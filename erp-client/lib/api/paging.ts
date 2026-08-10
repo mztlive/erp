@@ -8,10 +8,10 @@
 
 /** 后端分页响应统一形状。 */
 export interface Page<T> {
-  items: T[]
-  total: number
-  page: number
-  page_size: number
+    items: T[]
+    total: number
+    page: number
+    page_size: number
 }
 
 /**
@@ -24,10 +24,10 @@ export interface Page<T> {
  * @returns 形如 "page=1&page_size=20&sort_by=code&sort_dir=asc" 的字符串。
  */
 export const toQueryString = (params: Record<string, unknown>): string => {
-  const search = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === null || value === "") continue
-    search.set(key, String(value))
-  }
-  return search.toString()
+    const search = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+        if (value === undefined || value === null || value === "") continue
+        search.set(key, String(value))
+    }
+    return search.toString()
 }

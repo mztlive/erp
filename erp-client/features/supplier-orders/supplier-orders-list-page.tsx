@@ -4,1214 +4,1306 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type {
-  ColumnDef,
-  PaginationState,
-  SortingState,
+    ColumnDef,
+    PaginationState,
+    SortingState,
 } from "@tanstack/react-table"
-import {
-  DownloadIcon,
-  SearchIcon,
-  TriangleAlertIcon,
-} from "lucide-react"
+import { DownloadIcon, SearchIcon, TriangleAlertIcon } from "lucide-react"
 
 import {
-  BackgroundJobProgress,
-  BatchImpactPreview,
-  BusinessEmptyState,
-  BusinessFailureState,
-  BusinessStatusBadge,
-  BusinessTableFrame,
-  DataFreshness,
-  DataTable,
-  FormalActionResult,
-  ListToolbar,
-  MetricFilterItem,
-  MetricStrip,
-  MultiOptionCombobox,
-  OptionCombobox,
-  PageHeader,
-  PageScaffold,
-  QuickPreviewSheet,
-  StatusTrackSummary,
-  surfacePanelClassName,
+    BackgroundJobProgress,
+    BatchImpactPreview,
+    BusinessEmptyState,
+    BusinessFailureState,
+    BusinessStatusBadge,
+    BusinessTableFrame,
+    DataFreshness,
+    DataTable,
+    FormalActionResult,
+    ListToolbar,
+    MetricFilterItem,
+    MetricStrip,
+    MultiOptionCombobox,
+    OptionCombobox,
+    PageHeader,
+    PageScaffold,
+    QuickPreviewSheet,
+    StatusTrackSummary,
+    surfacePanelClassName,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
 } from "@/components/ui/input-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import {
-  useQueryResultMutation,
-  useSupplierOrderDetailQuery,
-  useSupplierOrderExportMutation,
-  useSupplierOrdersQuery,
+    useQueryResultMutation,
+    useSupplierOrderDetailQuery,
+    useSupplierOrderExportMutation,
+    useSupplierOrdersQuery,
 } from "@/features/supplier-orders/queries"
 import { SupplierOrderPreviewPanel } from "@/features/supplier-orders/supplier-order-preview-panel"
 import type {
-  CancelStatus,
-  ExportCommand,
-  ListView,
-  RefundStatus,
-  SupplierFulfillmentStatus,
-  SupplierOrderListQuery,
-  SupplierOrderListRow,
+    CancelStatus,
+    ExportCommand,
+    ListView,
+    RefundStatus,
+    SupplierFulfillmentStatus,
+    SupplierOrderListQuery,
+    SupplierOrderListRow,
 } from "@/features/supplier-orders/types"
 import {
-  CANCEL_STATUS_LABEL,
-  CANCEL_STATUSES,
-  FULFILLMENT_STATUS_LABEL,
-  FULFILLMENT_STATUSES,
-  REFUND_STATUS_LABEL,
-  REFUND_STATUSES,
-  VIEW_LABEL,
+    CANCEL_STATUS_LABEL,
+    CANCEL_STATUSES,
+    FULFILLMENT_STATUS_LABEL,
+    FULFILLMENT_STATUSES,
+    REFUND_STATUS_LABEL,
+    REFUND_STATUSES,
+    VIEW_LABEL,
 } from "@/features/supplier-orders/types"
 import {
-  buildSupplierOrdersSearchParams,
-  parseSupplierOrdersSearchParams,
+    buildSupplierOrdersSearchParams,
+    parseSupplierOrdersSearchParams,
 } from "@/features/supplier-orders/url-state"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 
 const SORT_COLUMN_TO_FIELD: Record<
-  string,
-  NonNullable<SupplierOrderListQuery["sortBy"]>
+    string,
+    NonNullable<SupplierOrderListQuery["sortBy"]>
 > = {
-  identity: "orderNo",
-  mall: "mallOrderNo",
-  external: "externalOrderNo",
-  updated: "lastBusinessAt",
+    identity: "orderNo",
+    mall: "mallOrderNo",
+    external: "externalOrderNo",
+    updated: "lastBusinessAt",
 }
 
 export function SupplierOrdersListPage() {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const url = React.useMemo(
-    () => parseSupplierOrdersSearchParams(searchParams),
-    [searchParams]
-  )
-  const returnTo = searchParams.get("returnTo") ?? undefined
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const url = React.useMemo(
+        () => parseSupplierOrdersSearchParams(searchParams),
+        [searchParams],
+    )
+    const returnTo = searchParams.get("returnTo") ?? undefined
 
-  const listQueryInput = React.useMemo<SupplierOrderListQuery>(
-    () => ({
-      view: url.view,
-      q: url.q,
-      supplierId: url.supplierId,
-      fulfillmentStatuses: url.fulfillmentStatuses,
-      cancelStatuses: url.cancelStatuses,
-      refundStatuses: url.refundStatuses,
-      aftersalePending: url.aftersalePending,
-      paidFrom: url.paidFrom,
-      paidTo: url.paidTo,
-      page: url.page,
-      pageSize: url.pageSize,
-      sortBy: url.sort ? SORT_COLUMN_TO_FIELD[url.sort] : undefined,
-      sortDir: url.dir,
-    }),
-    [url]
-  )
+    const listQueryInput = React.useMemo<SupplierOrderListQuery>(
+        () => ({
+            view: url.view,
+            q: url.q,
+            supplierId: url.supplierId,
+            fulfillmentStatuses: url.fulfillmentStatuses,
+            cancelStatuses: url.cancelStatuses,
+            refundStatuses: url.refundStatuses,
+            aftersalePending: url.aftersalePending,
+            paidFrom: url.paidFrom,
+            paidTo: url.paidTo,
+            page: url.page,
+            pageSize: url.pageSize,
+            sortBy: url.sort ? SORT_COLUMN_TO_FIELD[url.sort] : undefined,
+            sortDir: url.dir,
+        }),
+        [url],
+    )
 
-  const listQuery = useSupplierOrdersQuery(listQueryInput)
-  const previewQuery = useSupplierOrderDetailQuery({
-    orderId: url.preview ?? "",
-    enabled: Boolean(url.preview),
-  })
-  const queryResultMutation = useQueryResultMutation()
-
-  const [searchDraft, setSearchDraft] = React.useState(url.q ?? "")
-  const [focusedIndex, setFocusedIndex] = React.useState(0)
-  const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
-  const [actionResult, setActionResult] = React.useState<{
-    status: "succeeded" | "failed" | "unknown" | "blocked"
-    title: string
-    description: string
-    reference?: string
-  } | null>(null)
-  const [exportPreviewOpen, setExportPreviewOpen] = React.useState(false)
-  const [pendingExport, setPendingExport] =
-    React.useState<ExportCommand | null>(null)
-  const [exportResult, setExportResult] = React.useState<{
-    jobId: string
-    rowCount: number
-    permissionVersion: string
-    maskDisclaimer: string
-    downloadLabel: string
-    expiresAt: string
-  } | null>(null)
-
-  const exportMutation = useSupplierOrderExportMutation()
-
-  React.useEffect(() => {
-    setSearchDraft(url.q ?? "")
-  }, [url.q])
-
-  // W25 钻取：supplierOrderId / from=W25 时进入对象中心
-  React.useEffect(() => {
-    const soId =
-      searchParams.get("supplierOrderId") ?? searchParams.get("preview")
-    const from = searchParams.get("from")
-    if (
-      soId &&
-      (from === "W25" ||
-        from === "mall-order" ||
-        searchParams.get("openCenter") === "1")
-    ) {
-      const mall =
-        searchParams.get("mallOrderId") ?? searchParams.get("sourceId")
-      const qs = new URLSearchParams()
-      if (from) qs.set("from", from === "W25" ? "mall-order" : from)
-      if (mall) qs.set("sourceId", mall)
-      const s = qs.toString()
-      router.replace(
-        `/supplier-api/orders/${soId}${s ? `?${s}` : ""}`
-      )
-    }
-  }, [router, searchParams])
-
-  // P2：筛选/分页/搜索变更统一 replace，不膨胀历史。
-  // 原实现整体用 push，意图是「后退可逐步撤销筛选」，与规范冲突已改为 replace；
-  // 仅预览打开/关闭这类详情导航保留 push（openPreview/closePreview 传 "push"）。
-  const updateUrl = React.useCallback(
-    (
-      patch: Partial<typeof url>,
-      navigate: "replace" | "push" = "replace"
-    ) => {
-      const next = { ...url, ...patch }
-      let qs = buildSupplierOrdersSearchParams(next)
-      // URL state codec 不声明 returnTo，筛选/分页变化时手动保留返回上下文
-      if (returnTo) {
-        qs += `${qs ? "&" : "?"}returnTo=${encodeURIComponent(returnTo)}`
-      }
-      if (navigate === "push") {
-        router.push(`${pathname}${qs}`, { scroll: false })
-      } else {
-        router.replace(`${pathname}${qs}`, { scroll: false })
-      }
-    },
-    [pathname, router, url, returnTo]
-  )
-
-  const rows = React.useMemo(
-    () => listQuery.data?.rows ?? [],
-    [listQuery.data?.rows]
-  )
-  const metrics = listQuery.data?.metrics ?? []
-  const total = listQuery.data?.pageInfo.total ?? 0
-
-  const pagination = React.useMemo<PaginationState>(
-    () => ({
-      pageIndex: Math.max(0, url.page - 1),
-      pageSize: url.pageSize,
-    }),
-    [url.page, url.pageSize]
-  )
-
-  const sorting = React.useMemo<SortingState>(
-    () =>
-      url.sort && SORT_COLUMN_TO_FIELD[url.sort]
-        ? [{ id: url.sort, desc: url.dir === "desc" }]
-        : [],
-    [url.dir, url.sort]
-  )
-
-  const handleSortingChange = React.useCallback(
-    (next: SortingState) => {
-      const head = next[0]
-      updateUrl({
-        sort: head && SORT_COLUMN_TO_FIELD[head.id] ? head.id : undefined,
-        dir: head ? (head.desc ? "desc" : "asc") : undefined,
-        page: 1,
-      })
-    },
-    [updateUrl]
-  )
-
-  // P4：清除=清全部筛选参数并回第 1 页；保留 view（视图类）与排序。
-  // 工具栏常驻清除与空态 BusinessEmptyState 共用同一函数（D21）。
-  const hasActiveFilters = Boolean(
-    url.q ||
-      url.supplierId ||
-      url.fulfillmentStatuses?.length ||
-      url.cancelStatuses?.length ||
-      url.refundStatuses?.length ||
-      url.aftersalePending ||
-      url.paidFrom ||
-      url.paidTo
-  )
-  const clearFilters = React.useCallback(() => {
-    updateUrl({
-      fulfillmentStatuses: undefined,
-      cancelStatuses: undefined,
-      refundStatuses: undefined,
-      aftersalePending: false,
-      q: undefined,
-      supplierId: undefined,
-      paidFrom: undefined,
-      paidTo: undefined,
-      page: 1,
+    const listQuery = useSupplierOrdersQuery(listQueryInput)
+    const previewQuery = useSupplierOrderDetailQuery({
+        orderId: url.preview ?? "",
+        enabled: Boolean(url.preview),
     })
-  }, [updateUrl])
+    const queryResultMutation = useQueryResultMutation()
 
-  React.useEffect(() => {
-    setFocusedIndex(0)
-  }, [url.view, url.q, url.fulfillmentStatuses, url.page, rows.length])
+    const [searchDraft, setSearchDraft] = React.useState(url.q ?? "")
+    const [focusedIndex, setFocusedIndex] = React.useState(0)
+    const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
+    const [actionResult, setActionResult] = React.useState<{
+        status: "succeeded" | "failed" | "unknown" | "blocked"
+        title: string
+        description: string
+        reference?: string
+    } | null>(null)
+    const [exportPreviewOpen, setExportPreviewOpen] = React.useState(false)
+    const [pendingExport, setPendingExport] =
+        React.useState<ExportCommand | null>(null)
+    const [exportResult, setExportResult] = React.useState<{
+        jobId: string
+        rowCount: number
+        permissionVersion: string
+        maskDisclaimer: string
+        downloadLabel: string
+        expiresAt: string
+    } | null>(null)
 
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable)
-      ) {
-        if (event.key !== "Escape") return
-      }
+    const exportMutation = useSupplierOrderExportMutation()
 
-      if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault()
-        document
-          .querySelector<HTMLInputElement>('[data-slot="sfo-list-search"]')
-          ?.focus()
-        return
-      }
+    React.useEffect(() => {
+        setSearchDraft(url.q ?? "")
+    }, [url.q])
 
-      if (rows.length === 0) return
+    // W25 钻取：supplierOrderId / from=W25 时进入对象中心
+    React.useEffect(() => {
+        const soId =
+            searchParams.get("supplierOrderId") ?? searchParams.get("preview")
+        const from = searchParams.get("from")
+        if (
+            soId &&
+            (from === "W25" ||
+                from === "mall-order" ||
+                searchParams.get("openCenter") === "1")
+        ) {
+            const mall =
+                searchParams.get("mallOrderId") ?? searchParams.get("sourceId")
+            const qs = new URLSearchParams()
+            if (from) qs.set("from", from === "W25" ? "mall-order" : from)
+            if (mall) qs.set("sourceId", mall)
+            const s = qs.toString()
+            router.replace(`/supplier-api/orders/${soId}${s ? `?${s}` : ""}`)
+        }
+    }, [router, searchParams])
 
-      if (event.key === "j" || event.key === "ArrowDown") {
-        event.preventDefault()
-        setFocusedIndex((i) => Math.min(rows.length - 1, i + 1))
-      } else if (event.key === "k" || event.key === "ArrowUp") {
-        event.preventDefault()
-        setFocusedIndex((i) => Math.max(0, i - 1))
-      } else if (event.key === "Enter") {
-        event.preventDefault()
-        const row = rows[focusedIndex]
-        if (row) updateUrl({ preview: row.orderId }, "push")
-      } else if (event.key === "Escape" && url.preview) {
-        event.preventDefault()
+    // P2：筛选/分页/搜索变更统一 replace，不膨胀历史。
+    // 原实现整体用 push，意图是「后退可逐步撤销筛选」，与规范冲突已改为 replace；
+    // 仅预览打开/关闭这类详情导航保留 push（openPreview/closePreview 传 "push"）。
+    const updateUrl = React.useCallback(
+        (
+            patch: Partial<typeof url>,
+            navigate: "replace" | "push" = "replace",
+        ) => {
+            const next = { ...url, ...patch }
+            let qs = buildSupplierOrdersSearchParams(next)
+            // URL state codec 不声明 returnTo，筛选/分页变化时手动保留返回上下文
+            if (returnTo) {
+                qs += `${qs ? "&" : "?"}returnTo=${encodeURIComponent(returnTo)}`
+            }
+            if (navigate === "push") {
+                router.push(`${pathname}${qs}`, { scroll: false })
+            } else {
+                router.replace(`${pathname}${qs}`, { scroll: false })
+            }
+        },
+        [pathname, router, url, returnTo],
+    )
+
+    const rows = React.useMemo(
+        () => listQuery.data?.rows ?? [],
+        [listQuery.data?.rows],
+    )
+    const metrics = listQuery.data?.metrics ?? []
+    const total = listQuery.data?.pageInfo.total ?? 0
+
+    const pagination = React.useMemo<PaginationState>(
+        () => ({
+            pageIndex: Math.max(0, url.page - 1),
+            pageSize: url.pageSize,
+        }),
+        [url.page, url.pageSize],
+    )
+
+    const sorting = React.useMemo<SortingState>(
+        () =>
+            url.sort && SORT_COLUMN_TO_FIELD[url.sort]
+                ? [{ id: url.sort, desc: url.dir === "desc" }]
+                : [],
+        [url.dir, url.sort],
+    )
+
+    const handleSortingChange = React.useCallback(
+        (next: SortingState) => {
+            const head = next[0]
+            updateUrl({
+                sort:
+                    head && SORT_COLUMN_TO_FIELD[head.id] ? head.id : undefined,
+                dir: head ? (head.desc ? "desc" : "asc") : undefined,
+                page: 1,
+            })
+        },
+        [updateUrl],
+    )
+
+    // P4：清除=清全部筛选参数并回第 1 页；保留 view（视图类）与排序。
+    // 工具栏常驻清除与空态 BusinessEmptyState 共用同一函数（D21）。
+    const hasActiveFilters = Boolean(
+        url.q ||
+        url.supplierId ||
+        url.fulfillmentStatuses?.length ||
+        url.cancelStatuses?.length ||
+        url.refundStatuses?.length ||
+        url.aftersalePending ||
+        url.paidFrom ||
+        url.paidTo,
+    )
+    const clearFilters = React.useCallback(() => {
+        updateUrl({
+            fulfillmentStatuses: undefined,
+            cancelStatuses: undefined,
+            refundStatuses: undefined,
+            aftersalePending: false,
+            q: undefined,
+            supplierId: undefined,
+            paidFrom: undefined,
+            paidTo: undefined,
+            page: 1,
+        })
+    }, [updateUrl])
+
+    React.useEffect(() => {
+        setFocusedIndex(0)
+    }, [url.view, url.q, url.fulfillmentStatuses, url.page, rows.length])
+
+    React.useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null
+            if (
+                target &&
+                (target.tagName === "INPUT" ||
+                    target.tagName === "TEXTAREA" ||
+                    target.tagName === "SELECT" ||
+                    target.isContentEditable)
+            ) {
+                if (event.key !== "Escape") return
+            }
+
+            if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+                event.preventDefault()
+                document
+                    .querySelector<HTMLInputElement>(
+                        '[data-slot="sfo-list-search"]',
+                    )
+                    ?.focus()
+                return
+            }
+
+            if (rows.length === 0) return
+
+            if (event.key === "j" || event.key === "ArrowDown") {
+                event.preventDefault()
+                setFocusedIndex((i) => Math.min(rows.length - 1, i + 1))
+            } else if (event.key === "k" || event.key === "ArrowUp") {
+                event.preventDefault()
+                setFocusedIndex((i) => Math.max(0, i - 1))
+            } else if (event.key === "Enter") {
+                event.preventDefault()
+                const row = rows[focusedIndex]
+                if (row) updateUrl({ preview: row.orderId }, "push")
+            } else if (event.key === "Escape" && url.preview) {
+                event.preventDefault()
+                const id = url.preview
+                updateUrl({ preview: undefined }, "push")
+                requestAnimationFrame(() => {
+                    rowRefs.current.get(id)?.focus()
+                })
+            }
+        }
+        window.addEventListener("keydown", onKeyDown)
+        return () => window.removeEventListener("keydown", onKeyDown)
+    }, [focusedIndex, updateUrl, rows, url.preview])
+
+    const openPreview = React.useCallback(
+        (orderId: string) => updateUrl({ preview: orderId }, "push"),
+        [updateUrl],
+    )
+
+    const closePreview = React.useCallback(() => {
         const id = url.preview
         updateUrl({ preview: undefined }, "push")
-        requestAnimationFrame(() => {
-          rowRefs.current.get(id)?.focus()
+        if (id) {
+            requestAnimationFrame(() => {
+                rowRefs.current.get(id)?.focus()
+            })
+        }
+    }, [updateUrl, url.preview])
+
+    const handleQueryFromList = async (row: SupplierOrderListRow) => {
+        if (!row.allowedActions.includes("QUERY_RESULT")) {
+            setActionResult({
+                status: "blocked",
+                title: "无法查询原结果",
+                description:
+                    row.actionBlockers.find((b) => b.action === "QUERY_RESULT")
+                        ?.message ?? "当前订单不可查询",
+            })
+            return
+        }
+        // 打开预览并在取得详情锁版本后查询
+        openPreview(row.orderId)
+        const { fetchSupplierOrderDetail } =
+            await import("@/features/supplier-orders/api")
+        const detail = await fetchSupplierOrderDetail({
+            orderId: row.orderId,
         })
-      }
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [focusedIndex, updateUrl, rows, url.preview])
-
-  const openPreview = React.useCallback(
-    (orderId: string) => updateUrl({ preview: orderId }, "push"),
-    [updateUrl]
-  )
-
-  const closePreview = React.useCallback(() => {
-    const id = url.preview
-    updateUrl({ preview: undefined }, "push")
-    if (id) {
-      requestAnimationFrame(() => {
-        rowRefs.current.get(id)?.focus()
-      })
-    }
-  }, [updateUrl, url.preview])
-
-  const handleQueryFromList = async (row: SupplierOrderListRow) => {
-    if (!row.allowedActions.includes("QUERY_RESULT")) {
-      setActionResult({
-        status: "blocked",
-        title: "无法查询原结果",
-        description:
-          row.actionBlockers.find((b) => b.action === "QUERY_RESULT")
-            ?.message ?? "当前订单不可查询",
-      })
-      return
-    }
-    // 打开预览并在取得详情锁版本后查询
-    openPreview(row.orderId)
-    const { fetchSupplierOrderDetail } = await import(
-      "@/features/supplier-orders/api"
-    )
-    const detail = await fetchSupplierOrderDetail({
-      orderId: row.orderId,
-    })
-    if (!detail) {
-      setActionResult({
-        status: "failed",
-        title: "无法加载订单",
-        description: "未找到供应商订单详情",
-      })
-      return
-    }
-    const res = await queryResultMutation.mutateAsync({
-      orderId: row.orderId,
-      expectedLockVersion: detail.order.lockVersion,
-      targetSupplierActionId: detail.placeActionId,
-      operationId: `op-query-list-${Date.now()}`,
-      idempotencyKey: `query-list-${row.orderId}-${Date.now()}`,
-      workItemId: detail.workItem?.workItemId,
-      expectedSubjectHash: detail.workItem?.subjectHash,
-      expectedSubjectVersion: detail.workItem?.subjectVersion,
-    })
-    setActionResult({
-      status:
-        res.status === "unknown"
-          ? "unknown"
-          : res.status === "blocked"
-            ? "blocked"
-            : res.status === "succeeded"
-              ? "succeeded"
-              : "failed",
-      title:
-        res.status === "succeeded"
-          ? "查询原结果已完成"
-          : res.status === "unknown"
-            ? "查询结果仍未知"
-            : "查询未成功",
-      description: res.message,
-      reference: res.reference,
-    })
-  }
-
-  const columns = React.useMemo<ColumnDef<SupplierOrderListRow>[]>(
-    () => [
-      {
-        id: "identity",
-        accessorKey: "orderNo",
-        header: "供应商订单",
-        meta: { label: "供应商订单", width: "reference" },
-        cell: ({ row }) => (
-          <div
-            className="flex min-w-0 flex-col gap-0.5"
-            ref={(el) => {
-              if (el) rowRefs.current.set(row.original.orderId, el)
-              else rowRefs.current.delete(row.original.orderId)
-            }}
-            tabIndex={
-              rows[focusedIndex]?.orderId === row.original.orderId ? 0 : -1
-            }
-            data-focused={
-              rows[focusedIndex]?.orderId === row.original.orderId
-                ? "true"
-                : undefined
-            }
-          >
-            <Button
-              type="button"
-              variant="link"
-              size="xs"
-              className="num h-auto justify-start px-0"
-              aria-label={`预览 ${row.original.orderNo}`}
-              onClick={() => openPreview(row.original.orderId)}
-            >
-              {row.original.orderNo}
-            </Button>
-            <span className="truncate text-tiny text-muted-foreground">
-              {row.original.supplierName}
-            </span>
-          </div>
-        ),
-      },
-      {
-        id: "mall",
-        accessorKey: "mallOrderNo",
-        header: "商城单号",
-        meta: { label: "商城订单", width: "reference" },
-        cell: ({ row }) => (
-          <Link
-            href={`/commerce/consumption-orders?q=${encodeURIComponent(row.original.mallOrderNo)}`}
-            className="num text-sm text-primary underline-offset-2 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {row.original.mallOrderNo}
-          </Link>
-        ),
-      },
-      {
-        id: "tracks",
-        header: "履约 / 取消 / 退款",
-        meta: { label: "三轨状态", width: "tracks" },
-        enableSorting: false,
-        cell: ({ row }) => (
-          <StatusTrackSummary
-            variant="inline"
-            className="flex-nowrap gap-x-2 gap-y-0"
-            aria-label={`${row.original.orderNo} 三轨状态`}
-            tracks={[
-              {
-                id: "ff",
-                label: "履约",
-                status: {
-                  label: row.original.fulfillmentLabel,
-                  tone: row.original.fulfillmentTone,
-                },
-              },
-              {
-                id: "cancel",
-                label: "取消",
-                status: {
-                  label: row.original.cancelLabel,
-                  tone: row.original.cancelTone,
-                },
-              },
-              {
-                id: "refund",
-                label: "退款",
-                status: {
-                  label: row.original.refundLabel,
-                  tone: row.original.refundTone,
-                },
-              },
-            ]}
-          />
-        ),
-      },
-      {
-        id: "external",
-        accessorKey: "externalOrderNo",
-        header: "外部单号",
-        meta: { label: "供应商外部单号", width: "reference" },
-        cell: ({ row }) =>
-          row.original.externalOrderNo ? (
-            <span className="num text-xs">{row.original.externalOrderNo}</span>
-          ) : (
-            <span className="text-xs text-muted-foreground">尚未返回</span>
-          ),
-      },
-      {
-        id: "updated",
-        accessorKey: "lastBusinessAt",
-        header: "更新时间",
-        meta: { label: "更新时间", width: "default" },
-        cell: ({ row }) => (
-          <span className="num text-xs text-muted-foreground">
-            {formatDateTime(row.original.lastBusinessAt, "monthDayIntl", "passthrough")}
-          </span>
-        ),
-      },
-      {
-        id: "itemCount",
-        accessorFn: (row) => row.itemCount,
-        header: "商品数",
-        meta: { label: "商品数", width: "quantity", align: "end", numeric: true },
-        cell: ({ row }) => (
-          <span className="num text-xs">{row.original.itemCount}</span>
-        ),
-      },
-      {
-        id: "actions",
-        header: "操作",
-        meta: { label: "操作", width: "default" },
-        enableSorting: false,
-        cell: ({ row }) => {
-          const r = row.original
-          const canQuery = r.allowedActions.includes("QUERY_RESULT")
-          const canReplay = r.allowedActions.includes("REPLAY")
-          const queryBlocker = r.actionBlockers.find(
-            (b) => b.action === "QUERY_RESULT"
-          )
-          return (
-            <div className="flex flex-wrap items-center gap-1">
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                onClick={() => openPreview(r.orderId)}
-              >
-                预览
-              </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                render={<Link href={`/supplier-api/orders/${r.orderId}`} />}
-              >
-                详情
-              </Button>
-              {r.fulfillmentStatus === "RESULT_UNKNOWN" ? (
-                <>
-                  <Button
-                    type="button"
-                    size="xs"
-                    disabled={!canQuery || queryResultMutation.isPending}
-                    onClick={() => void handleQueryFromList(r)}
-                  >
-                    查询原结果
-                  </Button>
-                  {!canQuery && queryBlocker ? (
-                    <span className="max-w-[14rem] text-tiny leading-tight text-muted-foreground">
-                      {queryBlocker.message}
-                      {queryBlocker.destinationWorkspaceId ? (
-                        <>
-                          ，可
-                          <Link
-                            href="/governance/integration-errors"
-                            className="text-primary underline-offset-2 hover:underline"
-                          >
-                            前往接口错误中心
-                          </Link>
-                        </>
-                      ) : null}
-                    </span>
-                  ) : null}
-                </>
-              ) : null}
-              {r.fulfillmentStatus === "RESULT_UNKNOWN" && !canReplay ? (
-                <span className="sr-only">
-                  重发需先查询确认无结果且系统允许重试
-                </span>
-              ) : null}
-            </div>
-          )
-        },
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers stable enough for list
-    [focusedIndex, openPreview, queryResultMutation.isPending, rows]
-  )
-
-  const confirmExport = async () => {
-    const requestId = `req-w26-export-${Date.now()}`
-    const command: ExportCommand = {
-      selectionSnapshotId: `snap-${requestId}`,
-      fieldSetId: "w26-list-default-masked",
-      requestId,
-      rowCount: listQuery.data?.pageInfo.total ?? 0,
-      filterSummary: listQuery.data?.filterSummary ?? "",
-    }
-    setPendingExport(command)
-    await runExport(command)
-  }
-
-  const retryExport = async () => {
-    if (!pendingExport) return
-    await runExport(pendingExport)
-  }
-
-  const runExport = async (command: ExportCommand) => {
-    const result = await exportMutation.mutateAsync(command)
-    setExportResult({
-      jobId: result.jobId,
-      rowCount: result.rowCount,
-      permissionVersion: result.permissionVersion,
-      maskDisclaimer: result.maskDisclaimer,
-      downloadLabel: result.downloadLabel,
-      expiresAt: result.expiresAt,
-    })
-    setPendingExport(null)
-    setExportPreviewOpen(false)
-  }
-
-  return (
-    <PageScaffold>
-      <PageHeader
-        title="供应商订单"
-        breadcrumbs={[
-          { id: "api", label: "供应商 API", href: "/supplier-api/orders" },
-          { id: "so", label: "供应商订单", current: true },
-        ]}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <DataFreshness
-              updatedAt="刚刚"
-              dateTime={listQuery.data?.queriedAt}
-              state={listQuery.isFetching ? "syncing" : "fresh"}
-              label="列表数据"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={
-                !listQuery.data ||
-                total === 0 ||
-                exportMutation.isPending
-              }
-              onClick={() => setExportPreviewOpen(true)}
-            >
-              <DownloadIcon className="size-3.5" />
-              导出
-            </Button>
-          </div>
+        if (!detail) {
+            setActionResult({
+                status: "failed",
+                title: "无法加载订单",
+                description: "未找到供应商订单详情",
+            })
+            return
         }
-      />
+        const res = await queryResultMutation.mutateAsync({
+            orderId: row.orderId,
+            expectedLockVersion: detail.order.lockVersion,
+            targetSupplierActionId: detail.placeActionId,
+            operationId: `op-query-list-${Date.now()}`,
+            idempotencyKey: `query-list-${row.orderId}-${Date.now()}`,
+            workItemId: detail.workItem?.workItemId,
+            expectedSubjectHash: detail.workItem?.subjectHash,
+            expectedSubjectVersion: detail.workItem?.subjectVersion,
+        })
+        setActionResult({
+            status:
+                res.status === "unknown"
+                    ? "unknown"
+                    : res.status === "blocked"
+                      ? "blocked"
+                      : res.status === "succeeded"
+                        ? "succeeded"
+                        : "failed",
+            title:
+                res.status === "succeeded"
+                    ? "查询原结果已完成"
+                    : res.status === "unknown"
+                      ? "查询结果仍未知"
+                      : "查询未成功",
+            description: res.message,
+            reference: res.reference,
+        })
+    }
 
-      {returnTo ? (
-        <div
-          className={cn(
-            surfacePanelClassName,
-            "flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm"
-          )}
-        >
-          <span className="text-muted-foreground">
-            从关联页面进来的。返回时会回到原来的位置。
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="rounded-lg shadow-none"
-            render={<Link href={returnTo} />}
-          >
-            返回来源
-          </Button>
-        </div>
-      ) : null}
-
-      {/* 互斥规则（D21 记录在案）：履约状态 / 售后待处理 / 视图三组指标互斥——
-          点击任一组都会静默重置其它组（避免组合出矛盾空结果），
-          已通过按钮 title 提示；履约多值（fulfillmentStatuses）与单值
-          （fulfillmentStatus）为同一维度。 */}
-      <MetricStrip>
-        {metrics.map((m) => (
-          <MetricFilterItem
-            key={m.key}
-            label={m.label}
-            value={m.value}
-            title={
-              m.fulfillmentStatuses?.length || m.fulfillmentStatus
-                ? "应用履约状态筛选，会清除「售后待处理」指标"
-                : m.aftersalePending
-                  ? "应用「售后待处理」筛选，会清除履约状态筛选"
-                  : m.view
-                    ? "切换视图，会清除履约与售后筛选"
-                    : undefined
-            }
-            active={
-              m.fulfillmentStatuses?.length
-                ? (url.fulfillmentStatuses?.length ?? 0) ===
-                    m.fulfillmentStatuses.length &&
-                  m.fulfillmentStatuses.every((s) =>
-                    url.fulfillmentStatuses?.includes(s)
-                  )
-                : m.fulfillmentStatus
-                  ? url.fulfillmentStatuses?.includes(m.fulfillmentStatus) ??
-                    false
-                  : m.aftersalePending
-                    ? url.aftersalePending === true
-                    : m.view
-                      ? url.view === m.view &&
-                        !url.fulfillmentStatuses?.length &&
-                        !url.aftersalePending
-                      : false
-            }
-            onClick={() => {
-              if (m.fulfillmentStatuses?.length) {
-                updateUrl({
-                  fulfillmentStatuses: m.fulfillmentStatuses,
-                  aftersalePending: false,
-                  view: m.fulfillmentStatuses.includes("RESULT_UNKNOWN")
-                    ? "all"
-                    : url.view,
-                  page: 1,
-                })
-              } else if (m.fulfillmentStatus) {
-                updateUrl({
-                  fulfillmentStatuses: [m.fulfillmentStatus],
-                  aftersalePending: false,
-                  view:
-                    m.fulfillmentStatus === "RESULT_UNKNOWN"
-                      ? "all"
-                      : url.view,
-                  page: 1,
-                })
-              } else if (m.aftersalePending) {
-                updateUrl({
-                  view: "all",
-                  fulfillmentStatuses: undefined,
-                  aftersalePending: !url.aftersalePending,
-                  page: 1,
-                })
-              } else if (m.view) {
-                updateUrl({
-                  view: m.view,
-                  fulfillmentStatuses: undefined,
-                  aftersalePending: false,
-                  page: 1,
-                })
-              }
-            }}
-          />
-        ))}
-      </MetricStrip>
-
-      {actionResult ? (
-        <FormalActionResult
-          status={
-            actionResult.status === "failed"
-              ? "rejected"
-              : actionResult.status
-          }
-          title={actionResult.title}
-          description={actionResult.description}
-          reference={actionResult.reference}
-          actions={
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setActionResult(null)}
-            >
-              关闭
-            </Button>
-          }
-        />
-      ) : null}
-
-      {exportResult ? (
-        <div className="space-y-2">
-          <FormalActionResult
-            status="succeeded"
-            title="导出任务已创建"
-            description={exportResult.maskDisclaimer}
-            facts={[
-              { label: "行数", value: String(exportResult.rowCount) },
-              {
-                label: "权限规则",
-                value: "已固定，下载时重新校验",
-              },
-              {
-                label: "文件",
-                value: exportResult.downloadLabel,
-              },
-              {
-                label: "到期",
-                value: formatDateTime(exportResult.expiresAt, "monthDayIntl", "passthrough"),
-              },
-            ]}
-          />
-          <BackgroundJobProgress
-            mode="all-or-nothing"
-            status="succeeded"
-            label="导出作业"
-            description="筛选快照 · 字段打码 · 结果 7 天内可下载"
-            total={exportResult.rowCount}
-            completed={exportResult.rowCount}
-            succeeded={exportResult.rowCount}
-          />
-        </div>
-      ) : null}
-
-      {exportPreviewOpen ? (
-        <div className={cn(surfacePanelClassName, "space-y-3 p-4")}>
-          <BatchImpactPreview
-            title="导出当前筛选全部"
-            description="按当前筛选快照导出，不限于当前页；结果 7 天内可下载，下载时将重新校验权限。"
-            filterSummary={listQuery.data?.filterSummary ?? "—"}
-            selectionScope="当前筛选全部"
-            estimated={total}
-            processable={total}
-            skipped={0}
-            background
-            sensitiveFields={["收货地址", "手机号", "未授权成本金额"]}
-            skippedReason="无权限字段以打码形式导出，默认列不含收货地址"
-          />
-          <div className="flex flex-wrap gap-2">
-            {exportMutation.isError ? (
-              <p className="w-full text-sm text-destructive" aria-live="polite">
-                {getErrorMessage(
-                  exportMutation.error,
-                  "导出任务创建失败，可按原筛选快照重试。",
-                )}
-              </p>
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              disabled={exportMutation.isPending}
-              onClick={() => {
-                if (exportMutation.isError && pendingExport) {
-                  void retryExport()
-                } else {
-                  void confirmExport()
-                }
-              }}
-            >
-              {exportMutation.isError && pendingExport
-                ? "按原快照重试"
-                : "确认导出"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setExportPreviewOpen(false)}
-            >
-              取消
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      <BusinessTableFrame
-        title="供应商订单列表"
-        description="身份列与操作列固定；履约/取消/退款三种状态独立展示。"
-        toolbar={
-          <ListToolbar
-            search={
-              <InputGroup className="w-full max-w-sm">
-                <InputGroupAddon>
-                  <SearchIcon className="size-3.5" />
-                </InputGroupAddon>
-                <InputGroupInput
-                  data-slot="sfo-list-search"
-                  value={searchDraft}
-                  onChange={(e) => setSearchDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      updateUrl({ q: searchDraft || undefined, page: 1 })
-                    }
-                  }}
-                  onBlur={() => {
-                    if ((url.q ?? "") !== searchDraft) {
-                      updateUrl({ q: searchDraft || undefined, page: 1 })
-                    }
-                  }}
-                  placeholder="供应商订单号、商城订单、外部单号"
-                  aria-label="搜索供应商订单"
-                />
-              </InputGroup>
-            }
-            filters={
-              <>
-                <ToggleGroup
-                  value={[url.view]}
-                  onValueChange={(values) => {
-                    const next = values[0] as ListView | undefined
-                    if (next) updateUrl({ view: next, page: 1 })
-                  }}
-                  variant="outline"
-                  size="sm"
-                  spacing={0}
-                  aria-label="列表视图"
-                >
-                  {(Object.keys(VIEW_LABEL) as ListView[]).map((v) => (
-                    <ToggleGroupItem key={v} value={v}>
-                      {VIEW_LABEL[v]}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-                <SupplierSearchCombobox
-                  value={url.supplierId || undefined}
-                  onValueChange={(id) =>
-                    updateUrl({
-                      supplierId: id || undefined,
-                      page: 1,
-                    })
-                  }
-                  purpose="filter"
-                  aria-label="供应商"
-                  className="w-[12rem]"
-                  placeholder="全部供应商"
-                />
-                <MultiOptionCombobox
-                  value={url.fulfillmentStatuses ?? []}
-                  onValueChange={(values) =>
-                    updateUrl({
-                      fulfillmentStatuses:
-                        values.length > 0
-                          ? (values as SupplierFulfillmentStatus[])
-                          : undefined,
-                      page: 1,
-                    })
-                  }
-                  options={FULFILLMENT_STATUSES.map((s) => ({
-                    value: s,
-                    label: FULFILLMENT_STATUS_LABEL[s],
-                  }))}
-                  aria-label="履约状态"
-                  className="w-[10rem]"
-                  size="sm"
-                  placeholder="履约·全部"
-                />
-              </>
-            }
-            secondary={
-              <>
-                <OptionCombobox
-                  value={url.cancelStatuses?.[0] ?? ""}
-                  onValueChange={(v) =>
-                    updateUrl({
-                      cancelStatuses: v ? [v as CancelStatus] : undefined,
-                      page: 1,
-                    })
-                  }
-                  options={[
-                    { value: "", label: "取消·全部" },
-                    ...CANCEL_STATUSES.map((s) => ({
-                      value: s,
-                      label: CANCEL_STATUS_LABEL[s],
-                    })),
-                  ]}
-                  aria-label="取消状态"
-                  className="w-[7.5rem]"
-                  size="sm"
-                  allowClear={false}
-                  placeholder="取消·全部"
-                />
-                <OptionCombobox
-                  value={url.refundStatuses?.[0] ?? ""}
-                  onValueChange={(v) =>
-                    updateUrl({
-                      refundStatuses: v ? [v as RefundStatus] : undefined,
-                      page: 1,
-                    })
-                  }
-                  options={[
-                    { value: "", label: "退款·全部" },
-                    ...REFUND_STATUSES.map((s) => ({
-                      value: s,
-                      label: REFUND_STATUS_LABEL[s],
-                    })),
-                  ]}
-                  aria-label="退款状态"
-                  className="w-[7.5rem]"
-                  size="sm"
-                  allowClear={false}
-                  placeholder="退款·全部"
-                />
-                <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                  支付自
-                  <DatePicker
-                    className="w-[9.5rem]"
-                    value={url.paidFrom || undefined}
-                    onValueChange={(next) =>
-                      updateUrl({ paidFrom: next || undefined, page: 1 })
-                    }
-                  />
-                </label>
-                <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                  至
-                  <DatePicker
-                    className="w-[9.5rem]"
-                    value={url.paidTo || undefined}
-                    onValueChange={(next) =>
-                      updateUrl({ paidTo: next || undefined, page: 1 })
-                    }
-                  />
-                </label>
-              </>
-            }
-            actions={
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span aria-live="polite">
-                  共 {total.toLocaleString("zh-CN")} 条
-                </span>
-                {hasActiveFilters ? (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    onClick={clearFilters}
-                  >
-                    清除筛选
-                  </Button>
-                ) : null}
-              </div>
-            }
-          />
-        }
-        table={
-          <DataTable
-            data={rows}
-            columns={columns}
-            getRowId={(row) => row.orderId}
-            rowCount={total}
-            loading={listQuery.isPending}
-            errorState={
-              listQuery.isError ? (
-                <BusinessFailureState
-                  title="供应商订单列表加载失败"
-                  error={listQuery.error}
-                  action={
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void listQuery.refetch()}
+    const columns = React.useMemo<ColumnDef<SupplierOrderListRow>[]>(
+        () => [
+            {
+                id: "identity",
+                accessorKey: "orderNo",
+                header: "供应商订单",
+                meta: { label: "供应商订单", width: "reference" },
+                cell: ({ row }) => (
+                    <div
+                        className="flex min-w-0 flex-col gap-0.5"
+                        ref={(el) => {
+                            if (el)
+                                rowRefs.current.set(row.original.orderId, el)
+                            else rowRefs.current.delete(row.original.orderId)
+                        }}
+                        tabIndex={
+                            rows[focusedIndex]?.orderId === row.original.orderId
+                                ? 0
+                                : -1
+                        }
+                        data-focused={
+                            rows[focusedIndex]?.orderId === row.original.orderId
+                                ? "true"
+                                : undefined
+                        }
                     >
-                      重试
-                    </Button>
-                  }
-                />
-              ) : undefined
-            }
-            emptyState={
-              !listQuery.isPending && rows.length === 0 ? (
-                <BusinessEmptyState
-                  kind="filter"
-                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                  title="当前范围没有供应商订单"
-                  description="调整视图、供应商或支付时间，或从商城消费订单钻取。"
-                  action={
-                    <div className="flex flex-wrap gap-2">
-                      {hasActiveFilters ? (
                         <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          className="rounded-lg shadow-none"
-                          onClick={clearFilters}
+                            type="button"
+                            variant="link"
+                            size="xs"
+                            className="num h-auto justify-start px-0"
+                            aria-label={`预览 ${row.original.orderNo}`}
+                            onClick={() => openPreview(row.original.orderId)}
                         >
-                          清除筛选
+                            {row.original.orderNo}
                         </Button>
-                      ) : null}
-                      <Button
+                        <span className="truncate text-tiny text-muted-foreground">
+                            {row.original.supplierName}
+                        </span>
+                    </div>
+                ),
+            },
+            {
+                id: "mall",
+                accessorKey: "mallOrderNo",
+                header: "商城单号",
+                meta: { label: "商城订单", width: "reference" },
+                cell: ({ row }) => (
+                    <Link
+                        href={`/commerce/consumption-orders?q=${encodeURIComponent(row.original.mallOrderNo)}`}
+                        className="num text-sm text-primary underline-offset-2 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {row.original.mallOrderNo}
+                    </Link>
+                ),
+            },
+            {
+                id: "tracks",
+                header: "履约 / 取消 / 退款",
+                meta: { label: "三轨状态", width: "tracks" },
+                enableSorting: false,
+                cell: ({ row }) => (
+                    <StatusTrackSummary
+                        variant="inline"
+                        className="flex-nowrap gap-x-2 gap-y-0"
+                        aria-label={`${row.original.orderNo} 三轨状态`}
+                        tracks={[
+                            {
+                                id: "ff",
+                                label: "履约",
+                                status: {
+                                    label: row.original.fulfillmentLabel,
+                                    tone: row.original.fulfillmentTone,
+                                },
+                            },
+                            {
+                                id: "cancel",
+                                label: "取消",
+                                status: {
+                                    label: row.original.cancelLabel,
+                                    tone: row.original.cancelTone,
+                                },
+                            },
+                            {
+                                id: "refund",
+                                label: "退款",
+                                status: {
+                                    label: row.original.refundLabel,
+                                    tone: row.original.refundTone,
+                                },
+                            },
+                        ]}
+                    />
+                ),
+            },
+            {
+                id: "external",
+                accessorKey: "externalOrderNo",
+                header: "外部单号",
+                meta: { label: "供应商外部单号", width: "reference" },
+                cell: ({ row }) =>
+                    row.original.externalOrderNo ? (
+                        <span className="num text-xs">
+                            {row.original.externalOrderNo}
+                        </span>
+                    ) : (
+                        <span className="text-xs text-muted-foreground">
+                            尚未返回
+                        </span>
+                    ),
+            },
+            {
+                id: "updated",
+                accessorKey: "lastBusinessAt",
+                header: "更新时间",
+                meta: { label: "更新时间", width: "default" },
+                cell: ({ row }) => (
+                    <span className="num text-xs text-muted-foreground">
+                        {formatDateTime(
+                            row.original.lastBusinessAt,
+                            "monthDayIntl",
+                            "passthrough",
+                        )}
+                    </span>
+                ),
+            },
+            {
+                id: "itemCount",
+                accessorFn: (row) => row.itemCount,
+                header: "商品数",
+                meta: {
+                    label: "商品数",
+                    width: "quantity",
+                    align: "end",
+                    numeric: true,
+                },
+                cell: ({ row }) => (
+                    <span className="num text-xs">
+                        {row.original.itemCount}
+                    </span>
+                ),
+            },
+            {
+                id: "actions",
+                header: "操作",
+                meta: { label: "操作", width: "default" },
+                enableSorting: false,
+                cell: ({ row }) => {
+                    const r = row.original
+                    const canQuery = r.allowedActions.includes("QUERY_RESULT")
+                    const canReplay = r.allowedActions.includes("REPLAY")
+                    const queryBlocker = r.actionBlockers.find(
+                        (b) => b.action === "QUERY_RESULT",
+                    )
+                    return (
+                        <div className="flex flex-wrap items-center gap-1">
+                            <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                onClick={() => openPreview(r.orderId)}
+                            >
+                                预览
+                            </Button>
+                            <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                render={
+                                    <Link
+                                        href={`/supplier-api/orders/${r.orderId}`}
+                                    />
+                                }
+                            >
+                                详情
+                            </Button>
+                            {r.fulfillmentStatus === "RESULT_UNKNOWN" ? (
+                                <>
+                                    <Button
+                                        type="button"
+                                        size="xs"
+                                        disabled={
+                                            !canQuery ||
+                                            queryResultMutation.isPending
+                                        }
+                                        onClick={() =>
+                                            void handleQueryFromList(r)
+                                        }
+                                    >
+                                        查询原结果
+                                    </Button>
+                                    {!canQuery && queryBlocker ? (
+                                        <span className="max-w-[14rem] text-tiny leading-tight text-muted-foreground">
+                                            {queryBlocker.message}
+                                            {queryBlocker.destinationWorkspaceId ? (
+                                                <>
+                                                    ，可
+                                                    <Link
+                                                        href="/governance/integration-errors"
+                                                        className="text-primary underline-offset-2 hover:underline"
+                                                    >
+                                                        前往接口错误中心
+                                                    </Link>
+                                                </>
+                                            ) : null}
+                                        </span>
+                                    ) : null}
+                                </>
+                            ) : null}
+                            {r.fulfillmentStatus === "RESULT_UNKNOWN" &&
+                            !canReplay ? (
+                                <span className="sr-only">
+                                    重发需先查询确认无结果且系统允许重试
+                                </span>
+                            ) : null}
+                        </div>
+                    )
+                },
+            },
+        ],
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers stable enough for list
+        [focusedIndex, openPreview, queryResultMutation.isPending, rows],
+    )
+
+    const confirmExport = async () => {
+        const requestId = `req-w26-export-${Date.now()}`
+        const command: ExportCommand = {
+            selectionSnapshotId: `snap-${requestId}`,
+            fieldSetId: "w26-list-default-masked",
+            requestId,
+            rowCount: listQuery.data?.pageInfo.total ?? 0,
+            filterSummary: listQuery.data?.filterSummary ?? "",
+        }
+        setPendingExport(command)
+        await runExport(command)
+    }
+
+    const retryExport = async () => {
+        if (!pendingExport) return
+        await runExport(pendingExport)
+    }
+
+    const runExport = async (command: ExportCommand) => {
+        const result = await exportMutation.mutateAsync(command)
+        setExportResult({
+            jobId: result.jobId,
+            rowCount: result.rowCount,
+            permissionVersion: result.permissionVersion,
+            maskDisclaimer: result.maskDisclaimer,
+            downloadLabel: result.downloadLabel,
+            expiresAt: result.expiresAt,
+        })
+        setPendingExport(null)
+        setExportPreviewOpen(false)
+    }
+
+    return (
+        <PageScaffold>
+            <PageHeader
+                title="供应商订单"
+                breadcrumbs={[
+                    {
+                        id: "api",
+                        label: "供应商 API",
+                        href: "/supplier-api/orders",
+                    },
+                    { id: "so", label: "供应商订单", current: true },
+                ]}
+                actions={
+                    <div className="flex flex-wrap items-center gap-2">
+                        <DataFreshness
+                            updatedAt="刚刚"
+                            dateTime={listQuery.data?.queriedAt}
+                            state={listQuery.isFetching ? "syncing" : "fresh"}
+                            label="列表数据"
+                        />
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                                !listQuery.data ||
+                                total === 0 ||
+                                exportMutation.isPending
+                            }
+                            onClick={() => setExportPreviewOpen(true)}
+                        >
+                            <DownloadIcon className="size-3.5" />
+                            导出
+                        </Button>
+                    </div>
+                }
+            />
+
+            {returnTo ? (
+                <div
+                    className={cn(
+                        surfacePanelClassName,
+                        "flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm",
+                    )}
+                >
+                    <span className="text-muted-foreground">
+                        从关联页面进来的。返回时会回到原来的位置。
+                    </span>
+                    <Button
                         type="button"
                         size="sm"
                         variant="secondary"
                         className="rounded-lg shadow-none"
-                        render={<Link href="/commerce/consumption-orders" />}
-                      >
-                        打开商城消费订单
-                      </Button>
-                    </div>
-                  }
-                />
-              ) : undefined
-            }
-            sorting={sorting}
-            onSortingChange={handleSortingChange}
-            pagination={pagination}
-            onPaginationChange={(next) => {
-              updateUrl({
-                page: next.pageIndex + 1,
-                pageSize: next.pageSize,
-              })
-            }}
-            layout="flush"
-            density="compact"
-            defaultColumnPinning={{
-              left: ["identity"],
-              right: ["actions"],
-            }}
-            onRowPreview={(row) => openPreview(row.orderId)}
-            onRowOpen={(row) => openPreview(row.orderId)}
-          />
-        }
-      />
+                        render={<Link href={returnTo} />}
+                    >
+                        返回来源
+                    </Button>
+                </div>
+            ) : null}
 
-      <QuickPreviewSheet
-        open={Boolean(url.preview)}
-        onOpenChange={(open) => {
-          if (!open) closePreview()
-        }}
-        size="detail"
-        title={previewQuery.data?.order.supplierName ?? "供应商订单预览"}
-        identity={
-          previewQuery.data ? (
-            <span className="num">
-              {previewQuery.data.order.orderNo}
-              {previewQuery.data.order.externalOrderNo
-                ? ` · ${previewQuery.data.order.externalOrderNo}`
-                : " · 外部单号尚未返回"}
-            </span>
-          ) : null
-        }
-        summary={
-          previewQuery.data ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <BusinessStatusBadge
-                context="preview"
-                label={previewQuery.data.order.fulfillmentLabel}
-                tone={previewQuery.data.order.fulfillmentTone}
-              />
-              <Badge variant="secondary">
-                取消 {previewQuery.data.order.cancelLabel}
-              </Badge>
-              <Badge variant="secondary">
-                退款 {previewQuery.data.order.refundLabel}
-              </Badge>
-              {previewQuery.data.order.fulfillmentStatus ===
-              "RESULT_UNKNOWN" ? (
-                <Badge variant="outline" className="gap-1">
-                  <TriangleAlertIcon className="size-3" />
-                  须先查询
-                </Badge>
-              ) : null}
-            </div>
-          ) : null
-        }
-        footer={
-          previewQuery.data ? (
-            <>
-              <Button type="button" variant="outline" onClick={closePreview}>
-                关闭
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                render={
-                  <Link
-                    href={`/supplier-api/orders/${previewQuery.data.order.id}`}
-                  />
+            {/* 互斥规则（D21 记录在案）：履约状态 / 售后待处理 / 视图三组指标互斥——
+          点击任一组都会静默重置其它组（避免组合出矛盾空结果），
+          已通过按钮 title 提示；履约多值（fulfillmentStatuses）与单值
+          （fulfillmentStatus）为同一维度。 */}
+            <MetricStrip>
+                {metrics.map((m) => (
+                    <MetricFilterItem
+                        key={m.key}
+                        label={m.label}
+                        value={m.value}
+                        title={
+                            m.fulfillmentStatuses?.length || m.fulfillmentStatus
+                                ? "应用履约状态筛选，会清除「售后待处理」指标"
+                                : m.aftersalePending
+                                  ? "应用「售后待处理」筛选，会清除履约状态筛选"
+                                  : m.view
+                                    ? "切换视图，会清除履约与售后筛选"
+                                    : undefined
+                        }
+                        active={
+                            m.fulfillmentStatuses?.length
+                                ? (url.fulfillmentStatuses?.length ?? 0) ===
+                                      m.fulfillmentStatuses.length &&
+                                  m.fulfillmentStatuses.every((s) =>
+                                      url.fulfillmentStatuses?.includes(s),
+                                  )
+                                : m.fulfillmentStatus
+                                  ? (url.fulfillmentStatuses?.includes(
+                                        m.fulfillmentStatus,
+                                    ) ?? false)
+                                  : m.aftersalePending
+                                    ? url.aftersalePending === true
+                                    : m.view
+                                      ? url.view === m.view &&
+                                        !url.fulfillmentStatuses?.length &&
+                                        !url.aftersalePending
+                                      : false
+                        }
+                        onClick={() => {
+                            if (m.fulfillmentStatuses?.length) {
+                                updateUrl({
+                                    fulfillmentStatuses: m.fulfillmentStatuses,
+                                    aftersalePending: false,
+                                    view: m.fulfillmentStatuses.includes(
+                                        "RESULT_UNKNOWN",
+                                    )
+                                        ? "all"
+                                        : url.view,
+                                    page: 1,
+                                })
+                            } else if (m.fulfillmentStatus) {
+                                updateUrl({
+                                    fulfillmentStatuses: [m.fulfillmentStatus],
+                                    aftersalePending: false,
+                                    view:
+                                        m.fulfillmentStatus === "RESULT_UNKNOWN"
+                                            ? "all"
+                                            : url.view,
+                                    page: 1,
+                                })
+                            } else if (m.aftersalePending) {
+                                updateUrl({
+                                    view: "all",
+                                    fulfillmentStatuses: undefined,
+                                    aftersalePending: !url.aftersalePending,
+                                    page: 1,
+                                })
+                            } else if (m.view) {
+                                updateUrl({
+                                    view: m.view,
+                                    fulfillmentStatuses: undefined,
+                                    aftersalePending: false,
+                                    page: 1,
+                                })
+                            }
+                        }}
+                    />
+                ))}
+            </MetricStrip>
+
+            {actionResult ? (
+                <FormalActionResult
+                    status={
+                        actionResult.status === "failed"
+                            ? "rejected"
+                            : actionResult.status
+                    }
+                    title={actionResult.title}
+                    description={actionResult.description}
+                    reference={actionResult.reference}
+                    actions={
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setActionResult(null)}
+                        >
+                            关闭
+                        </Button>
+                    }
+                />
+            ) : null}
+
+            {exportResult ? (
+                <div className="space-y-2">
+                    <FormalActionResult
+                        status="succeeded"
+                        title="导出任务已创建"
+                        description={exportResult.maskDisclaimer}
+                        facts={[
+                            {
+                                label: "行数",
+                                value: String(exportResult.rowCount),
+                            },
+                            {
+                                label: "权限规则",
+                                value: "已固定，下载时重新校验",
+                            },
+                            {
+                                label: "文件",
+                                value: exportResult.downloadLabel,
+                            },
+                            {
+                                label: "到期",
+                                value: formatDateTime(
+                                    exportResult.expiresAt,
+                                    "monthDayIntl",
+                                    "passthrough",
+                                ),
+                            },
+                        ]}
+                    />
+                    <BackgroundJobProgress
+                        mode="all-or-nothing"
+                        status="succeeded"
+                        label="导出作业"
+                        description="筛选快照 · 字段打码 · 结果 7 天内可下载"
+                        total={exportResult.rowCount}
+                        completed={exportResult.rowCount}
+                        succeeded={exportResult.rowCount}
+                    />
+                </div>
+            ) : null}
+
+            {exportPreviewOpen ? (
+                <div className={cn(surfacePanelClassName, "space-y-3 p-4")}>
+                    <BatchImpactPreview
+                        title="导出当前筛选全部"
+                        description="按当前筛选快照导出，不限于当前页；结果 7 天内可下载，下载时将重新校验权限。"
+                        filterSummary={listQuery.data?.filterSummary ?? "—"}
+                        selectionScope="当前筛选全部"
+                        estimated={total}
+                        processable={total}
+                        skipped={0}
+                        background
+                        sensitiveFields={[
+                            "收货地址",
+                            "手机号",
+                            "未授权成本金额",
+                        ]}
+                        skippedReason="无权限字段以打码形式导出，默认列不含收货地址"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                        {exportMutation.isError ? (
+                            <p
+                                className="w-full text-sm text-destructive"
+                                aria-live="polite"
+                            >
+                                {getErrorMessage(
+                                    exportMutation.error,
+                                    "导出任务创建失败，可按原筛选快照重试。",
+                                )}
+                            </p>
+                        ) : null}
+                        <Button
+                            type="button"
+                            size="sm"
+                            disabled={exportMutation.isPending}
+                            onClick={() => {
+                                if (exportMutation.isError && pendingExport) {
+                                    void retryExport()
+                                } else {
+                                    void confirmExport()
+                                }
+                            }}
+                        >
+                            {exportMutation.isError && pendingExport
+                                ? "按原快照重试"
+                                : "确认导出"}
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setExportPreviewOpen(false)}
+                        >
+                            取消
+                        </Button>
+                    </div>
+                </div>
+            ) : null}
+
+            <BusinessTableFrame
+                title="供应商订单列表"
+                description="身份列与操作列固定；履约/取消/退款三种状态独立展示。"
+                toolbar={
+                    <ListToolbar
+                        search={
+                            <InputGroup className="w-full max-w-sm">
+                                <InputGroupAddon>
+                                    <SearchIcon className="size-3.5" />
+                                </InputGroupAddon>
+                                <InputGroupInput
+                                    data-slot="sfo-list-search"
+                                    value={searchDraft}
+                                    onChange={(e) =>
+                                        setSearchDraft(e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            updateUrl({
+                                                q: searchDraft || undefined,
+                                                page: 1,
+                                            })
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        if ((url.q ?? "") !== searchDraft) {
+                                            updateUrl({
+                                                q: searchDraft || undefined,
+                                                page: 1,
+                                            })
+                                        }
+                                    }}
+                                    placeholder="供应商订单号、商城订单、外部单号"
+                                    aria-label="搜索供应商订单"
+                                />
+                            </InputGroup>
+                        }
+                        filters={
+                            <>
+                                <ToggleGroup
+                                    value={[url.view]}
+                                    onValueChange={(values) => {
+                                        const next = values[0] as
+                                            | ListView
+                                            | undefined
+                                        if (next)
+                                            updateUrl({ view: next, page: 1 })
+                                    }}
+                                    variant="outline"
+                                    size="sm"
+                                    spacing={0}
+                                    aria-label="列表视图"
+                                >
+                                    {(
+                                        Object.keys(VIEW_LABEL) as ListView[]
+                                    ).map((v) => (
+                                        <ToggleGroupItem key={v} value={v}>
+                                            {VIEW_LABEL[v]}
+                                        </ToggleGroupItem>
+                                    ))}
+                                </ToggleGroup>
+                                <SupplierSearchCombobox
+                                    value={url.supplierId || undefined}
+                                    onValueChange={(id) =>
+                                        updateUrl({
+                                            supplierId: id || undefined,
+                                            page: 1,
+                                        })
+                                    }
+                                    purpose="filter"
+                                    aria-label="供应商"
+                                    className="w-[12rem]"
+                                    placeholder="全部供应商"
+                                />
+                                <MultiOptionCombobox
+                                    value={url.fulfillmentStatuses ?? []}
+                                    onValueChange={(values) =>
+                                        updateUrl({
+                                            fulfillmentStatuses:
+                                                values.length > 0
+                                                    ? (values as SupplierFulfillmentStatus[])
+                                                    : undefined,
+                                            page: 1,
+                                        })
+                                    }
+                                    options={FULFILLMENT_STATUSES.map((s) => ({
+                                        value: s,
+                                        label: FULFILLMENT_STATUS_LABEL[s],
+                                    }))}
+                                    aria-label="履约状态"
+                                    className="w-[10rem]"
+                                    size="sm"
+                                    placeholder="履约·全部"
+                                />
+                            </>
+                        }
+                        secondary={
+                            <>
+                                <OptionCombobox
+                                    value={url.cancelStatuses?.[0] ?? ""}
+                                    onValueChange={(v) =>
+                                        updateUrl({
+                                            cancelStatuses: v
+                                                ? [v as CancelStatus]
+                                                : undefined,
+                                            page: 1,
+                                        })
+                                    }
+                                    options={[
+                                        { value: "", label: "取消·全部" },
+                                        ...CANCEL_STATUSES.map((s) => ({
+                                            value: s,
+                                            label: CANCEL_STATUS_LABEL[s],
+                                        })),
+                                    ]}
+                                    aria-label="取消状态"
+                                    className="w-[7.5rem]"
+                                    size="sm"
+                                    allowClear={false}
+                                    placeholder="取消·全部"
+                                />
+                                <OptionCombobox
+                                    value={url.refundStatuses?.[0] ?? ""}
+                                    onValueChange={(v) =>
+                                        updateUrl({
+                                            refundStatuses: v
+                                                ? [v as RefundStatus]
+                                                : undefined,
+                                            page: 1,
+                                        })
+                                    }
+                                    options={[
+                                        { value: "", label: "退款·全部" },
+                                        ...REFUND_STATUSES.map((s) => ({
+                                            value: s,
+                                            label: REFUND_STATUS_LABEL[s],
+                                        })),
+                                    ]}
+                                    aria-label="退款状态"
+                                    className="w-[7.5rem]"
+                                    size="sm"
+                                    allowClear={false}
+                                    placeholder="退款·全部"
+                                />
+                                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    支付自
+                                    <DatePicker
+                                        className="w-[9.5rem]"
+                                        value={url.paidFrom || undefined}
+                                        onValueChange={(next) =>
+                                            updateUrl({
+                                                paidFrom: next || undefined,
+                                                page: 1,
+                                            })
+                                        }
+                                    />
+                                </label>
+                                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    至
+                                    <DatePicker
+                                        className="w-[9.5rem]"
+                                        value={url.paidTo || undefined}
+                                        onValueChange={(next) =>
+                                            updateUrl({
+                                                paidTo: next || undefined,
+                                                page: 1,
+                                            })
+                                        }
+                                    />
+                                </label>
+                            </>
+                        }
+                        actions={
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span aria-live="polite">
+                                    共 {total.toLocaleString("zh-CN")} 条
+                                </span>
+                                {hasActiveFilters ? (
+                                    <Button
+                                        type="button"
+                                        size="xs"
+                                        variant="ghost"
+                                        onClick={clearFilters}
+                                    >
+                                        清除筛选
+                                    </Button>
+                                ) : null}
+                            </div>
+                        }
+                    />
                 }
-              >
-                查看详情
-              </Button>
-              {previewQuery.data.allowedActions.includes("QUERY_RESULT") ? (
-                <Button
-                  type="button"
-                  disabled={queryResultMutation.isPending}
-                  onClick={() => {
-                    void queryResultMutation
-                      .mutateAsync({
-                        orderId: previewQuery.data!.order.id,
-                        expectedLockVersion:
-                          previewQuery.data!.order.lockVersion,
-                        targetSupplierActionId:
-                          previewQuery.data!.placeActionId,
-                        operationId: `op-query-preview-${Date.now()}`,
-                        idempotencyKey: `query-preview-${previewQuery.data!.order.id}-${Date.now()}`,
-                        workItemId: previewQuery.data!.workItem?.workItemId,
-                        expectedSubjectHash:
-                          previewQuery.data!.workItem?.subjectHash,
-                        expectedSubjectVersion:
-                          previewQuery.data!.workItem?.subjectVersion,
-                      })
-                      .then((res) => {
-                        setActionResult({
-                          status:
-                            res.status === "failed"
-                              ? "failed"
-                              : res.status === "blocked"
-                                ? "blocked"
-                                : res.status === "unknown"
-                                  ? "unknown"
-                                  : "succeeded",
-                          title:
-                            res.status === "succeeded"
-                              ? "查询原结果已完成"
-                              : "查询未形成终局成功",
-                          description: res.message,
-                          reference: res.reference,
-                        })
-                      })
-                  }}
-                >
-                  查询原结果
-                </Button>
-              ) : null}
-            </>
-          ) : null
-        }
-      >
-        {previewQuery.isPending ? (
-          <div className="p-5 text-sm text-muted-foreground">加载预览…</div>
-        ) : previewQuery.data ? (
-          <SupplierOrderPreviewPanel order={previewQuery.data} />
-        ) : (
-          <div className="p-5 text-sm text-muted-foreground">
-            未找到该供应商订单
-          </div>
-        )}
-      </QuickPreviewSheet>
-    </PageScaffold>
-  )
+                table={
+                    <DataTable
+                        data={rows}
+                        columns={columns}
+                        getRowId={(row) => row.orderId}
+                        rowCount={total}
+                        loading={listQuery.isPending}
+                        errorState={
+                            listQuery.isError ? (
+                                <BusinessFailureState
+                                    title="供应商订单列表加载失败"
+                                    error={listQuery.error}
+                                    action={
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() =>
+                                                void listQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
+                                    }
+                                />
+                            ) : undefined
+                        }
+                        emptyState={
+                            !listQuery.isPending && rows.length === 0 ? (
+                                <BusinessEmptyState
+                                    kind="filter"
+                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    title="当前范围没有供应商订单"
+                                    description="调整视图、供应商或支付时间，或从商城消费订单钻取。"
+                                    action={
+                                        <div className="flex flex-wrap gap-2">
+                                            {hasActiveFilters ? (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="rounded-lg shadow-none"
+                                                    onClick={clearFilters}
+                                                >
+                                                    清除筛选
+                                                </Button>
+                                            ) : null}
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="secondary"
+                                                className="rounded-lg shadow-none"
+                                                render={
+                                                    <Link href="/commerce/consumption-orders" />
+                                                }
+                                            >
+                                                打开商城消费订单
+                                            </Button>
+                                        </div>
+                                    }
+                                />
+                            ) : undefined
+                        }
+                        sorting={sorting}
+                        onSortingChange={handleSortingChange}
+                        pagination={pagination}
+                        onPaginationChange={(next) => {
+                            updateUrl({
+                                page: next.pageIndex + 1,
+                                pageSize: next.pageSize,
+                            })
+                        }}
+                        layout="flush"
+                        density="compact"
+                        defaultColumnPinning={{
+                            left: ["identity"],
+                            right: ["actions"],
+                        }}
+                        onRowPreview={(row) => openPreview(row.orderId)}
+                        onRowOpen={(row) => openPreview(row.orderId)}
+                    />
+                }
+            />
+
+            <QuickPreviewSheet
+                open={Boolean(url.preview)}
+                onOpenChange={(open) => {
+                    if (!open) closePreview()
+                }}
+                size="detail"
+                title={
+                    previewQuery.data?.order.supplierName ?? "供应商订单预览"
+                }
+                identity={
+                    previewQuery.data ? (
+                        <span className="num">
+                            {previewQuery.data.order.orderNo}
+                            {previewQuery.data.order.externalOrderNo
+                                ? ` · ${previewQuery.data.order.externalOrderNo}`
+                                : " · 外部单号尚未返回"}
+                        </span>
+                    ) : null
+                }
+                summary={
+                    previewQuery.data ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <BusinessStatusBadge
+                                context="preview"
+                                label={previewQuery.data.order.fulfillmentLabel}
+                                tone={previewQuery.data.order.fulfillmentTone}
+                            />
+                            <Badge variant="secondary">
+                                取消 {previewQuery.data.order.cancelLabel}
+                            </Badge>
+                            <Badge variant="secondary">
+                                退款 {previewQuery.data.order.refundLabel}
+                            </Badge>
+                            {previewQuery.data.order.fulfillmentStatus ===
+                            "RESULT_UNKNOWN" ? (
+                                <Badge variant="outline" className="gap-1">
+                                    <TriangleAlertIcon className="size-3" />
+                                    须先查询
+                                </Badge>
+                            ) : null}
+                        </div>
+                    ) : null
+                }
+                footer={
+                    previewQuery.data ? (
+                        <>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={closePreview}
+                            >
+                                关闭
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                render={
+                                    <Link
+                                        href={`/supplier-api/orders/${previewQuery.data.order.id}`}
+                                    />
+                                }
+                            >
+                                查看详情
+                            </Button>
+                            {previewQuery.data.allowedActions.includes(
+                                "QUERY_RESULT",
+                            ) ? (
+                                <Button
+                                    type="button"
+                                    disabled={queryResultMutation.isPending}
+                                    onClick={() => {
+                                        void queryResultMutation
+                                            .mutateAsync({
+                                                orderId:
+                                                    previewQuery.data!.order.id,
+                                                expectedLockVersion:
+                                                    previewQuery.data!.order
+                                                        .lockVersion,
+                                                targetSupplierActionId:
+                                                    previewQuery.data!
+                                                        .placeActionId,
+                                                operationId: `op-query-preview-${Date.now()}`,
+                                                idempotencyKey: `query-preview-${previewQuery.data!.order.id}-${Date.now()}`,
+                                                workItemId:
+                                                    previewQuery.data!.workItem
+                                                        ?.workItemId,
+                                                expectedSubjectHash:
+                                                    previewQuery.data!.workItem
+                                                        ?.subjectHash,
+                                                expectedSubjectVersion:
+                                                    previewQuery.data!.workItem
+                                                        ?.subjectVersion,
+                                            })
+                                            .then((res) => {
+                                                setActionResult({
+                                                    status:
+                                                        res.status === "failed"
+                                                            ? "failed"
+                                                            : res.status ===
+                                                                "blocked"
+                                                              ? "blocked"
+                                                              : res.status ===
+                                                                  "unknown"
+                                                                ? "unknown"
+                                                                : "succeeded",
+                                                    title:
+                                                        res.status ===
+                                                        "succeeded"
+                                                            ? "查询原结果已完成"
+                                                            : "查询未形成终局成功",
+                                                    description: res.message,
+                                                    reference: res.reference,
+                                                })
+                                            })
+                                    }}
+                                >
+                                    查询原结果
+                                </Button>
+                            ) : null}
+                        </>
+                    ) : null
+                }
+            >
+                {previewQuery.isPending ? (
+                    <div className="p-5 text-sm text-muted-foreground">
+                        加载预览…
+                    </div>
+                ) : previewQuery.data ? (
+                    <SupplierOrderPreviewPanel order={previewQuery.data} />
+                ) : (
+                    <div className="p-5 text-sm text-muted-foreground">
+                        未找到该供应商订单
+                    </div>
+                )}
+            </QuickPreviewSheet>
+        </PageScaffold>
+    )
 }

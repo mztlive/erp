@@ -11,13 +11,13 @@ import { setToken } from "@/lib/api/session"
 type AccountKind = "admin"
 
 export type LoginInput = {
-  account: string
-  password: string
-  account_kind?: AccountKind
+    account: string
+    password: string
+    account_kind?: AccountKind
 }
 
 export type LoginResult = {
-  token: string
+    token: string
 }
 
 /**
@@ -25,18 +25,18 @@ export type LoginResult = {
  * permissions 为 Casbin 隐式权限字符串，含通配如 `customer:*` / `*:*`。
  */
 export type AccountProfile = {
-  userid: string
-  account: string
-  name: string
-  email?: string | null
-  phone?: string | null
-  avatar?: string | null
-  subject: string
-  role_ids: string[]
-  /** `resource:action` 权限列表（可能含 `*` 通配）。 */
-  permissions: string[]
-  account_kind: AccountKind
-  store_id?: string | null
+    userid: string
+    account: string
+    name: string
+    email?: string | null
+    phone?: string | null
+    avatar?: string | null
+    subject: string
+    role_ids: string[]
+    /** `resource:action` 权限列表（可能含 `*` 通配）。 */
+    permissions: string[]
+    account_kind: AccountKind
+    store_id?: string | null
 }
 
 /**
@@ -46,20 +46,20 @@ export type AccountProfile = {
  * @returns 服务端签发的 JWT。
  */
 export async function login(input: LoginInput): Promise<LoginResult> {
-  const result = await apiPost<LoginResult>("/login", {
-    account: input.account.trim(),
-    password: input.password,
-    account_kind: input.account_kind ?? "admin",
-  })
-  if (!result?.token) {
-    throw {
-      kind: "Parse",
-      message: "登录响应缺少 token",
-      responseData: result,
+    const result = await apiPost<LoginResult>("/login", {
+        account: input.account.trim(),
+        password: input.password,
+        account_kind: input.account_kind ?? "admin",
+    })
+    if (!result?.token) {
+        throw {
+            kind: "Parse",
+            message: "登录响应缺少 token",
+            responseData: result,
+        }
     }
-  }
-  setToken(result.token)
-  return result
+    setToken(result.token)
+    return result
 }
 
 /**
@@ -67,10 +67,12 @@ export async function login(input: LoginInput): Promise<LoginResult> {
  * 侧栏、顶栏与工作台身份均应基于本接口，禁止本地硬编码角色菜单。
  */
 export async function fetchAccountProfile(): Promise<AccountProfile> {
-  const profile = await apiGet<AccountProfile>("/account/profile")
-  return {
-    ...profile,
-    permissions: Array.isArray(profile.permissions) ? profile.permissions : [],
-    role_ids: Array.isArray(profile.role_ids) ? profile.role_ids : [],
-  }
+    const profile = await apiGet<AccountProfile>("/account/profile")
+    return {
+        ...profile,
+        permissions: Array.isArray(profile.permissions)
+            ? profile.permissions
+            : [],
+        role_ids: Array.isArray(profile.role_ids) ? profile.role_ids : [],
+    }
 }

@@ -5,7 +5,7 @@
 import type { MallConsumptionOrderView } from "@/features/mall-consumption-orders/types"
 
 export function customerLabelFor(view: MallConsumptionOrderView): string {
-  return view.fieldPermissions.customer === "masked"
-    ? "客户（已打码）"
-    : view.customer.customerLabel
+    return view.fieldPermissions.customer === "masked"
+        ? "客户（已打码）"
+        : view.customer.customerLabel
 }

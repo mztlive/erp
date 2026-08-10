@@ -16,7 +16,7 @@ const unauthorizedHandlers = new Set<() => void>()
  * @returns 未登录时返回 null。
  */
 export const getToken = (): string | null =>
-  localStorage.getItem(TOKEN_STORAGE_KEY)
+    localStorage.getItem(TOKEN_STORAGE_KEY)
 
 /**
  * 保存登录 token。
@@ -24,14 +24,14 @@ export const getToken = (): string | null =>
  * @param token 服务端下发的 JWT 字符串。
  */
 export const setToken = (token: string): void => {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token)
+    localStorage.setItem(TOKEN_STORAGE_KEY, token)
 }
 
 /**
  * 清除登录 token（登出或 401 失效时调用）。
  */
 export const clearToken = (): void => {
-  localStorage.removeItem(TOKEN_STORAGE_KEY)
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
 /**
@@ -46,10 +46,10 @@ export const isAuthenticated = (): boolean => Boolean(getToken())
  * @returns 取消注册函数，调用后该回调不再被触发。
  */
 export const onUnauthorized = (handler: () => void): (() => void) => {
-  unauthorizedHandlers.add(handler)
-  return () => {
-    unauthorizedHandlers.delete(handler)
-  }
+    unauthorizedHandlers.add(handler)
+    return () => {
+        unauthorizedHandlers.delete(handler)
+    }
 }
 
 /**
@@ -58,8 +58,8 @@ export const onUnauthorized = (handler: () => void): (() => void) => {
  * 会先清除本地 token，再逐个执行回调（跳转登录页、清空 Query 缓存等）。
  */
 export const notifyUnauthorized = (): void => {
-  clearToken()
-  for (const handler of unauthorizedHandlers) {
-    handler()
-  }
+    clearToken()
+    for (const handler of unauthorizedHandlers) {
+        handler()
+    }
 }

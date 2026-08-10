@@ -5,15 +5,15 @@ interface PermissionItem {
     path: string
     description: string
     permission: {
-      resource: string
-      action: string
+        resource: string
+        action: string
     }
 }
 
 export interface PermissionGroup {
-    name: string;
-    description: string;
-    permissions: PermissionItem[];
+    name: string
+    description: string
+    permissions: PermissionItem[]
 }
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
@@ -3907,4 +3907,4 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
-];
+]

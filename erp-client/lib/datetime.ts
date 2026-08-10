@@ -15,64 +15,66 @@
  */
 
 export type DateTimeFormatMode =
-  | "full"
-  | "default"
-  | "monthDay"
-  | "monthDayIntl"
-  | "fullIntl"
-  | "dateStyle"
+    | "full"
+    | "default"
+    | "monthDay"
+    | "monthDayIntl"
+    | "fullIntl"
+    | "dateStyle"
 
 export type DateTimeEmptyHandling = "dash" | "passthrough"
 
 export function formatDateTime(
-  iso: string | null | undefined,
-  mode: DateTimeFormatMode = "full",
-  empty: DateTimeEmptyHandling = "dash"
+    iso: string | null | undefined,
+    mode: DateTimeFormatMode = "full",
+    empty: DateTimeEmptyHandling = "dash",
 ): string {
-  if (empty === "dash" && !iso) return "—"
-  try {
-    switch (mode) {
-      case "default":
-        return new Date(iso as string).toLocaleString("zh-CN", { hour12: false })
-      case "monthDay":
-        return new Date(iso as string).toLocaleString("zh-CN", {
-          hour12: false,
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      case "monthDayIntl":
-        return new Intl.DateTimeFormat("zh-CN", {
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date(iso as string))
-      case "fullIntl":
-        return new Intl.DateTimeFormat("zh-CN", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date(iso as string))
-      case "dateStyle":
-        return new Intl.DateTimeFormat("zh-CN", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(iso as string))
-      default:
-        return new Date(iso as string).toLocaleString("zh-CN", {
-          hour12: false,
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
+    if (empty === "dash" && !iso) return "—"
+    try {
+        switch (mode) {
+            case "default":
+                return new Date(iso as string).toLocaleString("zh-CN", {
+                    hour12: false,
+                })
+            case "monthDay":
+                return new Date(iso as string).toLocaleString("zh-CN", {
+                    hour12: false,
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })
+            case "monthDayIntl":
+                return new Intl.DateTimeFormat("zh-CN", {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                }).format(new Date(iso as string))
+            case "fullIntl":
+                return new Intl.DateTimeFormat("zh-CN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                }).format(new Date(iso as string))
+            case "dateStyle":
+                return new Intl.DateTimeFormat("zh-CN", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                }).format(new Date(iso as string))
+            default:
+                return new Date(iso as string).toLocaleString("zh-CN", {
+                    hour12: false,
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })
+        }
+    } catch {
+        return (iso as string) ?? ""
     }
-  } catch {
-    return (iso as string) ?? ""
-  }
 }

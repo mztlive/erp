@@ -10,15 +10,15 @@ import { WorkspaceShell } from "@/components/layout/workspace-shell"
  * 清会话并跳转登录。
  */
 export default function WorkspaceLayout({
-  children,
+    children,
 }: {
-  children: React.ReactNode
+    children: React.ReactNode
 }) {
-  return (
-    <Suspense fallback={<div className="min-h-svh bg-background" />}>
-      <RequireAuth>
-        <WorkspaceShell>{children}</WorkspaceShell>
-      </RequireAuth>
-    </Suspense>
-  )
+    return (
+        <Suspense fallback={<div className="min-h-svh bg-background" />}>
+            <RequireAuth>
+                <WorkspaceShell>{children}</WorkspaceShell>
+            </RequireAuth>
+        </Suspense>
+    )
 }

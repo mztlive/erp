@@ -12,36 +12,36 @@
 export type FulfillmentLane = "warehouse" | "procurement"
 
 export type FulfillmentLaneHeader = {
-  /** 侧栏 / 页头标题 */
-  label: string
-  /** 页头说明 */
-  description: string
-  /** 面包屑上级分组；无归属岗位时为空 */
-  group?: { label: string; href: string }
+    /** 侧栏 / 页头标题 */
+    label: string
+    /** 页头说明 */
+    description: string
+    /** 面包屑上级分组；无归属岗位时为空 */
+    group?: { label: string; href: string }
 }
 
 const FULFILLMENT_LANES: Record<
-  FulfillmentLane,
-  FulfillmentLaneHeader & {
-    value: FulfillmentLane
-    /** 侧栏 href */
-    navHref: string
-  }
+    FulfillmentLane,
+    FulfillmentLaneHeader & {
+        value: FulfillmentLane
+        /** 侧栏 href */
+        navHref: string
+    }
 > = {
-  warehouse: {
-    value: "warehouse",
-    label: "收货与发货",
-    description: "处理待入库和公司仓发货，连续做完再下一条。",
-    group: { label: "仓储", href: "/fulfillment?lane=warehouse" },
-    navHref: "/fulfillment?lane=warehouse",
-  },
-  procurement: {
-    value: "procurement",
-    label: "交付与代发",
-    description: "处理供应商直发、电子交付和线下服务。",
-    group: { label: "采购与履约", href: "/procurement/confirm" },
-    navHref: "/fulfillment?lane=procurement",
-  },
+    warehouse: {
+        value: "warehouse",
+        label: "收货与发货",
+        description: "处理待入库和公司仓发货，连续做完再下一条。",
+        group: { label: "仓储", href: "/fulfillment?lane=warehouse" },
+        navHref: "/fulfillment?lane=warehouse",
+    },
+    procurement: {
+        value: "procurement",
+        label: "交付与代发",
+        description: "处理供应商直发、电子交付和线下服务。",
+        group: { label: "采购与履约", href: "/procurement/confirm" },
+        navHref: "/fulfillment?lane=procurement",
+    },
 }
 
 /**
@@ -52,13 +52,13 @@ const FULFILLMENT_LANES: Record<
  * 对着一条电子交付任务写「收货与发货」。中性短名与 `lib/ui-text.ts` 的 W09 一致。
  */
 const FULFILLMENT_NEUTRAL_HEADER: FulfillmentLaneHeader = {
-  label: "履约处理",
-  description: "入库、公司仓发、供应商直发、电子交付与线下服务。",
+    label: "履约处理",
+    description: "入库、公司仓发、供应商直发、电子交付与线下服务。",
 }
 
 function parseLaneParam(raw: string | null): FulfillmentLane | null {
-  if (raw === "warehouse" || raw === "procurement") return raw
-  return null
+    if (raw === "warehouse" || raw === "procurement") return raw
+    return null
 }
 
 /**
@@ -69,10 +69,12 @@ function parseLaneParam(raw: string | null): FulfillmentLane | null {
  * 写回 URL —— 写回等于替用户认领一个他没选的岗位。
  */
 export function resolveLane(laneRaw: string | null): FulfillmentLane | null {
-  return parseLaneParam(laneRaw)
+    return parseLaneParam(laneRaw)
 }
 
 /** 页头/面包屑用：有岗位取岗位口径，无岗位取中性口径。 */
-export function laneHeader(lane: FulfillmentLane | null): FulfillmentLaneHeader {
-  return lane ? FULFILLMENT_LANES[lane] : FULFILLMENT_NEUTRAL_HEADER
+export function laneHeader(
+    lane: FulfillmentLane | null,
+): FulfillmentLaneHeader {
+    return lane ? FULFILLMENT_LANES[lane] : FULFILLMENT_NEUTRAL_HEADER
 }

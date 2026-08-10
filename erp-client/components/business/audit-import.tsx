@@ -1,735 +1,808 @@
-"use client";
+"use client"
 
-import * as React from "react";
+import * as React from "react"
 import {
-  CircleCheckIcon,
-  CircleDashedIcon,
-  CircleXIcon,
-  HistoryIcon,
-  LoaderCircleIcon,
-} from "lucide-react";
+    CircleCheckIcon,
+    CircleDashedIcon,
+    CircleXIcon,
+    HistoryIcon,
+    LoaderCircleIcon,
+} from "lucide-react"
 
 import {
-  Alert,
-  AlertAction,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+    Alert,
+    AlertAction,
+    AlertDescription,
+    AlertTitle,
+} from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemTitle,
-} from "@/components/ui/item";
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
+    Item,
+    ItemActions,
+    ItemContent,
+    ItemDescription,
+    ItemTitle,
+} from "@/components/ui/item"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import {
-  Timeline,
-  TimelineDescription,
-  TimelineHeader,
-  TimelineItem,
-  TimelineMarker,
-  TimelineTime,
-  TimelineTitle,
-} from "@/components/ui/timeline";
-import { cn } from "@/lib/utils";
+    Timeline,
+    TimelineDescription,
+    TimelineHeader,
+    TimelineItem,
+    TimelineMarker,
+    TimelineTime,
+    TimelineTitle,
+} from "@/components/ui/timeline"
+import { cn } from "@/lib/utils"
 
 export type WorkTaskStatus = Readonly<{
-  label: string;
-  tone?: StatusTone;
-}>;
+    label: string
+    tone?: StatusTone
+}>
 
-export type WorkTaskItemDensity = "default" | "compact";
+export type WorkTaskItemDensity = "default" | "compact"
 
 export interface WorkTaskItemProps extends Omit<
-  React.ComponentProps<typeof Item>,
-  "children" | "title"
+    React.ComponentProps<typeof Item>,
+    "children" | "title"
 > {
-  taskType: React.ReactNode;
-  businessObject: React.ReactNode;
-  counterparty?: React.ReactNode;
-  enteredAt: React.ReactNode;
-  enteredDateTime?: string;
-  /** 默认密度下「进入时间」字段的标签；默认「进入队列」（沿用既有语境）。 */
-  enteredAtLabel?: string;
-  dueAt: React.ReactNode;
-  dueDateTime?: string;
-  responsibleParty: React.ReactNode;
-  reason: React.ReactNode;
-  impact: React.ReactNode;
-  status?: WorkTaskStatus;
-  nextAction?: React.ReactNode;
-  /**
-   * compact：只保留任务类型、对象、截止与责任方，省略进入队列时间与原因/影响。
-   * 仅用于右侧已有详情面板的队列选择列表；独立展示的工作台请用 default。
-   */
-  density?: WorkTaskItemDensity;
+    taskType: React.ReactNode
+    businessObject: React.ReactNode
+    counterparty?: React.ReactNode
+    enteredAt: React.ReactNode
+    enteredDateTime?: string
+    /** 默认密度下「进入时间」字段的标签；默认「进入队列」（沿用既有语境）。 */
+    enteredAtLabel?: string
+    dueAt: React.ReactNode
+    dueDateTime?: string
+    responsibleParty: React.ReactNode
+    reason: React.ReactNode
+    impact: React.ReactNode
+    status?: WorkTaskStatus
+    nextAction?: React.ReactNode
+    /**
+     * compact：只保留任务类型、对象、截止与责任方，省略进入队列时间与原因/影响。
+     * 仅用于右侧已有详情面板的队列选择列表；独立展示的工作台请用 default。
+     */
+    density?: WorkTaskItemDensity
 }
 
 /**
  * 工作台任务条目。截止时间、责任方和可执行动作均由调用方提供，组件不判断逾期或权限。
  */
 export function WorkTaskItem({
-  taskType,
-  businessObject,
-  counterparty,
-  enteredAt,
-  enteredDateTime,
-  enteredAtLabel = "进入队列",
-  dueAt,
-  dueDateTime,
-  responsibleParty,
-  reason,
-  impact,
-  status,
-  nextAction,
-  density = "default",
-  className,
-  ...props
+    taskType,
+    businessObject,
+    counterparty,
+    enteredAt,
+    enteredDateTime,
+    enteredAtLabel = "进入队列",
+    dueAt,
+    dueDateTime,
+    responsibleParty,
+    reason,
+    impact,
+    status,
+    nextAction,
+    density = "default",
+    className,
+    ...props
 }: WorkTaskItemProps) {
-  const compact = density === "compact";
-  const due = dueDateTime ? (
-    <time dateTime={dueDateTime}>{dueAt}</time>
-  ) : (
-    dueAt
-  );
+    const compact = density === "compact"
+    const due = dueDateTime ? (
+        <time dateTime={dueDateTime}>{dueAt}</time>
+    ) : (
+        dueAt
+    )
 
-  return (
-    <Item
-      data-slot="work-task-item"
-      data-density={density}
-      variant="outline"
-      size={compact ? "xs" : "sm"}
-      className={cn("items-start", className)}
-      {...props}
-    >
-      <ItemContent>
-        <ItemTitle className="flex-wrap">
-          <span>{taskType}</span>
-          {status ? (
-            <StatusBadge label={status.label} tone={status.tone} />
-          ) : null}
-        </ItemTitle>
-        <ItemDescription className="flex flex-wrap gap-x-3 gap-y-1">
-          <span className="font-medium text-foreground">{businessObject}</span>
-          {counterparty ? <span>{counterparty}</span> : null}
-        </ItemDescription>
+    return (
+        <Item
+            data-slot="work-task-item"
+            data-density={density}
+            variant="outline"
+            size={compact ? "xs" : "sm"}
+            className={cn("items-start", className)}
+            {...props}
+        >
+            <ItemContent>
+                <ItemTitle className="flex-wrap">
+                    <span>{taskType}</span>
+                    {status ? (
+                        <StatusBadge label={status.label} tone={status.tone} />
+                    ) : null}
+                </ItemTitle>
+                <ItemDescription className="flex flex-wrap gap-x-3 gap-y-1">
+                    <span className="font-medium text-foreground">
+                        {businessObject}
+                    </span>
+                    {counterparty ? <span>{counterparty}</span> : null}
+                </ItemDescription>
 
-        {compact ? (
-          <dl className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs">
-            <div className="flex items-baseline gap-1">
-              <dt className="text-muted-foreground">截止</dt>
-              <dd className="font-medium text-foreground">{due}</dd>
-            </div>
-            <div className="flex min-w-0 items-baseline gap-1">
-              <dt className="sr-only">责任方</dt>
-              <dd className="truncate text-muted-foreground">
-                {responsibleParty}
-              </dd>
-            </div>
-          </dl>
-        ) : (
-          <>
-            <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-              <div className="flex items-baseline gap-1">
-                <dt className="text-muted-foreground">{enteredAtLabel}</dt>
-                <dd className="font-medium text-foreground">
-                  {enteredDateTime ? (
-                    <time dateTime={enteredDateTime}>{enteredAt}</time>
-                  ) : (
-                    enteredAt
-                  )}
-                </dd>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <dt className="text-muted-foreground">截止</dt>
-                <dd className="font-medium text-foreground">{due}</dd>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <dt className="text-muted-foreground">责任方</dt>
-                <dd className="font-medium text-foreground">
-                  {responsibleParty}
-                </dd>
-              </div>
-            </dl>
-            <dl className="mt-2 grid gap-1 text-xs">
-              <div className="flex items-start gap-1">
-                <dt className="shrink-0 text-muted-foreground">原因</dt>
-                <dd className="text-foreground">{reason}</dd>
-              </div>
-              <div className="flex items-start gap-1">
-                <dt className="shrink-0 text-muted-foreground">影响</dt>
-                <dd className="text-foreground">{impact}</dd>
-              </div>
-            </dl>
-          </>
-        )}
-      </ItemContent>
-      {nextAction ? <ItemActions>{nextAction}</ItemActions> : null}
-    </Item>
-  );
+                {compact ? (
+                    <dl className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs">
+                        <div className="flex items-baseline gap-1">
+                            <dt className="text-muted-foreground">截止</dt>
+                            <dd className="font-medium text-foreground">
+                                {due}
+                            </dd>
+                        </div>
+                        <div className="flex min-w-0 items-baseline gap-1">
+                            <dt className="sr-only">责任方</dt>
+                            <dd className="truncate text-muted-foreground">
+                                {responsibleParty}
+                            </dd>
+                        </div>
+                    </dl>
+                ) : (
+                    <>
+                        <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                            <div className="flex items-baseline gap-1">
+                                <dt className="text-muted-foreground">
+                                    {enteredAtLabel}
+                                </dt>
+                                <dd className="font-medium text-foreground">
+                                    {enteredDateTime ? (
+                                        <time dateTime={enteredDateTime}>
+                                            {enteredAt}
+                                        </time>
+                                    ) : (
+                                        enteredAt
+                                    )}
+                                </dd>
+                            </div>
+                            <div className="flex items-baseline gap-1">
+                                <dt className="text-muted-foreground">截止</dt>
+                                <dd className="font-medium text-foreground">
+                                    {due}
+                                </dd>
+                            </div>
+                            <div className="flex items-baseline gap-1">
+                                <dt className="text-muted-foreground">
+                                    责任方
+                                </dt>
+                                <dd className="font-medium text-foreground">
+                                    {responsibleParty}
+                                </dd>
+                            </div>
+                        </dl>
+                        <dl className="mt-2 grid gap-1 text-xs">
+                            <div className="flex items-start gap-1">
+                                <dt className="shrink-0 text-muted-foreground">
+                                    原因
+                                </dt>
+                                <dd className="text-foreground">{reason}</dd>
+                            </div>
+                            <div className="flex items-start gap-1">
+                                <dt className="shrink-0 text-muted-foreground">
+                                    影响
+                                </dt>
+                                <dd className="text-foreground">{impact}</dd>
+                            </div>
+                        </dl>
+                    </>
+                )}
+            </ItemContent>
+            {nextAction ? <ItemActions>{nextAction}</ItemActions> : null}
+        </Item>
+    )
 }
 
 export type BusinessDiffEntry = Readonly<{
-  id: React.Key;
-  field: React.ReactNode;
-  before: React.ReactNode;
-  after: React.ReactNode;
-  note?: React.ReactNode;
-}>;
+    id: React.Key
+    field: React.ReactNode
+    before: React.ReactNode
+    after: React.ReactNode
+    note?: React.ReactNode
+}>
 
 export interface BusinessDiffPanelProps extends Omit<
-  React.ComponentProps<"section">,
-  "children" | "title"
+    React.ComponentProps<"section">,
+    "children" | "title"
 > {
-  changes: readonly BusinessDiffEntry[];
-  title?: React.ReactNode;
-  caption?: string;
-  emptyValue?: React.ReactNode;
-  emptyMessage?: React.ReactNode;
-  /**
-   * 头部计数；默认按 `changes.length`。左右证据对照等场景可传真实差异数，
-   * 避免把共同属性行计入「N 项」。
-   */
-  count?: number;
-  /** 列头文案；左右证据对照场景可传「左证据 / 右证据」。 */
-  fieldColumnLabel?: React.ReactNode;
-  beforeColumnLabel?: React.ReactNode;
-  afterColumnLabel?: React.ReactNode;
-  noteColumnLabel?: React.ReactNode;
+    changes: readonly BusinessDiffEntry[]
+    title?: React.ReactNode
+    caption?: string
+    emptyValue?: React.ReactNode
+    emptyMessage?: React.ReactNode
+    /**
+     * 头部计数；默认按 `changes.length`。左右证据对照等场景可传真实差异数，
+     * 避免把共同属性行计入「N 项」。
+     */
+    count?: number
+    /** 列头文案；左右证据对照场景可传「左证据 / 右证据」。 */
+    fieldColumnLabel?: React.ReactNode
+    beforeColumnLabel?: React.ReactNode
+    afterColumnLabel?: React.ReactNode
+    noteColumnLabel?: React.ReactNode
 }
 
 /**
  * 字段级差异面板。敏感字段的脱敏策略由调用方在 before/after 节点中显式决定。
  */
 export function BusinessDiffPanel({
-  changes,
-  title = "字段变更",
-  caption = "字段变更前后值对比",
-  emptyValue = "—",
-  emptyMessage = "没有字段变更",
-  count,
-  fieldColumnLabel = "字段",
-  beforeColumnLabel = "变更前",
-  afterColumnLabel = "变更后",
-  noteColumnLabel = "变更说明",
-  className,
-  ...props
+    changes,
+    title = "字段变更",
+    caption = "字段变更前后值对比",
+    emptyValue = "—",
+    emptyMessage = "没有字段变更",
+    count,
+    fieldColumnLabel = "字段",
+    beforeColumnLabel = "变更前",
+    afterColumnLabel = "变更后",
+    noteColumnLabel = "变更说明",
+    className,
+    ...props
 }: BusinessDiffPanelProps) {
-  const badgeCount = count ?? changes.length;
-  return (
-    <section
-      data-slot="business-diff-panel"
-      className={cn("overflow-hidden rounded-2xl border bg-card", className)}
-      {...props}
-    >
-      <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <h3 className="text-sm font-semibold text-card-foreground">{title}</h3>
-        <Badge variant="neutral">{badgeCount} 项</Badge>
-      </header>
-      <Table>
-        <TableCaption className="sr-only">{caption}</TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{fieldColumnLabel}</TableHead>
-            <TableHead>{beforeColumnLabel}</TableHead>
-            <TableHead>{afterColumnLabel}</TableHead>
-            <TableHead>{noteColumnLabel}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {changes.length > 0 ? (
-            changes.map((change) => (
-              <TableRow key={change.id}>
-                <TableCell className="font-medium text-foreground">
-                  {change.field}
-                </TableCell>
-                <TableCell className="whitespace-normal text-muted-foreground">
-                  {change.before ?? emptyValue}
-                </TableCell>
-                <TableCell className="whitespace-normal text-foreground">
-                  {change.after ?? emptyValue}
-                </TableCell>
-                <TableCell className="whitespace-normal text-muted-foreground">
-                  {change.note ?? emptyValue}
-                </TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell
-                colSpan={4}
-                className="text-center text-muted-foreground"
-              >
-                {emptyMessage}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </section>
-  );
+    const badgeCount = count ?? changes.length
+    return (
+        <section
+            data-slot="business-diff-panel"
+            className={cn(
+                "overflow-hidden rounded-2xl border bg-card",
+                className,
+            )}
+            {...props}
+        >
+            <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
+                <h3 className="text-sm font-semibold text-card-foreground">
+                    {title}
+                </h3>
+                <Badge variant="neutral">{badgeCount} 项</Badge>
+            </header>
+            <Table>
+                <TableCaption className="sr-only">{caption}</TableCaption>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>{fieldColumnLabel}</TableHead>
+                        <TableHead>{beforeColumnLabel}</TableHead>
+                        <TableHead>{afterColumnLabel}</TableHead>
+                        <TableHead>{noteColumnLabel}</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {changes.length > 0 ? (
+                        changes.map((change) => (
+                            <TableRow key={change.id}>
+                                <TableCell className="font-medium text-foreground">
+                                    {change.field}
+                                </TableCell>
+                                <TableCell className="whitespace-normal text-muted-foreground">
+                                    {change.before ?? emptyValue}
+                                </TableCell>
+                                <TableCell className="whitespace-normal text-foreground">
+                                    {change.after ?? emptyValue}
+                                </TableCell>
+                                <TableCell className="whitespace-normal text-muted-foreground">
+                                    {change.note ?? emptyValue}
+                                </TableCell>
+                            </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell
+                                colSpan={4}
+                                className="text-center text-muted-foreground"
+                            >
+                                {emptyMessage}
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </section>
+    )
 }
 
 export type AuditTimelineEntry = Readonly<{
-  id: React.Key;
-  action: React.ReactNode;
-  operator: React.ReactNode;
-  occurredAt: string;
-  occurredAtLabel: React.ReactNode;
-  source: React.ReactNode;
-  note?: React.ReactNode;
-  marker?: React.ReactNode;
-}>;
+    id: React.Key
+    action: React.ReactNode
+    operator: React.ReactNode
+    occurredAt: string
+    occurredAtLabel: React.ReactNode
+    source: React.ReactNode
+    note?: React.ReactNode
+    marker?: React.ReactNode
+}>
 
 export interface AuditTimelineProps extends Omit<
-  React.ComponentProps<typeof Timeline>,
-  "children"
+    React.ComponentProps<typeof Timeline>,
+    "children"
 > {
-  entries: readonly AuditTimelineEntry[];
-  emptyMessage?: React.ReactNode;
+    entries: readonly AuditTimelineEntry[]
+    emptyMessage?: React.ReactNode
 }
 
 /** 审计记录时间线。组件不格式化时间，也不推导操作者或来源。 */
 export function AuditTimeline({
-  entries,
-  emptyMessage = "暂无审计记录",
-  className,
-  "aria-label": ariaLabel = "审计记录",
-  ...props
+    entries,
+    emptyMessage = "暂无审计记录",
+    className,
+    "aria-label": ariaLabel = "审计记录",
+    ...props
 }: AuditTimelineProps) {
-  if (entries.length === 0) {
-    return (
-      <p
-        data-slot="audit-timeline-empty"
-        role="status"
-        className={cn("text-sm text-muted-foreground", className)}
-      >
-        {emptyMessage}
-      </p>
-    );
-  }
+    if (entries.length === 0) {
+        return (
+            <p
+                data-slot="audit-timeline-empty"
+                role="status"
+                className={cn("text-sm text-muted-foreground", className)}
+            >
+                {emptyMessage}
+            </p>
+        )
+    }
 
-  return (
-    <Timeline
-      data-slot="audit-timeline"
-      aria-label={ariaLabel}
-      className={className}
-      {...props}
-    >
-      {entries.map((entry) => (
-        <TimelineItem key={entry.id}>
-          <TimelineMarker>
-            {entry.marker ?? <HistoryIcon aria-hidden="true" />}
-          </TimelineMarker>
-          <TimelineHeader>
-            <TimelineTitle>{entry.action}</TimelineTitle>
-            <TimelineTime dateTime={entry.occurredAt}>
-              {entry.occurredAtLabel}
-            </TimelineTime>
-          </TimelineHeader>
-          <TimelineDescription>
-            <span className="flex flex-wrap gap-x-4 gap-y-1">
-              <span>
-                操作者：
-                <span className="text-foreground">{entry.operator}</span>
-              </span>
-              <span>
-                来源：<span className="text-foreground">{entry.source}</span>
-              </span>
-            </span>
-            {entry.note ? (
-              <span className="mt-1 block text-foreground">{entry.note}</span>
-            ) : null}
-          </TimelineDescription>
-        </TimelineItem>
-      ))}
-    </Timeline>
-  );
+    return (
+        <Timeline
+            data-slot="audit-timeline"
+            aria-label={ariaLabel}
+            className={className}
+            {...props}
+        >
+            {entries.map((entry) => (
+                <TimelineItem key={entry.id}>
+                    <TimelineMarker>
+                        {entry.marker ?? <HistoryIcon aria-hidden="true" />}
+                    </TimelineMarker>
+                    <TimelineHeader>
+                        <TimelineTitle>{entry.action}</TimelineTitle>
+                        <TimelineTime dateTime={entry.occurredAt}>
+                            {entry.occurredAtLabel}
+                        </TimelineTime>
+                    </TimelineHeader>
+                    <TimelineDescription>
+                        <span className="flex flex-wrap gap-x-4 gap-y-1">
+                            <span>
+                                操作者：
+                                <span className="text-foreground">
+                                    {entry.operator}
+                                </span>
+                            </span>
+                            <span>
+                                来源：
+                                <span className="text-foreground">
+                                    {entry.source}
+                                </span>
+                            </span>
+                        </span>
+                        {entry.note ? (
+                            <span className="mt-1 block text-foreground">
+                                {entry.note}
+                            </span>
+                        ) : null}
+                    </TimelineDescription>
+                </TimelineItem>
+            ))}
+        </Timeline>
+    )
 }
 
 export type ImportStageKey =
-  "upload" | "mapping" | "validation" | "preview" | "submission" | "result";
+    | "upload"
+    | "mapping"
+    | "validation"
+    | "preview"
+    | "submission"
+    | "result"
 
-export type ImportStageStatus = "pending" | "current" | "complete" | "failed";
+export type ImportStageStatus = "pending" | "current" | "complete" | "failed"
 
 export type ImportStageDisplay = Readonly<{
-  status: ImportStageStatus;
-  description?: React.ReactNode;
-}>;
+    status: ImportStageStatus
+    description?: React.ReactNode
+}>
 
 export type ImportStageStates = Readonly<
-  Record<ImportStageKey, ImportStageDisplay>
->;
+    Record<ImportStageKey, ImportStageDisplay>
+>
 
 export interface ImportStageIndicatorProps extends Omit<
-  React.ComponentProps<"ol">,
-  "children"
+    React.ComponentProps<"ol">,
+    "children"
 > {
-  stages: ImportStageStates;
-  /**
-   * 按阶段覆盖固定步骤标签（如回填流水线「范围确认/来源校验/…」）。
-   * 未覆盖的阶段沿用默认导入步骤名。
-   */
-  stageLabels?: Partial<Record<ImportStageKey, string>>;
+    stages: ImportStageStates
+    /**
+     * 按阶段覆盖固定步骤标签（如回填流水线「范围确认/来源校验/…」）。
+     * 未覆盖的阶段沿用默认导入步骤名。
+     */
+    stageLabels?: Partial<Record<ImportStageKey, string>>
 }
 
 const importStages: ReadonlyArray<{
-  key: ImportStageKey;
-  label: string;
+    key: ImportStageKey
+    label: string
 }> = [
-  { key: "upload", label: "上传" },
-  { key: "mapping", label: "映射" },
-  { key: "validation", label: "校验" },
-  { key: "preview", label: "预览" },
-  { key: "submission", label: "提交" },
-  { key: "result", label: "结果" },
-];
+    { key: "upload", label: "上传" },
+    { key: "mapping", label: "映射" },
+    { key: "validation", label: "校验" },
+    { key: "preview", label: "预览" },
+    { key: "submission", label: "提交" },
+    { key: "result", label: "结果" },
+]
 
 const importStatusPresentation: Readonly<
-  Record<
-    ImportStageStatus,
-    {
-      label: string;
-      tone: StatusTone;
-      icon: typeof CircleDashedIcon;
-    }
-  >
+    Record<
+        ImportStageStatus,
+        {
+            label: string
+            tone: StatusTone
+            icon: typeof CircleDashedIcon
+        }
+    >
 > = {
-  pending: {
-    label: "未开始",
-    tone: "neutral",
-    icon: CircleDashedIcon,
-  },
-  current: {
-    label: "进行中",
-    tone: "info",
-    icon: LoaderCircleIcon,
-  },
-  complete: {
-    label: "已完成",
-    tone: "success",
-    icon: CircleCheckIcon,
-  },
-  failed: {
-    label: "失败",
-    tone: "destructive",
-    icon: CircleXIcon,
-  },
-};
+    pending: {
+        label: "未开始",
+        tone: "neutral",
+        icon: CircleDashedIcon,
+    },
+    current: {
+        label: "进行中",
+        tone: "info",
+        icon: LoaderCircleIcon,
+    },
+    complete: {
+        label: "已完成",
+        tone: "success",
+        icon: CircleCheckIcon,
+    },
+    failed: {
+        label: "失败",
+        tone: "destructive",
+        icon: CircleXIcon,
+    },
+}
 
 /** 固定顺序展示导入流程；每一步的记录状态由调用方显式传入。 */
 export function ImportStageIndicator({
-  stages,
-  stageLabels,
-  className,
-  "aria-label": ariaLabel = "导入进度",
-  ...props
+    stages,
+    stageLabels,
+    className,
+    "aria-label": ariaLabel = "导入进度",
+    ...props
 }: ImportStageIndicatorProps) {
-  return (
-    <ol
-      data-slot="import-stage-indicator"
-      aria-label={ariaLabel}
-      className={cn(
-        "grid overflow-hidden rounded-2xl border bg-card divide-y divide-border lg:grid-cols-6 lg:divide-x lg:divide-y-0",
-        className,
-      )}
-      {...props}
-    >
-      {importStages.map((stage) => {
-        const stageDisplay = stages[stage.key];
-        const presentation = importStatusPresentation[stageDisplay.status];
+    return (
+        <ol
+            data-slot="import-stage-indicator"
+            aria-label={ariaLabel}
+            className={cn(
+                "grid overflow-hidden rounded-2xl border bg-card divide-y divide-border lg:grid-cols-6 lg:divide-x lg:divide-y-0",
+                className,
+            )}
+            {...props}
+        >
+            {importStages.map((stage) => {
+                const stageDisplay = stages[stage.key]
+                const presentation =
+                    importStatusPresentation[stageDisplay.status]
 
-        return (
-          <li
-            key={stage.key}
-            aria-current={
-              stageDisplay.status === "current" ? "step" : undefined
-            }
-            className="flex min-w-0 flex-col items-start gap-2 p-3"
-          >
-            <span className="text-sm font-medium text-card-foreground">
-              {stageLabels?.[stage.key] ?? stage.label}
-            </span>
-            <StatusBadge
-              label={presentation.label}
-              tone={presentation.tone}
-              icon={presentation.icon}
-            />
-            {stageDisplay.description ? (
-              <span className="text-xs text-muted-foreground">
-                {stageDisplay.description}
-              </span>
-            ) : null}
-          </li>
-        );
-      })}
-    </ol>
-  );
+                return (
+                    <li
+                        key={stage.key}
+                        aria-current={
+                            stageDisplay.status === "current"
+                                ? "step"
+                                : undefined
+                        }
+                        className="flex min-w-0 flex-col items-start gap-2 p-3"
+                    >
+                        <span className="text-sm font-medium text-card-foreground">
+                            {stageLabels?.[stage.key] ?? stage.label}
+                        </span>
+                        <StatusBadge
+                            label={presentation.label}
+                            tone={presentation.tone}
+                            icon={presentation.icon}
+                        />
+                        {stageDisplay.description ? (
+                            <span className="text-xs text-muted-foreground">
+                                {stageDisplay.description}
+                            </span>
+                        ) : null}
+                    </li>
+                )
+            })}
+        </ol>
+    )
 }
 
 export type ImportIssue = Readonly<{
-  id: React.Key;
-  rowNumber: number | string;
-  field: string;
-  errorCode: string;
-  message: React.ReactNode;
-  repairable: boolean;
-}>;
+    id: React.Key
+    rowNumber: number | string
+    field: string
+    errorCode: string
+    message: React.ReactNode
+    repairable: boolean
+}>
 
 /**
  * 导入/批量结果的错误码中文映射。命中才翻译，未命中的原样展示（不猜测），
  * 避免把枚举原值直接上屏。
  */
 const IMPORT_CODE_LABEL: Readonly<Record<string, string>> = {
-  CUSTOMER_NOT_FOUND: "客户不存在",
-  AMOUNT_PRECISION: "金额精度不符",
-  STOCK_QTY_INVALID: "库存数量无效",
-  MAPPING_CONFLICT: "映射冲突",
-  HISTORY_FLOW_FORBIDDEN: "历史流程禁止修改",
-  BASELINE_DATE_MISMATCH: "基准日不一致",
-  CARD_DRAFT_EXCLUDED: "卡券草稿已排除",
-  IDEMPOTENT_SKIP: "已处理跳过",
-  OUT_OF_SCOPE: "超出导入范围",
-  STAGE_NOT_READY: "阶段未就绪",
-  CONFIRMATIONS_INCOMPLETE: "责任确认未完成",
-  STALE_CONFIRMATION: "确认已过期",
-  JOB_RUNNING: "任务执行中",
-  VALIDATION_ENV_REQUIRED: "需在验证环境校验",
-  ADMIN_CANNOT_CONFIRM: "管理员不能确认",
-  IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED: "确认任务尚未配置",
-};
+    CUSTOMER_NOT_FOUND: "客户不存在",
+    AMOUNT_PRECISION: "金额精度不符",
+    STOCK_QTY_INVALID: "库存数量无效",
+    MAPPING_CONFLICT: "映射冲突",
+    HISTORY_FLOW_FORBIDDEN: "历史流程禁止修改",
+    BASELINE_DATE_MISMATCH: "基准日不一致",
+    CARD_DRAFT_EXCLUDED: "卡券草稿已排除",
+    IDEMPOTENT_SKIP: "已处理跳过",
+    OUT_OF_SCOPE: "超出导入范围",
+    STAGE_NOT_READY: "阶段未就绪",
+    CONFIRMATIONS_INCOMPLETE: "责任确认未完成",
+    STALE_CONFIRMATION: "确认已过期",
+    JOB_RUNNING: "任务执行中",
+    VALIDATION_ENV_REQUIRED: "需在验证环境校验",
+    ADMIN_CANNOT_CONFIRM: "管理员不能确认",
+    IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED: "确认任务尚未配置",
+}
 
 export function importCodeLabel(code: string): string {
-  return IMPORT_CODE_LABEL[code] ?? code;
+    return IMPORT_CODE_LABEL[code] ?? code
 }
 
 export interface ImportIssueTableProps extends Omit<
-  React.ComponentProps<"div">,
-  "children"
+    React.ComponentProps<"div">,
+    "children"
 > {
-  issues: readonly ImportIssue[];
-  caption?: string;
-  emptyMessage?: React.ReactNode;
-  /** 错误码列文案；默认走内置中文映射，未命中回退原码。 */
-  errorCodeLabel?: (code: string) => React.ReactNode;
-  /** 「修复方式」列的两种标签；默认「可在导入中修复 / 需外部处理」。 */
-  repairableLabel?: string;
-  externalLabel?: string;
+    issues: readonly ImportIssue[]
+    caption?: string
+    emptyMessage?: React.ReactNode
+    /** 错误码列文案；默认走内置中文映射，未命中回退原码。 */
+    errorCodeLabel?: (code: string) => React.ReactNode
+    /** 「修复方式」列的两种标签；默认「可在导入中修复 / 需外部处理」。 */
+    repairableLabel?: string
+    externalLabel?: string
 }
 
 /** 导入问题明细。可修复标识直接展示调用方记录，不内置修复动作。 */
 export function ImportIssueTable({
-  issues,
-  caption = "导入问题明细",
-  emptyMessage = "没有导入问题",
-  errorCodeLabel = importCodeLabel,
-  repairableLabel = "可在导入中修复",
-  externalLabel = "需外部处理",
-  className,
-  ...props
+    issues,
+    caption = "导入问题明细",
+    emptyMessage = "没有导入问题",
+    errorCodeLabel = importCodeLabel,
+    repairableLabel = "可在导入中修复",
+    externalLabel = "需外部处理",
+    className,
+    ...props
 }: ImportIssueTableProps) {
-  return (
-    <div
-      data-slot="import-issue-table"
-      className={cn("overflow-hidden rounded-2xl border bg-card", className)}
-      {...props}
-    >
-      <Table>
-        <TableCaption className="sr-only">{caption}</TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead>行号</TableHead>
-            <TableHead>字段</TableHead>
-            <TableHead>错误码</TableHead>
-            <TableHead>说明</TableHead>
-            <TableHead>修复方式</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {issues.length > 0 ? (
-            issues.map((issue) => (
-              <TableRow key={issue.id}>
-                <TableCell className="num">{issue.rowNumber}</TableCell>
-                <TableCell className="font-medium text-foreground">
-                  {issue.field}
-                </TableCell>
-                <TableCell className="num text-muted-foreground">
-                  {errorCodeLabel(issue.errorCode)}
-                </TableCell>
-                <TableCell className="whitespace-normal">
-                  {issue.message}
-                </TableCell>
-                <TableCell>
-                  <StatusBadge
-                    label={
-                      issue.repairable ? repairableLabel : externalLabel
-                    }
-                    tone={issue.repairable ? "info" : "destructive"}
-                  />
-                </TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell
-                colSpan={5}
-                className="text-center text-muted-foreground"
-              >
-                {emptyMessage}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
+    return (
+        <div
+            data-slot="import-issue-table"
+            className={cn(
+                "overflow-hidden rounded-2xl border bg-card",
+                className,
+            )}
+            {...props}
+        >
+            <Table>
+                <TableCaption className="sr-only">{caption}</TableCaption>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>行号</TableHead>
+                        <TableHead>字段</TableHead>
+                        <TableHead>错误码</TableHead>
+                        <TableHead>说明</TableHead>
+                        <TableHead>修复方式</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {issues.length > 0 ? (
+                        issues.map((issue) => (
+                            <TableRow key={issue.id}>
+                                <TableCell className="num">
+                                    {issue.rowNumber}
+                                </TableCell>
+                                <TableCell className="font-medium text-foreground">
+                                    {issue.field}
+                                </TableCell>
+                                <TableCell className="num text-muted-foreground">
+                                    {errorCodeLabel(issue.errorCode)}
+                                </TableCell>
+                                <TableCell className="whitespace-normal">
+                                    {issue.message}
+                                </TableCell>
+                                <TableCell>
+                                    <StatusBadge
+                                        label={
+                                            issue.repairable
+                                                ? repairableLabel
+                                                : externalLabel
+                                        }
+                                        tone={
+                                            issue.repairable
+                                                ? "info"
+                                                : "destructive"
+                                        }
+                                    />
+                                </TableCell>
+                            </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell
+                                colSpan={5}
+                                className="text-center text-muted-foreground"
+                            >
+                                {emptyMessage}
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </div>
+    )
 }
 
 export type BatchOperationResultItem = Readonly<{
-  id: React.Key;
-  label: React.ReactNode;
-  detail?: React.ReactNode;
-  code?: string;
-}>;
+    id: React.Key
+    label: React.ReactNode
+    detail?: React.ReactNode
+    code?: string
+}>
 
 export interface BatchOperationResultProps extends Omit<
-  React.ComponentProps<"section">,
-  "children" | "title"
+    React.ComponentProps<"section">,
+    "children" | "title"
 > {
-  succeeded: readonly BatchOperationResultItem[];
-  skipped?: readonly BatchOperationResultItem[];
-  failed: readonly BatchOperationResultItem[];
-  title?: React.ReactNode;
-  retryAction?: React.ReactNode;
-  successEmptyMessage?: React.ReactNode;
-  skippedEmptyMessage?: React.ReactNode;
-  failureEmptyMessage?: React.ReactNode;
-  /** 条目 code 徽章文案；默认走内置中文映射，未命中回退原码。 */
-  codeLabel?: (code: string) => React.ReactNode;
+    succeeded: readonly BatchOperationResultItem[]
+    skipped?: readonly BatchOperationResultItem[]
+    failed: readonly BatchOperationResultItem[]
+    title?: React.ReactNode
+    retryAction?: React.ReactNode
+    successEmptyMessage?: React.ReactNode
+    skippedEmptyMessage?: React.ReactNode
+    failureEmptyMessage?: React.ReactNode
+    /** 条目 code 徽章文案；默认走内置中文映射，未命中回退原码。 */
+    codeLabel?: (code: string) => React.ReactNode
 }
 
 /** 批处理分项结果。重试行为由调用方注入，组件不重新提交请求。 */
 export function BatchOperationResult({
-  succeeded,
-  skipped = [],
-  failed,
-  title = "批量处理结果",
-  retryAction,
-  successEmptyMessage = "没有成功项",
-  skippedEmptyMessage = "没有跳过项",
-  failureEmptyMessage = "没有失败项",
-  codeLabel = importCodeLabel,
-  className,
-  ...props
+    succeeded,
+    skipped = [],
+    failed,
+    title = "批量处理结果",
+    retryAction,
+    successEmptyMessage = "没有成功项",
+    skippedEmptyMessage = "没有跳过项",
+    failureEmptyMessage = "没有失败项",
+    codeLabel = importCodeLabel,
+    className,
+    ...props
 }: BatchOperationResultProps) {
-  const titleId = React.useId();
+    const titleId = React.useId()
 
-  return (
-    <section
-      data-slot="batch-operation-result"
-      aria-labelledby={titleId}
-      className={cn("space-y-3", className)}
-      {...props}
-    >
-      <header className="flex flex-wrap items-center gap-2">
-        <h3 id={titleId} className="text-sm font-semibold text-foreground">
-          {title}
-        </h3>
-        <Badge variant="success">成功 {succeeded.length}</Badge>
-        <Badge variant="neutral">跳过 {skipped.length}</Badge>
-        <Badge variant={failed.length > 0 ? "destructive" : "neutral"}>
-          失败 {failed.length}
-        </Badge>
-      </header>
-      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-        <Alert variant="success">
-          <CircleCheckIcon aria-hidden="true" />
-          <AlertTitle>成功项</AlertTitle>
-          <AlertDescription>
-            {succeeded.length > 0 ? (
-              <ul className="mt-2 space-y-2">
-                {succeeded.map((item) => (
-                  <li key={item.id}>
-                    <span className="font-medium">{item.label}</span>
-                    {item.code ? (
-                      <Badge variant="success" className="ml-2">
-                        {codeLabel(item.code)}
-                      </Badge>
+    return (
+        <section
+            data-slot="batch-operation-result"
+            aria-labelledby={titleId}
+            className={cn("space-y-3", className)}
+            {...props}
+        >
+            <header className="flex flex-wrap items-center gap-2">
+                <h3
+                    id={titleId}
+                    className="text-sm font-semibold text-foreground"
+                >
+                    {title}
+                </h3>
+                <Badge variant="success">成功 {succeeded.length}</Badge>
+                <Badge variant="neutral">跳过 {skipped.length}</Badge>
+                <Badge variant={failed.length > 0 ? "destructive" : "neutral"}>
+                    失败 {failed.length}
+                </Badge>
+            </header>
+            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                <Alert variant="success">
+                    <CircleCheckIcon aria-hidden="true" />
+                    <AlertTitle>成功项</AlertTitle>
+                    <AlertDescription>
+                        {succeeded.length > 0 ? (
+                            <ul className="mt-2 space-y-2">
+                                {succeeded.map((item) => (
+                                    <li key={item.id}>
+                                        <span className="font-medium">
+                                            {item.label}
+                                        </span>
+                                        {item.code ? (
+                                            <Badge
+                                                variant="success"
+                                                className="ml-2"
+                                            >
+                                                {codeLabel(item.code)}
+                                            </Badge>
+                                        ) : null}
+                                        {item.detail ? (
+                                            <span className="mt-1 block">
+                                                {item.detail}
+                                            </span>
+                                        ) : null}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <span>{successEmptyMessage}</span>
+                        )}
+                    </AlertDescription>
+                </Alert>
+                <Alert>
+                    <CircleDashedIcon aria-hidden="true" />
+                    <AlertTitle>跳过项</AlertTitle>
+                    <AlertDescription>
+                        {skipped.length > 0 ? (
+                            <ul className="mt-2 space-y-2">
+                                {skipped.map((item) => (
+                                    <li key={item.id}>
+                                        <span className="font-medium">
+                                            {item.label}
+                                        </span>
+                                        {item.code ? (
+                                            <Badge
+                                                variant="neutral"
+                                                className="ml-2"
+                                            >
+                                                {codeLabel(item.code)}
+                                            </Badge>
+                                        ) : null}
+                                        {item.detail ? (
+                                            <span className="mt-1 block">
+                                                {item.detail}
+                                            </span>
+                                        ) : null}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <span>{skippedEmptyMessage}</span>
+                        )}
+                    </AlertDescription>
+                </Alert>
+                <Alert variant={failed.length > 0 ? "destructive" : "default"}>
+                    <CircleXIcon aria-hidden="true" />
+                    <AlertTitle>失败项</AlertTitle>
+                    <AlertDescription>
+                        {failed.length > 0 ? (
+                            <ul className="mt-2 space-y-2">
+                                {failed.map((item) => (
+                                    <li key={item.id}>
+                                        <span className="font-medium">
+                                            {item.label}
+                                        </span>
+                                        {item.code ? (
+                                            <Badge
+                                                variant="destructive"
+                                                className="ml-2"
+                                            >
+                                                {codeLabel(item.code)}
+                                            </Badge>
+                                        ) : null}
+                                        {item.detail ? (
+                                            <span className="mt-1 block">
+                                                {item.detail}
+                                            </span>
+                                        ) : null}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <span>{failureEmptyMessage}</span>
+                        )}
+                    </AlertDescription>
+                    {retryAction ? (
+                        <AlertAction>{retryAction}</AlertAction>
                     ) : null}
-                    {item.detail ? (
-                      <span className="mt-1 block">{item.detail}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <span>{successEmptyMessage}</span>
-            )}
-          </AlertDescription>
-        </Alert>
-        <Alert>
-          <CircleDashedIcon aria-hidden="true" />
-          <AlertTitle>跳过项</AlertTitle>
-          <AlertDescription>
-            {skipped.length > 0 ? (
-              <ul className="mt-2 space-y-2">
-                {skipped.map((item) => (
-                  <li key={item.id}>
-                    <span className="font-medium">{item.label}</span>
-                    {item.code ? (
-                      <Badge variant="neutral" className="ml-2">
-                        {codeLabel(item.code)}
-                      </Badge>
-                    ) : null}
-                    {item.detail ? (
-                      <span className="mt-1 block">{item.detail}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <span>{skippedEmptyMessage}</span>
-            )}
-          </AlertDescription>
-        </Alert>
-        <Alert variant={failed.length > 0 ? "destructive" : "default"}>
-          <CircleXIcon aria-hidden="true" />
-          <AlertTitle>失败项</AlertTitle>
-          <AlertDescription>
-            {failed.length > 0 ? (
-              <ul className="mt-2 space-y-2">
-                {failed.map((item) => (
-                  <li key={item.id}>
-                    <span className="font-medium">{item.label}</span>
-                    {item.code ? (
-                      <Badge variant="destructive" className="ml-2">
-                        {codeLabel(item.code)}
-                      </Badge>
-                    ) : null}
-                    {item.detail ? (
-                      <span className="mt-1 block">{item.detail}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <span>{failureEmptyMessage}</span>
-            )}
-          </AlertDescription>
-          {retryAction ? <AlertAction>{retryAction}</AlertAction> : null}
-        </Alert>
-      </div>
-    </section>
-  );
+                </Alert>
+            </div>
+        </section>
+    )
 }

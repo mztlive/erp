@@ -4,22 +4,25 @@ import { Suspense } from "react"
 import { InventoryLedgerPage } from "@/features/inventory/inventory-ledger-page"
 
 export const metadata: Metadata = {
-  title: "库存台账",
+    title: "库存台账",
 }
 
 function InventoryFallback() {
-  return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:gap-4 md:px-6 md:py-5">
-      <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
-        ))}
-      </div>
-      <div className="h-12 animate-pulse rounded-xl bg-muted" />
-      <div className="h-[28rem] animate-pulse rounded-lg bg-muted" />
-    </div>
-  )
+    return (
+        <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:gap-4 md:px-6 md:py-5">
+            <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                        key={i}
+                        className="h-20 animate-pulse rounded-lg bg-muted"
+                    />
+                ))}
+            </div>
+            <div className="h-12 animate-pulse rounded-xl bg-muted" />
+            <div className="h-[28rem] animate-pulse rounded-lg bg-muted" />
+        </div>
+    )
 }
 
 /**
@@ -28,9 +31,9 @@ function InventoryFallback() {
  * 业务数据不在服务端 fetch。
  */
 export default function InventoryPage() {
-  return (
-    <Suspense fallback={<InventoryFallback />}>
-      <InventoryLedgerPage />
-    </Suspense>
-  )
+    return (
+        <Suspense fallback={<InventoryFallback />}>
+            <InventoryLedgerPage />
+        </Suspense>
+    )
 }

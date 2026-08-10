@@ -5,18 +5,18 @@ import { PageScaffold } from "@/components/business"
 import { SupplierOrdersListPage } from "@/features/supplier-orders/supplier-orders-list-page"
 
 export const metadata: Metadata = {
-  title: "供应商订单",
+    title: "供应商订单",
 }
 
 function OrdersFallback() {
-  return (
-    <PageScaffold>
-      <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-      <div className="h-16 animate-pulse rounded-lg bg-muted" />
-      <div className="h-24 animate-pulse rounded-lg bg-muted" />
-      <div className="h-72 animate-pulse rounded-lg bg-muted" />
-    </PageScaffold>
-  )
+    return (
+        <PageScaffold>
+            <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
+            <div className="h-16 animate-pulse rounded-lg bg-muted" />
+            <div className="h-24 animate-pulse rounded-lg bg-muted" />
+            <div className="h-72 animate-pulse rounded-lg bg-muted" />
+        </PageScaffold>
+    )
 }
 
 /**
@@ -24,9 +24,9 @@ function OrdersFallback() {
  * 业务数据不在服务端 fetch。
  */
 export default function Page() {
-  return (
-    <Suspense fallback={<OrdersFallback />}>
-      <SupplierOrdersListPage />
-    </Suspense>
-  )
+    return (
+        <Suspense fallback={<OrdersFallback />}>
+            <SupplierOrdersListPage />
+        </Suspense>
+    )
 }

@@ -1,9 +1,9 @@
 "use client"
 
 import type {
-  FulfillmentDraft,
-  FulfillmentOperationType,
-  FulfillmentTask,
+    FulfillmentDraft,
+    FulfillmentOperationType,
+    FulfillmentTask,
 } from "./types"
 
 /**
@@ -12,11 +12,11 @@ import type {
  * 仓发/直发的物流单号是空的；服务的完成说明是空的且必填。
  */
 export const FIRST_INPUT_ID: Record<FulfillmentOperationType, string> = {
-  RECEIPT: "receipt-recv-0",
-  WAREHOUSE_SHIP: "ship-tracking",
-  SUPPLIER_DIRECT: "direct-tracking",
-  ELECTRONIC: "el-qty-0",
-  SERVICE: "service-note",
+    RECEIPT: "receipt-recv-0",
+    WAREHOUSE_SHIP: "ship-tracking",
+    SUPPLIER_DIRECT: "direct-tracking",
+    ELECTRONIC: "el-qty-0",
+    SERVICE: "service-note",
 }
 import { FulfillmentDirectForm } from "./fulfillment-direct-form"
 import { FulfillmentElectronicForm } from "./fulfillment-electronic-form"
@@ -29,61 +29,61 @@ import { FulfillmentShipForm } from "./fulfillment-ship-form"
  * 草稿是可辨识联合，分派后各表单拿到收窄类型，不再各自 narrow。
  */
 export function FulfillmentDraftForm({
-  task,
-  draft,
-  onChange,
-  disabled,
+    task,
+    draft,
+    onChange,
+    disabled,
 }: {
-  task: FulfillmentTask
-  draft: FulfillmentDraft
-  onChange: (d: FulfillmentDraft) => void
-  disabled?: boolean
+    task: FulfillmentTask
+    draft: FulfillmentDraft
+    onChange: (d: FulfillmentDraft) => void
+    disabled?: boolean
 }) {
-  switch (draft.type) {
-    case "RECEIPT":
-      return (
-        <FulfillmentReceiptForm
-          task={task}
-          draft={draft}
-          onChange={onChange}
-          disabled={disabled}
-        />
-      )
-    case "WAREHOUSE_SHIP":
-      return (
-        <FulfillmentShipForm
-          task={task}
-          draft={draft}
-          onChange={onChange}
-          disabled={disabled}
-        />
-      )
-    case "SUPPLIER_DIRECT":
-      return (
-        <FulfillmentDirectForm
-          task={task}
-          draft={draft}
-          onChange={onChange}
-          disabled={disabled}
-        />
-      )
-    case "ELECTRONIC":
-      return (
-        <FulfillmentElectronicForm
-          task={task}
-          draft={draft}
-          onChange={onChange}
-          disabled={disabled}
-        />
-      )
-    case "SERVICE":
-      return (
-        <FulfillmentServiceForm
-          task={task}
-          draft={draft}
-          onChange={onChange}
-          disabled={disabled}
-        />
-      )
-  }
+    switch (draft.type) {
+        case "RECEIPT":
+            return (
+                <FulfillmentReceiptForm
+                    task={task}
+                    draft={draft}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
+            )
+        case "WAREHOUSE_SHIP":
+            return (
+                <FulfillmentShipForm
+                    task={task}
+                    draft={draft}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
+            )
+        case "SUPPLIER_DIRECT":
+            return (
+                <FulfillmentDirectForm
+                    task={task}
+                    draft={draft}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
+            )
+        case "ELECTRONIC":
+            return (
+                <FulfillmentElectronicForm
+                    task={task}
+                    draft={draft}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
+            )
+        case "SERVICE":
+            return (
+                <FulfillmentServiceForm
+                    task={task}
+                    draft={draft}
+                    onChange={onChange}
+                    disabled={disabled}
+                />
+            )
+    }
 }

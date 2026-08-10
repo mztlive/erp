@@ -5,2068 +5,2298 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import {
-  ArrowLeftIcon,
-  DownloadIcon,
-  ExternalLinkIcon,
-  RefreshCwIcon,
-  SearchIcon,
-  ShieldAlertIcon,
-  TriangleAlertIcon,
-  XIcon,
+    ArrowLeftIcon,
+    DownloadIcon,
+    ExternalLinkIcon,
+    RefreshCwIcon,
+    SearchIcon,
+    ShieldAlertIcon,
+    TriangleAlertIcon,
+    XIcon,
 } from "lucide-react"
 
 import {
-  BackgroundJobProgress,
-  BusinessEmptyState,
-  BusinessFailureState,
-  BusinessStatusBadge,
-  BusinessTableFrame,
-  CostCoverageNotice,
-  DataFreshness,
-  DataTable,
-  DocumentHeader,
-  FormalActionConfirmDialog,
-  ImportStageIndicator,
-  ListToolbar,
-  MetricItem,
-  MetricStrip,
-  OptionCombobox,
-  PageHeader,
-  PageScaffold,
-  surfacePanelClassName,
-  type ImportStageStates,
+    BackgroundJobProgress,
+    BusinessEmptyState,
+    BusinessFailureState,
+    BusinessStatusBadge,
+    BusinessTableFrame,
+    CostCoverageNotice,
+    DataFreshness,
+    DataTable,
+    DocumentHeader,
+    FormalActionConfirmDialog,
+    ImportStageIndicator,
+    ListToolbar,
+    MetricItem,
+    MetricStrip,
+    OptionCombobox,
+    PageHeader,
+    PageScaffold,
+    surfacePanelClassName,
+    type ImportStageStates,
 } from "@/components/business"
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MallSearchCombobox } from "@/features/entity-selectors"
 import {
-  useHistoryBackfillCommandMutation,
-  useHistoryBackfillDetailQuery,
-  useHistoryBackfillListQuery,
+    useHistoryBackfillCommandMutation,
+    useHistoryBackfillDetailQuery,
+    useHistoryBackfillListQuery,
 } from "@/features/history-backfill/queries"
 import type {
-  BackfillPipelineStage,
-  CostBasis,
-  HistoryBackfillCommandResult,
-  HistoryBackfillEnvironment,
-  HistoryBackfillItemView,
-  HistoryBackfillListItem,
-  HistoryBackfillProcessingStatus,
-  HistoryBackfillReportReviewStatus,
-  HistoryBackfillView,
-  ItemResult,
-  JobSection,
-  MallOrderFactType,
+    BackfillPipelineStage,
+    CostBasis,
+    HistoryBackfillCommandResult,
+    HistoryBackfillEnvironment,
+    HistoryBackfillItemView,
+    HistoryBackfillListItem,
+    HistoryBackfillProcessingStatus,
+    HistoryBackfillReportReviewStatus,
+    HistoryBackfillView,
+    ItemResult,
+    JobSection,
+    MallOrderFactType,
 } from "@/features/history-backfill/types"
 import {
-  COST_BASIS_LABEL,
-  ENVIRONMENT_LABEL,
-  FACT_TYPE_LABEL,
-  FAILURE_CODE_LABEL,
-  ITEM_RESULT_LABEL,
-  ITEM_RESULT_TONE,
-  PIPELINE_ORDER,
-  PIPELINE_STAGE_LABEL,
-  PIPELINE_TO_INDICATOR,
-  PROCESSING_STATUS_LABEL,
-  PROCESSING_STATUS_TONE,
-  REPORT_REVIEW_STATUS_LABEL,
-  REPORT_REVIEW_STATUS_TONE,
-  VIEW_LABEL,
+    COST_BASIS_LABEL,
+    ENVIRONMENT_LABEL,
+    FACT_TYPE_LABEL,
+    FAILURE_CODE_LABEL,
+    ITEM_RESULT_LABEL,
+    ITEM_RESULT_TONE,
+    PIPELINE_ORDER,
+    PIPELINE_STAGE_LABEL,
+    PIPELINE_TO_INDICATOR,
+    PROCESSING_STATUS_LABEL,
+    PROCESSING_STATUS_TONE,
+    REPORT_REVIEW_STATUS_LABEL,
+    REPORT_REVIEW_STATUS_TONE,
+    VIEW_LABEL,
 } from "@/features/history-backfill/types"
 import {
-  buildHistoryBackfillSearchParams,
-  parseHistoryBackfillSearchParams,
-  type HistoryBackfillUrlState,
+    buildHistoryBackfillSearchParams,
+    parseHistoryBackfillSearchParams,
+    type HistoryBackfillUrlState,
 } from "@/features/history-backfill/url-state"
 import { formatDateTime } from "@/lib/datetime"
 import { CreateBackfillSheet } from "@/features/history-backfill/components/create-backfill-sheet"
-import {
-  formatHistoryBackfillDay as formatDay,
-} from "@/features/history-backfill/components/format"
-import {
-  HistoryBackfillFact as Fact,
-} from "@/features/history-backfill/components/history-backfill-fact"
-import {
-  HistoryBackfillResultBanner as FormalResultBanner,
-} from "@/features/history-backfill/components/history-backfill-result-banner"
+import { formatHistoryBackfillDay as formatDay } from "@/features/history-backfill/components/format"
+import { HistoryBackfillFact as Fact } from "@/features/history-backfill/components/history-backfill-fact"
+import { HistoryBackfillResultBanner as FormalResultBanner } from "@/features/history-backfill/components/history-backfill-result-banner"
 
 const SECTION_TABS: { id: JobSection; label: string }[] = [
-  { id: "overview", label: "概览" },
-  { id: "facts", label: "记录结果" },
-  { id: "dedupe", label: "去重" },
-  { id: "unattributed", label: "未归集" },
-  { id: "cost", label: "成本口径" },
-  { id: "failures", label: "失败诊断" },
-  { id: "report", label: "审计报告" },
+    { id: "overview", label: "概览" },
+    { id: "facts", label: "记录结果" },
+    { id: "dedupe", label: "去重" },
+    { id: "unattributed", label: "未归集" },
+    { id: "cost", label: "成本口径" },
+    { id: "failures", label: "失败诊断" },
+    { id: "report", label: "审计报告" },
 ]
 
 function newRequestId(prefix: string) {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
 function buildStageStates(current: BackfillPipelineStage): ImportStageStates {
-  const currentIdx = PIPELINE_ORDER.indexOf(current)
-  const states: {
-    [K in import("@/components/business").ImportStageKey]: {
-      status: "pending" | "current" | "complete" | "failed"
-      description?: string
+    const currentIdx = PIPELINE_ORDER.indexOf(current)
+    const states: {
+        [K in import("@/components/business").ImportStageKey]: {
+            status: "pending" | "current" | "complete" | "failed"
+            description?: string
+        }
+    } = {
+        upload: { status: "pending", description: PIPELINE_STAGE_LABEL.SCOPE },
+        mapping: {
+            status: "pending",
+            description: PIPELINE_STAGE_LABEL.VALIDATE_SOURCE,
+        },
+        validation: {
+            status: "pending",
+            description: PIPELINE_STAGE_LABEL.INGEST,
+        },
+        preview: {
+            status: "pending",
+            description: PIPELINE_STAGE_LABEL.ATTRIBUTE,
+        },
+        submission: {
+            status: "pending",
+            description: PIPELINE_STAGE_LABEL.REPORT,
+        },
+        result: { status: "pending", description: PIPELINE_STAGE_LABEL.DONE },
     }
-  } = {
-    upload: { status: "pending", description: PIPELINE_STAGE_LABEL.SCOPE },
-    mapping: {
-      status: "pending",
-      description: PIPELINE_STAGE_LABEL.VALIDATE_SOURCE,
-    },
-    validation: { status: "pending", description: PIPELINE_STAGE_LABEL.INGEST },
-    preview: {
-      status: "pending",
-      description: PIPELINE_STAGE_LABEL.ATTRIBUTE,
-    },
-    submission: { status: "pending", description: PIPELINE_STAGE_LABEL.REPORT },
-    result: { status: "pending", description: PIPELINE_STAGE_LABEL.DONE },
-  }
-  for (let i = 0; i < PIPELINE_ORDER.length; i += 1) {
-    const stage = PIPELINE_ORDER[i]!
-    const key = PIPELINE_TO_INDICATOR[stage]
-    let status: "pending" | "current" | "complete" | "failed" = "pending"
-    if (i < currentIdx) status = "complete"
-    else if (i === currentIdx) status = "current"
-    states[key] = { status, description: PIPELINE_STAGE_LABEL[stage] }
-  }
-  return states
+    for (let i = 0; i < PIPELINE_ORDER.length; i += 1) {
+        const stage = PIPELINE_ORDER[i]!
+        const key = PIPELINE_TO_INDICATOR[stage]
+        let status: "pending" | "current" | "complete" | "failed" = "pending"
+        if (i < currentIdx) status = "complete"
+        else if (i === currentIdx) status = "current"
+        states[key] = { status, description: PIPELINE_STAGE_LABEL[stage] }
+    }
+    return states
 }
 
 function mapJobProgressStatus(
-  processing: HistoryBackfillProcessingStatus
+    processing: HistoryBackfillProcessingStatus,
 ): "queued" | "running" | "succeeded" | "partial" | "failed" {
-  if (processing === "RUNNING" || processing === "VALIDATING") return "running"
-  if (processing === "COMPLETED") return "succeeded"
-  if (processing === "PARTIAL") return "partial"
-  if (processing === "FAILED") return "failed"
-  return "queued"
+    if (processing === "RUNNING" || processing === "VALIDATING")
+        return "running"
+    if (processing === "COMPLETED") return "succeeded"
+    if (processing === "PARTIAL") return "partial"
+    if (processing === "FAILED") return "failed"
+    return "queued"
 }
 
 export function HistoryBackfillPage({
-  routeJobId,
+    routeJobId,
 }: {
-  /** 来自 `/governance/history-backfill/:jobId` */
-  routeJobId?: string
+    /** 来自 `/governance/history-backfill/:jobId` */
+    routeJobId?: string
 }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
 
-  const urlState = React.useMemo(
-    () => parseHistoryBackfillSearchParams(searchParams),
-    [searchParams]
-  )
-
-  const jobId = routeJobId ?? urlState.jobId
-
-  const listPath = "/governance/history-backfill"
-
-  const replaceListUrl = React.useCallback(
-    (next: HistoryBackfillUrlState) => {
-      const qs = buildHistoryBackfillSearchParams(
-        { ...next, jobId: undefined },
-        { omitJobId: true }
-      )
-      router.replace(`${listPath}${qs}`, { scroll: false })
-    },
-    [router]
-  )
-
-  const replaceDetailUrl = React.useCallback(
-    (id: string, next: HistoryBackfillUrlState) => {
-      const qs = buildHistoryBackfillSearchParams(
-        { ...next, jobId: undefined },
-        { omitJobId: true }
-      )
-      router.replace(`${listPath}/${id}${qs}`, { scroll: false })
-    },
-    [router]
-  )
-
-  const patchUrl = React.useCallback(
-    (patch: Partial<HistoryBackfillUrlState>) => {
-      const next = { ...urlState, ...patch }
-      if (jobId) replaceDetailUrl(jobId, next)
-      else replaceListUrl(next)
-    },
-    [urlState, jobId, replaceDetailUrl, replaceListUrl]
-  )
-
-  if (jobId) {
-    return (
-      <JobDetailView
-        jobId={jobId}
-        urlState={urlState}
-        patchUrl={patchUrl}
-        onBack={() => {
-          replaceListUrl({ ...urlState, jobId: undefined, section: "overview" })
-        }}
-        onOpenJob={(id) =>
-          replaceDetailUrl(id, {
-            ...urlState,
-            section: "overview",
-            page: 1,
-            result: undefined,
-            factType: undefined,
-            costBasis: undefined,
-            q: undefined,
-          })
-        }
-      />
+    const urlState = React.useMemo(
+        () => parseHistoryBackfillSearchParams(searchParams),
+        [searchParams],
     )
-  }
 
-  return (
-    <JobListView
-      urlState={urlState}
-      patchUrl={patchUrl}
-      onOpenJob={(id) =>
-        replaceDetailUrl(id, {
-          ...urlState,
-          section: "overview",
-          page: 1,
-          result: undefined,
-          factType: undefined,
-          costBasis: undefined,
-          q: undefined,
-        })
-      }
-      pathname={pathname}
-    />
-  )
+    const jobId = routeJobId ?? urlState.jobId
+
+    const listPath = "/governance/history-backfill"
+
+    const replaceListUrl = React.useCallback(
+        (next: HistoryBackfillUrlState) => {
+            const qs = buildHistoryBackfillSearchParams(
+                { ...next, jobId: undefined },
+                { omitJobId: true },
+            )
+            router.replace(`${listPath}${qs}`, { scroll: false })
+        },
+        [router],
+    )
+
+    const replaceDetailUrl = React.useCallback(
+        (id: string, next: HistoryBackfillUrlState) => {
+            const qs = buildHistoryBackfillSearchParams(
+                { ...next, jobId: undefined },
+                { omitJobId: true },
+            )
+            router.replace(`${listPath}/${id}${qs}`, { scroll: false })
+        },
+        [router],
+    )
+
+    const patchUrl = React.useCallback(
+        (patch: Partial<HistoryBackfillUrlState>) => {
+            const next = { ...urlState, ...patch }
+            if (jobId) replaceDetailUrl(jobId, next)
+            else replaceListUrl(next)
+        },
+        [urlState, jobId, replaceDetailUrl, replaceListUrl],
+    )
+
+    if (jobId) {
+        return (
+            <JobDetailView
+                jobId={jobId}
+                urlState={urlState}
+                patchUrl={patchUrl}
+                onBack={() => {
+                    replaceListUrl({
+                        ...urlState,
+                        jobId: undefined,
+                        section: "overview",
+                    })
+                }}
+                onOpenJob={(id) =>
+                    replaceDetailUrl(id, {
+                        ...urlState,
+                        section: "overview",
+                        page: 1,
+                        result: undefined,
+                        factType: undefined,
+                        costBasis: undefined,
+                        q: undefined,
+                    })
+                }
+            />
+        )
+    }
+
+    return (
+        <JobListView
+            urlState={urlState}
+            patchUrl={patchUrl}
+            onOpenJob={(id) =>
+                replaceDetailUrl(id, {
+                    ...urlState,
+                    section: "overview",
+                    page: 1,
+                    result: undefined,
+                    factType: undefined,
+                    costBasis: undefined,
+                    q: undefined,
+                })
+            }
+            pathname={pathname}
+        />
+    )
 }
 
 function JobListView({
-  urlState,
-  patchUrl,
-  onOpenJob,
+    urlState,
+    patchUrl,
+    onOpenJob,
 }: {
-  urlState: HistoryBackfillUrlState
-  patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
-  onOpenJob: (id: string) => void
-  pathname: string
+    urlState: HistoryBackfillUrlState
+    patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
+    onOpenJob: (id: string) => void
+    pathname: string
 }) {
-  const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-  const [createOpen, setCreateOpen] = React.useState(false)
-  const [scopeAlertDismissed, setScopeAlertDismissed] = React.useState(false)
-  const [actionResult, setActionResult] =
-    React.useState<HistoryBackfillCommandResult | null>(null)
-  const commandMutation = useHistoryBackfillCommandMutation()
+    const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const [createOpen, setCreateOpen] = React.useState(false)
+    const [scopeAlertDismissed, setScopeAlertDismissed] = React.useState(false)
+    const [actionResult, setActionResult] =
+        React.useState<HistoryBackfillCommandResult | null>(null)
+    const commandMutation = useHistoryBackfillCommandMutation()
 
-  React.useEffect(() => {
-    setQDraft(urlState.q ?? "")
-  }, [urlState.q])
+    React.useEffect(() => {
+        setQDraft(urlState.q ?? "")
+    }, [urlState.q])
 
-  // P3 搜索：300ms 防抖写 URL，Enter 兜底，/ 聚焦
-  React.useEffect(() => {
-    const handle = globalThis.setTimeout(() => {
-      if (qDraft.trim() === (urlState.q ?? "")) return
-      patchUrl({ q: qDraft.trim() || undefined, page: 1 })
-    }, 300)
-    return () => globalThis.clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
-  }, [qDraft])
+    // P3 搜索：300ms 防抖写 URL，Enter 兜底，/ 聚焦
+    React.useEffect(() => {
+        const handle = globalThis.setTimeout(() => {
+            if (qDraft.trim() === (urlState.q ?? "")) return
+            patchUrl({ q: qDraft.trim() || undefined, page: 1 })
+        }, 300)
+        return () => globalThis.clearTimeout(handle)
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
+    }, [qDraft])
 
-  React.useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (
-        event.key !== "/" ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      ) {
-        return
-      }
-      const target = event.target as HTMLElement | null
-      const tag = target?.tagName
-      if (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        target?.isContentEditable
-      ) {
-        return
-      }
-      event.preventDefault()
-      searchInputRef.current?.focus()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
+    React.useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if (
+                event.key !== "/" ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.altKey
+            ) {
+                return
+            }
+            const target = event.target as HTMLElement | null
+            const tag = target?.tagName
+            if (
+                tag === "INPUT" ||
+                tag === "TEXTAREA" ||
+                tag === "SELECT" ||
+                target?.isContentEditable
+            ) {
+                return
+            }
+            event.preventDefault()
+            searchInputRef.current?.focus()
+        }
+        window.addEventListener("keydown", onKey)
+        return () => window.removeEventListener("keydown", onKey)
+    }, [])
 
-  const listQuery = useHistoryBackfillListQuery({
-    view: urlState.view,
-    mallId: urlState.mallId,
-    environment: urlState.environment,
-    processingStatus: urlState.processingStatus,
-    reportReviewStatus: urlState.reportReviewStatus,
-    basis: urlState.basis,
-    q: urlState.q,
-    page: urlState.page,
-    pageSize: 20,
-  })
-
-  const data = listQuery.data
-
-  const columns = React.useMemo<ColumnDef<HistoryBackfillListItem>[]>(
-    () => [
-      {
-        id: "jobNo",
-        header: "任务号",
-        cell: ({ row }) => (
-          <Button
-            variant="link"
-            className="h-auto p-0 font-mono text-sm"
-            onClick={() => onOpenJob(row.original.id)}
-          >
-            {row.original.jobNo}
-          </Button>
-        ),
-      },
-      {
-        id: "mall",
-        header: "商城",
-        cell: ({ row }) => (
-          <div className="space-y-0.5">
-            <div className="text-sm">{row.original.mallName}</div>
-            <Badge
-              variant={
-                row.original.environment === "production"
-                  ? "destructive"
-                  : "secondary"
-              }
-              className="text-2xs"
-            >
-              {ENVIRONMENT_LABEL[row.original.environment]}
-            </Badge>
-          </div>
-        ),
-      },
-      {
-        id: "range",
-        header: "范围起点至截止时点",
-        cell: ({ row }) => (
-          <span className="num font-mono text-xs">
-            {row.original.rangeLabel}
-          </span>
-        ),
-      },
-      {
-        id: "processing",
-        header: "处理状态",
-        cell: ({ row }) => (
-          <BusinessStatusBadge
-            context="list"
-            label={PROCESSING_STATUS_LABEL[row.original.processingStatus]}
-            tone={PROCESSING_STATUS_TONE[row.original.processingStatus]}
-          />
-        ),
-      },
-      {
-        id: "reportReview",
-        header: "报告确认",
-        cell: ({ row }) => (
-          <BusinessStatusBadge
-            context="list"
-            label={REPORT_REVIEW_STATUS_LABEL[row.original.reportReviewStatus]}
-            tone={REPORT_REVIEW_STATUS_TONE[row.original.reportReviewStatus]}
-          />
-        ),
-      },
-      {
-        id: "progress",
-        header: "进度",
-        cell: ({ row }) => (
-          <span className="num text-sm">{row.original.progressLabel}</span>
-        ),
-      },
-      {
-        id: "dedupe",
-        header: "去重",
-        cell: ({ row }) => (
-          <span className="num text-sm">
-            {row.original.deduplicatedCount.toLocaleString("zh-CN")}
-          </span>
-        ),
-      },
-      {
-        id: "unattr",
-        header: "未归集",
-        cell: ({ row }) => (
-          <span className="num text-sm">
-            {row.original.unattributedCount.toLocaleString("zh-CN")}
-          </span>
-        ),
-      },
-      {
-        id: "cost",
-        header: "成本覆盖",
-        cell: ({ row }) => (
-          <span className="text-xs">{row.original.costCoverageLabel}</span>
-        ),
-      },
-      {
-        id: "actions",
-        header: "操作",
-        cell: ({ row }) => (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => onOpenJob(row.original.id)}
-          >
-            打开
-          </Button>
-        ),
-      },
-    ],
-    [onOpenJob]
-  )
-
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: Math.max(0, urlState.page - 1),
-    pageSize: 20,
-  })
-
-  React.useEffect(() => {
-    setPagination((p) => ({
-      ...p,
-      pageIndex: Math.max(0, urlState.page - 1),
-    }))
-  }, [urlState.page])
-
-  const hasListFilters = Boolean(
-    urlState.mallId ||
-      urlState.processingStatus ||
-      urlState.reportReviewStatus ||
-      urlState.basis ||
-      urlState.q
-  )
-
-  const clearListFilters = () => {
-    setQDraft("")
-    patchUrl({
-      mallId: undefined,
-      processingStatus: undefined,
-      reportReviewStatus: undefined,
-      basis: undefined,
-      q: undefined,
-      page: 1,
+    const listQuery = useHistoryBackfillListQuery({
+        view: urlState.view,
+        mallId: urlState.mallId,
+        environment: urlState.environment,
+        processingStatus: urlState.processingStatus,
+        reportReviewStatus: urlState.reportReviewStatus,
+        basis: urlState.basis,
+        q: urlState.q,
+        page: urlState.page,
+        pageSize: 20,
     })
-  }
 
-  return (
-    <PageScaffold>
-      <PageHeader
-        title="历史消费回填"
-        breadcrumbs={[
-          {
-            id: "gov",
-            label: "治理",
-            href: "/governance/history-backfill",
-            current: false,
-          },
-          { id: "hb", label: "历史消费回填", current: true },
-        ]}
-        metadata={
-          <DataFreshness
-            updatedAt={
-              data?.queriedAt ? formatDateTime(data.queriedAt, "dateStyle") : "刚刚"
-            }
-            dateTime={data?.queriedAt}
-            state={listQuery.isFetching ? "stale" : "fresh"}
-            label="回填任务"
-          />
-        }
-        actions={
-          <Button
-            type="button"
-            className="max-sm:hidden"
-            onClick={() => setCreateOpen(true)}
-          >
-            创建回填任务
-          </Button>
-        }
-      />
+    const data = listQuery.data
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={listQuery.isFetching}
-          onClick={() => void listQuery.refetch()}
-        >
-          <RefreshCwIcon className="size-4" aria-hidden />
-          刷新
-        </Button>
-      </div>
+    const columns = React.useMemo<ColumnDef<HistoryBackfillListItem>[]>(
+        () => [
+            {
+                id: "jobNo",
+                header: "任务号",
+                cell: ({ row }) => (
+                    <Button
+                        variant="link"
+                        className="h-auto p-0 font-mono text-sm"
+                        onClick={() => onOpenJob(row.original.id)}
+                    >
+                        {row.original.jobNo}
+                    </Button>
+                ),
+            },
+            {
+                id: "mall",
+                header: "商城",
+                cell: ({ row }) => (
+                    <div className="space-y-0.5">
+                        <div className="text-sm">{row.original.mallName}</div>
+                        <Badge
+                            variant={
+                                row.original.environment === "production"
+                                    ? "destructive"
+                                    : "secondary"
+                            }
+                            className="text-2xs"
+                        >
+                            {ENVIRONMENT_LABEL[row.original.environment]}
+                        </Badge>
+                    </div>
+                ),
+            },
+            {
+                id: "range",
+                header: "范围起点至截止时点",
+                cell: ({ row }) => (
+                    <span className="num font-mono text-xs">
+                        {row.original.rangeLabel}
+                    </span>
+                ),
+            },
+            {
+                id: "processing",
+                header: "处理状态",
+                cell: ({ row }) => (
+                    <BusinessStatusBadge
+                        context="list"
+                        label={
+                            PROCESSING_STATUS_LABEL[
+                                row.original.processingStatus
+                            ]
+                        }
+                        tone={
+                            PROCESSING_STATUS_TONE[
+                                row.original.processingStatus
+                            ]
+                        }
+                    />
+                ),
+            },
+            {
+                id: "reportReview",
+                header: "报告确认",
+                cell: ({ row }) => (
+                    <BusinessStatusBadge
+                        context="list"
+                        label={
+                            REPORT_REVIEW_STATUS_LABEL[
+                                row.original.reportReviewStatus
+                            ]
+                        }
+                        tone={
+                            REPORT_REVIEW_STATUS_TONE[
+                                row.original.reportReviewStatus
+                            ]
+                        }
+                    />
+                ),
+            },
+            {
+                id: "progress",
+                header: "进度",
+                cell: ({ row }) => (
+                    <span className="num text-sm">
+                        {row.original.progressLabel}
+                    </span>
+                ),
+            },
+            {
+                id: "dedupe",
+                header: "去重",
+                cell: ({ row }) => (
+                    <span className="num text-sm">
+                        {row.original.deduplicatedCount.toLocaleString("zh-CN")}
+                    </span>
+                ),
+            },
+            {
+                id: "unattr",
+                header: "未归集",
+                cell: ({ row }) => (
+                    <span className="num text-sm">
+                        {row.original.unattributedCount.toLocaleString("zh-CN")}
+                    </span>
+                ),
+            },
+            {
+                id: "cost",
+                header: "成本覆盖",
+                cell: ({ row }) => (
+                    <span className="text-xs">
+                        {row.original.costCoverageLabel}
+                    </span>
+                ),
+            },
+            {
+                id: "actions",
+                header: "操作",
+                cell: ({ row }) => (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenJob(row.original.id)}
+                    >
+                        打开
+                    </Button>
+                ),
+            },
+        ],
+        [onOpenJob],
+    )
 
-      <FormalResultBanner result={actionResult} />
+    const [pagination, setPagination] = React.useState<PaginationState>({
+        pageIndex: Math.max(0, urlState.page - 1),
+        pageSize: 20,
+    })
 
-      <Tabs
-        value={urlState.view}
-        onValueChange={(v) => {
-          if (v == null) return
-          patchUrl({ view: v as HistoryBackfillView, page: 1 })
-        }}
-      >
-        <TabsList>
-          {(Object.keys(VIEW_LABEL) as HistoryBackfillView[]).map((v) => (
-            <TabsTrigger key={v} value={v}>
-              {VIEW_LABEL[v]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+    React.useEffect(() => {
+        setPagination((p) => ({
+            ...p,
+            pageIndex: Math.max(0, urlState.page - 1),
+        }))
+    }, [urlState.page])
 
-      <MetricStrip columns={5} aria-label="回填任务指标">
-        <MetricItem label="执行中" value={data?.metrics.running ?? "—"} />
-        <MetricItem label="待归集" value={data?.metrics.unattributed ?? "—"} />
-        <MetricItem
-          label="重叠去重"
-          value={data?.metrics.deduplicated ?? "—"}
-        />
-        <MetricItem
-          label="未覆盖消费"
-          value={data?.metrics.noneConsumption ?? "—"}
-        />
-        <MetricItem label="失败项" value={data?.metrics.failed ?? "—"} />
-      </MetricStrip>
+    const hasListFilters = Boolean(
+        urlState.mallId ||
+        urlState.processingStatus ||
+        urlState.reportReviewStatus ||
+        urlState.basis ||
+        urlState.q,
+    )
 
-      {!scopeAlertDismissed ? (
-        <Alert>
-          <ShieldAlertIcon />
-          <AlertTitle className="flex items-center justify-between gap-2">
-            范围与敏感边界
-            <button
-              type="button"
-              aria-label="关闭提示"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => setScopeAlertDismissed(true)}
-            >
-              <XIcon className="size-4" aria-hidden />
-            </button>
-          </AlertTitle>
-          <AlertDescription>
-            从范围起点至截止时点（截止时点当天除外），截止时点当天发生的记录不进历史回填。技术处理完成 ≠
-            报告已确认 ≠ 全历史业务完成。页面与导出不含卡号、卡密、绑定手机、完整地址或原始消息内容。
-          </AlertDescription>
-        </Alert>
-      ) : null}
+    const clearListFilters = () => {
+        setQDraft("")
+        patchUrl({
+            mallId: undefined,
+            processingStatus: undefined,
+            reportReviewStatus: undefined,
+            basis: undefined,
+            q: undefined,
+            page: 1,
+        })
+    }
 
-      <BusinessTableFrame
-        title="回填任务"
-        description={
-          listQuery.isError
-            ? "列表加载失败，可调整筛选后重试"
-            : `共 ${data?.totalCount ?? 0} 个任务 · 处理状态与报告确认状态分列`
-        }
-        toolbar={
-          <ListToolbar
-            search={
-              <form
-                className="flex gap-1"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  patchUrl({ q: qDraft.trim() || undefined, page: 1 })
-                }}
-              >
-                <InputGroup>
-                  <InputGroupAddon>
-                    <SearchIcon aria-hidden="true" />
-                  </InputGroupAddon>
-                  <InputGroupInput
-                    ref={searchInputRef}
-                    value={qDraft}
-                    onChange={(e) => setQDraft(e.target.value)}
-                    placeholder="任务号 / 商城"
-                    aria-label="搜索"
-                  />
-                </InputGroup>
-              </form>
-            }
-            filters={
-              <>
-                <MallSearchCombobox
-                  value={urlState.mallId ?? null}
-                  onValueChange={(v) => {
-                    patchUrl({
-                      mallId: v ?? undefined,
-                      page: 1,
-                    })
-                  }}
-                  inputClassName="w-[10rem]"
-                  size="sm"
-                  placeholder="商城：全部"
-                  aria-label="商城"
-                  allowClear={false}
-                />
-                <OptionCombobox
-                  value={urlState.processingStatus ?? "all"}
-                  onValueChange={(v) => {
-                    if (v == null) return
-                    patchUrl({
-                      processingStatus:
-                        v === "all"
-                          ? undefined
-                          : (v as HistoryBackfillProcessingStatus),
-                      page: 1,
-                    })
-                  }}
-                  options={[
-                    { value: "all", label: "全部处理状态" },
-                    ...(
-                      Object.keys(
-                        PROCESSING_STATUS_LABEL
-                      ) as HistoryBackfillProcessingStatus[]
-                    ).map((s) => ({
-                      value: s,
-                      label: PROCESSING_STATUS_LABEL[s],
-                    })),
-                  ]}
-                  inputClassName="w-[11rem]"
-                  size="sm"
-                  placeholder="处理状态：全部"
-                  aria-label="处理状态"
-                  allowClear={false}
-                />
-                <OptionCombobox
-                  value={urlState.environment ?? "all"}
-                  onValueChange={(v) => {
-                    if (v == null) return
-                    patchUrl({
-                      environment:
-                        v === "all"
-                          ? undefined
-                          : (v as HistoryBackfillEnvironment),
-                      page: 1,
-                    })
-                  }}
-                  options={[
-                    { value: "all", label: "全部环境" },
-                    { value: "production", label: "生产环境" },
-                    { value: "verification", label: "验证环境" },
-                  ]}
-                  inputClassName="w-[9rem]"
-                  size="sm"
-                  placeholder="环境：全部"
-                  aria-label="环境"
-                  allowClear={false}
-                />
-              </>
-            }
-            secondary={
-              <>
-                <OptionCombobox
-                  value={urlState.reportReviewStatus ?? "all"}
-                  onValueChange={(v) => {
-                    if (v == null) return
-                    patchUrl({
-                      reportReviewStatus:
-                        v === "all"
-                          ? undefined
-                          : (v as HistoryBackfillReportReviewStatus),
-                      page: 1,
-                    })
-                  }}
-                  options={[
-                    { value: "all", label: "全部确认状态" },
-                    ...(
-                      Object.keys(
-                        REPORT_REVIEW_STATUS_LABEL
-                      ) as HistoryBackfillReportReviewStatus[]
-                    ).map((s) => ({
-                      value: s,
-                      label: REPORT_REVIEW_STATUS_LABEL[s],
-                    })),
-                  ]}
-                  inputClassName="w-[11rem]"
-                  size="sm"
-                  placeholder="报告确认：全部"
-                  aria-label="报告确认"
-                  allowClear={false}
-                />
-                <OptionCombobox
-                  value={urlState.basis ?? "all"}
-                  onValueChange={(v) => {
-                    if (v == null) return
-                    patchUrl({
-                      basis: v === "all" ? undefined : (v as CostBasis),
-                      page: 1,
-                    })
-                  }}
-                  options={[
-                    { value: "all", label: "全部口径" },
-                    ...(Object.keys(COST_BASIS_LABEL) as CostBasis[]).map(
-                      (b) => ({
-                        value: b,
-                        label: COST_BASIS_LABEL[b],
-                      })
-                    ),
-                  ]}
-                  inputClassName="w-[10rem]"
-                  size="sm"
-                  placeholder="成本口径：全部"
-                  aria-label="成本口径"
-                  allowClear={false}
-                />
-              </>
-            }
-            actions={
-              <>
-                <span className="text-xs text-muted-foreground" aria-live="polite">
-                  共 {(data?.totalCount ?? 0).toLocaleString("zh-CN")} 个
-                </span>
-                {hasListFilters ? (
-                  <Button
+    return (
+        <PageScaffold>
+            <PageHeader
+                title="历史消费回填"
+                breadcrumbs={[
+                    {
+                        id: "gov",
+                        label: "治理",
+                        href: "/governance/history-backfill",
+                        current: false,
+                    },
+                    { id: "hb", label: "历史消费回填", current: true },
+                ]}
+                metadata={
+                    <DataFreshness
+                        updatedAt={
+                            data?.queriedAt
+                                ? formatDateTime(data.queriedAt, "dateStyle")
+                                : "刚刚"
+                        }
+                        dateTime={data?.queriedAt}
+                        state={listQuery.isFetching ? "stale" : "fresh"}
+                        label="回填任务"
+                    />
+                }
+                actions={
+                    <Button
+                        type="button"
+                        className="max-sm:hidden"
+                        onClick={() => setCreateOpen(true)}
+                    >
+                        创建回填任务
+                    </Button>
+                }
+            />
+
+            <div className="flex flex-wrap items-center gap-2">
+                <Button
                     type="button"
                     size="sm"
                     variant="ghost"
-                    onClick={clearListFilters}
-                  >
-                    清除筛选
-                  </Button>
-                ) : null}
-              </>
-            }
-          />
-        }
-        table={
-          listQuery.isError ? (
-            <BusinessFailureState
-              title="任务列表加载失败"
-              error={listQuery.error}
-              className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-              action={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="rounded-lg shadow-none"
-                  onClick={() => void listQuery.refetch()}
+                    disabled={listQuery.isFetching}
+                    onClick={() => void listQuery.refetch()}
                 >
-                  重试
+                    <RefreshCwIcon className="size-4" aria-hidden />
+                    刷新
                 </Button>
-              }
-            />
-          ) : (
-            <DataTable
-              data={[...(data?.rows ?? [])]}
-              columns={columns}
-              getRowId={(row) => row.id}
-              rowCount={data?.totalCount ?? 0}
-              pagination={pagination}
-              onPaginationChange={(next) => {
-                setPagination(next)
-                patchUrl({ page: next.pageIndex + 1 })
-              }}
-              layout="flush"
-              density="compact"
-              loading={listQuery.isPending}
-            />
-          )
-        }
-      />
+            </div>
 
-      <CreateBackfillSheet
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        context={data?.createContext}
-        pending={commandMutation.isPending}
-        result={actionResult}
-        onSubmit={async () => {
-          const ctx = data?.createContext
-          if (!ctx) return
-          const operationId = newRequestId("op")
-          const idempotencyKey = newRequestId("idem_create")
-          const result = await commandMutation.mutateAsync({
-            action: "CREATE_DRAFT",
-            cutoverId: ctx.cutoverId,
-            rangeStart: ctx.requiredHistoryStart,
-            rangeEnd: ctx.rangeEnd,
-            operationId,
-            idempotencyKey,
-          })
-          setActionResult(result)
-          if (result.status === "COMMITTED" && result.jobId) {
-            setCreateOpen(false)
-            onOpenJob(result.jobId)
-          }
-        }}
-      />
-    </PageScaffold>
-  )
+            <FormalResultBanner result={actionResult} />
+
+            <Tabs
+                value={urlState.view}
+                onValueChange={(v) => {
+                    if (v == null) return
+                    patchUrl({ view: v as HistoryBackfillView, page: 1 })
+                }}
+            >
+                <TabsList>
+                    {(Object.keys(VIEW_LABEL) as HistoryBackfillView[]).map(
+                        (v) => (
+                            <TabsTrigger key={v} value={v}>
+                                {VIEW_LABEL[v]}
+                            </TabsTrigger>
+                        ),
+                    )}
+                </TabsList>
+            </Tabs>
+
+            <MetricStrip columns={5} aria-label="回填任务指标">
+                <MetricItem
+                    label="执行中"
+                    value={data?.metrics.running ?? "—"}
+                />
+                <MetricItem
+                    label="待归集"
+                    value={data?.metrics.unattributed ?? "—"}
+                />
+                <MetricItem
+                    label="重叠去重"
+                    value={data?.metrics.deduplicated ?? "—"}
+                />
+                <MetricItem
+                    label="未覆盖消费"
+                    value={data?.metrics.noneConsumption ?? "—"}
+                />
+                <MetricItem
+                    label="失败项"
+                    value={data?.metrics.failed ?? "—"}
+                />
+            </MetricStrip>
+
+            {!scopeAlertDismissed ? (
+                <Alert>
+                    <ShieldAlertIcon />
+                    <AlertTitle className="flex items-center justify-between gap-2">
+                        范围与敏感边界
+                        <button
+                            type="button"
+                            aria-label="关闭提示"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => setScopeAlertDismissed(true)}
+                        >
+                            <XIcon className="size-4" aria-hidden />
+                        </button>
+                    </AlertTitle>
+                    <AlertDescription>
+                        从范围起点至截止时点（截止时点当天除外），截止时点当天发生的记录不进历史回填。技术处理完成
+                        ≠ 报告已确认 ≠
+                        全历史业务完成。页面与导出不含卡号、卡密、绑定手机、完整地址或原始消息内容。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            <BusinessTableFrame
+                title="回填任务"
+                description={
+                    listQuery.isError
+                        ? "列表加载失败，可调整筛选后重试"
+                        : `共 ${data?.totalCount ?? 0} 个任务 · 处理状态与报告确认状态分列`
+                }
+                toolbar={
+                    <ListToolbar
+                        search={
+                            <form
+                                className="flex gap-1"
+                                onSubmit={(e) => {
+                                    e.preventDefault()
+                                    patchUrl({
+                                        q: qDraft.trim() || undefined,
+                                        page: 1,
+                                    })
+                                }}
+                            >
+                                <InputGroup>
+                                    <InputGroupAddon>
+                                        <SearchIcon aria-hidden="true" />
+                                    </InputGroupAddon>
+                                    <InputGroupInput
+                                        ref={searchInputRef}
+                                        value={qDraft}
+                                        onChange={(e) =>
+                                            setQDraft(e.target.value)
+                                        }
+                                        placeholder="任务号 / 商城"
+                                        aria-label="搜索"
+                                    />
+                                </InputGroup>
+                            </form>
+                        }
+                        filters={
+                            <>
+                                <MallSearchCombobox
+                                    value={urlState.mallId ?? null}
+                                    onValueChange={(v) => {
+                                        patchUrl({
+                                            mallId: v ?? undefined,
+                                            page: 1,
+                                        })
+                                    }}
+                                    inputClassName="w-[10rem]"
+                                    size="sm"
+                                    placeholder="商城：全部"
+                                    aria-label="商城"
+                                    allowClear={false}
+                                />
+                                <OptionCombobox
+                                    value={urlState.processingStatus ?? "all"}
+                                    onValueChange={(v) => {
+                                        if (v == null) return
+                                        patchUrl({
+                                            processingStatus:
+                                                v === "all"
+                                                    ? undefined
+                                                    : (v as HistoryBackfillProcessingStatus),
+                                            page: 1,
+                                        })
+                                    }}
+                                    options={[
+                                        { value: "all", label: "全部处理状态" },
+                                        ...(
+                                            Object.keys(
+                                                PROCESSING_STATUS_LABEL,
+                                            ) as HistoryBackfillProcessingStatus[]
+                                        ).map((s) => ({
+                                            value: s,
+                                            label: PROCESSING_STATUS_LABEL[s],
+                                        })),
+                                    ]}
+                                    inputClassName="w-[11rem]"
+                                    size="sm"
+                                    placeholder="处理状态：全部"
+                                    aria-label="处理状态"
+                                    allowClear={false}
+                                />
+                                <OptionCombobox
+                                    value={urlState.environment ?? "all"}
+                                    onValueChange={(v) => {
+                                        if (v == null) return
+                                        patchUrl({
+                                            environment:
+                                                v === "all"
+                                                    ? undefined
+                                                    : (v as HistoryBackfillEnvironment),
+                                            page: 1,
+                                        })
+                                    }}
+                                    options={[
+                                        { value: "all", label: "全部环境" },
+                                        {
+                                            value: "production",
+                                            label: "生产环境",
+                                        },
+                                        {
+                                            value: "verification",
+                                            label: "验证环境",
+                                        },
+                                    ]}
+                                    inputClassName="w-[9rem]"
+                                    size="sm"
+                                    placeholder="环境：全部"
+                                    aria-label="环境"
+                                    allowClear={false}
+                                />
+                            </>
+                        }
+                        secondary={
+                            <>
+                                <OptionCombobox
+                                    value={urlState.reportReviewStatus ?? "all"}
+                                    onValueChange={(v) => {
+                                        if (v == null) return
+                                        patchUrl({
+                                            reportReviewStatus:
+                                                v === "all"
+                                                    ? undefined
+                                                    : (v as HistoryBackfillReportReviewStatus),
+                                            page: 1,
+                                        })
+                                    }}
+                                    options={[
+                                        { value: "all", label: "全部确认状态" },
+                                        ...(
+                                            Object.keys(
+                                                REPORT_REVIEW_STATUS_LABEL,
+                                            ) as HistoryBackfillReportReviewStatus[]
+                                        ).map((s) => ({
+                                            value: s,
+                                            label: REPORT_REVIEW_STATUS_LABEL[
+                                                s
+                                            ],
+                                        })),
+                                    ]}
+                                    inputClassName="w-[11rem]"
+                                    size="sm"
+                                    placeholder="报告确认：全部"
+                                    aria-label="报告确认"
+                                    allowClear={false}
+                                />
+                                <OptionCombobox
+                                    value={urlState.basis ?? "all"}
+                                    onValueChange={(v) => {
+                                        if (v == null) return
+                                        patchUrl({
+                                            basis:
+                                                v === "all"
+                                                    ? undefined
+                                                    : (v as CostBasis),
+                                            page: 1,
+                                        })
+                                    }}
+                                    options={[
+                                        { value: "all", label: "全部口径" },
+                                        ...(
+                                            Object.keys(
+                                                COST_BASIS_LABEL,
+                                            ) as CostBasis[]
+                                        ).map((b) => ({
+                                            value: b,
+                                            label: COST_BASIS_LABEL[b],
+                                        })),
+                                    ]}
+                                    inputClassName="w-[10rem]"
+                                    size="sm"
+                                    placeholder="成本口径：全部"
+                                    aria-label="成本口径"
+                                    allowClear={false}
+                                />
+                            </>
+                        }
+                        actions={
+                            <>
+                                <span
+                                    className="text-xs text-muted-foreground"
+                                    aria-live="polite"
+                                >
+                                    共{" "}
+                                    {(data?.totalCount ?? 0).toLocaleString(
+                                        "zh-CN",
+                                    )}{" "}
+                                    个
+                                </span>
+                                {hasListFilters ? (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={clearListFilters}
+                                    >
+                                        清除筛选
+                                    </Button>
+                                ) : null}
+                            </>
+                        }
+                    />
+                }
+                table={
+                    listQuery.isError ? (
+                        <BusinessFailureState
+                            title="任务列表加载失败"
+                            error={listQuery.error}
+                            className="rounded-lg border-0 bg-transparent shadow-none ring-0"
+                            action={
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="rounded-lg shadow-none"
+                                    onClick={() => void listQuery.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    ) : (
+                        <DataTable
+                            data={[...(data?.rows ?? [])]}
+                            columns={columns}
+                            getRowId={(row) => row.id}
+                            rowCount={data?.totalCount ?? 0}
+                            pagination={pagination}
+                            onPaginationChange={(next) => {
+                                setPagination(next)
+                                patchUrl({ page: next.pageIndex + 1 })
+                            }}
+                            layout="flush"
+                            density="compact"
+                            loading={listQuery.isPending}
+                        />
+                    )
+                }
+            />
+
+            <CreateBackfillSheet
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                context={data?.createContext}
+                pending={commandMutation.isPending}
+                result={actionResult}
+                onSubmit={async () => {
+                    const ctx = data?.createContext
+                    if (!ctx) return
+                    const operationId = newRequestId("op")
+                    const idempotencyKey = newRequestId("idem_create")
+                    const result = await commandMutation.mutateAsync({
+                        action: "CREATE_DRAFT",
+                        cutoverId: ctx.cutoverId,
+                        rangeStart: ctx.requiredHistoryStart,
+                        rangeEnd: ctx.rangeEnd,
+                        operationId,
+                        idempotencyKey,
+                    })
+                    setActionResult(result)
+                    if (result.status === "COMMITTED" && result.jobId) {
+                        setCreateOpen(false)
+                        onOpenJob(result.jobId)
+                    }
+                }}
+            />
+        </PageScaffold>
+    )
 }
 
-
 function JobDetailView({
-  jobId,
-  urlState,
-  patchUrl,
-  onBack,
-}: {
-  jobId: string
-  urlState: HistoryBackfillUrlState
-  patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
-  onBack: () => void
-  onOpenJob: (id: string) => void
-}) {
-  const [actionResult, setActionResult] =
-    React.useState<HistoryBackfillCommandResult | null>(null)
-  const [startOpen, setStartOpen] = React.useState(false)
-  const [resumeOpen, setResumeOpen] = React.useState(false)
-  const [reattributeOpen, setReattributeOpen] = React.useState(false)
-  const [reattributeItemId, setReattributeItemId] = React.useState<string | null>(null)
-  const [confirmReportOpen, setConfirmReportOpen] = React.useState(false)
-  const [downloadNote, setDownloadNote] = React.useState<string | null>(null)
-  const commandMutation = useHistoryBackfillCommandMutation()
-
-  const section = urlState.section
-  const results: ItemResult[] | undefined =
-    section === "dedupe"
-      ? ["DEDUPLICATED"]
-      : section === "unattributed"
-        ? ["UNATTRIBUTED"]
-        : section === "failures"
-          ? ["FAILED"]
-          : urlState.result
-            ? [urlState.result]
-            : undefined
-  const factTypes = urlState.factType ? [urlState.factType] : undefined
-  const costBases = urlState.costBasis ? [urlState.costBasis] : undefined
-
-  const detailQuery = useHistoryBackfillDetailQuery({
     jobId,
-    results,
-    factTypes,
-    costBases,
-    q: urlState.q,
-    page: Math.max(1, urlState.page),
-    pageSize: 20,
-    section,
-  })
+    urlState,
+    patchUrl,
+    onBack,
+}: {
+    jobId: string
+    urlState: HistoryBackfillUrlState
+    patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
+    onBack: () => void
+    onOpenJob: (id: string) => void
+}) {
+    const [actionResult, setActionResult] =
+        React.useState<HistoryBackfillCommandResult | null>(null)
+    const [startOpen, setStartOpen] = React.useState(false)
+    const [resumeOpen, setResumeOpen] = React.useState(false)
+    const [reattributeOpen, setReattributeOpen] = React.useState(false)
+    const [reattributeItemId, setReattributeItemId] = React.useState<
+        string | null
+    >(null)
+    const [confirmReportOpen, setConfirmReportOpen] = React.useState(false)
+    const [downloadNote, setDownloadNote] = React.useState<string | null>(null)
+    const commandMutation = useHistoryBackfillCommandMutation()
 
-  const view = detailQuery.data
-  const job = view?.job
+    const section = urlState.section
+    const results: ItemResult[] | undefined =
+        section === "dedupe"
+            ? ["DEDUPLICATED"]
+            : section === "unattributed"
+              ? ["UNATTRIBUTED"]
+              : section === "failures"
+                ? ["FAILED"]
+                : urlState.result
+                  ? [urlState.result]
+                  : undefined
+    const factTypes = urlState.factType ? [urlState.factType] : undefined
+    const costBases = urlState.costBasis ? [urlState.costBasis] : undefined
 
-  if (detailQuery.isPending) {
-    return (
-      <PageScaffold>
-        <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-        <div className="h-24 animate-pulse rounded-lg bg-muted" />
-        <div className="h-40 animate-pulse rounded-lg bg-muted" />
-      </PageScaffold>
-    )
-  }
-
-  if (detailQuery.isError) {
-    return (
-      <PageScaffold>
-        <BusinessFailureState
-          title="任务加载失败"
-          error={detailQuery.error}
-          onRetry={() => void detailQuery.refetch()}
-        />
-      </PageScaffold>
-    )
-  }
-
-  if (!job) {
-    return (
-      <PageScaffold>
-        <BusinessEmptyState
-          kind="no-data"
-          title="无法打开该任务"
-          description="任务可能已结束或链接失效；也可返回任务列表重新选择。"
-          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-          action={
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="rounded-lg shadow-none"
-                onClick={() => void detailQuery.refetch()}
-              >
-                重试
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="rounded-lg shadow-none"
-                onClick={onBack}
-              >
-                返回列表
-              </Button>
-            </div>
-          }
-        />
-      </PageScaffold>
-    )
-  }
-
-  // 收窄后固定引用，供 async 闭包安全使用
-  const currentJob = job
-
-  const stageStates = buildStageStates(currentJob.pipelineStage)
-  const stageLabels = {
-    upload: PIPELINE_STAGE_LABEL.SCOPE,
-    mapping: PIPELINE_STAGE_LABEL.VALIDATE_SOURCE,
-    validation: PIPELINE_STAGE_LABEL.INGEST,
-    preview: PIPELINE_STAGE_LABEL.ATTRIBUTE,
-    submission: PIPELINE_STAGE_LABEL.REPORT,
-    result: PIPELINE_STAGE_LABEL.DONE,
-  }
-  const progressStatus = mapJobProgressStatus(currentJob.processingStatus)
-  const noneRow = currentJob.costBasis.find((c) => c.basis === "NONE")
-  const canStart = currentJob.allowedActions.includes("START")
-  const canResume = currentJob.allowedActions.includes("RESUME")
-  const canValidate = currentJob.allowedActions.includes("VALIDATE_SOURCE")
-  const canConfirmReport = currentJob.allowedActions.includes("CONFIRM_REPORT")
-  const startBlockers = currentJob.actionBlockers.filter((b) => b.action === "START")
-  const report = view?.report
-
-  const primaryProcessing = {
-    label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
-    tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
-  }
-
-  const filteredItems = view?.items ?? []
-  const sectionItems = filteredItems
-
-  const dominantBasis: CostBasis =
-    ([...currentJob.costBasis].sort((a, b) => b.count - a.count)[0]?.basis as CostBasis) ??
-    "NONE"
-
-  const coverageState =
-    currentJob.coveragePercent >= 99
-      ? "complete"
-      : currentJob.coveragePercent <= 0
-        ? "none"
-        : "partial"
-
-  async function runCommand(
-    action:
-      | "VALIDATE_SOURCE"
-      | "START"
-      | "RESUME"
-      | "REATTRIBUTE"
-      | "CONFIRM_REPORT",
-    itemIds?: string[]
-  ) {
-    const operationId = newRequestId("op")
-    const idempotencyKey =
-      action === "RESUME"
-        ? `${currentJob.idempotencyNamespace}:resume:${currentJob.lockVersion}`
-        : newRequestId(`idem_${action.toLowerCase()}`)
-    const result = await commandMutation.mutateAsync({
-      action,
-      jobId: currentJob.id,
-      expectedLockVersion: currentJob.lockVersion,
-      rangeStart: currentJob.rangeStart,
-      rangeEnd: currentJob.rangeEnd,
-      operationId,
-      idempotencyKey,
-      itemIds,
-      reportVersion: report?.reportVersion,
+    const detailQuery = useHistoryBackfillDetailQuery({
+        jobId,
+        results,
+        factTypes,
+        costBases,
+        q: urlState.q,
+        page: Math.max(1, urlState.page),
+        pageSize: 20,
+        section,
     })
-    setActionResult(result)
-    if (action === "START") setStartOpen(false)
-    if (action === "RESUME") setResumeOpen(false)
-    if (action === "REATTRIBUTE") setReattributeOpen(false)
-    if (action === "CONFIRM_REPORT") setConfirmReportOpen(false)
-  }
 
-  return (
-    <PageScaffold>
-      <PageHeader
-        variant="object-chrome"
-        breadcrumbs={[
-          {
-            id: "gov",
-            label: "治理",
-            href: "/governance/history-backfill",
-          },
-          {
-            id: "hb",
-            label: "历史消费回填",
-            href: "/governance/history-backfill",
-          },
-          {
-            id: "job",
-            label: currentJob.jobNo,
-            current: true,
-          },
-        ]}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-              <ArrowLeftIcon className="size-4" />
-              返回任务列表
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="text-muted-foreground"
-              disabled={detailQuery.isFetching}
-              onClick={() => void detailQuery.refetch()}
-            >
-              <RefreshCwIcon
-                className={detailQuery.isFetching ? "animate-spin" : ""}
-                aria-hidden
-              />
-              刷新
-            </Button>
-          </div>
-        }
-      />
+    const view = detailQuery.data
+    const job = view?.job
 
-      <DocumentHeader
-        density="compact"
-        title={currentJob.mallName}
-        documentNumber={currentJob.jobNo}
-        primaryStatus={primaryProcessing}
-        version={`版本 ${currentJob.lockVersion}`}
-        meta={
-          <span className="text-muted-foreground">
-            {ENVIRONMENT_LABEL[currentJob.environment]} · 范围起点{" "}
-            {formatDay(currentJob.rangeStart)} 至 截止时点{" "}
-            {formatDay(currentJob.rangeEnd)}
-          </span>
-        }
-        statuses={[
-          {
-            id: "report",
-            label: "报告确认",
-            status: {
-              label: REPORT_REVIEW_STATUS_LABEL[currentJob.reportReviewStatus],
-              tone: REPORT_REVIEW_STATUS_TONE[currentJob.reportReviewStatus],
-            },
-          },
-          {
-            id: "mall",
-            label: "商城",
-            status: {
-              label: `${currentJob.mallName} · ${ENVIRONMENT_LABEL[currentJob.environment]}`,
-              tone:
-                currentJob.environment === "production" ? "destructive" : "info",
-            },
-          },
-          {
-            id: "downstream",
-            label: "后续流程",
-            status: {
-              label: currentJob.formalDownstreamUnlocked ? "已可用" : "保持关闭",
-              tone: currentJob.formalDownstreamUnlocked ? "success" : "warning",
-            },
-          },
-        ]}
-        secondaryActions={
-          <>
-            {canValidate ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={commandMutation.isPending}
-                onClick={() => void runCommand("VALIDATE_SOURCE")}
-              >
-                校验来源
-              </Button>
+    if (detailQuery.isPending) {
+        return (
+            <PageScaffold>
+                <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
+                <div className="h-24 animate-pulse rounded-lg bg-muted" />
+                <div className="h-40 animate-pulse rounded-lg bg-muted" />
+            </PageScaffold>
+        )
+    }
+
+    if (detailQuery.isError) {
+        return (
+            <PageScaffold>
+                <BusinessFailureState
+                    title="任务加载失败"
+                    error={detailQuery.error}
+                    onRetry={() => void detailQuery.refetch()}
+                />
+            </PageScaffold>
+        )
+    }
+
+    if (!job) {
+        return (
+            <PageScaffold>
+                <BusinessEmptyState
+                    kind="no-data"
+                    title="无法打开该任务"
+                    description="任务可能已结束或链接失效；也可返回任务列表重新选择。"
+                    className="rounded-lg border-0 bg-transparent shadow-none ring-0"
+                    action={
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                className="rounded-lg shadow-none"
+                                onClick={() => void detailQuery.refetch()}
+                            >
+                                重试
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                className="rounded-lg shadow-none"
+                                onClick={onBack}
+                            >
+                                返回列表
+                            </Button>
+                        </div>
+                    }
+                />
+            </PageScaffold>
+        )
+    }
+
+    // 收窄后固定引用，供 async 闭包安全使用
+    const currentJob = job
+
+    const stageStates = buildStageStates(currentJob.pipelineStage)
+    const stageLabels = {
+        upload: PIPELINE_STAGE_LABEL.SCOPE,
+        mapping: PIPELINE_STAGE_LABEL.VALIDATE_SOURCE,
+        validation: PIPELINE_STAGE_LABEL.INGEST,
+        preview: PIPELINE_STAGE_LABEL.ATTRIBUTE,
+        submission: PIPELINE_STAGE_LABEL.REPORT,
+        result: PIPELINE_STAGE_LABEL.DONE,
+    }
+    const progressStatus = mapJobProgressStatus(currentJob.processingStatus)
+    const noneRow = currentJob.costBasis.find((c) => c.basis === "NONE")
+    const canStart = currentJob.allowedActions.includes("START")
+    const canResume = currentJob.allowedActions.includes("RESUME")
+    const canValidate = currentJob.allowedActions.includes("VALIDATE_SOURCE")
+    const canConfirmReport =
+        currentJob.allowedActions.includes("CONFIRM_REPORT")
+    const startBlockers = currentJob.actionBlockers.filter(
+        (b) => b.action === "START",
+    )
+    const report = view?.report
+
+    const primaryProcessing = {
+        label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
+        tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
+    }
+
+    const filteredItems = view?.items ?? []
+    const sectionItems = filteredItems
+
+    const dominantBasis: CostBasis =
+        ([...currentJob.costBasis].sort((a, b) => b.count - a.count)[0]
+            ?.basis as CostBasis) ?? "NONE"
+
+    const coverageState =
+        currentJob.coveragePercent >= 99
+            ? "complete"
+            : currentJob.coveragePercent <= 0
+              ? "none"
+              : "partial"
+
+    async function runCommand(
+        action:
+            | "VALIDATE_SOURCE"
+            | "START"
+            | "RESUME"
+            | "REATTRIBUTE"
+            | "CONFIRM_REPORT",
+        itemIds?: string[],
+    ) {
+        const operationId = newRequestId("op")
+        const idempotencyKey =
+            action === "RESUME"
+                ? `${currentJob.idempotencyNamespace}:resume:${currentJob.lockVersion}`
+                : newRequestId(`idem_${action.toLowerCase()}`)
+        const result = await commandMutation.mutateAsync({
+            action,
+            jobId: currentJob.id,
+            expectedLockVersion: currentJob.lockVersion,
+            rangeStart: currentJob.rangeStart,
+            rangeEnd: currentJob.rangeEnd,
+            operationId,
+            idempotencyKey,
+            itemIds,
+            reportVersion: report?.reportVersion,
+        })
+        setActionResult(result)
+        if (action === "START") setStartOpen(false)
+        if (action === "RESUME") setResumeOpen(false)
+        if (action === "REATTRIBUTE") setReattributeOpen(false)
+        if (action === "CONFIRM_REPORT") setConfirmReportOpen(false)
+    }
+
+    return (
+        <PageScaffold>
+            <PageHeader
+                variant="object-chrome"
+                breadcrumbs={[
+                    {
+                        id: "gov",
+                        label: "治理",
+                        href: "/governance/history-backfill",
+                    },
+                    {
+                        id: "hb",
+                        label: "历史消费回填",
+                        href: "/governance/history-backfill",
+                    },
+                    {
+                        id: "job",
+                        label: currentJob.jobNo,
+                        current: true,
+                    },
+                ]}
+                actions={
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={onBack}
+                        >
+                            <ArrowLeftIcon className="size-4" />
+                            返回任务列表
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground"
+                            disabled={detailQuery.isFetching}
+                            onClick={() => void detailQuery.refetch()}
+                        >
+                            <RefreshCwIcon
+                                className={
+                                    detailQuery.isFetching ? "animate-spin" : ""
+                                }
+                                aria-hidden
+                            />
+                            刷新
+                        </Button>
+                    </div>
+                }
+            />
+
+            <DocumentHeader
+                density="compact"
+                title={currentJob.mallName}
+                documentNumber={currentJob.jobNo}
+                primaryStatus={primaryProcessing}
+                version={`版本 ${currentJob.lockVersion}`}
+                meta={
+                    <span className="text-muted-foreground">
+                        {ENVIRONMENT_LABEL[currentJob.environment]} · 范围起点{" "}
+                        {formatDay(currentJob.rangeStart)} 至 截止时点{" "}
+                        {formatDay(currentJob.rangeEnd)}
+                    </span>
+                }
+                statuses={[
+                    {
+                        id: "report",
+                        label: "报告确认",
+                        status: {
+                            label: REPORT_REVIEW_STATUS_LABEL[
+                                currentJob.reportReviewStatus
+                            ],
+                            tone: REPORT_REVIEW_STATUS_TONE[
+                                currentJob.reportReviewStatus
+                            ],
+                        },
+                    },
+                    {
+                        id: "mall",
+                        label: "商城",
+                        status: {
+                            label: `${currentJob.mallName} · ${ENVIRONMENT_LABEL[currentJob.environment]}`,
+                            tone:
+                                currentJob.environment === "production"
+                                    ? "destructive"
+                                    : "info",
+                        },
+                    },
+                    {
+                        id: "downstream",
+                        label: "后续流程",
+                        status: {
+                            label: currentJob.formalDownstreamUnlocked
+                                ? "已可用"
+                                : "保持关闭",
+                            tone: currentJob.formalDownstreamUnlocked
+                                ? "success"
+                                : "warning",
+                        },
+                    },
+                ]}
+                secondaryActions={
+                    <>
+                        {canValidate ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={commandMutation.isPending}
+                                onClick={() =>
+                                    void runCommand("VALIDATE_SOURCE")
+                                }
+                            >
+                                校验来源
+                            </Button>
+                        ) : null}
+                        {canStart ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setStartOpen(true)}
+                            >
+                                开始回填
+                            </Button>
+                        ) : null}
+                        {canResume ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setResumeOpen(true)}
+                            >
+                                续跑原任务
+                            </Button>
+                        ) : null}
+                        {canConfirmReport ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setConfirmReportOpen(true)}
+                            >
+                                确认报告
+                            </Button>
+                        ) : null}
+                        {report ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                    setDownloadNote(
+                                        `示例：报告文件生成中 · ${report.downloadLabel} · v${report.reportVersion}`,
+                                    )
+                                }}
+                            >
+                                <DownloadIcon className="size-4" />
+                                下载报告（示例）
+                            </Button>
+                        ) : null}
+                    </>
+                }
+            />
+
+            {currentJob.processingStatus === "COMPLETED" &&
+            currentJob.reportReviewStatus !== "CONFIRMED" ? (
+                <Alert>
+                    <TriangleAlertIcon />
+                    <AlertTitle>
+                        技术处理完成 ≠ 报告已确认 / 全历史业务完成
+                    </AlertTitle>
+                    <AlertDescription>
+                        技术处理完成仅表示处理完成。当前报告确认状态为「
+                        {
+                            REPORT_REVIEW_STATUS_LABEL[
+                                currentJob.reportReviewStatus
+                            ]
+                        }
+                        」。后续流程门禁：
+                        {currentJob.formalDownstreamUnlocked
+                            ? "已可用"
+                            : "保持关闭"}
+                        。
+                    </AlertDescription>
+                </Alert>
             ) : null}
-            {canStart ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setStartOpen(true)}
-              >
-                开始回填
-              </Button>
+
+            {!currentJob.coverageComplete ? (
+                <Alert variant="destructive">
+                    <AlertTitle>全历史覆盖不足 · 阻断执行</AlertTitle>
+                    <AlertDescription>
+                        必须覆盖起点=
+                        {formatDay(currentJob.requiredHistoryStart)}，
+                        来源覆盖起点=
+                        {currentJob.sourceCoverageStart
+                            ? formatDay(currentJob.sourceCoverageStart)
+                            : "—"}
+                        。不得把较晚时间改成范围起点后宣称全历史完成。
+                        <ul className="mt-2 list-disc pl-4">
+                            {currentJob.coverageGaps.map((g) => (
+                                <li key={`${g.from}-${g.to}`}>
+                                    {formatDay(g.from)} → {formatDay(g.to)} ·{" "}
+                                    {g.reasonLabel}
+                                </li>
+                            ))}
+                        </ul>
+                    </AlertDescription>
+                </Alert>
             ) : null}
-            {canResume ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setResumeOpen(true)}
-              >
-                续跑原任务
-              </Button>
+
+            <FormalResultBanner result={actionResult} />
+
+            {downloadNote ? (
+                <Alert>
+                    <DownloadIcon />
+                    <AlertTitle>下载结果</AlertTitle>
+                    <AlertDescription>{downloadNote}</AlertDescription>
+                </Alert>
             ) : null}
-            {canConfirmReport ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setConfirmReportOpen(true)}
-              >
-                确认报告
-              </Button>
-            ) : null}
-            {report ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setDownloadNote(
-                    `示例：报告文件生成中 · ${report.downloadLabel} · v${report.reportVersion}`
-                  )
+
+            <ImportStageIndicator
+                stages={stageStates}
+                stageLabels={stageLabels}
+                aria-label="回填处理阶段"
+            />
+
+            <BackgroundJobProgress
+                mode="partialAllowed"
+                status={progressStatus}
+                total={currentJob.progress.totalCount}
+                completed={currentJob.progress.processedCount}
+                succeeded={currentJob.progress.insertedCount}
+                skipped={currentJob.progress.deduplicatedCount}
+                failed={currentJob.progress.failedCount}
+                label={`后台回填进度 · ${currentJob.jobNo}`}
+                description={
+                    <>
+                        后台执行，不伪装同步完成。已处理{" "}
+                        {currentJob.progress.processedCount.toLocaleString(
+                            "zh-CN",
+                        )}{" "}
+                        · 新增{" "}
+                        {currentJob.progress.insertedCount.toLocaleString(
+                            "zh-CN",
+                        )}{" "}
+                        · 去重{" "}
+                        {currentJob.progress.deduplicatedCount.toLocaleString(
+                            "zh-CN",
+                        )}{" "}
+                        · 待归集{" "}
+                        {currentJob.progress.unattributedCount.toLocaleString(
+                            "zh-CN",
+                        )}{" "}
+                        · 失败{" "}
+                        {currentJob.progress.failedCount.toLocaleString(
+                            "zh-CN",
+                        )}
+                        {currentJob.progress.heartbeatAt
+                            ? ` · 最近更新于 ${formatDateTime(currentJob.progress.heartbeatAt, "dateStyle")}`
+                            : ""}
+                    </>
+                }
+            />
+
+            <CostCoverageNotice
+                basis={dominantBasis}
+                coveragePercent={currentJob.coveragePercent}
+                coverageLabel={currentJob.coverageRate ?? "—"}
+                coverageState={coverageState}
+                breakdown={{
+                    ACTUAL:
+                        currentJob.costBasis.find((c) => c.basis === "ACTUAL")
+                            ?.consumptionAmountGross ?? "—",
+                    STANDARD:
+                        currentJob.costBasis.find((c) => c.basis === "STANDARD")
+                            ?.consumptionAmountGross ?? "—",
+                    NONE:
+                        noneRow && noneRow.count > 0
+                            ? `${noneRow.consumptionAmountGross} · 成本空（非 0）`
+                            : "—",
                 }}
-              >
-                <DownloadIcon className="size-4" />
-                下载报告（示例）
-              </Button>
+                profitBasis="回填成本按逐笔记录：商城成本记录 → 消费时点供给版本 → 未覆盖；禁止使用当前供给价"
+                notice={
+                    <span>
+                        未覆盖时成本字段为空而非
+                        0，仅进入消费金额与覆盖率分母。时点标准成本
+                        必须命中消费发生时点版本。
+                    </span>
+                }
+            />
+
+            <div
+                className={`${surfacePanelClassName} grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4`}
+            >
+                <Fact label="发起人" value={currentJob.requestedBy} />
+                <Fact
+                    label="发起时间"
+                    value={formatDateTime(currentJob.requestedAt, "dateStyle")}
+                />
+                <Fact
+                    label="来源更新时间"
+                    value={formatDateTime(currentJob.sourceAsOf, "dateStyle")}
+                />
+                <Fact label="范围说明" value={currentJob.scopeNote} />
+                <Fact label="履约说明" value={currentJob.legacyManualNote} />
+            </div>
+
+            {startBlockers.length > 0 && !canStart ? (
+                <Alert>
+                    <AlertTitle>处理动作阻断</AlertTitle>
+                    <AlertDescription>
+                        <ul className="list-disc pl-4">
+                            {startBlockers.map((b) => (
+                                <li key={b.code}>{b.message}</li>
+                            ))}
+                        </ul>
+                    </AlertDescription>
+                </Alert>
             ) : null}
-          </>
-        }
-      />
 
-      {currentJob.processingStatus === "COMPLETED" &&
-      currentJob.reportReviewStatus !== "CONFIRMED" ? (
-        <Alert>
-          <TriangleAlertIcon />
-          <AlertTitle>
-            技术处理完成 ≠ 报告已确认 / 全历史业务完成
-          </AlertTitle>
-          <AlertDescription>
-            技术处理完成仅表示处理完成。当前报告确认状态为「
-            {REPORT_REVIEW_STATUS_LABEL[currentJob.reportReviewStatus]}
-            」。后续流程门禁：
-            {currentJob.formalDownstreamUnlocked ? "已可用" : "保持关闭"}。
-          </AlertDescription>
-        </Alert>
-      ) : null}
+            <Tabs
+                value={section}
+                onValueChange={(v) => {
+                    if (v == null) return
+                    patchUrl({ section: v as JobSection, page: 1 })
+                }}
+            >
+                <TabsList className="flex h-auto flex-wrap">
+                    {SECTION_TABS.map((t) => (
+                        <TabsTrigger key={t.id} value={t.id}>
+                            {t.label}
+                        </TabsTrigger>
+                    ))}
+                </TabsList>
+            </Tabs>
 
-      {!currentJob.coverageComplete ? (
-        <Alert variant="destructive">
-          <AlertTitle>全历史覆盖不足 · 阻断执行</AlertTitle>
-          <AlertDescription>
-            必须覆盖起点={formatDay(currentJob.requiredHistoryStart)}，
-            来源覆盖起点=
-            {currentJob.sourceCoverageStart
-              ? formatDay(currentJob.sourceCoverageStart)
-              : "—"}
-            。不得把较晚时间改成范围起点后宣称全历史完成。
-            <ul className="mt-2 list-disc pl-4">
-              {currentJob.coverageGaps.map((g) => (
-                <li key={`${g.from}-${g.to}`}>
-                  {formatDay(g.from)} → {formatDay(g.to)} · {g.reasonLabel}
-                </li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+            {(section === "facts" ||
+                section === "dedupe" ||
+                section === "unattributed" ||
+                section === "failures") && (
+                <ItemFilters
+                    urlState={urlState}
+                    patchUrl={patchUrl}
+                    section={section}
+                />
+            )}
 
-      <FormalResultBanner result={actionResult} />
+            {section === "overview" ? (
+                <OverviewSection job={currentJob} />
+            ) : null}
 
-      {downloadNote ? (
-        <Alert>
-          <DownloadIcon />
-          <AlertTitle>下载结果</AlertTitle>
-          <AlertDescription>{downloadNote}</AlertDescription>
-        </Alert>
-      ) : null}
+            {section === "facts" ||
+            section === "dedupe" ||
+            section === "unattributed" ||
+            section === "failures" ? (
+                <ItemsTable
+                    items={sectionItems}
+                    section={section}
+                    loading={detailQuery.isFetching}
+                    totalCount={view?.totalItems ?? sectionItems.length}
+                    page={Math.max(1, urlState.page)}
+                    onPageChange={(nextPage) => patchUrl({ page: nextPage })}
+                    onReattribute={(itemId) => {
+                        setReattributeItemId(itemId)
+                        setReattributeOpen(true)
+                    }}
+                />
+            ) : null}
 
-      <ImportStageIndicator
-        stages={stageStates}
-        stageLabels={stageLabels}
-        aria-label="回填处理阶段"
-      />
+            {section === "cost" ? (
+                <CostSection job={currentJob} items={filteredItems} />
+            ) : null}
 
-      <BackgroundJobProgress
-        mode="partialAllowed"
-        status={progressStatus}
-        total={currentJob.progress.totalCount}
-        completed={currentJob.progress.processedCount}
-        succeeded={currentJob.progress.insertedCount}
-        skipped={currentJob.progress.deduplicatedCount}
-        failed={currentJob.progress.failedCount}
-        label={`后台回填进度 · ${currentJob.jobNo}`}
-        description={
-          <>
-            后台执行，不伪装同步完成。已处理 {currentJob.progress.processedCount.toLocaleString("zh-CN")}{" "}
-            · 新增 {currentJob.progress.insertedCount.toLocaleString("zh-CN")} · 去重{" "}
-            {currentJob.progress.deduplicatedCount.toLocaleString("zh-CN")} · 待归集{" "}
-            {currentJob.progress.unattributedCount.toLocaleString("zh-CN")} · 失败{" "}
-            {currentJob.progress.failedCount.toLocaleString("zh-CN")}
-            {currentJob.progress.heartbeatAt
-              ? ` · 最近更新于 ${formatDateTime(currentJob.progress.heartbeatAt, "dateStyle")}`
-              : ""}
-          </>
-        }
-      />
+            {section === "report" ? (
+                <ReportSection
+                    job={currentJob}
+                    report={report}
+                    onDownload={() => {
+                        if (!report) return
+                        setDownloadNote(
+                            `${report.downloadLabel} · Schema ${report.schemaVersion} · 规则 ${report.ruleVersion}`,
+                        )
+                    }}
+                />
+            ) : null}
 
-      <CostCoverageNotice
-        basis={dominantBasis}
-        coveragePercent={currentJob.coveragePercent}
-        coverageLabel={currentJob.coverageRate ?? "—"}
-        coverageState={coverageState}
-        breakdown={{
-          ACTUAL:
-            currentJob.costBasis.find((c) => c.basis === "ACTUAL")
-              ?.consumptionAmountGross ?? "—",
-          STANDARD:
-            currentJob.costBasis.find((c) => c.basis === "STANDARD")
-              ?.consumptionAmountGross ?? "—",
-          NONE:
-            noneRow && noneRow.count > 0
-              ? `${noneRow.consumptionAmountGross} · 成本空（非 0）`
-              : "—",
-        }}
-        profitBasis="回填成本按逐笔记录：商城成本记录 → 消费时点供给版本 → 未覆盖；禁止使用当前供给价"
-        notice={
-          <span>
-            未覆盖时成本字段为空而非 0，仅进入消费金额与覆盖率分母。时点标准成本
-            必须命中消费发生时点版本。
-          </span>
-        }
-      />
+            <FormalActionConfirmDialog
+                open={startOpen}
+                onOpenChange={setStartOpen}
+                actionLabel="开始回填"
+                title="确认开始历史回填"
+                description="将锁定回填范围并创建后台任务，只补充缺失记录；回填起点前的支付不计入；范围创建后不可修改。"
+                fromStatus={{
+                    label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
+                    tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
+                }}
+                toStatus={{ label: "运行中", tone: "info" }}
+                lockedFields={[
+                    `范围起点 = 必须覆盖起点 = ${formatDay(currentJob.requiredHistoryStart)}`,
+                    `截止时点 = ${formatDay(currentJob.rangeEnd)}`,
+                    `商城 ${currentJob.mallName} · ${ENVIRONMENT_LABEL[currentJob.environment]}`,
+                ]}
+                effects={[
+                    "后台执行五类关键记录回填",
+                    "与实时记录按业务记录键去重",
+                    "成本按实际、时点标准、未覆盖三种口径评估",
+                ]}
+                irreversibleEffects={[
+                    "已成功写入的业务记录不因失败或续跑回滚",
+                    "范围冻结后不可修改",
+                ]}
+                pending={commandMutation.isPending}
+                onConfirm={() => runCommand("START")}
+            />
 
-      <div
-        className={`${surfacePanelClassName} grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4`}
-      >
-        <Fact label="发起人" value={currentJob.requestedBy} />
-        <Fact label="发起时间" value={formatDateTime(currentJob.requestedAt, "dateStyle")} />
-        <Fact label="来源更新时间" value={formatDateTime(currentJob.sourceAsOf, "dateStyle")} />
-        <Fact label="范围说明" value={currentJob.scopeNote} />
-        <Fact label="履约说明" value={currentJob.legacyManualNote} />
-      </div>
+            <FormalActionConfirmDialog
+                open={resumeOpen}
+                onOpenChange={setResumeOpen}
+                actionLabel="续跑原任务"
+                title="确认续跑失败/中断任务"
+                description="沿原任务、原范围与原任务标识续跑，不新建重叠业务批次。"
+                fromStatus={{
+                    label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
+                    tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
+                }}
+                toStatus={{ label: "运行中", tone: "info" }}
+                lockedFields={[
+                    `任务 ${currentJob.jobNo}`,
+                    `范围起点 ${formatDay(currentJob.rangeStart)} 至 截止时点 ${formatDay(currentJob.rangeEnd)}`,
+                    "沿用原任务提交记录",
+                    `已成功 ${currentJob.progress.insertedCount} · 待处理剩余项`,
+                ]}
+                effects={["逐项仍使用相同业务记录键", "已成功记录保持不变"]}
+                irreversibleEffects={["不删除已入库记录"]}
+                pending={commandMutation.isPending}
+                onConfirm={() => runCommand("RESUME")}
+            />
 
-      {startBlockers.length > 0 && !canStart ? (
-        <Alert>
-          <AlertTitle>处理动作阻断</AlertTitle>
-          <AlertDescription>
-            <ul className="list-disc pl-4">
-              {startBlockers.map((b) => (
-                <li key={b.code}>{b.message}</li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+            <FormalActionConfirmDialog
+                open={confirmReportOpen}
+                onOpenChange={setConfirmReportOpen}
+                actionLabel="确认报告"
+                title="确认技术报告并解锁后续流程"
+                description="仅更新报告确认状态；不改写已入库记录或处理状态。"
+                fromStatus={{
+                    label: REPORT_REVIEW_STATUS_LABEL[
+                        currentJob.reportReviewStatus
+                    ],
+                    tone: REPORT_REVIEW_STATUS_TONE[
+                        currentJob.reportReviewStatus
+                    ],
+                }}
+                toStatus={{ label: "已确认", tone: "success" }}
+                effects={[
+                    "技术报告标记为已确认",
+                    "覆盖完整时解锁后续流程",
+                    "不改写已入库记录",
+                ]}
+                irreversibleEffects={["报告确认状态进入处理审计"]}
+                pending={commandMutation.isPending}
+                onConfirm={() => runCommand("CONFIRM_REPORT")}
+            />
 
-      <Tabs
-        value={section}
-        onValueChange={(v) => {
-          if (v == null) return
-          patchUrl({ section: v as JobSection, page: 1 })
-        }}
-      >
-        <TabsList className="flex h-auto flex-wrap">
-          {SECTION_TABS.map((t) => (
-            <TabsTrigger key={t.id} value={t.id}>
-              {t.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      {(section === "facts" ||
-        section === "dedupe" ||
-        section === "unattributed" ||
-        section === "failures") && (
-        <ItemFilters
-          urlState={urlState}
-          patchUrl={patchUrl}
-          section={section}
-        />
-      )}
-
-      {section === "overview" ? (
-        <OverviewSection job={currentJob} />
-      ) : null}
-
-      {section === "facts" ||
-      section === "dedupe" ||
-      section === "unattributed" ||
-      section === "failures" ? (
-        <ItemsTable
-          items={sectionItems}
-          section={section}
-          loading={detailQuery.isFetching}
-          totalCount={view?.totalItems ?? sectionItems.length}
-          page={Math.max(1, urlState.page)}
-          onPageChange={(nextPage) => patchUrl({ page: nextPage })}
-          onReattribute={(itemId) => {
-            setReattributeItemId(itemId)
-            setReattributeOpen(true)
-          }}
-        />
-      ) : null}
-
-      {section === "cost" ? (
-        <CostSection job={currentJob} items={filteredItems} />
-      ) : null}
-
-      {section === "report" ? (
-        <ReportSection
-          job={currentJob}
-          report={report}
-          onDownload={() => {
-            if (!report) return
-            setDownloadNote(
-              `${report.downloadLabel} · Schema ${report.schemaVersion} · 规则 ${report.ruleVersion}`
-            )
-          }}
-        />
-      ) : null}
-
-      <FormalActionConfirmDialog
-        open={startOpen}
-        onOpenChange={setStartOpen}
-        actionLabel="开始回填"
-        title="确认开始历史回填"
-        description="将锁定回填范围并创建后台任务，只补充缺失记录；回填起点前的支付不计入；范围创建后不可修改。"
-        fromStatus={{
-          label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
-          tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
-        }}
-        toStatus={{ label: "运行中", tone: "info" }}
-        lockedFields={[
-          `范围起点 = 必须覆盖起点 = ${formatDay(currentJob.requiredHistoryStart)}`,
-          `截止时点 = ${formatDay(currentJob.rangeEnd)}`,
-          `商城 ${currentJob.mallName} · ${ENVIRONMENT_LABEL[currentJob.environment]}`,
-        ]}
-        effects={[
-          "后台执行五类关键记录回填",
-          "与实时记录按业务记录键去重",
-          "成本按实际、时点标准、未覆盖三种口径评估",
-        ]}
-        irreversibleEffects={[
-          "已成功写入的业务记录不因失败或续跑回滚",
-          "范围冻结后不可修改",
-        ]}
-        pending={commandMutation.isPending}
-        onConfirm={() => runCommand("START")}
-      />
-
-      <FormalActionConfirmDialog
-        open={resumeOpen}
-        onOpenChange={setResumeOpen}
-        actionLabel="续跑原任务"
-        title="确认续跑失败/中断任务"
-        description="沿原任务、原范围与原任务标识续跑，不新建重叠业务批次。"
-        fromStatus={{
-          label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
-          tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
-        }}
-        toStatus={{ label: "运行中", tone: "info" }}
-        lockedFields={[
-          `任务 ${currentJob.jobNo}`,
-          `范围起点 ${formatDay(currentJob.rangeStart)} 至 截止时点 ${formatDay(currentJob.rangeEnd)}`,
-          "沿用原任务提交记录",
-          `已成功 ${currentJob.progress.insertedCount} · 待处理剩余项`,
-        ]}
-        effects={["逐项仍使用相同业务记录键", "已成功记录保持不变"]}
-        irreversibleEffects={["不删除已入库记录"]}
-        pending={commandMutation.isPending}
-        onConfirm={() => runCommand("RESUME")}
-      />
-
-      <FormalActionConfirmDialog
-        open={confirmReportOpen}
-        onOpenChange={setConfirmReportOpen}
-        actionLabel="确认报告"
-        title="确认技术报告并解锁后续流程"
-        description="仅更新报告确认状态；不改写已入库记录或处理状态。"
-        fromStatus={{
-          label: REPORT_REVIEW_STATUS_LABEL[currentJob.reportReviewStatus],
-          tone: REPORT_REVIEW_STATUS_TONE[currentJob.reportReviewStatus],
-        }}
-        toStatus={{ label: "已确认", tone: "success" }}
-        effects={[
-          "技术报告标记为已确认",
-          "覆盖完整时解锁后续流程",
-          "不改写已入库记录",
-        ]}
-        irreversibleEffects={["报告确认状态进入处理审计"]}
-        pending={commandMutation.isPending}
-        onConfirm={() => runCommand("CONFIRM_REPORT")}
-      />
-
-      <FormalActionConfirmDialog
-        open={reattributeOpen}
-        onOpenChange={setReattributeOpen}
-        actionLabel="重新归集"
-        title="确认逐项重新归集"
-        description="引用原业务记录重新归集并追加成本评估；不复制业务记录、不改写原消费。"
-        fromStatus={{ label: "待归集", tone: "warning" }}
-        toStatus={{ label: "已提交重新归集", tone: "success" }}
-        effects={["按原业务记录键重新归集", "追加成本评估"]}
-        irreversibleEffects={["归集结果进入处理审计"]}
-        pending={commandMutation.isPending}
-        onConfirm={() =>
-          runCommand(
-            "REATTRIBUTE",
-            reattributeItemId ? [reattributeItemId] : undefined
-          )
-        }
-      />
-    </PageScaffold>
-  )
+            <FormalActionConfirmDialog
+                open={reattributeOpen}
+                onOpenChange={setReattributeOpen}
+                actionLabel="重新归集"
+                title="确认逐项重新归集"
+                description="引用原业务记录重新归集并追加成本评估；不复制业务记录、不改写原消费。"
+                fromStatus={{ label: "待归集", tone: "warning" }}
+                toStatus={{ label: "已提交重新归集", tone: "success" }}
+                effects={["按原业务记录键重新归集", "追加成本评估"]}
+                irreversibleEffects={["归集结果进入处理审计"]}
+                pending={commandMutation.isPending}
+                onConfirm={() =>
+                    runCommand(
+                        "REATTRIBUTE",
+                        reattributeItemId ? [reattributeItemId] : undefined,
+                    )
+                }
+            />
+        </PageScaffold>
+    )
 }
 
 function ItemFilters({
-  urlState,
-  patchUrl,
-  section,
+    urlState,
+    patchUrl,
+    section,
 }: {
-  urlState: HistoryBackfillUrlState
-  patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
-  section: JobSection
+    urlState: HistoryBackfillUrlState
+    patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
+    section: JobSection
 }) {
-  const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
-  return (
-    <div className="flex flex-wrap items-end gap-2 rounded-lg bg-muted/40 p-3">
-      {section === "facts" ? (
-        <>
-          <div className="space-y-1">
-            <Label className="text-xs">结果</Label>
-            <OptionCombobox
-              value={urlState.result ?? "all"}
-              onValueChange={(v) => {
-                if (v == null) return
-                patchUrl({
-                  result: v === "all" ? undefined : (v as ItemResult),
-                  page: 1,
-                })
-              }}
-              options={[
-                { value: "all", label: "全部结果" },
-                ...(Object.keys(ITEM_RESULT_LABEL) as ItemResult[]).map(
-                  (r) => ({
-                    value: r,
-                    label: ITEM_RESULT_LABEL[r],
-                  })
-                ),
-              ]}
-              className="w-[10rem]"
-              size="sm"
-              allowClear={false}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">记录类型</Label>
-            <OptionCombobox
-              value={urlState.factType ?? "all"}
-              onValueChange={(v) => {
-                if (v == null) return
-                patchUrl({
-                  factType:
-                    v === "all" ? undefined : (v as MallOrderFactType),
-                  page: 1,
-                })
-              }}
-              options={[
-                { value: "all", label: "全部五类" },
-                ...(Object.keys(FACT_TYPE_LABEL) as MallOrderFactType[]).map(
-                  (t) => ({
-                    value: t,
-                    label: FACT_TYPE_LABEL[t],
-                  })
-                ),
-              ]}
-              className="w-[12rem]"
-              size="sm"
-              allowClear={false}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">成本口径</Label>
-            <OptionCombobox
-              value={urlState.costBasis ?? "all"}
-              onValueChange={(v) => {
-                if (v == null) return
-                patchUrl({
-                  costBasis: v === "all" ? undefined : (v as CostBasis),
-                  page: 1,
-                })
-              }}
-              options={[
-                { value: "all", label: "全部" },
-                ...(Object.keys(COST_BASIS_LABEL) as CostBasis[]).map(
-                  (b) => ({
-                    value: b,
-                    label: COST_BASIS_LABEL[b],
-                  })
-                ),
-              ]}
-              className="w-[9rem]"
-              size="sm"
-              allowClear={false}
-            />
-          </div>
-        </>
-      ) : null}
-      <div className="space-y-1">
-        <Label className="text-xs">搜索</Label>
-        <form
-          className="flex gap-1"
-          onSubmit={(e) => {
-            e.preventDefault()
-            patchUrl({ q: qDraft.trim() || undefined, page: 1 })
-          }}
-        >
-          <Input
-            className="h-8 w-[12rem]"
-            value={qDraft}
-            onChange={(e) => setQDraft(e.target.value)}
-            placeholder="商城订单号 / 子单号"
-          />
-          {urlState.q ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setQDraft("")
-                patchUrl({ q: undefined, page: 1 })
-              }}
-            >
-              清除
-            </Button>
-          ) : null}
-          <Button type="submit" size="sm" variant="secondary">
-            搜索
-          </Button>
-        </form>
-      </div>
-      <p className="w-full text-xs text-muted-foreground">
-        同一商城订单的多笔关键记录分别保留，多次退款/恢复不合并
-      </p>
-    </div>
-  )
+    const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
+    return (
+        <div className="flex flex-wrap items-end gap-2 rounded-lg bg-muted/40 p-3">
+            {section === "facts" ? (
+                <>
+                    <div className="space-y-1">
+                        <Label className="text-xs">结果</Label>
+                        <OptionCombobox
+                            value={urlState.result ?? "all"}
+                            onValueChange={(v) => {
+                                if (v == null) return
+                                patchUrl({
+                                    result:
+                                        v === "all"
+                                            ? undefined
+                                            : (v as ItemResult),
+                                    page: 1,
+                                })
+                            }}
+                            options={[
+                                { value: "all", label: "全部结果" },
+                                ...(
+                                    Object.keys(
+                                        ITEM_RESULT_LABEL,
+                                    ) as ItemResult[]
+                                ).map((r) => ({
+                                    value: r,
+                                    label: ITEM_RESULT_LABEL[r],
+                                })),
+                            ]}
+                            className="w-[10rem]"
+                            size="sm"
+                            allowClear={false}
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs">记录类型</Label>
+                        <OptionCombobox
+                            value={urlState.factType ?? "all"}
+                            onValueChange={(v) => {
+                                if (v == null) return
+                                patchUrl({
+                                    factType:
+                                        v === "all"
+                                            ? undefined
+                                            : (v as MallOrderFactType),
+                                    page: 1,
+                                })
+                            }}
+                            options={[
+                                { value: "all", label: "全部五类" },
+                                ...(
+                                    Object.keys(
+                                        FACT_TYPE_LABEL,
+                                    ) as MallOrderFactType[]
+                                ).map((t) => ({
+                                    value: t,
+                                    label: FACT_TYPE_LABEL[t],
+                                })),
+                            ]}
+                            className="w-[12rem]"
+                            size="sm"
+                            allowClear={false}
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs">成本口径</Label>
+                        <OptionCombobox
+                            value={urlState.costBasis ?? "all"}
+                            onValueChange={(v) => {
+                                if (v == null) return
+                                patchUrl({
+                                    costBasis:
+                                        v === "all"
+                                            ? undefined
+                                            : (v as CostBasis),
+                                    page: 1,
+                                })
+                            }}
+                            options={[
+                                { value: "all", label: "全部" },
+                                ...(
+                                    Object.keys(COST_BASIS_LABEL) as CostBasis[]
+                                ).map((b) => ({
+                                    value: b,
+                                    label: COST_BASIS_LABEL[b],
+                                })),
+                            ]}
+                            className="w-[9rem]"
+                            size="sm"
+                            allowClear={false}
+                        />
+                    </div>
+                </>
+            ) : null}
+            <div className="space-y-1">
+                <Label className="text-xs">搜索</Label>
+                <form
+                    className="flex gap-1"
+                    onSubmit={(e) => {
+                        e.preventDefault()
+                        patchUrl({ q: qDraft.trim() || undefined, page: 1 })
+                    }}
+                >
+                    <Input
+                        className="h-8 w-[12rem]"
+                        value={qDraft}
+                        onChange={(e) => setQDraft(e.target.value)}
+                        placeholder="商城订单号 / 子单号"
+                    />
+                    {urlState.q ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                                setQDraft("")
+                                patchUrl({ q: undefined, page: 1 })
+                            }}
+                        >
+                            清除
+                        </Button>
+                    ) : null}
+                    <Button type="submit" size="sm" variant="secondary">
+                        搜索
+                    </Button>
+                </form>
+            </div>
+            <p className="w-full text-xs text-muted-foreground">
+                同一商城订单的多笔关键记录分别保留，多次退款/恢复不合并
+            </p>
+        </div>
+    )
 }
 
 function OverviewSection({
-  job,
+    job,
 }: {
-  job: NonNullable<
-    Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
-  >["job"]
+    job: NonNullable<
+        Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
+    >["job"]
 }) {
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card className={surfacePanelClassName}>
-        <CardHeader className="border-b border-border/30">
-          <CardTitle>任务身份与范围</CardTitle>
-          <CardDescription>范围起点固定等于必须覆盖起点</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <Fact label="切换编号" value={job.cutoverId} mono />
-          <Fact
-            label="必须覆盖起点"
-            value={formatDay(job.requiredHistoryStart)}
-            mono
-          />
-          <Fact label="范围起点" value={formatDay(job.rangeStart)} mono />
-          <Fact label="截止时点" value={formatDay(job.rangeEnd)} mono />
-          <Fact
-            label="覆盖完整"
-            value={job.coverageComplete ? "是" : "否"}
-          />
-          <Fact
-            label="阶段"
-            value={PIPELINE_STAGE_LABEL[job.pipelineStage]}
-          />
-        </CardContent>
-      </Card>
-      <Card className={surfacePanelClassName}>
-        <CardHeader className="border-b border-border/30">
-          <CardTitle>结果记录</CardTitle>
-          <CardDescription>统计由系统统一计算；明细可按页浏览。</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <Fact
-            label="来源记录数"
-            value={job.progress.totalCount.toLocaleString("zh-CN")}
-          />
-          <Fact
-            label="已处理"
-            value={job.progress.processedCount.toLocaleString("zh-CN")}
-          />
-          <Fact
-            label="新增"
-            value={job.progress.insertedCount.toLocaleString("zh-CN")}
-          />
-          <Fact
-            label="去重"
-            value={job.progress.deduplicatedCount.toLocaleString("zh-CN")}
-          />
-          <Fact
-            label="待归集"
-            value={job.progress.unattributedCount.toLocaleString("zh-CN")}
-          />
-          <Fact
-            label="失败"
-            value={job.progress.failedCount.toLocaleString("zh-CN")}
-          />
-        </CardContent>
-      </Card>
-    </div>
-  )
+    return (
+        <div className="grid gap-4 lg:grid-cols-2">
+            <Card className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30">
+                    <CardTitle>任务身份与范围</CardTitle>
+                    <CardDescription>
+                        范围起点固定等于必须覆盖起点
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 sm:grid-cols-2">
+                    <Fact label="切换编号" value={job.cutoverId} mono />
+                    <Fact
+                        label="必须覆盖起点"
+                        value={formatDay(job.requiredHistoryStart)}
+                        mono
+                    />
+                    <Fact
+                        label="范围起点"
+                        value={formatDay(job.rangeStart)}
+                        mono
+                    />
+                    <Fact
+                        label="截止时点"
+                        value={formatDay(job.rangeEnd)}
+                        mono
+                    />
+                    <Fact
+                        label="覆盖完整"
+                        value={job.coverageComplete ? "是" : "否"}
+                    />
+                    <Fact
+                        label="阶段"
+                        value={PIPELINE_STAGE_LABEL[job.pipelineStage]}
+                    />
+                </CardContent>
+            </Card>
+            <Card className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30">
+                    <CardTitle>结果记录</CardTitle>
+                    <CardDescription>
+                        统计由系统统一计算；明细可按页浏览。
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 sm:grid-cols-2">
+                    <Fact
+                        label="来源记录数"
+                        value={job.progress.totalCount.toLocaleString("zh-CN")}
+                    />
+                    <Fact
+                        label="已处理"
+                        value={job.progress.processedCount.toLocaleString(
+                            "zh-CN",
+                        )}
+                    />
+                    <Fact
+                        label="新增"
+                        value={job.progress.insertedCount.toLocaleString(
+                            "zh-CN",
+                        )}
+                    />
+                    <Fact
+                        label="去重"
+                        value={job.progress.deduplicatedCount.toLocaleString(
+                            "zh-CN",
+                        )}
+                    />
+                    <Fact
+                        label="待归集"
+                        value={job.progress.unattributedCount.toLocaleString(
+                            "zh-CN",
+                        )}
+                    />
+                    <Fact
+                        label="失败"
+                        value={job.progress.failedCount.toLocaleString("zh-CN")}
+                    />
+                </CardContent>
+            </Card>
+        </div>
+    )
 }
 
 function ItemsTable({
-  items,
-  section,
-  loading,
-  totalCount,
-  page,
-  onPageChange,
-  onReattribute,
-  title,
+    items,
+    section,
+    loading,
+    totalCount,
+    page,
+    onPageChange,
+    onReattribute,
+    title,
 }: {
-  items: HistoryBackfillItemView[]
-  section: JobSection
-  loading?: boolean
-  totalCount: number
-  page: number
-  onPageChange: (page: number) => void
-  onReattribute?: (itemId: string) => void
-  title?: string
+    items: HistoryBackfillItemView[]
+    section: JobSection
+    loading?: boolean
+    totalCount: number
+    page: number
+    onPageChange: (page: number) => void
+    onReattribute?: (itemId: string) => void
+    title?: string
 }) {
-  const pageSize = 20
-  const columns = React.useMemo<ColumnDef<HistoryBackfillItemView>[]>(
-    () => [
-      {
-        id: "factType",
-        header: "记录类型",
-        cell: ({ row }) => (
-          <span className="text-sm">{FACT_TYPE_LABEL[row.original.factType]}</span>
-        ),
-      },
-      {
-        id: "key",
-        header: "记录摘要",
-        cell: ({ row }) => (
-          <span className="font-mono text-xs">
-            {row.original.businessFactKeySummary}
-          </span>
-        ),
-      },
-      {
-        id: "order",
-        header: "商城订单",
-        cell: ({ row }) => (
-          <div className="space-y-0.5">
-            <div className="font-mono text-xs">{row.original.mallOrderNo}</div>
-            {row.original.sourceDocNo ? (
-              <div className="text-tiny text-muted-foreground">
-                子单 {row.original.sourceDocNo}
-              </div>
-            ) : null}
-          </div>
-        ),
-      },
-      {
-        id: "occurred",
-        header: "发生时间",
-        cell: ({ row }) => (
-          <span className="num text-xs">
-            {formatDateTime(row.original.occurredAt, "dateStyle")}
-          </span>
-        ),
-      },
-      {
-        id: "result",
-        header: "结果",
-        cell: ({ row }) => (
-          <BusinessStatusBadge
-            context="list"
-            label={ITEM_RESULT_LABEL[row.original.result]}
-            tone={ITEM_RESULT_TONE[row.original.result]}
-          />
-        ),
-      },
-      {
-        id: "cost",
-        header: "成本",
-        cell: ({ row }) => {
-          const b = row.original.costBasis
-          if (!b || b === "N_A") return <span className="text-xs">不适用</span>
-          return (
-            <span className="text-xs">
-              {COST_BASIS_LABEL[b]}
-              {b === "NONE"
-                ? " · 成本空"
-                : row.original.costAmountNet
-                  ? ` · ${row.original.costAmountNet}`
-                  : ""}
-            </span>
-          )
-        },
-      },
-      {
-        id: "extra",
-        header: section === "dedupe" ? "去重证明" : "说明 / 去向",
-        cell: ({ row }) => {
-          const item = row.original
-          if (item.dedupeProof) {
-            return (
-              <div className="max-w-[16rem] text-xs">
-                <div>
-                  {item.dedupeProof.matchedSource === "REALTIME"
-                    ? "命中实时记录"
-                    : "命中原回填记录"}
-                </div>
-                <div className="text-muted-foreground">
-                  {item.dedupeProof.formalFactSummary}
-                </div>
-              </div>
-            )
-          }
-          if (item.result === "UNATTRIBUTED") {
-            return (
-              <div className="space-y-1">
-                <div className="text-xs">{item.unattributedReason}</div>
-                <div className="flex flex-wrap gap-1">
-                  <Button
-                    render={
-                      <Link href="/governance/integration-errors?view=mine" />
+    const pageSize = 20
+    const columns = React.useMemo<ColumnDef<HistoryBackfillItemView>[]>(
+        () => [
+            {
+                id: "factType",
+                header: "记录类型",
+                cell: ({ row }) => (
+                    <span className="text-sm">
+                        {FACT_TYPE_LABEL[row.original.factType]}
+                    </span>
+                ),
+            },
+            {
+                id: "key",
+                header: "记录摘要",
+                cell: ({ row }) => (
+                    <span className="font-mono text-xs">
+                        {row.original.businessFactKeySummary}
+                    </span>
+                ),
+            },
+            {
+                id: "order",
+                header: "商城订单",
+                cell: ({ row }) => (
+                    <div className="space-y-0.5">
+                        <div className="font-mono text-xs">
+                            {row.original.mallOrderNo}
+                        </div>
+                        {row.original.sourceDocNo ? (
+                            <div className="text-tiny text-muted-foreground">
+                                子单 {row.original.sourceDocNo}
+                            </div>
+                        ) : null}
+                    </div>
+                ),
+            },
+            {
+                id: "occurred",
+                header: "发生时间",
+                cell: ({ row }) => (
+                    <span className="num text-xs">
+                        {formatDateTime(row.original.occurredAt, "dateStyle")}
+                    </span>
+                ),
+            },
+            {
+                id: "result",
+                header: "结果",
+                cell: ({ row }) => (
+                    <BusinessStatusBadge
+                        context="list"
+                        label={ITEM_RESULT_LABEL[row.original.result]}
+                        tone={ITEM_RESULT_TONE[row.original.result]}
+                    />
+                ),
+            },
+            {
+                id: "cost",
+                header: "成本",
+                cell: ({ row }) => {
+                    const b = row.original.costBasis
+                    if (!b || b === "N_A")
+                        return <span className="text-xs">不适用</span>
+                    return (
+                        <span className="text-xs">
+                            {COST_BASIS_LABEL[b]}
+                            {b === "NONE"
+                                ? " · 成本空"
+                                : row.original.costAmountNet
+                                  ? ` · ${row.original.costAmountNet}`
+                                  : ""}
+                        </span>
+                    )
+                },
+            },
+            {
+                id: "extra",
+                header: section === "dedupe" ? "去重证明" : "说明 / 去向",
+                cell: ({ row }) => {
+                    const item = row.original
+                    if (item.dedupeProof) {
+                        return (
+                            <div className="max-w-[16rem] text-xs">
+                                <div>
+                                    {item.dedupeProof.matchedSource ===
+                                    "REALTIME"
+                                        ? "命中实时记录"
+                                        : "命中原回填记录"}
+                                </div>
+                                <div className="text-muted-foreground">
+                                    {item.dedupeProof.formalFactSummary}
+                                </div>
+                            </div>
+                        )
                     }
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                  >
-                    去接口错误中心处理
-                    <ExternalLinkIcon className="size-3" />
-                  </Button>
-                  {onReattribute ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      onClick={() => onReattribute(item.itemId)}
-                    >
-                      重新归集
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            )
-          }
-          if (item.failure) {
-            return (
-              <div className="max-w-[14rem] text-xs">
-                <div>{FAILURE_CODE_LABEL[item.failure.errorCode] ?? item.failure.summary}</div>
-                <div>{item.failure.summary}</div>
-                <div className="text-muted-foreground">
-                  {PIPELINE_STAGE_LABEL[
-                    item.failure.stage as BackfillPipelineStage
-                  ] ?? item.failure.stage}{" "}
-                  · {item.failure.retryable ? "可续跑" : "需业务修复"}
-                </div>
-              </div>
-            )
-          }
-          return (
-            <span className="text-xs text-muted-foreground">
-              {item.fulfillmentChain === "LEGACY_MANUAL"
-                ? "历史手工口径"
-                : "—"}
-            </span>
-          )
-        },
-      },
-    ],
-    [section, onReattribute]
-  )
-
-  if (items.length === 0) {
-    return (
-      <BusinessEmptyState
-        kind="no-data"
-        title="当前筛选无明细"
-        description="同一商城订单的多笔关键记录分别保留；支付/取消/完成/多次退款/多次余额恢复不会被合并。"
-      />
+                    if (item.result === "UNATTRIBUTED") {
+                        return (
+                            <div className="space-y-1">
+                                <div className="text-xs">
+                                    {item.unattributedReason}
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                    <Button
+                                        render={
+                                            <Link href="/governance/integration-errors?view=mine" />
+                                        }
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs"
+                                    >
+                                        去接口错误中心处理
+                                        <ExternalLinkIcon className="size-3" />
+                                    </Button>
+                                    {onReattribute ? (
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 text-xs"
+                                            onClick={() =>
+                                                onReattribute(item.itemId)
+                                            }
+                                        >
+                                            重新归集
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            </div>
+                        )
+                    }
+                    if (item.failure) {
+                        return (
+                            <div className="max-w-[14rem] text-xs">
+                                <div>
+                                    {FAILURE_CODE_LABEL[
+                                        item.failure.errorCode
+                                    ] ?? item.failure.summary}
+                                </div>
+                                <div>{item.failure.summary}</div>
+                                <div className="text-muted-foreground">
+                                    {PIPELINE_STAGE_LABEL[
+                                        item.failure
+                                            .stage as BackfillPipelineStage
+                                    ] ?? item.failure.stage}{" "}
+                                    ·{" "}
+                                    {item.failure.retryable
+                                        ? "可续跑"
+                                        : "需业务修复"}
+                                </div>
+                            </div>
+                        )
+                    }
+                    return (
+                        <span className="text-xs text-muted-foreground">
+                            {item.fulfillmentChain === "LEGACY_MANUAL"
+                                ? "历史手工口径"
+                                : "—"}
+                        </span>
+                    )
+                },
+            },
+        ],
+        [section, onReattribute],
     )
-  }
 
-  return (
-    <BusinessTableFrame
-      title={
-        title ??
-        (section === "dedupe"
-          ? "去重证明"
-          : section === "unattributed"
-            ? "待归集（原记录已保存）"
-            : section === "failures"
-              ? "失败诊断"
-              : "记录结果")
-      }
-      description="不含卡号/卡密/手机/完整地址/原始消息内容"
-      table={
-        <DataTable
-          data={[...items]}
-          columns={columns}
-          getRowId={(row) => row.itemId}
-          rowCount={totalCount}
-          pagination={{ pageIndex: Math.max(0, page - 1), pageSize }}
-          onPaginationChange={(next) => onPageChange(next.pageIndex + 1)}
-          layout="flush"
-          density="compact"
-          loading={loading}
-          showRefreshingBanner={false}
+    if (items.length === 0) {
+        return (
+            <BusinessEmptyState
+                kind="no-data"
+                title="当前筛选无明细"
+                description="同一商城订单的多笔关键记录分别保留；支付/取消/完成/多次退款/多次余额恢复不会被合并。"
+            />
+        )
+    }
+
+    return (
+        <BusinessTableFrame
+            title={
+                title ??
+                (section === "dedupe"
+                    ? "去重证明"
+                    : section === "unattributed"
+                      ? "待归集（原记录已保存）"
+                      : section === "failures"
+                        ? "失败诊断"
+                        : "记录结果")
+            }
+            description="不含卡号/卡密/手机/完整地址/原始消息内容"
+            table={
+                <DataTable
+                    data={[...items]}
+                    columns={columns}
+                    getRowId={(row) => row.itemId}
+                    rowCount={totalCount}
+                    pagination={{ pageIndex: Math.max(0, page - 1), pageSize }}
+                    onPaginationChange={(next) =>
+                        onPageChange(next.pageIndex + 1)
+                    }
+                    layout="flush"
+                    density="compact"
+                    loading={loading}
+                    showRefreshingBanner={false}
+                />
+            }
         />
-      }
-    />
-  )
+    )
 }
 
 function CostSection({
-  job,
-  items,
+    job,
+    items,
 }: {
-  job: NonNullable<
-    Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
-  >["job"]
-  items: HistoryBackfillItemView[]
+    job: NonNullable<
+        Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
+    >["job"]
+    items: HistoryBackfillItemView[]
 }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
-        {job.costBasis.map((row) => (
-          <Card key={row.basis} className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30 pb-2">
-              <CardTitle className="text-base">
-                {COST_BASIS_LABEL[row.basis]}
-              </CardTitle>
-              <CardDescription>{row.count.toLocaleString("zh-CN")} 笔</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <div>消费金额（含税）：{row.consumptionAmountGross}</div>
-              <div>
-                成本净额：
-                {row.basis === "NONE"
-                  ? "空（禁止写 0）"
-                  : (row.costAmountNet ?? "—")}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <Alert>
-        <AlertTitle>禁止当前供给价</AlertTitle>
-        <AlertDescription>
-          时点标准成本必须命中消费发生时点有效供给版本；未覆盖
-          不得用当前价、猜测税率或销项税率替代进项。覆盖率{" "}
-          {job.coverageRate ?? "—"}（未覆盖进分母）。
-        </AlertDescription>
-      </Alert>
-      <Separator />
-      <ItemsTable
-        items={items.filter(
-          (i) => i.costBasis === "ACTUAL" || i.costBasis === "STANDARD" || i.costBasis === "NONE"
-        )}
-        section="facts"
-        title="成本口径明细"
-        totalCount={
-          items.filter(
-            (i) =>
-              i.costBasis === "ACTUAL" ||
-              i.costBasis === "STANDARD" ||
-              i.costBasis === "NONE"
-          ).length
-        }
-        page={1}
-        onPageChange={() => undefined}
-      />
-    </div>
-  )
+    return (
+        <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+                {job.costBasis.map((row) => (
+                    <Card key={row.basis} className={surfacePanelClassName}>
+                        <CardHeader className="border-b border-border/30 pb-2">
+                            <CardTitle className="text-base">
+                                {COST_BASIS_LABEL[row.basis]}
+                            </CardTitle>
+                            <CardDescription>
+                                {row.count.toLocaleString("zh-CN")} 笔
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-1 text-sm">
+                            <div>
+                                消费金额（含税）：{row.consumptionAmountGross}
+                            </div>
+                            <div>
+                                成本净额：
+                                {row.basis === "NONE"
+                                    ? "空（禁止写 0）"
+                                    : (row.costAmountNet ?? "—")}
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+            <Alert>
+                <AlertTitle>禁止当前供给价</AlertTitle>
+                <AlertDescription>
+                    时点标准成本必须命中消费发生时点有效供给版本；未覆盖
+                    不得用当前价、猜测税率或销项税率替代进项。覆盖率{" "}
+                    {job.coverageRate ?? "—"}（未覆盖进分母）。
+                </AlertDescription>
+            </Alert>
+            <Separator />
+            <ItemsTable
+                items={items.filter(
+                    (i) =>
+                        i.costBasis === "ACTUAL" ||
+                        i.costBasis === "STANDARD" ||
+                        i.costBasis === "NONE",
+                )}
+                section="facts"
+                title="成本口径明细"
+                totalCount={
+                    items.filter(
+                        (i) =>
+                            i.costBasis === "ACTUAL" ||
+                            i.costBasis === "STANDARD" ||
+                            i.costBasis === "NONE",
+                    ).length
+                }
+                page={1}
+                onPageChange={() => undefined}
+            />
+        </div>
+    )
 }
 
 function ReportSection({
-  job,
-  report,
-  onDownload,
+    job,
+    report,
+    onDownload,
 }: {
-  job: NonNullable<
-    Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
-  >["job"]
-  report?: NonNullable<
-    Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
-  >["report"]
-  onDownload: () => void
+    job: NonNullable<
+        Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
+    >["job"]
+    report?: NonNullable<
+        Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
+    >["report"]
+    onDownload: () => void
 }) {
-  if (!report) {
+    if (!report) {
+        return (
+            <BusinessEmptyState
+                kind="no-data"
+                title="技术报告尚未生成"
+                description="处理状态达到部分完成或技术处理完成后可生成可审计报告。"
+                className="rounded-lg border-0 bg-transparent shadow-none ring-0"
+            />
+        )
+    }
+
+    const unconfirmed = report.reviewLabel === "UNCONFIRMED"
+
     return (
-      <BusinessEmptyState
-        kind="no-data"
-        title="技术报告尚未生成"
-        description="处理状态达到部分完成或技术处理完成后可生成可审计报告。"
-        className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-      />
+        <div className="space-y-4">
+            <Card className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                            <CardTitle>审计报告</CardTitle>
+                            <CardDescription>
+                                v{report.reportVersion} ·{" "}
+                                {formatDateTime(
+                                    report.generatedAt,
+                                    "dateStyle",
+                                )}
+                            </CardDescription>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Badge
+                                variant={unconfirmed ? "outline" : "default"}
+                            >
+                                {report.downloadLabel}
+                            </Badge>
+                            <BusinessStatusBadge
+                                context="detail"
+                                label={
+                                    PROCESSING_STATUS_LABEL[
+                                        report.processingStatus
+                                    ]
+                                }
+                                tone={
+                                    PROCESSING_STATUS_TONE[
+                                        report.processingStatus
+                                    ]
+                                }
+                            />
+                            <BusinessStatusBadge
+                                context="detail"
+                                label={
+                                    REPORT_REVIEW_STATUS_LABEL[
+                                        report.reportReviewStatus
+                                    ]
+                                }
+                                tone={
+                                    REPORT_REVIEW_STATUS_TONE[
+                                        report.reportReviewStatus
+                                    ]
+                                }
+                            />
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {unconfirmed ? (
+                        <Alert>
+                            <TriangleAlertIcon />
+                            <AlertTitle>技术报告 · 未确认</AlertTitle>
+                            <AlertDescription>
+                                报告复核策略未配置或报告未确认时，下载固定标「技术报告
+                                ·
+                                未确认」。确认动作与下游门禁保持关闭；不得仅因技术完成解锁。
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+
+                    {report.fullHistoryFinalComplete ? (
+                        <Alert>
+                            <AlertTitle>全历史回填最终完成</AlertTitle>
+                            <AlertDescription>
+                                技术处理完成、来源覆盖完整且报告已确认。
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <Alert>
+                            <AlertTitle>尚未全历史最终完成</AlertTitle>
+                            <AlertDescription>
+                                当前不可宣称「全历史回填最终完成」。后续流程：
+                                {job.formalDownstreamUnlocked
+                                    ? "已可用"
+                                    : "保持关闭"}
+                                。
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <Fact
+                            label="范围"
+                            value={`${formatDay(report.rangeStart)} 至 ${formatDay(report.rangeEnd)}（截止时点当天除外）`}
+                            mono
+                        />
+                        <Fact
+                            label="启用日"
+                            value={formatDay(report.cutoverAt)}
+                            mono
+                        />
+                        <Fact
+                            label="总笔数"
+                            value={report.totalCount.toLocaleString("zh-CN")}
+                        />
+                        <Fact label="总金额" value={report.totalAmount} />
+                        <Fact
+                            label="去重"
+                            value={report.deduplicatedCount.toLocaleString(
+                                "zh-CN",
+                            )}
+                        />
+                        <Fact
+                            label="覆盖率"
+                            value={report.coverageRate ?? "—"}
+                        />
+                        <Fact
+                            label="报告格式"
+                            value={report.schemaVersion}
+                            mono
+                        />
+                        <Fact
+                            label="规则版本"
+                            value={report.ruleVersion}
+                            mono
+                        />
+                        <Fact label="操作者" value={report.operatorLabel} />
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                        {report.costBasis.map((c) => (
+                            <div
+                                key={c.basis}
+                                className="rounded-xl border bg-muted/30 p-3 text-sm"
+                            >
+                                <div className="font-medium">
+                                    {COST_BASIS_LABEL[c.basis]}
+                                </div>
+                                <div>{c.count.toLocaleString("zh-CN")} 笔</div>
+                                <div>{c.consumptionAmountGross}</div>
+                                <div className="text-muted-foreground">
+                                    成本：
+                                    {c.basis === "NONE"
+                                        ? "空"
+                                        : (c.costAmountNet ?? "—")}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                            <h4 className="mb-2 text-sm font-medium">
+                                未归集清单摘要
+                            </h4>
+                            <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                                {report.unattributedSummaries.map((s) => (
+                                    <li key={s}>{s}</li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="mb-2 text-sm font-medium">
+                                失败清单摘要
+                            </h4>
+                            <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                                {report.failedSummaries.map((s) => (
+                                    <li key={s}>{s}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                        {report.sensitiveRedactionNote}
+                    </p>
+
+                    <div className="flex flex-wrap gap-2">
+                        <Button type="button" onClick={onDownload}>
+                            <DownloadIcon className="size-4" />
+                            下载
+                            {unconfirmed ? "技术报告 · 未确认" : "已确认报告"}
+                            （示例）
+                        </Button>
+                        {job.reportReviewStatus === "POLICY_NOT_CONFIGURED" ? (
+                            <Badge variant="outline">
+                                确认动作不可用 · 复核策略未配置
+                            </Badge>
+                        ) : null}
+                        {job.allowedActions.includes("CONFIRM_REPORT") ? (
+                            <Badge variant="outline">
+                                报告确认后解锁后续流程
+                            </Badge>
+                        ) : null}
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
     )
-  }
-
-  const unconfirmed = report.reviewLabel === "UNCONFIRMED"
-
-  return (
-    <div className="space-y-4">
-      <Card className={surfacePanelClassName}>
-        <CardHeader className="border-b border-border/30">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <CardTitle>审计报告</CardTitle>
-              <CardDescription>
-                v{report.reportVersion} ·{" "}
-                {formatDateTime(report.generatedAt, "dateStyle")}
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant={unconfirmed ? "outline" : "default"}>
-                {report.downloadLabel}
-              </Badge>
-              <BusinessStatusBadge
-                context="detail"
-                label={PROCESSING_STATUS_LABEL[report.processingStatus]}
-                tone={PROCESSING_STATUS_TONE[report.processingStatus]}
-              />
-              <BusinessStatusBadge
-                context="detail"
-                label={REPORT_REVIEW_STATUS_LABEL[report.reportReviewStatus]}
-                tone={REPORT_REVIEW_STATUS_TONE[report.reportReviewStatus]}
-              />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {unconfirmed ? (
-            <Alert>
-              <TriangleAlertIcon />
-              <AlertTitle>技术报告 · 未确认</AlertTitle>
-              <AlertDescription>
-                报告复核策略未配置或报告未确认时，下载固定标「技术报告 ·
-                未确认」。确认动作与下游门禁保持关闭；不得仅因技术完成解锁。
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {report.fullHistoryFinalComplete ? (
-            <Alert>
-              <AlertTitle>全历史回填最终完成</AlertTitle>
-              <AlertDescription>
-                技术处理完成、来源覆盖完整且报告已确认。
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <Alert>
-              <AlertTitle>尚未全历史最终完成</AlertTitle>
-              <AlertDescription>
-                当前不可宣称「全历史回填最终完成」。后续流程：
-                {job.formalDownstreamUnlocked ? "已可用" : "保持关闭"}。
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Fact
-              label="范围"
-              value={`${formatDay(report.rangeStart)} 至 ${formatDay(report.rangeEnd)}（截止时点当天除外）`}
-              mono
-            />
-            <Fact label="启用日" value={formatDay(report.cutoverAt)} mono />
-            <Fact
-              label="总笔数"
-              value={report.totalCount.toLocaleString("zh-CN")}
-            />
-            <Fact label="总金额" value={report.totalAmount} />
-            <Fact
-              label="去重"
-              value={report.deduplicatedCount.toLocaleString("zh-CN")}
-            />
-            <Fact label="覆盖率" value={report.coverageRate ?? "—"} />
-            <Fact label="报告格式" value={report.schemaVersion} mono />
-            <Fact label="规则版本" value={report.ruleVersion} mono />
-            <Fact label="操作者" value={report.operatorLabel} />
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            {report.costBasis.map((c) => (
-              <div
-                key={c.basis}
-                className="rounded-xl border bg-muted/30 p-3 text-sm"
-              >
-                <div className="font-medium">{COST_BASIS_LABEL[c.basis]}</div>
-                <div>{c.count.toLocaleString("zh-CN")} 笔</div>
-                <div>{c.consumptionAmountGross}</div>
-                <div className="text-muted-foreground">
-                  成本：
-                  {c.basis === "NONE"
-                    ? "空"
-                    : (c.costAmountNet ?? "—")}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <h4 className="mb-2 text-sm font-medium">未归集清单摘要</h4>
-              <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-                {report.unattributedSummaries.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h4 className="mb-2 text-sm font-medium">失败清单摘要</h4>
-              <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-                {report.failedSummaries.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            {report.sensitiveRedactionNote}
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={onDownload}>
-              <DownloadIcon className="size-4" />
-              下载{unconfirmed ? "技术报告 · 未确认" : "已确认报告"}
-              （示例）
-            </Button>
-            {job.reportReviewStatus === "POLICY_NOT_CONFIGURED" ? (
-              <Badge variant="outline">确认动作不可用 · 复核策略未配置</Badge>
-            ) : null}
-            {job.allowedActions.includes("CONFIRM_REPORT") ? (
-              <Badge variant="outline">报告确认后解锁后续流程</Badge>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
 }

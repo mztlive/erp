@@ -1,4 +1,5 @@
 <!-- BEGIN:nextjs-agent-rules -->
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
@@ -14,11 +15,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - **不要做服务端渲染业务**：不要依赖 RSC 在服务端取数、不要用服务端组件承载业务状态。
 - **不要使用 SSR / SSG 数据能力**，例如：
-  - `getServerSideProps` / `getStaticProps` / `getInitialProps`
-  - Server Actions 作为常规数据读写通道
-  - Route Handler 以外的「服务端直接查库/调业务 API 再 hydrate」
-  - `cookies()` / `headers()` 等服务端请求上下文去做页面数据
-  - `export const dynamic` / `revalidate` 等缓存与渲染策略来服务业务数据
+    - `getServerSideProps` / `getStaticProps` / `getInitialProps`
+    - Server Actions 作为常规数据读写通道
+    - Route Handler 以外的「服务端直接查库/调业务 API 再 hydrate」
+    - `cookies()` / `headers()` 等服务端请求上下文去做页面数据
+    - `export const dynamic` / `revalidate` 等缓存与渲染策略来服务业务数据
 - **业务页面与交互组件优先 `"use client"`**。UI、表单、列表、弹窗、路由内业务逻辑都在客户端执行。
 - **不要假设存在 Node 服务端运行时环境**（`fs`、服务端-only SDK 等）来支撑页面渲染。
 - 若使用 Next 路由：页面壳可以是 Server Component，但**真正的数据请求与业务逻辑必须在 Client Component 中完成**。
@@ -32,9 +33,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ### 强制规则
 
 - **所有服务端/HTTP 数据请求必须走 TanStack Query**，包括：
-  - 查询：`useQuery` / `useSuspenseQuery` / `useInfiniteQuery` / `useQueries`
-  - 变更：`useMutation`
-  - 缓存读写：`queryClient`（`invalidateQueries`、`setQueryData`、`prefetchQuery` 等）
+    - 查询：`useQuery` / `useSuspenseQuery` / `useInfiniteQuery` / `useQueries`
+    - 变更：`useMutation`
+    - 缓存读写：`queryClient`（`invalidateQueries`、`setQueryData`、`prefetchQuery` 等）
 - **禁止**在组件里直接 `fetch` / `axios` 后自己维护 loading、error、缓存与重试，除非该 `fetch`/`axios` **仅作为** `queryFn` / `mutationFn` 内部实现。
 - **禁止**用 `useEffect` + 手动请求替代 Query。
 - **禁止**在 Server Component / layout 服务端逻辑中发业务 API 请求。
@@ -60,28 +61,29 @@ features/<domain>/
 ```tsx
 // features/orders/api.ts — 纯函数，可被 queryFn 调用
 export async function fetchOrders(params: OrderListParams): Promise<Order[]> {
-  const res = await fetch(`/api/orders?${new URLSearchParams(params)}`);
-  if (!res.ok) throw new Error("Failed to fetch orders");
-  return res.json();
+    const res = await fetch(`/api/orders?${new URLSearchParams(params)}`)
+    if (!res.ok) throw new Error("Failed to fetch orders")
+    return res.json()
 }
 
 // features/orders/queries.ts — 唯一对外消费入口
 export const orderKeys = {
-  all: ["orders"] as const,
-  list: (params: OrderListParams) => [...orderKeys.all, "list", params] as const,
-};
+    all: ["orders"] as const,
+    list: (params: OrderListParams) =>
+        [...orderKeys.all, "list", params] as const,
+}
 
 export function useOrdersQuery(params: OrderListParams) {
-  return useQuery({
-    queryKey: orderKeys.list(params),
-    queryFn: () => fetchOrders(params),
-  });
+    return useQuery({
+        queryKey: orderKeys.list(params),
+        queryFn: () => fetchOrders(params),
+    })
 }
 
 // components — 只通过 hook 取数
 function OrderList() {
-  const { data, isPending, isError } = useOrdersQuery({ page: 1 });
-  // ...
+    const { data, isPending, isError } = useOrdersQuery({ page: 1 })
+    // ...
 }
 ```
 
@@ -125,53 +127,53 @@ features/<domain>/
 ### 示例
 
 ```tsx
-"use client";
+"use client"
 
-import { z } from "zod";
-import { useAppForm } from "@/components/form";
-import { useCreateOrderMutation } from "./queries";
+import { z } from "zod"
+import { useAppForm } from "@/components/form"
+import { useCreateOrderMutation } from "./queries"
 
 const schema = z.object({
-  title: z.string().min(1, "请输入标题"),
-  remark: z.string().optional(),
-});
+    title: z.string().min(1, "请输入标题"),
+    remark: z.string().optional(),
+})
 
 export function CreateOrderForm() {
-  const createOrder = useCreateOrderMutation();
+    const createOrder = useCreateOrderMutation()
 
-  const form = useAppForm({
-    defaultValues: {
-      title: "",
-      remark: "",
-    },
-    validators: {
-      onChange: schema,
-    },
-    onSubmit: async ({ value }) => {
-      await createOrder.mutateAsync(value);
-    },
-  });
+    const form = useAppForm({
+        defaultValues: {
+            title: "",
+            remark: "",
+        },
+        validators: {
+            onChange: schema,
+        },
+        onSubmit: async ({ value }) => {
+            await createOrder.mutateAsync(value)
+        },
+    })
 
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void form.handleSubmit();
-      }}
-    >
-      <form.AppField
-        name="title"
-        children={(field) => <field.TextField label="标题" />}
-      />
-      <form.AppField
-        name="remark"
-        children={(field) => <field.TextareaField label="备注" />}
-      />
-      <form.AppForm>
-        <form.SubmitButton label="创建" />
-      </form.AppForm>
-    </form>
-  );
+    return (
+        <form
+            onSubmit={(e) => {
+                e.preventDefault()
+                void form.handleSubmit()
+            }}
+        >
+            <form.AppField
+                name="title"
+                children={(field) => <field.TextField label="标题" />}
+            />
+            <form.AppField
+                name="remark"
+                children={(field) => <field.TextareaField label="备注" />}
+            />
+            <form.AppForm>
+                <form.SubmitButton label="创建" />
+            </form.AppForm>
+        </form>
+    )
 }
 ```
 

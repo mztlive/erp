@@ -21,38 +21,38 @@ import type { ReadonlyURLSearchParams } from "next/navigation"
 export type PatchUrlParams = Record<string, string | null | undefined>
 
 export interface PatchUrlOptions {
-  replace?: boolean
+    replace?: boolean
 }
 
 export interface PatchUrlContext {
-  router: ReturnType<typeof useRouter>
-  pathname: string
-  searchParams: ReadonlyURLSearchParams
-  /** 提供时：结果缺少 view 参数则回填该值（keep-view 语义） */
-  view?: string
-  /** 非 cursor/pageSize 变更时清除 cursor（inventory 语义） */
-  clearCursor?: boolean
+    router: ReturnType<typeof useRouter>
+    pathname: string
+    searchParams: ReadonlyURLSearchParams
+    /** 提供时：结果缺少 view 参数则回填该值（keep-view 语义） */
+    view?: string
+    /** 非 cursor/pageSize 变更时清除 cursor（inventory 语义） */
+    clearCursor?: boolean
 }
 
 export function patchUrl(
-  context: PatchUrlContext,
-  patch: PatchUrlParams,
-  options?: PatchUrlOptions
+    context: PatchUrlContext,
+    patch: PatchUrlParams,
+    options?: PatchUrlOptions,
 ): void {
-  const { router, pathname, searchParams, view, clearCursor } = context
-  const next = new URLSearchParams(searchParams.toString())
-  for (const [key, value] of Object.entries(patch)) {
-    if (value == null || value === "") next.delete(key)
-    else next.set(key, value)
-  }
-  if (clearCursor && !("cursor" in patch) && !("pageSize" in patch)) {
-    next.delete("cursor")
-  }
-  if (view !== undefined && !next.get("view")) {
-    next.set("view", view)
-  }
-  const qs = next.toString()
-  const href = qs ? `${pathname}?${qs}` : pathname
-  if (options?.replace) router.replace(href)
-  else router.push(href)
+    const { router, pathname, searchParams, view, clearCursor } = context
+    const next = new URLSearchParams(searchParams.toString())
+    for (const [key, value] of Object.entries(patch)) {
+        if (value == null || value === "") next.delete(key)
+        else next.set(key, value)
+    }
+    if (clearCursor && !("cursor" in patch) && !("pageSize" in patch)) {
+        next.delete("cursor")
+    }
+    if (view !== undefined && !next.get("view")) {
+        next.set("view", view)
+    }
+    const qs = next.toString()
+    const href = qs ? `${pathname}?${qs}` : pathname
+    if (options?.replace) router.replace(href)
+    else router.push(href)
 }
