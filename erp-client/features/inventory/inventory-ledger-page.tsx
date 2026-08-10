@@ -32,8 +32,8 @@ import {
   PageScaffold,
   QuickPreviewSheet,
   surfaceInsetClassName,
-  WarehouseCombobox,
 } from "@/components/business"
+import { WarehouseSearchCombobox } from "@/features/entity-selectors"
 import { FilterChip } from "@/components/business/filter-chip"
 import { useAppForm } from "@/components/form"
 import { formatDateTime } from "@/lib/datetime"
@@ -1436,7 +1436,7 @@ export function InventoryLedgerPage() {
                   <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                     仓库
                   </span>
-                  <WarehouseCombobox
+                  <WarehouseSearchCombobox
                     className="w-44"
                     value={warehouseId || undefined}
                     onValueChange={(id) => {
@@ -1448,13 +1448,7 @@ export function InventoryLedgerPage() {
                       )
                       resetPagination()
                     }}
-                    warehouses={data.warehouses.map((w) => ({
-                      warehouseId: w.id,
-                      warehouseName: w.name,
-                      warehouseCode: w.code,
-                      statusLabel: "可选",
-                      statusTone: "neutral",
-                    }))}
+                    purpose="filter"
                     aria-label="筛选仓库"
                     placeholder="全部仓库"
                   />

@@ -657,7 +657,3 @@ export async function submitHistoryBackfillCommand(
     idempotencyKey,
   }
 }
-
-export function listMallOptions() {
-  return [] as Array<{ id: string; name: string }>
-}

@@ -32,7 +32,6 @@ import {
   MetricFilterItem,
   MetricStrip,
   OptionCombobox,
-  SupplierCombobox,
   PageHeader,
   PageScaffold,
   surfaceInsetClassName,
@@ -81,6 +80,7 @@ import {
   useStartCatalogSyncMutation,
   useUpdateCapabilitiesMutation,
 } from "@/features/supplier-api-connections/queries"
+import { OpaqueReferenceSearchCombobox } from "@/features/supplier-api-connections/opaque-reference-search-combobox"
 import { cn } from "@/lib/utils"
 import type {
   CapabilityCode,
@@ -103,7 +103,7 @@ import {
   parseConnectionsSearchParams,
   type ConnectionsUrlState,
 } from "@/features/supplier-api-connections/url-state"
-import { useSupplierOptionsQuery } from "@/hooks/use-options"
+import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import { freshnessText } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -228,7 +228,6 @@ function ConnectionList({
     (ResultState & { actions?: React.ReactNode }) | null
   >(null)
   const createMutation = useCreateConnectionMutation()
-  const { data: supplierOptions } = useSupplierOptionsQuery()
 
   React.useEffect(() => {
     setSearchDraft(urlState.q ?? "")
@@ -723,7 +722,7 @@ function ConnectionList({
                   allowClear={false}
                   aria-label="连接状态"
                 />
-                <SupplierCombobox
+                <SupplierSearchCombobox
                   value={urlState.supplierId || undefined}
                   onValueChange={(id) =>
                     patchUrl({
@@ -731,7 +730,7 @@ function ConnectionList({
                       page: 1,
                     })
                   }
-                  suppliers={supplierOptions ?? []}
+                  purpose="filter"
                   className="w-[12rem]"
                   placeholder="全部供应商"
                   aria-label="供应商"
@@ -874,20 +873,17 @@ function ConnectionList({
                 return (
                   <Field data-invalid={isInvalid || undefined}>
                     <FieldLabel htmlFor="create-supplierId">供应商</FieldLabel>
-                    <SupplierCombobox
+                    <SupplierSearchCombobox
                       value={field.state.value || undefined}
                       onValueChange={(id) => {
-                        const next = id ?? ""
-                        field.handleChange(next)
-                        const supplier = supplierOptions?.find(
-                          (s) => s.supplierId === next
-                        )
+                        field.handleChange(id ?? "")
+                      }}
+                      onItemChange={(supplier) => {
                         form.setFieldValue(
                           "supplierName",
                           supplier?.supplierName ?? ""
                         )
                       }}
-                      suppliers={supplierOptions ?? []}
                       placeholder="搜索供应商名称或编码"
                     />
                     {isInvalid ? <FieldError errors={errors} /> : null}
@@ -1401,18 +1397,13 @@ function ConnectionCenter({
               </Alert>
             ) : null}
             <Label htmlFor="opaque-ref">密钥管理引用</Label>
-            <OptionCombobox
+            <OpaqueReferenceSearchCombobox
+              kind="credential"
               id="opaque-ref"
               value={selectedRef || null}
               onValueChange={(v) => {
                 if (v) setSelectedRef(v)
               }}
-              options={(listQuery.data?.credentialOpaqueOptions ?? []).map(
-                (o) => ({
-                  value: o.referenceId,
-                  label: `${o.alias} · ${o.version}`,
-                })
-              )}
               placeholder="选择不透明引用"
               allowClear={false}
             />
@@ -1477,18 +1468,13 @@ function ConnectionCenter({
               </Alert>
             ) : null}
             <Label htmlFor="endpoint-ref">地址配置引用</Label>
-            <OptionCombobox
+            <OpaqueReferenceSearchCombobox
+              kind="endpoint"
               id="endpoint-ref"
               value={selectedEndpointRef || null}
               onValueChange={(v) => {
                 if (v) setSelectedEndpointRef(v)
               }}
-              options={(listQuery.data?.endpointOpaqueOptions ?? []).map(
-                (o) => ({
-                  value: o.referenceId,
-                  label: `${o.alias} · ${o.version}`,
-                })
-              )}
               placeholder="选择地址配置引用"
               allowClear={false}
             />

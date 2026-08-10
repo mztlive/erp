@@ -36,6 +36,7 @@ import {
   QuickPreviewSheet,
   surfacePanelClassName,
 } from "@/components/business"
+import { MallSearchCombobox } from "@/features/entity-selectors"
 import { cn } from "@/lib/utils"
 import {
   Alert,
@@ -859,18 +860,11 @@ export function ConsumptionOrdersListPage() {
                   }
                   filters={
                     <>
-                      <OptionCombobox
-                        value={mallId}
+                      <MallSearchCombobox
+                        value={mallId === "all" ? null : mallId}
                         onValueChange={(v) =>
-                          replaceParams({ mall: v || undefined })
+                          replaceParams({ mall: v || "all" })
                         }
-                        options={[
-                          { value: "all", label: "全部商城" },
-                          ...(data?.malls ?? []).map((m) => ({
-                            value: m.id,
-                            label: m.name,
-                          })),
-                        ]}
                         className="w-44"
                         size="sm"
                         allowClear={false}

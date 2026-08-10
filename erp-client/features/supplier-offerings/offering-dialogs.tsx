@@ -24,9 +24,11 @@ import {
 } from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
-import { useMasterDataListQuery } from "@/features/master-data/queries"
 import {
-  useCompanySkuOptionsQuery,
+  CompanySkuSearchCombobox,
+  SupplierSearchCombobox,
+} from "@/features/entity-selectors"
+import {
   useCreateSupplierOfferingMutation,
   useReviseSupplierOfferingMutation,
   useUpdateOfferingAvailabilityMutation,
@@ -129,12 +131,6 @@ export function RegisterSupplyForSkuDialog({
   onOpenChange: (open: boolean) => void
   fixedSku?: FixedSku
 }) {
-  const supplierQuery = useMasterDataListQuery({
-    resource: "suppliers",
-    lifecycleStatus: "enabled",
-    revisionTiming: "current",
-  })
-  const skuQuery = useCompanySkuOptionsQuery(open && !fixedSku)
   const mutation = useCreateSupplierOfferingMutation()
   const [submitError, setSubmitError] = React.useState<string | null>(null)
   const form = useAppForm({
@@ -199,15 +195,6 @@ export function RegisterSupplyForSkuDialog({
     },
   })
 
-  const supplierOptions = (supplierQuery.data?.rows ?? []).map((supplier) => ({
-    value: supplier.stableId,
-    label: `${supplier.name} · ${supplier.stableNo}`,
-  }))
-  const skuOptions = (skuQuery.data ?? []).map((sku) => ({
-    value: sku.id,
-    label: `${sku.skuNo} · ${sku.specification || "默认规格"}`,
-  }))
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[88vh] w-[calc(100vw-2rem)] flex-col gap-4 overflow-hidden p-5 sm:max-h-[76vh] sm:max-w-6xl">
@@ -251,17 +238,12 @@ export function RegisterSupplyForSkuDialog({
                       {(field) => (
                         <div className="space-y-1.5 sm:col-span-2">
                           <Label>公司 SKU *</Label>
-                          <OptionCombobox
-                            value={field.state.value || null}
+                          <CompanySkuSearchCombobox
+                            value={field.state.value || undefined}
                             onValueChange={(value) =>
                               field.handleChange(value ?? "")
                             }
-                            options={skuOptions}
-                            placeholder={
-                              skuQuery.isPending
-                                ? "正在加载…"
-                                : "选择公司 SKU"
-                            }
+                            placeholder="选择公司 SKU"
                             className="w-full"
                           />
                         </div>
@@ -272,17 +254,12 @@ export function RegisterSupplyForSkuDialog({
                     {(field) => (
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label>供应商 *</Label>
-                        <OptionCombobox
-                          value={field.state.value || null}
+                        <SupplierSearchCombobox
+                          value={field.state.value || undefined}
                           onValueChange={(value) =>
                             field.handleChange(value ?? "")
                           }
-                          options={supplierOptions}
-                          placeholder={
-                            supplierQuery.isPending
-                              ? "正在加载…"
-                              : "选择已启用供应商"
-                          }
+                          placeholder="选择已启用供应商"
                           className="w-full"
                         />
                       </div>

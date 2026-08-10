@@ -591,11 +591,6 @@ export async function addCollaborationNote(
   }
 }
 
-export function listSupplierOptions(): { id: string; name: string }[] {
-  // 供应商主数据由 W14/W20 提供；本域列表无独立 supplier 维表接口
-  return []
-}
-
 export async function createSupplierOrderExportJob(
   command: ExportCommand
 ): Promise<ExportJobResult> {

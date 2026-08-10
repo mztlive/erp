@@ -108,12 +108,6 @@ export type UpdateOfferingAvailabilityInput = Readonly<{
   idempotency_key: string
 }>
 
-export type CompanySkuOption = Readonly<{
-  id: string
-  skuNo: string
-  specification: string
-}>
-
 /** 公司商品详情向新增供给弹窗提供的固定 SKU。 */
 export type FixedSku = Readonly<{
   skuId: string

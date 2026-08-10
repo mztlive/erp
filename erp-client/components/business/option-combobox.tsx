@@ -28,6 +28,10 @@ export type OptionComboboxProps = {
   placeholder?: string
   emptyLabel?: string
   searchPlaceholder?: string
+  /** 服务端已完成搜索时关闭本地二次过滤。 */
+  filterMode?: "local" | "remote"
+  /** 输入变化通知；远程模式下用于触发查询。 */
+  onSearchChange?: (query: string) => void
   disabled?: boolean
   loading?: boolean
   /** 是否显示清除按钮；默认 true */
@@ -63,9 +67,12 @@ export function OptionCombobox({
   value,
   onValueChange,
   placeholder = "请选择",
+  searchPlaceholder,
   emptyLabel = "没有符合条件的选项",
   disabled = false,
   loading = false,
+  filterMode = "local",
+  onSearchChange,
   allowClear = true,
   required = false,
   id,
@@ -87,10 +94,12 @@ export function OptionCombobox({
       onValueChange={(next) => {
         onValueChange(next?.value ?? null)
       }}
+      onInputValueChange={(query) => onSearchChange?.(query)}
       itemToStringLabel={(item) => item.label}
       itemToStringValue={(item) => item.value}
       isItemEqualToValue={(item, current) => item.value === current.value}
       filter={(item, query) => {
+        if (filterMode === "remote") return true
         const q = query.trim().toLowerCase()
         if (!q) return true
         return item.__search.toLowerCase().includes(q)
@@ -108,7 +117,7 @@ export function OptionCombobox({
           aria-label={ariaLabel}
           aria-invalid={ariaInvalid || undefined}
           aria-busy={loading || undefined}
-          placeholder={placeholder}
+          placeholder={searchPlaceholder ?? placeholder}
           showClear={allowClear && !disabled}
           disabled={disabled}
           onBlur={onBlur}

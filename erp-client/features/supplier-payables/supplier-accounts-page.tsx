@@ -30,8 +30,8 @@ import {
   PageHeader,
   PageScaffold,
   QuickPreviewSheet,
-  SupplierCombobox,
 } from "@/components/business"
+import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
@@ -1176,17 +1176,12 @@ export function SupplierAccountsPage() {
               <div className="flex flex-wrap items-end gap-2">
                 <div>
                   <Label className="sr-only">供应商</Label>
-                  <SupplierCombobox
+                  <SupplierSearchCombobox
                     value={supplierId || undefined}
                     onValueChange={(id) => {
                       patchUrl({ supplierId: id || null, page: null })
                     }}
-                    suppliers={data.suppliers.map((s) => ({
-                      supplierId: s.supplierId,
-                      supplierName: s.supplierName,
-                      statusLabel: "可选",
-                      statusTone: "neutral",
-                    }))}
+                    purpose="filter"
                     className="w-[12rem]"
                     aria-label="供应商"
                     placeholder="全部供应商"
@@ -1591,15 +1586,9 @@ export function SupplierAccountsPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label>供应商</Label>
-            <SupplierCombobox
+            <SupplierSearchCombobox
               value={pickSupplierId || undefined}
               onValueChange={(id) => setPickSupplierId(id ?? "")}
-              suppliers={data.suppliers.map((s) => ({
-                supplierId: s.supplierId,
-                supplierName: s.supplierName,
-                statusLabel: "可选",
-                statusTone: "neutral",
-              }))}
               className="w-full"
               aria-label="供应商"
               placeholder="选择供应商"

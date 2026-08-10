@@ -68,7 +68,7 @@ import {
 } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { listMallOptions } from "@/features/history-backfill/api"
+import { MallSearchCombobox } from "@/features/entity-selectors"
 import {
   useHistoryBackfillCommandMutation,
   useHistoryBackfillDetailQuery,
@@ -386,7 +386,6 @@ function JobListView({
   })
 
   const data = listQuery.data
-  const malls = React.useMemo(() => listMallOptions(), [])
 
   const columns = React.useMemo<ColumnDef<HistoryBackfillListItem>[]>(
     () => [
@@ -668,19 +667,14 @@ function JobListView({
             }
             filters={
               <>
-                <OptionCombobox
-                  value={urlState.mallId ?? "all"}
+                <MallSearchCombobox
+                  value={urlState.mallId ?? null}
                   onValueChange={(v) => {
-                    if (v == null) return
                     patchUrl({
-                      mallId: v === "all" ? undefined : v,
+                      mallId: v ?? undefined,
                       page: 1,
                     })
                   }}
-                  options={[
-                    { value: "all", label: "全部商城" },
-                    ...malls.map((m) => ({ value: m.id, label: m.name })),
-                  ]}
                   inputClassName="w-[10rem]"
                   size="sm"
                   placeholder="商城：全部"

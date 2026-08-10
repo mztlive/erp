@@ -45,6 +45,8 @@ interface BusinessObjectComboboxProps {
   value?: string
   onValueChange: (id?: string) => void
   onSearchChange?: (query: string) => void
+  /** 服务端已完成搜索时关闭本地二次过滤。 */
+  filterMode?: "local" | "remote"
   label: string
   placeholder?: string
   emptyLabel?: string
@@ -59,6 +61,7 @@ function BusinessObjectCombobox({
   value,
   onValueChange,
   onSearchChange,
+  filterMode = "local",
   label,
   placeholder = "搜索名称或编号",
   emptyLabel = "没有符合条件的对象",
@@ -79,6 +82,7 @@ function BusinessObjectCombobox({
       itemToStringValue={(item) => item.id}
       isItemEqualToValue={(item, current) => item.id === current.id}
       filter={(item, query) => {
+        if (filterMode === "remote") return true
         const q = query.trim().toLowerCase()
         if (!q) return true
         const haystack = [

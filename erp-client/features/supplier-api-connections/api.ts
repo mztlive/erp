@@ -416,6 +416,25 @@ export async function fetchConnectionList(
   }
 }
 
+/**
+ * 读取外部不透明引用目录。
+ *
+ * 当前后端连接列表契约尚未提供独立引用注册表；此适配保留唯一接入点，
+ * 后端补齐目录后页面无需再次改写请求逻辑。
+ */
+export async function fetchOpaqueReferenceOptions(
+  kind: "credential" | "endpoint",
+) {
+  const view = await fetchConnectionList({
+    environment: "all",
+    page: 1,
+    pageSize: 1,
+  })
+  return kind === "credential"
+    ? view.credentialOpaqueOptions
+    : view.endpointOpaqueOptions
+}
+
 export async function fetchConnectionCenter(input: {
   connectionId: string
 }): Promise<ConnectionCenterView | null> {

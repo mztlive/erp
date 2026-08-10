@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   createSupplierOffering,
-  fetchCompanySkuOptions,
   fetchSupplierOfferings,
   fetchSupplierOfferingsForSkus,
   reviseSupplierOffering,
@@ -21,7 +20,6 @@ export const supplierOfferingKeys = {
   all: ["supplier-offerings"] as const,
   list: (query: SupplierOfferingListQuery) =>
     [...supplierOfferingKeys.all, "list", query] as const,
-  companySkus: () => [...supplierOfferingKeys.all, "company-skus"] as const,
 }
 
 export function useSupplierOfferingsQuery(query: SupplierOfferingListQuery) {
@@ -38,14 +36,6 @@ export function useSupplierOfferingsForSkusQuery(skuIds: readonly string[]) {
     queryKey: [...supplierOfferingKeys.all, "sku-details", normalized],
     queryFn: () => fetchSupplierOfferingsForSkus(normalized),
     enabled: normalized.length > 0,
-  })
-}
-
-export function useCompanySkuOptionsQuery(enabled = true) {
-  return useQuery({
-    queryKey: supplierOfferingKeys.companySkus(),
-    queryFn: fetchCompanySkuOptions,
-    enabled,
   })
 }
 

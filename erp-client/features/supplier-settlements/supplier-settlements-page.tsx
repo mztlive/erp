@@ -40,10 +40,10 @@ import {
   PageHeader,
   PageScaffold,
   QuickPreviewSheet,
-  SupplierCombobox,
   surfaceInsetClassName,
   surfacePanelClassName,
 } from "@/components/business"
+import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
@@ -769,7 +769,7 @@ function SettlementList({
             }
             filters={
               <>
-                <SupplierCombobox
+                <SupplierSearchCombobox
                   value={urlState.supplierId || undefined}
                   onValueChange={(id) =>
                     patchUrl({
@@ -777,12 +777,7 @@ function SettlementList({
                       page: 1,
                     })
                   }
-                  suppliers={(data?.suppliers ?? []).map((s) => ({
-                    supplierId: s.supplierId,
-                    supplierName: s.supplierName,
-                    statusLabel: "可选",
-                    statusTone: "neutral",
-                  }))}
+                  purpose="filter"
                   className="w-[12rem]"
                   aria-label="供应商"
                   placeholder="全部供应商"
@@ -1078,10 +1073,9 @@ function SettlementList({
               children={(field) => (
                 <div className="space-y-1.5">
                   <Label htmlFor="supplierId">供应商</Label>
-                  <SupplierCombobox
+                  <SupplierSearchCombobox
                     value={field.state.value || undefined}
                     onValueChange={(id) => field.handleChange(id ?? "")}
-                    suppliers={data?.suppliers ?? []}
                     placeholder="请选择供应商"
                   />
                 </div>

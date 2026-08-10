@@ -38,22 +38,22 @@ import {
   DataTable,
   MetricItem,
   MetricStrip,
-  CustomerCombobox,
   MoneyValue,
   OptionCombobox,
   PageActions,
   PageHeader,
   PageScaffold,
   QuickPreviewSheet,
-  SalesOrderCombobox,
   surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
-import { useCustomerDirectoryQuery } from "@/features/customers/queries"
+import {
+  CustomerSearchCombobox,
+  SalesOrderSearchCombobox,
+} from "@/features/entity-selectors"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { useSalesOrdersQuery } from "@/features/sales-orders/queries"
 import { hasPermission } from "@/lib/permissions"
 import type { DataFreshnessState } from "@/components/business/page"
 import {
@@ -335,7 +335,7 @@ export function CardBusinessAnalyticsPage() {
   const accountProfile = useAccountProfileQuery()
   const canReadAllCustomers = hasPermission(
     accountProfile.data?.permissions,
-    "customer_scope:detail"
+    "customer_scope:detail",
   )
 
   const periodPreset = parsePreset(searchParams.get("periodPreset"))
@@ -373,46 +373,6 @@ export function CardBusinessAnalyticsPage() {
   const [basisSheetOpen, setBasisSheetOpen] = React.useState(false)
   const [refreshFailed, setRefreshFailed] = React.useState<string | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
-
-  const customerDirectoryQuery = useCustomerDirectoryQuery({
-    scope: canReadAllCustomers ? "all_authorized" : "assigned",
-    status: "all",
-    page: 1,
-    pageSize: 100,
-  })
-  const salesOrdersQuery = useSalesOrdersQuery({
-    page: 1,
-    pageSize: 500,
-  })
-
-  const customerComboboxItems = React.useMemo(
-    () =>
-      (customerDirectoryQuery.data?.items ?? []).map((c) => ({
-        id: c.id,
-        customerNo: c.customerNo,
-        legalName: c.legalName,
-        shortName: c.shortName,
-        statusLabel: c.statusLabel.label,
-        statusTone: c.statusLabel.tone,
-        ownerName: c.ownerName,
-      })),
-    [customerDirectoryQuery.data?.items]
-  )
-
-  const salesOrderComboboxItems = React.useMemo(
-    () =>
-      (salesOrdersQuery.data?.items ?? []).map((o) => ({
-        id: o.id,
-        documentNumber: o.documentNumber,
-        customerName: o.customerName,
-        statusLabel: o.primaryStatus.label,
-        statusTone: o.primaryStatus.tone,
-        amountGross: o.amountGross,
-        natureLabel:
-          o.nature === "card_voucher" ? "卡券" : "实物与服务",
-      })),
-    [salesOrdersQuery.data?.items]
-  )
 
   const basisQuery = useDateBasisConfigQuery()
   const basisConfig = basisQuery.data
@@ -1131,26 +1091,25 @@ export function CardBusinessAnalyticsPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-customer">客户</Label>
-            <CustomerCombobox
+            <CustomerSearchCombobox
               value={customerId}
               onValueChange={(id) =>
                 patchUrl({ customerId: id || null })
               }
-              customers={customerComboboxItems}
-              loading={customerDirectoryQuery.isPending}
+              purpose="filter"
+              scope={canReadAllCustomers ? "all_authorized" : "assigned"}
               className="min-w-48"
               placeholder="全部客户"
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-so">销售单</Label>
-            <SalesOrderCombobox
+            <SalesOrderSearchCombobox
               value={salesOrderId}
               onValueChange={(id) =>
                 patchUrl({ salesOrderId: id || null })
               }
-              orders={salesOrderComboboxItems}
-              loading={salesOrdersQuery.isPending}
+              purpose="filter"
               className="min-w-48"
               placeholder="全部销售单"
             />

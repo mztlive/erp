@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/input-group"
 
 import { PurchaseOrderPreviewPanel } from "@/features/purchase-orders/purchase-order-preview-panel"
+import { CreationBasisSearchCombobox } from "@/features/purchase-orders/creation-basis-search-combobox"
 import {
   useCreateFromBasisMutation,
   useCreationBasesQuery,
@@ -1040,27 +1041,12 @@ export function PurchaseOrdersListPage() {
             ) : (
               <label className="grid gap-1.5 text-sm">
                 <span>选择创建依据</span>
-                <OptionCombobox
+                <CreationBasisSearchCombobox
                   className="w-full"
                   value={selectedBasisId}
                   onValueChange={(v) =>
                     setSelectedBasisId(v ?? selectedBasisId)
                   }
-                  options={[
-                    ...(basisFromUrl &&
-                    !openBases.some((b) => b.basisId === basisFromUrl)
-                      ? [
-                          {
-                            value: basisFromUrl,
-                            label: "来自采购二次确认的固定结果",
-                          },
-                        ]
-                      : []),
-                    ...openBases.map((basis) => ({
-                      value: basis.basisId,
-                      label: `${basis.salesOrderNo} · ${basis.supplierName} · ${PURCHASE_TYPE_LABEL[basis.purchaseType]} · 估 ${basis.estimatedGross}`,
-                    })),
-                  ]}
                   allowClear={false}
                   aria-label="选择创建依据"
                   placeholder="选择创建依据"

@@ -33,7 +33,6 @@ import {
   PageScaffold,
   QuickPreviewSheet,
   StatusTrackSummary,
-  SupplierCombobox,
   surfacePanelClassName,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -46,7 +45,7 @@ import {
 } from "@/components/ui/input-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
-import { listSupplierOptions } from "@/features/supplier-orders/api"
+import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import {
   useQueryResultMutation,
   useSupplierOrderDetailQuery,
@@ -125,7 +124,6 @@ export function SupplierOrdersListPage() {
   })
   const queryResultMutation = useQueryResultMutation()
 
-  const suppliers = React.useMemo(() => listSupplierOptions(), [])
   const [searchDraft, setSearchDraft] = React.useState(url.q ?? "")
   const [focusedIndex, setFocusedIndex] = React.useState(0)
   const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
@@ -900,7 +898,7 @@ export function SupplierOrdersListPage() {
                     </ToggleGroupItem>
                   ))}
                 </ToggleGroup>
-                <SupplierCombobox
+                <SupplierSearchCombobox
                   value={url.supplierId || undefined}
                   onValueChange={(id) =>
                     updateUrl({
@@ -908,12 +906,7 @@ export function SupplierOrdersListPage() {
                       page: 1,
                     })
                   }
-                  suppliers={suppliers.map((s) => ({
-                    supplierId: s.id,
-                    supplierName: s.name,
-                    statusLabel: "可选",
-                    statusTone: "neutral",
-                  }))}
+                  purpose="filter"
                   aria-label="供应商"
                   className="w-[12rem]"
                   placeholder="全部供应商"

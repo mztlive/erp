@@ -27,10 +27,10 @@ import {
   PageHeader,
   PageScaffold,
   RevisionTimeline,
-  SettlementPartyCombobox,
   surfaceInsetClassName,
   surfacePanelClassName,
 } from "@/components/business"
+import { SettlementPartySearchCombobox } from "@/features/entity-selectors"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -86,7 +86,6 @@ import type {
 } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
-import { usePartyOptionsQuery } from "@/hooks/use-options"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
@@ -525,7 +524,6 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   const createMutation = useCreateMasterDataMutation()
   const reviseMutation = useCreateRevisionMutation()
   const accountQuery = useAccountProfileQuery()
-  const partyOptionsQuery = usePartyOptionsQuery()
 
   const data = detailQuery.data
   const lockVersion = data?.lockVersion
@@ -1339,12 +1337,11 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                 <Label>
                                   {masterDataCopy.fSigningEntity}
                                 </Label>
-                                <SettlementPartyCombobox
+                                <SettlementPartySearchCombobox
                                   value={values.signingEntity || undefined}
                                   onValueChange={(value) =>
                                     setFieldValue("signingEntity", value ?? "")
                                   }
-                                  parties={partyOptionsQuery.data ?? []}
                                   placeholder="选择与供应商签约的公司主体"
                                   disabled={!canEdit}
                                 />
@@ -1353,12 +1350,11 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                 <Label>
                                   {masterDataCopy.fPaymentEntity}
                                 </Label>
-                                <SettlementPartyCombobox
+                                <SettlementPartySearchCombobox
                                   value={values.paymentEntity || undefined}
                                   onValueChange={(value) =>
                                     setFieldValue("paymentEntity", value ?? "")
                                   }
-                                  parties={partyOptionsQuery.data ?? []}
                                   placeholder="选择向供应商付款的公司主体"
                                   disabled={!canEdit}
                                 />

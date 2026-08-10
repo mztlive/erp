@@ -10,7 +10,6 @@ import {
   BusinessFailureState,
   BusinessTableFrame,
   ListToolbar,
-  OptionCombobox,
   PageHeader,
   PageScaffold,
 } from "@/components/business"
@@ -25,16 +24,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { useMasterDataListQuery } from "@/features/master-data/queries"
+import {
+  CompanySkuSearchCombobox,
+  SupplierSearchCombobox,
+} from "@/features/entity-selectors"
 import {
   RegisterSupplyForSkuDialog,
   ReviseOfferingDialog,
   UpdateAvailabilityDialog,
 } from "@/features/supplier-offerings/offering-dialogs"
-import {
-  useCompanySkuOptionsQuery,
-  useSupplierOfferingsQuery,
-} from "@/features/supplier-offerings/queries"
+import { useSupplierOfferingsQuery } from "@/features/supplier-offerings/queries"
 import type {
   OfferingStatus,
   SupplierOfferingView,
@@ -77,12 +76,6 @@ export function SupplierOfferingsPage() {
     React.useState<SupplierOfferingView | null>(null)
   const [availabilityOffering, setAvailabilityOffering] =
     React.useState<SupplierOfferingView | null>(null)
-  const supplierQuery = useMasterDataListQuery({
-    resource: "suppliers",
-    lifecycleStatus: "enabled",
-    revisionTiming: "current",
-  })
-  const skuQuery = useCompanySkuOptionsQuery(!skuId)
   const query = useSupplierOfferingsQuery({
     q: q || undefined,
     skuId: skuId ?? skuFilter,
@@ -95,14 +88,6 @@ export function SupplierOfferingsPage() {
   const activeCount = items.filter((item) => item.status === "ACTIVE").length
   const availableCount = items.filter(isCurrentlyAvailable).length
   const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / 50))
-  const supplierOptions = (supplierQuery.data?.rows ?? []).map((supplier) => ({
-    value: supplier.stableId,
-    label: `${supplier.name} · ${supplier.stableNo}`,
-  }))
-  const skuOptions = (skuQuery.data ?? []).map((sku) => ({
-    value: sku.id,
-    label: `${sku.skuNo} · ${sku.specification || "默认规格"}`,
-  }))
   const hasFilters = Boolean(q || skuFilter || supplierId || status)
 
   return (
@@ -170,30 +155,24 @@ export function SupplierOfferingsPage() {
             filters={
               <div className="flex flex-wrap items-center gap-1">
                 {!skuId ? (
-                  <OptionCombobox
-                    options={skuOptions}
-                    value={skuFilter ?? null}
+                  <CompanySkuSearchCombobox
+                    value={skuFilter}
                     onValueChange={(value) => {
                       setSkuFilter(value ?? undefined)
                       setPage(1)
                     }}
                     placeholder="公司 SKU"
-                    loading={skuQuery.isPending}
-                    size="sm"
                     className="w-52"
                     aria-label="公司 SKU"
                   />
                 ) : null}
-                <OptionCombobox
-                  options={supplierOptions}
-                  value={supplierId ?? null}
+                <SupplierSearchCombobox
+                  value={supplierId}
                   onValueChange={(value) => {
                     setSupplierId(value ?? undefined)
                     setPage(1)
                   }}
                   placeholder="供应商"
-                  loading={supplierQuery.isPending}
-                  size="sm"
                   className="w-48"
                   aria-label="供应商"
                 />

@@ -4,9 +4,7 @@ import * as React from "react"
 import { z } from "zod"
 
 import {
-  CustomerCombobox,
   DiscardConfirmDialog,
-  SettlementPartyCombobox,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
@@ -38,12 +36,12 @@ import { CircleAlertIcon } from "lucide-react"
 import { contractPdfError } from "@/features/contracts/pdf"
 import { useUploadContractPdfMutation } from "@/features/contracts/queries"
 import type { UploadContractPdfResult } from "@/features/contracts/types"
-import {
-  useCustomerCenterQuery,
-  useCustomerDirectoryQuery,
-} from "@/features/customers/queries"
+import { useCustomerCenterQuery } from "@/features/customers/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { usePartyOptionsQuery } from "@/hooks/use-options"
+import {
+  CustomerSearchCombobox,
+  SettlementPartySearchCombobox,
+} from "@/features/entity-selectors"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -106,30 +104,9 @@ export function ContractUploadDialog({
     accountProfile.data?.permissions,
     "customer_scope:detail"
   )
-  const customerDirectoryQuery = useCustomerDirectoryQuery({
-    scope: canReadAllCustomers ? "all_authorized" : "assigned",
-    status: "active",
-    page: 1,
-    pageSize: 100,
-  })
   const uploadMutation = useUploadContractPdfMutation()
-  const { data: partyOptions } = usePartyOptionsQuery()
   const seededCustomerRef = React.useRef(false)
   const [discardOpen, setDiscardOpen] = React.useState(false)
-
-  const customerComboboxItems = React.useMemo(
-    () =>
-      (customerDirectoryQuery.data?.items ?? []).map((c) => ({
-        id: c.id,
-        customerNo: c.customerNo,
-        legalName: c.legalName,
-        shortName: c.shortName,
-        statusLabel: c.statusLabel.label,
-        statusTone: c.statusLabel.tone,
-        ownerName: c.ownerName,
-      })),
-    [customerDirectoryQuery.data?.items]
-  )
 
   const form = useAppForm({
     defaultValues: {
@@ -277,21 +254,18 @@ export function ContractUploadDialog({
                       return (
                         <Field data-invalid={isInvalid || undefined}>
                           <FieldLabel htmlFor="upload-customerId">客户</FieldLabel>
-                          <CustomerCombobox
+                          <CustomerSearchCombobox
                             value={field.state.value || undefined}
                             onValueChange={(id) => {
-                              const next = id ?? ""
-                              field.handleChange(next)
-                              const customer = customerComboboxItems.find(
-                                (c) => c.id === next
-                              )
+                              field.handleChange(id ?? "")
+                            }}
+                            onItemChange={(customer) => {
                               form.setFieldValue(
                                 "customerName",
                                 customer?.legalName ?? ""
                               )
                             }}
-                            customers={customerComboboxItems}
-                            loading={customerDirectoryQuery.isPending}
+                            scope={canReadAllCustomers ? "all_authorized" : "assigned"}
                             placeholder="搜索客户编号或名称"
                           />
                           {isInvalid ? <FieldError errors={errors} /> : null}
@@ -310,19 +284,17 @@ export function ContractUploadDialog({
                           <FieldLabel htmlFor="upload-settlementPartyId">
                             结算主体
                           </FieldLabel>
-                          <SettlementPartyCombobox
+                          <SettlementPartySearchCombobox
                             value={field.state.value || undefined}
                             onValueChange={(id) => {
-                              const next = id ?? ""
-                              field.handleChange(next)
+                              field.handleChange(id ?? "")
+                            }}
+                            onItemChange={(party) => {
                               form.setFieldValue(
                                 "settlementPartyName",
-                                partyOptions?.find(
-                                  (p) => p.partyId === next
-                                )?.displayName ?? ""
+                                party?.displayName ?? ""
                               )
                             }}
-                            parties={[...(partyOptions ?? [])]}
                             placeholder="搜索结算主体"
                           />
                           {isInvalid ? <FieldError errors={errors} /> : null}

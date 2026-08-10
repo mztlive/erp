@@ -4,6 +4,7 @@ import * as React from "react"
 import { SearchIcon } from "lucide-react"
 
 import { FilterChip, ListToolbar, OptionCombobox } from "@/components/business"
+import { WarehouseSearchCombobox } from "@/features/entity-selectors"
 import { Button } from "@/components/ui/button"
 import {
   InputGroup,
@@ -32,7 +33,6 @@ export type QueueFilterPatch = Record<string, string | null>
 export function FulfillmentQueueToolbar({
   q,
   warehouseId,
-  warehouseOptions,
   due,
   gate,
   salesOrderId,
@@ -48,7 +48,6 @@ export function FulfillmentQueueToolbar({
 }: {
   q: string | undefined
   warehouseId: string | undefined
-  warehouseOptions: ReadonlyArray<{ value: string; label: string }>
   due: DueFilter | undefined
   gate: GateFilter | undefined
   salesOrderId: string | undefined
@@ -115,19 +114,15 @@ export function FulfillmentQueueToolbar({
       }
       filters={
         <>
-          {warehouseOptions.length > 0 ? (
-            <OptionCombobox
-              value={warehouseId ?? null}
-              options={warehouseOptions}
-              placeholder="仓库：全部"
-              size="sm"
-              aria-label="按仓库筛选（只对入库和发货有效）"
-              inputClassName="w-[9rem]"
-              onValueChange={(v) =>
-                onPatch({ warehouseId: v ?? null, currentWorkItemId: null })
-              }
-            />
-          ) : null}
+          <WarehouseSearchCombobox
+            value={warehouseId}
+            placeholder="仓库：全部"
+            aria-label="按仓库筛选（只对入库和发货有效）"
+            className="w-[9rem]"
+            onValueChange={(value) =>
+              onPatch({ warehouseId: value ?? null, currentWorkItemId: null })
+            }
+          />
           <OptionCombobox
             value={due ?? null}
             options={DUE_FILTER_OPTIONS}

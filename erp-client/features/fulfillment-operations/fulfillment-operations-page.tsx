@@ -896,7 +896,6 @@ export function FulfillmentOperationsPage() {
         <FulfillmentQueueToolbar
           q={q}
           warehouseId={warehouseId}
-          warehouseOptions={context?.warehouseOptions ?? []}
           due={due}
           gate={gate}
           salesOrderId={salesOrderId}

@@ -72,6 +72,7 @@ import {
   useResolveIntegrationMutation,
   useTransferIntegrationMutation,
 } from "./queries"
+import { ReplacementWorkItemSearchCombobox } from "./replacement-work-item-search-combobox"
 import type {
   IntegrationFormalResult,
   IntegrationResolutionItemView,
@@ -686,18 +687,6 @@ export function IntegrationErrorsPage({
 
   const can = (action: string) =>
     Boolean(item?.allowedActions.includes(action as never))
-
-  const replacementOptions = queueItems
-    .filter(
-      (i) =>
-        i.identity.itemType === "ERROR_TASK" &&
-        i.workItem &&
-        i.identity.id !== item?.identity.id
-    )
-    .map((i) => ({
-      value: i.workItem!.workItemId,
-      label: `${i.identity.number} · ${i.businessObject.title}`,
-    }))
 
   const reconReason = item?.reconciliationReasonRegistry?.registeredReasons.find(
     (r) => r.registeredReasonId === reconReasonId
@@ -1910,12 +1899,12 @@ export function IntegrationErrorsPage({
                         <div className="flex w-full flex-wrap items-end gap-2 rounded-lg border p-2">
                           <div className="space-y-1">
                             <Label className="text-xs">替代任务</Label>
-                            <OptionCombobox
+                            <ReplacementWorkItemSearchCombobox
                               value={replacementTaskId || null}
                               onValueChange={(v) =>
                                 setReplacementTaskId(v ?? "")
                               }
-                              options={replacementOptions}
+                              excludeItemId={item.identity.id}
                               className="w-72"
                               size="sm"
                               aria-label="选择替代任务"

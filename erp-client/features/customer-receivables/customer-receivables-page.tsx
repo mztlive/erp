@@ -31,7 +31,6 @@ import {
   PageHeader,
   PageScaffold,
   QuickPreviewSheet,
-  SettlementPartyCombobox,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -72,7 +71,6 @@ import {
 } from "@/features/customer-receivables/queries"
 import type {
   AllocationMode,
-  CounterpartyOption,
   CustomerAccountsListView,
   CustomerAccountsQuery,
   CustomerAccountsView,
@@ -81,6 +79,7 @@ import type {
   ReceivableAccountRow,
   SalesInvoiceRow,
 } from "@/features/customer-receivables/types"
+import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receivables/receivable-counterparty-search-combobox"
 import { DUE_LABEL, VIEW_LABEL } from "@/features/customer-receivables/types"
 import { freshnessText } from "@/lib/ui-text"
 
@@ -864,9 +863,6 @@ export function CustomerReceivablesPage() {
   }
 
   const metrics = data?.metrics
-  const counterparties: readonly CounterpartyOption[] =
-    data?.counterparties ?? []
-
   return (
     <PageScaffold density="compact">
       <PageHeader
@@ -1151,7 +1147,7 @@ export function CustomerReceivablesPage() {
                       <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                         往来主体
                       </span>
-                      <SettlementPartyCombobox
+                      <ReceivableCounterpartySearchCombobox
                         value={counterpartyPartyId || undefined}
                         onValueChange={(id) => {
                           patchUrl(
@@ -1159,15 +1155,7 @@ export function CustomerReceivablesPage() {
                             { replace: true }
                           )
                         }}
-                        parties={counterparties.map((c) => ({
-                          partyId: c.counterpartyPartyId,
-                          displayName: c.counterpartyPartyName,
-                          description: c.customerName
-                            ? `经营客户 ${c.customerName}`
-                            : undefined,
-                          statusLabel: "可选",
-                          statusTone: "neutral",
-                        }))}
+                        purpose="filter"
                         className="w-56"
                         aria-label="筛选往来主体"
                         placeholder="全部主体"
@@ -1688,18 +1676,10 @@ export function CustomerReceivablesPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="pick-party">往来主体</Label>
-            <SettlementPartyCombobox
+            <ReceivableCounterpartySearchCombobox
               value={selectedPartyId || undefined}
               onValueChange={(id) => setSelectedPartyId(id ?? "")}
-              parties={counterparties.map((c) => ({
-                partyId: c.counterpartyPartyId,
-                displayName: c.counterpartyPartyName,
-                description: c.customerName
-                  ? `经营客户 ${c.customerName}`
-                  : undefined,
-                statusLabel: "可选",
-                statusTone: "neutral",
-              }))}
+              purpose="form"
               className="w-full"
               aria-label="往来主体"
               placeholder="请选择往来主体"

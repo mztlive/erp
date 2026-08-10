@@ -7,13 +7,11 @@ import { CircleAlertIcon, CircleCheckIcon, PlusIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
-  ContractCombobox,
   DiscardConfirmDialog,
   EditableLineItemTable,
   MoneyValue,
   PageHeader,
   PageScaffold,
-  ProductCombobox,
   StickyTotalBar,
   ValidationSummary,
   WizardSteps,
@@ -26,6 +24,7 @@ import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
+import { useQueryClient } from "@tanstack/react-query"
 import type { StandardSchemaV1Issue } from "@tanstack/react-form"
 import {
   PAYMENT_TERM_OPTIONS,
@@ -51,15 +50,15 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
-import {
-  useContractCenterQuery,
-  useContractsForNewSalesOrderQuery,
-} from "@/features/contracts/queries"
+import { useContractCenterQuery } from "@/features/contracts/queries"
 import type { UploadContractPdfResult } from "@/features/contracts/types"
-import type { StatusTone } from "@/components/ui/status-badge"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { useMasterDataListQuery } from "@/features/master-data/queries"
-import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
+import {
+  ContractSearchCombobox,
+  SellableSkuSearchCombobox,
+  VoucherCategorySearchCombobox,
+  entitySelectorKeys,
+} from "@/features/entity-selectors"
 import {
   useCreateSalesOrderMutation,
   useSalesOrderDraftResumeQuery,
@@ -466,16 +465,7 @@ function SalesOrderCreateForm({
   initialDraft?: SalesOrderDraftResumeData | null
 }) {
   const router = useRouter()
-  const contractsQuery = useContractsForNewSalesOrderQuery()
-  /** 公司商品池（SKU）；按 product_kind 拆分实物与卡券候选。 */
-  const sellableQuery = useMasterDataListQuery({
-    resource: "sellable-items",
-    lifecycleStatus: "enabled",
-  })
-  const voucherCategoriesQuery = useMasterDataListQuery({
-    resource: "voucher-categories",
-    lifecycleStatus: "enabled",
-  })
+  const queryClient = useQueryClient()
   const createMutation = useCreateSalesOrderMutation()
   const saveDraftMutation = useSaveSalesOrderDraftMutation()
   const submitMutation = useSubmitSalesOrderMutation()
@@ -506,104 +496,6 @@ function SalesOrderCreateForm({
         }
       : null
   )
-
-  const isVoucherKind = React.useCallback((kind: string | undefined) => {
-    const value = kind?.trim()
-    if (!value) return false
-    return (
-      value === "VOUCHER" ||
-      value === PRODUCT_KIND_LABELS.VOUCHER ||
-      value === "卡券"
-    )
-  }, [])
-
-  const toComboboxItem = React.useCallback(
-    (
-      p: {
-        stableId: string
-        stableNo: string
-        name: string
-        lifecycleStatusLabel: string
-        lifecycleTone: StatusTone
-        keyFacts: ReadonlyArray<{ label: string; value: string }>
-        currentRevisionId: string
-      },
-      options?: { forceUnit?: string }
-    ) => {
-      const baseUnit =
-        options?.forceUnit ??
-        p.keyFacts.find((f) => f.label === "基础单位")?.value ??
-        ""
-      const note =
-        p.keyFacts.find((f) => f.label === "说明")?.value ??
-        p.keyFacts.find((f) => f.label === "商品类型")?.value
-      return {
-        productId: p.stableId,
-        revisionId: p.currentRevisionId,
-        sku: p.stableNo,
-        name: p.name,
-        statusLabel: p.lifecycleStatusLabel,
-        statusTone: p.lifecycleTone,
-        baseUnit,
-        description:
-          [baseUnit ? `单位 ${baseUnit}` : null, note]
-            .filter(Boolean)
-            .join(" · ") || undefined,
-      }
-    },
-    []
-  )
-
-  /** 实物/服务：公司商品池中非卡券 SKU。 */
-  const productComboboxItems = React.useMemo(
-    () =>
-      (sellableQuery.data?.rows ?? [])
-        .filter((p) => !isVoucherKind(p.productKind))
-        .map((p) => toComboboxItem(p)),
-    [isVoucherKind, sellableQuery.data?.rows, toComboboxItem]
-  )
-
-  /**
-   * 卡券类目：优先正式卡券类目档案；若档案为空，回退公司商品池中的 VOUCHER SKU。
-   * 稳定身份均为 SKU id，供 voucher_category_sku_id / goods.sku_id 使用。
-   */
-  const voucherCategoryComboboxItems = React.useMemo(() => {
-    const fromProfiles = (voucherCategoriesQuery.data?.rows ?? []).map((p) =>
-      toComboboxItem(p, { forceUnit: "张" })
-    )
-    if (fromProfiles.length > 0) return fromProfiles
-    return (sellableQuery.data?.rows ?? [])
-      .filter((p) => isVoucherKind(p.productKind))
-      .map((p) => toComboboxItem(p, { forceUnit: "张" }))
-  }, [
-    isVoucherKind,
-    sellableQuery.data?.rows,
-    toComboboxItem,
-    voucherCategoriesQuery.data?.rows,
-  ])
-
-  const productPickerLoading =
-    sellableQuery.isPending || sellableQuery.isFetching
-  const voucherPickerLoading =
-    voucherCategoriesQuery.isPending ||
-    voucherCategoriesQuery.isFetching ||
-    (voucherCategoriesQuery.isSuccess &&
-      (voucherCategoriesQuery.data?.rows.length ?? 0) === 0 &&
-      sellableQuery.isPending)
-  const productPickerEmptyLabel = sellableQuery.isError
-    ? getErrorMessage(sellableQuery.error, "商品列表加载失败，请刷新重试")
-    : productComboboxItems.length === 0
-      ? "暂无可用的实物/服务 SKU（已排除卡券）"
-      : "没有符合条件的商品"
-  const voucherPickerEmptyLabel = voucherCategoriesQuery.isError &&
-    sellableQuery.isError
-    ? getErrorMessage(
-        voucherCategoriesQuery.error,
-        getErrorMessage(sellableQuery.error, "卡券类目加载失败，请刷新重试"),
-      )
-    : voucherCategoryComboboxItems.length === 0
-      ? "暂无可用的卡券类目"
-      : "没有符合条件的卡券类目"
 
   /**
    * 必须稳定：createEmptyLine 每次生成新 rowKey。
@@ -768,27 +660,6 @@ function SalesOrderCreateForm({
     return () => window.removeEventListener("beforeunload", onBeforeUnload)
   }, [dirty])
 
-  const contractComboboxItems = React.useMemo(
-    () =>
-      (contractsQuery.data ?? [])
-        .filter(
-          (contract) =>
-            !initialCustomerId ||
-            contract.customer.customerId === initialCustomerId
-        )
-        .map((c) => ({
-          contractId: c.contractId,
-          contractNo: c.contractNo,
-          customerName: c.customer.displayName,
-          statusLabel: c.statusLabel,
-          statusTone: c.statusTone,
-          revisionNo: c.revisionNo,
-          validTo: c.validTo,
-          settlementPartyName: c.settlementParty.displayName,
-        })),
-    [contractsQuery.data, initialCustomerId]
-  )
-
   React.useEffect(() => {
     const contract = contractQuery.data
     if (!contract) return
@@ -858,7 +729,7 @@ function SalesOrderCreateForm({
 
   const handleUploadSuccess = React.useCallback(
     async (result: UploadContractPdfResult) => {
-      await contractsQuery.refetch()
+      await queryClient.invalidateQueries({ queryKey: entitySelectorKeys.all })
       preferredRevisionRef.current = result.revisionId
       setSelectedContractId(result.contractId)
       form.setFieldValue("contractId", result.contractId)
@@ -867,7 +738,7 @@ function SalesOrderCreateForm({
       form.setFieldValue("customerName", "")
       form.setFieldValue("settlementEntity", "")
     },
-    [contractsQuery, form]
+    [form, queryClient]
   )
 
   const applyNature = React.useCallback(
@@ -915,19 +786,6 @@ function SalesOrderCreateForm({
             : { label: "未创建", tone: "neutral" }
         }
       />
-
-      {contractsQuery.isError ? (
-        <Alert variant="destructive">
-          <CircleAlertIcon aria-hidden="true" />
-          <AlertTitle>有效合同加载失败</AlertTitle>
-          <AlertDescription>
-            {getErrorMessage(
-              contractsQuery.error,
-              "暂时不能选择合同。可点击加号上传新合同，或刷新页面后重试。",
-            )}
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       {profileQuery.isError ? (
         <Alert variant="destructive">
@@ -1006,31 +864,17 @@ function SalesOrderCreateForm({
                               </FieldLabel>
                               <div className="flex items-start gap-2">
                                 <div className="min-w-0 flex-1">
-                                  <ContractCombobox
+                                  <ContractSearchCombobox
                                     value={field.state.value || undefined}
                                     onValueChange={(id) => {
                                       const next = id ?? ""
                                       field.handleChange(next)
                                       handleContractChange(next)
                                     }}
-                                    contracts={contractComboboxItems}
-                                    disabled={
-                                      contractsQuery.isPending ||
-                                      contractsQuery.isError
-                                    }
-                                    loading={contractsQuery.isPending}
-                                    placeholder={
-                                      contractsQuery.isPending
-                                        ? "正在加载有效合同…"
-                                        : contractComboboxItems.length > 0
-                                          ? "搜索合同编号或客户"
-                                          : "暂无可用合同，请点加号上传"
-                                    }
-                                    emptyLabel={
-                                      contractComboboxItems.length > 0
-                                        ? "没有符合条件的合同"
-                                        : "暂无可用合同，请点加号上传"
-                                    }
+                                    customerId={initialCustomerId || undefined}
+                                    selectableOnly
+                                    placeholder="搜索合同编号或客户"
+                                    emptyLabel="暂无可用合同，请点加号上传"
                                   />
                                 </div>
                                 <Button
@@ -1267,15 +1111,13 @@ function SalesOrderCreateForm({
                                 name={`lineItems[${rowIndex}].sku`}
                               >
                                 {(field) => (
-                                  <ProductCombobox
+                                  <VoucherCategorySearchCombobox
                                     value={field.state.value || undefined}
                                     onValueChange={(id) => {
-                                      const category =
-                                        voucherCategoryComboboxItems.find(
-                                          (p) => p.productId === id
-                                        )
                                       // 提交 voucher_category_sku_id 用 SKU 稳定 id
                                       field.handleChange(id ?? "")
+                                    }}
+                                    onItemChange={(category) => {
                                       form.setFieldValue(
                                         `lineItems[${rowIndex}].skuRevisionId`,
                                         category?.revisionId ?? ""
@@ -1289,10 +1131,24 @@ function SalesOrderCreateForm({
                                         "张"
                                       )
                                     }}
-                                    products={voucherCategoryComboboxItems}
-                                    loading={voucherPickerLoading}
+                                    selectedItem={
+                                      values.lineItems[rowIndex]?.sku
+                                        ? {
+                                            productId:
+                                              values.lineItems[rowIndex].sku,
+                                            revisionId:
+                                              values.lineItems[rowIndex]
+                                                .skuRevisionId,
+                                            sku: values.lineItems[rowIndex].sku,
+                                            name:
+                                              values.lineItems[rowIndex].name ||
+                                              values.lineItems[rowIndex].sku,
+                                            baseUnit: "张",
+                                          }
+                                        : undefined
+                                    }
                                     placeholder="搜索卡券类目"
-                                    emptyLabel={voucherPickerEmptyLabel}
+                                    emptyLabel="暂无可用的卡券类目"
                                   />
                                 )}
                               </form.AppField>
@@ -1303,15 +1159,13 @@ function SalesOrderCreateForm({
                                 name={`lineItems[${rowIndex}].sku`}
                               >
                                 {(field) => (
-                                  <ProductCombobox
+                                  <SellableSkuSearchCombobox
                                     value={field.state.value || undefined}
                                     onValueChange={(id) => {
-                                      const product =
-                                        productComboboxItems.find(
-                                          (p) => p.productId === id
-                                        )
                                       // 公司商品池稳定身份 = sku_id
                                       field.handleChange(id ?? "")
+                                    }}
+                                    onItemChange={(product) => {
                                       form.setFieldValue(
                                         `lineItems[${rowIndex}].skuRevisionId`,
                                         product?.revisionId ?? ""
@@ -1325,10 +1179,26 @@ function SalesOrderCreateForm({
                                         product?.baseUnit ?? ""
                                       )
                                     }}
-                                    products={productComboboxItems}
-                                    loading={productPickerLoading}
+                                    excludeProductKind="VOUCHER"
+                                    selectedItem={
+                                      values.lineItems[rowIndex]?.sku
+                                        ? {
+                                            productId:
+                                              values.lineItems[rowIndex].sku,
+                                            revisionId:
+                                              values.lineItems[rowIndex]
+                                                .skuRevisionId,
+                                            sku: values.lineItems[rowIndex].sku,
+                                            name:
+                                              values.lineItems[rowIndex].name ||
+                                              values.lineItems[rowIndex].sku,
+                                            baseUnit:
+                                              values.lineItems[rowIndex].unit,
+                                          }
+                                        : undefined
+                                    }
                                     placeholder="搜索 SKU 或商品名称"
-                                    emptyLabel={productPickerEmptyLabel}
+                                    emptyLabel="暂无可用的实物/服务 SKU（已排除卡券）"
                                   />
                                 )}
                               </form.AppField>
