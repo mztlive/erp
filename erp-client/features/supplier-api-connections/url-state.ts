@@ -1,7 +1,6 @@
 import type {
   ConnectionEnvironment,
   ConnectionSection,
-  HealthResult,
 } from "@/features/supplier-api-connections/types"
 import { SECTIONS } from "@/features/supplier-api-connections/types"
 import { createUrlStateCodec } from "@/lib/url-state"
@@ -51,18 +50,3 @@ const codec = createUrlStateCodec<ConnectionsUrlState>([
 
 export const parseConnectionsSearchParams = codec.parse
 export const buildConnectionsSearchParams = codec.build
-
-export function parseHealthFilter(raw?: string): HealthResult | undefined {
-  if (
-    raw === "SUCCESS" ||
-    raw === "FAILED" ||
-    raw === "PARTIAL" ||
-    raw === "UNCHECKED" ||
-    raw === "STALE" ||
-    raw === "AUTH_FAILED" ||
-    raw === "UNKNOWN"
-  ) {
-    return raw
-  }
-  return undefined
-}

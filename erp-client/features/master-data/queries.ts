@@ -15,8 +15,6 @@ import {
   fetchProductFilterOptions,
   fetchProductListSkus,
   fetchSkuSupplierCounts,
-  queryMasterDataIdempotency,
-  revealMasterDataSensitive,
   updateProductListingStatus,
 } from "@/features/master-data/api"
 import type {
@@ -159,18 +157,5 @@ export function useProductListingMutation() {
     onSuccess: async () => {
       await invalidateMasterDataCaches(queryClient)
     },
-  })
-}
-
-export function useQueryMasterDataIdempotencyMutation() {
-  return useMutation({
-    mutationFn: (idempotencyKey: string) =>
-      queryMasterDataIdempotency(idempotencyKey),
-  })
-}
-
-export function useRevealMasterDataSensitiveMutation() {
-  return useMutation({
-    mutationFn: (revealToken: string) => revealMasterDataSensitive(revealToken),
   })
 }

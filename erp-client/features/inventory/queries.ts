@@ -6,15 +6,13 @@ import {
   createAdjustmentDraft,
   fetchBalanceDetail,
   fetchInventoryList,
-  getAdjustmentDraft,
   resolveAdjustmentUnknown,
-  saveAdjustmentDraft,
   startInventoryExport,
   submitAdjustment,
 } from "@/features/inventory/api"
 import type { InventoryQuery } from "@/features/inventory/types"
 
-export const inventoryKeys = {
+const inventoryKeys = {
   all: ["inventory"] as const,
   list: (query: InventoryQuery) =>
     [...inventoryKeys.all, "list", query] as const,
@@ -43,32 +41,12 @@ export function useBalanceDetailQuery(balanceId: string | null) {
   })
 }
 
-export function useAdjustmentDraftQuery(stockAdjustmentId: string | null) {
-  return useQuery({
-    queryKey: inventoryKeys.draft(stockAdjustmentId ?? ""),
-    queryFn: () => getAdjustmentDraft(stockAdjustmentId!),
-    enabled: Boolean(stockAdjustmentId),
-  })
-}
-
 export function useCreateAdjustmentDraftMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: createAdjustmentDraft,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: inventoryKeys.all })
-    },
-  })
-}
-
-export function useSaveAdjustmentDraftMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: saveAdjustmentDraft,
-    onSuccess: async (draft) => {
-      await queryClient.invalidateQueries({
-        queryKey: inventoryKeys.draft(draft.stockAdjustmentId),
-      })
     },
   })
 }

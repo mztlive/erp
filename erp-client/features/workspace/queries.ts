@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { fetchWorkspaceDashboard } from "@/features/workspace/api"
 import type { TodayWorkspaceQuery } from "@/features/workspace/types"
 
-export const workspaceHomeKeys = {
+const workspaceHomeKeys = {
   all: ["workspace-home"] as const,
   dashboard: (query: TodayWorkspaceQuery) =>
     [...workspaceHomeKeys.all, "dashboard", query] as const,

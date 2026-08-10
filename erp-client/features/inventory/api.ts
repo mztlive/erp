@@ -1021,40 +1021,6 @@ export async function createAdjustmentDraft(input: {
   }
 }
 
-export async function saveAdjustmentDraft(input: {
-  stockAdjustmentId: string
-  expectedEditVersion: number
-  reasonType: AdjustmentReasonType
-  reasonTypeLabel: string
-  direction: "increase" | "decrease"
-  quantity: string
-  note: string
-  occurredAt: string
-}): Promise<AdjustmentDraftView> {
-  // Backend UpdateStockAdjustmentRequest only supports reason_type + version (not lines/qty/note)
-  const updated = await apiPut<BackendStockAdjustment>(
-    `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}`,
-    {
-      version: input.expectedEditVersion,
-      reason_type: reasonTypeBackend(input.reasonType),
-    }
-  )
-  const full = await apiGet<BackendStockAdjustmentDetail>(
-    `/admin/stock-adjustments/${encodeURIComponent(updated.id)}`
-  )
-  const draft = toDraftView(full, full.adjustment.version)
-  return {
-    ...draft,
-    // preserve client fields backend does not store on update
-    quantity: input.quantity,
-    note: input.note,
-    occurredAt: input.occurredAt,
-    reasonType: input.reasonType,
-    reasonTypeLabel: input.reasonTypeLabel,
-    direction: input.direction,
-  }
-}
-
 export async function submitAdjustment(input: {
   stockAdjustmentId: string
   expectedBalanceLockVersion: number
@@ -1171,20 +1137,6 @@ export async function resolveAdjustmentUnknown(input: {
     status: "failed",
     code: "NO_PENDING",
     message: "未找到该任务号对应的处理中请求",
-  }
-}
-
-export async function getAdjustmentDraft(
-  stockAdjustmentId: string
-): Promise<AdjustmentDraftView | null> {
-  try {
-    const full = await apiGet<BackendStockAdjustmentDetail>(
-      `/admin/stock-adjustments/${encodeURIComponent(stockAdjustmentId)}`
-    )
-    return toDraftView(full, full.adjustment.version)
-  } catch (error) {
-    if (isApiError(error) && error.status === 404) return null
-    throw error
   }
 }
 

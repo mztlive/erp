@@ -14,7 +14,7 @@ export type AcceptanceOverallResult =
 
 export type AcceptanceStatus = "DRAFT" | "POSTED" | "REVERSED"
 
-export type AllocationDirection = "APPLY" | "REVERSE"
+type AllocationDirection = "APPLY" | "REVERSE"
 
 export type AcceptanceEligibleFact = {
   fulfillmentLineId: string
@@ -35,7 +35,7 @@ export type AcceptanceEligibleFact = {
   trackingNo?: string
 }
 
-export type AcceptanceAllocationRecord = {
+type AcceptanceAllocationRecord = {
   fulfillmentLineId: string
   fulfillmentNo: string
   fulfillmentFactType: FulfillmentFactType
@@ -44,7 +44,7 @@ export type AcceptanceAllocationRecord = {
   allocatedQuantity: string
 }
 
-export type AcceptanceLineRecord = {
+type AcceptanceLineRecord = {
   salesOrderLineId: string
   lineNo: number
   itemSnapshot: string
@@ -87,7 +87,7 @@ export type AcceptanceDraftLine = {
   }>
 }
 
-export type AcceptanceDraft = {
+type AcceptanceDraft = {
   acceptanceDraftId: string
   draftVersion: number
   salesOrderId: string

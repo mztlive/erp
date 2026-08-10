@@ -38,20 +38,20 @@ export type AllowedAction =
   | "EXPORT"
   | "VIEW_DETAIL"
 
-export type ActionBlocker = Readonly<{
+type ActionBlocker = Readonly<{
   action: AllowedAction | string
   code: string
   message: string
 }>
 
-export type StatusTone =
+type StatusTone =
   | "success"
   | "destructive"
   | "warning"
   | "info"
   | "neutral"
 
-export type CounterpartyOption = Readonly<{
+type CounterpartyOption = Readonly<{
   counterpartyPartyId: string
   counterpartyPartyName: string
   customerId: string
@@ -165,7 +165,7 @@ export type SalesInvoiceRow = Readonly<{
   canDelete: false
 }>
 
-export type CustomerAccountsMetrics = Readonly<{
+type CustomerAccountsMetrics = Readonly<{
   openReceivableTotal: string
   overdueReceivableTotal: string
   unallocatedReceiptTotal: string
@@ -173,7 +173,7 @@ export type CustomerAccountsMetrics = Readonly<{
   cardPendingReviewCount: number
 }>
 
-export type UnallocatedSections = Readonly<{
+type UnallocatedSections = Readonly<{
   receipts: readonly ReceiptRow[]
   invoices: readonly SalesInvoiceRow[]
   /** 两类余额不可相加 — 服务端仅分别返回 */
@@ -205,7 +205,7 @@ export type CustomerAccountsListView = Readonly<{
   }
 }>
 
-export type DetailKind = "receivable" | "receipt" | "invoice"
+type DetailKind = "receivable" | "receipt" | "invoice"
 
 export type CustomerAccountsDetailView = Readonly<{
   kind: DetailKind

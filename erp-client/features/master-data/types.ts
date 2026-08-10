@@ -41,7 +41,12 @@ export type ProductListingStatus =
   | "UNLISTED"
 export type ProductListingFilter = "listed" | "partially_listed" | "unlisted"
 export type ProductSkuCoverageFilter = "complete" | "partial" | "none"
-export type RevisionTiming = "CURRENT" | "FUTURE" | "HISTORICAL"
+export type SupplierQualificationHealth =
+  | "valid"
+  | "expiring_30"
+  | "expired"
+  | "not_registered"
+type RevisionTiming = "CURRENT" | "FUTURE" | "HISTORICAL"
 
 export type MasterDataSectionId =
   | "overview"
@@ -49,9 +54,9 @@ export type MasterDataSectionId =
   | "relations"
   | "audit"
 
-export type FieldVisibility = "full" | "masked" | "hidden"
+type FieldVisibility = "full" | "masked" | "hidden"
 
-export type SelectorEligibility = Readonly<{
+type SelectorEligibility = Readonly<{
   context: string
   contextLabel: string
   eligible: boolean
@@ -59,13 +64,13 @@ export type SelectorEligibility = Readonly<{
   reason?: string
 }>
 
-export type ActionBlocker = Readonly<{
+type ActionBlocker = Readonly<{
   action: string
   code: string
   message: string
 }>
 
-export type SensitiveFieldView = Readonly<{
+type SensitiveFieldView = Readonly<{
   label: string
   maskedValue: string
   revealToken?: string
@@ -156,6 +161,9 @@ export type MasterDataListQuery = Readonly<{
   productSupplyCoverage?: ProductSkuCoverageFilter
   productSalesPriceMin?: string
   productSalesPriceMax?: string
+  supplierCapabilityCodes?: readonly string[]
+  supplierQualificationTypes?: readonly string[]
+  supplierQualificationHealth?: SupplierQualificationHealth
 }>
 
 export type MasterDataListResult = Readonly<{
@@ -421,25 +429,6 @@ export type ProductDetailView = Readonly<{
   skus: readonly ProductSkuFields[]
 }>
 
-/**
- * `sku_revision` 记录：公司 SKU 修订。
- * `salesVisiblePriceGross` 是公司对销售可见的含税价；供应商成本、供给模式等
- * 归 W21 `supplier_offering_revision`，绝不写入 SKU 修订。
- */
-export type SkuRevisionRecord = Readonly<{
-  skuId: string
-  skuNo: string
-  specificationSignature: string
-  /** 对应 `sku_revision.sales_visible_price_gross`。 */
-  salesVisiblePriceGross?: string
-  marketPrice?: string
-  lifecycleStatus: LifecycleStatus
-  revisionId: string
-  effectiveFrom: string
-  recordedAt: string
-  isCurrent: boolean
-}>
-
 export type SellableItemFields = Readonly<{
   sku: string
   /** 采购发布给销售的公司商品池价格；不是任何一家供应商的成本。 */
@@ -555,7 +544,7 @@ export type SupplierFields = Readonly<{
   currentScore?: string
 }>
 
-export type WarehouseFields = Readonly<Record<string, never>>
+type WarehouseFields = Readonly<Record<string, never>>
 
 /**
  * 按资源强类型化的专属字段（对齐 W14 §4.3 / §5.2 / §8.2）。

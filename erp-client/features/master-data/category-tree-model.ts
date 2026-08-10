@@ -152,12 +152,3 @@ export function toBrandComboboxItems(rows: readonly MasterDataListItem[]) {
       statusTone: row.lifecycleTone,
     }))
 }
-
-export function findCategoryPathLabel(
-  rows: readonly MasterDataListItem[],
-  stableId: string
-): string | undefined {
-  const forest = buildCategoryForest(rows)
-  const flat = flattenCategoryForest(forest)
-  return flat.find((n) => n.item.stableId === stableId)?.pathLabel
-}

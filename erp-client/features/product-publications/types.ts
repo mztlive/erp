@@ -11,7 +11,7 @@ export type SafetyPauseCause =
   | "COST_CHANGE_UNCONFIRMED"
   | "CRITICAL_SUPPLY_CHANGE_UNCONFIRMED"
 
-export type SafetyPauseFollowUpWorkItemRef = {
+type SafetyPauseFollowUpWorkItemRef = {
   workItemId: string
   workItemType: "BUSINESS_EXCEPTION"
   businessObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
@@ -21,23 +21,19 @@ export type SafetyPauseFollowUpWorkItemRef = {
   handlerKey: string
 }
 
-export type SafetyPauseNoTaskBlocker = {
+type SafetyPauseNoTaskBlocker = {
   code: "NO_MANUAL_FOLLOW_UP_TASK_BY_CURRENT_POLICY"
   message: string
   evidenceReference: string
 }
 
-export type SafetyPauseReviewRegistrationBlocker = {
+type SafetyPauseReviewRegistrationBlocker = {
   code: "NORMAL_REVIEW_WORK_ITEM_TYPE_UNREGISTERED"
   message: string
   evidenceReference: string
 }
 
-export type SafetyPauseFollowUpBlocker =
-  | SafetyPauseNoTaskBlocker
-  | SafetyPauseReviewRegistrationBlocker
-
-export type SafetyPauseAffectedPublicationView =
+type SafetyPauseAffectedPublicationView =
   | {
       publicationId: string
       pauseArtifactKind: "REVISION"
@@ -53,7 +49,7 @@ export type SafetyPauseAffectedPublicationView =
       outboxMessageId: string
     }
 
-export type KnownSafetyPauseOperationBase = {
+type KnownSafetyPauseOperationBase = {
   operationId: string
   resultStatus: "COMMITTED" | "ALREADY_SAFE"
   sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
@@ -102,7 +98,7 @@ export type SystemSafetyPauseOperationView =
       committedAt?: never
     }
 
-export type PublicationCreationBlocker = {
+type PublicationCreationBlocker = {
   code: "PUBLICATION_IDENTITY_POLICY_UNCONFIRMED"
   message: string
 }
@@ -179,7 +175,7 @@ export type ProductPublicationListQuery = {
   pageSize?: number
 }
 
-export type FixedOfferingSummary = {
+type FixedOfferingSummary = {
   offeringRevisionId: string
   supplierName: string
   availability: string
@@ -301,7 +297,7 @@ export type ProductPublicationRevisionView = {
   createdBy: string
 }
 
-export type PublicationDeliveryView = {
+type PublicationDeliveryView = {
   deliveryId: string
   revisionId: string
   revisionNo: number
@@ -459,18 +455,6 @@ export type RetryDeliveryResult =
     }
   | { status: "blocked"; code: string; message: string }
   | { status: "unknown"; requestId: string; message: string }
-
-/** 仅供领域事件处理器调用；浏览器页面不得构造。 */
-export type SystemSafetyPauseTrigger = {
-  cause: SafetyPauseCause
-  sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
-  sourceObjectId: string
-  sourceVersion: string
-  subjectHash: string
-  affectedPublicationIds: string[]
-  occurredAt: string
-  idempotencyKey: string
-}
 
 export const PUBLICATION_STATUS_LABEL: Record<PublicationStatus, string> = {
   DRAFT: "草稿",

@@ -18,7 +18,6 @@ import type {
   WorkItemLease,
 } from "@/features/card-funds-review/types"
 import {
-  APPROVE_CONCLUSION_LABEL,
   REJECT_FOLLOW_UP_COLLABORATION,
 } from "@/features/card-funds-review/types"
 // ─── Backend DTOs ──────────────────────────────────────────────────────────
@@ -866,42 +865,3 @@ export async function saveCardFundsEvidence(input: {
   return { ok: true }
 }
 
-/** W11 列表辅助：卡券相关应收可靠性（从真实应收子账 review_status 读取）。 */
-export async function getW11FundsReliabilityFlags(): Promise<
-  ReadonlyArray<{
-    accountId: string
-    customerName: string
-    fundsReliability: string
-    note: string
-    reviewed: boolean
-  }>
-> {
-  const page = await apiGet<Page<BackendReceivableAccount>>(
-    "/admin/receivable-accounts",
-    {
-      review_status: "opening_pending",
-      page: 1,
-      page_size: 100,
-    }
-  )
-  const pending = page.items ?? []
-  const page2 = await apiGet<Page<BackendReceivableAccount>>(
-    "/admin/receivable-accounts",
-    {
-      review_status: "sync_delta_pending",
-      page: 1,
-      page_size: 100,
-    }
-  )
-  const delta = page2.items ?? []
-  return [...pending, ...delta].map((a) => ({
-    accountId: a.id,
-    customerName: a.customer_id,
-    fundsReliability: "UNRELIABLE_PENDING_REVIEW",
-    note: "卡券票款待复核，指标暂不可靠",
-    reviewed: false,
-  }))
-}
-
-// Re-export label map for page imports that historically came through api
-export { APPROVE_CONCLUSION_LABEL }

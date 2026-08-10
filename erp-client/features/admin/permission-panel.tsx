@@ -41,7 +41,7 @@ const SYSTEM_GROUP_NAMES = new Set([
 
 export type PermissionPanelTab = "business" | "system"
 
-export const PERMISSION_PANEL_TAB_LABEL: Record<PermissionPanelTab, string> = {
+const PERMISSION_PANEL_TAB_LABEL: Record<PermissionPanelTab, string> = {
   business: "业务",
   system: "系统",
 }
@@ -67,15 +67,6 @@ const BUSINESS_GROUPS: readonly PermissionGroupOption[] =
   PERMISSION_CATALOG.filter((group) => !isSystemGroup(group.name))
 const SYSTEM_GROUPS: readonly PermissionGroupOption[] =
   PERMISSION_CATALOG.filter((group) => isSystemGroup(group.name))
-
-/** 权限字符串 → 描述文案；目录未收录时回落为权限码本身。 */
-export function permissionDescription(code: string): string {
-  for (const group of PERMISSION_CATALOG) {
-    const hit = group.items.find((item) => item.code === code)
-    if (hit) return hit.description
-  }
-  return code
-}
 
 function matchesKeyword(item: PermissionItemOption, q: string): boolean {
   return [item.code, item.description, item.path]

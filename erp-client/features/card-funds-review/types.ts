@@ -4,7 +4,7 @@ export type ReviewType = "OPENING" | "SYNC_DELTA"
 
 export type WorkItemType = "CARD_FUNDS_REVIEW" | "CARD_FUNDS_DELTA_REVIEW"
 
-export type ReviewResult = "APPROVED" | "REJECTED"
+type ReviewResult = "APPROVED" | "REJECTED"
 
 export type ApproveConclusion =
   | "NO_HISTORY_FROM_ZERO"
@@ -16,12 +16,12 @@ export type RejectReasonCode =
   | "COUNTERPARTY_UNCLEAR"
   | "OTHER"
 
-export type FundsReliability =
+type FundsReliability =
   | "VERIFIED"
   | "UNRELIABLE_PENDING_REVIEW"
   | "STALE_FINGERPRINT"
 
-export type ReceiptSummary = Readonly<{
+type ReceiptSummary = Readonly<{
   receiptId: string
   receiptNo: string
   receivedAt: string
@@ -31,7 +31,7 @@ export type ReceiptSummary = Readonly<{
   reversed: boolean
 }>
 
-export type InvoiceSummary = Readonly<{
+type InvoiceSummary = Readonly<{
   invoiceId: string
   invoiceNo: string
   direction: "BLUE" | "RED"
@@ -43,7 +43,7 @@ export type InvoiceSummary = Readonly<{
   reversed: boolean
 }>
 
-export type ReviewHistoryItem = Readonly<{
+type ReviewHistoryItem = Readonly<{
   reviewId: string
   reviewNo: number
   reviewType: ReviewType
@@ -57,7 +57,7 @@ export type ReviewHistoryItem = Readonly<{
   readOnly: true
 }>
 
-export type DiffChange = Readonly<{
+type DiffChange = Readonly<{
   id: string
   field: string
   before: string
@@ -67,7 +67,7 @@ export type DiffChange = Readonly<{
   occurredAt?: string
 }>
 
-export type ReviewDifference = Readonly<{
+type ReviewDifference = Readonly<{
   title: string
   baselineReviewNo?: number
   baselineSubjectHash?: string
@@ -75,7 +75,7 @@ export type ReviewDifference = Readonly<{
   invalidatedAt?: string
 }>
 
-export type EvidenceDraft = Readonly<{
+type EvidenceDraft = Readonly<{
   evidenceDocumentIds: string[]
   evidenceReferences: string[]
   comment?: string
@@ -239,7 +239,7 @@ export type CardFundsReviewDecision =
       expectedSubjectHash: string
     }
 
-export type CardFundsReviewBusinessResult = Readonly<{
+type CardFundsReviewBusinessResult = Readonly<{
   receivableFundsReviewId: string
   receivableAccountId: string
   reviewNo: number

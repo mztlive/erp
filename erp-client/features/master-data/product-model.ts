@@ -8,11 +8,10 @@ import type {
   ProductSkuFields,
   ProductSpecDimension,
 } from "@/features/master-data/types"
-import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 
 /** 笛卡尔积生成规格取值组合。无规格时返回单行空组合。 */
-export function cartesianSpecValues(
+function cartesianSpecValues(
   specs: readonly ProductSpecDimension[]
 ): readonly (readonly string[])[] {
   const active = specs
@@ -38,7 +37,7 @@ export function cartesianSpecValues(
   )
 }
 
-export function formatSpecLabel(
+function formatSpecLabel(
   specs: readonly ProductSpecDimension[],
   attributeValues: readonly string[]
 ): string {
@@ -59,7 +58,7 @@ export function formatSpecLabel(
  * 无规格时返回固定空签名（同一 SPU 最多一个无规格 SKU）。
  * 前后端均以 SPU 局部规格名 / 取值文本计算，不要求预先维护全局规格字典。
  */
-export function computeSpecificationSignature(
+function computeSpecificationSignature(
   specs: readonly ProductSpecDimension[],
   attributeValues: readonly string[]
 ): string {
@@ -155,65 +154,6 @@ export function emptyProductFields(): ProductFields {
       },
     ],
   }
-}
-
-export function productSpecsSummary(
-  specs: readonly ProductSpecDimension[]
-): string {
-  const active = specs.filter(
-    (s) => s.name.trim() && s.values.some((v) => v.trim())
-  )
-  if (active.length === 0) return "无规格（单 SKU）"
-  return active
-    .map((s) => `${s.name}（${s.values.filter((v) => v.trim()).length}）`)
-    .join(" · ")
-}
-
-export function joinMediaNames(names: readonly string[] | undefined): string {
-  return (names ?? []).filter(Boolean).join(", ")
-}
-
-export function splitMediaNames(value: string | undefined): string[] {
-  if (!value?.trim()) return []
-  return value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-
-/** 列表/概览用的 SPU 关键事实（不含规格标识、不含 SKU 主图）。 */
-export function productListFacts(fields: ProductFields): ReadonlyArray<{
-  label: string
-  value: string
-}> {
-  const facts: { label: string; value: string }[] = [
-    { label: "商品编号", value: fields.productNo },
-    { label: "基础单位", value: fields.baseUnit },
-    {
-      label: "商品类型",
-      value: fields.productKind ? PRODUCT_KIND_LABELS[fields.productKind] : "",
-    },
-    { label: "分类", value: fields.category },
-    { label: "品牌", value: fields.brand },
-  ]
-  facts.push({
-    label: "规格",
-    value: productSpecsSummary(fields.specs),
-  })
-  facts.push({ label: "SKU 数", value: String(fields.skus.length) })
-  if (fields.carouselImages.length > 0) {
-    facts.push({
-      label: "轮播图",
-      value: `${fields.carouselImages.length} 张`,
-    })
-  }
-  if (fields.detailImages.length > 0) {
-    facts.push({
-      label: "详情图",
-      value: `${fields.detailImages.length} 张`,
-    })
-  }
-  return facts.filter((f) => f.value)
 }
 
 /** 校验：每个启用 SKU 必须有主图；SPU 级字段完整。 */

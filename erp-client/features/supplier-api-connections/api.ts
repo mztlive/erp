@@ -565,28 +565,6 @@ export async function bindEndpointReference(input: {
   }
 }
 
-export async function confirmCapabilityRequirement(input: {
-  connectionId: string
-  capabilityCode: CapabilityCode
-  requirement: "REQUIRED" | "NOT_REQUIRED"
-  reasonCode: string
-  expectedConnectionVersion: string
-  expectedCapabilityVersion: string
-  operationId: string
-  idempotencyKey: string
-}): Promise<FormalOutcome> {
-  // 后端无独立「业务能力需求确认」端点 — 登记 backend_gap；
-  // 不调用 UPDATE_CAPABILITIES（会改启停），仅返回成功占位并提示审计缺口。
-  return {
-    status: "blocked",
-    code: "BACKEND_GAP",
-    title: "业务能力需求确认尚未接入",
-    message:
-      "后端暂无采购业务能力需求确认接口；能力启停请由管理员通过能力配置接口处理。",
-    reference: input.operationId,
-  }
-}
-
 export async function updateCapabilities(input: {
   connectionId: string
   changes: Array<{ code: CapabilityCode; enabled: boolean }>
@@ -752,13 +730,4 @@ export async function enableConnection(input: {
     reference: updated.connection_code,
     connectionVersion: String(updated.version),
   }
-}
-
-export function getActiveJob(jobId: string) {
-  void jobId
-  return null
-}
-
-export function referenceStateLabel(state: ReferenceState): string {
-  return REFERENCE_STATE_LABEL[state]
 }

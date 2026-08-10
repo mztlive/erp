@@ -12,7 +12,7 @@ import type {
   ImportIssueQuery,
 } from "@/features/import-opening/types"
 
-export const importOpeningKeys = {
+const importOpeningKeys = {
   all: ["import-opening"] as const,
   list: (query: ImportBatchListQuery) =>
     [...importOpeningKeys.all, "list", query] as const,

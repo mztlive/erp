@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   bindCredentialReference,
   bindEndpointReference,
-  confirmCapabilityRequirement,
   createConnection,
   disableConnection,
   enableConnection,
@@ -17,7 +16,7 @@ import {
   type ListQueryInput,
 } from "@/features/supplier-api-connections/api"
 
-export const supplierConnectionKeys = {
+const supplierConnectionKeys = {
   all: ["supplier-api-connections"] as const,
   list: (input: ListQueryInput) =>
     [...supplierConnectionKeys.all, "list", input] as const,
@@ -73,16 +72,6 @@ export function useBindEndpointMutation() {
   const invalidate = useInvalidateAll()
   return useMutation({
     mutationFn: bindEndpointReference,
-    onSuccess: async (result) => {
-      if (result.status === "succeeded") await invalidate()
-    },
-  })
-}
-
-export function useConfirmCapabilityMutation() {
-  const invalidate = useInvalidateAll()
-  return useMutation({
-    mutationFn: confirmCapabilityRequirement,
     onSuccess: async (result) => {
       if (result.status === "succeeded") await invalidate()
     },

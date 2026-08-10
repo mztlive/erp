@@ -1005,9 +1005,3 @@ export async function submitBulkProjectionCommand(
   bulkJobs.set(jobId, job)
   return job
 }
-
-export async function fetchBulkJob(
-  jobId: string
-): Promise<BulkProjectionJob | null> {
-  return bulkJobs.get(jobId) ?? null
-}

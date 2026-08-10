@@ -10,7 +10,7 @@ import {
 } from "@/features/card-business-analytics/api"
 import type { CardBusinessAnalyticsQuery } from "@/features/card-business-analytics/types"
 
-export const cardBusinessKeys = {
+const cardBusinessKeys = {
   all: ["card-business-analytics"] as const,
   dateBasis: (q: DateBasisConfigQuery) =>
     [...cardBusinessKeys.all, "date-basis", q] as const,

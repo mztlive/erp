@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
-  assignMappingTask,
   claimMappingWorkItem,
   confirmMapping,
   deferMapping,
@@ -21,7 +20,7 @@ import type {
 } from "@/features/mall-sync/types"
 import { isAuthenticated } from "@/lib/api"
 
-export const mallSyncKeys = {
+const mallSyncKeys = {
   all: ["mall-sync"] as const,
   page: (input: MallSyncQueryInput) =>
     [...mallSyncKeys.all, "page", input] as const,
@@ -145,18 +144,6 @@ export function useResolveUnknownReapplyMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: resolveUnknownReapply,
-    onSuccess: async (result) => {
-      if (result.status === "succeeded") {
-        await queryClient.invalidateQueries({ queryKey: mallSyncKeys.all })
-      }
-    },
-  })
-}
-
-export function useAssignMappingMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: assignMappingTask,
     onSuccess: async (result) => {
       if (result.status === "succeeded") {
         await queryClient.invalidateQueries({ queryKey: mallSyncKeys.all })

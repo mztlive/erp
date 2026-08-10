@@ -22,7 +22,7 @@ import type {
   SupplierOrderListQuery,
 } from "@/features/supplier-orders/types"
 
-export const supplierOrderKeys = {
+const supplierOrderKeys = {
   all: ["supplier-orders"] as const,
   list: (query: SupplierOrderListQuery) =>
     [...supplierOrderKeys.all, "list", query] as const,

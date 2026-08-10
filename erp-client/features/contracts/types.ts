@@ -14,25 +14,25 @@ export type ContractAction =
   /** 预留能力：后端未下发该动作时前端不展示入口。 */
   | "TERMINATE"
 
-export type ActionBlocker = {
+type ActionBlocker = {
   action: string
   code: string
   message: string
 }
 
-export type ObjectReference = {
+type ObjectReference = {
   id: string
   displayName: string
   reference?: string
 }
 
-export type PaymentTermView = {
+type PaymentTermView = {
   label: string
   days?: number
   description: string
 }
 
-export type InvoiceRequirementView = {
+type InvoiceRequirementView = {
   titleType: string
   taxIdMasked?: string
   contentSummary: string
@@ -51,7 +51,7 @@ export type ContractAttachmentView = {
   canDownload: boolean
 }
 
-export type RelatedSalesOrderSummary = {
+type RelatedSalesOrderSummary = {
   salesOrderId: string
   documentNumber: string
   natureLabel: string
@@ -76,7 +76,7 @@ export type ContractRevisionSummary = {
   diffSummary?: Array<{ field: string; before: string; after: string }>
 }
 
-export type AuditEventView = {
+type AuditEventView = {
   id: string
   action: string
   actorLabel: string

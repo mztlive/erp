@@ -20,7 +20,7 @@ import {
   type ListQueryInput,
 } from "@/features/supplier-settlements/api"
 
-export const settlementKeys = {
+const settlementKeys = {
   all: ["supplier-settlements"] as const,
   list: (input: ListQueryInput) =>
     [...settlementKeys.all, "list", input] as const,

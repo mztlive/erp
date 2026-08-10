@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
-  fetchBulkJob,
   fetchExecutionProjectionDetail,
   fetchExecutionProjectionList,
   fetchSalesOrderCollaboration,
@@ -14,7 +13,7 @@ import {
 } from "@/features/execution-projections/api"
 import type { ExecutionProjectionListQuery } from "@/features/execution-projections/types"
 
-export const executionProjectionKeys = {
+const executionProjectionKeys = {
   all: ["execution-projections"] as const,
   list: (query: ExecutionProjectionListQuery) =>
     [...executionProjectionKeys.all, "list", query] as const,
@@ -87,13 +86,5 @@ export function useBulkProjectionCommandMutation() {
         queryKey: executionProjectionKeys.all,
       })
     },
-  })
-}
-
-export function useBulkJobQuery(jobId: string | undefined) {
-  return useQuery({
-    queryKey: executionProjectionKeys.bulkJob(jobId ?? ""),
-    queryFn: () => fetchBulkJob(jobId!),
-    enabled: Boolean(jobId),
   })
 }

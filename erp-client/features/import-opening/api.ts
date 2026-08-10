@@ -7,7 +7,6 @@
 import { apiGet } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 import type {
-  FormalActionResponse,
   ImportBatchListQuery,
   ImportBatchListView,
   ImportBatchStatus,
@@ -23,7 +22,6 @@ import type {
 } from "@/features/import-opening/types"
 import {
   BATCH_STATUS_LABEL,
-  CONFIRMATION_SCOPE_LABEL,
   OBJECT_CODE_LABEL,
 } from "@/features/import-opening/types"
 
@@ -489,41 +487,8 @@ export async function fetchImportIssues(
   }
 }
 
-/** 上传接收确认 — 后端无专用接口（创建走 POST batches） */
-export async function acknowledgeUploadReceived(input: {
-  batchId: string
-}): Promise<FormalActionResponse> {
-  // 读详情确认批次存在即可
-  await apiGet(`/admin/legacy-import-batches/${input.batchId}`)
-  return {
-    status: "succeeded",
-    message: "批次已存在于后端；上传资产登记请走 file_asset + 批次创建契约。",
-    batchId: input.batchId,
-    reference: `recv-${input.batchId}`,
-  }
-}
-
 export function formatObjectSet(codes: readonly string[]): string {
   return codes
     .map((c) => OBJECT_CODE_LABEL[c as keyof typeof OBJECT_CODE_LABEL] ?? c)
     .join("、")
-}
-
-export function formatConfirmationSummary(
-  confirmations: readonly ImportConfirmationView[]
-): string {
-  return confirmations
-    .map(
-      (c) =>
-        `${CONFIRMATION_SCOPE_LABEL[c.scope]}：${
-          c.result === "CONFIRMED"
-            ? "已确认"
-            : c.result === "REJECTED"
-              ? "已退回"
-              : c.result === "INVALIDATED"
-                ? "已失效"
-                : "待确认"
-        }`
-    )
-    .join("；")
 }

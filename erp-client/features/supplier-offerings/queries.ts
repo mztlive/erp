@@ -16,7 +16,7 @@ import type {
   UpdateOfferingAvailabilityInput,
 } from "@/features/supplier-offerings/types"
 
-export const supplierOfferingKeys = {
+const supplierOfferingKeys = {
   all: ["supplier-offerings"] as const,
   list: (query: SupplierOfferingListQuery) =>
     [...supplierOfferingKeys.all, "list", query] as const,

@@ -6,7 +6,7 @@ const SCOPE_SLUGS: QueueScopeSlug[] = ["mine", "role_pool", "team", "hold"]
  * 当前任务焦点不落地址栏（内部 ID 禁止进 URL），经 sessionStorage 传递，
  * 支持 W01 等来源页的深链聚焦（P2-5 / 内部 ID 清零契约）。
  */
-export const W02_FOCUS_SESSION_KEY = "w02.focus-work-item"
+const W02_FOCUS_SESSION_KEY = "w02.focus-work-item"
 
 export function readW02FocusId(): string | null {
   if (typeof window === "undefined") return null

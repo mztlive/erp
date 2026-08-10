@@ -6,7 +6,6 @@
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api"
 import type {
-  AdminAccount,
   AdminRole,
   CreateAdminPayload,
   CreateRolePayload,
@@ -14,10 +13,6 @@ import type {
   UpdateAdminRolePayload,
   UpdateRolePayload,
 } from "@/features/admin/types"
-
-/** 账号列表：后端一次返回全部管理员（无分页），筛选/分页在前端完成。 */
-export const fetchAdmins = (): Promise<AdminAccount[]> =>
-  apiGet<AdminAccount[]>("/admin/admins")
 
 /** 角色列表：含权限策略，后端一次返回全部角色。 */
 export const fetchRoles = (): Promise<AdminRole[]> =>

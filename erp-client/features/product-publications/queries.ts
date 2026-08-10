@@ -11,7 +11,7 @@ import {
 } from "@/features/product-publications/api"
 import type { ProductPublicationListQuery } from "@/features/product-publications/types"
 
-export const publicationKeys = {
+const publicationKeys = {
   all: ["product-publications"] as const,
   list: (query: ProductPublicationListQuery) =>
     [...publicationKeys.all, "list", query] as const,

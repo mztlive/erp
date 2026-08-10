@@ -7,7 +7,6 @@ import {
   createRole,
   deleteAdmin,
   deleteRole,
-  fetchAdmins,
   fetchAssignableRoles,
   fetchRoles,
   updateAdmin,
@@ -15,27 +14,17 @@ import {
   updateRole,
 } from "@/features/admin/api"
 import type {
-  AdminAccount,
-  AdminRole,
   CreateAdminPayload,
   CreateRolePayload,
   UpdateAdminPayload,
   UpdateRolePayload,
 } from "@/features/admin/types"
 
-export const adminKeys = {
+const adminKeys = {
   all: ["admin"] as const,
   admins: () => [...adminKeys.all, "admins"] as const,
   roles: () => [...adminKeys.all, "roles"] as const,
   assignableRoles: () => [...adminKeys.all, "roles", "assignable"] as const,
-}
-
-/** 管理员账号列表。 */
-export function useAdminsQuery() {
-  return useQuery({
-    queryKey: adminKeys.admins(),
-    queryFn: fetchAdmins,
-  })
 }
 
 /** 全部角色列表（账号页用于展示角色名、角色页用于列表）。 */
@@ -133,38 +122,4 @@ export function useRoleMutations() {
     isUpdating: update.isPending,
     isDeleting: remove.isPending,
   }
-}
-
-/** 账号列表按关键词过滤（账号 / 姓名 / 角色名）。 */
-export function filterAdmins(
-  admins: readonly AdminAccount[],
-  roleNameById: ReadonlyMap<string, string>,
-  query: string
-): AdminAccount[] {
-  const q = query.trim().toLowerCase()
-  if (!q) return [...admins]
-  return admins.filter((admin) => {
-    const roleNames = admin.role_ids
-      .map((id) => roleNameById.get(id) ?? id)
-      .join(" ")
-    return [admin.account, admin.name, admin.id, roleNames]
-      .join(" ")
-      .toLowerCase()
-      .includes(q)
-  })
-}
-
-/** 角色列表按关键词过滤（名称 / 权限字符串）。 */
-export function filterRoles(
-  roles: readonly AdminRole[],
-  query: string
-): AdminRole[] {
-  const q = query.trim().toLowerCase()
-  if (!q) return [...roles]
-  return roles.filter((role) =>
-    [role.name, role.id, role.permissions.join(" ")]
-      .join(" ")
-      .toLowerCase()
-      .includes(q)
-  )
 }

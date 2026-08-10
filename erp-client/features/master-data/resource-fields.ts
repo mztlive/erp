@@ -14,7 +14,7 @@ import type {
   MasterDataResourceFields,
 } from "@/features/master-data/types"
 
-export const REGION_OPTIONS = [
+const REGION_OPTIONS = [
   "华东",
   "华南",
   "华北",
@@ -51,7 +51,7 @@ export const SUPPLIER_CAPABILITY_OPTIONS = [
   "印刷",
 ] as const
 
-export const PRODUCT_KIND_OPTIONS = [
+const PRODUCT_KIND_OPTIONS = [
   "实物",
   "虚拟",
   "服务",
@@ -59,7 +59,7 @@ export const PRODUCT_KIND_OPTIONS = [
 ] as const
 
 /** 计量单位允许的数量小数位（对齐 unit_of_measure.quantity_scale 0–6）。 */
-export const QUANTITY_SCALE_OPTIONS = [
+const QUANTITY_SCALE_OPTIONS = [
   "0",
   "1",
   "2",
@@ -69,7 +69,7 @@ export const QUANTITY_SCALE_OPTIONS = [
   "6",
 ] as const
 
-export type ResourceFieldKind =
+type ResourceFieldKind =
   | "text"
   | "textarea"
   | "select"
@@ -685,57 +685,6 @@ export function buildResourceFields(
     case "warehouses":
       return {}
   }
-}
-
-/** 媒体类字段展示值：空则跳过；列表类显示张数摘要。 */
-function formatFieldDisplayValue(
-  def: ResourceFieldDef,
-  value: string | undefined
-): string | null {
-  if (!value?.trim()) return null
-  if (def.kind === "media-list") {
-    const count = value
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean).length
-    return count > 0 ? `${value}（${count} 张）` : null
-  }
-  return value.trim()
-}
-
-/** 强类型字段 → 展示事实（跳过未填写的字段），写入版本 fields。 */
-export function resourceFieldsToFacts(
-  resource: MasterDataResource,
-  fields: MasterDataResourceFields[MasterDataResource] | undefined
-): ReadonlyArray<{ label: string; value: string }> {
-  if (!fields) return []
-  return RESOURCE_FIELDS[resource]
-    .map((def) => {
-      const raw = (fields as Readonly<Record<string, string | undefined>>)[
-        def.key
-      ]
-      const value = formatFieldDisplayValue(def, raw)
-      return value ? { label: def.label, value } : null
-    })
-    .filter((fact): fact is { label: string; value: string } => fact !== null)
-}
-
-/** 强类型字段 → 列表关键信息（只保留 listFact）。 */
-export function resourceFieldsToListFacts(
-  resource: MasterDataResource,
-  fields: MasterDataResourceFields[MasterDataResource] | undefined
-): ReadonlyArray<{ label: string; value: string }> {
-  if (!fields) return []
-  return RESOURCE_FIELDS[resource]
-    .filter((def) => def.listFact)
-    .map((def) => {
-      const raw = (fields as Readonly<Record<string, string | undefined>>)[
-        def.key
-      ]
-      const value = formatFieldDisplayValue(def, raw)
-      return value ? { label: def.label, value } : null
-    })
-    .filter((fact): fact is { label: string; value: string } => fact !== null)
 }
 
 /** 解析 media-list 逗号分隔文件名。 */

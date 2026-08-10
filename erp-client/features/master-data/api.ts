@@ -1496,8 +1496,19 @@ async function listSuppliers(
   const suppliers = await fetchAllPages<SupplierDto>("/admin/suppliers", {
     status,
     keyword: query.q || undefined,
+    capability_codes: joinFilterCodes(query.supplierCapabilityCodes),
+    qualification_types: joinFilterCodes(query.supplierQualificationTypes),
+    qualification_health: query.supplierQualificationHealth,
   })
   return suppliers.map((supplier) => mapSupplierRow(supplier))
+}
+
+/** 规范化多选条件，供后端以逗号分隔的稳定查询参数接收。 */
+function joinFilterCodes(values: readonly string[] | undefined): string | undefined {
+  if (!values?.length) return undefined
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
+    .sort()
+    .join(",")
 }
 
 // ---------------------------------------------------------------------------
@@ -3376,30 +3387,6 @@ export async function disableMasterDataObject(
   }
 }
 
-/** 查询供应商资料根命令的持久化幂等结果；不存在时返回 null。 */
-export async function queryMasterDataIdempotency(
-  idempotencyKey: string
-): Promise<MasterDataMutationResult | null> {
-  const result = await apiGet<SupplierProfileMutationDto | null>(
-    `/admin/supplier-profile-commands/${encodeURIComponent(idempotencyKey)}`,
-  )
-  if (!result) return null
-  return {
-    outcome: "succeeded",
-    stableId: result.supplier_id,
-    stableNo: result.supplier_no,
-    revisionId: result.revision_id,
-    revisionNo: result.revision_no,
-    revisionState: "CURRENT",
-    effectiveFrom: result.effective_from,
-    recordedAt: tsToIso(result.recorded_at),
-    actor: "—",
-    changeReason: result.change_reason,
-    reference: `MD-CMD-${result.supplier_no}-v${result.revision_no}`,
-    nextActions: ["查看详情", "返回列表"],
-  }
-}
-
 /** 使用短期令牌揭示供应商敏感字段；服务端再次执行权限校验并记录审计。 */
 export async function revealMasterDataSensitive(
   revealToken: string
@@ -3412,4 +3399,3 @@ export async function revealMasterDataSensitive(
 }
 
 // Re-export pure display helpers used by pages (stable import path via queries)
-export { buildMasterDataExportCsv, downloadCsv } from "./export-csv"

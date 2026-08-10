@@ -8,7 +8,6 @@
 
 import type {
   OwnerComboboxItem,
-  SettlementPartyComboboxItem,
   SupplierComboboxItem,
 } from "@/components/business/entity-comboboxes"
 import { apiGet } from "@/lib/api"
@@ -33,26 +32,6 @@ type SupplierDto = {
   version: number
 }
 
-type PartyDto = {
-  id: string
-  party_no: string
-  party_kind: string
-  status: string
-  current_revision_id: string | null
-  created_at: number
-  version: number
-}
-
-type PartyRevisionDto = {
-  id: string
-  revision_no: number
-  legal_name: string
-  short_name: string | null
-  effective_from: string
-  effective_to: string | null
-  version: number
-  created_at: number
-}
 
 type AdminItem = {
   id: string
@@ -96,23 +75,6 @@ async function fetchAllPages<T>(
   return items
 }
 
-/** 取主体当前生效修订的法律名称；取不到时回退主体编号。 */
-async function resolvePartyName(
-  party: PartyDto
-): Promise<string> {
-  if (!party.current_revision_id) return party.party_no
-  try {
-    const revPage = await apiGet<BackendPage<PartyRevisionDto>>(
-      `/admin/parties/${party.id}/revisions`,
-      { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
-    )
-    const rev = revPage.items[0]
-    return rev?.legal_name ?? party.party_no
-  } catch {
-    return party.party_no
-  }
-}
-
 /**
  * 拉取启用状态的供应商选项（名称来自其主体当前生效修订）。
  *
@@ -127,24 +89,6 @@ export const fetchSupplierOptions = async (): Promise<SupplierComboboxItem[]> =>
     supplierName: s.legal_name ?? s.short_name ?? s.party_no ?? s.supplier_no,
     supplierCode: s.supplier_no,
   }))
-}
-
-/**
- * 拉取结算主体选项（名称取当前生效修订的法律名称）。
- *
- * @returns Combobox 结算主体选项列表。
- */
-export const fetchPartyOptions = async (): Promise<SettlementPartyComboboxItem[]> => {
-  const parties = await fetchAllPages<PartyDto>("/admin/parties", {})
-  const rows: SettlementPartyComboboxItem[] = []
-  for (const party of parties) {
-    rows.push({
-      partyId: party.id,
-      displayName: await resolvePartyName(party),
-      partyCode: party.party_no,
-    })
-  }
-  return rows
 }
 
 /**

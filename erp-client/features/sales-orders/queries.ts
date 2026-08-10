@@ -19,7 +19,6 @@ import {
   saveSalesOrderDraft,
   startSalesChangeOrder,
   submitSalesOrder,
-  submitSalesOrderAcceptance,
   type SalesOrdersListQuery,
 } from "@/features/sales-orders/api"
 
@@ -92,21 +91,6 @@ export function useSubmitSalesOrderMutation() {
       await queryClient.invalidateQueries({ queryKey: salesOrderKeys.all })
       await queryClient.invalidateQueries({
         queryKey: salesOrderKeys.detail(data.salesOrderId),
-      })
-    },
-  })
-}
-
-export function useSubmitSalesOrderAcceptanceMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: submitSalesOrderAcceptance,
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: salesOrderKeys.detail(variables.salesOrderId),
-      })
-      await queryClient.invalidateQueries({
-        queryKey: salesOrderKeys.all,
       })
     },
   })

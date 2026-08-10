@@ -8,7 +8,6 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import type { Page } from "@/lib/api"
 
 import type {
   CostEntryDetail,
@@ -187,7 +186,7 @@ export async function fetchProfitLossView(
   return adaptProfitLossView(dto)
 }
 
-export async function fetchCostEntryDetail(
+async function fetchCostEntryDetail(
   costEntryId: string
 ): Promise<CostEntryDetail | null> {
   try {
@@ -286,45 +285,5 @@ export async function startProfitLossExport(input: {
       businessType: "GOODS_SERVICE",
       rowCount: input.view.rows.total,
     },
-  }
-}
-
-/**
- * 标记来源纠错待投影刷新。E3 重建入口未落地时登记缺口；调用预期路径。
- */
-export async function markSourceCorrectionPending(): Promise<{
-  notice: string
-}> {
-  await apiPost<{ notice?: string }>(
-    "/admin/actual-profit-loss/rebuild",
-    { reason: "source_correction" }
-  )
-  return {
-    notice:
-      "业务记录已更新，经营汇总将在数据追平后刷新。本页不会覆盖系统金额。",
-  }
-}
-
-export async function clearSourceCorrectionPending(): Promise<void> {
-  // 真后端无对应清除接口 — 空操作保留签名
-  return
-}
-
-/** 可选：按销售单筛选成本列表（辅助下钻，非页面主路径）。 */
-export async function listCostEntries(params?: {
-  page?: number
-  pageSize?: number
-  sourceDocumentId?: string
-}): Promise<Page<CostEntryDetail>> {
-  const page = await apiGet<Page<CostEntryDto>>("/admin/cost-entries", {
-    page: params?.page ?? 1,
-    page_size: params?.pageSize ?? 20,
-    source_document_id: params?.sourceDocumentId,
-  })
-  return {
-    items: page.items.map(mapCostEntry),
-    total: page.total,
-    page: page.page,
-    page_size: page.page_size,
   }
 }

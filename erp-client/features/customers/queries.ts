@@ -14,19 +14,17 @@ import {
   queryCustomerMutationByIdempotency,
   revealCustomerSensitiveField,
   saveCustomerDetails,
-  saveCustomerRevision,
 } from "@/features/customers/api"
 import type {
   CreateCustomerInput,
   CustomerAssignmentChangeInput,
   CustomerDirectoryQuery,
   SaveCustomerDetailsInput,
-  SaveCustomerRevisionInput,
 } from "@/features/customers/types"
 
 export { revealCustomerSensitiveField }
 
-export const customerKeys = {
+const customerKeys = {
   all: ["customers"] as const,
   directory: (query: CustomerDirectoryQuery) =>
     [...customerKeys.all, "directory", query] as const,
@@ -52,19 +50,6 @@ export function useCustomerCenterQuery(customerId: string) {
     queryKey: customerKeys.detail(customerId),
     queryFn: () => fetchCustomerCenter(customerId),
     enabled: Boolean(customerId),
-  })
-}
-
-export function useSaveCustomerRevisionMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (input: SaveCustomerRevisionInput) =>
-      saveCustomerRevision(input),
-    onSuccess: async (result) => {
-      if (result.outcome === "succeeded") {
-        await queryClient.invalidateQueries({ queryKey: customerKeys.all })
-      }
-    },
   })
 }
 
@@ -97,13 +82,6 @@ export function useQueryCustomerIdempotencyMutation() {
   return useMutation({
     mutationFn: (idempotencyKey: string) =>
       queryCustomerMutationByIdempotency(idempotencyKey),
-  })
-}
-
-export function useRevealCustomerSensitiveMutation() {
-  return useMutation({
-    mutationFn: (revealToken: string) =>
-      revealCustomerSensitiveField(revealToken),
   })
 }
 

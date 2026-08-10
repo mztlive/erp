@@ -83,7 +83,7 @@ export type SalesOrderLineItem = {
   dueDate?: string
 }
 
-export type SalesOrderRelatedSummary = {
+type SalesOrderRelatedSummary = {
   purchaseOrders: number
   fulfillments: number
   receipts: number
@@ -91,7 +91,7 @@ export type SalesOrderRelatedSummary = {
 }
 
 /** 关闭资格：仅履约完成 + 应收结清；开票不阻塞。 */
-export type CloseEligibility = {
+type CloseEligibility = {
   fulfillmentComplete: boolean
   receivableSettled: boolean
   invoiceComplete: boolean
@@ -101,7 +101,7 @@ export type CloseEligibility = {
   note: string
 }
 
-export type StructuredDiffItem = {
+type StructuredDiffItem = {
   field: string
   before: string
   after: string

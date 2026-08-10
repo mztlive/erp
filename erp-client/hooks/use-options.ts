@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query"
 
 import {
   fetchOwnerOptions,
-  fetchPartyOptions,
   fetchSupplierOptions,
   fetchTeamOptions,
   fetchUnitOptions,
@@ -27,15 +26,6 @@ export function useSupplierOptionsQuery() {
   return useQuery({
     queryKey: optionKeys.suppliers,
     queryFn: fetchSupplierOptions,
-    staleTime: OPTIONS_STALE_TIME,
-  })
-}
-
-/** 结算主体选项。 */
-export function usePartyOptionsQuery() {
-  return useQuery({
-    queryKey: optionKeys.parties,
-    queryFn: fetchPartyOptions,
     staleTime: OPTIONS_STALE_TIME,
   })
 }

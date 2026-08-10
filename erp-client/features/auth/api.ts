@@ -8,7 +8,7 @@ import { apiGet, apiPost } from "@/lib/api"
 import { setToken } from "@/lib/api/session"
 
 /** 后台账号类型（与 entities::AccountKind snake_case 一致）。 */
-export type AccountKind = "admin"
+type AccountKind = "admin"
 
 export type LoginInput = {
   account: string

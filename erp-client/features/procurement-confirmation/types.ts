@@ -55,7 +55,7 @@ export type CoverageByLine = Readonly<{
   gap: string
 }>
 
-export type BlockingIssue = Readonly<{
+type BlockingIssue = Readonly<{
   code: string
   message: string
   lineId?: string

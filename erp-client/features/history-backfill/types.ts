@@ -64,7 +64,7 @@ export type JobSection =
   | "failures"
   | "report"
 
-export type FormalCommandAction =
+type FormalCommandAction =
   | "CREATE_DRAFT"
   | "VALIDATE_SOURCE"
   | "START"
@@ -72,7 +72,7 @@ export type FormalCommandAction =
   | "REATTRIBUTE"
   | "CONFIRM_REPORT"
 
-export type FormalCommandResultStatus =
+type FormalCommandResultStatus =
   | "COMMITTED"
   | "BLOCKED"
   | "RESULT_UNKNOWN"
@@ -205,23 +205,14 @@ export const VIEW_LABEL: Record<HistoryBackfillView, string> = {
   all: "全部",
 }
 
-export const ACTIVE_PROCESSING: HistoryBackfillProcessingStatus[] = [
-  "DRAFT",
-  "VALIDATING",
-  "READY",
-  "RUNNING",
-  "PARTIAL",
-  "FAILED",
-]
-
-export type CoverageGap = {
+type CoverageGap = {
   from: string
   to: string
   reasonCode: string
   reasonLabel: string
 }
 
-export type CostBasisRow = {
+type CostBasisRow = {
   basis: CostBasis
   count: number
   /** 消费金额（含税）文案；NONE 成本金额为空而非 0 */
@@ -230,7 +221,7 @@ export type CostBasisRow = {
   costAmountNet: string | null
 }
 
-export type HistoryBackfillProgress = {
+type HistoryBackfillProgress = {
   totalCount: number
   processedCount: number
   insertedCount: number
@@ -311,7 +302,7 @@ export type HistoryBackfillListItem = {
   lastProgressAt?: string
 }
 
-export type HistoryBackfillListMetrics = {
+type HistoryBackfillListMetrics = {
   running: number
   unattributed: number
   deduplicated: number
@@ -380,7 +371,7 @@ export type HistoryBackfillItemView = {
   whitelistFields: Array<{ field: string; label: string; value: string }>
 }
 
-export type HistoryBackfillReportView = {
+type HistoryBackfillReportView = {
   reportId: string
   reportVersion: number
   generatedAt: string

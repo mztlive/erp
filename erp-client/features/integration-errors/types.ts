@@ -5,7 +5,7 @@
 
 import type { InterfaceErrorClass } from "@/components/business"
 
-export type IntegrationItemType = "ERROR_TASK" | "RECONCILIATION_DIFFERENCE"
+type IntegrationItemType = "ERROR_TASK" | "RECONCILIATION_DIFFERENCE"
 
 export type IntegrationView =
   | "mine"
@@ -21,7 +21,7 @@ export type IntegrationEnvironment = "production" | "verification"
 
 export type IntegrationOwnerFilter = "me" | "role_pool" | "claimed" | "all"
 
-export type WorkItemStatus =
+type WorkItemStatus =
   | "UNCLAIMED"
   | "PENDING"
   | "IN_PROGRESS"
@@ -31,12 +31,12 @@ export type WorkItemStatus =
 
 export type FundsImpact = "NONE" | "POTENTIAL" | "POSTED"
 
-export type QueryOutcome =
+type QueryOutcome =
   | "TERMINAL_EVIDENCE_FOUND"
   | "NO_RESULT_CONFIRMED"
   | "RESULT_UNKNOWN"
 
-export type ActionOutcome =
+type ActionOutcome =
   | QueryOutcome
   | "REPLAY_ACCEPTED"
   | "REATTRIBUTED"
@@ -51,7 +51,7 @@ export type ActionOutcome =
   | "CONFIRMED_NO_ERROR"
   | "CONFIRMED_VALID_DIFFERENCE"
 
-export type IntegrationActionKind =
+type IntegrationActionKind =
   | "CLAIM"
   | "QUERY_ORIGINAL_RESULT"
   | "REPLAY_ORIGINAL"
@@ -74,13 +74,13 @@ export type ControlledEvidenceKind =
   | "COMPENSATION_RESULT"
   | "DISTINCT_REVIEW"
 
-export type ControlledTerminalEvidenceRef = {
+type ControlledTerminalEvidenceRef = {
   kind: ControlledEvidenceKind
   recordId: string
   label: string
 }
 
-export type ResolutionEvidencePolicyView = {
+type ResolutionEvidencePolicyView = {
   evidencePolicyId: string
   evidencePolicyVersion: number
   key: { errorType: string; fundsImpact: FundsImpact }
@@ -88,7 +88,7 @@ export type ResolutionEvidencePolicyView = {
   reviewerSeparation: "NONE" | "DISTINCT_REVIEWER" | "DISTINCT_FINANCE_REVIEWER"
 }
 
-export type RegisteredReconciliationReason = {
+type RegisteredReconciliationReason = {
   registeredReasonId: string
   registeredReasonVersion: number
   conclusion: "CONFIRM_NO_ERROR" | "CONFIRM_VALID_DIFFERENCE"
@@ -96,13 +96,13 @@ export type RegisteredReconciliationReason = {
   requiredEvidenceKinds: ControlledEvidenceKind[]
 }
 
-export type ReconciliationReasonRegistryView = {
+type ReconciliationReasonRegistryView = {
   reasonRegistryId: string
   reasonRegistryVersion: number
   registeredReasons: RegisteredReconciliationReason[]
 }
 
-export type IntegrationAttemptSummary = {
+type IntegrationAttemptSummary = {
   attemptNumber: number
   attemptedAt: string
   result: string
@@ -111,7 +111,7 @@ export type IntegrationAttemptSummary = {
   nextRetryAt?: string
 }
 
-export type MessageEventSummary = {
+type MessageEventSummary = {
   eventIdSummary: string
   idempotencyKeySummary: string
   businessFactKeySummary: string
@@ -121,7 +121,7 @@ export type MessageEventSummary = {
   maskedPayloadSummary: string
 }
 
-export type OriginalActionView = {
+type OriginalActionView = {
   originalActionId: string
   originalActionIdempotencyKeySummary: string
   /** Always true in views; client must never send the raw key */
@@ -129,7 +129,7 @@ export type OriginalActionView = {
   actionLabel: string
 }
 
-export type DifferenceEvidenceView = {
+type DifferenceEvidenceView = {
   leftLabel: string
   leftSummary: string
   rightLabel: string
@@ -140,13 +140,13 @@ export type DifferenceEvidenceView = {
   differenceSummary: string
 }
 
-export type RepairLink = {
+type RepairLink = {
   workspaceId: "W17" | "W21" | "W26" | "W20" | "W27"
   label: string
   href: string
 }
 
-export type AuditEntryView = {
+type AuditEntryView = {
   id: string
   at: string
   actor: string
@@ -227,7 +227,7 @@ export type IntegrationResolutionItemView = {
   freshness: { updatedAt: string; sourceWatermark?: string }
 }
 
-export type IntegrationMetrics = {
+type IntegrationMetrics = {
   resultUnknown: number
   manualRequired: number
   securityFaults: number
@@ -265,7 +265,7 @@ export type IntegrationQueueView = {
   }
 }
 
-export type FormalActionStatus =
+type FormalActionStatus =
   | "succeeded"
   | "blocked"
   | "rejected"
@@ -385,13 +385,6 @@ export const ERROR_CLASS_LABEL: Record<string, string> = {
   "duplicate-callback": "重复通知",
   "out-of-order-callback": "通知顺序异常",
   "reconciliation-difference": "对账差异",
-}
-
-export const SEVERITY_LABEL: Record<string, string> = {
-  critical: "阻断",
-  high: "高",
-  medium: "中",
-  low: "低",
 }
 
 export const VIEW_LABEL: Record<IntegrationView, string> = {

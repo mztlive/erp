@@ -1061,9 +1061,3 @@ export async function deferProcurementConfirmation(input: {
     }
   }
 }
-
-/** 终局结果查询：后端无按 workItem 反查业务 outcome 的独立接口。 */
-export function getTerminalOutcome(workItemId: string): FormalOutcome | null {
-  void workItemId
-  return null
-}

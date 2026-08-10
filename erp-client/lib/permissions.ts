@@ -8,7 +8,7 @@
  */
 
 /** 判断单条已授予权限是否覆盖目标权限。 */
-export function permissionCovers(granted: string, required: string): boolean {
+function permissionCovers(granted: string, required: string): boolean {
   const [grantedResource, grantedAction] = splitPermission(granted)
   const [requiredResource, requiredAction] = splitPermission(required)
   if (!grantedResource || !grantedAction || !requiredResource || !requiredAction) {

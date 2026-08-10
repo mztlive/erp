@@ -14,7 +14,7 @@ export type AttributionStatus =
 
 export type CostBasis = "ACTUAL" | "STANDARD" | "NONE"
 
-export type PaymentSourceType = "CARD" | "WECHAT"
+type PaymentSourceType = "CARD" | "WECHAT"
 
 export type PaymentSourceFilter = PaymentSourceType | "MIXED"
 
@@ -146,7 +146,7 @@ export const DATA_SOURCE_LABEL: Record<DataSource, string> = {
   MIXED: "混合",
 }
 
-export type ActionBlocker = {
+type ActionBlocker = {
   action: string
   code: string
   message: string
@@ -186,26 +186,26 @@ export type SalesOrderConsumptionSummary = {
   latestFactAt?: string
 }
 
-export type PaymentComposition = {
+type PaymentComposition = {
   cardAmount: string
   wechatAmount: string
   sourceCount: number
 }
 
-export type FactSummaryItem = {
+type FactSummaryItem = {
   factType: FactType
   latestOccurredAt: string
   count: number
 }
 
-export type CostBasisBreakdownItem = {
+type CostBasisBreakdownItem = {
   basis: CostBasis
   lineCount: number
   /** NONE 时省略，不展示 0 */
   costAmount?: string
 }
 
-export type SupplierOrderSummary = {
+type SupplierOrderSummary = {
   total: number
   statuses: string[]
   hasException: boolean
@@ -280,7 +280,7 @@ export type MallOrderFactView = {
   resultDetails: Record<string, string | number | null>
 }
 
-export type MallOrderItemView = {
+type MallOrderItemView = {
   mallOrderItemId: string
   externalItemId: string
   skuId?: string
@@ -302,7 +302,7 @@ export type MallOrderItemView = {
   attributionStatus: AttributionStatus
 }
 
-export type CostAssessmentView = {
+type CostAssessmentView = {
   assessmentId: string
   assessmentNo: number
   costBasis: CostBasis
@@ -341,13 +341,13 @@ export type PaymentSourceView = {
   }
 }
 
-export type FundingAllocation = {
+type FundingAllocation = {
   mallOrderItemId: string
   paymentSourceId: string
   allocatedPaymentAmount: string
 }
 
-export type ConservationResult = {
+type ConservationResult = {
   itemRowResults: Array<{
     mallOrderItemId: string
     expected: string
@@ -363,7 +363,7 @@ export type ConservationResult = {
   orderTotal: { expected: string; actual: string; valid: boolean }
 }
 
-export type ConsumptionEntryView = {
+type ConsumptionEntryView = {
   consumptionEntryId: string
   factId: string
   itemId: string
@@ -377,7 +377,7 @@ export type ConsumptionEntryView = {
   currentCostAssessment: CostAssessmentView
 }
 
-export type SupplierOrderView = {
+type SupplierOrderView = {
   supplierFulfillmentOrderId: string
   fulfillmentOrderNo: string
   supplierLabel: string

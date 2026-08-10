@@ -56,7 +56,7 @@ export const createApiError = (input: ApiErrorInput): ApiErrorException =>
   new ApiErrorException(input)
 
 /** 判断未知异常是否满足统一 API 错误合同。 */
-export const isApiError = (error: unknown): error is ApiError =>
+const isApiError = (error: unknown): error is ApiError =>
   typeof error === "object" &&
   error !== null &&
   "kind" in error &&
@@ -161,16 +161,8 @@ export const fromParse = (cause: unknown, responseData?: unknown): ApiError =>
     cause,
   })
 
-/** 未归类的兜底错误。 */
-export const fromUnknown = (cause: unknown): ApiError =>
-  createApiError({
-    kind: "Unknown",
-    message: "操作未完成，请稍后重试。",
-    cause,
-  })
-
 /** 面向业务界面的错误分类。 */
-export type ErrorPresentationKind =
+type ErrorPresentationKind =
   | "validation"
   | "business"
   | "permission"

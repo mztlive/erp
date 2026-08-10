@@ -25,13 +25,13 @@ export type InventoryQuery = {
   balanceId?: string
 }
 
-export type AllowedAction =
+type AllowedAction =
   | "CREATE_ADJUSTMENT"
   | "EXPORT"
   | "VIEW_SOURCE"
   | "VIEW_ADJUSTMENT"
 
-export type ActionBlocker = Readonly<{
+type ActionBlocker = Readonly<{
   action: AllowedAction | string
   code: string
   message: string
@@ -138,14 +138,14 @@ export type StockAdjustmentRow = Readonly<{
   note?: string
 }>
 
-export type InventoryMetrics = Readonly<{
+type InventoryMetrics = Readonly<{
   balanceDimensionCount: number
   reservedDimensionCount: number
   zeroAvailableDimensionCount: number
   pendingAdjustmentCount: number
 }>
 
-export type InventoryEmptyReason =
+type InventoryEmptyReason =
   | "NO_DATA"
   | "FILTER_NO_RESULT"
   | "NO_DATA_SCOPE"

@@ -5,7 +5,7 @@
  */
 
 /** localStorage 中保存 token 的键名。 */
-export const TOKEN_STORAGE_KEY = "erp.token"
+const TOKEN_STORAGE_KEY = "erp.token"
 
 /** 已注册的 401 处理器集合（client.ts 检测到未授权时逐个通知）。 */
 const unauthorizedHandlers = new Set<() => void>()

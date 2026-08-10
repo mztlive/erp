@@ -42,12 +42,12 @@ export type OrderSection =
   | "costs"
   | "audit"
 
-export type InvestigationOutcome =
+type InvestigationOutcome =
   | "VERIFIED_TERMINAL"
   | "VERIFIED_NO_RESULT"
   | "RESULT_UNKNOWN"
 
-export type ActionBlocker = {
+type ActionBlocker = {
   action: string
   code: string
   message: string
@@ -203,15 +203,6 @@ export const REFUND_STATUSES: RefundStatus[] = [
   "MANUAL",
 ]
 
-/** 默认可操作视图：结果未知、异常、售后待处理 */
-export const ACTIONABLE_FULFILLMENT: SupplierFulfillmentStatus[] = [
-  "RESULT_UNKNOWN",
-  "EXCEPTION",
-  "REJECTED",
-  "SUBMITTING",
-  "RECEIVED",
-]
-
 export type SupplierOrderListQuery = {
   view: ListView
   q?: string
@@ -298,7 +289,7 @@ export type ExportJobResult = {
   status: "queued" | "succeeded"
 }
 
-export type SupplierOrderItemView = {
+type SupplierOrderItemView = {
   itemId: string
   mallLineId: string
   productName: string
@@ -317,7 +308,7 @@ export type SupplierOrderItemView = {
   snapshotImmutable: true
 }
 
-export type LogisticsView = {
+type LogisticsView = {
   carrier?: string
   trackingNo?: string
   acceptedAt?: string
@@ -325,7 +316,7 @@ export type LogisticsView = {
   completedAt?: string
 }
 
-export type StatusHistoryItem = {
+type StatusHistoryItem = {
   id: string
   at: string
   track: "fulfillment" | "cancel" | "refund"
@@ -335,7 +326,7 @@ export type StatusHistoryItem = {
   note?: string
 }
 
-export type AfterSalesTrackView = {
+type AfterSalesTrackView = {
   requestId: string
   requestNo: string
   mallRequestRef: string
@@ -367,7 +358,7 @@ export type AfterSalesTrackView = {
   actionBlockers: ActionBlocker[]
 }
 
-export type CostView = {
+type CostView = {
   cumulativeCostGross: string | null
   cumulativeCostNet: string | null
   costSource: string
@@ -377,7 +368,7 @@ export type CostView = {
   payableEntryLabel?: string
 }
 
-export type SupplierActionView = {
+type SupplierActionView = {
   actionId: string
   actionType:
     | "PLACE"
@@ -399,7 +390,7 @@ export type SupplierActionView = {
   operationId?: string
 }
 
-export type AddressRevealView = {
+type AddressRevealView = {
   masked: string
   /** 完整地址仅在短时揭示会话中返回 */
   revealed?: string
@@ -412,7 +403,7 @@ export type AddressRevealView = {
   auditNote?: string
 }
 
-export type InvestigationEvidenceView = {
+type InvestigationEvidenceView = {
   evidenceId: string
   targetSupplierActionId: string
   outcome: InvestigationOutcome
@@ -423,7 +414,7 @@ export type InvestigationEvidenceView = {
   summary: string
 }
 
-export type WorkItemView = {
+type WorkItemView = {
   workItemId: string
   workItemType: "INTEGRATION_RESULT_UNKNOWN" | "BUSINESS_EXCEPTION"
   businessObjectType: "SUPPLIER_FULFILLMENT_ORDER"

@@ -48,7 +48,7 @@ export type ConfirmationScope =
   | "WAREHOUSE"
   | "FINANCE"
 
-export type ConfirmationResult =
+type ConfirmationResult =
   | "PENDING"
   | "CONFIRMED"
   | "REJECTED"
@@ -194,7 +194,7 @@ export const WORK_ITEM_TYPE_BLOCKER = {
   ] as const,
 }
 
-export type SafeFileAssetView = Readonly<{
+type SafeFileAssetView = Readonly<{
   assetId: string
   fileName: string
   byteSize: number
@@ -215,7 +215,7 @@ export type ImportConfirmationView = Readonly<{
   inViewerResponsibility: boolean
 }>
 
-export type BackgroundJobView = Readonly<{
+type BackgroundJobView = Readonly<{
   jobId: string
   status: "queued" | "running" | "succeeded" | "partial" | "failed" | "frozen"
   mode: "partialAllowed"
@@ -227,7 +227,7 @@ export type BackgroundJobView = Readonly<{
   updatedAt: string
 }>
 
-export type ApplyPartitionItem = Readonly<{
+type ApplyPartitionItem = Readonly<{
   id: string
   label: string
   detail?: string
@@ -317,7 +317,7 @@ export type ImportBatchView = Readonly<{
   linkedValidationBatchNo?: string
 }>
 
-export type ImportIssueRowView = Readonly<{
+type ImportIssueRowView = Readonly<{
   issueId: string
   batchId: string
   issueCode: ImportIssueCode
@@ -365,14 +365,3 @@ export type ImportIssuePage = Readonly<{
   issueVersion: string
   queriedAt: string
 }>
-
-export type FormalActionResponse =
-  | {
-      status: "succeeded"
-      message: string
-      batchId: string
-      reference: string
-    }
-  | { status: "failed"; message: string; code: string }
-  | { status: "blocked"; message: string; code: string }
-  | { status: "unknown"; message: string; idempotencyKey: string }

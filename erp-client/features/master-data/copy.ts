@@ -70,21 +70,6 @@ export function revisionTimingFilterLabel(value: string): string {
   }
 }
 
-export function metricFilterLabel(value: string): string {
-  switch (value) {
-    case "enabled":
-      return "当前启用"
-    case "disabled":
-      return "当前停用"
-    case "pending":
-      return "待生效更新"
-    case "expiring":
-      return "即将到期"
-    default:
-      return "全部"
-  }
-}
-
 /** 权限条、表头等短标签 */
 export const masterDataCopy = {
   resourceNavAria: "基础资料分类",
@@ -96,6 +81,8 @@ export const masterDataCopy = {
     `共 ${count} 条 · 可按启用状态、版本状态筛选 · 按 / 搜索 · 回车打开详情`,
   productListDescription: (count: number) =>
     `共 ${count} 条 · 筛选按商品归属、状态与 SKU 条件分组 · 回车打开详情`,
+  supplierListDescription: (count: number) =>
+    `共 ${count} 条 · 可按启用状态、资质状态与能力条件筛选 · 按 / 搜索 · 回车打开详情`,
   searchAria: "搜索基础资料",
   sellableItemsHint:
     "公司商品池只显示已上架、资料有效且当前有供给关系的 SKU；销售价来自公司商品主档，采购成本不会在这里展示。",

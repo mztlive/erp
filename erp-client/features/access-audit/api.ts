@@ -792,11 +792,3 @@ export async function submitAccessChange(
     message: `当前命令 ${command.action} 未映射到后端 HTTP 写路径。`,
   }
 }
-
-export async function resolveAccessChangeUnknown(
-  idempotencyKey: string
-): Promise<AccessChangeOutcome | null> {
-  // 后端无幂等查询端点 — 返回 null（未知仍未知）
-  void idempotencyKey
-  return null
-}

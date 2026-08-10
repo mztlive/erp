@@ -34,13 +34,13 @@ export type AccessListQuery = {
   eventId?: string
 }
 
-export type ActionBlocker = Readonly<{
+type ActionBlocker = Readonly<{
   action: string
   code: string
   message: string
 }>
 
-export type UserRoleTimePolicy =
+type UserRoleTimePolicy =
   | {
       state: "MISSING"
       allowedActions: readonly ["EMERGENCY_REVOKE_USER_ROLE"]
@@ -53,7 +53,7 @@ export type UserRoleTimePolicy =
       expirationAllowed: boolean
     }
 
-export type FieldPolicyGranularity =
+type FieldPolicyGranularity =
   | {
       state: "MISSING"
       editable: false
@@ -68,7 +68,7 @@ export type FieldPolicyGranularity =
       }[]
     }
 
-export type AuditAccessPolicy =
+type AuditAccessPolicy =
   | {
       state: "MISSING"
       fallbackFrom: string
@@ -176,7 +176,7 @@ export type AuditEventRow = Readonly<{
   safeDigest?: string
 }>
 
-export type AccessGrantView = Readonly<{
+type AccessGrantView = Readonly<{
   id: string
   layer: "MODULE_ACTION" | "DATA_SCOPE" | "FIELD" | "HISTORICAL_PARTICIPANT"
   layerLabel: string
@@ -187,7 +187,7 @@ export type AccessGrantView = Readonly<{
   note?: string
 }>
 
-export type AccessExplanationView = Readonly<{
+type AccessExplanationView = Readonly<{
   id: string
   code: string
   message: string
@@ -259,7 +259,7 @@ export type AccessChangeOutcome =
       serverPermissionVersion: string
     }
 
-export type AccessListMetrics = Readonly<{
+type AccessListMetrics = Readonly<{
   roleCount: number
   userCount: number
   scopeCount: number

@@ -9,7 +9,7 @@ export type FulfillmentOperationType =
   | "ELECTRONIC"
   | "SERVICE"
 
-export type GateState = "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
+type GateState = "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
 
 export type FulfillmentResultCode = "SUCCESS" | "PARTIAL" | "FAILED"
 
@@ -147,26 +147,26 @@ export type ReceiptDraftLine = Readonly<{
   evidenceNote?: string
 }>
 
-export type ShipDraftLine = Readonly<{
+type ShipDraftLine = Readonly<{
   salesOrderLineId: string
   stockReservationId: string
   quantity: string
 }>
 
-export type DirectDraftLine = Readonly<{
+type DirectDraftLine = Readonly<{
   salesOrderLineId: string
   purchaseLineSalesAllocationId: string
   quantity: string
 }>
 
-export type ElectronicDraftLine = Readonly<{
+type ElectronicDraftLine = Readonly<{
   salesOrderLineId: string
   purchaseLineSalesAllocationId: string
   quantity: string
   evidenceNote?: string
 }>
 
-export type ServiceDraftLine = Readonly<{
+type ServiceDraftLine = Readonly<{
   salesOrderLineId: string
   purchaseLineSalesAllocationId: string
   quantity: string
@@ -265,7 +265,7 @@ export type FulfillmentTask = Readonly<{
   }
 }>
 
-export type FulfillmentQueueMetrics = ReadonlyArray<{
+type FulfillmentQueueMetrics = ReadonlyArray<{
   operationType: FulfillmentOperationType
   label: string
   count: number
@@ -307,7 +307,7 @@ export type WorkItemLease = Readonly<{
   claimedByLabel: string
 }>
 
-export type InventoryDelta = Readonly<{
+type InventoryDelta = Readonly<{
   warehouseId: string
   warehouseLabel: string
   skuId: string
@@ -316,7 +316,7 @@ export type InventoryDelta = Readonly<{
   direction: "INCREASE" | "DECREASE"
 }>
 
-export type ReservationDelta = Readonly<{
+type ReservationDelta = Readonly<{
   reservationId: string
   quantity: string
   action: "CREATE" | "CONSUME"

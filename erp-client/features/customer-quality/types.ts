@@ -4,20 +4,20 @@
  */
 
 export type FundsReviewFilter = "all" | "reviewed_only"
-export type BusinessTypeFilter = "VOUCHER" | "GOODS_SERVICE"
+type BusinessTypeFilter = "VOUCHER" | "GOODS_SERVICE"
 export type PeriodSelectionSource =
   | "SERVER_DEFAULT"
   | "CONFIGURED_PRESET"
   | "EXPLICIT"
 
-export type ProjectionFreshnessState =
+type ProjectionFreshnessState =
   | "fresh"
   | "stale"
   | "rebuilding"
   | "failed"
 
-export type MetricReliability = "reliable" | "partial" | "unavailable"
-export type AmountBasis = "GROSS" | "NET"
+type MetricReliability = "reliable" | "partial" | "unavailable"
+type AmountBasis = "GROSS" | "NET"
 
 export type CustomerQualityScenario =
   | "default"
@@ -31,7 +31,7 @@ export type CustomerQualityScenario =
   | "failed"
   | "refresh_failed"
 
-export type TagType = "scale" | "profit" | "risk"
+type TagType = "scale" | "profit" | "risk"
 
 export type CustomerQualityPeriodPolicy = Readonly<{
   hasDefault: boolean
@@ -76,7 +76,7 @@ export type CustomerQualityQuery = Readonly<{
   scenario?: CustomerQualityScenario
 }>
 
-export type CustomerQualityMetric = Readonly<{
+type CustomerQualityMetric = Readonly<{
   key: string
   label: string
   value: string
@@ -88,7 +88,7 @@ export type CustomerQualityMetric = Readonly<{
   fieldDenied?: boolean
 }>
 
-export type DimensionItem = Readonly<{
+type DimensionItem = Readonly<{
   code: string
   label: string
   value: string
@@ -96,7 +96,7 @@ export type DimensionItem = Readonly<{
   count?: number
 }>
 
-export type CustomerQualityDimension = Readonly<{
+type CustomerQualityDimension = Readonly<{
   key: string
   title: string
   ruleVersion?: string

@@ -12,7 +12,7 @@ import type {
   CustomerQualityScenario,
 } from "@/features/customer-quality/types"
 
-export const customerQualityKeys = {
+const customerQualityKeys = {
   all: ["customer-quality"] as const,
   periodPolicy: (scenario?: CustomerQualityScenario) =>
     [...customerQualityKeys.all, "period-policy", scenario ?? "default"] as const,

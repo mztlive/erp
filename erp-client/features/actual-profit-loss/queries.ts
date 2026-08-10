@@ -1,23 +1,17 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 
 import {
-  clearSourceCorrectionPending,
   fetchCostEntriesForRow,
-  fetchCostEntryDetail,
   fetchPeriodBasisConfig,
   fetchProfitLossView,
-  markSourceCorrectionPending,
   startProfitLossExport,
   type PeriodBasisConfigQuery,
 } from "@/features/actual-profit-loss/api"
-import type {
-  ProfitLossQuery,
-  ProfitLossView,
-} from "@/features/actual-profit-loss/types"
+import type { ProfitLossQuery } from "@/features/actual-profit-loss/types"
 
-export const profitLossKeys = {
+const profitLossKeys = {
   all: ["actual-profit-loss"] as const,
   periodBasis: (q: PeriodBasisConfigQuery) =>
     [...profitLossKeys.all, "period-basis", q] as const,
@@ -59,14 +53,6 @@ export function useProfitLossViewQuery(
   })
 }
 
-export function useCostEntryDetailQuery(costEntryId: string | null) {
-  return useQuery({
-    queryKey: profitLossKeys.costEntry(costEntryId ?? ""),
-    queryFn: () => fetchCostEntryDetail(costEntryId!),
-    enabled: Boolean(costEntryId),
-  })
-}
-
 export function useCostEntriesForRowQuery(costEntryIds: readonly string[]) {
   return useQuery({
     queryKey: profitLossKeys.costEntries(costEntryIds),
@@ -81,24 +67,4 @@ export function useStartProfitLossExportMutation() {
   })
 }
 
-export function useMarkCorrectionPendingMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: markSourceCorrectionPending,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: profitLossKeys.all })
-    },
-  })
-}
-
-export function useClearCorrectionPendingMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: clearSourceCorrectionPending,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: profitLossKeys.all })
-    },
-  })
-}
-
-export type { ProfitLossQuery, ProfitLossView }
+export type { ProfitLossQuery }

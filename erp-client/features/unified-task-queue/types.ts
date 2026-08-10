@@ -29,7 +29,7 @@ export type WorkItemActionCode =
   | "CLOSE"
   | "COMPLETE"
 
-export type WorkItemFixture = Readonly<{
+type WorkItemFixture = Readonly<{
   id: string
   workItemType: string
   workItemTypeLabel: string
@@ -109,11 +109,6 @@ export type UnifiedTaskQueueView = {
 }
 
 export type InTaskActionKind = "DEFER" | "SAVE_EVIDENCE" | "QUERY_RESULT"
-
-export type DecisionDraft = {
-  note: string
-  completionAction: string
-}
 
 export type SessionLease = {
   workItemId: string

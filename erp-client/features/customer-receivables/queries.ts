@@ -14,7 +14,7 @@ import {
 } from "@/features/customer-receivables/api"
 import type { CustomerAccountsQuery } from "@/features/customer-receivables/types"
 
-export const customerReceivableKeys = {
+const customerReceivableKeys = {
   all: ["customer-receivables"] as const,
   list: (query: CustomerAccountsQuery) =>
     [...customerReceivableKeys.all, "list", query] as const,

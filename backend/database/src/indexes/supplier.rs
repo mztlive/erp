@@ -151,6 +151,10 @@ fn qualification_indexes() -> Vec<IndexModel> {
             "idx_supplier_qualifications_supplier",
             doc! { "supplier_id": 1, "qualification_type": 1, "status": 1 },
         ),
+        named_index(
+            "idx_supplier_qualifications_list_filter",
+            doc! { "qualification_type": 1, "status": 1, "valid_to": 1 },
+        ),
     ]
 }
 

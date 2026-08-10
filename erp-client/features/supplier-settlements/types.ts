@@ -68,20 +68,20 @@ export type SettlementSection =
   | "payable"
   | "audit"
 
-export type EmptyReason =
+type EmptyReason =
   | "NO_PERMISSION"
   | "NO_SCOPE"
   | "NO_STATEMENTS"
   | "FILTER_NO_RESULT"
 
-export type ActionBlocker = {
+type ActionBlocker = {
   action: string
   code: string
   message: string
   destinationWorkspaceId?: string
 }
 
-export type ActorView = {
+type ActorView = {
   userId: string
   displayName: string
 }
@@ -111,7 +111,7 @@ export type SettlementListRow = {
   actionBlockers: ActionBlocker[]
 }
 
-export type SettlementListTotals = {
+type SettlementListTotals = {
   pendingReconcile: number
   hasDifference: number
   pendingReview: number
@@ -141,7 +141,7 @@ export type SettlementListView = {
   filterSummary: string
 }
 
-export type SettlementItemView = {
+type SettlementItemView = {
   itemId: string
   supplierOrderNo: string
   /** 采购单号（W08 业务单号）；结算明细可直达采购单详情 */
@@ -162,7 +162,7 @@ export type SettlementItemView = {
   readOnly: true
 }
 
-export type DifferenceEvidence = {
+type DifferenceEvidence = {
   evidenceId: string
   kind: "PROCUREMENT_OPINION" | "SUPPLIER_CONFIRM" | "TICKET" | "ATTACHMENT"
   label: string
@@ -171,7 +171,7 @@ export type DifferenceEvidence = {
   at: string
 }
 
-export type DifferenceResolutionRecord = {
+type DifferenceResolutionRecord = {
   resolutionId: string
   resolution: DifferenceResolution
   resolutionLabel: string
@@ -203,7 +203,7 @@ export type SettlementDifferenceView = {
   leftFields: Array<{ id: string; field: string; before: string; after: string; note?: string }>
 }
 
-export type ReviewRecordView = {
+type ReviewRecordView = {
   recordId: string
   action: "SUBMIT" | "REJECT" | "CONFIRM"
   actionLabel: string
@@ -213,7 +213,7 @@ export type ReviewRecordView = {
   reasonCode?: string
 }
 
-export type AuditEventView = {
+type AuditEventView = {
   eventId: string
   at: string
   actor: string
@@ -222,7 +222,7 @@ export type AuditEventView = {
   auditNo?: string
 }
 
-export type SettlementTotalsView = {
+type SettlementTotalsView = {
   orderAmountGross: string
   freightGross: string
   serviceFeeGross: string
@@ -236,7 +236,7 @@ export type SettlementTotalsView = {
   confirmedCostDeltaGross?: string
 }
 
-export type PayableLinkView = {
+type PayableLinkView = {
   payableAccountId: string
   payableNo: string
   grossAmount: string

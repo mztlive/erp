@@ -47,19 +47,6 @@ export const WELFARE_SCENARIO_OPTIONS: readonly ComboboxOption[] = [
   },
 ] as const
 
-/** 销售/库存常用单位。 */
-export const UNIT_OPTIONS: readonly ComboboxOption[] = [
-  { value: "件", label: "件" },
-  { value: "箱", label: "箱" },
-  { value: "套", label: "套" },
-  { value: "盒", label: "盒" },
-  { value: "篮", label: "篮" },
-  { value: "张", label: "张" },
-  { value: "份", label: "份" },
-  { value: "kg", label: "kg" },
-  { value: "次", label: "次" },
-] as const
-
 /** 入库质量结果。 */
 export const QUALITY_RESULT_OPTIONS: readonly ComboboxOption[] = [
   { value: "合格", label: "合格" },

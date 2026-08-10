@@ -22,6 +22,7 @@ import {
   BusinessTableFrame,
   DataFreshness,
   DataTable,
+  FixedOptionCheckboxFilter,
   FixedOptionRadioFilter,
   FormalActionResult,
   ListToolbar,
@@ -89,6 +90,7 @@ import {
   type ProductListingFilter,
   type ProductListSkuSummary,
   type ProductSkuCoverageFilter,
+  type SupplierQualificationHealth,
 } from "@/features/master-data/types"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
 import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/queries"
@@ -148,6 +150,70 @@ const REVISION_TIMING_RADIO_FILTER_OPTIONS = [
   { value: "current", label: "当前生效" },
   { value: "future", label: "待生效" },
 ] as const
+
+const SUPPLIER_CAPABILITY_OPTIONS = [
+  { value: "physical", label: "实物商品" },
+  { value: "virtual", label: "虚拟商品" },
+  { value: "offline_service", label: "线下服务" },
+  { value: "api", label: "API" },
+  { value: "printing", label: "印刷" },
+] as const
+
+const SUPPLIER_QUALIFICATION_TYPE_OPTIONS = [
+  { value: "certificate", label: "资质证照" },
+  { value: "contract", label: "合同" },
+  { value: "authorization", label: "授权书" },
+  { value: "food_license", label: "食品经营许可证" },
+  { value: "legal_person_id", label: "法人身份证" },
+] as const
+
+const SUPPLIER_QUALIFICATION_HEALTH_OPTIONS = [
+  { value: "all", label: "资质状态：全部" },
+  { value: "valid", label: "资质状态：有效" },
+  { value: "expiring_30", label: "资质状态：30 天内到期" },
+  { value: "expired", label: "资质状态：已过期" },
+  { value: "not_registered", label: "资质状态：未登记" },
+] as const
+
+/** 读取 URL 中逗号分隔的多选条件，去空、去重并固定排序。 */
+function selectedCsvValues(value: string | null): string[] {
+  if (!value) return []
+  return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))].sort()
+}
+
+/** 将多选条件压缩为 URL 与接口共用的逗号分隔值。 */
+function csvFilterValue(values: readonly string[]): string | null {
+  const normalized = [...new Set(values.map((item) => item.trim()).filter(Boolean))].sort()
+  return normalized.length > 0 ? normalized.join(",") : null
+}
+
+/** 返回资质状态的业务文案。 */
+function qualificationHealthLabel(value: SupplierQualificationHealth | undefined): string {
+  return SUPPLIER_QUALIFICATION_HEALTH_OPTIONS.find(
+    (option) => option.value === value
+  )?.label.replace("资质状态：", "") ?? "全部"
+}
+
+/** 仅保留当前页面已声明的多选枚举值，避免 URL 中的无效值成为隐形状态。 */
+function selectedSupplierOptionValues(
+  value: string | null,
+  options: readonly { value: string; label: string }[]
+): string[] {
+  return selectedCsvValues(value).filter((item) =>
+    options.some((option) => option.value === item)
+  )
+}
+
+/** 把已选固定枚举代码转换为业务文案，用于导出筛选摘要。 */
+function selectedSupplierOptionLabels(
+  values: readonly string[],
+  options: readonly { value: string; label: string }[]
+): string[] {
+  return values.flatMap((value) => {
+    const label = options.find((option) => option.value === value)?.label
+    return label ? [label] : []
+  })
+}
 
 /** 校验销售价输入，并使用分值整数比较上下界，避免浮点误差。 */
 function productSalesPriceRangeError(
@@ -375,7 +441,9 @@ function MasterDataListWorkspace({
     isUnitOfMeasureResource
   /** 即时字典（品牌 / 计量单位等）不展示生效期间列。 */
   const showEffectiveColumn =
-    resource !== "brands" && resource !== "unit-of-measures"
+    resource !== "brands" &&
+    resource !== "unit-of-measures" &&
+    !isSupplierResource
 
   // ── 筛选与分页唯一事实源 = URL（刷新/后退/分享一致） ──
   const q = searchParams.get("q") ?? ""
@@ -419,6 +487,40 @@ function MasterDataListWorkspace({
   const productSalesPriceMax = isProductResource
     ? searchParams.get("productSalesPriceMax")?.trim() || undefined
     : undefined
+  const supplierCapabilityCodesParam = searchParams.get("supplierCapabilityCodes")
+  const supplierQualificationTypesParam = searchParams.get(
+    "supplierQualificationTypes"
+  )
+  const supplierCapabilityCodes = React.useMemo(
+    () =>
+      isSupplierResource
+        ? selectedSupplierOptionValues(
+            supplierCapabilityCodesParam,
+            SUPPLIER_CAPABILITY_OPTIONS
+          )
+        : [],
+    [isSupplierResource, supplierCapabilityCodesParam]
+  )
+  const supplierQualificationTypes = React.useMemo(
+    () =>
+      isSupplierResource
+        ? selectedSupplierOptionValues(
+            supplierQualificationTypesParam,
+            SUPPLIER_QUALIFICATION_TYPE_OPTIONS
+          )
+        : [],
+    [isSupplierResource, supplierQualificationTypesParam]
+  )
+  const supplierQualificationHealthParam = searchParams.get(
+    "supplierQualificationHealth"
+  )
+  const supplierQualificationHealth = isSupplierResource
+    ? (SUPPLIER_QUALIFICATION_HEALTH_OPTIONS.find(
+        (option) =>
+          option.value !== "all" &&
+          option.value === supplierQualificationHealthParam
+      )?.value as SupplierQualificationHealth | undefined)
+    : undefined
   /** 指标态保留在 URL：与 lifecycleStatus 同源写入，只做展示不做筛选。 */
   const metricKey = searchParams.get("metricKey") ?? "all"
   /** 已生效（非草稿）的结构化商品筛选是否有任意一项非默认值，决定"高级筛选"默认展开与徽标。 */
@@ -434,6 +536,12 @@ function MasterDataListWorkspace({
       productSalesPriceMin ||
       productSalesPriceMax
   )
+  const hasStructuredSupplierFilters = Boolean(
+    lifecycleStatus !== "all" ||
+      supplierQualificationHealth ||
+      supplierCapabilityCodes.length ||
+      supplierQualificationTypes.length
+  )
   const pageParamRaw = Number(searchParams.get("page"))
   const pageParamIndex =
     Number.isFinite(pageParamRaw) && pageParamRaw > 0
@@ -445,7 +553,18 @@ function MasterDataListWorkspace({
   const [productFilterPanelOpen, setProductFilterPanelOpen] = React.useState(
     hasStructuredProductFilters
   )
-  // 商品筛选面板为"编辑草稿 + 点击搜索才提交"模式：以下均为本地草稿，
+  /** 供应商显式提交筛选面板展开态；深链带入条件时自动展开。 */
+  const [supplierFilterPanelOpen, setSupplierFilterPanelOpen] =
+    React.useState(hasStructuredSupplierFilters)
+  const [supplierCapabilityCodesDraft, setSupplierCapabilityCodesDraft] =
+    React.useState<string[]>(supplierCapabilityCodes)
+  const [supplierQualificationTypesDraft, setSupplierQualificationTypesDraft] =
+    React.useState<string[]>(supplierQualificationTypes)
+  const [supplierQualificationHealthDraft, setSupplierQualificationHealthDraft] =
+    React.useState<SupplierQualificationHealth | "all">(
+      supplierQualificationHealth ?? "all"
+    )
+  // 商品与供应商筛选面板均为"编辑草稿 + 点击搜索才提交"模式：以下均为本地草稿，
   // 与 URL 事实源的同步只发生在挂载、外部 URL 变化（后退/清除）与提交时。
   const [productKindDraft, setProductKindDraft] = React.useState<
     ProductKind | "all"
@@ -535,6 +654,32 @@ function MasterDataListWorkspace({
     [patchUrl, resetPagination, revisionTiming]
   )
 
+  /** 提交供应商筛选面板；全部草稿字段一次性写入 URL。 */
+  const applySupplierFilters = React.useCallback(() => {
+    patchUrl({
+      q: searchDraft.trim() || null,
+      lifecycleStatus:
+        lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
+      metricKey: lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
+      supplierCapabilityCodes: csvFilterValue(supplierCapabilityCodesDraft),
+      supplierQualificationTypes: csvFilterValue(supplierQualificationTypesDraft),
+      supplierQualificationHealth:
+        supplierQualificationHealthDraft === "all"
+          ? null
+          : supplierQualificationHealthDraft,
+      page: null,
+    })
+    resetPagination()
+  }, [
+    patchUrl,
+    resetPagination,
+    searchDraft,
+    lifecycleStatusDraft,
+    supplierCapabilityCodesDraft,
+    supplierQualificationHealthDraft,
+    supplierQualificationTypesDraft,
+  ])
+
   /** 商品筛选面板整体提交：点击"搜索"才把全部草稿字段一次性写入 URL。 */
   const applyProductFilters = React.useCallback(() => {
     const minimum = productSalesPriceMinDraft.trim()
@@ -594,6 +739,10 @@ function MasterDataListWorkspace({
     setProductSalesPriceMaxDraft("")
     setProductSalesPriceError(null)
     setProductFilterPanelOpen(false)
+    setSupplierCapabilityCodesDraft([])
+    setSupplierQualificationTypesDraft([])
+    setSupplierQualificationHealthDraft("all")
+    setSupplierFilterPanelOpen(false)
     patchUrl({
       q: null,
       lifecycleStatus: null,
@@ -607,6 +756,9 @@ function MasterDataListWorkspace({
       productSupplyCoverage: null,
       productSalesPriceMin: null,
       productSalesPriceMax: null,
+      supplierCapabilityCodes: null,
+      supplierQualificationTypes: null,
+      supplierQualificationHealth: null,
       page: null,
     })
     resetPagination()
@@ -644,6 +796,18 @@ function MasterDataListWorkspace({
     hasStructuredProductFilters,
   ])
 
+  React.useEffect(() => {
+    setSupplierCapabilityCodesDraft(supplierCapabilityCodes)
+    setSupplierQualificationTypesDraft(supplierQualificationTypes)
+    setSupplierQualificationHealthDraft(supplierQualificationHealth ?? "all")
+    setSupplierFilterPanelOpen(hasStructuredSupplierFilters)
+  }, [
+    hasStructuredSupplierFilters,
+    supplierCapabilityCodes,
+    supplierQualificationHealth,
+    supplierQualificationTypes,
+  ])
+
   // URL page 回读（后退/前进/分享恢复）
   React.useEffect(() => {
     setPagination((p) => ({ ...p, pageIndex: pageParamIndex }))
@@ -670,6 +834,9 @@ function MasterDataListWorkspace({
     productSupplyCoverage,
     productSalesPriceMin,
     productSalesPriceMax,
+    supplierCapabilityCodes,
+    supplierQualificationTypes,
+    supplierQualificationHealth,
     // metricKey 只做展示不做筛选：指标与 ToggleGroup 共用 lifecycleStatus 状态源
     metricKey: undefined,
   })
@@ -782,7 +949,25 @@ function MasterDataListWorkspace({
     const parts = [
       `分类=${resourceLabel(resource)}`,
       `启用状态=${lifecycleFilterLabel(lifecycleStatus)}`,
-      `版本状态=${revisionTimingFilterLabel(revisionTiming)}`,
+      ...(isSupplierResource
+        ? [`资质状态=${qualificationHealthLabel(supplierQualificationHealth)}`]
+        : [`版本状态=${revisionTimingFilterLabel(revisionTiming)}`]),
+      ...(supplierCapabilityCodes.length > 0
+        ? [
+            `供应能力=${selectedSupplierOptionLabels(
+              supplierCapabilityCodes,
+              SUPPLIER_CAPABILITY_OPTIONS
+            ).join("、")}`,
+          ]
+        : []),
+      ...(supplierQualificationTypes.length > 0
+        ? [
+            `资质类型=${selectedSupplierOptionLabels(
+              supplierQualificationTypes,
+              SUPPLIER_QUALIFICATION_TYPE_OPTIONS
+            ).join("、")}`,
+          ]
+        : []),
       ...(productKind ? [`商品类型=${PRODUCT_KIND_LABELS[productKind]}`] : []),
       ...(selectedCategoryLabel ? [`商品分类=${selectedCategoryLabel}`] : []),
       ...(selectedBrandLabel ? [`品牌=${selectedBrandLabel}`] : []),
@@ -815,6 +1000,10 @@ function MasterDataListWorkspace({
     q,
     resource,
     revisionTiming,
+    isSupplierResource,
+    supplierCapabilityCodes,
+    supplierQualificationHealth,
+    supplierQualificationTypes,
     selectedBrandLabel,
     selectedCategoryLabel,
     selectedSupplierLabel,
@@ -835,6 +1024,9 @@ function MasterDataListWorkspace({
       productSupplyCoverage,
       productSalesPriceMin,
       productSalesPriceMax,
+      supplierCapabilityCodes,
+      supplierQualificationTypes,
+      supplierQualificationHealth,
     })
     const exportRows = refreshed.rows
     if (exportRows.length === 0) return
@@ -863,6 +1055,9 @@ function MasterDataListWorkspace({
     resource,
     revisionTiming,
     rows.length,
+    supplierCapabilityCodes,
+    supplierQualificationHealth,
+    supplierQualificationTypes,
   ])
 
   const updateProductListing = React.useCallback(
@@ -892,7 +1087,7 @@ function MasterDataListWorkspace({
 
   const columns = React.useMemo<ColumnDef<MasterDataListItem>[]>(
     () => [
-      ...(!isSellableResource
+      ...(!isSellableResource && !isSupplierResource
         ? [
             {
               id: "stableNo",
@@ -1395,7 +1590,12 @@ function MasterDataListWorkspace({
   const hasActiveFilters =
     q.trim() !== "" ||
     lifecycleStatus !== "all" ||
-    revisionTiming !== "all" ||
+    (!isSupplierResource && revisionTiming !== "all") ||
+    Boolean(
+      supplierQualificationHealth ||
+        supplierCapabilityCodes.length ||
+        supplierQualificationTypes.length
+    ) ||
     Boolean(
       productKind ||
       productCategoryId ||
@@ -1406,7 +1606,9 @@ function MasterDataListWorkspace({
       productSalesPriceMin ||
       productSalesPriceMax
     )
-  const metrics = syncedMetrics
+  const metrics = isSupplierResource
+    ? syncedMetrics.filter((metric) => metric.key !== "pending")
+    : syncedMetrics
   const noDataWithCreate = !listLoadFailed && rows.length === 0
 
   return (
@@ -1545,15 +1747,18 @@ function MasterDataListWorkspace({
       {!isVoucherCategoryResource && metrics.length > 0 ? (
         <MetricStrip
           columns={4}
-          aria-label={`${resourceLabel(resource)}指标筛选`}
+          aria-label={`${resourceLabel(resource)}${
+            isSupplierResource ? "指标" : "指标筛选"
+          }`}
         >
           {metrics.map((metric) => {
             const isLifecycleMetric =
               metric.key === "all" ||
               metric.key === "enabled" ||
               metric.key === "disabled"
-            if (!isLifecycleMetric) {
-              // 待生效更新属于版本状态维度（有独立筛选控件），只读展示
+            if (isSupplierResource || !isLifecycleMetric) {
+              // 供应商页使用显式提交筛选面板；指标只读展示，避免第二套即时筛选。
+              // 待生效更新属于版本状态维度（有独立筛选控件），同样只读展示。
               return (
                 <MetricItem
                   key={metric.key}
@@ -1595,7 +1800,9 @@ function MasterDataListWorkspace({
         description={
           isProductResource
             ? masterDataCopy.productListDescription(rows.length)
-            : masterDataCopy.listDescription(rows.length)
+            : isSupplierResource
+              ? masterDataCopy.supplierListDescription(rows.length)
+              : masterDataCopy.listDescription(rows.length)
         }
         toolbar={
           isProductResource ? (
@@ -1832,6 +2039,134 @@ function MasterDataListWorkspace({
                 }
               />
             </form>
+          ) : isSupplierResource ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                applySupplierFilters()
+              }}
+            >
+              <ListToolbar
+                search={
+                  <InputGroup>
+                    <InputGroupAddon>
+                      <SearchIcon aria-hidden="true" />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                      ref={searchInputRef}
+                      value={searchDraft}
+                      onChange={(event) => setSearchDraft(event.target.value)}
+                      placeholder={masterDataSearchPlaceholder(resource)}
+                      aria-label={masterDataCopy.searchAria}
+                    />
+                  </InputGroup>
+                }
+                filters={
+                  <>
+                    {!supplierFilterPanelOpen ? (
+                      <Button type="submit" size="sm">
+                        <SearchIcon
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />
+                        搜索
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={supplierFilterPanelOpen}
+                      onClick={() =>
+                        setSupplierFilterPanelOpen((open) => !open)
+                      }
+                    >
+                      <FilterIcon data-icon="inline-start" aria-hidden="true" />
+                      高级筛选
+                      {hasStructuredSupplierFilters ? (
+                        <Badge variant="info">已启用</Badge>
+                      ) : null}
+                      <ChevronDownIcon
+                        data-icon="inline-end"
+                        aria-hidden="true"
+                        className={
+                          supplierFilterPanelOpen
+                            ? "rotate-180 transition-transform"
+                            : "transition-transform"
+                        }
+                      />
+                    </Button>
+                  </>
+                }
+                secondary={
+                  supplierFilterPanelOpen ? (
+                    <div
+                      className="flex w-full flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
+                      aria-label="供应商筛选条件"
+                    >
+                      <FixedOptionRadioFilter
+                        label="启停"
+                        value={lifecycleStatusDraft}
+                        onValueChange={setLifecycleStatusDraft}
+                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
+                        aria-label={masterDataCopy.filterLifecycleAria}
+                      />
+                      <FixedOptionRadioFilter
+                        label="资质状态"
+                        value={supplierQualificationHealthDraft}
+                        onValueChange={setSupplierQualificationHealthDraft}
+                        options={SUPPLIER_QUALIFICATION_HEALTH_OPTIONS}
+                        aria-label="资质状态"
+                      />
+                      <FixedOptionCheckboxFilter
+                        label="供应能力"
+                        value={supplierCapabilityCodesDraft}
+                        onValueChange={setSupplierCapabilityCodesDraft}
+                        options={SUPPLIER_CAPABILITY_OPTIONS}
+                        aria-label="供应能力，可多选"
+                      />
+                      <FixedOptionCheckboxFilter
+                        label="资质类型"
+                        value={supplierQualificationTypesDraft}
+                        onValueChange={setSupplierQualificationTypesDraft}
+                        options={SUPPLIER_QUALIFICATION_TYPE_OPTIONS}
+                        aria-label="资质类型，可多选"
+                      />
+
+                      <div className="flex justify-end">
+                        <Button type="submit" size="sm">
+                          <SearchIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                          />
+                          搜索
+                        </Button>
+                      </div>
+                    </div>
+                  ) : undefined
+                }
+                actions={
+                  <>
+                    <span
+                      className="text-xs text-muted-foreground"
+                      aria-live="polite"
+                    >
+                      {resourceLabel(resource)} · {rows.length} 条
+                    </span>
+                    {hasActiveFilters ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={clearAllFilters}
+                      >
+                        清除筛选
+                      </Button>
+                    ) : null}
+                  </>
+                }
+              />
+            </form>
           ) : (
             <ListToolbar
               search={
@@ -1912,26 +2247,26 @@ function MasterDataListWorkspace({
                 </>
               }
               actions={
-              <>
-                <span
-                  className="text-xs text-muted-foreground"
-                  aria-live="polite"
-                >
-                  {resourceLabel(resource)} · {rows.length} 条
-                </span>
-                {hasActiveFilters ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={clearAllFilters}
+                <>
+                  <span
+                    className="text-xs text-muted-foreground"
+                    aria-live="polite"
                   >
-                    清除筛选
-                  </Button>
-                ) : null}
-              </>
-            }
-          />
+                    {resourceLabel(resource)} · {rows.length} 条
+                  </span>
+                  {hasActiveFilters ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearAllFilters}
+                    >
+                      清除筛选
+                    </Button>
+                  ) : null}
+                </>
+              }
+            />
           )
         }
         table={

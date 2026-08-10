@@ -4,11 +4,15 @@
 //! 提供列表、完整详情和停用入口，不保留拆分的供应商、商务版本、能力、资质
 //! 或评级写接口。
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
+use chrono::Days;
 use database::{AccessControlExt, NoTransaction, PartyExt, SupplierExt};
-use entities::ids::PartyId;
 use entities::supplier::{SupplierAccount, SupplierAccountId, SupplierCommercialProfileRevision};
+use entities::{common::time::BusinessDate, ids::PartyId};
 use mongodb::{bson::doc, Database};
 use validator::Validate;
 
@@ -24,11 +28,12 @@ pub use self::dto::{
     CommercialProfileView, PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest,
     SupplierCapabilityView, SupplierDetailView, SupplierListParams, SupplierProfileAddressInput,
     SupplierProfileBankAccountInput, SupplierProfileContactInput, SupplierProfileMutationView,
-    SupplierProfileQualificationInput, SupplierProfileRatingInput, SupplierQualificationView,
-    SupplierRatingView, SupplierSensitiveFieldView, SupplierSensitiveRevealView, SupplierView,
+    SupplierProfileQualificationInput, SupplierProfileRatingInput, SupplierQualificationHealth,
+    SupplierQualificationView, SupplierRatingView, SupplierSensitiveFieldView, SupplierSensitiveRevealView,
+    SupplierView,
 };
 
-use self::dto::SortDir;
+use self::dto::{SortDir, SupplierListQuery};
 
 /// 供应商角色列表筛选条件类型（经 `SupplierExt` 关联类型跨 crate 可达）。
 type SupplierAccountFilter = <mongodb::Database as SupplierExt>::SupplierAccountFilter;
@@ -82,11 +87,14 @@ impl SupplierService {
             Some(keyword) => Some(self.matching_party_ids(keyword).await?),
             None => None,
         };
+        let (supplier_ids, excluded_supplier_ids) = self.supplier_id_constraints(&query).await?;
         let filter = SupplierAccountFilter {
             keyword: query.keyword,
             party_id: query.party_id,
             party_ids,
             status: query.status,
+            supplier_ids,
+            excluded_supplier_ids,
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -105,6 +113,102 @@ impl SupplierService {
             page: filter.page,
             page_size: filter.page_size,
         })
+    }
+
+    /// 组装供应商能力和资质条件对应的角色 ID 约束。
+    async fn supplier_id_constraints(
+        &self,
+        query: &SupplierListQuery,
+    ) -> Result<(Option<Vec<SupplierAccountId>>, Option<Vec<SupplierAccountId>>)> {
+        let as_of = BusinessDate::today().to_string();
+        let capability_ids = self.matching_capability_supplier_ids(query, &as_of).await?;
+        let (qualification_ids, excluded_qualification_ids) =
+            self.matching_qualification_supplier_ids(query, &as_of).await?;
+        Ok((
+            intersect_supplier_ids(capability_ids, qualification_ids),
+            excluded_qualification_ids,
+        ))
+    }
+
+    /// 查询命中任一当前有效供应能力的供应商角色 ID。
+    async fn matching_capability_supplier_ids(
+        &self,
+        query: &SupplierListQuery,
+        as_of: &str,
+    ) -> Result<Option<Vec<SupplierAccountId>>> {
+        if query.capability_codes.is_empty() {
+            return Ok(None);
+        }
+        let ids = self
+            .db
+            .supplier_capabilities()
+            .find_supplier_ids_by_active_capability_codes(&query.capability_codes, as_of, &mut NoTransaction)
+            .await?;
+        Ok(Some(ids))
+    }
+
+    /// 查询资质类型和资料状态对应的供应商角色 ID 约束。
+    async fn matching_qualification_supplier_ids(
+        &self,
+        query: &SupplierListQuery,
+        as_of: &str,
+    ) -> Result<(Option<Vec<SupplierAccountId>>, Option<Vec<SupplierAccountId>>)> {
+        if query.qualification_types.is_empty() && query.qualification_health.is_none() {
+            return Ok((None, None));
+        }
+        let repository = self.db.supplier_qualifications();
+        let included = match query.qualification_health {
+            None => Some(
+                repository
+                    .find_supplier_ids_by_qualification_types(&query.qualification_types, &mut NoTransaction)
+                    .await?,
+            ),
+            Some(SupplierQualificationHealth::Valid) => Some(
+                repository
+                    .find_supplier_ids_by_valid_qualifications(
+                        &query.qualification_types,
+                        as_of,
+                        &mut NoTransaction,
+                    )
+                    .await?,
+            ),
+            Some(SupplierQualificationHealth::Expiring30) => {
+                let expires_by = qualification_expiry_cutoff(as_of)?;
+                Some(
+                    repository
+                        .find_supplier_ids_by_expiring_qualifications(
+                            &query.qualification_types,
+                            as_of,
+                            &expires_by,
+                            &mut NoTransaction,
+                        )
+                        .await?,
+                )
+            }
+            Some(SupplierQualificationHealth::Expired) => Some(
+                repository
+                    .find_supplier_ids_by_expired_qualifications(
+                        &query.qualification_types,
+                        as_of,
+                        &mut NoTransaction,
+                    )
+                    .await?,
+            ),
+            Some(SupplierQualificationHealth::NotRegistered) => None,
+        };
+        let excluded = if matches!(
+            query.qualification_health,
+            Some(SupplierQualificationHealth::NotRegistered)
+        ) {
+            Some(
+                repository
+                    .find_supplier_ids_by_qualification_types(&query.qualification_types, &mut NoTransaction)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        Ok((included, excluded))
     }
 
     /// 查询供应商角色详情（供应商 + 当前商务结算版本 + 主体编号）。
@@ -509,6 +613,36 @@ impl SupplierService {
         }
         Ok(())
     }
+}
+
+/// 合并两个供应商角色候选集合；两个条件同时存在时取交集。
+fn intersect_supplier_ids(
+    current: Option<Vec<SupplierAccountId>>,
+    matched: Option<Vec<SupplierAccountId>>,
+) -> Option<Vec<SupplierAccountId>> {
+    let (current, matched) = match (current, matched) {
+        (Some(current), Some(matched)) => (current, matched),
+        (Some(current), None) => return Some(current),
+        (None, Some(matched)) => return Some(matched),
+        (None, None) => return None,
+    };
+    let matched: HashSet<String> = matched.into_iter().map(|id| id.to_string()).collect();
+    Some(
+        current
+            .into_iter()
+            .filter(|id| matched.contains(&id.to_string()))
+            .collect(),
+    )
+}
+
+/// 计算“30 天内到期”筛选窗口的结束业务日。
+fn qualification_expiry_cutoff(as_of: &str) -> Result<String> {
+    let as_of = as_of.parse::<BusinessDate>()?;
+    as_of
+        .as_naive_date()
+        .checked_add_days(Days::new(30))
+        .map(|date| date.to_string())
+        .ok_or_else(|| Error::Internal("无法计算资质到期筛选窗口".to_string()))
 }
 
 /// 将批量读取结果按稳定 ID 装配为供应商列表/详情统一视图。

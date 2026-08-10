@@ -19,7 +19,7 @@ export type SyncDirection =
   | "MALL_TO_ERP_COMMERCIAL_FACT"
   | "SEALED_HISTORY"
 
-export type ManualGovernancePolicy =
+type ManualGovernancePolicy =
   | {
       state: "MISSING"
       blockerCode: "MANUAL_GOVERNANCE_POLICY_MISSING"
@@ -41,7 +41,7 @@ export type MallSyncMetric = {
   targetFilter?: Record<string, string>
 }
 
-export type MallSyncOwnership = {
+type MallSyncOwnership = {
   businessType: "VOUCHER"
   stage: OwnershipStage
   /** 同步范围内销售单的创建来源汇总（MALL/MIXED/ERP） */
@@ -58,7 +58,7 @@ export type MallSyncOwnership = {
   erpWriteBoundary: string
 }
 
-export type MallSyncContext = {
+type MallSyncContext = {
   sourceSystem: {
     id: string
     code: string
@@ -137,7 +137,7 @@ export type MallSnapshotRow = {
   whitelistFields: Array<{ field: string; label: string; value: string }>
 }
 
-export type MappingTaskWorkItemView = {
+type MappingTaskWorkItemView = {
   workItemId: string
   workItemType: "BUSINESS_EXCEPTION"
   businessObjectType: "MASTER_MAPPING_TASK"
@@ -150,7 +150,7 @@ export type MappingTaskWorkItemView = {
   claimedBy?: string
 }
 
-export type MappingCandidate = {
+type MappingCandidate = {
   objectType: string
   objectId: string
   stableNo: string
@@ -160,7 +160,7 @@ export type MappingCandidate = {
   reason: string
 }
 
-export type MappingCurrentTarget = {
+type MappingCurrentTarget = {
   objectType: string
   objectId: string
   stableNo: string
@@ -262,7 +262,7 @@ export type ReconciliationBatch = {
   differences: ReconciliationDifference[]
 }
 
-export type HistoryArchiveEntry = {
+type HistoryArchiveEntry = {
   id: string
   kind: "SEAL" | "MAPPING"
   title: string

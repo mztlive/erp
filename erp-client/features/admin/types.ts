@@ -12,15 +12,6 @@ export type AdminRole = {
   created_at: number
 }
 
-/** 管理员账号项（GET /admin/admins）。 */
-export type AdminAccount = {
-  id: string
-  account: string
-  name: string
-  role_ids: string[]
-  created_at: number
-}
-
 /** 创建管理员请求（POST /admin/admins）。 */
 export type CreateAdminPayload = {
   account: string

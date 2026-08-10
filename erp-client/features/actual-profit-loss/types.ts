@@ -12,7 +12,7 @@ export type ProfitLossDimension =
   | "cost_type"
 
 export type CostStage = "EXPECTED" | "CONFIRMED" | "ACTUAL" | "REDUCTION"
-export type CostScope = "NON_VOUCHER_FULFILLMENT"
+type CostScope = "NON_VOUCHER_FULFILLMENT"
 
 export type CoverageState = "COVERED" | "PARTIAL" | "UNCOVERED"
 
@@ -22,9 +22,9 @@ export type ProjectionFreshnessState =
   | "rebuilding"
   | "failed"
 
-export type Reliability = "reliable" | "partial" | "unavailable"
+type Reliability = "reliable" | "partial" | "unavailable"
 
-export type ProfitLossPeriodBasisOption = Readonly<{
+type ProfitLossPeriodBasisOption = Readonly<{
   code: string
   label: string
   explanation: string
@@ -54,7 +54,7 @@ export type ProfitLossQuery = Readonly<{
   pageSize: number
 }>
 
-export type CoverageBlocker = Readonly<{
+type CoverageBlocker = Readonly<{
   code: string
   message: string
 }>
@@ -83,7 +83,7 @@ export type ProfitLossRow = Readonly<{
   costEntryIds: readonly string[]
 }>
 
-export type ProfitLossTrendPoint = Readonly<{
+type ProfitLossTrendPoint = Readonly<{
   period: string
   netSalesRevenue: string
   actualCostNet: string
@@ -91,7 +91,7 @@ export type ProfitLossTrendPoint = Readonly<{
   reliability: Reliability
 }>
 
-export type ProfitLossCostComposition = Readonly<{
+type ProfitLossCostComposition = Readonly<{
   costType: string
   label: string
   netAmount: string
@@ -99,7 +99,7 @@ export type ProfitLossCostComposition = Readonly<{
   share?: string
 }>
 
-export type StageReferenceLine = Readonly<{
+type StageReferenceLine = Readonly<{
   stage: "EXPECTED" | "CONFIRMED"
   label: string
   procurementCostNet: string
@@ -250,12 +250,3 @@ export const COVERAGE_STATE_UI: Record<
   PARTIAL: { label: "部分", tone: "warning" },
   UNCOVERED: { label: "未覆盖", tone: "destructive" },
 }
-
-export const PERIOD_BASIS_CODES = [
-  "sales_revenue_recognition_date",
-  "sales_order_effective_date",
-  "fulfillment_complete_date",
-  "cost_occurred_date",
-] as const
-
-export type PeriodBasisCode = (typeof PERIOD_BASIS_CODES)[number]

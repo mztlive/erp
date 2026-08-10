@@ -20,17 +20,9 @@ import type {
   SaveAcceptanceDraftInput,
 } from "@/features/sales-orders/acceptance-types"
 import { FACT_ONLY_NOTICE } from "@/features/sales-orders/acceptance-types"
-import {
-  fetchSalesOrderDetail,
-  submitSalesOrderAcceptance,
-  type SalesOrderDetailView,
-} from "@/features/sales-orders/api"
+import { fetchSalesOrderDetail } from "@/features/sales-orders/api"
 
-export {
-  fetchSalesOrderDetail,
-  submitSalesOrderAcceptance,
-  type SalesOrderDetailView,
-}
+
 
 // ─── 后端形状 ────────────────────────────────────────────────────────────────
 
@@ -559,9 +551,4 @@ export async function reverseCustomerAcceptanceWorkspace(
       message: apiErr?.message ?? "冲正失败",
     }
   }
-}
-
-export async function clearCustomerAcceptanceDraft(salesOrderId: string) {
-  // 后端无「清除草稿」接口；草稿保留在服务端，客户端无操作。
-  void salesOrderId
 }

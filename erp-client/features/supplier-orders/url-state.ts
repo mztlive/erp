@@ -13,7 +13,7 @@ import {
 } from "@/features/supplier-orders/types"
 import { createUrlStateCodec } from "@/lib/url-state"
 
-export type SupplierOrdersUrlState = {
+type SupplierOrdersUrlState = {
   view: ListView
   q?: string
   supplierId?: string

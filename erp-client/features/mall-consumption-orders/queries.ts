@@ -13,7 +13,7 @@ import type {
   MallConsumptionOrderListQuery,
 } from "@/features/mall-consumption-orders/types"
 
-export const consumptionOrderKeys = {
+const consumptionOrderKeys = {
   all: ["mall-consumption-orders"] as const,
   list: (query: MallConsumptionOrderListQuery) =>
     [...consumptionOrderKeys.all, "list", query] as const,

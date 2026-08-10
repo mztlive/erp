@@ -12,15 +12,15 @@ export type PayableSourceType = "PURCHASE_ORDER" | "SUPPLIER_SETTLEMENT"
 
 export type PayableStatus = "OPEN" | "PARTIAL" | "SETTLED"
 
-export type PaymentStatus = "DRAFT" | "POSTED" | "REVERSED"
+type PaymentStatus = "DRAFT" | "POSTED" | "REVERSED"
 
-export type InvoiceKind = "BLUE" | "RED"
+type InvoiceKind = "BLUE" | "RED"
 
-export type InvoiceStatus = "POSTED" | "REVERSED"
+type InvoiceStatus = "POSTED" | "REVERSED"
 
 export type AllocationTrack = "payment" | "purchase_invoice"
 
-export type PolicyState = "AVAILABLE" | "MISSING" | "STALE"
+type PolicyState = "AVAILABLE" | "MISSING" | "STALE"
 
 export type SupplierAccountsQuery = {
   view: SupplierAccountsView
@@ -34,7 +34,7 @@ export type SupplierAccountsQuery = {
   pageSize?: number
 }
 
-export type PayablePriorityPolicyView = {
+type PayablePriorityPolicyView = {
   payablePriorityPolicyId?: string
   payablePriorityPolicyVersion?: number
   state: PolicyState
@@ -42,7 +42,7 @@ export type PayablePriorityPolicyView = {
   blockerMessage?: string
 }
 
-export type ActionBlocker = {
+type ActionBlocker = {
   action: string
   code: string
   message: string
@@ -83,7 +83,7 @@ export type PayableRow = Readonly<{
   actionBlockers: readonly ActionBlocker[]
 }>
 
-export type PaymentAllocationLine = Readonly<{
+type PaymentAllocationLine = Readonly<{
   allocationId: string
   action: "APPLY" | "REVERSE"
   payableAccountId: string
@@ -115,7 +115,7 @@ export type PaymentRow = Readonly<{
   reverseOfPaymentId?: string
 }>
 
-export type InvoiceAllocationLine = Readonly<{
+type InvoiceAllocationLine = Readonly<{
   allocationId: string
   action: "APPLY" | "REVERSE"
   payableAccountId: string
@@ -163,7 +163,7 @@ export type UnallocatedRow = Readonly<{
   statusTone: StatusTone
 }>
 
-export type SupplierOption = Readonly<{
+type SupplierOption = Readonly<{
   supplierId: string
   supplierName: string
   openPayableTotal: string
@@ -171,7 +171,7 @@ export type SupplierOption = Readonly<{
   unallocatedInvoiceTotal: string
 }>
 
-export type SupplierAccountsMetrics = Readonly<{
+type SupplierAccountsMetrics = Readonly<{
   openPayableTotal: string
   overduePayableTotal: string
   unallocatedPaymentTotal: string
@@ -219,7 +219,7 @@ export type PayableDetailView = Readonly<{
   queriedAt: string
 }>
 
-export type AllocationPoolItem = Readonly<{
+type AllocationPoolItem = Readonly<{
   payableAccountId: string
   primaryEntryId: string
   entryLockVersion: number
@@ -257,7 +257,7 @@ export type AllocationSessionView = Readonly<{
   existingDocumentNo?: string
 }>
 
-export type AllocationTargetInput = {
+type AllocationTargetInput = {
   payableAccountId: string
   payableEntryId?: string
   amount: string
@@ -313,7 +313,7 @@ export type ReverseInvoiceInput = {
   idempotencyKey: string
 }
 
-export type FormalSubmitStatus = "succeeded" | "failed" | "unknown" | "blocked"
+type FormalSubmitStatus = "succeeded" | "failed" | "unknown" | "blocked"
 
 export type FormalSubmitResult = {
   status: FormalSubmitStatus

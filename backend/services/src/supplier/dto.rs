@@ -228,6 +228,12 @@ pub struct SupplierListParams {
     pub party_id: Option<entities::ids::PartyId>,
     /// 启停状态筛选。
     pub status: Option<SupplierAccountStatus>,
+    /// 供应能力代码，多项以逗号分隔；命中任一当前有效能力即可。
+    pub capability_codes: Option<String>,
+    /// 资质类型代码，多项以逗号分隔；命中任一类型即可。
+    pub qualification_types: Option<String>,
+    /// 资质资料状态筛选。
+    pub qualification_health: Option<SupplierQualificationHealth>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -249,6 +255,12 @@ pub(crate) struct SupplierListQuery {
     pub party_id: Option<entities::ids::PartyId>,
     /// 启停状态筛选。
     pub status: Option<SupplierAccountStatus>,
+    /// 命中任一当前有效能力的能力代码。
+    pub capability_codes: Vec<CapabilityCode>,
+    /// 命中任一资质类型的类型代码。
+    pub qualification_types: Vec<QualificationType>,
+    /// 资质资料状态筛选。
+    pub qualification_health: Option<SupplierQualificationHealth>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -267,6 +279,9 @@ impl SupplierListParams {
             keyword: normalized_text(self.keyword.as_deref()),
             party_id: self.party_id.clone(),
             status: self.status,
+            capability_codes: normalize_capability_codes(self.capability_codes.as_deref())?,
+            qualification_types: normalize_qualification_types(self.qualification_types.as_deref())?,
+            qualification_health: self.qualification_health,
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -275,6 +290,66 @@ impl SupplierListParams {
             },
         })
     }
+}
+
+/// 供应商资质资料的当前状态。
+///
+/// 状态以当前业务日、资质启停状态和有效期共同计算；`NotRegistered` 仅表示
+/// 尚未登记对应资质记录，不推断业务规则中的必备资质。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SupplierQualificationHealth {
+    /// 当前有效。
+    Valid,
+    /// 当前有效，且将在 30 天内到期。
+    Expiring30,
+    /// 已标记失效，或有效期已过。
+    Expired,
+    /// 尚未登记资质记录。
+    NotRegistered,
+}
+
+/// 归一化逗号分隔的供应能力代码。
+fn normalize_capability_codes(value: Option<&str>) -> Result<Vec<CapabilityCode>> {
+    normalize_code_list(value, "供应能力", |code| match code {
+        "physical" => Some(CapabilityCode::Physical),
+        "virtual" => Some(CapabilityCode::Virtual),
+        "offline_service" => Some(CapabilityCode::OfflineService),
+        "api" => Some(CapabilityCode::Api),
+        "printing" => Some(CapabilityCode::Printing),
+        _ => None,
+    })
+}
+
+/// 归一化逗号分隔的资质类型代码。
+fn normalize_qualification_types(value: Option<&str>) -> Result<Vec<QualificationType>> {
+    normalize_code_list(value, "资质类型", |code| match code {
+        "certificate" => Some(QualificationType::Certificate),
+        "contract" => Some(QualificationType::Contract),
+        "authorization" => Some(QualificationType::Authorization),
+        "food_license" => Some(QualificationType::FoodLicense),
+        "legal_person_id" => Some(QualificationType::LegalPersonId),
+        _ => None,
+    })
+}
+
+/// 清理、去重并校验逗号分隔的固定枚举代码。
+fn normalize_code_list<T: Copy + Eq>(
+    value: Option<&str>,
+    field: &str,
+    parse: impl Fn(&str) -> Option<T>,
+) -> Result<Vec<T>> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let mut codes = Vec::new();
+    for raw in value.split(',').map(str::trim).filter(|code| !code.is_empty()) {
+        let code = parse(raw).ok_or_else(|| Error::ValidationError(format!("不支持的{field}: {raw}")))?;
+        if !codes.contains(&code) {
+            codes.push(code);
+        }
+    }
+    Ok(codes)
 }
 
 /// 商务结算版本响应视图（契约形状对齐投影行）。
@@ -646,7 +721,10 @@ pub struct SupplierProfileMutationView {
 mod tests {
     use validator::Validate;
 
-    use super::{normalize_sort, SortDir, SupplierProfileBankAccountInput};
+    use super::{
+        normalize_sort, SortDir, SupplierListParams, SupplierProfileBankAccountInput,
+        SupplierQualificationHealth,
+    };
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -680,5 +758,47 @@ mod tests {
             account_number: " ".to_string(),
         };
         assert!(missing_account_number.validate().is_err());
+    }
+
+    #[test]
+    fn supplier_list_normalizes_repeated_filter_codes() {
+        let params = SupplierListParams {
+            keyword: None,
+            party_id: None,
+            status: None,
+            capability_codes: Some(" physical, api,physical ".to_string()),
+            qualification_types: Some("contract, food_license,contract".to_string()),
+            qualification_health: Some(SupplierQualificationHealth::Expiring30),
+            page: None,
+            page_size: None,
+            sort_by: None,
+            sort_dir: None,
+        };
+
+        let query = params.normalized().unwrap();
+        assert_eq!(query.capability_codes.len(), 2);
+        assert_eq!(query.qualification_types.len(), 2);
+        assert_eq!(
+            query.qualification_health,
+            Some(SupplierQualificationHealth::Expiring30)
+        );
+    }
+
+    #[test]
+    fn supplier_list_rejects_unknown_filter_code() {
+        let params = SupplierListParams {
+            keyword: None,
+            party_id: None,
+            status: None,
+            capability_codes: Some("unknown".to_string()),
+            qualification_types: None,
+            qualification_health: None,
+            page: None,
+            page_size: None,
+            sort_by: None,
+            sort_dir: None,
+        };
+
+        assert!(params.normalized().is_err());
     }
 }

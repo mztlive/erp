@@ -7,13 +7,13 @@
  * build 跳过默认值并省略空参数，保证 URL 最小化。
  */
 
-export type SearchParamsLike =
+type SearchParamsLike =
   | URLSearchParams
   | { get(name: string): string | null }
 
 type GetParam = (name: string) => string | null
 
-export type ParsedUrlState = Record<string, unknown>
+type ParsedUrlState = Record<string, unknown>
 
 export type UrlFieldSpec =
   | {

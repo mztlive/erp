@@ -34,7 +34,7 @@ import {
 import { hasAnyPermission } from "@/lib/permissions"
 
 /** 页面模式（文档用语；不在 UI 文案中展示代码）。 */
-export type WorkspaceMode =
+type WorkspaceMode =
   | "M1"
   | "M2"
   | "M3"
@@ -88,7 +88,7 @@ export type WorkspaceNavBadgeKey =
   | "delivery-count"
   | "warehouse-count"
 
-export type WorkspaceNavItem = Readonly<{
+type WorkspaceNavItem = Readonly<{
   id: WorkspaceId
   href: string
   label: string
@@ -723,17 +723,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
     ],
   },
 ])
-
-/** Flat list of every main nav href (and W06 nested path) for verification. */
-export function getAllWorkspaceNavHrefs(): readonly string[] {
-  const nav = WORKSPACE_NAV_GROUPS.flatMap((group) =>
-    group.items.map((item) => item.href)
-  )
-  const nested = WORKSPACE_ROUTES.filter((route) => route.nestedUnder).map(
-    (route) => route.navHref
-  )
-  return [...nav, ...nested]
-}
 
 export function getWorkspaceById(id: WorkspaceId): WorkspaceRouteEntry {
   const found = WORKSPACE_ROUTES.find((route) => route.id === id)

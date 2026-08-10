@@ -7,7 +7,6 @@ import {
   fetchAuditEvent,
   fetchEffectiveAccess,
   previewAccessChange,
-  resolveAccessChangeUnknown,
   submitAccessChange,
 } from "@/features/access-audit/api"
 import type {
@@ -15,7 +14,7 @@ import type {
   AccessListQuery,
 } from "@/features/access-audit/types"
 
-export const accessAuditKeys = {
+const accessAuditKeys = {
   all: ["access-audit"] as const,
   list: (query: AccessListQuery) =>
     [...accessAuditKeys.all, "list", query] as const,
@@ -66,19 +65,6 @@ export function useSubmitAccessChangeMutation() {
     mutationFn: (command: AccessChangeCommand) => submitAccessChange(command),
     onSuccess: async (result) => {
       if (result.outcome === "CONFIRMED") {
-        await queryClient.invalidateQueries({ queryKey: accessAuditKeys.all })
-      }
-    },
-  })
-}
-
-export function useResolveAccessUnknownMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (idempotencyKey: string) =>
-      resolveAccessChangeUnknown(idempotencyKey),
-    onSuccess: async (result) => {
-      if (result?.outcome === "CONFIRMED") {
         await queryClient.invalidateQueries({ queryKey: accessAuditKeys.all })
       }
     },

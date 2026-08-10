@@ -21,7 +21,7 @@ import type {
   IntegrationTransferInput,
 } from "@/features/integration-errors/types"
 
-export const integrationErrorKeys = {
+const integrationErrorKeys = {
   all: ["integration-errors"] as const,
   queue: (query: IntegrationResolutionQuery) =>
     [...integrationErrorKeys.all, "queue", query] as const,

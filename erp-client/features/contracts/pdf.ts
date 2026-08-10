@@ -1,4 +1,4 @@
-export const MAX_CONTRACT_PDF_BYTES = 20 * 1024 * 1024
+const MAX_CONTRACT_PDF_BYTES = 20 * 1024 * 1024
 
 export function contractPdfError(file: File | null): string | null {
   if (!file) return "请上传合同 PDF"

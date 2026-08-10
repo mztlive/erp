@@ -41,20 +41,6 @@ export function salesOrderStatusLabel(
   return STATUS_LABEL_BY_VALUE.get(status) ?? status
 }
 
-export function matchesSalesOrderSearch(
-  order: SalesOrderListItem,
-  query: string
-): boolean {
-  if (!query) return true
-  const q = query.trim().toLowerCase()
-  return (
-    order.documentNumber.toLowerCase().includes(q) ||
-    order.customerName.toLowerCase().includes(q) ||
-    order.contractNumber.toLowerCase().includes(q) ||
-    order.ownerName.toLowerCase().includes(q)
-  )
-}
-
 export function salesOrderSummaryLabels(
   summaryFilter: SalesOrderSummaryFilter
 ): string {

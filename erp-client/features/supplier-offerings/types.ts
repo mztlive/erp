@@ -62,7 +62,7 @@ export type SupplierOfferingListQuery = Readonly<{
   pageSize?: number
 }>
 
-export type SupplierOfferingTermsInput = Readonly<{
+type SupplierOfferingTermsInput = Readonly<{
   dropship_supply_price_gross: string
   bulk_supply_price_gross: string
   input_tax_rate: string

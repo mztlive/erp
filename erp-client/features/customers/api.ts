@@ -25,7 +25,6 @@ import type {
   CustomerStatus,
   RelatedObjectSummary,
   SaveCustomerDetailsInput,
-  SaveCustomerRevisionInput,
 } from "@/features/customers/types"
 import {
   CONTRACT_STATUS_LABEL,
@@ -888,16 +887,6 @@ export async function saveCustomerDetails(
     }
     throw error
   }
-}
-
-/** 仅修订客户主体身份；内部仍复用同一根命令。 */
-export async function saveCustomerRevision(
-  input: SaveCustomerRevisionInput
-): Promise<CustomerMutationResult> {
-  return saveCustomerDetails({
-    ...input,
-    expectedPartyVersion: input.expectedPartyVersion,
-  })
 }
 
 /** 按原幂等键查询已经提交成功的最终结果。 */

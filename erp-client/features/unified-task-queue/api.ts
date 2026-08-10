@@ -25,7 +25,7 @@ import type {
 import { FAMILY_LABELS } from "./types"
 
 /** 后端 work_item 列表/详情 DTO。 */
-export type WorkItemDto = {
+type WorkItemDto = {
   id: string
   work_item_type: string
   business_object_type: string
@@ -323,7 +323,7 @@ function allowedActionsFor(
   return []
 }
 
-export function mapWorkItemDto(
+function mapWorkItemDto(
   dto: WorkItemDto,
   profile?: AccountProfileDto
 ): QueueWorkItemView {

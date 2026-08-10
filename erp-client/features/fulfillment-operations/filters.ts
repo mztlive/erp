@@ -6,7 +6,7 @@
 import type { FulfillmentOperationType } from "@/features/fulfillment-operations/types"
 import { SLUG_TO_TYPE, TYPE_SLUG } from "@/features/fulfillment-operations/types"
 
-export const ALL_TYPES: FulfillmentOperationType[] = [
+const ALL_TYPES: FulfillmentOperationType[] = [
   "RECEIPT",
   "WAREHOUSE_SHIP",
   "SUPPLIER_DIRECT",

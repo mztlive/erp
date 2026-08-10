@@ -16,7 +16,7 @@ export type CoverageFilter = "below_threshold" | "none" | "all"
 
 export type ExpiryState = "active" | "expired" | "all"
 
-export type ProjectionSlaState =
+type ProjectionSlaState =
   | "WITHIN_SLA"
   | "BREACHED"
   | "REBUILDING"
@@ -36,7 +36,7 @@ export type CoverageStatus =
   | "warning"
   | "insufficient"
 
-export type DateBasisOption = Readonly<{
+type DateBasisOption = Readonly<{
   code: DateBasis
   label: string
   explanation: string
@@ -67,7 +67,7 @@ export type CardBusinessAnalyticsQuery = Readonly<{
   pageSize: number
 }>
 
-export type AuthorizedCardMetric = Readonly<{
+type AuthorizedCardMetric = Readonly<{
   key: string
   label: string
   value: string | null
@@ -78,7 +78,7 @@ export type AuthorizedCardMetric = Readonly<{
   detail?: string
 }>
 
-export type CostBasisSlice = Readonly<{
+type CostBasisSlice = Readonly<{
   basis: CostBasisCode
   consumptionGross: string
   /** NONE 不返回成本金额，禁止 0 */
@@ -87,7 +87,7 @@ export type CostBasisSlice = Readonly<{
   shareLabel: string
 }>
 
-export type CardBusinessCoverage = Readonly<{
+type CardBusinessCoverage = Readonly<{
   coveredConsumptionGross: string
   totalConsumptionGross: string
   rate: string | null
@@ -101,7 +101,7 @@ export type CardBusinessCoverage = Readonly<{
   profitReferenceOnly: boolean
 }>
 
-export type CardBusinessFreshness = Readonly<{
+type CardBusinessFreshness = Readonly<{
   projectionUpdatedAt: string
   consumedOutboxWatermark: string
   sourceFactWatermark: string
@@ -112,7 +112,7 @@ export type CardBusinessFreshness = Readonly<{
   state: ProjectionFreshnessState
 }>
 
-export type CardBusinessTrendPoint = Readonly<{
+type CardBusinessTrendPoint = Readonly<{
   period: string
   salesGross: string
   consumptionGross: string
@@ -120,7 +120,7 @@ export type CardBusinessTrendPoint = Readonly<{
   balanceGross: string
 }>
 
-export type ContributionTrendPoint = Readonly<{
+type ContributionTrendPoint = Readonly<{
   period: string
   marginNet: string
   contributionNet: string
@@ -128,7 +128,7 @@ export type ContributionTrendPoint = Readonly<{
   coveragePercent: number
 }>
 
-export type CardBusinessBreakdownItem = Readonly<{
+type CardBusinessBreakdownItem = Readonly<{
   id: string
   label: string
   consumptionGross: string
@@ -279,11 +279,6 @@ export const COST_BASIS_ROW_UI: Record<
   ACTUAL: { label: "实际成本", tone: "success" },
   STANDARD: { label: "标准成本", tone: "info" },
   NONE: { label: "无可用成本", tone: "warning" },
-}
-
-export const EXPIRY_STATE_LABEL: Record<Exclude<ExpiryState, "all">, string> = {
-  active: "未到期",
-  expired: "已到期",
 }
 
 export const COVERAGE_FILTER_LABEL: Record<

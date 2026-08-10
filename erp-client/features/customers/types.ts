@@ -17,7 +17,7 @@ export type CustomerSectionId =
   | "quality"
   | "audit"
 
-export type FieldVisibility = "full" | "masked" | "hidden"
+type FieldVisibility = "full" | "masked" | "hidden"
 
 export type CustomerAssignmentView = Readonly<{
   id: string
@@ -99,7 +99,7 @@ export type RelatedObjectSummary = Readonly<{
   detail?: string
 }>
 
-export type CustomerRelationshipMetrics = Readonly<{
+type CustomerRelationshipMetrics = Readonly<{
   /** 来自正式关联接口的完整分页汇总；分区失败时必须返回 null。 */
   activeContractCount: number | null
   inProgressSalesOrderCount: number | null
@@ -108,7 +108,7 @@ export type CustomerRelationshipMetrics = Readonly<{
   expiringContractCount?: number
 }>
 
-export type ReceivableSummary = Readonly<{
+type ReceivableSummary = Readonly<{
   receivableBalance: string
   overdueAmount: string
   earliestOverdueDate?: string
@@ -117,7 +117,7 @@ export type ReceivableSummary = Readonly<{
   reliabilityNote?: string
 }>
 
-export type CustomerQualitySummary = Readonly<{
+type CustomerQualitySummary = Readonly<{
   scaleLabel: string
   profitContributionLabel: string
   collectionRiskLabel: string

@@ -20,7 +20,7 @@ import type {
 import { purchaseOrderKeys } from "@/features/purchase-orders/queries"
 import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
 
-export const supplierPayablesKeys = {
+const supplierPayablesKeys = {
   all: ["supplier-payables"] as const,
   list: (query: SupplierAccountsQuery) =>
     [...supplierPayablesKeys.all, "list", query] as const,

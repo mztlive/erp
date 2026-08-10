@@ -74,7 +74,7 @@ export type SalesOrderListView = {
   queriedAt: string
 }
 
-export const PERMISSION_VERSION = "pv-w05-1"
+const PERMISSION_VERSION = "pv-w05-1"
 
 // ─── 后端原始形状 ────────────────────────────────────────────────────────────
 
@@ -1564,36 +1564,6 @@ export async function fetchSalesOrderDraftForResume(
     remark: wc.business_remark ?? "",
     lineItems,
   }
-}
-
-// ─── 验收（兼容旧入口） ──────────────────────────────────────────────────────
-
-export async function submitSalesOrderAcceptance(input: {
-  salesOrderId: string
-  documentNumber: string
-  acceptedQuantity: string
-  note: string
-}): Promise<{ reference: string }> {
-  // 旧单字段入口：创建一笔简化验收草稿后立即过账需要销售行与分配。
-  // 完整工作台走 acceptance.ts；此处仅登记后端可创建的草稿头。
-  const acceptanceNo = `YS${Date.now().toString(36).toUpperCase()}`
-  const created = await apiPost<{
-    acceptance?: { id: string; acceptance_no: string }
-    id?: string
-    acceptance_no?: string
-  }>("/admin/customer-acceptances", {
-    acceptance_no: acceptanceNo,
-    sales_order_id: input.salesOrderId,
-    accepted_at: Math.floor(Date.now() / 1000),
-    result: "PASSED",
-    lines: [],
-  }).catch(() => null)
-
-  const reference =
-    created?.acceptance?.acceptance_no ??
-    created?.acceptance_no ??
-    acceptanceNo
-  return { reference }
 }
 
 // ─── 采购拒绝处理 ────────────────────────────────────────────────────────────

@@ -12,14 +12,14 @@ export const NATURE_LABEL: Record<SalesOrderListItem["nature"], string> = {
 }
 
 /** 阶段责任角色中文映射（后端固定码，见 `sales_order/mod.rs` 提交编排）。 */
-export const STAGE_OWNER_ROLE_LABEL: Record<string, string> = {
+const STAGE_OWNER_ROLE_LABEL: Record<string, string> = {
   procurement: "采购",
   sales_leader: "销售领导",
   operations: "运营",
 }
 
 /** 审核轨进行中的阶段码（草稿/已生效/履约中/已关闭/已作废不在其中）。 */
-export const PENDING_REVIEW_STAGE_CODES = [
+const PENDING_REVIEW_STAGE_CODES = [
   "awaiting_confirm",
   "awaiting_sales",
   "awaiting_sales_lead",

@@ -20,7 +20,7 @@ export type FulfillmentLaneHeader = {
   group?: { label: string; href: string }
 }
 
-export const FULFILLMENT_LANES: Record<
+const FULFILLMENT_LANES: Record<
   FulfillmentLane,
   FulfillmentLaneHeader & {
     value: FulfillmentLane
@@ -51,12 +51,12 @@ export const FULFILLMENT_LANES: Record<
  * **不要**在这两种情况下退回「收货与发货」—— 那会在最显眼的位置，
  * 对着一条电子交付任务写「收货与发货」。中性短名与 `lib/ui-text.ts` 的 W09 一致。
  */
-export const FULFILLMENT_NEUTRAL_HEADER: FulfillmentLaneHeader = {
+const FULFILLMENT_NEUTRAL_HEADER: FulfillmentLaneHeader = {
   label: "履约处理",
   description: "入库、公司仓发、供应商直发、电子交付与线下服务。",
 }
 
-export function parseLaneParam(raw: string | null): FulfillmentLane | null {
+function parseLaneParam(raw: string | null): FulfillmentLane | null {
   if (raw === "warehouse" || raw === "procurement") return raw
   return null
 }

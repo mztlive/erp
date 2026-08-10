@@ -21,9 +21,7 @@ export type LatencyBand = "normal" | "near_sla" | "over_sla"
 
 export type ReconciliationStatus = "MATCHED" | "VERSION_MISMATCH" | "NONE"
 
-export type DeliveryAction = "QUERY_RESULT" | "RETRY" | "ESCALATE"
-
-export type DeliveryCommandResultCode =
+type DeliveryCommandResultCode =
   | "ACKED"
   | "FAILED"
   | "STILL_UNKNOWN"
@@ -67,7 +65,7 @@ export const RECONCILIATION_LABEL: Record<ReconciliationStatus, string> = {
   NONE: "无对账",
 }
 
-export type ActionBlocker = {
+type ActionBlocker = {
   action: string
   code: string
   message: string
@@ -88,7 +86,7 @@ export type ProjectionWhitelistContent = {
   contentHash: string
 }
 
-export type ExecutionProjectionDelivery = {
+type ExecutionProjectionDelivery = {
   deliveryId: string
   status: DeliveryStatus
   statusLabel: string
@@ -181,7 +179,7 @@ export type ExecutionProjectionListResult = {
   defaultViewNote: string
 }
 
-export type RevisionLink = {
+type RevisionLink = {
   salesOrderRevisionId: string
   salesOrderRevisionNo: number
   projectionRevisionId: string

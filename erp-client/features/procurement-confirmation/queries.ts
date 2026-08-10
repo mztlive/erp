@@ -14,7 +14,7 @@ import {
   type QueueFilters,
 } from "@/features/procurement-confirmation/api"
 
-export const procurementConfirmKeys = {
+const procurementConfirmKeys = {
   all: ["procurement-confirmation"] as const,
   queue: (filters: QueueFilters) =>
     [...procurementConfirmKeys.all, "queue", filters] as const,

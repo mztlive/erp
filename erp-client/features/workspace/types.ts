@@ -20,7 +20,7 @@ export type WorkspaceMetricKey =
   | "overdue"
   | "exception"
 
-export type WorkspaceActionCode = "VIEW" | "PROCESS"
+type WorkspaceActionCode = "VIEW" | "PROCESS"
 
 export type WorkspaceWorkItem = Readonly<{
   workItemId: string
@@ -74,7 +74,7 @@ export type WorkspaceMetric = Readonly<{
   detail?: string
 }>
 
-export type WorkspaceWarning = Readonly<{
+type WorkspaceWarning = Readonly<{
   warningId: string
   kind: string
   severity: "warning" | "destructive" | "info"
@@ -85,7 +85,7 @@ export type WorkspaceWarning = Readonly<{
   objectId?: string
 }>
 
-export type WorkspaceRecentItem = Readonly<{
+type WorkspaceRecentItem = Readonly<{
   id: string
   label: string
   destinationWorkspaceId: WorkspaceId

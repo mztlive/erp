@@ -13,7 +13,7 @@ import {
 } from "@/features/card-funds-review/api"
 import type { CardFundsReviewQueueQuery } from "@/features/card-funds-review/types"
 
-export const cardFundsReviewKeys = {
+const cardFundsReviewKeys = {
   all: ["card-funds-review"] as const,
   queue: (query: CardFundsReviewQueueQuery) =>
     [...cardFundsReviewKeys.all, "queue", query] as const,

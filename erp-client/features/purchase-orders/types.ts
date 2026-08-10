@@ -56,13 +56,13 @@ export const PO_STATUS_FILTER_LABEL: Record<PurchaseOrderStatusFilter, string> =
     VOID: "已作废",
   }
 
-export type ActionBlocker = {
+type ActionBlocker = {
   action: string
   code: string
   message: string
 }
 
-export type PurchaseOrderLineView = Readonly<{
+type PurchaseOrderLineView = Readonly<{
   lineId: string
   lineType: "ITEM_SERVICE" | "LOGISTICS_FEE"
   procurementConfirmationLineId?: string
@@ -81,7 +81,7 @@ export type PurchaseOrderLineView = Readonly<{
   salesAllocationLabel?: string
 }>
 
-export type PrepaymentGateView = Readonly<{
+type PrepaymentGateView = Readonly<{
   state: PaymentGateState
   message: string
   required: string
@@ -90,13 +90,13 @@ export type PrepaymentGateView = Readonly<{
   updatedAt: string
 }>
 
-export type PayableSummaryView = Readonly<{
+type PayableSummaryView = Readonly<{
   payableOpenAmount: string
   paidAllocatedAmount: string
   purchaseInvoiceAllocatedAmount: string
 }>
 
-export type FulfillmentSummaryView = Readonly<{
+type FulfillmentSummaryView = Readonly<{
   progressLabel: string
   progressTone: StatusTone
   inboundQty: string
@@ -105,7 +105,7 @@ export type FulfillmentSummaryView = Readonly<{
   note?: string
 }>
 
-export type RelatedChangeView = Readonly<{
+type RelatedChangeView = Readonly<{
   changeId: string
   label: string
   statusLabel: string
@@ -113,7 +113,7 @@ export type RelatedChangeView = Readonly<{
   baseRevisionNo?: number
 }>
 
-export type WorkflowActionView = Readonly<{
+type WorkflowActionView = Readonly<{
   id: string
   actionLabel: string
   actorLabel: string

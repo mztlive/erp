@@ -77,17 +77,6 @@ export function formatScaled(unscaled: bigint, scale: number): string {
   return negative && absolute !== ZERO ? `-${value}` : value
 }
 
-/** Normalize a decimal string while keeping no unnecessary trailing zeros. */
-export function canonicalDecimal(
-  value: string,
-  options: { maxScale: number; allowNegative?: boolean }
-): string {
-  const parsed = parseDecimal(value, options)
-  if (parsed.scale === 0) return formatScaled(parsed.unscaled, 0)
-  const fixed = formatScaled(parsed.unscaled, parsed.scale)
-  return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
-}
-
 /** Normalize and round a decimal string to an exact output scale. */
 export function normalizeFixed(
   value: string,
@@ -144,23 +133,6 @@ export function sumFixed(
     ZERO
   )
   return formatScaled(total, options.outputScale)
-}
-
-/** Derive line net/tax amounts from a gross amount and a fractional tax rate. */
-export function splitGrossByFractionRate(
-  grossAmount: string,
-  taxRate: string
-): { gross: string; net: string; tax: string } {
-  const gross = parseDecimal(grossAmount, { maxScale: 2 })
-  const grossCents = rescale(gross, 2)
-  const rate = parseDecimal(taxRate, { maxScale: 6 })
-  const rateBase = powerOfTen(rate.scale)
-  const netCents = roundDivide(grossCents * rateBase, rateBase + rate.unscaled)
-  return {
-    gross: formatScaled(grossCents, 2),
-    net: formatScaled(netCents, 2),
-    tax: formatScaled(grossCents - netCents, 2),
-  }
 }
 
 /** Derive line net/tax amounts from a gross amount and a percentage tax rate. */

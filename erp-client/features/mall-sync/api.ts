@@ -27,11 +27,9 @@ import type {
   TriggerMallSyncResult,
 } from "@/features/mall-sync/types"
 import {
-  DIRECTION_LABEL,
   JOB_TYPE_LABEL,
   MAPPING_TYPE_LABEL,
   OWNER_ROLE_LABEL,
-  STAGE_LABEL,
 } from "@/features/mall-sync/types"
 
 // ─── 后端 DTO（snake_case；时间秒级时间戳） ─────────────────────────────────
@@ -173,10 +171,6 @@ export type MallSyncQueryInput = {
   queueContextId?: string
   owner?: "mine" | "all"
   mappingType?: string
-}
-
-export function getMallSyncStageLabels() {
-  return { STAGE_LABEL, DIRECTION_LABEL }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1045,28 +1039,6 @@ export async function resolveUnknownReapply(input: {
     status: "failed",
     code: "BACKEND_GAP_REAPPLY",
     message: "后端尚未提供重新归集查询/结算接口。",
-  }
-}
-
-export async function assignMappingTask(input: {
-  workItemId: string
-  expectedSubjectVersion: string
-  targetOwnerRole: "SALES" | "OPERATIONS" | "FINANCE"
-  reason: string
-}): Promise<{ status: "succeeded" | "failed"; message: string; code?: string }> {
-  const version = Number(input.expectedSubjectVersion)
-  await apiPost<WorkItemView>(
-    `/admin/work-items/${encodeURIComponent(input.workItemId)}/transfer`,
-    {
-      version: Number.isFinite(version) && version > 0 ? version : 1,
-      owner_role: input.targetOwnerRole,
-      owner_user_id: "unassigned",
-      comment: input.reason,
-    }
-  )
-  return {
-    status: "succeeded",
-    message: `已指派给 ${OWNER_ROLE_LABEL[input.targetOwnerRole]} 处理。`,
   }
 }
 

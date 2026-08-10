@@ -6,21 +6,6 @@
  * - 分页响应形状为 items + total + page + page_size
  */
 
-/** 排序方向。 */
-export type SortDir = "asc" | "desc"
-
-/** 分页列表查询参数（可叠加任意扁平筛选字段）。 */
-export interface PageParams {
-  /** 页码，从 1 开始。 */
-  page: number
-  /** 每页条数。 */
-  page_size: number
-  /** 排序列名（可选）。 */
-  sort_by?: string
-  /** 排序方向（可选，默认由后端决定）。 */
-  sort_dir?: SortDir
-}
-
 /** 后端分页响应统一形状。 */
 export interface Page<T> {
   items: T[]

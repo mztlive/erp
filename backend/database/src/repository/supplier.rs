@@ -22,7 +22,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::extensions::SupplierExt;
 use super::regex_filter::insert_literal_regex_filter;
@@ -71,6 +71,10 @@ pub struct SupplierAccountFilter {
     pub party_ids: Option<Vec<PartyId>>,
     /// 启停状态；`None` 表示不筛选。
     pub status: Option<SupplierAccountStatus>,
+    /// 必须命中的供应商角色 ID 集合；空集合表示无匹配结果。
+    pub supplier_ids: Option<Vec<SupplierAccountId>>,
+    /// 必须排除的供应商角色 ID 集合。
+    pub excluded_supplier_ids: Option<Vec<SupplierAccountId>>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -110,8 +114,37 @@ impl QueryFilter for SupplierAccountFilter {
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
+        insert_supplier_id_constraints(
+            &mut filter,
+            self.supplier_ids.as_deref(),
+            self.excluded_supplier_ids.as_deref(),
+        );
         filter
     }
+}
+
+/// 将供应商候选与排除集合写入账户列表查询条件。
+fn insert_supplier_id_constraints(
+    filter: &mut Document,
+    supplier_ids: Option<&[SupplierAccountId]>,
+    excluded_supplier_ids: Option<&[SupplierAccountId]>,
+) {
+    let Some(supplier_ids) = supplier_ids else {
+        if let Some(excluded_supplier_ids) = excluded_supplier_ids {
+            filter.insert("id", doc! { "$nin": supplier_id_strings(excluded_supplier_ids) });
+        }
+        return;
+    };
+    let mut id_filter = doc! { "$in": supplier_id_strings(supplier_ids) };
+    if let Some(excluded_supplier_ids) = excluded_supplier_ids {
+        id_filter.insert("$nin", supplier_id_strings(excluded_supplier_ids));
+    }
+    filter.insert("id", id_filter);
+}
+
+/// 转换供应商角色 ID，供 MongoDB 集合条件使用。
+fn supplier_id_strings(ids: &[SupplierAccountId]) -> Vec<String> {
+    ids.iter().map(ToString::to_string).collect()
 }
 
 impl Pagination for SupplierAccountFilter {
@@ -544,6 +577,41 @@ impl<'a> Repository<'a, SupplierCapability> {
         )
         .await
     }
+
+    /// 查询命中任一当前有效能力的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `capability_codes` - 供应能力代码；调用方保证非空
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_supplier_ids_by_active_capability_codes(
+        &self,
+        capability_codes: &[CapabilityCode],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        let codes: Vec<&str> = capability_codes.iter().map(CapabilityCode::as_str).collect();
+        find_supplier_ids(
+            self,
+            doc! {
+                "capability_code": { "$in": codes },
+                "status": CapabilityStatus::Active.as_str(),
+                "valid_from": { "$lte": as_of },
+                "$or": [
+                    { "valid_to": null },
+                    { "valid_to": { "$gte": as_of } },
+                ],
+            },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 供应商资质列表投影行。
@@ -684,6 +752,112 @@ impl<'a> Repository<'a, SupplierQualification> {
         )
         .await
     }
+
+    /// 查询已登记任一指定资质类型的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_supplier_ids_by_qualification_types(
+        &self,
+        qualification_types: &[QualificationType],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        find_supplier_ids(self, qualification_type_filter(qualification_types), executor).await
+    }
+
+    /// 查询当前有效的供应商资质对应的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_supplier_ids_by_valid_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        let mut filter = qualification_type_filter(qualification_types);
+        filter.insert("status", QualificationStatus::Active.as_str());
+        filter.insert("valid_from", doc! { "$lte": as_of });
+        filter.insert(
+            "$or",
+            vec![doc! { "valid_to": null }, doc! { "valid_to": { "$gte": as_of } }],
+        );
+        find_supplier_ids(self, filter, executor).await
+    }
+
+    /// 查询将在指定日期前到期且当前仍有效的供应商资质对应的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `expires_by` - 到期窗口的结束业务日，格式为 `YYYY-MM-DD`
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_supplier_ids_by_expiring_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        expires_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        let mut filter = qualification_type_filter(qualification_types);
+        filter.insert("status", QualificationStatus::Active.as_str());
+        filter.insert("valid_from", doc! { "$lte": as_of });
+        filter.insert("valid_to", doc! { "$gte": as_of, "$lte": expires_by });
+        find_supplier_ids(self, filter, executor).await
+    }
+
+    /// 查询已失效供应商资质对应的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_supplier_ids_by_expired_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        let mut filter = qualification_type_filter(qualification_types);
+        filter.insert(
+            "$or",
+            vec![
+                doc! { "status": QualificationStatus::Expired.as_str() },
+                doc! {
+                    "status": QualificationStatus::Active.as_str(),
+                    "valid_to": { "$lt": as_of },
+                },
+            ],
+        );
+        find_supplier_ids(self, filter, executor).await
+    }
 }
 
 impl<'a> Repository<'a, SupplierQualificationCapability> {
@@ -731,6 +905,45 @@ impl<'a> Repository<'a, SupplierProfileCommand> {
         self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
             .await
     }
+}
+
+/// 仅承载筛选阶段所需的供应商角色 ID。
+#[derive(Debug, Deserialize)]
+struct SupplierIdRow {
+    supplier_id: SupplierAccountId,
+}
+
+/// 按供应商子集合条件读取去重后的供应商角色 ID。
+async fn find_supplier_ids<T>(
+    repository: &Repository<'_, T>,
+    mut filter: Document,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierAccountId>>
+where
+    T: Serialize + DeserializeOwned + Send + Sync,
+{
+    filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
+    let options = FindOptions::builder()
+        .projection(doc! { "supplier_id": 1, "_id": 0 })
+        .build();
+    let collection = repository.collection().clone_with_type::<SupplierIdRow>();
+    let rows = mongo_ops::find_many(&collection, filter, options, executor).await?;
+    let mut ids: Vec<SupplierAccountId> = rows.into_iter().map(|row| row.supplier_id).collect();
+    ids.sort_by_key(ToString::to_string);
+    ids.dedup();
+    Ok(ids)
+}
+
+/// 构建资质类型范围条件；空集合表示不限制类型。
+fn qualification_type_filter(qualification_types: &[QualificationType]) -> Document {
+    if qualification_types.is_empty() {
+        return Document::new();
+    }
+    let types: Vec<&str> = qualification_types
+        .iter()
+        .map(QualificationType::as_str)
+        .collect();
+    doc! { "qualification_type": { "$in": types } }
 }
 
 /// D09 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
@@ -924,8 +1137,10 @@ fn supplier_qualification_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, QueryFilter, SupplierCapabilityFilter, SupplierQualificationFilter};
-    use entities::supplier::{CapabilityStatus, QualificationStatus};
+    use super::{
+        sort_doc, QueryFilter, SupplierAccountFilter, SupplierCapabilityFilter, SupplierQualificationFilter,
+    };
+    use entities::supplier::{CapabilityStatus, QualificationStatus, SupplierAccountStatus};
     use mongodb::bson::doc;
 
     #[test]
@@ -960,6 +1175,28 @@ mod tests {
 
         let document = filter.to_doc();
         assert_eq!(document.get_str("qualification_type").unwrap(), "food_license");
+        assert_eq!(document.get_str("status").unwrap(), "active");
+    }
+
+    #[test]
+    fn account_filter_applies_candidate_and_excluded_supplier_ids() {
+        let filter = SupplierAccountFilter {
+            keyword: None,
+            party_id: None,
+            party_ids: None,
+            status: Some(SupplierAccountStatus::Active),
+            supplier_ids: Some(vec![entities::ids::SupplierAccountId::new("supplier-1")]),
+            excluded_supplier_ids: Some(vec![entities::ids::SupplierAccountId::new("supplier-2")]),
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        let document = filter.to_doc();
+        let ids = document.get_document("id").unwrap();
+        assert_eq!(ids.get_array("$in").unwrap().len(), 1);
+        assert_eq!(ids.get_array("$nin").unwrap().len(), 1);
         assert_eq!(document.get_str("status").unwrap(), "active");
     }
 

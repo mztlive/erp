@@ -111,14 +111,6 @@ function isApiError(error: unknown): error is ApiError {
   )
 }
 
-function apiErrorMessage(error: ApiError): string {
-  const data = error.responseData as { errorMessage?: string } | undefined
-  if (data?.errorMessage && data.errorMessage !== "OK") {
-    return data.errorMessage
-  }
-  return error.message
-}
-
 function tsToIso(seconds: number | undefined | null): string {
   if (seconds == null || !Number.isFinite(seconds)) {
     return new Date().toISOString()
@@ -576,19 +568,6 @@ export async function fetchContractCenter(
 }
 
 /**
- * 新销售单可选合同：生效中且服务端状态允许引用。
- */
-export async function fetchContractsForNewSalesOrder(): Promise<
-  ContractListRow[]
-> {
-  const rows = await fetchContracts()
-  return rows.filter((row) => {
-    if (row.status !== "EFFECTIVE") return false
-    return row.allowedActions.includes("CREATE_SALES_ORDER")
-  })
-}
-
-/**
  * 上传合同 PDF：先 file-asset 上传，再 create contract。
  */
 export async function uploadContractPdf(
@@ -747,4 +726,4 @@ export async function createContractExportJob(input: {
 }
 
 /** 透传工具：供调用方读取错误文案 */
-export { apiErrorMessage, isApiError }
+

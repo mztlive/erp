@@ -26,10 +26,10 @@ import { toQueryString } from "@/lib/api/paging"
 import { getToken, notifyUnauthorized } from "@/lib/api/session"
 
 /** 默认后端地址（可用 NEXT_PUBLIC_API_BASE_URL 覆盖）。 */
-export const DEFAULT_API_BASE_URL = "http://127.0.0.1:10001"
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:10001"
 
 /** 默认请求超时（毫秒）。 */
-export const DEFAULT_TIMEOUT_MS = 15_000
+const DEFAULT_TIMEOUT_MS = 15_000
 
 /**
  * 读取后端 base URL（浏览器端读取环境变量）。
@@ -38,7 +38,7 @@ export const getApiBaseUrl = (): string =>
   process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL
 
 /** 后端统一响应信封（与 response.rs 字段一一对应）。 */
-export interface ApiResponseEnvelope<T> {
+interface ApiResponseEnvelope<T> {
   status: number
   errorMessage: string
   code?: string
@@ -70,7 +70,7 @@ export interface ApiRequestOptions {
  * @returns 信封解包后的业务数据（T）。
  * @throws {ApiError} 网络失败 / 非 2xx / 业务失败 / 解析失败统一抛 ApiError。
  */
-export const apiFetch = async <T>(
+const apiFetch = async <T>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<T> => {

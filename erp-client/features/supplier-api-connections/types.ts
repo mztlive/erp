@@ -39,9 +39,9 @@ export type CapabilityCode =
   | "CALLBACK"
   | "SETTLEMENT"
 
-export type CapabilityStatus = "ENABLED" | "DISABLED"
+type CapabilityStatus = "ENABLED" | "DISABLED"
 
-export type CapabilityVerification =
+type CapabilityVerification =
   | "SUCCESS"
   | "FAILED"
   | "UNVERIFIED"
@@ -56,20 +56,20 @@ export type ConnectionSection =
   | "related"
   | "audit"
 
-export type EmptyReason =
+type EmptyReason =
   | "NO_PERMISSION"
   | "NO_SCOPE"
   | "NO_CONNECTIONS"
   | "FILTER_NO_RESULT"
 
-export type ActionBlocker = {
+type ActionBlocker = {
   action: string
   code: string
   message: string
   destinationWorkspaceId?: string
 }
 
-export type SafeReferenceView = {
+type SafeReferenceView = {
   state: ReferenceState
   /** 仅技术角色可见；采购只看就绪文案 */
   alias?: string
@@ -109,7 +109,7 @@ export type HealthRecordView = {
   jobNo?: string
 }
 
-export type CatalogSyncView = {
+type CatalogSyncView = {
   state: CatalogFreshnessState
   stateLabel: string
   lastSuccessfulAt?: string
@@ -124,14 +124,14 @@ export type CatalogSyncView = {
   }
 }
 
-export type RelatedImpactView = {
+type RelatedImpactView = {
   activeOfferings: number
   activePublications: number
   openSupplierOrders: number
   activeSyncJobs: number
 }
 
-export type AuditEventView = {
+type AuditEventView = {
   eventId: string
   at: string
   actor: string
@@ -208,7 +208,7 @@ export type ConnectionCenterView = {
   nextStep: string
 }
 
-export type ConnectionListMetrics = {
+type ConnectionListMetrics = {
   enabled: number
   faulted: number
   pendingConfig: number
