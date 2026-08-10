@@ -88,6 +88,7 @@
 
   /* 高密度表格与工具条表面 */
   --color-surface-sunken: var(--surface-sunken);
+  --color-surface-control: var(--surface-control);
   --color-table-header: var(--table-header);
   --color-row-hover: var(--row-hover);
   --color-row-selected: var(--row-selected);
@@ -218,10 +219,15 @@
 
   --border: oklch(0.8853 0 0); /* #d9d9d9 colorBorder */
   --overlay: oklch(0 0 0 / 45%); /* antd mask */
-  --input: oklch(0.8853 0 0); /* #d9d9d9 colorBorder */
+  /* 表单控件静止态边框：比通用 --border 再浅一档，配合纯白背景（--surface-control）
+     不会显得过重；hover/focus 时仍靠 border-foreground/25 与 ring 变深提示 */
+  --input: oklch(0.93 0 0); /* #e8e8e8 */
   --ring: oklch(0.6726 0.176 255.3); /* #4096ff primary-hover */
 
   --surface-sunken: oklch(0.9851 0 0); /* #fafafa */
+  /* 表单控件静止态背景：与 card 同色，靠 border 提示可编辑，避免和 --muted
+     disabled 态（#f5f5f5）灰度太接近而被误读成"已禁用" */
+  --surface-control: oklch(1 0 0); /* = card #ffffff */
   --table-header: oklch(0.9851 0 0);
   --row-hover: oklch(0.9702 0 0); /* #f5f5f5 */
   --row-selected: oklch(0.96 0.021 241.3); /* #e6f4ff */
@@ -297,10 +303,11 @@
 
   --border: oklch(1 0 0 / 12%);
   --overlay: oklch(0 0 0 / 65%);
-  --input: oklch(1 0 0 / 16%);
+  --input: oklch(1 0 0 / 10%);
   --ring: oklch(0.6726 0.176 255.3);
 
   --surface-sunken: oklch(0.21 0 0);
+  --surface-control: oklch(0.244 0 0); /* = card #1f1f1f */
   --table-header: oklch(0.26 0 0);
   --row-hover: oklch(0.28 0 0);
   --row-selected: oklch(0.32 0.06 259);

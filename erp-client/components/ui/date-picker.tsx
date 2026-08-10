@@ -123,7 +123,7 @@ function DatePicker({
               type="button"
               variant="outline"
               size="lg"
-              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-sunken shadow-xs hover:border-foreground/25 hover:bg-card"
+              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
               disabled={disabled}
               aria-invalid={ariaInvalid}
               aria-label={value ? `已选日期 ${value}` : placeholder}
@@ -200,7 +200,7 @@ function DateRangePicker({
               type="button"
               variant="outline"
               size="lg"
-              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-sunken shadow-xs hover:border-foreground/25 hover:bg-card"
+              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
               disabled={disabled}
               aria-label={label}
             />
@@ -292,7 +292,7 @@ function DateTimePicker({
               type="button"
               variant="outline"
               size="lg"
-              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-sunken shadow-xs hover:border-foreground/25 hover:bg-card"
+              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
               disabled={disabled}
               aria-invalid={ariaInvalid}
               aria-label={label}
