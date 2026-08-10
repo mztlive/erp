@@ -120,6 +120,24 @@ export type MasterDataListItem = Readonly<{
   parentStableId?: string
   /** 分类适用商品类型（实物 / 虚拟 / 服务 / 卡券）。 */
   productKind?: string
+  /** 公司商品池列表与预览专用的只读销售资格投影。 */
+  sellableItem?: Readonly<{
+    productId: string
+    productNo: string
+    specificationAttributes: ReadonlyArray<{
+      name: string
+      value: string
+    }>
+    specificationLabel: string
+    barcode?: string
+    baseUnit: string
+    productKindLabel: string
+    salesVisiblePriceGross: string
+    marketPrice?: string
+    supplierCount: number
+    supplyRegions: readonly string[]
+    eligibilityAsOf: string
+  }>
 }>
 
 export type MasterDataListQuery = Readonly<{

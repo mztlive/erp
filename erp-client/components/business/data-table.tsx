@@ -764,10 +764,11 @@ function DataTable<TData>({
                         pinningClass(header.column.getIsPinned(), "header")
                       )}
                       style={{
-                        width:
-                          enableColumnResizing && !meta?.role
-                            ? runtimeWidth
-                            : undefined,
+                        width: columnRuntimeWidth(
+                          enableColumnResizing,
+                          meta?.role,
+                          runtimeWidth
+                        ),
                       }}
                       aria-sort={
                         sort === "asc"
@@ -920,15 +921,17 @@ function DataTable<TData>({
                           className={cn(
                             alignmentClass(meta?.align),
                             cell.column.id === "actions" && "max-sm:hidden",
-                            meta?.numeric && "num",
+                            // align="end" 已由 [data-align="end"] 统一带上 num，这里只处理非 end 的等宽数字列。
+                            meta?.numeric && meta?.align !== "end" && "num",
                             columnWidthClass(meta?.width, meta?.role),
                             pinningClass(cell.column.getIsPinned(), "cell")
                           )}
                           style={{
-                            width:
-                              enableColumnResizing && !meta?.role
-                                ? runtimeWidth
-                                : undefined,
+                            width: columnRuntimeWidth(
+                              enableColumnResizing,
+                              meta?.role,
+                              runtimeWidth
+                            ),
                           }}
                         >
                           {flexRender(
@@ -1240,9 +1243,18 @@ function DataTablePagination<TData>({
 }
 
 function alignmentClass(alignment: DataTableAlignment = "start") {
-  if (alignment === "end") return "text-right"
+  // align="end" 已由 globals.css 的 [data-align="end"] 选择器统一处理（text-right + num）。
+  if (alignment === "end") return undefined
   if (alignment === "center") return "text-center"
   return "text-left"
+}
+
+function columnRuntimeWidth(
+  enableColumnResizing: boolean,
+  role: "selection" | undefined,
+  runtimeWidth: number | undefined
+) {
+  return enableColumnResizing && !role ? runtimeWidth : undefined
 }
 
 function sortableHeaderClass(alignment: DataTableAlignment = "start") {

@@ -193,6 +193,10 @@ type SellableSkuDto = {
   product_no: string
   product_kind: ProductKind
   name: string
+  specification_attributes: Array<{
+    name: string
+    value: string
+  }>
   specification: string | null
   barcode: string | null
   base_unit_id: string
@@ -971,6 +975,14 @@ function mapProductRow(
 function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
   const lifecycle = "ENABLED" as const
   const kindLabel = productKindLabel(dto.product_kind)
+  const specificationAttributes = dto.specification_attributes ?? []
+  const specificationLabel =
+    specificationAttributes.length > 0
+      ? specificationAttributes
+          .map((attribute) => `${attribute.name}：${attribute.value}`)
+          .join(" / ")
+      : "无规格"
+  const baseUnit = dto.base_unit_name ?? dto.base_unit_code ?? "—"
   return {
     objectType: "sellable-items",
     stableId: dto.sku_id,
@@ -989,7 +1001,7 @@ function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
     keyFacts: [
       { label: "SKU", value: dto.sku_no },
       {
-        label: "销售可见价",
+        label: "销售价",
         value: `¥${dto.sales_visible_price_gross}`,
       },
       {
@@ -1012,6 +1024,20 @@ function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
     lockVersion: dto.sku_version,
     metricTags: ["enabled"],
     productKind: dto.product_kind,
+    sellableItem: {
+      productId: dto.product_id,
+      productNo: dto.product_no,
+      specificationAttributes,
+      specificationLabel,
+      barcode: dto.barcode ?? undefined,
+      baseUnit,
+      productKindLabel: kindLabel,
+      salesVisiblePriceGross: dto.sales_visible_price_gross,
+      marketPrice: dto.market_price ?? undefined,
+      supplierCount: dto.supplier_count,
+      supplyRegions: dto.supply_regions,
+      eligibilityAsOf: dto.eligibility_as_of,
+    },
   }
 }
 

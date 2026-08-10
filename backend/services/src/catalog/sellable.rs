@@ -52,6 +52,8 @@ pub struct SellableSkuView {
     pub product_kind: ProductKind,
     /// 公司审核后的 SKU 名称。
     pub name: String,
+    /// 稳定 SKU 身份对应的规格属性名与取值。
+    pub specification_attributes: Vec<SellableSkuSpecificationAttributeView>,
     /// 公司审核后的规格文案。
     pub specification: Option<String>,
     /// 条码。
@@ -78,6 +80,31 @@ pub struct SellableSkuView {
     pub supply_regions: Vec<String>,
     /// 本次资格判定的服务端业务日期。
     pub eligibility_as_of: BusinessDate,
+}
+
+/// 公司商品池中一项 SKU 规格属性。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SellableSkuSpecificationAttributeView {
+    /// SPU 内的规格属性名。
+    pub name: String,
+    /// 当前 SKU 选中的规格属性值。
+    pub value: String,
+}
+
+/// 将稳定 SKU 规格签名转换为对外的结构化规格属性。
+fn specification_attributes(signature: &str) -> Vec<SellableSkuSpecificationAttributeView> {
+    signature
+        .split('|')
+        .filter_map(|entry| {
+            let (name, value) = entry.split_once('=')?;
+            let name = name.trim();
+            let value = value.trim();
+            (!name.is_empty() && !value.is_empty()).then(|| SellableSkuSpecificationAttributeView {
+                name: name.to_string(),
+                value: value.to_string(),
+            })
+        })
+        .collect()
 }
 
 impl CatalogService {
@@ -129,6 +156,7 @@ impl CatalogService {
                 product_no: row.product_no,
                 product_kind: row.product_kind,
                 name: row.name,
+                specification_attributes: specification_attributes(&row.specification_signature),
                 specification: row.specification,
                 barcode: row.barcode,
                 base_unit_id: row.base_unit_id,
@@ -169,7 +197,7 @@ pub(crate) fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use super::SellableSkuListParams;
+    use super::{specification_attributes, SellableSkuListParams};
     use validator::Validate;
 
     /// 公司商品池分页上限固定为一百，阻止无界销售查询。
@@ -184,5 +212,18 @@ mod tests {
         };
 
         assert!(params.validate().is_err());
+    }
+
+    /// 公司商品池返回真实规格属性名/值，无规格 SKU 返回空集合。
+    #[test]
+    fn sellable_sku_specification_attributes_come_from_stable_identity() {
+        let attributes = specification_attributes("尺码=L|颜色=红色");
+
+        assert_eq!(attributes.len(), 2);
+        assert_eq!(attributes[0].name, "尺码");
+        assert_eq!(attributes[0].value, "L");
+        assert_eq!(attributes[1].name, "颜色");
+        assert_eq!(attributes[1].value, "红色");
+        assert!(specification_attributes("").is_empty());
     }
 }

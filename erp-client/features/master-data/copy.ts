@@ -96,7 +96,7 @@ export const masterDataCopy = {
     `共 ${count} 条 · 可按启用状态、版本状态筛选 · 按 / 搜索 · 回车打开详情`,
   searchAria: "搜索基础资料",
   sellableItemsHint:
-    "公司商品池只显示已上架、资料有效且当前有供给关系的 SKU；销售可见价来自公司商品主档，采购成本不会在这里展示。",
+    "公司商品池只显示已上架、资料有效且当前有供给关系的 SKU；销售价来自公司商品主档，采购成本不会在这里展示。",
   filterLifecycleAria: "启用状态",
   filterVersionAria: "版本状态",
   versionAll: "版本：全部",
@@ -188,7 +188,7 @@ export const masterDataCopy = {
   fCarouselImages: "轮播图",
   fDetailImages: "详情图",
   fCostPrice: "成本价",
-  fSalePrice: "销售可见价",
+  fSalePrice: "销售价",
   fMarketPrice: "市场价",
   fProductCode: "产品编码",
   fSpecName: "规格名",
@@ -247,7 +247,7 @@ export const masterDataCopy = {
   unitListHint:
     "计量单位供公司商品等表单选择基础单位；停用后业务页默认不可选，历史引用保留。单位代码创建后不可修改。",
   fDescription: "类目描述",
-  fSalesVisiblePrice: "销售可见价",
+  fSalesVisiblePrice: "销售价",
   fSupplierCount: "可供供应商数",
   fRegion: "服务区域",
   fLeadTime: "交期",

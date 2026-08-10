@@ -2403,7 +2403,7 @@ export function ProductDetailPage({
                                             {sku.skuNo} · {sku.specLabel}
                                           </div>
                                           <div className="mt-1 text-muted-foreground">
-                                            销售可见价 {sku.salePrice ?? "—"} · 市场价 {sku.marketPrice ?? "—"}
+                                            销售价 {sku.salePrice ?? "—"} · 市场价 {sku.marketPrice ?? "—"}
                                           </div>
                                         </div>
                                       ))}

@@ -77,6 +77,8 @@ pub struct SellableSkuRow {
     pub product_kind: ProductKind,
     /// 公司审核后的 SKU 名称。
     pub name: String,
+    /// 稳定 SKU 的规范化规格属性签名。
+    pub specification_signature: String,
     /// 公司审核后的规格文案。
     pub specification: Option<String>,
     /// 条码。
@@ -1960,6 +1962,7 @@ fn sellable_sku_pipeline(
             "product_no": "$product.product_no",
             "product_kind": "$product.product_kind",
             "name": "$sku_revision.name",
+            "specification_signature": 1,
             "specification": "$sku_revision.specification",
             "barcode": "$sku_revision.barcode",
             "base_unit_id": 1,
@@ -2547,6 +2550,7 @@ mod tests {
         assert!(json.contains("$gt"));
         assert!(json.contains("AVAILABLE"));
         assert!(json.contains("product_revision"));
+        assert!(json.contains("specification_signature"));
         assert!(json.contains("supplier_count"));
         assert!(json.contains("eligibility") || json.contains("valid_from"));
         assert!(!json.contains("dropship_supply_price"));

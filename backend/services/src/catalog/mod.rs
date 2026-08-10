@@ -70,7 +70,7 @@ pub use self::dto::{
     VoucherCategoryProfileView, VoucherSkuInput,
 };
 pub(crate) use self::sellable::sellable_sku_invalid_error;
-pub use self::sellable::{SellableSkuListParams, SellableSkuView};
+pub use self::sellable::{SellableSkuListParams, SellableSkuSpecificationAttributeView, SellableSkuView};
 
 /// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductCategoryFilter = <mongodb::Database as CatalogExt>::ProductCategoryFilter;

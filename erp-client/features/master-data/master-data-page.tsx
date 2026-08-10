@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
+  ArrowUpRightIcon,
   BanIcon,
   DownloadIcon,
   HistoryIcon,
@@ -24,6 +25,7 @@ import {
   MetricFilterItem,
   MetricItem,
   MetricStrip,
+  MoneyValue,
   OptionCombobox,
   PageActions,
   PageHeader,
@@ -58,7 +60,10 @@ import {
   MasterDataDisableDialog,
   MasterDataReviseDialog,
 } from "@/features/master-data/master-data-action-dialog"
-import { MasterDataPreviewPanel } from "@/features/master-data/master-data-preview"
+import {
+  MasterDataPreviewPanel,
+  SellableItemPreviewPanel,
+} from "@/features/master-data/master-data-preview"
 import { ProductSupplyDialog } from "@/features/master-data/product-supply-dialog"
 import { VoucherCategoryFormDialog } from "@/features/master-data/voucher-category-form-dialog"
 import {
@@ -430,7 +435,7 @@ function MasterDataListWorkspace({
 
   const previewDetailQuery = useMasterDataCenterQuery(
     resource,
-    previewId ?? ""
+    isSellableResource ? "" : previewId ?? ""
   )
 
   const previewRow = React.useMemo(
@@ -565,61 +570,143 @@ function MasterDataListWorkspace({
 
   const columns = React.useMemo<ColumnDef<MasterDataListItem>[]>(
     () => [
-      {
-        id: "stableNo",
-        accessorKey: "stableNo",
-        header: masterDataCopy.colStableNo,
-        meta: { label: masterDataCopy.colStableNo, width: "default" as const },
-        cell: ({ row }) => (
-          <span className="num text-sm">{row.original.stableNo}</span>
-        ),
-      },
+      ...(!isSellableResource
+        ? [
+            {
+              id: "stableNo",
+              accessorKey: "stableNo",
+              header: masterDataCopy.colStableNo,
+              meta: {
+                label: masterDataCopy.colStableNo,
+                width: "default" as const,
+              },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <span className="num text-sm">{row.original.stableNo}</span>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+          ]
+        : []),
       {
         id: "name",
         accessorKey: "name",
-        header: masterDataCopy.colName,
-        meta: { label: masterDataCopy.colName },
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
-              {row.original.name}
-            </div>
-            {row.original.keyFacts[0] ? (
-              <div className="truncate text-xs text-muted-foreground">
-                {row.original.keyFacts[0].label}：
-                {row.original.keyFacts[0].value}
+        header: isSellableResource ? "商品名称 · 规格" : masterDataCopy.colName,
+        meta: {
+          label: isSellableResource ? "商品名称 · 规格" : masterDataCopy.colName,
+        },
+        cell: ({ row }) => {
+          const sellable = row.original.sellableItem
+          return (
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">
+                {row.original.name}
+                {sellable ? (
+                  <span className="text-muted-foreground">
+                    {" "}· {sellable.specificationLabel}
+                  </span>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        ),
+              {sellable ? (
+                <div className="truncate text-xs text-muted-foreground">
+                  SKU 编号：
+                  <span className="num">{row.original.stableNo}</span>
+                </div>
+              ) : row.original.keyFacts[0] ? (
+                <div className="truncate text-xs text-muted-foreground">
+                  {row.original.keyFacts[0].label}：
+                  {row.original.keyFacts[0].value}
+                </div>
+              ) : null}
+            </div>
+          )
+        },
       },
-      {
-        id: "revisionNo",
-        header: masterDataCopy.colVersion,
-        meta: { label: masterDataCopy.colVersion, width: "amount" as const },
-        cell: ({ row }) => (
-          <span className="num text-sm">v{row.original.revisionNo}</span>
-        ),
-      },
-      {
-        id: "lifecycle",
-        header: masterDataCopy.colLifecycle,
-        meta: { label: masterDataCopy.colLifecycle },
-        cell: ({ row }) => (
-          <div className="flex flex-col gap-1">
-            <BusinessStatusBadge
-              context="list"
-              label={row.original.lifecycleStatusLabel}
-              tone={row.original.lifecycleTone}
-            />
-            {row.original.scheduledLifecycleLabel ? (
-              <span className="text-tiny text-muted-foreground">
-                {row.original.scheduledLifecycleLabel}
-              </span>
-            ) : null}
-          </div>
-        ),
-      },
+      ...(isSellableResource
+        ? [
+            {
+              id: "productNo",
+              header: "SPU 编号",
+              meta: { label: "SPU 编号", width: "default" as const },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <span className="num text-sm">
+                  {row.original.sellableItem?.productNo ?? "—"}
+                </span>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+            {
+              id: "price",
+              header: "价格",
+              meta: { label: "价格", width: "amount" as const },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <div className="flex flex-col gap-0.5">
+                  <MoneyValue
+                    value={row.original.sellableItem?.salesVisiblePriceGross}
+                  />
+                  <span className="text-tiny text-muted-foreground">
+                    销售价 · 含税
+                  </span>
+                </div>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+            {
+              id: "supplyRegions",
+              header: "可供区域",
+              meta: { label: "可供区域" },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => {
+                const regions = row.original.sellableItem?.supplyRegions ?? []
+                const label = regions.length > 0 ? regions.join("、") : "未标注"
+                return (
+                  <span className="line-clamp-2 max-w-64 text-sm" title={label}>
+                    {label}
+                  </span>
+                )
+              },
+            } satisfies ColumnDef<MasterDataListItem>,
+            {
+              id: "supplierCount",
+              header: "有效供应商",
+              meta: { label: "有效供应商", width: "status" as const },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <Badge variant="outline">
+                  <span className="num">
+                    {row.original.sellableItem?.supplierCount ?? 0}
+                  </span>{" "}
+                  家
+                </Badge>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+          ]
+        : [
+            {
+              id: "revisionNo",
+              header: masterDataCopy.colVersion,
+              meta: {
+                label: masterDataCopy.colVersion,
+                width: "amount" as const,
+              },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <span className="num text-sm">v{row.original.revisionNo}</span>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+            {
+              id: "lifecycle",
+              header: masterDataCopy.colLifecycle,
+              meta: { label: masterDataCopy.colLifecycle },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <div className="flex flex-col gap-1">
+                  <BusinessStatusBadge
+                    context="list"
+                    label={row.original.lifecycleStatusLabel}
+                    tone={row.original.lifecycleTone}
+                  />
+                  {row.original.scheduledLifecycleLabel ? (
+                    <span className="text-tiny text-muted-foreground">
+                      {row.original.scheduledLifecycleLabel}
+                    </span>
+                  ) : null}
+                </div>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+          ]),
       ...(isProductResource
         ? [
             {
@@ -755,20 +842,26 @@ function MasterDataListWorkspace({
             } satisfies ColumnDef<MasterDataListItem>,
           ]
         : []),
-      {
-        id: "revisionTiming",
-        header: masterDataCopy.colVersionState,
-        meta: { label: masterDataCopy.colVersionState },
-        cell: ({ row }) => (
-          <Badge
-            variant={
-              row.original.revisionTiming === "FUTURE" ? "warning" : "secondary"
-            }
-          >
-            {row.original.revisionTimingLabel}
-          </Badge>
-        ),
-      },
+      ...(!isSellableResource
+        ? [
+            {
+              id: "revisionTiming",
+              header: masterDataCopy.colVersionState,
+              meta: { label: masterDataCopy.colVersionState },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <Badge
+                  variant={
+                    row.original.revisionTiming === "FUTURE"
+                      ? "warning"
+                      : "secondary"
+                  }
+                >
+                  {row.original.revisionTimingLabel}
+                </Badge>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+          ]
+        : []),
     ...(showEffectiveColumn
       ? [
           {
@@ -805,153 +898,139 @@ function MasterDataListWorkspace({
             } satisfies ColumnDef<MasterDataListItem>,
           ]
         : []),
-      {
-        id: "actions",
-        header: masterDataCopy.colActions,
-        meta: { label: masterDataCopy.colActions },
-        cell: ({ row }) => {
-          const item = row.original
-          const canRevise = item.allowedActions.includes("CREATE_REVISION")
-          const canDisable = item.allowedActions.includes("DISABLE")
-          const reviseBlocker = item.actionBlockers.find(
-            (b) => b.action === "CREATE_REVISION"
-          )
-          const disableBlocker = item.actionBlockers.find(
-            (b) => b.action === "DISABLE"
-          )
-          // 卡券类目：仅原地编辑。
-          if (isVoucherCategoryResource) {
-            return (
-              <div className="flex flex-wrap gap-1">
-                <DisabledActionHint message={reviseBlocker?.message}>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    disabled={!canRevise}
-                    title={reviseBlocker?.message}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      lastFocusedRowId.current = item.stableId
-                      setReviseTarget(item)
-                    }}
-                  >
-                    <HistoryIcon data-icon="inline-start" aria-hidden />
-                    {masterDataCopy.actionUpdate}
-                  </Button>
-                </DisabledActionHint>
-              </div>
-            )
-          }
-          // 商品点击行进入详情；品牌 / 计量单位点击行打开更新 Dialog。操作列均仅保留「停用」。
-          if (
-            isProductResource ||
-            isBrandResource ||
-            isUnitOfMeasureResource
-          ) {
-            return (
-              <div className="flex flex-wrap gap-1">
-                <DisabledActionHint message={disableBlocker?.message}>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    disabled={!canDisable}
-                    title={disableBlocker?.message}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      lastFocusedRowId.current = item.stableId
-                      setDisableTarget(item)
-                    }}
-                  >
-                    <BanIcon data-icon="inline-start" aria-hidden />
-                    {masterDataCopy.actionDisable}
-                  </Button>
-                </DisabledActionHint>
-              </div>
-            )
-          }
-          return (
-            <div className="flex flex-wrap gap-1">
-              {isSellableResource ? (
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="ghost"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    lastFocusedRowId.current = item.stableId
-                    setPreviewId(item.stableId)
-                  }}
-                >
-                  {masterDataCopy.actionView}
-                </Button>
-              ) : null}
-              {!isSellableResource ? (
-                <>
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    lastFocusedRowId.current = item.stableId
-                    if (isProductResource || isSupplierResource) {
-                      router.push(
-                        `/master-data/${resource}/${item.stableId}?section=overview`
-                      )
-                    } else {
-                      setPreviewId(item.stableId)
-                    }
-                  }}
-              >
-                {masterDataCopy.actionView}
-              </Button>
-              <DisabledActionHint message={reviseBlocker?.message}>
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="ghost"
-                  disabled={!canRevise}
-                  title={reviseBlocker?.message}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (isProductResource || isSupplierResource) {
-                      // 详情页即编辑，与「查看」同一路由
-                      router.push(
-                        `/master-data/${resource}/${item.stableId}?section=overview`
-                      )
-                    } else {
-                      setReviseTarget(item)
-                    }
-                  }}
-                >
-                  <HistoryIcon data-icon="inline-start" aria-hidden />
-                  {masterDataCopy.actionUpdate}
-                </Button>
-              </DisabledActionHint>
-              <DisabledActionHint message={disableBlocker?.message}>
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="ghost"
-                  disabled={!canDisable}
-                  title={disableBlocker?.message}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setDisableTarget(item)
-                  }}
-                >
-                  <BanIcon data-icon="inline-start" aria-hidden />
-                  {masterDataCopy.actionDisable}
-                </Button>
-              </DisabledActionHint>
-                </>
-              ) : null}
-            </div>
-          )
-        },
-      },
+      ...(!isSellableResource
+        ? [
+            {
+              id: "actions",
+              header: masterDataCopy.colActions,
+              meta: { label: masterDataCopy.colActions },
+              cell: ({ row }) => {
+                const item = row.original
+                const canRevise = item.allowedActions.includes("CREATE_REVISION")
+                const canDisable = item.allowedActions.includes("DISABLE")
+                const reviseBlocker = item.actionBlockers.find(
+                  (b) => b.action === "CREATE_REVISION"
+                )
+                const disableBlocker = item.actionBlockers.find(
+                  (b) => b.action === "DISABLE"
+                )
+                // 卡券类目：仅原地编辑。
+                if (isVoucherCategoryResource) {
+                  return (
+                    <div className="flex flex-wrap gap-1">
+                      <DisabledActionHint message={reviseBlocker?.message}>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="ghost"
+                          disabled={!canRevise}
+                          title={reviseBlocker?.message}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            lastFocusedRowId.current = item.stableId
+                            setReviseTarget(item)
+                          }}
+                        >
+                          <HistoryIcon data-icon="inline-start" aria-hidden />
+                          {masterDataCopy.actionUpdate}
+                        </Button>
+                      </DisabledActionHint>
+                    </div>
+                  )
+                }
+                // 商品点击行进入详情；品牌 / 计量单位点击行打开更新 Dialog。操作列均仅保留「停用」。
+                if (
+                  isProductResource ||
+                  isBrandResource ||
+                  isUnitOfMeasureResource
+                ) {
+                  return (
+                    <div className="flex flex-wrap gap-1">
+                      <DisabledActionHint message={disableBlocker?.message}>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="ghost"
+                          disabled={!canDisable}
+                          title={disableBlocker?.message}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            lastFocusedRowId.current = item.stableId
+                            setDisableTarget(item)
+                          }}
+                        >
+                          <BanIcon data-icon="inline-start" aria-hidden />
+                          {masterDataCopy.actionDisable}
+                        </Button>
+                      </DisabledActionHint>
+                    </div>
+                  )
+                }
+                return (
+                  <div className="flex flex-wrap gap-1">
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        lastFocusedRowId.current = item.stableId
+                        if (isSupplierResource) {
+                          router.push(
+                            `/master-data/${resource}/${item.stableId}?section=overview`
+                          )
+                        } else {
+                          setPreviewId(item.stableId)
+                        }
+                      }}
+                    >
+                      {masterDataCopy.actionView}
+                    </Button>
+                    <DisabledActionHint message={reviseBlocker?.message}>
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        disabled={!canRevise}
+                        title={reviseBlocker?.message}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (isSupplierResource) {
+                            // 详情页即编辑，与「查看」同一路由
+                            router.push(
+                              `/master-data/${resource}/${item.stableId}?section=overview`
+                            )
+                          } else {
+                            setReviseTarget(item)
+                          }
+                        }}
+                      >
+                        <HistoryIcon data-icon="inline-start" aria-hidden />
+                        {masterDataCopy.actionUpdate}
+                      </Button>
+                    </DisabledActionHint>
+                    <DisabledActionHint message={disableBlocker?.message}>
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        disabled={!canDisable}
+                        title={disableBlocker?.message}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDisableTarget(item)
+                        }}
+                      >
+                        <BanIcon data-icon="inline-start" aria-hidden />
+                        {masterDataCopy.actionDisable}
+                      </Button>
+                    </DisabledActionHint>
+                  </div>
+                )
+              },
+            } satisfies ColumnDef<MasterDataListItem>,
+          ]
+        : []),
     ],
     [
       isProductResource,
@@ -1294,8 +1373,8 @@ function MasterDataListWorkspace({
             layout="flush"
             density="compact"
             defaultColumnPinning={{
-              left: ["stableNo"],
-              right: ["actions"],
+              left: [isSellableResource ? "name" : "stableNo"],
+              right: isSellableResource ? [] : ["actions"],
             }}
             errorState={
               listLoadFailed ? (
@@ -1397,105 +1476,160 @@ function MasterDataListWorkspace({
               }
             }
           }}
-          size="detail"
-          title={previewRow?.name ?? "基础资料预览"}
+          size={isSellableResource ? "preview" : "detail"}
+          title={
+            previewRow?.sellableItem
+              ? `${previewRow.name} · ${previewRow.sellableItem.specificationLabel}`
+              : previewRow?.name ?? "基础资料预览"
+          }
+          description={
+            previewRow?.sellableItem
+              ? "公司商品池中当前符合销售资格的 SKU"
+              : undefined
+          }
           identity={
             previewRow ? (
               <span className="num">
-                {previewRow.stableNo} · v{previewRow.revisionNo}
+                {previewRow.sellableItem ? "SKU 编号：" : null}
+                {previewRow.stableNo}
+                {!previewRow.sellableItem ? ` · v${previewRow.revisionNo}` : null}
               </span>
             ) : null
           }
           summary={
             previewRow ? (
               <div className="flex flex-wrap items-center gap-2">
-                <BusinessStatusBadge
-                  context="preview"
-                  label={previewRow.lifecycleStatusLabel}
-                  tone={previewRow.lifecycleTone}
-                />
-                <Badge
-                  variant={
-                    previewRow.revisionTiming === "FUTURE"
-                      ? "warning"
-                      : "secondary"
-                  }
-                >
-                  {previewRow.revisionTimingLabel}
-                </Badge>
+                {previewRow.sellableItem ? (
+                  <>
+                    <Badge variant="success">当前可售</Badge>
+                    <Badge variant="outline">
+                      {previewRow.sellableItem.productKindLabel}
+                    </Badge>
+                    <Badge variant="outline">
+                      <span className="num">
+                        {previewRow.sellableItem.supplierCount}
+                      </span>{" "}
+                      家有效供应商
+                    </Badge>
+                  </>
+                ) : (
+                  <>
+                    <BusinessStatusBadge
+                      context="preview"
+                      label={previewRow.lifecycleStatusLabel}
+                      tone={previewRow.lifecycleTone}
+                    />
+                    <Badge
+                      variant={
+                        previewRow.revisionTiming === "FUTURE"
+                          ? "warning"
+                          : "secondary"
+                      }
+                    >
+                      {previewRow.revisionTimingLabel}
+                    </Badge>
+                  </>
+                )}
               </div>
             ) : null
           }
           footer={
             previewRow ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setPreviewId(null)}
-                >
-                  关闭
-                </Button>
-                <DisabledActionHint
-                  message={previewRow.actionBlockers.find(
-                    (b) => b.action === "CREATE_REVISION"
-                  )?.message}
-                >
+              previewRow.sellableItem ? (
+                <>
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={
-                      !previewRow.allowedActions.includes("CREATE_REVISION")
-                    }
-                    title={
-                      previewRow.actionBlockers.find(
-                        (b) => b.action === "CREATE_REVISION"
-                      )?.message
-                    }
-                    onClick={() => setReviseTarget(previewRow)}
+                    onClick={() => setPreviewId(null)}
                   >
-                    {masterDataCopy.actionUpdate}
+                    关闭
                   </Button>
-                </DisabledActionHint>
-                <DisabledActionHint
-                  message={previewRow.actionBlockers.find(
-                    (b) => b.action === "DISABLE"
-                  )?.message}
-                >
+                  <Button
+                    type="button"
+                    render={
+                      <Link
+                        href={`/master-data/products/${previewRow.sellableItem.productId}?section=overview`}
+                      />
+                    }
+                  >
+                    打开商品资料
+                    <ArrowUpRightIcon data-icon="inline-end" aria-hidden />
+                  </Button>
+                </>
+              ) : (
+                <>
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!previewRow.allowedActions.includes("DISABLE")}
-                    title={
-                      previewRow.actionBlockers.find(
-                        (b) => b.action === "DISABLE"
-                      )?.message
-                    }
-                    onClick={() => setDisableTarget(previewRow)}
+                    onClick={() => setPreviewId(null)}
                   >
-                    {masterDataCopy.actionDisable}
+                    关闭
                   </Button>
-                </DisabledActionHint>
-                <Button
-                  type="button"
-                  render={
-                    <Link
-                      href={`/master-data/${resource}/${previewRow.stableId}?section=overview`}
-                    />
-                  }
-                >
-                  {masterDataCopy.actionOpenDetail}
-                </Button>
-              </>
+                  <DisabledActionHint
+                    message={previewRow.actionBlockers.find(
+                      (b) => b.action === "CREATE_REVISION"
+                    )?.message}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        !previewRow.allowedActions.includes("CREATE_REVISION")
+                      }
+                      title={
+                        previewRow.actionBlockers.find(
+                          (b) => b.action === "CREATE_REVISION"
+                        )?.message
+                      }
+                      onClick={() => setReviseTarget(previewRow)}
+                    >
+                      {masterDataCopy.actionUpdate}
+                    </Button>
+                  </DisabledActionHint>
+                  <DisabledActionHint
+                    message={previewRow.actionBlockers.find(
+                      (b) => b.action === "DISABLE"
+                    )?.message}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!previewRow.allowedActions.includes("DISABLE")}
+                      title={
+                        previewRow.actionBlockers.find(
+                          (b) => b.action === "DISABLE"
+                        )?.message
+                      }
+                      onClick={() => setDisableTarget(previewRow)}
+                    >
+                      {masterDataCopy.actionDisable}
+                    </Button>
+                  </DisabledActionHint>
+                  <Button
+                    type="button"
+                    render={
+                      <Link
+                        href={`/master-data/${resource}/${previewRow.stableId}?section=overview`}
+                      />
+                    }
+                  >
+                    {masterDataCopy.actionOpenDetail}
+                  </Button>
+                </>
+              )
             ) : null
           }
         >
           {previewRow ? (
-            <MasterDataPreviewPanel
-              row={previewRow}
-              detail={previewDetailQuery.data}
-              detailLoading={previewDetailQuery.isPending}
-            />
+            previewRow.sellableItem ? (
+              <SellableItemPreviewPanel row={previewRow} />
+            ) : (
+              <MasterDataPreviewPanel
+                row={previewRow}
+                detail={previewDetailQuery.data}
+                detailLoading={previewDetailQuery.isPending}
+              />
+            )
           ) : null}
         </QuickPreviewSheet>
       ) : null}
