@@ -9,8 +9,11 @@
 import { apiGet, apiPost, apiPut } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
 import type { StatusTone } from "@/components/ui/status-badge"
-import { welfareScenarioLabel } from "@/lib/business-options"
-import { computeSalesOrderMetrics } from "@/features/sales-orders/filter-orders"
+import {
+  PAYMENT_TERM_OPTIONS,
+  WELFARE_SCENARIO_OPTIONS,
+  welfareScenarioLabel,
+} from "@/lib/business-options"
 import type {
   ActionBlocker,
   CardSalesApproval,
@@ -20,6 +23,8 @@ import type {
   ProcurementRejectionResolution,
   ProgressTrack,
   SalesChangeOrderSummary,
+  SalesOrderContractInput,
+  SalesOrderDraftLineInput,
   SalesOrderLineItem,
   SalesOrderListItem,
   SalesOrderNature,
@@ -39,12 +44,6 @@ export type SalesOrderDetailView = SalesOrderListItem & {
   permissionVersion: string
   sourceAsOf: string
   queriedAt: string
-  /** 当前阶段责任角色（后端固定码，如 `procurement`/`sales_leader`/`operations`）；无待办时为 `null`。 */
-  stageOwnerRole?: string | null
-  stageOwnerUserId?: string | null
-  stageOwnerUserName?: string | null
-  /** 当前阶段预计完成时限（秒级时间戳）；未设置时为 `null`。 */
-  stageDueAt?: number | null
 }
 
 export type SalesOrdersListQuery = {
@@ -52,13 +51,10 @@ export type SalesOrdersListQuery = {
   pageSize: number
   search?: string
   nature?: "all" | "physical_service" | "card_voucher"
-  summary?:
-    | "all"
-    | "pending"
-    | "inProgress"
-    | "pendingCollection"
-    | "fulfillmentException"
-    | "mallCollab"
+  /** 四个固定工作视图；"mine"/"createdByMe" 需要 `currentUserId`。 */
+  summary?: "all" | "mine" | "createdByMe" | "exception"
+  /** 当前登录人账号 id；"待我处理"/"我创建的" 视图按此过滤创建人。 */
+  currentUserId?: string
   origin?: "all" | SalesOrderOrigin
   status?: string
   sortBy?:
@@ -75,7 +71,6 @@ export type SalesOrderListView = {
   total: number
   page: number
   pageSize: number
-  metrics: ReturnType<typeof computeSalesOrderMetrics>
   queriedAt: string
 }
 
@@ -90,15 +85,14 @@ type PageView<T> = {
   page_size: number
 }
 
-/** 服务端权威计算的当前阶段（替代前端字符串拼接）。 */
+/**
+ * 服务端权威计算的当前阶段（替代前端字符串拼接）；列表与详情共用同一形状
+ * ——责任人/时限走整页批量查询，不是逐行查询，列表接口也带得起。
+ */
 type BackendStageSummary = {
   code: string
   label: string
   tone: string
-}
-
-/** 详情页阶段视图：摘要 + 责任人 + 时限。 */
-type BackendStageView = BackendStageSummary & {
   owner_role?: string | null
   owner_user_id?: string | null
   owner_user_name?: string | null
@@ -157,10 +151,13 @@ type BackendWorkingCopyLine = {
   card_count?: number | null
   transaction_amount?: string | null
   card_form?: string | null
+  fulfillment_due_at?: number | null
 }
 
 type BackendWorkingCopy = {
   id: string
+  /** 乐观锁版本；`PUT .../working-copy` 的 `version` 按此比对，不是 `draft_version`。 */
+  version: number
   working_purpose: string
   status: string
   draft_version: number
@@ -245,7 +242,7 @@ type BackendSalesOrderDetail = {
   working_copy?: BackendWorkingCopy | null
   submissions: BackendSubmission[]
   revisions: BackendRevision[]
-  stage: BackendStageView
+  stage: BackendStageSummary
   close_eligibility: BackendCloseEligibility
   can_start_sales_change_order: boolean
   change_order_blocker?: string | null
@@ -602,6 +599,10 @@ function mapListItemFromBackend(
     code: row.stage.code,
     label: row.stage.label,
     tone: mapStageTone(row.stage.tone),
+    ownerRole: row.stage.owner_role,
+    ownerUserId: row.stage.owner_user_id,
+    ownerUserName: row.stage.owner_user_name,
+    dueAt: row.stage.due_at,
   }
   const fulfillment = mapFulfillment(row.fulfillment_progress)
   const collection = mapCollection(row.collection_progress)
@@ -1008,6 +1009,16 @@ function percentToRate(percent: string): string {
   return (n / 100).toFixed(6)
 }
 
+function rateToPercent(rate: string | undefined): string {
+  const n = Number(rate)
+  if (!Number.isFinite(n)) return "13.00"
+  return (n * 100).toFixed(2)
+}
+
+function mapCardFormFromBackend(code: string | null | undefined): string {
+  return code === "PHYSICAL" ? "实体卡" : "电子卡"
+}
+
 function dateToUnixSecs(dateStr: string): number {
   if (!dateStr) return Math.floor(Date.now() / 1000)
   // YYYY-MM-DD or datetime
@@ -1039,6 +1050,16 @@ export async function fetchSalesOrders(
         ? "GOODS_SERVICE"
         : undefined
 
+  // "待我处理"/"我创建的" 都按创建人过滤；"待我处理"额外限定草稿/驳回回销售，
+  // "异常"限定审核轨被驳回。三者与 commercial_status/review_status 互斥，
+  // 与 status 高级筛选是两回事（summary 是固定视图，status 是任意阶段码）。
+  const createdBy =
+    query.summary === "mine" || query.summary === "createdByMe"
+      ? query.currentUserId?.trim() || undefined
+      : undefined
+  const myTodo = query.summary === "mine"
+  const exceptionOnly = query.summary === "exception"
+
   const page = await apiGet<PageView<BackendSalesOrderView>>(
     "/admin/sales-orders",
     {
@@ -1046,28 +1067,27 @@ export async function fetchSalesOrders(
       page_size: query.pageSize,
       order_no: query.search?.trim() || undefined,
       business_type: businessType,
-      commercial_status: statusMap.commercial_status,
-      review_status: statusMap.review_status,
+      commercial_status: myTodo || exceptionOnly ? undefined : statusMap.commercial_status,
+      review_status: myTodo || exceptionOnly ? undefined : statusMap.review_status,
+      created_by: createdBy,
+      my_todo: myTodo || undefined,
+      exception_only: exceptionOnly || undefined,
       sort_by: mapSortBy(query.sortBy),
       sort_dir: query.sortDir,
     }
   )
 
-  // origin / summary 筛选后端未提供，客户端对当前页做展示过滤（缺口登记）。
+  // origin 筛选后端未提供，客户端对当前页做展示过滤（缺口登记，不在本次范围）。
   let items = page.items.map((row) => mapListItemFromBackend(row))
   if (query.origin && query.origin !== "all") {
     items = items.filter((o) => o.originSystem === query.origin)
   }
-
-  const metrics = computeSalesOrderMetrics(items)
-  metrics.total = page.total
 
   return {
     items,
     total: page.total,
     page: page.page,
     pageSize: page.page_size,
-    metrics,
     queriedAt: formatIsoNow(),
   }
 }
@@ -1248,39 +1268,32 @@ export async function fetchSalesOrderDetail(
     permissionVersion: PERMISSION_VERSION,
     sourceAsOf: queriedAt,
     queriedAt,
-    stageOwnerRole: detail.stage.owner_role,
-    stageOwnerUserId: detail.stage.owner_user_id,
-    stageOwnerUserName: detail.stage.owner_user_name,
-    stageDueAt: detail.stage.due_at,
   }
 }
 
 // ─── 建单 ────────────────────────────────────────────────────────────────────
 
-export async function createSalesOrder(
-  input: CreateSalesOrderInput
-): Promise<CreateSalesOrderResult> {
-  if (input.lineItems.length === 0) {
-    throwValidation("至少需要一行明细")
-  }
-  if (input.nature === "card_voucher" && input.lineItems.length !== 1) {
-    throwValidation("卡券销售单必须且只能有一行明细")
-  }
+type DraftContentInput = {
+  nature: SalesOrderNature
+  ownerUserId: string
+  ownerName: string
+  welfareScene: string
+  paymentTerms: string
+  fulfillmentDeadline: string
+  taxRatePercent: string
+  remark: string
+  lineItems: CreateSalesOrderInput["lineItems"]
+}
 
-  const contract = await apiGet<BackendContractDetail>(
-    `/admin/contracts/${input.contract.contractId}`
-  )
-  const requested =
-    contract.revisions.find(
-      (r) => r.id === input.contract.requestedContractRevisionId
-    ) ??
-    contract.revisions.find((r) => r.id === contract.current_revision_id) ??
-    contract.revisions[0]
-
-  if (!requested) {
-    throwValidation("合同修订不存在")
-  }
-
+/**
+ * 建单与草稿更新共用的表头+明细快照构造（分别对应 `POST /sales-orders` 与
+ * `PUT /sales-orders/{id}/working-copy` 的 `draft` 请求体，字段形状完全一致）。
+ */
+function buildDraftPayload(
+  input: DraftContentInput,
+  contract: BackendContractDetail,
+  requested: BackendContractDetail["revisions"][number]
+): { businessType: "VOUCHER" | "GOODS_SERVICE"; draft: Record<string, unknown> } {
   const taxRate = percentToRate(input.taxRatePercent || "0")
   const businessType =
     input.nature === "card_voucher" ? "VOUCHER" : "GOODS_SERVICE"
@@ -1337,15 +1350,8 @@ export async function createSalesOrder(
     return base
   })
 
-  const orderNo = localOrderNo()
-  const body = {
-    order_no: orderNo,
-    business_type: businessType,
-    customer_id: contract.customer_id,
-    contract_id: contract.id,
-    settlement_party_id: contract.settlement_party_id,
-    idempotency_key: input.idempotencyKey,
-    intent: input.intent,
+  return {
+    businessType,
     draft: {
       editor_user_id:
         input.ownerUserId.trim() || input.ownerName.trim() || "unknown",
@@ -1371,6 +1377,55 @@ export async function createSalesOrder(
       lines,
     },
   }
+}
+
+async function resolveContractRevision(input: {
+  contractId: string
+  requestedContractRevisionId?: string
+}): Promise<{
+  contract: BackendContractDetail
+  requested: BackendContractDetail["revisions"][number]
+}> {
+  const contract = await apiGet<BackendContractDetail>(
+    `/admin/contracts/${input.contractId}`
+  )
+  const requested =
+    contract.revisions.find(
+      (r) => r.id === input.requestedContractRevisionId
+    ) ??
+    contract.revisions.find((r) => r.id === contract.current_revision_id) ??
+    contract.revisions[0]
+
+  if (!requested) {
+    throwValidation("合同修订不存在")
+  }
+  return { contract, requested }
+}
+
+export async function createSalesOrder(
+  input: CreateSalesOrderInput
+): Promise<CreateSalesOrderResult> {
+  if (input.lineItems.length === 0) {
+    throwValidation("至少需要一行明细")
+  }
+  if (input.nature === "card_voucher" && input.lineItems.length !== 1) {
+    throwValidation("卡券销售单必须且只能有一行明细")
+  }
+
+  const { contract, requested } = await resolveContractRevision(input.contract)
+  const { businessType, draft } = buildDraftPayload(input, contract, requested)
+
+  const orderNo = localOrderNo()
+  const body = {
+    order_no: orderNo,
+    business_type: businessType,
+    customer_id: contract.customer_id,
+    contract_id: contract.id,
+    settlement_party_id: contract.settlement_party_id,
+    idempotency_key: input.idempotencyKey,
+    intent: input.intent,
+    draft,
+  }
 
   const created = await apiPost<BackendSalesOrderDetail>(
     "/admin/sales-orders",
@@ -1383,6 +1438,131 @@ export async function createSalesOrder(
     statusLabel: created.stage.label,
     createdAt: new Date(created.created_at * 1000).toISOString(),
     reference: `SO-CREATE-${created.order_no}`,
+    workingCopyVersion: created.working_copy?.version,
+  }
+}
+
+/**
+ * 更新已存在草稿的工作副本（继续编辑场景；乐观锁按工作副本自身版本比对，
+ * 不是销售单版本）。字段形状与 `createSalesOrder` 的 `draft` 完全一致。
+ */
+export async function saveSalesOrderDraft(
+  input: DraftContentInput & {
+    salesOrderId: string
+    /** 工作副本乐观锁版本，来自上一次 `fetchSalesOrderDetail`/本函数返回值。 */
+    version: number
+    contract: SalesOrderContractInput
+  }
+): Promise<{ version: number }> {
+  if (input.lineItems.length === 0) {
+    throwValidation("至少需要一行明细")
+  }
+  if (input.nature === "card_voucher" && input.lineItems.length !== 1) {
+    throwValidation("卡券销售单必须且只能有一行明细")
+  }
+
+  const { contract, requested } = await resolveContractRevision(input.contract)
+  const { draft } = buildDraftPayload(input, contract, requested)
+
+  const updated = await apiPut<BackendWorkingCopy>(
+    `/admin/sales-orders/${input.salesOrderId}/working-copy`,
+    { version: input.version, draft }
+  )
+
+  return { version: updated.version }
+}
+
+/** 提交已存在的草稿进入审核轨（继续编辑场景的"提交"动作）。 */
+export async function submitSalesOrder(input: {
+  salesOrderId: string
+  version: number
+  idempotencyKey: string
+}): Promise<{ salesOrderId: string }> {
+  await apiPost(`/admin/sales-orders/${input.salesOrderId}/submit`, {
+    version: input.version,
+    idempotency_key: input.idempotencyKey,
+  })
+  return { salesOrderId: input.salesOrderId }
+}
+
+export type SalesOrderDraftResumeData = {
+  salesOrderId: string
+  documentNumber: string
+  version: number
+  contractId: string
+  nature: SalesOrderNature
+  welfareScene: string
+  paymentTerms: string
+  fulfillmentDeadline: string
+  taxRatePercent: string
+  remark: string
+  lineItems: SalesOrderDraftLineInput[]
+}
+
+/**
+ * 取回草稿的可编辑表单值（继续编辑场景）；非草稿或没有有效工作副本时返回
+ * `null`（详情页只在草稿态显示"继续编辑"，理论上不会命中，仍做防御）。
+ *
+ * 直接读原始详情接口而不是 `fetchSalesOrderDetail`——后者已经把明细压缩成
+ * 展示用的 `SalesOrderLineItem`（丢了 `skuRevisionId`/`fulfillmentMode` 等
+ * 建单表单必需的原始字段），这里需要 `working_copy` 的完整快照。
+ */
+export async function fetchSalesOrderDraftForResume(
+  salesOrderId: string
+): Promise<SalesOrderDraftResumeData | null> {
+  const detail = await apiGet<BackendSalesOrderDetail>(
+    `/admin/sales-orders/${salesOrderId}`
+  )
+  const wc = detail.working_copy
+  if (detail.commercial_status !== "DRAFT" || !wc) return null
+
+  const nature: SalesOrderNature =
+    detail.business_type === "VOUCHER" ? "card_voucher" : "physical_service"
+
+  const welfareScene =
+    WELFARE_SCENARIO_OPTIONS.find((o) => o.label === wc.project_name)
+      ?.value ?? ""
+  const paymentTerms =
+    PAYMENT_TERM_OPTIONS.find((o) => o.label === wc.payment_term_name)
+      ?.value ?? "CONTRACT"
+
+  const lineItems: SalesOrderDraftLineInput[] = (wc.lines ?? []).map(
+    (line) => {
+      const isVoucher = line.line_type === "VOUCHER"
+      return {
+        rowKey: line.sales_order_line_id || line.id,
+        name: line.item_name_snapshot,
+        // 卡券类目 SKU 存在表头快照 voucher_category_sku_id，不在行内 sku_id；
+        // 卡券也不追踪精确修订（只有实物/服务需要锁定 SKU 修订）。
+        sku: isVoucher ? (wc.voucher_category_sku_id ?? "") : (line.sku_id ?? ""),
+        skuRevisionId: isVoucher ? "" : (line.sku_revision_id ?? ""),
+        quantity: isVoucher
+          ? String(line.card_count ?? 1)
+          : (line.quantity ?? "1"),
+        unit: isVoucher ? "张" : (line.unit_snapshot ?? line.base_unit_code ?? ""),
+        unitPriceGross: line.unit_price_gross ?? "0.00",
+        // 建单页不提供仓发/直发选择；沿用 createEmptyLine 的固定占位值。
+        fulfillmentMode: !isVoucher ? "公司仓发" : "",
+        dueDate: formatEpochDate(line.fulfillment_due_at),
+        faceValue: line.face_value ?? "",
+        giftRate: "",
+        cardForm: isVoucher ? mapCardFormFromBackend(line.card_form) : "",
+      }
+    }
+  )
+
+  return {
+    salesOrderId: detail.id,
+    documentNumber: detail.order_no,
+    version: wc.version,
+    contractId: detail.contract_id ?? "",
+    nature,
+    welfareScene,
+    paymentTerms,
+    fulfillmentDeadline: formatEpochDate(wc.voucher_expiry_at),
+    taxRatePercent: rateToPercent(wc.lines?.[0]?.sales_tax_rate),
+    remark: wc.business_remark ?? "",
+    lineItems,
   }
 }
 

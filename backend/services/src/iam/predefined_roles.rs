@@ -114,13 +114,7 @@ const SALES_PERMISSIONS: &[&str] = &[
     "sales_change_order:submit",
     "sales_change_order:delete",
     "customer_acceptance:*",
-    "product:list",
-    "product_revision:list",
-    "sku:list",
-    "sku_revision:list",
-    "product_category:list",
-    "product_brand:list",
-    "unit_of_measure:list",
+    "sellable_sku:list",
     "receivable_account:list",
     "receivable_account:detail",
     "customer_receipt:list",
@@ -188,6 +182,7 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "product_revision:list",
     "sku:list",
     "sku_revision:list",
+    "sellable_sku:list",
     "voucher_category_profile:list",
     "warehouse:list",
     "warehouse:create",
@@ -256,6 +251,7 @@ const OPERATIONS_PERMISSIONS: &[&str] = &[
     "product_revision:list",
     "sku:list",
     "sku_revision:list",
+    "sellable_sku:list",
     "voucher_category_profile:*",
     "sales_order:list",
     "sales_order:detail",
@@ -318,6 +314,7 @@ const WAREHOUSE_PERMISSIONS: &[&str] = &[
     "stock_adjustment:*",
     "product:list",
     "sku:list",
+    "sellable_sku:list",
 ];
 
 /// 财务推荐权限。
@@ -493,9 +490,50 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
         seed_one(rbac, role).await?;
     }
+    upgrade_sales_role_permissions(rbac).await?;
     upgrade_customer_role_boundaries(rbac).await?;
     upgrade_procurement_role_permissions(rbac).await?;
+    upgrade_sellable_sku_reader_permissions(rbac).await?;
     Ok(())
+}
+
+/// 仅将仍保持历史默认种子的销售角色收紧为公司商品池只读权限。
+async fn upgrade_sales_role_permissions(rbac: &SharedRbacService) -> Result<()> {
+    let desired = parse_permissions(SALES_PERMISSIONS)?;
+    for previous in sales_legacy_permission_snapshots(&desired)? {
+        upgrade_exact(rbac, "role-sales", previous, desired.clone()).await?;
+    }
+    Ok(())
+}
+
+/// 构造销售角色已知历史默认权限快照，管理员自定义权限不在匹配范围内。
+fn sales_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
+    let mut before_sellable_pool = remove_permissions(desired, &["sellable_sku:list"]);
+    for permission in [
+        "product:list",
+        "product_revision:list",
+        "sku:list",
+        "sku_revision:list",
+        "product_category:list",
+        "product_brand:list",
+        "unit_of_measure:list",
+    ] {
+        before_sellable_pool.push(Permission::parse(permission)?);
+    }
+
+    let mut before_customer_boundary = remove_permissions(
+        &before_sellable_pool,
+        &[
+            "customer:list",
+            "customer:detail",
+            "customer:create",
+            "customer:update",
+            "customer_sensitive:reveal",
+        ],
+    );
+    before_customer_boundary.push(Permission::parse("customer:*")?);
+    before_customer_boundary.push(Permission::parse("party_bank_account:*")?);
+    Ok(vec![before_sellable_pool, before_customer_boundary])
 }
 
 /// 仅为仍保持历史默认种子的采购角色补齐当前供应商维护权限。
@@ -509,11 +547,19 @@ async fn upgrade_procurement_role_permissions(rbac: &SharedRbacService) -> Resul
 
 /// 构造可安全识别的历史采购默认权限快照。
 fn procurement_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
-    let before_sensitive_reveal =
-        remove_permissions(desired, &["file_asset:preview", "supplier_sensitive:reveal"]);
+    let before_sellable_pool = remove_permissions(desired, &["sellable_sku:list"]);
+    let before_sensitive_reveal = remove_permissions(
+        desired,
+        &[
+            "sellable_sku:list",
+            "file_asset:preview",
+            "supplier_sensitive:reveal",
+        ],
+    );
     let mut catalog_era = remove_permissions(
         desired,
         &[
+            "sellable_sku:list",
             "supplier_sensitive:reveal",
             "file_asset:preview",
             "supplier_offering_availability:*",
@@ -529,30 +575,11 @@ fn procurement_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec
     ] {
         catalog_era.push(Permission::parse(permission)?);
     }
-    Ok(vec![before_sensitive_reveal, catalog_era])
+    Ok(vec![before_sellable_pool, before_sensitive_reveal, catalog_era])
 }
 
 /// 仅为仍保持旧默认种子的角色收紧客户范围并补齐字段级权限。
 async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -> Result<()> {
-    let sales_desired = parse_permissions(SALES_PERMISSIONS)?;
-    let mut sales_previous: Vec<Permission> = sales_desired
-        .iter()
-        .filter(|permission| {
-            !matches!(
-                permission.to_string().as_str(),
-                "customer:list"
-                    | "customer:detail"
-                    | "customer:create"
-                    | "customer:update"
-                    | "customer_sensitive:reveal"
-            )
-        })
-        .cloned()
-        .collect();
-    sales_previous.push(Permission::parse("customer:*")?);
-    sales_previous.push(Permission::parse("party_bank_account:*")?);
-    upgrade_exact(rbac, "role-sales", sales_previous, sales_desired).await?;
-
     let finance_desired = parse_permissions(FINANCE_PERMISSIONS)?;
     let finance_previous = remove_permissions(
         &finance_desired,
@@ -574,6 +601,19 @@ async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -> Result<()
     ] {
         let desired = parse_permissions(raw)?;
         let previous = remove_permissions(&desired, &["customer_scope:detail"]);
+        upgrade_exact(rbac, role_id, previous, desired).await?;
+    }
+    Ok(())
+}
+
+/// 为仍保持旧默认种子的公司商品池读者补齐独立查询权限。
+async fn upgrade_sellable_sku_reader_permissions(rbac: &SharedRbacService) -> Result<()> {
+    for (role_id, raw) in [
+        ("role-operations", OPERATIONS_PERMISSIONS),
+        ("role-warehouse", WAREHOUSE_PERMISSIONS),
+    ] {
+        let desired = parse_permissions(raw)?;
+        let previous = remove_permissions(&desired, &["sellable_sku:list"]);
         upgrade_exact(rbac, role_id, previous, desired).await?;
     }
     Ok(())
@@ -658,8 +698,8 @@ pub(super) fn predefined_role_ids() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_permissions, predefined_role_ids, procurement_legacy_permission_snapshots, PREDEFINED_ROLES,
-        PROCUREMENT_PERMISSIONS, SALES_PERMISSIONS,
+        parse_permissions, predefined_role_ids, procurement_legacy_permission_snapshots,
+        sales_legacy_permission_snapshots, PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS, SALES_PERMISSIONS,
     };
     use entities::{Permission, PermissionSet};
 
@@ -715,12 +755,13 @@ mod tests {
     fn procurement_legacy_snapshots_cover_current_database_seed() {
         let desired = parse_permissions(PROCUREMENT_PERMISSIONS).unwrap();
         let snapshots = procurement_legacy_permission_snapshots(&desired).unwrap();
-        assert_eq!(snapshots[0].len(), desired.len() - 2);
-        assert_eq!(snapshots[1].len(), 67);
-        assert!(snapshots[1]
+        assert_eq!(snapshots[0].len(), desired.len() - 1);
+        assert_eq!(snapshots[1].len(), desired.len() - 3);
+        assert_eq!(snapshots[2].len(), 67);
+        assert!(snapshots[2]
             .iter()
             .any(|permission| permission.to_string() == "supplier_catalog_cost:detail"));
-        assert!(!snapshots[1]
+        assert!(!snapshots[2]
             .iter()
             .any(|permission| permission.to_string() == "supplier_sensitive:reveal"));
     }
@@ -737,6 +778,22 @@ mod tests {
         assert!(permissions
             .iter()
             .any(|p| p.covers(&Permission::parse("contract:create").unwrap())));
+        assert!(permissions
+            .iter()
+            .any(|p| p.covers(&Permission::parse("sellable_sku:list").unwrap())));
+        for forbidden in [
+            "product:list",
+            "product_revision:list",
+            "sku:list",
+            "sku_revision:list",
+            "product_category:list",
+            "product_brand:list",
+            "unit_of_measure:list",
+        ] {
+            assert!(!permissions
+                .iter()
+                .any(|p| p.covers(&Permission::parse(forbidden).unwrap())));
+        }
         assert!(!permissions
             .iter()
             .any(|p| p.covers(&Permission::parse("party_bank_account:detail").unwrap())));
@@ -749,6 +806,24 @@ mod tests {
                 .any(|p| p.covers(&Permission::parse("purchase_order:approve").unwrap())),
             "销售不应默认具备采购财务审核权"
         );
+    }
+
+    #[test]
+    fn sales_legacy_snapshots_cover_catalog_and_customer_boundary_seeds() {
+        let desired = parse_permissions(SALES_PERMISSIONS).unwrap();
+        let snapshots = sales_legacy_permission_snapshots(&desired).unwrap();
+        assert_eq!(snapshots[0].len(), desired.len() + 6);
+        assert_eq!(snapshots[1].len(), desired.len() + 3);
+        assert!(snapshots[0]
+            .iter()
+            .any(|permission| permission.to_string() == "sku:list"));
+        assert!(snapshots[1]
+            .iter()
+            .any(|permission| permission.to_string() == "party_bank_account:*"));
+        assert!(snapshots
+            .iter()
+            .flatten()
+            .all(|permission| permission.to_string() != "sellable_sku:list"));
     }
 
     #[test]

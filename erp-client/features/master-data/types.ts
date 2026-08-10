@@ -146,6 +146,17 @@ export type MasterDataListResult = Readonly<{
   }[]
 }>
 
+/** 商品列表的当前启用 SKU 摘要；销售价来自 SKU 当前修订。 */
+export type ProductListSkuSummary = Readonly<{
+  productId: string
+  skuId: string
+  skuNo: string
+  skuName: string
+  specification: string
+  baseUnit: string
+  salesVisiblePriceGross?: string
+}>
+
 export type RevisionTimelineEntry = Readonly<{
   id: string
   revisionNo: number

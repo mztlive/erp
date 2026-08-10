@@ -6,14 +6,14 @@ import { useRouter } from "next/navigation"
 import { isAuthenticated } from "@/lib/api/session"
 
 /**
- * 根路由：按登录态分流（未登录 → /login，已登录 → /workspace）。
+ * 根路由：按登录态分流（未登录 → /login，已登录 → /workspace/tasks 待我处理）。
  */
 export default function HomePage() {
   const router = useRouter()
 
   React.useEffect(() => {
     if (isAuthenticated()) {
-      router.replace("/workspace")
+      router.replace("/workspace/tasks")
     } else {
       router.replace("/login")
     }

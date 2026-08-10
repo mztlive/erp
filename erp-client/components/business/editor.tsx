@@ -112,6 +112,8 @@ type StickyTotalBarProps = Omit<
   items: readonly StickyTotalItem[]
   note?: React.ReactNode
   actions?: React.ReactNode
+  /** 左侧次级动作（如分步流程的"上一步"）；与 `actions` 分开渲染，不挤右侧主动作组。 */
+  leftActions?: React.ReactNode
 }
 
 /** M5 编辑工作区统一的金额汇总与提交动作条。 */
@@ -119,6 +121,7 @@ function StickyTotalBar({
   items,
   note,
   actions,
+  leftActions,
   className,
   ...props
 }: StickyTotalBarProps) {
@@ -132,6 +135,9 @@ function StickyTotalBar({
       {...props}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        {leftActions ? (
+          <div className="flex shrink-0 flex-wrap gap-2">{leftActions}</div>
+        ) : null}
         <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-3">
           {items.map((item) => (
             <div key={item.id} className="min-w-0">

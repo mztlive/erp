@@ -110,7 +110,7 @@ export function RedirectIfAuthenticated({
       const target =
         raw && raw.startsWith("/") && !raw.startsWith("//")
           ? raw
-          : "/workspace"
+          : "/workspace/tasks"
       router.replace(target)
       return
     }

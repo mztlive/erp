@@ -18,7 +18,6 @@ export const procurementConfirmKeys = {
   all: ["procurement-confirmation"] as const,
   queue: (filters: QueueFilters) =>
     [...procurementConfirmKeys.all, "queue", filters] as const,
-  counts: () => [...procurementConfirmKeys.all, "counts"] as const,
   supplyOptions: (skuIds: readonly string[]) =>
     [...procurementConfirmKeys.all, "supply-options", [...skuIds].sort()] as const,
   recommendation: (confirmationId: string) =>
@@ -52,17 +51,6 @@ export function useProcurementConfirmationQuery(filters: QueueFilters) {
   return useQuery({
     queryKey: procurementConfirmKeys.queue(filters),
     queryFn: () => fetchProcurementQueue(filters),
-  })
-}
-
-/** 角标计数：W07「仅我的」有效待确认项。 */
-export function useProcurementConfirmCountQuery() {
-  return useQuery({
-    queryKey: procurementConfirmKeys.counts(),
-    queryFn: async () => {
-      const view = await fetchProcurementQueue({ scope: "mine" })
-      return { mine: view.context.total }
-    },
   })
 }
 

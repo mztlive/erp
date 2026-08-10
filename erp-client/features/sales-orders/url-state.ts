@@ -28,11 +28,9 @@ const NATURES: SalesOrderNatureFilter[] = [
 
 const SUMMARIES: SalesOrderSummaryFilter[] = [
   "all",
-  "pending",
-  "inProgress",
-  "pendingCollection",
-  "fulfillmentException",
-  "mallCollab",
+  "mine",
+  "createdByMe",
+  "exception",
 ]
 
 const ORIGINS: SalesOrderOriginFilter[] = ["all", "erp", "mall"]

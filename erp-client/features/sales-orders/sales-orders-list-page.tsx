@@ -24,8 +24,6 @@ import {
   DataTable,
   FormalActionResult,
   ListToolbar,
-  MetricFilterItem,
-  MetricStrip,
   MoneyValue,
   OptionCombobox,
   PageActions,
@@ -47,8 +45,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
+  isPendingReviewStage,
   NATURE_LABEL,
   ORIGIN_LABEL,
+  stageDueDisplay,
+  stageOwnerDisplay,
 } from "@/features/sales-orders/labels"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
 import {
@@ -64,6 +65,7 @@ import {
   useCreateSalesOrderExportJobMutation,
   useSalesOrdersQuery,
 } from "@/features/sales-orders/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import {
   buildSalesOrdersSearchParams,
@@ -82,19 +84,12 @@ const SORT_COLUMN_TO_FIELD: Record<
   submittedAt: "submittedAt",
 }
 
-const EMPTY_METRICS = {
-  total: 0,
-  pending: 0,
-  inProgress: 0,
-  pendingCollection: 0,
-  fulfillmentException: 0,
-  mallCollab: 0,
-}
-
 export function SalesOrdersListPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const profileQuery = useAccountProfileQuery()
+  const currentUserId = profileQuery.data?.userid?.trim() ?? ""
   const url = React.useMemo(
     () => parseSalesOrdersSearchParams(searchParams),
     [searchParams]
@@ -116,12 +111,13 @@ export function SalesOrdersListPage() {
       search: url.search,
       nature: url.nature,
       summary: url.summary,
+      currentUserId,
       origin: url.origin,
       status: url.status,
       sortBy: url.sort ? SORT_COLUMN_TO_FIELD[url.sort] : undefined,
       sortDir: url.dir,
     }),
-    [url]
+    [url, currentUserId]
   )
 
   const ordersQuery = useSalesOrdersQuery(query)
@@ -131,7 +127,6 @@ export function SalesOrdersListPage() {
     [ordersQuery.data?.items]
   )
   const total = ordersQuery.data?.total ?? 0
-  const metrics = ordersQuery.data?.metrics ?? EMPTY_METRICS
 
   const [searchDraft, setSearchDraft] = React.useState(url.search ?? "")
   const [paperId, setPaperId] = React.useState<string | null>(null)
@@ -210,7 +205,7 @@ export function SalesOrdersListPage() {
       } else if (event.key === "Enter") {
         event.preventDefault()
         const row = items[focusedIndex]
-        if (row) openPaperPreview(row.id)
+        if (row) router.push(`/sales/orders/${row.id}`)
       } else if (event.key === "Escape" && paperId) {
         event.preventDefault()
         const id = paperId
@@ -222,7 +217,7 @@ export function SalesOrdersListPage() {
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [focusedIndex, items, openPaperPreview, paperId])
+  }, [focusedIndex, items, openPaperPreview, paperId, router])
 
   const pagination = React.useMemo<PaginationState>(
     () => ({
@@ -451,6 +446,31 @@ export function SalesOrdersListPage() {
         meta: { label: "负责人", width: "default" },
       },
       {
+        id: "currentOwner",
+        header: "当前责任 / 时限",
+        meta: { label: "当前责任 / 时限", width: "default" },
+        enableSorting: false,
+        cell: ({ row }) => {
+          const order = row.original
+          if (!isPendingReviewStage(order.primaryStatus.code)) {
+            return <span className="text-sm text-muted-foreground">—</span>
+          }
+          const due = stageDueDisplay(order)
+          return (
+            <div className="text-sm">
+              <div>{stageOwnerDisplay(order)}</div>
+              <div className="text-xs text-muted-foreground">
+                {due ? (
+                  <time dateTime={due.dateTime}>{due.label}</time>
+                ) : (
+                  "时限未设置"
+                )}
+              </div>
+            </div>
+          )
+        },
+      },
+      {
         id: "submittedAt",
         accessorKey: "submittedAt",
         header: "提交时间",
@@ -559,54 +579,23 @@ export function SalesOrdersListPage() {
         />
       ) : null}
 
-      <MetricStrip columns={5} aria-label="销售单快速筛选">
-        <MetricFilterItem
-          label="全部"
-          value={metrics.total}
-          detail="当前业务范围"
-          active={url.summary === "all"}
-          onClick={() => {
-            pushUrl({ summary: "all", page: 1 })
-          }}
-        />
-        <MetricFilterItem
-          label="待处理"
-          value={metrics.pending}
-          detail="确认 / 审批 / 驳回"
-          active={url.summary === "pending"}
-          onClick={() => {
-            // summary 与主状态维度重叠，点击时重置 status，避免矛盾空结果
-            pushUrl({ summary: "pending", status: "all", page: 1 })
-          }}
-        />
-        <MetricFilterItem
-          label="进行中"
-          value={metrics.inProgress}
-          detail="履约中 / 已生效"
-          active={url.summary === "inProgress"}
-          onClick={() => {
-            pushUrl({ summary: "inProgress", status: "all", page: 1 })
-          }}
-        />
-        <MetricFilterItem
-          label="待收款"
-          value={metrics.pendingCollection}
-          detail="未收 / 部分 / 待复核"
-          active={url.summary === "pendingCollection"}
-          onClick={() => {
-            pushUrl({ summary: "pendingCollection", status: "all", page: 1 })
-          }}
-        />
-        <MetricFilterItem
-          label="履约异常"
-          value={metrics.fulfillmentException}
-          detail="部分履约等"
-          active={url.summary === "fulfillmentException"}
-          onClick={() => {
-            pushUrl({ summary: "fulfillmentException", status: "all", page: 1 })
-          }}
-        />
-      </MetricStrip>
+      <ToggleGroup
+        value={[url.summary]}
+        onValueChange={(values) => {
+          const next = values[0] as SalesOrdersUrlState["summary"] | undefined
+          // summary 与主状态高级筛选是两个维度，切视图时重置 status 避免矛盾空结果
+          pushUrl({ summary: next ?? "all", status: "all", page: 1 })
+        }}
+        variant="outline"
+        size="sm"
+        spacing={0}
+        aria-label="销售单工作视图"
+      >
+        <ToggleGroupItem value="all">全部</ToggleGroupItem>
+        <ToggleGroupItem value="mine">待我处理</ToggleGroupItem>
+        <ToggleGroupItem value="createdByMe">我创建的</ToggleGroupItem>
+        <ToggleGroupItem value="exception">异常</ToggleGroupItem>
+      </ToggleGroup>
 
       <BusinessTableFrame
         title="销售单列表"
@@ -764,7 +753,7 @@ export function SalesOrdersListPage() {
                   ·
                 </span>
                 <span className="hidden md:inline">
-                  / 聚焦搜索 · ↑↓ 选择行 · Enter 预览
+                  / 聚焦搜索 · ↑↓ 选择行 · Enter 打开详情
                 </span>
                 {filtersActive ? (
                   <Button
@@ -834,8 +823,8 @@ export function SalesOrdersListPage() {
               layout="flush"
               density="compact"
               defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
-              onRowPreview={(row) => openPaperPreview(row.id)}
-              onRowOpen={(row) => openPaperPreview(row.id)}
+              onRowPreview={(row) => router.push(`/sales/orders/${row.id}`)}
+              onRowOpen={(row) => router.push(`/sales/orders/${row.id}`)}
             />
           )
         }

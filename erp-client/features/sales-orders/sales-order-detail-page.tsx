@@ -33,11 +33,9 @@ import {
   StatusTrackSummary,
   surfaceInsetClassName,
   surfacePanelClassName,
-  type DisplayTime,
   type ResponsibilityTrack,
 } from "@/components/business"
 import { welfareScenarioLabel } from "@/lib/business-options"
-import { formatDateTime } from "@/lib/datetime"
 import {
   Alert,
   AlertDescription,
@@ -66,11 +64,13 @@ import {
   useSalesOrderDetailQuery,
   useStartSalesChangeOrderMutation,
 } from "@/features/sales-orders/queries"
-import type { SalesOrderDetailView } from "@/features/sales-orders/api"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import {
+  isPendingReviewStage,
   NATURE_LABEL,
   ORIGIN_LABEL,
+  stageDueDisplay,
+  stageOwnerDisplay,
 } from "@/features/sales-orders/labels"
 import { sumFixed } from "@/lib/fixed-decimal"
 import { getErrorPresentation } from "@/lib/api/errors"
@@ -134,43 +134,6 @@ const WORK_ITEM_STATUS_ZH: Record<string, string> = {
   COMPLETED: "已完成",
 }
 
-/** 阶段责任角色中文映射（后端固定码，见 `sales_order/mod.rs` 提交编排）。 */
-const STAGE_OWNER_ROLE_LABEL: Record<string, string> = {
-  procurement: "采购",
-  sales_leader: "销售领导",
-  operations: "运营",
-}
-
-/** 审核轨进行中的阶段码（草稿/已生效/履约中/已关闭/已作废不在其中）。 */
-const PENDING_REVIEW_STAGE_CODES = [
-  "awaiting_confirm",
-  "awaiting_sales",
-  "awaiting_sales_lead",
-  "awaiting_ops",
-]
-
-function isPendingReviewStage(code: string) {
-  return PENDING_REVIEW_STAGE_CODES.includes(code)
-}
-
-/** 当前阶段责任人展示文案：有派发待办时按角色+姓名；驳回/低毛利待处理归销售本人。 */
-function stageOwnerDisplay(order: SalesOrderDetailView): string {
-  if (order.stageOwnerRole) {
-    const roleLabel = STAGE_OWNER_ROLE_LABEL[order.stageOwnerRole] ?? order.stageOwnerRole
-    return `${roleLabel} · ${order.stageOwnerUserName ?? "待认领"}`
-  }
-  if (order.primaryStatus.code === "awaiting_sales") {
-    return `销售 · ${order.ownerName}`
-  }
-  return "待分配"
-}
-
-/** 当前阶段预计完成时限；未设置时返回 `undefined`（面板自动显示"未设置"）。 */
-function stageDueDisplay(order: SalesOrderDetailView): DisplayTime | undefined {
-  if (!order.stageDueAt) return undefined
-  const iso = new Date(order.stageDueAt * 1000).toISOString()
-  return { dateTime: iso, label: formatDateTime(iso, "full") }
-}
 
 function resolveFocusTask(
   order: SalesOrderListItem,
@@ -435,15 +398,24 @@ export function SalesOrderDetailPage({
 
   const visibleNav = navItems.filter((item) => item.show)
 
-  const primaryTaskAction = actionableFocusTask ? (
-    <Button
-      type="button"
-      size="sm"
-      onClick={() => selectSection(actionableFocusTask.id)}
-    >
-      {actionableFocusTask.actionLabel}
-    </Button>
-  ) : null
+  const primaryTaskAction =
+    order.primaryStatus.code === "draft" ? (
+      <Button
+        type="button"
+        size="sm"
+        render={<Link href={`/sales/orders?mode=create&salesOrderId=${order.id}`} />}
+      >
+        继续编辑
+      </Button>
+    ) : actionableFocusTask ? (
+      <Button
+        type="button"
+        size="sm"
+        onClick={() => selectSection(actionableFocusTask.id)}
+      >
+        {actionableFocusTask.actionLabel}
+      </Button>
+    ) : null
 
   return (
     <PageScaffold>

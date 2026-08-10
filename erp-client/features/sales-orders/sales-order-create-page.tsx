@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { CircleAlertIcon, CircleCheckIcon, PlusIcon } from "lucide-react"
 import { z } from "zod"
@@ -15,9 +16,11 @@ import {
   ProductCombobox,
   StickyTotalBar,
   ValidationSummary,
+  WizardSteps,
   surfaceInsetClassName,
   surfacePanelClassName,
   type EditableLineItemColumn,
+  type WizardStep,
 } from "@/components/business"
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -57,7 +60,13 @@ import type { StatusTone } from "@/components/ui/status-badge"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
-import { useCreateSalesOrderMutation } from "@/features/sales-orders/queries"
+import {
+  useCreateSalesOrderMutation,
+  useSalesOrderDraftResumeQuery,
+  useSaveSalesOrderDraftMutation,
+  useSubmitSalesOrderMutation,
+} from "@/features/sales-orders/queries"
+import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api"
 import type {
   CreateSalesOrderInput,
   SalesOrderCreateIntent,
@@ -411,16 +420,50 @@ function errorMessage(error: unknown): string {
   return messages[message] ?? message
 }
 
-export function SalesOrderCreatePage({
+const WIZARD_STEPS: readonly WizardStep[] = [
+  { id: "contract", label: "客户与合同" },
+  { id: "content", label: "销售内容" },
+  { id: "terms", label: "交付与结算" },
+  { id: "review", label: "核对并提交" },
+] as const
+type WizardStepId = (typeof WIZARD_STEPS)[number]["id"]
+
+/** 字段名 → 所在步骤，用于校验失败时把用户带回能看见错误的那一步。 */
+const STEP_FIELD_PREFIXES: Record<WizardStepId, readonly string[]> = {
+  contract: [
+    "contractId",
+    "requestedContractRevisionId",
+    "customerName",
+    "settlementEntity",
+    "ownerUserId",
+    "ownerName",
+  ],
+  content: ["nature", "lineItems"],
+  terms: ["welfareScene", "paymentTerms", "fulfillmentDeadline", "taxRatePercent"],
+  review: [],
+}
+
+function stepForFieldName(name: string): WizardStepId | null {
+  const prefix = name.split(/[.[]/)[0]
+  for (const step of WIZARD_STEPS) {
+    if (STEP_FIELD_PREFIXES[step.id].includes(prefix)) return step.id
+  }
+  return null
+}
+
+function SalesOrderCreateForm({
   initialCustomerId = "",
   initialContractId = "",
   initialContractRevisionId = "",
   initialNature = "physical_service",
+  initialDraft = null,
 }: {
   initialCustomerId?: string
   initialContractId?: string
   initialContractRevisionId?: string
   initialNature?: SalesOrderNature
+  /** 继续编辑场景：已有草稿的可编辑内容；新建时为 `null`。 */
+  initialDraft?: SalesOrderDraftResumeData | null
 }) {
   const router = useRouter()
   const contractsQuery = useContractsForNewSalesOrderQuery()
@@ -434,13 +477,35 @@ export function SalesOrderCreatePage({
     lifecycleStatus: "enabled",
   })
   const createMutation = useCreateSalesOrderMutation()
+  const saveDraftMutation = useSaveSalesOrderDraftMutation()
+  const submitMutation = useSubmitSalesOrderMutation()
   const profileQuery = useAccountProfileQuery()
-  const [selectedContractId, setSelectedContractId] =
-    React.useState(initialContractId)
+  const [selectedContractId, setSelectedContractId] = React.useState(
+    initialDraft?.contractId || initialContractId
+  )
   const [uploadOpen, setUploadOpen] = React.useState(false)
   const preferredRevisionRef = React.useRef(initialContractRevisionId)
   const submitIntentRef = React.useRef<SalesOrderCreateIntent>("SAVE_DRAFT")
   const contractQuery = useContractCenterQuery(selectedContractId)
+  /** 继续编辑场景下，合同派生 effect 首次运行时不要覆盖已从草稿带回的付款条件。 */
+  const skipPaymentTermsResetRef = React.useRef(initialDraft != null)
+
+  const [currentStep, setCurrentStep] = React.useState<WizardStepId>("contract")
+  const currentStepIndex = WIZARD_STEPS.findIndex((s) => s.id === currentStep)
+  /** 继续编辑场景：草稿在后端的身份与乐观锁版本，保存草稿从"新建"切到"更新"。 */
+  const [draftIdentity, setDraftIdentity] = React.useState<{
+    salesOrderId: string
+    documentNumber: string
+    version: number
+  } | null>(
+    initialDraft
+      ? {
+          salesOrderId: initialDraft.salesOrderId,
+          documentNumber: initialDraft.documentNumber,
+          version: initialDraft.version,
+        }
+      : null
+  )
 
   const isVoucherKind = React.useCallback((kind: string | undefined) => {
     const value = kind?.trim()
@@ -546,33 +611,39 @@ export function SalesOrderCreatePage({
    * 未 touch 时若每次渲染都变，会 setState → 重渲染 → 死循环
    *（Maximum update depth exceeded @ Field）。
    */
-  const defaultValues = React.useMemo(
-    () =>
-      ({
-        contractId: initialContractId,
-        requestedContractRevisionId: initialContractRevisionId,
-        contractRevisionLabel: "",
-        customerId: initialCustomerId,
-        customerName: "",
-        settlementPartyId: "",
-        settlementEntity: "",
-        nature: initialNature,
-        ownerUserId: "",
-        ownerName: "",
-        welfareScene: "",
-        paymentTerms: "",
-        fulfillmentDeadline: "",
-        taxRatePercent: initialNature === "card_voucher" ? "6.00" : "13.00",
-        remark: "",
-        lineItems: [createEmptyLine(initialNature)],
-      }) satisfies CreateSalesOrderFormValues,
-    [
-      initialContractId,
-      initialContractRevisionId,
-      initialCustomerId,
-      initialNature,
-    ]
-  )
+  const defaultValues = React.useMemo(() => {
+    const nature = initialDraft?.nature ?? initialNature
+    return {
+      contractId: initialDraft?.contractId || initialContractId,
+      requestedContractRevisionId: initialContractRevisionId,
+      contractRevisionLabel: "",
+      customerId: initialCustomerId,
+      customerName: "",
+      settlementPartyId: "",
+      settlementEntity: "",
+      nature,
+      ownerUserId: "",
+      ownerName: "",
+      welfareScene: initialDraft?.welfareScene ?? "",
+      paymentTerms: initialDraft?.paymentTerms ?? "",
+      fulfillmentDeadline: initialDraft?.fulfillmentDeadline ?? "",
+      taxRatePercent:
+        initialDraft?.taxRatePercent ??
+        (nature === "card_voucher" ? "6.00" : "13.00"),
+      remark: initialDraft?.remark ?? "",
+      lineItems:
+        initialDraft && initialDraft.lineItems.length > 0
+          ? initialDraft.lineItems
+          : [createEmptyLine(nature)],
+    } satisfies CreateSalesOrderFormValues
+    // initialDraft 由外层等查询完成后才挂载本组件，渲染期间引用稳定，可以放心入依赖数组。
+  }, [
+    initialContractId,
+    initialContractRevisionId,
+    initialCustomerId,
+    initialNature,
+    initialDraft,
+  ])
 
   const form = useAppForm({
     defaultValues,
@@ -581,11 +652,11 @@ export function SalesOrderCreatePage({
         validateSalesOrderForm(value, submitIntentRef.current),
     },
     onSubmit: async ({ value }) => {
-      const command: CreateSalesOrderInput = {
-        contract: {
-          contractId: value.contractId,
-          requestedContractRevisionId: value.requestedContractRevisionId,
-        },
+      const idempotencyKey =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `so-create-${Date.now()}`
+      const draftContent = {
         nature: value.nature,
         ownerUserId: value.ownerUserId,
         ownerName: value.ownerName,
@@ -595,14 +666,57 @@ export function SalesOrderCreatePage({
         taxRatePercent: value.taxRatePercent,
         remark: value.remark,
         lineItems: value.lineItems,
+      }
+
+      // 已经落过库的草稿：后续保存/提交都基于既有记录续接，不再新建。
+      if (draftIdentity) {
+        const saved = await saveDraftMutation.mutateAsync({
+          ...draftContent,
+          salesOrderId: draftIdentity.salesOrderId,
+          version: draftIdentity.version,
+          contract: {
+            contractId: value.contractId,
+            requestedContractRevisionId: value.requestedContractRevisionId,
+          },
+        })
+        setDraftIdentity({
+          salesOrderId: draftIdentity.salesOrderId,
+          documentNumber: draftIdentity.documentNumber,
+          version: saved.version,
+        })
+        if (submitIntentRef.current === "SAVE_DRAFT") {
+          setDraftSaved({
+            documentNumber: draftIdentity.documentNumber,
+            savedAt: new Date(),
+          })
+          return
+        }
+        await submitMutation.mutateAsync({
+          salesOrderId: draftIdentity.salesOrderId,
+          version: saved.version,
+          idempotencyKey,
+        })
+        form.reset()
+        router.push(`/sales/orders/${draftIdentity.salesOrderId}`)
+        return
+      }
+
+      const command: CreateSalesOrderInput = {
+        contract: {
+          contractId: value.contractId,
+          requestedContractRevisionId: value.requestedContractRevisionId,
+        },
+        ...draftContent,
         intent: submitIntentRef.current,
-        idempotencyKey:
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `so-create-${Date.now()}`,
+        idempotencyKey,
       }
       const result = await createMutation.mutateAsync(command)
       if (submitIntentRef.current === "SAVE_DRAFT") {
+        setDraftIdentity({
+          salesOrderId: result.salesOrderId,
+          documentNumber: result.documentNumber,
+          version: result.workingCopyVersion ?? 1,
+        })
         setDraftSaved({
           documentNumber: result.documentNumber,
           savedAt: new Date(),
@@ -613,6 +727,27 @@ export function SalesOrderCreatePage({
       router.push(`/sales/orders/${result.salesOrderId}`)
     },
   })
+
+  /**
+   * 提交/保存草稿校验失败时，错误可能落在当前未展示的步骤上（字段仍挂载，
+   * 只是被 `hidden` 隐藏）——把用户带回能看见那条错误的步骤，不能让校验
+   * 失败后页面看起来什么都没发生。
+   */
+  const jumpToFirstInvalidStep = React.useCallback(() => {
+    const fieldMeta = form.state.fieldMeta as Record<
+      string,
+      { errors?: unknown[] } | undefined
+    >
+    for (const [name, meta] of Object.entries(fieldMeta)) {
+      if (meta?.errors && meta.errors.length > 0) {
+        const step = stepForFieldName(name)
+        if (step && step !== "review") {
+          setCurrentStep(step)
+          return
+        }
+      }
+    }
+  }, [form])
 
   const dirty = useSelector(form.store, (state) => state.isDirty)
   const [discardOpen, setDiscardOpen] = React.useState(false)
@@ -685,11 +820,17 @@ export function SalesOrderCreatePage({
       contract.currentRevision.settlementParty.displayName
     )
     // 负责销售固定为当前登录用户，不随合同变更覆盖
-    const termLabel = contract.currentRevision.paymentTermSnapshot.label
-    const termMatch = PAYMENT_TERM_OPTIONS.find(
-      (o) => o.label === termLabel || o.value === termLabel
-    )
-    form.setFieldValue("paymentTerms", termMatch?.value ?? "CONTRACT")
+    if (skipPaymentTermsResetRef.current) {
+      // 继续编辑草稿：本次合同 effect 首次运行只是把当前合同重新同步一遍，
+      // 已从草稿带回的付款条件不应被合同默认值覆盖；仅跳过这一次。
+      skipPaymentTermsResetRef.current = false
+    } else {
+      const termLabel = contract.currentRevision.paymentTermSnapshot.label
+      const termMatch = PAYMENT_TERM_OPTIONS.find(
+        (o) => o.label === termLabel || o.value === termLabel
+      )
+      form.setFieldValue("paymentTerms", termMatch?.value ?? "CONTRACT")
+    }
   }, [contractQuery.data, form])
 
   /** 负责销售固定为当前登录用户。 */
@@ -757,14 +898,22 @@ export function SalesOrderCreatePage({
     <PageScaffold className="pb-8">
       <PageHeader
         density="compact"
-        title="新建销售单"
+        title={initialDraft ? `继续编辑 ${initialDraft.documentNumber}` : "新建销售单"}
         description="创建后业务性质不可修改；金额以提交后系统计算为准。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "orders", label: "销售单", href: "/sales/orders" },
-          { id: "create", label: "新建", current: true },
+          {
+            id: "create",
+            label: initialDraft ? "继续编辑" : "新建",
+            current: true,
+          },
         ]}
-        status={{ label: "未创建", tone: "neutral" }}
+        status={
+          initialDraft
+            ? { label: "草稿", tone: "neutral" }
+            : { label: "未创建", tone: "neutral" }
+        }
       />
 
       {contractsQuery.isError ? (
@@ -813,16 +962,21 @@ export function SalesOrderCreatePage({
         onSubmit={(event) => {
           event.preventDefault()
           event.stopPropagation()
-          void form.handleSubmit()
+          void form.handleSubmit().then(() => {
+            jumpToFirstInvalidStep()
+          })
         }}
       >
         <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17.5rem] xl:gap-5">
           <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
-            <section className="border-b border-border/30 p-4 md:p-5 lg:p-6">
+            <section
+              className="border-b border-border/30 p-4 md:p-5 lg:p-6"
+              hidden={currentStep !== "contract"}
+            >
               <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="font-heading text-sm font-semibold">单据头</h2>
+                <h2 className="font-heading text-sm font-semibold">客户与合同</h2>
                 <span className="text-xs text-muted-foreground">
-                  合同与商业约定
+                  第 1 步 · 合同与负责销售
                 </span>
               </div>
 
@@ -944,24 +1098,6 @@ export function SalesOrderCreatePage({
                 </form.Subscribe>
 
                 <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <form.AppField name="nature">
-                    {(field) => (
-                      <field.SelectField
-                        label="业务性质"
-                        options={NATURE_OPTIONS}
-                        onValueChange={(value) => {
-                          const nature = value as SalesOrderNature
-                          if (nature === field.state.value) return
-                          const lines = form.state.values.lineItems
-                          if (hasMeaningfulLines(lines)) {
-                            setPendingNature(nature)
-                            return
-                          }
-                          applyNature(nature)
-                        }}
-                      />
-                    )}
-                  </form.AppField>
                   <form.AppField name="ownerName">
                     {(field) => (
                       <field.TextField
@@ -978,80 +1114,132 @@ export function SalesOrderCreatePage({
                       />
                     )}
                   </form.AppField>
-                  <form.AppField
-                    name="welfareScene"
-                    validators={{
-                      onBlur: z
-                        .string()
-                        .trim()
-                        .min(1, "请选择福利场景")
-                        .refine(
-                          (value) =>
-                            WELFARE_SCENARIO_OPTIONS.some(
-                              (o) => o.value === value
-                            ),
-                          "请选择有效的福利场景"
-                        ),
-                    }}
-                  >
-                    {(field) => (
-                      <field.SelectField
-                        label="福利场景"
-                        options={WELFARE_SCENARIO_OPTIONS}
-                        placeholder="选择福利场景"
-                      />
-                    )}
-                  </form.AppField>
-                  <form.AppField
-                    name="paymentTerms"
-                    validators={{
-                      onBlur: z.string().min(1, "请选择付款条件"),
-                    }}
-                  >
-                    {(field) => (
-                      <field.SelectField
-                        label="付款条件"
-                        options={PAYMENT_TERM_OPTIONS}
-                      />
-                    )}
-                  </form.AppField>
-                  <form.AppField
-                    name="fulfillmentDeadline"
-                    validators={{
-                      onBlur: z.string().min(1, "请选择履约期限"),
-                    }}
-                  >
-                    {(field) => (
-                      <field.DateField label="履约期限" />
-                    )}
-                  </form.AppField>
-                  <form.AppField
-                    name="taxRatePercent"
-                    validators={{
-                      onBlur: decimalInput("税率", 6).refine(
-                        (value) => decimalAtMost(value, "100", 6),
-                        "税率不能超过 100%"
-                      ),
-                    }}
-                  >
-                    {(field) => (
-                      <field.TextField
-                        label="税率（%）"
-                        type="number"
-                        inputClassName="num"
-                      />
-                    )}
-                  </form.AppField>
                 </div>
+              </div>
+            </section>
+
+            <section
+              className="border-b border-border/30 p-4 md:p-5 lg:p-6"
+              hidden={currentStep !== "terms"}
+            >
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <h2 className="font-heading text-sm font-semibold">交付与结算</h2>
+                <span className="text-xs text-muted-foreground">
+                  第 3 步 · 付款、履约期限与税率
+                </span>
+              </div>
+              <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                <form.AppField
+                  name="welfareScene"
+                  validators={{
+                    onBlur: z
+                      .string()
+                      .trim()
+                      .min(1, "请选择福利场景")
+                      .refine(
+                        (value) =>
+                          WELFARE_SCENARIO_OPTIONS.some(
+                            (o) => o.value === value
+                          ),
+                        "请选择有效的福利场景"
+                      ),
+                  }}
+                >
+                  {(field) => (
+                    <field.SelectField
+                      label="福利场景"
+                      options={WELFARE_SCENARIO_OPTIONS}
+                      placeholder="选择福利场景"
+                    />
+                  )}
+                </form.AppField>
+                <form.AppField
+                  name="paymentTerms"
+                  validators={{
+                    onBlur: z.string().min(1, "请选择付款条件"),
+                  }}
+                >
+                  {(field) => (
+                    <field.SelectField
+                      label="付款条件"
+                      options={PAYMENT_TERM_OPTIONS}
+                    />
+                  )}
+                </form.AppField>
+                <form.AppField
+                  name="fulfillmentDeadline"
+                  validators={{
+                    onBlur: z.string().min(1, "请选择履约期限"),
+                  }}
+                >
+                  {(field) => <field.DateField label="履约期限" />}
+                </form.AppField>
+                <form.AppField
+                  name="taxRatePercent"
+                  validators={{
+                    onBlur: decimalInput("税率", 6).refine(
+                      (value) => decimalAtMost(value, "100", 6),
+                      "税率不能超过 100%"
+                    ),
+                  }}
+                >
+                  {(field) => (
+                    <field.TextField
+                      label="税率（%）"
+                      type="number"
+                      inputClassName="num"
+                    />
+                  )}
+                </form.AppField>
+              </div>
+              <div className="mt-5">
+                <form.AppField name="remark">
+                  {(field) => (
+                    <field.TextareaField
+                      label="内部说明"
+                      placeholder="补充客户确认、交付或内部协同说明（可选）"
+                      rows={3}
+                    />
+                  )}
+                </form.AppField>
               </div>
             </section>
 
             <section
               id="sales-line-items-section"
               className="border-b border-border/30 p-4 md:p-5 lg:p-6"
+              hidden={currentStep !== "content"}
             >
               <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="font-heading text-sm font-semibold">销售明细</h2>
+                <h2 className="font-heading text-sm font-semibold">销售内容</h2>
+                <span className="text-xs text-muted-foreground">
+                  第 2 步 · 业务性质与明细
+                </span>
+              </div>
+
+              <div className="mb-5 max-w-xs">
+                <form.AppField name="nature">
+                  {(field) => (
+                    <field.SelectField
+                      label="业务性质"
+                      options={NATURE_OPTIONS}
+                      onValueChange={(value) => {
+                        const nature = value as SalesOrderNature
+                        if (nature === field.state.value) return
+                        const lines = form.state.values.lineItems
+                        if (hasMeaningfulLines(lines)) {
+                          setPendingNature(nature)
+                          return
+                        }
+                        applyNature(nature)
+                      }}
+                    />
+                  )}
+                </form.AppField>
+              </div>
+
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-medium">销售明细</h3>
                 <form.Subscribe selector={(state) => state.values.nature}>
                   {(nature) => (
                     <Badge variant="outline" className="font-normal">
@@ -1387,19 +1575,84 @@ export function SalesOrderCreatePage({
                           title={`明细共 ${lineItemIssues.length} 项待处理`}
                         />
                       ) : null}
-
-                      <div className="mt-5">
-                        <form.AppField name="remark">
-                          {(field) => (
-                            <field.TextareaField
-                              label="内部说明"
-                              placeholder="补充客户确认、交付或内部协同说明（可选）"
-                              rows={3}
-                            />
-                          )}
-                        </form.AppField>
-                      </div>
                     </>
+                  )
+                }}
+              </form.Subscribe>
+            </section>
+
+            <section
+              className="border-b border-border/30 p-4 md:p-5 lg:p-6"
+              hidden={currentStep !== "review"}
+            >
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <h2 className="font-heading text-sm font-semibold">核对并提交</h2>
+                <span className="text-xs text-muted-foreground">
+                  第 4 步 · 确认内容无误后提交
+                </span>
+              </div>
+              <form.Subscribe selector={(state) => state.values}>
+                {(values) => {
+                  const totals = calculateTotals(
+                    values.lineItems,
+                    values.taxRatePercent
+                  )
+                  const flowNote =
+                    values.nature === "card_voucher"
+                      ? "提交后进入销售领导 → 运营两级审批，运营通过后生效并形成应收。"
+                      : "提交后内容锁定并进入采购二次确认；生效以确认通过为准。"
+                  return (
+                    <dl className={cn(surfaceInsetClassName, "grid gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2")}>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">合同</dt>
+                        <dd className="font-medium">
+                          {values.contractRevisionLabel || "未选择"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">客户</dt>
+                        <dd className="font-medium">{values.customerName || "—"}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">结算主体</dt>
+                        <dd className="font-medium">
+                          {values.settlementEntity || "—"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">业务性质</dt>
+                        <dd className="font-medium">
+                          {values.nature === "card_voucher" ? "卡券" : "实物/服务"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">明细行</dt>
+                        <dd className="font-medium">
+                          {values.lineItems.length} 行
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">付款条件</dt>
+                        <dd className="font-medium">
+                          {paymentTermLabel(values.paymentTerms) || "未选择"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">含税金额</dt>
+                        <dd className="num font-semibold">
+                          <MoneyValue value={totals.gross} taxBasis="gross" />
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">税额</dt>
+                        <dd className="num font-medium">
+                          <MoneyValue value={totals.tax} />
+                        </dd>
+                      </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
+                        {flowNote}
+                      </p>
+                    </dl>
                   )
                 }}
               </form.Subscribe>
@@ -1447,6 +1700,28 @@ export function SalesOrderCreatePage({
                         税率 {values.taxRatePercent || "0"}% 预估。{flowNote}
                       </>
                     }
+                    leftActions={
+                      <div className="flex flex-wrap items-center gap-3">
+                        <WizardSteps
+                          steps={WIZARD_STEPS}
+                          currentStepId={currentStep}
+                        />
+                        {currentStepIndex > 0 ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setCurrentStep(
+                                WIZARD_STEPS[currentStepIndex - 1].id
+                              )
+                            }
+                          >
+                            上一步
+                          </Button>
+                        ) : null}
+                      </div>
+                    }
                     actions={
                       <form.AppForm>
                         <Button
@@ -1470,19 +1745,39 @@ export function SalesOrderCreatePage({
                             submitIntentRef.current = "SAVE_DRAFT"
                           }}
                         />
-                        <form.SubmitButton
-                          label="提交"
-                          pendingLabel="正在提交…"
-                          onClick={() => {
-                            submitIntentRef.current = "SUBMIT"
-                          }}
-                        >
-                          <PlusIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                          />
-                          提交
-                        </form.SubmitButton>
+                        {currentStepIndex < WIZARD_STEPS.length - 1 ? (
+                          <Button
+                            type="button"
+                            onClick={async () => {
+                              if (
+                                currentStep === "contract" &&
+                                !values.contractId.trim()
+                              ) {
+                                await form.validateField("contractId", "change")
+                                return
+                              }
+                              setCurrentStep(
+                                WIZARD_STEPS[currentStepIndex + 1].id
+                              )
+                            }}
+                          >
+                            下一步
+                          </Button>
+                        ) : (
+                          <form.SubmitButton
+                            label="提交"
+                            pendingLabel="正在提交…"
+                            onClick={() => {
+                              submitIntentRef.current = "SUBMIT"
+                            }}
+                          >
+                            <PlusIcon
+                              data-icon="inline-start"
+                              aria-hidden="true"
+                            />
+                            提交
+                          </form.SubmitButton>
+                        )}
                       </form.AppForm>
                     }
                   />
@@ -1615,5 +1910,78 @@ export function SalesOrderCreatePage({
         }}
       />
     </PageScaffold>
+  )
+}
+
+/**
+ * 继续编辑草稿时，先取回草稿内容再挂载表单——避免表单先以空 defaultValues
+ * 挂载、草稿到货后再 reset 的时序复杂度（TanStack Form 的 defaultValues 只在
+ * 挂载时生效一次）。
+ */
+export function SalesOrderCreatePage({
+  initialCustomerId = "",
+  initialContractId = "",
+  initialContractRevisionId = "",
+  initialNature = "physical_service",
+  initialSalesOrderId = "",
+}: {
+  initialCustomerId?: string
+  initialContractId?: string
+  initialContractRevisionId?: string
+  initialNature?: SalesOrderNature
+  /** 从草稿详情页"继续编辑"进入时携带；为空则是全新建单。 */
+  initialSalesOrderId?: string
+}) {
+  const resumeQuery = useSalesOrderDraftResumeQuery(initialSalesOrderId)
+
+  if (initialSalesOrderId) {
+    if (resumeQuery.isPending) {
+      return (
+        <PageScaffold>
+          <PageHeader title="继续编辑草稿" description="正在加载已保存的内容…" />
+          <div className="space-y-3" aria-busy="true" aria-label="加载中">
+            <div className="h-16 animate-pulse rounded-lg bg-muted" />
+            <div className="h-40 animate-pulse rounded-lg bg-muted" />
+          </div>
+        </PageScaffold>
+      )
+    }
+    if (resumeQuery.isError || !resumeQuery.data) {
+      return (
+        <PageScaffold>
+          <PageHeader
+            title="草稿加载失败"
+            description="这张草稿可能已被提交、作废，或暂时无法访问。"
+            actions={
+              <Button
+                type="button"
+                variant="outline"
+                render={<Link href={`/sales/orders/${initialSalesOrderId}`} />}
+              >
+                返回销售单详情
+              </Button>
+            }
+          />
+        </PageScaffold>
+      )
+    }
+    return (
+      <SalesOrderCreateForm
+        initialCustomerId={initialCustomerId}
+        initialContractId={initialContractId}
+        initialContractRevisionId={initialContractRevisionId}
+        initialNature={initialNature}
+        initialDraft={resumeQuery.data}
+      />
+    )
+  }
+
+  return (
+    <SalesOrderCreateForm
+      initialCustomerId={initialCustomerId}
+      initialContractId={initialContractId}
+      initialContractRevisionId={initialContractRevisionId}
+      initialNature={initialNature}
+    />
   )
 }

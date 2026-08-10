@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import {
   BoxesIcon,
-  ClipboardCheckIcon,
   ClipboardListIcon,
   FileStackIcon,
   FileTextIcon,
@@ -86,7 +85,6 @@ export type WorkspaceId =
 /** 侧栏角标键：由 Shell 映射到对应工作面的实时计数，无数据时隐藏。 */
 export type WorkspaceNavBadgeKey =
   | "todo-count"
-  | "confirm-count"
   | "delivery-count"
   | "warehouse-count"
 
@@ -224,6 +222,9 @@ function defaultNavPermissionsFor(
 
 /** W14 按资源路径映射入口 list 权限。 */
 function masterDataPermissionsForHref(href: string): readonly string[] {
+  if (href.includes("/master-data/sellable-items")) {
+    return ["sellable_sku:list"]
+  }
   if (href.includes("/master-data/categories")) return ["product_category:list"]
   if (href.includes("/master-data/brands")) return ["product_brand:list"]
   if (href.includes("/master-data/unit-of-measures")) {
@@ -234,7 +235,7 @@ function masterDataPermissionsForHref(href: string): readonly string[] {
   }
   if (href.includes("/master-data/suppliers")) return ["supplier:list"]
   if (href.includes("/master-data/warehouses")) return ["warehouse:list"]
-  // 公司商品池 / 商品与 SKU
+  // 商品与 SKU
   return ["product:list", "sku:list"]
 }
 
@@ -501,9 +502,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
       },
       {
         routeId: "W02",
-        label: "待办队列",
+        label: "待我处理",
         icon: ListTodoIcon,
         badge: "todo-count",
+        // 并入了 W07 的入口（见下方"采购与履约"分组说明）：采购角色可能只有
+        // procurement_confirmation:list 而没有 work_item:list，任一权限满足
+        // 即显示，避免降级后采购看不到这个入口。
+        requiredPermissions: ["work_item:list", "procurement_confirmation:list"],
       },
     ],
   },
@@ -528,12 +533,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
   {
     label: "采购与履约",
     items: [
-      {
-        routeId: "W07",
-        label: "二次确认",
-        icon: ClipboardCheckIcon,
-        badge: "confirm-count",
-      },
       {
         routeId: "W08",
         icon: ClipboardListIcon,

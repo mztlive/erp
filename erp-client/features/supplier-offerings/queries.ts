@@ -6,6 +6,7 @@ import {
   createSupplierOffering,
   fetchCompanySkuOptions,
   fetchSupplierOfferings,
+  fetchSupplierOfferingsForSkus,
   reviseSupplierOffering,
   updateSupplierOfferingAvailability,
 } from "@/features/supplier-offerings/api"
@@ -27,6 +28,16 @@ export function useSupplierOfferingsQuery(query: SupplierOfferingListQuery) {
   return useQuery({
     queryKey: supplierOfferingKeys.list(query),
     queryFn: () => fetchSupplierOfferings(query),
+  })
+}
+
+/** 商品列表当前页 SKU 的供给明细；列表状态与明细弹窗共用同一份查询结果。 */
+export function useSupplierOfferingsForSkusQuery(skuIds: readonly string[]) {
+  const normalized = [...new Set(skuIds.filter(Boolean))].sort()
+  return useQuery({
+    queryKey: [...supplierOfferingKeys.all, "sku-details", normalized],
+    queryFn: () => fetchSupplierOfferingsForSkus(normalized),
+    enabled: normalized.length > 0,
   })
 }
 

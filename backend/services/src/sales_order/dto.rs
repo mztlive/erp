@@ -250,6 +250,15 @@ pub struct SalesOrderListParams {
     pub review_status: Option<entities::sales_order::ReviewStatus>,
     /// 业务性质筛选。
     pub business_type: Option<BusinessType>,
+    /// 创建人账号筛选（"我创建的"/"待我处理"视图用）。
+    pub created_by: Option<String>,
+    /// "待我处理"视图：仅草稿或被驳回/低毛利待处理回销售的单；与
+    /// `commercial_status`/`review_status` 互斥，调用方不应同时传两者。
+    #[serde(default)]
+    pub my_todo: bool,
+    /// "异常"视图：审核轨被驳回；与 `review_status` 互斥。
+    #[serde(default)]
+    pub exception_only: bool,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -275,6 +284,12 @@ pub(crate) struct SalesOrderListQuery {
     pub review_status: Option<entities::sales_order::ReviewStatus>,
     /// 业务性质筛选。
     pub business_type: Option<BusinessType>,
+    /// 创建人账号筛选。
+    pub created_by: Option<String>,
+    /// "待我处理"视图。
+    pub my_todo: bool,
+    /// "异常"视图。
+    pub exception_only: bool,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -297,6 +312,9 @@ impl SalesOrderListParams {
             commercial_status: self.commercial_status,
             review_status: self.review_status,
             business_type: self.business_type,
+            created_by: normalized_text(self.created_by.as_deref()),
+            my_todo: self.my_todo,
+            exception_only: self.exception_only,
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -348,10 +366,12 @@ pub struct SalesOrderView {
     pub stage: SalesOrderStageSummary,
 }
 
-/// 销售单当前阶段摘要（列表行）。
+/// 销售单当前阶段摘要（列表行与详情共用）。
 ///
 /// `code` 与 erp-client `filter-orders.ts::SALES_ORDER_STATUS_OPTIONS` 的 9 个
 /// 筛选码一一对应，前端筛选逻辑改为直接比较该码，不再维护一份中文 label 匹配。
+/// 责任人/时限来自批量查询命中的待办（详情单条查、列表整页批量查，见
+/// `SalesOrderService::sales_order_list`），审核轨未在途或无命中待办时为 `None`。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderStageSummary {
     /// 阶段码：`draft`/`awaiting_confirm`/`awaiting_sales`/`awaiting_sales_lead`/
@@ -360,17 +380,6 @@ pub struct SalesOrderStageSummary {
     /// 中文展示文案。
     pub label: &'static str,
     /// 展示语气：`success`/`warning`/`info`/`void`/`neutral`。
-    pub tone: &'static str,
-}
-
-/// 销售单当前阶段详情（详情页；在摘要基础上附带责任人与时限）。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct SalesOrderStageView {
-    /// 阶段码，语义同 [`SalesOrderStageSummary::code`]。
-    pub code: &'static str,
-    /// 中文展示文案。
-    pub label: &'static str,
-    /// 展示语气。
     pub tone: &'static str,
     /// 当前责任岗位（来自命中的待办 `owner_role`）；无待办时为 `None`。
     pub owner_role: Option<String>,
@@ -418,6 +427,8 @@ pub struct SalesOrderLineView {
 pub struct WorkingCopyView {
     /// 实体主键。
     pub id: String,
+    /// 乐观锁版本（`save_working_copy` 的 `SaveWorkingCopyRequest.version` 按此比对）。
+    pub version: u64,
     /// 编辑目的。
     pub working_purpose: entities::sales_order::WorkingPurpose,
     /// 草稿状态。
@@ -635,7 +646,7 @@ pub struct SalesOrderDetailView {
     /// 版本历史（新版本在前）。
     pub revisions: Vec<RevisionView>,
     /// 当前阶段详情（含责任人与时限）。
-    pub stage: SalesOrderStageView,
+    pub stage: SalesOrderStageSummary,
     /// 结案资格判定。
     pub close_eligibility: CloseEligibilityView,
     /// 是否可以发起销售变更单。

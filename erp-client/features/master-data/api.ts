@@ -31,6 +31,7 @@ import type {
   MasterDataResource,
   ProductFields,
   ProductKind,
+  ProductListSkuSummary,
   ProductListingStatus,
   ProductSkuFields,
   RevisionTimelineEntry,
@@ -1247,6 +1248,58 @@ async function listProducts(
     rows.push(mapProductRow(product, revision))
   }
   return rows
+}
+
+/**
+ * 读取商品列表当前页的启用 SKU 与当前销售价。
+ *
+ * 商品列表接口只返回 SKU 数量；这里按稳定商品 ID 补齐 SKU 当前修订，供列表展示
+ * 销售价范围，并为新增供给 Dialog 提供固定 SKU 身份。
+ */
+export async function fetchProductListSkus(
+  productIds: readonly string[],
+): Promise<readonly ProductListSkuSummary[]> {
+  const selectedProductIds = new Set(productIds.filter(Boolean))
+  if (selectedProductIds.size === 0) return []
+
+  const [skus, units] = await Promise.all([
+    fetchAllPages<SkuDto>("/admin/skus", {}),
+    fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}),
+  ])
+  const unitById = new Map(units.map((unit) => [unit.id, unit]))
+  const selectedSkus = skus.filter(
+    (sku) =>
+      selectedProductIds.has(sku.product_id) &&
+      asLifecycle(sku.status) === "ENABLED",
+  )
+
+  return Promise.all(
+    selectedSkus.map(async (sku) => {
+      const revisions = await fetchAllPages<SkuRevisionDto>(
+        "/admin/sku-revisions",
+        {
+          sku_id: sku.id,
+          sort_by: "revision_no",
+          sort_dir: "desc",
+        },
+      )
+      const revision = sku.current_revision_id
+        ? revisions.find((item) => item.id === sku.current_revision_id)
+        : undefined
+      const unit = unitById.get(sku.base_unit_id)
+      return {
+        productId: sku.product_id,
+        skuId: sku.id,
+        skuNo: sku.sku_no,
+        skuName: revision?.name ?? sku.sku_no,
+        specification:
+          revision?.specification ?? sku.specification_signature ?? "默认规格",
+        baseUnit: unit?.name ?? unit?.symbol ?? unit?.unit_code ?? "—",
+        salesVisiblePriceGross:
+          revision?.sales_visible_price_gross ?? undefined,
+      }
+    }),
+  )
 }
 
 async function listSellableItems(

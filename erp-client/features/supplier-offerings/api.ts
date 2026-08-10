@@ -55,6 +55,33 @@ export function fetchSupplierOfferings(
   })
 }
 
+/** 按多个稳定 SKU 读取全部供给关系，供商品列表判断与明细弹窗复用。 */
+export async function fetchSupplierOfferingsForSkus(
+  skuIds: readonly string[],
+): Promise<SupplierOfferingPage["items"]> {
+  const uniqueIds = [...new Set(skuIds.filter(Boolean))]
+  const pages = await Promise.all(
+    uniqueIds.map(async (skuId) => {
+      const items: SupplierOfferingPage["items"][number][] = []
+      let page = 1
+      let total = Number.POSITIVE_INFINITY
+      while (items.length < total) {
+        const result = await fetchSupplierOfferings({
+          skuId,
+          page,
+          pageSize: 100,
+        })
+        items.push(...result.items)
+        total = result.total
+        if (result.items.length === 0) break
+        page += 1
+      }
+      return items
+    }),
+  )
+  return pages.flat()
+}
+
 export async function fetchCompanySkuOptions(): Promise<readonly CompanySkuOption[]> {
   const rows = await fetchAllPages<BackendSku>("/admin/skus")
   return rows

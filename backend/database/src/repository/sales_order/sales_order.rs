@@ -66,6 +66,14 @@ pub struct SalesOrderFilter {
     pub review_status: Option<ReviewStatus>,
     /// 业务性质；`None` 表示不筛选。
     pub business_type: Option<BusinessType>,
+    /// 创建人账号；`None` 表示不筛选（"我创建的"/"待我处理"视图用）。
+    pub created_by: Option<String>,
+    /// "待我处理"视图：仅草稿或被驳回/低毛利待处理回销售的单
+    /// （`commercial_status=DRAFT` 或 `review_status IN [REJECTED, PENDING_LOW_MARGIN_SUPERIOR]`）。
+    /// 与 `commercial_status`/`review_status` 互斥，调用方不应同时传两者。
+    pub my_todo: bool,
+    /// "异常"视图：审核轨被驳回（与 `review_status` 互斥）。
+    pub exception_only: bool,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -95,6 +103,28 @@ impl QueryFilter for SalesOrderFilter {
         }
         if let Some(business_type) = self.business_type {
             filter.insert("business_type", business_type.as_str());
+        }
+        if let Some(created_by) = &self.created_by {
+            filter.insert("created_by", created_by);
+        }
+        if self.my_todo {
+            filter.insert(
+                "$or",
+                vec![
+                    doc! { "commercial_status": CommercialStatus::Draft.as_str() },
+                    doc! {
+                        "review_status": {
+                            "$in": [
+                                ReviewStatus::Rejected.as_str(),
+                                ReviewStatus::PendingLowMarginSuperior.as_str(),
+                            ]
+                        }
+                    },
+                ],
+            );
+        }
+        if self.exception_only {
+            filter.insert("review_status", ReviewStatus::Rejected.as_str());
         }
         filter
     }
@@ -264,6 +294,9 @@ mod tests {
             commercial_status: Some(CommercialStatus::PendingReview),
             review_status: Some(ReviewStatus::PendingOperations),
             business_type: Some(BusinessType::Voucher),
+            created_by: Some("user-1".to_string()),
+            my_todo: false,
+            exception_only: false,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -284,6 +317,7 @@ mod tests {
         assert_eq!(document.get_str("commercial_status").unwrap(), "PENDING_REVIEW");
         assert_eq!(document.get_str("review_status").unwrap(), "PENDING_OPERATIONS");
         assert_eq!(document.get_str("business_type").unwrap(), "VOUCHER");
+        assert_eq!(document.get_str("created_by").unwrap(), "user-1");
     }
 
     #[test]
@@ -294,6 +328,9 @@ mod tests {
             commercial_status: None,
             review_status: None,
             business_type: None,
+            created_by: None,
+            my_todo: false,
+            exception_only: false,
             page: 1,
             page_size: 20,
             sort_by: None,

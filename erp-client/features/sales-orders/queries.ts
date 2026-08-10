@@ -13,9 +13,12 @@ import {
   createSalesOrder,
   createSalesOrderExportJob,
   fetchSalesOrderDetail,
+  fetchSalesOrderDraftForResume,
   fetchSalesOrders,
   resolveProcurementRejection,
+  saveSalesOrderDraft,
   startSalesChangeOrder,
+  submitSalesOrder,
   submitSalesOrderAcceptance,
   type SalesOrdersListQuery,
 } from "@/features/sales-orders/api"
@@ -47,6 +50,14 @@ export function useSalesOrderDetailQuery(salesOrderId: string) {
   })
 }
 
+export function useSalesOrderDraftResumeQuery(salesOrderId: string) {
+  return useQuery({
+    queryKey: [...salesOrderKeys.detail(salesOrderId), "draft-resume"] as const,
+    queryFn: () => fetchSalesOrderDraftForResume(salesOrderId),
+    enabled: salesOrderId.length > 0,
+  })
+}
+
 export function useCreateSalesOrderMutation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -57,6 +68,31 @@ export function useCreateSalesOrderMutation() {
         queryKey: salesOrderKeys.detail(data.salesOrderId),
       })
       await queryClient.invalidateQueries({ queryKey: ["contracts"] })
+    },
+  })
+}
+
+export function useSaveSalesOrderDraftMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: saveSalesOrderDraft,
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: salesOrderKeys.detail(variables.salesOrderId),
+      })
+    },
+  })
+}
+
+export function useSubmitSalesOrderMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: submitSalesOrder,
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: salesOrderKeys.all })
+      await queryClient.invalidateQueries({
+        queryKey: salesOrderKeys.detail(data.salesOrderId),
+      })
     },
   })
 }

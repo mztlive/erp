@@ -30,6 +30,7 @@ export default async function SalesOrdersPage({
     customerId?: string
     contractId?: string
     contractRevisionId?: string
+    salesOrderId?: string
   }>
 }) {
   const params = await searchParams
@@ -52,6 +53,7 @@ export default async function SalesOrdersPage({
         initialNature={
           initialNature === "card_voucher" ? "card_voucher" : "physical_service"
         }
+        initialSalesOrderId={params.salesOrderId}
       />
     )
   }

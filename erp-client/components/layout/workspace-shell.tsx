@@ -45,12 +45,10 @@ import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 import { useFulfillmentCountQuery } from "@/features/fulfillment-operations/queries"
-import { useProcurementConfirmCountQuery } from "@/features/procurement-confirmation/queries"
 import { useUnifiedTaskCountQuery } from "@/features/unified-task-queue/queries"
 
 type NavBadgeCounts = {
   todo: number
-  confirm: number
   delivery: number
   warehouse: number
 }
@@ -62,8 +60,6 @@ function badgeCountFor(
   switch (key) {
     case "todo-count":
       return counts.todo
-    case "confirm-count":
-      return counts.confirm
     case "delivery-count":
       return counts.delivery
     case "warehouse-count":
@@ -96,12 +92,10 @@ function AppSidebarNav() {
   )
 
   const todoCountQuery = useUnifiedTaskCountQuery()
-  const confirmCountQuery = useProcurementConfirmCountQuery()
   const deliveryCountQuery = useFulfillmentCountQuery("procurement")
   const warehouseCountQuery = useFulfillmentCountQuery("warehouse")
   const counts: NavBadgeCounts = {
     todo: todoCountQuery.data?.mine ?? 0,
-    confirm: confirmCountQuery.data?.mine ?? 0,
     delivery: deliveryCountQuery.data?.pending ?? 0,
     warehouse: warehouseCountQuery.data?.pending ?? 0,
   }

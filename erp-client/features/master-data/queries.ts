@@ -12,6 +12,7 @@ import {
   disableMasterDataObject,
   fetchMasterDataCenter,
   fetchMasterDataList,
+  fetchProductListSkus,
   fetchSkuSupplierCounts,
   queryMasterDataIdempotency,
   revealMasterDataSensitive,
@@ -45,6 +46,16 @@ export function useMasterDataListQuery(query: MasterDataListQuery) {
   return useQuery({
     queryKey: masterDataKeys.list(query),
     queryFn: () => fetchMasterDataList(query),
+  })
+}
+
+/** 商品列表当前页的启用 SKU、销售价与新增供给所需固定身份。 */
+export function useProductListSkusQuery(productIds: readonly string[]) {
+  const normalized = [...new Set(productIds.filter(Boolean))].sort()
+  return useQuery({
+    queryKey: [...masterDataKeys.all, "product-list-skus", normalized],
+    queryFn: () => fetchProductListSkus(normalized),
+    enabled: normalized.length > 0,
   })
 }
 

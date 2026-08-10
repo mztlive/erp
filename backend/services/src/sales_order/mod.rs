@@ -40,10 +40,10 @@ use entities::sales_order::{
     VoucherLineDraft, WorkingPurpose,
 };
 use entities::sales_review::{
-    ProcurementConfirmation, ProcurementConfirmationData, SalesOrderReview, SalesOrderReviewData,
-    SalesReviewStage,
+    ProcurementConfirmation, ProcurementConfirmationData, ProcurementConfirmationStatus, SalesOrderReview,
+    SalesOrderReviewData, SalesReviewStage, SalesReviewStatus,
 };
-use entities::work_item::{WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+use entities::work_item::{WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType};
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -56,9 +56,8 @@ mod dto;
 pub use self::dto::{
     CloseEligibilityView, CreateSalesOrderRequest, PageView, RevisionView, SalesOrderCreateIntent,
     SalesOrderDetailView, SalesOrderDraftLineRequest, SalesOrderDraftRequest, SalesOrderLineView,
-    SalesOrderListParams, SalesOrderStageSummary, SalesOrderStageView, SalesOrderView,
-    SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
-    VoidSalesOrderRequest, WorkingCopyView,
+    SalesOrderListParams, SalesOrderStageSummary, SalesOrderView, SalesOrderWorkingCopyLineView,
+    SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
@@ -221,6 +220,9 @@ impl SalesOrderService {
             commercial_status: query.commercial_status,
             review_status: query.review_status,
             business_type: query.business_type,
+            created_by: query.created_by,
+            my_todo: query.my_todo,
+            exception_only: query.exception_only,
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -231,12 +233,25 @@ impl SalesOrderService {
             .sales_orders()
             .search_sales_orders(&filter, &mut NoTransaction)
             .await?;
+
+        let owners = self
+            .resolve_stage_owners_batch(
+                &page
+                    .items
+                    .iter()
+                    .map(|row| (row.id.clone(), row.review_status))
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
+
         let items = page
             .items
             .into_iter()
             .map(|row| {
                 let (code, label, tone) =
                     stage_code_label_tone(row.commercial_status, row.review_status, row.close_status, row.fulfillment_progress);
+                let (owner_role, owner_user_id, owner_user_name, due_at) =
+                    owners.get(&row.id).cloned().unwrap_or_default();
                 SalesOrderView {
                     id: row.id,
                     order_no: row.order_no,
@@ -255,7 +270,15 @@ impl SalesOrderService {
                     version: row.version,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
-                    stage: dto::SalesOrderStageSummary { code, label, tone },
+                    stage: dto::SalesOrderStageSummary {
+                        code,
+                        label,
+                        tone,
+                        owner_role,
+                        owner_user_id,
+                        owner_user_name,
+                        due_at,
+                    },
                 }
             })
             .collect();
@@ -461,7 +484,7 @@ impl SalesOrderService {
                     created_at: revision.base.created_at,
                 })
                 .collect(),
-            stage: dto::SalesOrderStageView {
+            stage: dto::SalesOrderStageSummary {
                 code: stage_code,
                 label: stage_label,
                 tone: stage_tone,
@@ -931,6 +954,7 @@ impl SalesOrderService {
             .await?;
         Ok(WorkingCopyView {
             id: copy.base.id.clone(),
+            version: copy.base.version,
             working_purpose: copy.working_purpose,
             status: copy.stable.status,
             draft_version: copy.draft_version,
@@ -1053,6 +1077,131 @@ impl SalesOrderService {
             ),
             None => (None, None, None),
         })
+    }
+
+    /// 批量解析本页销售单的当前阶段责任人/时限（列表专用，避免逐行查询）。
+    ///
+    /// 按 `sales_order_id` 直接查命中的采购确认/审批记录（不像
+    /// [`Self::resolve_stage_owner`] 那样先定位最新提交——同一销售单同时只会
+    /// 有一条在途确认/审批记录，列表场景不需要精确到"最新提交"这一层），
+    /// 再批量查对应 work_item、批量解析涉及账号姓名。整页固定 3 次查询，不随
+    /// 页大小线性增长。
+    ///
+    /// # 参数
+    /// * `rows` - 本页销售单 `(id, review_status)`
+    ///
+    /// # 返回
+    /// 返回按销售单 id 索引的 `(责任角色, 责任人账号, 责任人姓名, 时限)`；
+    /// 审核轨不在途或无命中待办的订单不出现在返回的 map 中。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    async fn resolve_stage_owners_batch(
+        &self,
+        rows: &[(String, ReviewStatus)],
+    ) -> Result<HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>> {
+        let pending_ids: Vec<String> = rows
+            .iter()
+            .filter(|(_, review)| {
+                matches!(
+                    review,
+                    ReviewStatus::PendingProcurementConfirmation
+                        | ReviewStatus::PendingSalesLeader
+                        | ReviewStatus::PendingOperations
+                        | ReviewStatus::PendingLowMarginSuperior
+                )
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        let mut owners = HashMap::new();
+        if pending_ids.is_empty() {
+            return Ok(owners);
+        }
+
+        let confirmations = self
+            .db
+            .procurement_confirmations()
+            .find_many(
+                mongodb::bson::doc! {
+                    "sales_order_id": { "$in": &pending_ids },
+                    "status": ProcurementConfirmationStatus::Pending.as_str(),
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        let reviews = self
+            .db
+            .sales_order_reviews()
+            .find_many(
+                mongodb::bson::doc! {
+                    "sales_order_id": { "$in": &pending_ids },
+                    "status": SalesReviewStatus::Pending.as_str(),
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+
+        let mut business_object_by_order: HashMap<String, (&'static str, String)> = HashMap::new();
+        for confirmation in &confirmations {
+            business_object_by_order.insert(
+                confirmation.sales_order_id.to_string(),
+                ("procurement_confirmation", confirmation.base.id.clone()),
+            );
+        }
+        for review in &reviews {
+            business_object_by_order.insert(
+                review.sales_order_id.to_string(),
+                ("sales_order_review", review.base.id.clone()),
+            );
+        }
+        if business_object_by_order.is_empty() {
+            return Ok(owners);
+        }
+
+        let object_ids: Vec<String> = business_object_by_order
+            .values()
+            .map(|(_, id)| id.clone())
+            .collect();
+        let work_items = self
+            .db
+            .work_items()
+            .find_many(
+                mongodb::bson::doc! {
+                    "business_object_type": { "$in": ["procurement_confirmation", "sales_order_review"] },
+                    "business_object_id": { "$in": &object_ids },
+                    "status": { "$in": [WorkItemStatus::Unclaimed.as_str(), WorkItemStatus::InProgress.as_str()] },
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        let work_item_by_object: HashMap<String, &WorkItem> = work_items
+            .iter()
+            .map(|item| (item.business_object_id.clone(), item))
+            .collect();
+
+        let owner_user_ids: HashSet<String> = work_items
+            .iter()
+            .filter_map(|item| item.owner_user_id.clone())
+            .collect();
+        let mut names: HashMap<String, Option<String>> = HashMap::new();
+        for user_id in owner_user_ids {
+            let name = self.account_name(&user_id).await?;
+            names.insert(user_id, name);
+        }
+
+        for (order_id, (_, object_id)) in &business_object_by_order {
+            let item = work_item_by_object.get(object_id);
+            let owner_role = item.and_then(|i| i.owner_role.clone());
+            let owner_user_id = item.and_then(|i| i.owner_user_id.clone());
+            let owner_user_name = owner_user_id
+                .as_ref()
+                .and_then(|user_id| names.get(user_id).cloned().flatten());
+            let due_at = item.and_then(|i| i.due_at.map(|instant| instant.unix_secs() as u64));
+            owners.insert(order_id.clone(), (owner_role, owner_user_id, owner_user_name, due_at));
+        }
+
+        Ok(owners)
     }
 }
 

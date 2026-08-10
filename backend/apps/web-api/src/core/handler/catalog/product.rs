@@ -26,7 +26,7 @@ use crate::{
     group = "商品与仓库",
     group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
     desc = "查询公司商品池",
-    resource = "sku",
+    resource = "sellable_sku",
     action = "list"
 )]
 /// 查询符合销售资格的公司 SKU 只读投影。

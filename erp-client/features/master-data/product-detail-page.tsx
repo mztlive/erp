@@ -358,7 +358,7 @@ function MediaListEditor({
           "grid gap-3",
           mode === "carousel"
             ? "grid-cols-2 sm:grid-cols-4"
-            : "grid-cols-2 sm:grid-cols-3",
+            : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6",
         )}
       >
         {value.map((name, index) => {
@@ -374,7 +374,7 @@ function MediaListEditor({
               <button
                 type="button"
                 className={cn(
-                  "flex w-full flex-col items-center justify-center gap-2 p-3 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                  "relative flex w-full flex-col items-center justify-center gap-2 overflow-hidden p-3 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                   mode === "carousel" ? "aspect-square" : "aspect-[4/5]",
                   previewSrc && "cursor-zoom-in p-0",
                 )}

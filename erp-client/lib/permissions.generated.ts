@@ -1389,7 +1389,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 path: "/admin/sellable-skus",
                 description: "查询公司商品池",
                 permission: {
-                    resource: "sku",
+                    resource: "sellable_sku",
                     action: "list",
                 },
             },

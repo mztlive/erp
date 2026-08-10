@@ -1,3 +1,5 @@
+import type { DisplayTime } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
 import type {
   CardSalesApproval,
   SalesOrderListItem,
@@ -7,6 +9,46 @@ import type {
 export const NATURE_LABEL: Record<SalesOrderListItem["nature"], string> = {
   physical_service: "实物与服务",
   card_voucher: "卡券",
+}
+
+/** 阶段责任角色中文映射（后端固定码，见 `sales_order/mod.rs` 提交编排）。 */
+export const STAGE_OWNER_ROLE_LABEL: Record<string, string> = {
+  procurement: "采购",
+  sales_leader: "销售领导",
+  operations: "运营",
+}
+
+/** 审核轨进行中的阶段码（草稿/已生效/履约中/已关闭/已作废不在其中）。 */
+export const PENDING_REVIEW_STAGE_CODES = [
+  "awaiting_confirm",
+  "awaiting_sales",
+  "awaiting_sales_lead",
+  "awaiting_ops",
+]
+
+export function isPendingReviewStage(code: string) {
+  return PENDING_REVIEW_STAGE_CODES.includes(code)
+}
+
+/** 当前阶段责任人展示文案：有派发待办时按角色+姓名；驳回/低毛利待处理归销售本人。 */
+export function stageOwnerDisplay(order: SalesOrderListItem): string {
+  const ownerRole = order.primaryStatus.ownerRole
+  if (ownerRole) {
+    const roleLabel = STAGE_OWNER_ROLE_LABEL[ownerRole] ?? ownerRole
+    return `${roleLabel} · ${order.primaryStatus.ownerUserName ?? "待认领"}`
+  }
+  if (order.primaryStatus.code === "awaiting_sales") {
+    return `销售 · ${order.ownerName}`
+  }
+  return "待分配"
+}
+
+/** 当前阶段预计完成时限；未设置时返回 `undefined`（面板自动显示"未设置"）。 */
+export function stageDueDisplay(order: SalesOrderListItem): DisplayTime | undefined {
+  const dueAt = order.primaryStatus.dueAt
+  if (!dueAt) return undefined
+  const iso = new Date(dueAt * 1000).toISOString()
+  return { dateTime: iso, label: formatDateTime(iso, "full") }
 }
 
 /** 创建来源文案（MALL = 商城入口；ERP = 本系统入口）。 */

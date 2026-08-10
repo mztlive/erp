@@ -59,22 +59,54 @@ import {
   MasterDataReviseDialog,
 } from "@/features/master-data/master-data-action-dialog"
 import { MasterDataPreviewPanel } from "@/features/master-data/master-data-preview"
+import { ProductSupplyDialog } from "@/features/master-data/product-supply-dialog"
 import { VoucherCategoryFormDialog } from "@/features/master-data/voucher-category-form-dialog"
 import {
   useMasterDataCenterQuery,
   useMasterDataExportMutation,
   useMasterDataListQuery,
+  useProductListSkusQuery,
   useProductListingMutation,
 } from "@/features/master-data/queries"
 import {
   MASTER_DATA_RESOURCES,
   type MasterDataListItem,
   type MasterDataResource,
+  type ProductListSkuSummary,
 } from "@/features/master-data/types"
+import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
+import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/queries"
+import type { FixedSku } from "@/features/supplier-offerings/types"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
 
 const VALID = new Set(MASTER_DATA_RESOURCES.map((item) => item.key))
+
+const CNY_FORMATTER = new Intl.NumberFormat("zh-CN", {
+  style: "currency",
+  currency: "CNY",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+})
+
+function productSkuPriceRange(
+  skus: readonly ProductListSkuSummary[],
+): string {
+  const prices = skus
+    .flatMap((sku) => {
+      const raw = sku.salesVisiblePriceGross?.trim()
+      if (!raw) return []
+      const price = Number(raw)
+      return Number.isFinite(price) ? [price] : []
+    })
+    .sort((left, right) => left - right)
+  if (prices.length === 0) return "未填写"
+  const minimum = CNY_FORMATTER.format(prices[0])
+  const maximum = CNY_FORMATTER.format(prices[prices.length - 1])
+  return prices[0] === prices[prices.length - 1]
+    ? minimum
+    : `${minimum}–${maximum}`
+}
 
 const CREATE_PERMISSION_BY_RESOURCE: Partial<
   Record<MasterDataResource, string>
@@ -286,6 +318,10 @@ function MasterDataListWorkspace({
     React.useState<MasterDataListItem | null>(null)
   const [disableTarget, setDisableTarget] =
     React.useState<MasterDataListItem | null>(null)
+  const [supplyProduct, setSupplyProduct] =
+    React.useState<MasterDataListItem | null>(null)
+  const [supplyDialogSku, setSupplyDialogSku] =
+    React.useState<FixedSku | null>(null)
   const [exportMeta, setExportMeta] = React.useState<{
     jobId: string
     rowCount: number
@@ -368,6 +404,8 @@ function MasterDataListWorkspace({
   React.useEffect(() => {
     setPreviewId(null)
     setExportMeta(null)
+    setSupplyProduct(null)
+    setSupplyDialogSku(null)
   }, [resource])
 
   const listQuery = useMasterDataListQuery({
@@ -404,6 +442,41 @@ function MasterDataListWorkspace({
     const start = pagination.pageIndex * pagination.pageSize
     return rows.slice(start, start + pagination.pageSize)
   }, [pagination.pageIndex, pagination.pageSize, rows])
+
+  const productPageIds = React.useMemo(
+    () =>
+      isProductResource ? pageRows.map((row) => row.stableId) : [],
+    [isProductResource, pageRows],
+  )
+  const productSkusQuery = useProductListSkusQuery(productPageIds)
+  const productSkusByProduct = React.useMemo(() => {
+    const grouped = new Map<string, ProductListSkuSummary[]>()
+    for (const sku of productSkusQuery.data ?? []) {
+      const skus = grouped.get(sku.productId) ?? []
+      skus.push(sku)
+      grouped.set(sku.productId, skus)
+    }
+    return grouped
+  }, [productSkusQuery.data])
+  const productPageSkuIds = React.useMemo(
+    () => (productSkusQuery.data ?? []).map((sku) => sku.skuId),
+    [productSkusQuery.data],
+  )
+  const supplierOfferingsQuery =
+    useSupplierOfferingsForSkusQuery(productPageSkuIds)
+  const currentSupplySkuIds = React.useMemo(
+    () =>
+      new Set(
+        (supplierOfferingsQuery.data ?? [])
+          .filter(
+            (offering) =>
+              offering.status === "ACTIVE" &&
+              Boolean(offering.current_revision_id),
+          )
+          .map((offering) => offering.sku_id),
+      ),
+    [supplierOfferingsQuery.data],
+  )
 
   /** 指标与当前搜索/启停/版本筛选同步，避免「全部 3」与表格行数矛盾。 */
   const syncedMetrics = React.useMemo(() => {
@@ -550,6 +623,95 @@ function MasterDataListWorkspace({
       ...(isProductResource
         ? [
             {
+              id: "skuPriceRange",
+              header: "SKU 售价",
+              meta: { label: "SKU 售价", width: "amount" as const },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <span className="num text-sm">
+                  {productSkusQuery.isPending
+                    ? "读取中…"
+                    : productSkusQuery.isError
+                      ? "暂不可查"
+                      : productSkuPriceRange(
+                          productSkusByProduct.get(row.original.stableId) ?? [],
+                        )}
+                </span>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+            {
+              id: "skuCount",
+              header: "SKU 数量",
+              meta: { label: "SKU 数量", width: "amount" as const },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+                <span className="num text-sm">
+                  {row.original.skuCount ?? 0} 个
+                </span>
+              ),
+            } satisfies ColumnDef<MasterDataListItem>,
+            {
+              id: "supply",
+              header: "供给",
+              meta: { label: "供给", width: "status" as const },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => {
+                const item = row.original
+                const productSkus =
+                  productSkusByProduct.get(item.stableId) ?? []
+                const suppliedSkuCount = productSkus.filter((sku) =>
+                  currentSupplySkuIds.has(sku.skuId),
+                ).length
+                const skuDataPending = productSkusQuery.isPending
+                const skuDataFailed = productSkusQuery.isError
+                const offeringPending =
+                  productSkus.length > 0 && supplierOfferingsQuery.isPending
+                const offeringFailed =
+                  productSkus.length > 0 && supplierOfferingsQuery.isError
+                const statusLabel = skuDataPending
+                  ? "读取中…"
+                  : skuDataFailed || offeringFailed
+                    ? "暂不可查"
+                    : suppliedSkuCount > 0
+                      ? "有供给"
+                      : "无供给"
+                return (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    className="h-auto gap-1.5 px-1 py-0.5"
+                    aria-label={`${item.name}供给详情：${statusLabel}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      lastFocusedRowId.current = item.stableId
+                      setSupplyProduct(item)
+                    }}
+                  >
+                    <Badge
+                      variant={
+                        suppliedSkuCount > 0 &&
+                        !skuDataPending &&
+                        !offeringPending &&
+                        !skuDataFailed &&
+                        !offeringFailed
+                          ? "success"
+                          : "outline"
+                      }
+                    >
+                      {offeringPending ? "读取中…" : statusLabel}
+                    </Badge>
+                    {!skuDataPending &&
+                    !skuDataFailed &&
+                    !offeringPending &&
+                    !offeringFailed &&
+                    productSkus.length > 0 ? (
+                      <span className="num text-xs text-muted-foreground">
+                        {suppliedSkuCount}/{productSkus.length} SKU
+                      </span>
+                    ) : null}
+                  </Button>
+                )
+              },
+            } satisfies ColumnDef<MasterDataListItem>,
+            {
               id: "listing",
               header: "上架状态",
               meta: { label: "上架状态" },
@@ -681,8 +843,12 @@ function MasterDataListWorkspace({
               </div>
             )
           }
-          // 品牌 / 计量单位：点击行即打开更新 Dialog，仅保留「停用」按钮。
-          if (isBrandResource || isUnitOfMeasureResource) {
+          // 商品点击行进入详情；品牌 / 计量单位点击行打开更新 Dialog。操作列均仅保留「停用」。
+          if (
+            isProductResource ||
+            isBrandResource ||
+            isUnitOfMeasureResource
+          ) {
             return (
               <div className="flex flex-wrap gap-1">
                 <DisabledActionHint message={disableBlocker?.message}>
@@ -795,13 +961,19 @@ function MasterDataListWorkspace({
       isVoucherCategoryResource,
       isSellableResource,
       canUpdateProductListing,
+      currentSupplySkuIds,
       lastFocusedRowId,
+      productSkusByProduct,
+      productSkusQuery.isError,
+      productSkusQuery.isPending,
       productListingMutation.isPending,
       productListingMutation.variables,
       resource,
       router,
       rows,
       showEffectiveColumn,
+      supplierOfferingsQuery.isError,
+      supplierOfferingsQuery.isPending,
       updateProductListing,
     ]
   )
@@ -1326,6 +1498,49 @@ function MasterDataListWorkspace({
             />
           ) : null}
         </QuickPreviewSheet>
+      ) : null}
+
+      <ProductSupplyDialog
+        product={supplyProduct}
+        skus={
+          supplyProduct
+            ? (productSkusByProduct.get(supplyProduct.stableId) ?? [])
+            : []
+        }
+        skuLoading={productSkusQuery.isPending}
+        skuError={productSkusQuery.error}
+        offerings={supplierOfferingsQuery.data ?? []}
+        offeringLoading={
+          productPageSkuIds.length > 0 && supplierOfferingsQuery.isPending
+        }
+        offeringError={supplierOfferingsQuery.error}
+        onRetrySkus={() => void productSkusQuery.refetch()}
+        onRetryOfferings={() => void supplierOfferingsQuery.refetch()}
+        onAddSupply={(sku) => {
+          if (!supplyProduct) return
+          setSupplyDialogSku({
+            skuId: sku.skuId,
+            skuCode: sku.skuNo,
+            skuName: supplyProduct.name,
+            specification: sku.specification,
+            baseUnit: sku.baseUnit,
+            productKind: supplyProduct.productKind,
+          })
+        }}
+        onOpenChange={(open) => {
+          if (!open) setSupplyProduct(null)
+        }}
+      />
+
+      {supplyDialogSku ? (
+        <RegisterSupplyForSkuDialog
+          key={supplyDialogSku.skuId}
+          open
+          fixedSku={supplyDialogSku}
+          onOpenChange={(open) => {
+            if (!open) setSupplyDialogSku(null)
+          }}
+        />
       ) : null}
 
       {!isProductResource &&
