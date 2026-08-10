@@ -326,8 +326,8 @@ export function CustomerCenterPage() {
         }
         actions={
           <PageActions
-            actions={[
-              ...(canCreate
+            actions={
+              canCreate
                 ? [
                     {
                       actionKey: "create",
@@ -336,8 +336,8 @@ export function CustomerCenterPage() {
                       onClick: () => setCreateOpen(true),
                     },
                   ]
-                : []),
-            ]}
+                : []
+            }
           />
         }
       />

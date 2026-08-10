@@ -474,7 +474,7 @@ function MediaListEditor({
             })
             if (onPreviewUrlsChange) {
               onPreviewUrlsChange({
-                ...(previewUrls ?? {}),
+                ...previewUrls,
                 ...addedUrls,
               })
             }

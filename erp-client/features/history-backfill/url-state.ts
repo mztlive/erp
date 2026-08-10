@@ -95,7 +95,7 @@ const codec = createUrlStateCodec<HistoryBackfillUrlState>([
     type: "custom",
     parse: (get) => get("jobId") ?? undefined,
     build: (value, options) =>
-      value && !Boolean(options?.omitJobId) ? String(value) : undefined,
+      value && !options?.omitJobId ? String(value) : undefined,
   },
   { key: "section", type: "enum", values: SECTION_VALUES, defaultValue: "overview" },
   { key: "result", type: "enum", values: RESULT_VALUES },

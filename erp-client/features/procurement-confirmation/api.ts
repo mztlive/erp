@@ -752,8 +752,7 @@ async function projectTask(
     impactSummary: workItem.impact_summary ?? "采购二次确认",
     subjectVersion:
       workItem.subject_version ??
-      String(detail.version) ??
-      detail.submission_id,
+      String(detail.version ?? detail.submission_id),
     subjectHash: detail.submission_id,
     held: false,
     lease:

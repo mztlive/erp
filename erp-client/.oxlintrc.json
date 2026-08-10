@@ -1,0 +1,54 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "react",
+    "nextjs",
+    "import",
+    "jsx-a11y",
+    "unicorn",
+    "oxc"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "builtin": true
+  },
+  "ignorePatterns": [
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "node_modules/**"
+  ],
+  "rules": {
+    // TanStack Form's typed field API intentionally accepts render children
+    // through a `children` prop (the project form contract uses this shape).
+    "react/no-children-prop": "off",
+    // Rules of Hooks is pedantic in oxlint; keep it enforced like ESLint.
+    "react/rules-of-hooks": "error",
+    // oxlint's jsx-a11y correctness set is stricter than eslint-config-next
+    // and currently fails on existing SPA patterns that ESLint accepted.
+    // Keep a11y plugin enabled for critical rules; demote noisy ones to warn
+    // so migrations stay green while still surfacing issues.
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "jsx-a11y/label-has-associated-control": "warn",
+    "jsx-a11y/no-redundant-roles": "warn",
+    "jsx-a11y/no-static-element-interactions": "warn",
+    "jsx-a11y/no-noninteractive-tabindex": "warn",
+    "jsx-a11y/click-events-have-key-events": "warn",
+    "jsx-a11y/no-noninteractive-element-interactions": "warn",
+    "jsx-a11y/no-autofocus": "warn",
+    "jsx-a11y/interactive-supports-focus": "warn",
+    "jsx-a11y/anchor-has-content": "warn"
+  },
+  "settings": {
+    "react": {
+      "version": "19"
+    },
+    "next": {
+      "rootDir": "."
+    }
+  }
+}

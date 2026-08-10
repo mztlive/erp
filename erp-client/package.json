@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
     "test:api-errors": "node --test --experimental-strip-types scripts/api-errors.test.mts"
   },
   "dependencies": {
@@ -39,8 +42,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "oxfmt": "^0.62.0",
+    "oxlint": "^1.77.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -26,7 +26,6 @@ import {
   DataTable,
   DocumentHeader,
   FormalActionConfirmDialog,
-  FormalActionResult,
   ImportStageIndicator,
   ListToolbar,
   MetricItem,
@@ -58,14 +57,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MallSearchCombobox } from "@/features/entity-selectors"
@@ -77,7 +68,6 @@ import {
 import type {
   BackfillPipelineStage,
   CostBasis,
-  CreateBackfillContext,
   HistoryBackfillCommandResult,
   HistoryBackfillEnvironment,
   HistoryBackfillItemView,
@@ -111,6 +101,16 @@ import {
   type HistoryBackfillUrlState,
 } from "@/features/history-backfill/url-state"
 import { formatDateTime } from "@/lib/datetime"
+import { CreateBackfillSheet } from "@/features/history-backfill/components/create-backfill-sheet"
+import {
+  formatHistoryBackfillDay as formatDay,
+} from "@/features/history-backfill/components/format"
+import {
+  HistoryBackfillFact as Fact,
+} from "@/features/history-backfill/components/history-backfill-fact"
+import {
+  HistoryBackfillResultBanner as FormalResultBanner,
+} from "@/features/history-backfill/components/history-backfill-result-banner"
 
 const SECTION_TABS: { id: JobSection; label: string }[] = [
   { id: "overview", label: "概览" },
@@ -121,10 +121,6 @@ const SECTION_TABS: { id: JobSection; label: string }[] = [
   { id: "failures", label: "失败诊断" },
   { id: "report", label: "审计报告" },
 ]
-
-function formatDay(iso: string) {
-  return iso.slice(0, 10)
-}
 
 function newRequestId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -170,54 +166,6 @@ function mapJobProgressStatus(
   if (processing === "PARTIAL") return "partial"
   if (processing === "FAILED") return "failed"
   return "queued"
-}
-
-function FormalResultBanner({
-  result,
-}: {
-  result: HistoryBackfillCommandResult | null
-}) {
-  if (!result) return null
-  const status =
-    result.status === "COMMITTED"
-      ? "succeeded"
-      : result.status === "BLOCKED"
-        ? "blocked"
-        : result.status === "RESULT_UNKNOWN"
-          ? "unknown"
-          : "rejected"
-  return (
-    <FormalActionResult
-      status={status}
-      title={result.title}
-      description={result.description}
-      facts={[
-        ...(result.jobNo
-          ? [{ label: "任务号", value: result.jobNo }]
-          : []),
-        ...(result.nextStep
-          ? [{ label: "下一步", value: result.nextStep }]
-          : []),
-      ]}
-    />
-  )
-}
-
-function Fact({
-  label,
-  value,
-  mono,
-}: {
-  label: string
-  value: React.ReactNode
-  mono?: boolean
-}) {
-  return (
-    <div className="space-y-0.5">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={mono ? "num font-mono text-sm" : "text-sm"}>{value}</div>
-    </div>
-  )
 }
 
 export function HistoryBackfillPage({
@@ -877,153 +825,6 @@ function JobListView({
   )
 }
 
-function CreateBackfillSheet({
-  open,
-  onOpenChange,
-  context,
-  pending,
-  result,
-  onSubmit,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  context?: CreateBackfillContext
-  pending: boolean
-  result: HistoryBackfillCommandResult | null
-  onSubmit: () => Promise<void>
-}) {
-  const blocked = !context?.canCreateDraft
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" size="detail" className="overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>创建回填任务</SheetTitle>
-          <SheetDescription>
-            回填起点固定为系统登记的必需历史起点，不可晚于该日期。回填范围覆盖起点至当前日期。
-          </SheetDescription>
-        </SheetHeader>
-
-        {!context ? (
-          <p className="text-sm text-muted-foreground">正在加载创建上下文…</p>
-        ) : (
-          <div className="mt-4 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Fact label="商城" value={context.mallName} />
-              <Fact
-                label="环境"
-                value={ENVIRONMENT_LABEL[context.environment]}
-              />
-              <Fact
-                label="必需历史起点"
-                value={formatDay(context.requiredHistoryStart)}
-                mono
-              />
-              <Fact
-                label="消费回流启用日 / 回填终点"
-                value={formatDay(context.rangeEnd)}
-                mono
-              />
-              <Fact
-                label="来源可提供起点"
-                value={formatDay(context.sourceCoverageStart)}
-                mono
-              />
-              <Fact
-                label="预计记录数"
-                value={context.estimatedFactCount.toLocaleString("zh-CN")}
-              />
-              <Fact
-                label="来源覆盖"
-                value={context.coverageComplete ? "完整" : "不足 · 阻断"}
-              />
-            </div>
-
-            {blocked ? (
-              <Alert variant="destructive">
-                <TriangleAlertIcon />
-                <AlertTitle>当前无法创建回填任务</AlertTitle>
-                <AlertDescription>
-                  {context.blockReasons.join("；") || "前置条件尚未满足"}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            <Alert>
-              <TriangleAlertIcon />
-              <AlertTitle>截止时点前支付只补台账</AlertTitle>
-              <AlertDescription>
-                履约链固定为历史手工口径，不创建供应商订单。截止时点当天发生的记录
-                不在回填范围内。
-              </AlertDescription>
-            </Alert>
-
-            {context.coverageGaps.length > 0 ? (
-              <Alert variant="destructive">
-                <AlertTitle>覆盖缺口 · 禁止开始回填</AlertTitle>
-                <AlertDescription>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    {context.coverageGaps.map((g) => (
-                      <li key={`${g.from}-${g.to}`}>
-                        {formatDay(g.from)} → {formatDay(g.to)} · {g.reasonLabel}
-                      </li>
-                    ))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            {context.blockReasons.length > 0 ? (
-              <Alert variant="destructive">
-                <AlertTitle>创建阻断</AlertTitle>
-                <AlertDescription>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    {context.blockReasons.map((r) => (
-                      <li key={r}>{r}</li>
-                    ))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            {context.hasOverlappingFormalJob ? (
-              <Alert variant="destructive">
-                <AlertTitle>禁止重叠业务批次</AlertTitle>
-                <AlertDescription>
-                  已存在回填任务 {context.overlappingJobNo}
-                  。修复只能续跑原任务，不能新建覆盖同一范围的批次。
-                </AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
-        )}
-
-        <SheetFooter className="mt-6">
-          {result && result.status !== "COMMITTED" ? (
-            <div className="w-full">
-              <FormalResultBanner result={result} />
-            </div>
-          ) : null}
-          <div className="flex w-full justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => onOpenChange(false)}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              disabled={blocked || pending || !context}
-              onClick={() => void onSubmit()}
-            >
-              {pending ? "提交中…" : "创建任务草稿"}
-            </Button>
-          </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  )
-}
 
 function JobDetailView({
   jobId,
