@@ -4,7 +4,7 @@
 > **实施进度**：  
 > - **D1–D25**（交互/URL/隐形状态）：已全部落地（2026-08）  
 > - **L1–L6**（布局归属与密度）：主路径已完成；**全站回归 + 遗漏扫尾**已落地（客户中心空态、chip/secondary、W07/W21 队列 ListToolbar、商城同步 sticky 合一、类目树 surface 等）  
-> - **§3.6 显式提交结构化筛选面板**：新增模式（2026-08），与 §3.1 三层模型二选一，样板见 `/master-data/products`  
+> - **§3.6 显式提交折叠筛选面板**：新增模式（2026-08），与 §3.1 三层模型二选一，样板见 `/master-data/products`  
 > **适用范围**：`erp-client` 全部含搜索/筛选/指标条的列表页、队列工作区、分析页明细  
 > **关联**：`erp-ui-design.md`（页面布局 §2.5 / §4.3 / §4.4 / §4.9）、`ui-glossary.md`（文案）、`erp-client/AGENTS.md` §5（URL 契约）
 
@@ -162,27 +162,36 @@ PageHeader
 5. 同页「指标真筛选 + 工具条同义 Toggle + 高级筛选第三套」三重控件不同步。  
 6. 为统一而把队列硬塞进 `BusinessTableFrame`，或把列表筛选拆成页头下第三张便签卡。
 
-### 3.6 显式提交结构化筛选面板（Explicit-Submit Filter Panel，2026-08 新增）
+### 3.6 显式提交折叠筛选面板（Explicit-Submit Collapsible Filter Panel，2026-08 新增）
 
 > 与 §3.1 三层模型**二选一**，不是叠加。适用场景：结构化筛选字段数量较多（5 个以上）、都是常用维度、不想再区分「主筛 / 高级筛选」优先级的列表页。样板：`/master-data/products`（商品列表）。
 
-**触发场景**：字段太多时，硬塞进「主筛 ≤3」会漏掉高频维度；塞进 §4.5 的 Popover 高级筛选又要多点一次才能看到已选值，字段之间来回切换成本高。商品列表（类型/分类/品牌/启停/版本/上架/供给覆盖/供应商/销售价区间，9 个维度）属于这种情况。
+**触发场景**：字段太多时，硬塞进「主筛 ≤3」会漏掉高频维度；塞进 §4.5 的 Popover 高级筛选又要多点一次才能看到已选值，字段之间来回切换成本高；但字段全部铺开常驻又会把表格挤到折叠线以下。商品列表（类型/分类/品牌/启停/版本/上架/供给覆盖/供应商/销售价区间，9 个维度）属于这种情况。
 
-**模式**：
+**默认态（收起）**：
 
-- 关键词搜索框与全部结构化筛选控件（固定枚举用 `FixedOptionRadioFilter`，级联/远程搜索用 `OptionCombobox`）放进**同一个 `<form>`**，视觉上也在同一个带边框的容器里（不拆成「顶部搜索 + 下方筛选」两块视觉分离的区域）。
-- 每个 `FixedOptionRadioFilter`（radiogroup）独占一行；其余字段（下拉、区间输入）按可用宽度分栏横排（如 4 列，窄屏降级为 2 列/1 列）。
-- 所有控件只更新本地草稿 state（`onChange` 不写 URL）；面板内一个「搜索」按钮（`type="submit"`），在任意输入框按 Enter 或点击该按钮，才把全部字段一次性 `patchUrl`、`page` 回 1。
-- 「清除筛选」同时重置草稿 state 与 URL 参数，不能只清一边。
-- 浏览器前进/后退等外部 URL 变化时，用一个 effect 把草稿重新同步回 URL 派生值（参考 `productSalesPriceMinDraft`/`applyProductFilters` 的既有写法）。
+- 只有一个关键词搜索框（`InputGroup`，纯输入框，**不嵌按钮**）+ 紧挨着的一个独立「搜索」按钮 + 一个「高级筛选」折叠按钮（`FilterIcon` + 文案 + 展开态 `ChevronDownIcon` 旋转 + 有已生效结构化筛选时的「已启用」`Badge`）。三者都在 `ListToolbar` 主行，视觉上「一框一钮一开关」，不做多余修饰。
+- 面板默认收起；但如果 URL 上已带有任意结构化筛选参数（深链进入、刷新页面），默认**自动展开**，不能让用户带着生效筛选却看不到面板在哪。
+
+**展开态**：
+
+- 点击「高级筛选」在 `ListToolbar` 的 `secondary` 槽展开一个带边框的面板（`rounded-lg border`），与搜索框同属**一个 `<form>`**（不是 Popover，不是独立弹层）。
+- 面板内：每个固定枚举字段（`FixedOptionRadioFilter`）独占一行；其余字段（`OptionCombobox`、区间输入）按可用宽度分栏横排（如 4 列，窄屏降级为 2 列/1 列）。
+- 展开后，主行旁边那个独立「搜索」按钮**消失**，同一个「搜索」按钮改为出现在面板**最后一行、右对齐**——跟着用户视线走：编辑筛选在面板里，提交按钮也在面板里，不用为了点一下提交再把视线移回最上面。收起面板时按钮回到搜索框旁边。两处按钮本质是同一个 `type="submit"`，只是渲染位置随展开态切换，行为完全一致。
+
+**提交与状态**：
+
+- 全部控件（关键词 + 结构化字段）只更新本地草稿 state，`onChange` 不写 URL；在任意输入框按 Enter，或点击「搜索」按钮（不论它此刻在哪个位置），才把草稿一次性 `patchUrl`、`page` 回 1。
+- 「清除筛选」同时重置草稿 state、收起面板、清空 URL 参数，三者不能只做一部分。
+- 浏览器前进/后退、清除筛选等外部 URL 变化时，用一个 effect 把草稿和面板展开态一起重新同步回 URL 派生值（参考 `master-data-page.tsx` 里 `productKindDraft` 等草稿的 resync effect，以及 `hasStructuredProductFilters` → `productFilterPanelOpen` 的联动）。
 
 **与既有原则的关系（本模式内的显式例外，不是全站默认改规则）**：
 
 - **不套用 P3**「防抖即时 + Enter」——本模式所有字段都是「编辑草稿，点搜索才生效」，即时防抖反而会在用户还没选完时就发起多次请求。
-- **不套用 P11**「主筛 ≤3 + 二层 Popover 收纳高级条件」——本模式不做优先级裁剪，字段全部平铺展示，靠「先编辑、后一次性提交」而不是「限制数量」来控制认知负担。
+- **不套用 P11**「主筛 ≤3 + 二层 Popover 收纳高级条件」——本模式不做优先级裁剪，字段全部收在一个可展开面板里，靠「先编辑、后一次性提交」而不是「限制数量」或「弹层」来控制认知负担。
 - **P12**「≥5 选项必须 `OptionCombobox`」仍然适用——枚举选项多时依旧用 `OptionCombobox`，不要拿 `FixedOptionRadioFilter` 摆一堆选项。
 
-**参考实现**：`erp-client/features/master-data/master-data-page.tsx`，`resource === "products"` 分支的 `toolbar`；统一提交入口是 `applyProductFilters`。
+**参考实现**：`erp-client/features/master-data/master-data-page.tsx`，`resource === "products"` 分支的 `toolbar`；统一提交入口是 `applyProductFilters`，展开态状态是 `productFilterPanelOpen`。
 
 **选型建议**：常规列表页（筛选字段 ≤4、以浏览为主、偶尔筛一下）优先 §3.1 三层模型 + 即时生效；筛选字段本身就多、且用户习惯「调好几个条件再一起查」的重查询主数据列表，可以用本模式。
 
