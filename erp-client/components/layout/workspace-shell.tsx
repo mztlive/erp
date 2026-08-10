@@ -302,7 +302,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="min-w-0">
             <div className="truncate text-base font-bold tracking-tight text-foreground">
-              员工福利 ERP
+              福尚云 ERP
             </div>
             <div className="truncate text-xs text-muted-foreground">
               内部工作台
