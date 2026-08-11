@@ -1592,9 +1592,9 @@ pub struct VoucherSkuInput {
 /// - 分类：共用卡券根分类（代码 `VOUCHER` / 名称「卡券」），不存在时自动创建；
 /// - 品牌：固定「福尚云」（代码 `FSY`），不存在时自动创建；
 /// - 基础单位：固定「张」，不存在时自动创建。
-/// 仍可显式传入覆盖默认；`category_id` 与 `new_category` 不可同时给出。
-/// `description` 同时写入 `product_revision.description` 与
-/// `voucher_category_profile_revision.description`。
+///   仍可显式传入覆盖默认；`category_id` 与 `new_category` 不可同时给出。
+///   `description` 同时写入 `product_revision.description` 与
+///   `voucher_category_profile_revision.description`。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateVoucherCategoryRequest {
     /// 卡券类目编号（全局唯一，同时作为 `product_no` 与 `sku_no`，创建后不可修改）。

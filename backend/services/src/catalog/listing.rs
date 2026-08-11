@@ -10,7 +10,8 @@ use entities::catalog::{ListingStatus, Product, ProductListingStatus, Sku};
 use entities::ids::ProductId;
 use validator::Validate;
 
-use super::{ensure_version, CatalogService};
+use super::support::ensure_version;
+use super::CatalogService;
 use crate::audit::AuditActor;
 use crate::catalog::dto::{
     ProductListingView, ProductView, SkuView, UpdateProductListingRequest, UpdateSkuListingRequest,
