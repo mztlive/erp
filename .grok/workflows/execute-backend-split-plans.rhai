@@ -4,9 +4,9 @@ let meta = #{
     when_to_use: "需要按 docs/split/backend/**/plan.md 逐个完成 Rust 大文件拆分并验证无方案漂移时",
     phases: [
         #{ title: "Discover", detail: "选择未解决计划并检查工作区安全性" },
-        #{ title: "Design", detail: "按风险动态分配同模型设计代理并综合方案" },
+        #{ title: "Design", detail: "按风险分配互补职责的同模型设计代理并综合方案" },
         #{ title: "Implement", detail: "由 lightweight 代理在共享工作区实现" },
-        #{ title: "Review", detail: "同模型独立审查方案漂移与原始测试" },
+        #{ title: "Review", detail: "独立全量审查，Fix 后按变更范围执行全量或增量复核" },
         #{ title: "Resolve", detail: "Review 通过后在 plan.md 标记已解决" },
     ],
 };
@@ -24,8 +24,8 @@ let meta = #{
 //   max_fix_rounds   - Review 不通过后的 lightweight 修复轮数，默认 1，范围 0..3
 //   allow_dirty      - 是否允许从非干净工作区开始，默认 false；false 时需要用户恢复确认
 //
-// 模型规则：所有设计、综合和 Review agent 均不指定 model，自动继承主会话模型。
-// 代码规则：所有实现与 Review 后修复都显式使用 agent_type="lightweight"。
+// 模型规则：设计协调、设计、综合和 Review agent 均不指定 model，自动继承主会话模型。
+// 轻量规则：未解决计划发现、代码实现、Review 后修复和状态标记均显式使用 agent_type="lightweight"。
 
 let discovery_schema = #{
     "type": "object",
@@ -61,7 +61,7 @@ let preflight_schema = #{
 let coordination_schema = #{
     "type": "object",
     "required": [
-        "executable", "reason", "source_file", "designer_count", "design_focus",
+        "executable", "reason", "source_file", "designer_count",
         "risk", "original_tests", "required_gates"
     ],
     "properties": #{
@@ -69,36 +69,38 @@ let coordination_schema = #{
         "reason": #{ "type": "string" },
         "source_file": #{ "type": "string" },
         "designer_count": #{ "type": "integer", "minimum": 1, "maximum": 3 },
-        "design_focus": #{
-            "type": "array", "minItems": 1, "maxItems": 3,
-            "items": #{ "type": "string" },
-        },
         "risk": #{ "type": "string", "enum": ["low", "medium", "high"] },
         "original_tests": #{ "type": "array", "maxItems": 20, "items": #{ "type": "string" } },
         "required_gates": #{ "type": "array", "maxItems": 20, "items": #{ "type": "string" } },
     },
 };
 
-let design_schema = #{
+let role_design_schema = #{
     "type": "object",
-    "required": ["summary", "file_plan", "invariants", "risks", "verification"],
+    "required": ["role", "summary", "deliverables", "cross_scope_blockers", "risks"],
     "properties": #{
+        "role": #{
+            "type": "string",
+            "enum": [
+                "integrated", "module-boundaries", "contracts-and-verification",
+                "api-behavior", "verification-side-effects"
+            ],
+        },
         "summary": #{ "type": "string" },
-        "file_plan": #{
-            "type": "array", "maxItems": 16,
+        "deliverables": #{
+            "type": "array", "minItems": 1, "maxItems": 40,
             "items": #{
                 "type": "object",
-                "required": ["path", "symbols", "visibility_notes"],
+                "required": ["topic", "evidence", "recommendation"],
                 "properties": #{
-                    "path": #{ "type": "string" },
-                    "symbols": #{ "type": "array", "maxItems": 100, "items": #{ "type": "string" } },
-                    "visibility_notes": #{ "type": "string" },
+                    "topic": #{ "type": "string" },
+                    "evidence": #{ "type": "string" },
+                    "recommendation": #{ "type": "string" },
                 },
             },
         },
-        "invariants": #{ "type": "array", "maxItems": 40, "items": #{ "type": "string" } },
+        "cross_scope_blockers": #{ "type": "array", "maxItems": 20, "items": #{ "type": "string" } },
         "risks": #{ "type": "array", "maxItems": 30, "items": #{ "type": "string" } },
-        "verification": #{ "type": "array", "maxItems": 30, "items": #{ "type": "string" } },
     },
 };
 
@@ -131,26 +133,51 @@ let implementation_schema = #{
     },
 };
 
+let fix_schema = #{
+    "type": "object",
+    "required": [
+        "status", "summary", "changed_files", "commands", "test_results",
+        "cleanup_only", "target_files_changed", "target_snapshot_fingerprint"
+    ],
+    "properties": #{
+        "status": #{ "type": "string", "enum": ["implemented", "no_changes", "blocked"] },
+        "summary": #{ "type": "string" },
+        "changed_files": #{ "type": "array", "maxItems": 100, "items": #{ "type": "string" } },
+        "commands": #{ "type": "array", "maxItems": 40, "items": #{ "type": "string" } },
+        "test_results": #{ "type": "array", "maxItems": 40, "items": #{ "type": "string" } },
+        "cleanup_only": #{ "type": "boolean" },
+        "target_files_changed": #{ "type": "boolean" },
+        "target_snapshot_fingerprint": #{ "type": "string" },
+        "blocker": #{ "type": "string" },
+    },
+};
+
 let review_schema = #{
     "type": "object",
     "required": [
-        "pass", "plan_match", "drift", "tests_pass", "api_preserved",
-        "behavior_preserved", "findings", "test_commands", "evidence"
+        "pass", "review_mode", "plan_match", "drift", "tests_pass", "api_preserved",
+        "behavior_preserved", "target_snapshot_fingerprint", "findings", "test_commands", "evidence"
     ],
     "properties": #{
         "pass": #{ "type": "boolean" },
+        "review_mode": #{ "type": "string", "enum": ["full", "delta"] },
         "plan_match": #{ "type": "boolean" },
         "drift": #{ "type": "boolean" },
         "tests_pass": #{ "type": "boolean" },
         "api_preserved": #{ "type": "boolean" },
         "behavior_preserved": #{ "type": "boolean" },
+        "target_snapshot_fingerprint": #{ "type": "string" },
         "findings": #{
             "type": "array", "maxItems": 30,
             "items": #{
                 "type": "object",
-                "required": ["severity", "file", "issue", "required_fix"],
+                "required": ["severity", "category", "file", "issue", "required_fix"],
                 "properties": #{
                     "severity": #{ "type": "string", "enum": ["blocking", "non_blocking"] },
+                    "category": #{
+                        "type": "string",
+                        "enum": ["implementation", "test", "scope_drift", "quality_gate", "unknown"]
+                    },
                     "file": #{ "type": "string" },
                     "issue": #{ "type": "string" },
                     "required_fix": #{ "type": "string" },
@@ -250,6 +277,7 @@ if explicit_plan != () {
     let discovered = agent(discover_prompt, #{
         label: "discover:unresolved-plans",
         capability_mode: "execute",
+        agent_type: "lightweight",
         output_schema: discovery_schema,
     });
     if discovered != () && discovered.success && discovered.output.plans != () {
@@ -303,8 +331,9 @@ while plan_index < selected_plans.len() {
     let coordinator_prompt = "你是代码拆分设计协调代理。只读分析 `" + plan_path + "` 及其源文件。\n";
     coordinator_prompt += "必须读取 plan 完整内容、源文件、沿路径生效的 AGENTS.md/Claude.md，以及对应编码规范；禁止修改文件。\n";
     coordinator_prompt += "判断计划是否可执行：源文件存在；计划有具体 split 方案；若代码已经完成该拆分，也可 executable=true，后续将验证并标记。\n";
-    coordinator_prompt += "你代表主协调者自行决定需要多少个独立设计代理：低风险且边界清晰用 1 个，中风险/多模块用 2 个，高风险、事务/API/宏/生成逻辑复杂用 3 个；上限 " + max_designers.to_string() + "。\n";
-    coordinator_prompt += "design_focus 必须与 designer_count 数量一致，分别覆盖互补视角，例如模块边界、API/可见性、事务/测试/生成物。\n";
+    coordinator_prompt += "只负责风险分级、设计代理数量、原始测试和质量门禁，不要提前输出完整拆分设计。\n";
+    coordinator_prompt += "低风险且边界清晰用 1 个设计代理，中风险/多模块用 2 个，高风险、事务/API/宏/生成逻辑复杂用 3 个；上限 " + max_designers.to_string() + "。\n";
+    coordinator_prompt += "workflow 会固定分配互补角色：1 个时做 integrated；2 个时做 module-boundaries 与 contracts-and-verification；3 个时做 module-boundaries、api-behavior 与 verification-side-effects。\n";
     coordinator_prompt += "original_tests 列出现有测试的精确命令或测试模块；required_gates 包含 plan 和仓库要求的格式、编译、Clippy、测试命令。\n";
     coordinator_prompt += "返回 source_file 必须是 backend/ 下真实相对路径。";
 
@@ -343,24 +372,46 @@ while plan_index < selected_plans.len() {
     if type_of(coord.risk) == "string" { risk_label = coord.risk; }
     log("协调代理按风险 " + risk_label + " 分配 " + designer_count.to_string() + " 个同模型设计代理。");
 
+    let design_roles = [];
+    if designer_count == 1 {
+        design_roles.push("integrated");
+    } else if designer_count == 2 {
+        design_roles.push("module-boundaries");
+        design_roles.push("contracts-and-verification");
+    } else {
+        design_roles.push("module-boundaries");
+        design_roles.push("api-behavior");
+        design_roles.push("verification-side-effects");
+    }
+
     let design_jobs = [];
     let designer_i = 0;
-    while designer_i < designer_count {
-        let focus = "整体拆分正确性与最小行为变化";
-        if coord.design_focus != () && designer_i < coord.design_focus.len() {
-            focus = coord.design_focus[designer_i];
+    while designer_i < design_roles.len() {
+        let role = design_roles[designer_i];
+        let role_scope = "";
+        if role == "integrated" {
+            role_scope = "这是低风险单代理路径。覆盖文件/符号边界、API 与行为不变量、调用方和验证命令，但保持结论精炼，避免重复转述 plan。";
+        } else if role == "module-boundaries" {
+            role_scope = "只分析模块边界：逐文件符号归属、imports/trait scope、可见性与 re-export、私有 helper 归属、依赖方向和循环依赖。不要完整重做事务、业务行为或测试矩阵；跨范围问题只写入 cross_scope_blockers。";
+        } else if role == "contracts-and-verification" {
+            role_scope = "只分析 API/行为契约与验证：调用方兼容、DTO/返回类型、查询与投影、事务/幂等/审计/外部调用顺序、错误语义、原始测试、质量门禁和命令副作用。不要重复完整文件符号迁移表；结构阻塞只写入 cross_scope_blockers。";
+        } else if role == "api-behavior" {
+            role_scope = "只分析公开 API、调用方、可见性契约、DTO/返回类型、数据库查询与投影、事务/幂等/审计/外部调用顺序、错误与安全语义。不要输出完整文件迁移表或测试矩阵；跨范围问题只写入 cross_scope_blockers。";
+        } else {
+            role_scope = "只分析验证与工作区副作用：原始测试、契约测试、格式/编译/Clippy/测试门禁、生成物和 build script、副作用命令、验证前后 git diff 基线。不要重做文件拆分或完整业务分析；跨范围问题只写入 cross_scope_blockers。";
         }
-        let design_prompt = "你是独立代码拆分方案设计代理，使用与主会话相同的模型。只读，不得修改文件。\n";
-        design_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`；本代理重点：" + focus + "。\n";
-        design_prompt += "必须真实读取完整 plan、完整源文件、相邻模块、调用方、现有测试、AGENTS.md 与适用编码规范。\n";
-        design_prompt += "给出逐文件符号归属、imports/trait scope、可见性与 re-export、私有 helper 归属、循环依赖风险、事务/幂等/外部调用不变量、测试迁移与验证命令。\n";
-        design_prompt += "目标是纯拆分：不得顺手修改业务规则、错误语义、公开 API、DTO、数据库查询、事务顺序或生成逻辑。\n";
-        design_prompt += "若 plan 与当前代码不一致，明确指出应由综合代理采用的修订。空结论只有在读完代码后才允许。";
+
+        let design_prompt = "你是互补职责的代码拆分设计代理，使用与主会话相同的模型。只读，不得修改文件。\n";
+        design_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`；你的唯一角色：" + role + "。\n";
+        design_prompt += role_scope + "\n";
+        design_prompt += "必须真实读取 plan、角色所需源码/调用方/测试、AGENTS.md 与适用编码规范，并在 evidence 中给出真实路径或符号依据。\n";
+        design_prompt += "deliverables 只能覆盖本角色范围，不得为了显得完整而复制其他角色的分析；发现跨范围阻塞时只记录到 cross_scope_blockers，交给综合代理处理。\n";
+        design_prompt += "所有建议都必须保持纯拆分：不得顺手修改业务规则、错误语义、公开 API、DTO、数据库查询、事务顺序或生成逻辑。role 字段必须精确返回 `" + role + "`。";
         design_jobs.push(#{
             prompt: design_prompt,
-            label: "design:" + plan_index.to_string() + ":" + designer_i.to_string(),
+            label: "design:" + plan_index.to_string() + ":" + role,
             capability_mode: "read-only",
-            output_schema: design_schema,
+            output_schema: role_design_schema,
         });
         designer_i += 1;
     }
@@ -370,8 +421,11 @@ while plan_index < selected_plans.len() {
     let dr_i = 0;
     while dr_i < design_results.len() {
         let dr = design_results[dr_i];
-        if dr != () && dr.success && dr.output.summary != () {
+        if dr != () && dr.success && dr.output.summary != ()
+            && dr.output.role == design_roles[dr_i] {
             usable_designs.push(dr.output);
+        } else {
+            log("丢弃失败或角色不匹配的设计结果：" + design_roles[dr_i]);
         }
         dr_i += 1;
     }
@@ -385,10 +439,11 @@ while plan_index < selected_plans.len() {
     let synthesis_prompt = "你是代码拆分主方案综合代理，使用与主会话相同模型。只读，不得改文件。\n";
     synthesis_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`。\n";
     synthesis_prompt += "协调信息：" + json_encode(coord) + "\n";
-    synthesis_prompt += "独立设计结果：" + json_encode(usable_designs) + "\n";
-    synthesis_prompt += "请再次抽查真实代码，解决设计分歧并输出唯一可执行方案。implementation_plan 必须足够详细，供冷启动 lightweight 实现代理直接执行。\n";
+    synthesis_prompt += "互补职责设计结果：" + json_encode(usable_designs) + "\n";
+    synthesis_prompt += "这些结果按角色刻意不重复。请再次抽查真实代码，合并互补交付、处理 cross_scope_blockers、解决分歧并补齐角色间空隙，输出唯一可执行方案。\n";
+    synthesis_prompt += "implementation_plan 必须足够详细，供冷启动 lightweight 实现代理直接执行，但不要把多个角色的原文机械拼接。\n";
     synthesis_prompt += "强制保持公开 API/re-export、DTO、事务边界、幂等语义、审计顺序、外部调用位置、测试行为；私有 helper 跟随唯一调用方；不得机械按行数切割。\n";
-    synthesis_prompt += "verification_commands 合并 plan 与仓库门禁；original_tests 必须覆盖拆分前已有测试。";
+    synthesis_prompt += "verification_commands 合并 plan 与仓库门禁，并优先使用只读或限定 crate/文件范围的命令；会改写无关文件或生成物的命令必须改为隔离执行或记录前后工作区基线。original_tests 必须覆盖拆分前已有测试。";
     let synthesis = agent(synthesis_prompt, #{
         label: "synthesize:" + plan_index.to_string(),
         capability_mode: "read-only",
@@ -416,7 +471,7 @@ while plan_index < selected_plans.len() {
     implementation_prompt += "2. 严格执行纯代码搬迁，不改变公开 API、DTO、业务逻辑、事务/幂等/审计/外部调用顺序。\n";
     implementation_prompt += "3. 使用最小可见性；私有 helper 与唯一调用方同文件；保持所有原方法文档注释。\n";
     implementation_prompt += "4. 如果当前代码已完全符合方案，status=no_changes，不制造无意义 diff，但仍运行验证。\n";
-    implementation_prompt += "5. 运行 final_plan.verification_commands 与 original_tests 中可执行命令；若 workspace 门禁被计划外既有问题阻断，记录精确文件和错误，不得修改无关文件。\n";
+    implementation_prompt += "5. 运行 final_plan.verification_commands 与 original_tests 中可执行命令；每条可能格式化或生成文件的命令前后都检查 git status/diff。优先使用 --check 或限定到本次 crate/文件，禁止用全仓修改命令顺手改写计划外文件；会触发生成物的 workspace 命令应隔离执行或使用不会写工作区的等价门禁。若被计划外既有问题阻断，记录精确文件和错误，不得修改无关文件。\n";
     implementation_prompt += "6. 不要编辑 plan.md 的已解决状态；只有独立 Review 通过后才会标记。\n";
     implementation_prompt += "7. 最终按 schema 返回修改文件、命令和测试结果。";
 
@@ -448,19 +503,34 @@ while plan_index < selected_plans.len() {
     let review_round = 0;
     let review_passed = false;
     let last_review = ();
+    let last_fix = ();
+    let next_review_mode = "full";
     while review_round <= max_fix_rounds && !review_passed {
         let review_prompt = "你是独立 Review 子代理，使用与主会话相同模型。只读审查，禁止修改文件。\n";
         review_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`。\n";
         review_prompt += "最终方案 JSON：" + json_encode(final_plan) + "\n";
-        review_prompt += "实现代理报告 JSON：" + json_encode(current_impl) + "\n";
-        review_prompt += "必须真实执行 git status、git diff、read_file/grep，并独立运行 final_plan.original_tests、coord.original_tests 和适用质量门禁。\n";
-        review_prompt += "重点检查：符号遗漏/重复；文件职责；imports/trait scope；visibility/re-export/API 兼容；私有 helper；循环依赖；事务、幂等、审计、外部调用和写入顺序；测试迁移；生成物漂移；计划外文件修改。\n";
-        review_prompt += "pass 只有在 plan_match=true、drift=false、tests_pass=true、api_preserved=true、behavior_preserved=true 且没有 blocking finding 时才可为 true。\n";
-        review_prompt += "tests_pass 要求拆分前已有相关测试真实通过；不能只相信实现代理报告。质量门禁若被 diff 外既有问题阻断，写入 quality_gate_blockers，但仍需明确相关原始测试是否通过。\n";
-        review_prompt += "evidence 必须列出读过的关键路径、事务边界位置和真实测试命令结果；无证据不得通过。";
+        review_prompt += "当前实现/Fix 报告 JSON：" + json_encode(current_impl) + "\n";
+
+        if next_review_mode == "delta" && last_review != () && last_fix != () {
+            review_prompt += "本轮先执行增量复核。上轮完整 Review JSON：" + json_encode(last_review) + "\n";
+            review_prompt += "Fix JSON：" + json_encode(last_fix) + "\n";
+            review_prompt += "先独立执行 git status/diff，并按 final_plan.expected_files 排序计算目标快照指纹：逐个记录路径、文件内容 SHA-256；缺失文件记录 ABSENT。\n";
+            review_prompt += "只有目标快照与上轮 Review 及 Fix 报告完全一致、Fix 明确 cleanup_only=true 且 target_files_changed=false 时，才可保持 review_mode=delta。\n";
+            review_prompt += "增量复核必须确认上轮所有 blocking scope_drift findings 已解决、没有新增计划外变更、git diff --check 通过，并独立重跑 final_plan.original_tests 与 coord.original_tests。可复用上轮完整 API/行为分析证据，不必重新逐符号审查或重跑无关全仓门禁。\n";
+            review_prompt += "如果目标快照不一致、Fix 触及 expected_files、无法证明只是清理工作区副作用，必须在同一轮自动扩展为完整 Review，设置 review_mode=full，并执行下面完整审查要求后再给结论。\n";
+        } else {
+            review_prompt += "本轮必须执行完整 Review，review_mode=full。\n";
+        }
+
+        review_prompt += "当本轮是 full，或 delta 因证据不足自动升级为 full 时：真实执行 git status、git diff、read_file/grep，独立运行 final_plan.original_tests、coord.original_tests 和适用质量门禁；检查符号遗漏/重复、文件职责、imports/trait scope、visibility/re-export/API、私有 helper、循环依赖、事务/幂等/审计/外部调用和写入顺序、测试迁移、生成物漂移及计划外修改。\n";
+        review_prompt += "质量命令必须优先使用只读 --check 或限定 crate/文件范围；会改写生成物的命令应隔离或排除，执行前后检查工作区，不得由 Review 制造新 drift。\n";
+        review_prompt += "每个 finding 必须分类：implementation、test、scope_drift、quality_gate 或 unknown。由格式化、构建或生成命令造成的 expected_files 外变更属于 scope_drift。\n";
+        review_prompt += "无论 full 或 delta，都必须返回非空 target_snapshot_fingerprint。pass 只有在 plan_match=true、drift=false、tests_pass=true、api_preserved=true、behavior_preserved=true 且没有 blocking finding 时才可为 true。\n";
+        review_prompt += "tests_pass 要求拆分前已有相关测试真实通过；不能只相信实现/Fix 报告。质量门禁若被 diff 外既有问题阻断，写入 quality_gate_blockers。\n";
+        review_prompt += "evidence 必须说明本轮是 full 还是 delta、目标快照计算方式、读过的关键路径、复核的事务边界和真实测试命令结果；无证据不得通过。";
 
         let review = agent(review_prompt, #{
-            label: "review:" + plan_index.to_string() + ":" + review_round.to_string(),
+            label: "review:" + plan_index.to_string() + ":" + review_round.to_string() + ":" + next_review_mode,
             capability_mode: "execute",
             output_schema: review_schema,
         });
@@ -471,31 +541,72 @@ while plan_index < selected_plans.len() {
                 && review.output.drift == false
                 && review.output.tests_pass == true
                 && review.output.api_preserved == true
-                && review.output.behavior_preserved == true {
+                && review.output.behavior_preserved == true
+                && review.output.target_snapshot_fingerprint != "" {
                 review_passed = true;
             }
         }
 
         if !review_passed && review_round < max_fix_rounds {
             if last_review == () {
-                log("Review 未返回可用结果，启动 lightweight 复查修复轮次 " + (review_round + 1).to_string());
+                log("Review 未返回可用结果，无法安全生成修复范围，本计划停止自动 Fix。");
+                review_round = max_fix_rounds;
             } else {
                 log("Review 未通过，启动 lightweight 修复轮次 " + (review_round + 1).to_string() + "：" + json_encode(last_review.findings));
-            }
-            let fix_prompt = "继续处理同一个拆分任务。独立 Review 未通过。\n";
-            fix_prompt += "Review 结果 JSON：" + json_encode(last_review) + "\n";
-            fix_prompt += "只修复 blocking findings 和由本次拆分引入的问题；不得修改计划外既有问题或改变业务语义。\n";
-            fix_prompt += "修复后重新运行原始相关测试与方案验证命令，并按 implementation schema 返回。不要标记 plan 已解决。";
-            let fixed = agent(fix_prompt, #{
-                label: "fix:" + plan_index.to_string() + ":" + review_round.to_string(),
-                capability_mode: "all",
-                agent_type: "lightweight",
-                resume_from: implementation_agent_id,
-                output_schema: implementation_schema,
-            });
-            if fixed != () && fixed.success && fixed.output.status != "blocked" {
-                current_impl = fixed.output;
-                implementation_agent_id = fixed.agent_id;
+
+                let has_blocking = false;
+                let scope_only_candidate = true;
+                let finding_i = 0;
+                while finding_i < last_review.findings.len() {
+                    let finding = last_review.findings[finding_i];
+                    if finding.severity == "blocking" {
+                        has_blocking = true;
+                        if finding.category != "scope_drift" {
+                            scope_only_candidate = false;
+                        }
+                    }
+                    finding_i += 1;
+                }
+                if !has_blocking
+                    || last_review.plan_match != true
+                    || last_review.tests_pass != true
+                    || last_review.api_preserved != true
+                    || last_review.behavior_preserved != true {
+                    scope_only_candidate = false;
+                }
+
+                let fix_prompt = "继续处理同一个拆分任务。独立 Review 未通过。\n";
+                fix_prompt += "最终方案 JSON：" + json_encode(final_plan) + "\n";
+                fix_prompt += "Review 结果 JSON：" + json_encode(last_review) + "\n";
+                fix_prompt += "scope_only_candidate=" + scope_only_candidate.to_string() + "。只修复 blocking findings 和由本 workflow 引入的问题，不得修改计划外既有问题或改变业务语义。\n";
+                fix_prompt += "修复前后都按 final_plan.expected_files 排序计算目标快照指纹：逐个记录路径、文件内容 SHA-256；缺失文件记录 ABSENT。禁止盲目 checkout/reset 覆盖可能属于用户或并行任务的修改；只有在有证据证明差异由本 workflow 命令产生且起始基线无该差异时才可安全清理，否则 status=blocked。\n";
+                fix_prompt += "cleanup_only 仅在所有修复都只是清理 expected_files 外的 workflow 副作用、且目标快照与 Review 完全一致时为 true；任何 expected_files 内容或存在状态变化都必须 target_files_changed=true。\n";
+                fix_prompt += "如果修改了目标源码，重新运行完整原始相关测试和适用门禁；如果只是 cleanup_only，运行直接相关测试、git diff --check 和计划外文件零差异检查即可。不要标记 plan 已解决，按 fix schema 返回。";
+                let fixed = agent(fix_prompt, #{
+                    label: "fix:" + plan_index.to_string() + ":" + review_round.to_string(),
+                    capability_mode: "all",
+                    agent_type: "lightweight",
+                    resume_from: implementation_agent_id,
+                    output_schema: fix_schema,
+                });
+                if fixed != () && fixed.success && fixed.output.status != "blocked" {
+                    last_fix = fixed.output;
+                    current_impl = fixed.output;
+                    implementation_agent_id = fixed.agent_id;
+                    next_review_mode = "full";
+                    if scope_only_candidate
+                        && fixed.output.cleanup_only == true
+                        && fixed.output.target_files_changed == false
+                        && fixed.output.target_snapshot_fingerprint == last_review.target_snapshot_fingerprint {
+                        next_review_mode = "delta";
+                        log("Fix 仅清理计划外副作用且目标快照未变，下一轮执行独立增量复核。若指纹不一致，Reviewer 必须自动升级为完整 Review。");
+                    } else {
+                        log("Fix 触及目标实现或无法证明快照未变，下一轮执行完整 Review。");
+                    }
+                } else {
+                    log("lightweight Fix 失败或被阻塞，本计划停止自动修复。");
+                    review_round = max_fix_rounds;
+                }
             }
         }
         review_round += 1;
