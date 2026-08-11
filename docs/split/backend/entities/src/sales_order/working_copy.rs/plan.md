@@ -33,3 +33,9 @@
 - Service 继续负责事务边界；Repository 只负责数据访问；纯业务规则优先下沉到 Entity 或 Value Object。
 - 私有 helper 应跟随唯一调用方迁移；仅在同一领域多个子模块复用时使用 `pub(super)`。
 - 拆分完成后执行 `cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features` 和 `cargo test --workspace`。
+
+## 处理状态
+
+- 状态：**已解决**
+- 验证：实现与拆分方案匹配；`entities` 定向格式、编译、Clippy 与 960 项单元测试通过；独立 Review 通过。
+- 说明：workspace 全量格式与 Clippy 门禁仍受本次范围外的既有问题阻断，详见执行记录。

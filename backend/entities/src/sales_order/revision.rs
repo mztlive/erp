@@ -21,9 +21,9 @@ use crate::ids::{
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
 use super::types::{CardForm, FulfillmentMode, LineType, WelfareScenario};
-use super::working_copy::validate_amount_triple;
 
 /// 内容指纹最大长度。
 const CONTENT_HASH_MAX_LEN: usize = 128;

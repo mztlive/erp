@@ -9,21 +9,22 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::common::stable::StableBase;
-use crate::common::state::{ensure_transition, DocumentState};
+use crate::common::state::ensure_transition;
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
-    ContractId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesOrderId, SalesOrderLineId,
-    SalesOrderRevisionId, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuId,
+    ContractId, CustomerAccountId, PartyId, SalesChangeOrderId, SalesOrderId, SalesOrderRevisionId,
+    SalesOrderWorkingCopyId, SkuId,
 };
-use crate::money::{Amount, Quantity, Rate, UnitPrice};
+use crate::money::Amount;
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
-use super::types::{
-    build_line_groups, validate_line_list, BusinessType, FulfillmentMode, GoodsLineFields, LineSummary,
-    LineType, VoucherLineDraft, WelfareScenario,
-};
+use super::types::{validate_line_list, BusinessType, LineSummary};
+
+pub use super::working_copy_line::{SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData};
+pub use super::working_copy_types::{WorkingCopyStatus, WorkingPurpose};
 
 /// 内容指纹最大长度。
 const CONTENT_HASH_MAX_LEN: usize = 128;
@@ -33,100 +34,6 @@ const EDITOR_MAX_LEN: usize = 128;
 const PROJECT_NAME_MAX_LEN: usize = 256;
 /// 业务备注最大长度。
 const BUSINESS_REMARK_MAX_LEN: usize = 1024;
-/// 销售项名称快照最大长度。
-const ITEM_NAME_MAX_LEN: usize = 256;
-/// 规格快照最大长度。
-const SPEC_MAX_LEN: usize = 256;
-/// 单位快照最大长度。
-const UNIT_MAX_LEN: usize = 64;
-
-/// 工作副本编辑目的（数据模型 §6.5：首次提交或销售变更）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum WorkingPurpose {
-    /// 首次提交。
-    FirstSubmission,
-    /// 销售变更。
-    SalesChange,
-}
-
-impl WorkingPurpose {
-    /// 返回编辑目的的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::FirstSubmission => "首次提交",
-            Self::SalesChange => "销售变更",
-        }
-    }
-
-    /// 返回编辑目的的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::FirstSubmission => "FIRST_SUBMISSION",
-            Self::SalesChange => "SALES_CHANGE",
-        }
-    }
-}
-
-/// 工作副本状态（数据模型 §6.5：编辑中、已提交、已放弃、冲突）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum WorkingCopyStatus {
-    /// 编辑中。
-    Editing,
-    /// 已提交。
-    Submitted,
-    /// 已放弃。
-    Abandoned,
-    /// 冲突。
-    Conflict,
-}
-
-impl WorkingCopyStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Editing => "编辑中",
-            Self::Submitted => "已提交",
-            Self::Abandoned => "已放弃",
-            Self::Conflict => "冲突",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Editing => "EDITING",
-            Self::Submitted => "SUBMITTED",
-            Self::Abandoned => "ABANDONED",
-            Self::Conflict => "CONFLICT",
-        }
-    }
-}
-
-impl DocumentState for WorkingCopyStatus {
-    /// 编辑中可提交/放弃/标记冲突；冲突解决后回到编辑中；已提交/已放弃为终态
-    /// （驳回后以原提交复制出新的工作副本，旧副本不复用，§6.5）。
-    fn allowed_next(self) -> &'static [Self] {
-        match self {
-            Self::Editing => &[Self::Submitted, Self::Abandoned, Self::Conflict],
-            Self::Conflict => &[Self::Editing],
-            Self::Submitted | Self::Abandoned => &[],
-        }
-    }
-}
 
 /// 工作副本创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -586,232 +493,11 @@ impl SalesOrderWorkingCopy {
     }
 }
 
-/// 工作副本行创建数据（行字段组按 `line_type` 二选一）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SalesOrderWorkingCopyLineData {
-    /// 稳定明细身份。
-    pub sales_order_line_id: SalesOrderLineId,
-    /// 行号。
-    pub line_no: u32,
-    /// 行类型。
-    pub line_type: LineType,
-    /// 销项税率。
-    pub sales_tax_rate: Rate,
-    /// 销售项名称快照。
-    pub item_name_snapshot: String,
-    /// 规格快照。
-    pub spec_snapshot: Option<String>,
-    /// 单位快照。
-    pub unit_snapshot: Option<String>,
-    /// 实物及服务字段组。
-    pub goods: Option<GoodsLineFields>,
-    /// 卡券字段组。
-    pub voucher: Option<VoucherLineDraft>,
-}
-
-/// 工作副本行实体（数据模型 §6.5：`(working_copy_id, sales_order_line_id)` 唯一）。
-#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
-pub struct SalesOrderWorkingCopyLine {
-    #[serde(flatten)]
-    pub base: BaseModel,
-    /// 所属工作副本。
-    pub working_copy_id: SalesOrderWorkingCopyId,
-    /// 稳定明细身份。
-    pub sales_order_line_id: SalesOrderLineId,
-    /// 行号。
-    pub line_no: u32,
-    /// 行类型。
-    pub line_type: LineType,
-    /// 行含税金额。
-    pub gross_amount: Amount,
-    /// 行不含税金额。
-    pub net_amount: Amount,
-    /// 行税额。
-    pub tax_amount: Amount,
-    /// 销项税率。
-    pub sales_tax_rate: Rate,
-    /// 销售项名称快照。
-    pub item_name_snapshot: String,
-    /// 规格快照。
-    pub spec_snapshot: Option<String>,
-    /// 单位快照。
-    pub unit_snapshot: Option<String>,
-    /// 正式销售项 SKU。
-    pub sku_id: Option<SkuId>,
-    /// 精确 SKU 修订。
-    pub sku_revision_id: Option<crate::ids::SkuRevisionId>,
-    /// 福利场景。
-    pub welfare_scenario: Option<WelfareScenario>,
-    /// 履约方式。
-    pub fulfillment_mode: Option<FulfillmentMode>,
-    /// 本明细履约期限。
-    pub fulfillment_due_at: Option<Instant>,
-    /// 基础单位数量。
-    pub quantity: Option<Quantity>,
-    /// 基础单位代码。
-    pub base_unit_code: Option<String>,
-    /// 含税成交单价快照。
-    pub unit_price_gross: Option<UnitPrice>,
-    /// 单卡面额。
-    pub face_value: Option<Amount>,
-    /// 卡张数。
-    pub card_count: Option<u32>,
-    /// 面额小计。
-    pub face_value_total: Option<Amount>,
-    /// 最终成交金额。
-    pub transaction_amount: Option<Amount>,
-    /// 配赠金额。
-    pub gift_amount: Option<Amount>,
-    /// 配赠率。
-    pub gift_rate: Option<Rate>,
-    /// 卡形态。
-    pub card_form: Option<super::types::CardForm>,
-}
-
-impl SalesOrderWorkingCopyLine {
-    /// 创建工作副本行。
-    ///
-    /// 完成文本字段校验与规范化，行金额三元组按
-    /// [`crate::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
-    /// 校验面额小计、成交金额与配赠金额一致性。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SalesOrderWorkingCopyLineId`）
-    /// * `working_copy_id` - 所属工作副本
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的工作副本行。
-    ///
-    /// # 错误
-    /// 行号为零、必填为空、超长、行类型与字段组不一致或卡券金额不一致时返回错误。
-    pub fn new(
-        id: SalesOrderWorkingCopyLineId,
-        working_copy_id: SalesOrderWorkingCopyId,
-        data: SalesOrderWorkingCopyLineData,
-    ) -> Result<Self> {
-        if data.line_no == 0 {
-            return Err(Error::from("行号必须为正整数"));
-        }
-        let item_name_snapshot = normalize_required_text(
-            data.item_name_snapshot,
-            "销售项名称不能为空",
-            ITEM_NAME_MAX_LEN,
-            "销售项名称过长",
-        )?;
-        let spec_snapshot = normalize_optional_text(data.spec_snapshot, "规格", SPEC_MAX_LEN)?;
-        let unit_snapshot = normalize_optional_text(data.unit_snapshot, "单位", UNIT_MAX_LEN)?;
-        let built = build_line_groups(data.line_type, data.goods, data.voucher, data.sales_tax_rate)?;
-
-        Ok(Self {
-            base: BaseModel::new(id.to_string()),
-            working_copy_id,
-            sales_order_line_id: data.sales_order_line_id,
-            line_no: data.line_no,
-            line_type: data.line_type,
-            gross_amount: built.gross_amount,
-            net_amount: built.net_amount,
-            tax_amount: built.tax_amount,
-            sales_tax_rate: data.sales_tax_rate,
-            item_name_snapshot,
-            spec_snapshot,
-            unit_snapshot,
-            sku_id: built.goods.as_ref().map(|g| g.sku_id.clone()),
-            sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
-            welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
-            fulfillment_mode: built.goods.as_ref().map(|g| g.fulfillment_mode),
-            fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
-            quantity: built.goods.as_ref().map(|g| g.quantity),
-            base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
-            unit_price_gross: built
-                .goods
-                .as_ref()
-                .map(|g| g.unit_price_gross)
-                .or_else(|| built.voucher.as_ref().map(|v| v.unit_price_gross)),
-            face_value: built.voucher.as_ref().map(|v| v.face_value),
-            card_count: built.voucher.as_ref().map(|v| v.card_count),
-            face_value_total: built.voucher.as_ref().map(|v| v.face_value_total),
-            transaction_amount: built.voucher.as_ref().map(|v| v.transaction_amount),
-            gift_amount: built.voucher.as_ref().map(|v| v.gift_amount),
-            gift_rate: built.voucher.as_ref().map(|v| v.gift_rate),
-            card_form: built.voucher.as_ref().map(|v| v.card_form),
-        })
-    }
-}
-
-/// 校验表头金额三元组恒等式（§4.2 规则 2：表头只汇总已舍入的行金额）。
-///
-/// # 参数
-/// * `gross_amount` - 含税合计
-/// * `net_amount` - 不含税合计
-/// * `tax_amount` - 税额合计
-///
-/// # 返回
-/// 恒等式成立时返回 `Ok(())`。
-///
-/// # 错误
-/// `gross != net + tax` 时返回错误。
-pub(crate) fn validate_amount_triple(
-    gross_amount: Amount,
-    net_amount: Amount,
-    tax_amount: Amount,
-) -> Result<()> {
-    if gross_amount.to_decimal() != net_amount.to_decimal() + tax_amount.to_decimal() {
-        return Err(Error::from("表头金额必须满足 gross = net + tax"));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
+    use super::super::working_copy_test_support::{amt, line_data};
     use super::*;
-    use crate::ids::{SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId, SkuRevisionId};
-    use crate::money::Quantity;
-
-    fn amt(value: &str) -> Amount {
-        Amount::from_str(value).unwrap()
-    }
-
-    fn rate(value: &str) -> Rate {
-        Rate::from_str(value).unwrap()
-    }
-
-    fn qty(value: &str) -> Quantity {
-        Quantity::from_str(value).unwrap()
-    }
-
-    fn price(value: &str) -> UnitPrice {
-        UnitPrice::from_str(value).unwrap()
-    }
-
-    fn goods_line() -> GoodsLineFields {
-        GoodsLineFields {
-            sku_id: SkuId::new("sku-1"),
-            sku_revision_id: SkuRevisionId::new("skurev-1"),
-            welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
-            fulfillment_mode: FulfillmentMode::CompanyWarehouse,
-            fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
-            quantity: qty("3.000000"),
-            base_unit_code: "箱".to_string(),
-            unit_price_gross: price("9.9900"),
-        }
-    }
-
-    fn line_data(line_no: u32) -> SalesOrderWorkingCopyLineData {
-        SalesOrderWorkingCopyLineData {
-            sales_order_line_id: SalesOrderLineId::new(format!("line-{line_no}")),
-            line_no,
-            line_type: LineType::GoodsService,
-            sales_tax_rate: rate("0.130000"),
-            item_name_snapshot: " 年货礼盒 ".to_string(),
-            spec_snapshot: Some(" 10kg ".to_string()),
-            unit_snapshot: Some(" 箱 ".to_string()),
-            goods: Some(goods_line()),
-            voucher: None,
-        }
-    }
+    use crate::common::state::DocumentState;
 
     fn header_data() -> SalesOrderWorkingCopyData {
         SalesOrderWorkingCopyData {
@@ -1036,104 +722,5 @@ mod tests {
 
         copy.submit().unwrap();
         assert!(copy.save_draft("x".to_string(), "user-1").is_err());
-    }
-
-    #[test]
-    fn line_new_computes_amounts_and_normalizes() {
-        let line = SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new("wcl-1"),
-            SalesOrderWorkingCopyId::new("wc-1"),
-            line_data(1),
-        )
-        .unwrap();
-
-        assert_eq!(line.item_name_snapshot, "年货礼盒");
-        assert_eq!(line.gross_amount, amt("29.97"));
-        assert_eq!(line.net_amount, amt("26.07"));
-        assert_eq!(line.tax_amount, amt("3.90"));
-        assert_eq!(
-            line.gross_amount.to_decimal(),
-            line.net_amount.to_decimal() + line.tax_amount.to_decimal(),
-            "gross = net + tax 逐行成立"
-        );
-        assert_eq!(line.base_unit_code.as_deref(), Some("箱"));
-        assert_eq!(line.unit_price_gross, Some(price("9.9900")));
-        assert!(line.face_value.is_none());
-        assert!(line.card_count.is_none());
-    }
-
-    #[test]
-    fn line_new_rejects_zero_no_mismatch_and_inconsistent_voucher() {
-        let zero = SalesOrderWorkingCopyLineData {
-            line_no: 0,
-            ..line_data(1)
-        };
-        assert!(SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new("wcl-1"),
-            SalesOrderWorkingCopyId::new("wc-1"),
-            zero
-        )
-        .is_err());
-
-        let mismatch = SalesOrderWorkingCopyLineData {
-            line_type: LineType::Voucher,
-            goods: None,
-            voucher: None,
-            ..line_data(1)
-        };
-        assert!(SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new("wcl-1"),
-            SalesOrderWorkingCopyId::new("wc-1"),
-            mismatch
-        )
-        .is_err());
-
-        let blank_item = SalesOrderWorkingCopyLineData {
-            item_name_snapshot: "   ".to_string(),
-            ..line_data(1)
-        };
-        assert!(SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new("wcl-1"),
-            SalesOrderWorkingCopyId::new("wc-1"),
-            blank_item
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn voucher_line_builds_with_derived_gift_rate() {
-        let voucher = VoucherLineDraft {
-            face_value: amt("100.00"),
-            card_count: 3,
-            unit_price_gross: price("90.0000"),
-            face_value_total: amt("300.00"),
-            transaction_amount: amt("270.00"),
-            gift_amount: amt("30.00"),
-            gift_rate: None,
-            card_form: super::super::types::CardForm::Electronic,
-        };
-        let data = SalesOrderWorkingCopyLineData {
-            sales_order_line_id: SalesOrderLineId::new("line-1"),
-            line_no: 1,
-            line_type: LineType::Voucher,
-            sales_tax_rate: rate("0.130000"),
-            item_name_snapshot: "福利卡".to_string(),
-            spec_snapshot: None,
-            unit_snapshot: Some("张".to_string()),
-            goods: None,
-            voucher: Some(voucher),
-        };
-        let line = SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new("wcl-1"),
-            SalesOrderWorkingCopyId::new("wc-1"),
-            data,
-        )
-        .unwrap();
-
-        assert_eq!(line.transaction_amount, Some(amt("270.00")));
-        assert_eq!(line.face_value_total, Some(amt("300.00")));
-        assert_eq!(line.gift_amount, Some(amt("30.00")));
-        assert_eq!(line.gift_rate.unwrap().to_decimal().to_string(), "0.111111");
-        assert_eq!(line.gross_amount, amt("270.00"), "公共行金额等于成交金额");
     }
 }

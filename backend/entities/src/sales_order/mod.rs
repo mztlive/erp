@@ -19,6 +19,7 @@
 
 // 实体文件按表名命名（表 `sales_order` → sales_order.rs），与 `ids.rs` 映射表一致；
 // 父模块同名，按约定关闭 module_inception 提示。
+mod amount_validation;
 pub mod revision;
 #[allow(clippy::module_inception)]
 pub mod sales_order;
@@ -26,6 +27,10 @@ pub mod snapshot;
 pub mod submission;
 pub mod types;
 pub mod working_copy;
+mod working_copy_line;
+#[cfg(test)]
+mod working_copy_test_support;
+mod working_copy_types;
 
 pub use revision::{
     RevisionSource, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
