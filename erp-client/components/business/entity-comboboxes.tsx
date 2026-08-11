@@ -7,6 +7,11 @@ import {
     type BusinessObjectComboboxProps,
     type BusinessObjectOption,
 } from "@/components/business/selectors"
+import {
+    TreeCombobox,
+    type TreeComboboxNode,
+    type TreeComboboxProps,
+} from "@/components/business/tree-combobox"
 import type { StatusTone } from "@/components/ui/status-badge"
 
 type EntityComboboxBaseProps = Omit<
@@ -567,63 +572,63 @@ export type CategoryComboboxItem = Readonly<{
     categoryId: string
     categoryCode: string
     categoryName: string
-    /** 根到当前节点的路径文案，如「礼品 / 礼盒」。 */
-    pathLabel?: string
-    /** 树深度，0 为根；用于缩进展示。 */
-    depth?: number
     parentId?: string
-    statusLabel?: string
-    statusTone?: StatusTone
-    description?: string
-    /** 为 true 时不可选（例如选上级时排除自身与子树）。 */
+    /** 为 true 时不在下拉中展示（例如选上级时排除自身与子树）。 */
     disabled?: boolean
 }>
 
-export type CategoryComboboxProps = EntityComboboxBaseProps & {
+export type CategoryComboboxProps = Omit<TreeComboboxProps, "nodes" | "label"> & {
     categories: readonly CategoryComboboxItem[]
 }
 
-/** 商品分类选择：搜索代码、名称与路径；展示层级路径。 */
+/** 扁平分类行 → 树节点（父级缺失/自引用按根处理；同级按名称排序）。 */
+function buildCategoryNodes(
+    items: readonly CategoryComboboxItem[],
+): TreeComboboxNode[] {
+    const byId = new Map(items.map((item) => [item.categoryId, item]))
+    const childrenMap = new Map<string | null, CategoryComboboxItem[]>()
+    for (const item of items) {
+        const parentId =
+            item.parentId &&
+            byId.has(item.parentId) &&
+            item.parentId !== item.categoryId
+                ? item.parentId
+                : null
+        const list = childrenMap.get(parentId) ?? []
+        list.push(item)
+        childrenMap.set(parentId, list)
+    }
+    const sortSiblings = (list: CategoryComboboxItem[]) =>
+        [...list].sort((a, b) =>
+            a.categoryName.localeCompare(b.categoryName, "zh-CN"),
+        )
+    const build = (item: CategoryComboboxItem): TreeComboboxNode => ({
+        id: item.categoryId,
+        label: item.categoryName,
+        code: item.categoryCode,
+        disabled: item.disabled,
+        children: sortSiblings(childrenMap.get(item.categoryId) ?? []).map(
+            build,
+        ),
+    })
+    return sortSiblings(childrenMap.get(null) ?? []).map(build)
+}
+
+/** 商品分类选择：树形展开/收起；搜索代码或名称（命中平铺）。 */
 export function CategoryCombobox({
     categories,
     placeholder = "搜索分类代码、名称或路径",
     emptyLabel = "没有符合条件的分类",
     ...props
 }: CategoryComboboxProps) {
-    const items = React.useMemo(
-        () =>
-            mapToOptions(
-                categories
-                    .filter((c) => !c.disabled)
-                    .map((c) => {
-                        const depth = c.depth ?? 0
-                        const indent = depth > 0 ? `${"— ".repeat(depth)}` : ""
-                        return {
-                            id: c.categoryId,
-                            code: c.categoryCode,
-                            label: `${indent}${c.categoryName}`,
-                            status: {
-                                label: c.statusLabel ?? "启用",
-                                tone: c.statusTone ?? "success",
-                            },
-                            description: [
-                                c.pathLabel && c.pathLabel !== c.categoryName
-                                    ? c.pathLabel
-                                    : null,
-                                c.description,
-                            ]
-                                .filter(Boolean)
-                                .join(" · "),
-                        }
-                    }),
-            ),
-        [categories],
-    )
+    const nodes = React.useMemo(() => buildCategoryNodes(categories), [
+        categories,
+    ])
 
     return (
-        <BusinessObjectCombobox
+        <TreeCombobox
             {...props}
-            items={items}
+            nodes={nodes}
             label="商品分类"
             placeholder={placeholder}
             emptyLabel={emptyLabel}
