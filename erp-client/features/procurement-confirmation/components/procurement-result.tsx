@@ -1,8 +1,13 @@
+import type { Ref } from "react"
 import Link from "next/link"
-import { ArrowRightIcon } from "lucide-react"
+import { ArrowRightIcon, CircleCheckIcon } from "lucide-react"
 
 import { type ResultState } from "@/components/business/feedback"
-import { surfacePanelClassName } from "@/components/business"
+import {
+    FormalActionResult,
+    surfaceInsetClassName,
+    surfacePanelClassName,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -23,6 +28,129 @@ function salesOrderHref(salesOrderId: string, returnTo: string) {
         returnTo,
     })
     return `/sales/orders/${salesOrderId}?${params.toString()}`
+}
+
+type ProcurementOutcomeFeedbackProps = {
+    finishedResult: ResultState<FormalOutcome>
+    lastResult: ResultState<FormalOutcome>
+    fallbackSalesOrderId?: string
+    context?: { position: number; total: number }
+    submissionNo?: number
+    returnTo: string
+    resultRef: Ref<HTMLDivElement>
+    onDismissFinished: () => void
+    onNext: () => void
+}
+
+export function ProcurementOutcomeFeedback({
+    finishedResult,
+    lastResult,
+    fallbackSalesOrderId,
+    context,
+    submissionNo,
+    returnTo,
+    resultRef,
+    onDismissFinished,
+    onNext,
+}: ProcurementOutcomeFeedbackProps) {
+    return (
+        <>
+            {finishedResult && !lastResult ? (
+                <div
+                    role="status"
+                    className={`${surfaceInsetClassName} flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm`}
+                >
+                    <CircleCheckIcon
+                        className="size-4 shrink-0 text-success-soft-foreground"
+                        aria-hidden="true"
+                    />
+                    <span className="font-medium">
+                        上一项已
+                        {finishedResult.status === "rejected" ? "驳回" : "通过"}
+                    </span>
+                    {finishedResult.reference ? (
+                        <span className="num text-muted-foreground">
+                            {finishedResult.reference}
+                        </span>
+                    ) : null}
+                    <span className="text-muted-foreground">
+                        {finishedResult.status === "rejected"
+                            ? "销售可在销售单选择三条固定出路"
+                            : "已自动生成采购单草稿，可直接核对并提交"}
+                    </span>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            render={
+                                <Link
+                                    href={salesOrderHref(
+                                        finishedResult.outcome &&
+                                            "salesOrderId" in
+                                                finishedResult.outcome
+                                            ? finishedResult.outcome
+                                                  .salesOrderId
+                                            : (fallbackSalesOrderId ?? "#"),
+                                        returnTo,
+                                    )}
+                                />
+                            }
+                        >
+                            打开销售单
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={onDismissFinished}
+                        >
+                            关闭
+                        </Button>
+                    </div>
+                </div>
+            ) : null}
+
+            {lastResult ? (
+                <div ref={resultRef} tabIndex={-1} className="outline-none">
+                    <FormalActionResult
+                        status={
+                            lastResult.status === "failed"
+                                ? "blocked"
+                                : lastResult.status
+                        }
+                        title={lastResult.title}
+                        description={lastResult.description}
+                        reference={lastResult.reference}
+                        facts={buildProcurementResultFacts(
+                            lastResult.outcome,
+                            context,
+                            submissionNo,
+                        )}
+                        actions={
+                            <ProcurementResultActions
+                                lastResult={lastResult}
+                                taskSalesOrderId={
+                                    lastResult.outcome &&
+                                    "salesOrderId" in lastResult.outcome
+                                        ? lastResult.outcome.salesOrderId
+                                        : fallbackSalesOrderId
+                                }
+                                returnTo={returnTo}
+                                onNext={onNext}
+                            />
+                        }
+                    />
+                    {lastResult.outcome?.kind === "REJECTED_TO_SALES" ? (
+                        <ProcurementRejectionNextSteps
+                            salesOrderId={lastResult.outcome.salesOrderId}
+                            returnTo={returnTo}
+                        />
+                    ) : null}
+                </div>
+            ) : null}
+        </>
+    )
 }
 
 export function buildProcurementResultFacts(

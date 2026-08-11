@@ -3,44 +3,24 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import {
-    CircleCheckIcon,
-    FileSearchIcon,
-    PlusIcon,
-    SearchIcon,
-    TriangleAlertIcon,
-} from "lucide-react"
+import { TriangleAlertIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessStatusBadge,
     DataFreshness,
-    FormalActionResult,
-    ListToolbar,
     OptionCombobox,
     PageHeader,
     PageScaffold,
-    surfaceInsetClassName,
     surfacePanelClassName,
-    ValidationSummary,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
-import { cn } from "@/lib/utils"
 import { useSupplierOptionsQuery } from "@/hooks/use-options"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import {
     Dialog,
     DialogClose,
@@ -50,16 +30,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { DatePicker } from "@/components/ui/date-picker"
-import { Input } from "@/components/ui/input"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
 import type {
     ConfirmationLineDraft,
     FormalOutcome,
@@ -71,11 +42,10 @@ import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
 import { useContractCenterQuery } from "@/features/contracts/queries"
 import { ProcurementSalesDocument } from "@/features/procurement-confirmation/procurement-sales-document"
 import { ProcurementPlanConfirmationDialog } from "@/features/procurement-confirmation/components/procurement-plan-confirmation-dialog"
-import {
-    buildProcurementResultFacts,
-    ProcurementRejectionNextSteps,
-    ProcurementResultActions,
-} from "@/features/procurement-confirmation/components/procurement-result"
+import { LegacyProcurementPlanEditor } from "@/features/procurement-confirmation/components/legacy-procurement-plan-editor"
+import { ProcurementConfirmationSidebar } from "@/features/procurement-confirmation/components/procurement-confirmation-sidebar"
+import { ProcurementQueueControls } from "@/features/procurement-confirmation/components/procurement-queue-controls"
+import { ProcurementOutcomeFeedback } from "@/features/procurement-confirmation/components/procurement-result"
 import type { ProcurementSupplyOption } from "@/features/procurement-confirmation/api"
 import {
     FULFILLMENT_MODE_LABEL,
@@ -1108,6 +1078,21 @@ export function ProcurementConfirmationPage() {
         deferMutation.isPending ||
         claimMutation.isPending
 
+    const handleOpenReject = React.useCallback(async () => {
+        if (!(await guardTerminalOpen())) return
+        setRejectOpen(true)
+    }, [guardTerminalOpen])
+
+    const handleOpenConfirm = React.useCallback(async () => {
+        try {
+            await ensureLease()
+            setAdvanceAfterConfirm(autoNext)
+            setConfirmOpen(true)
+        } catch (error) {
+            setActionError(getErrorMessage(error, "领取任务失败"))
+        }
+    }, [autoNext, ensureLease])
+
     const returnTo = buildReturnHref(
         new URLSearchParams(searchParams.toString()),
     )
@@ -1188,271 +1173,49 @@ export function ProcurementConfirmationPage() {
                 }
             />
 
-            <div
-                className={cn(
-                    surfacePanelClassName,
-                    "sticky top-0 z-10 space-y-2.5 px-3 py-2.5 text-sm",
-                )}
-            >
-                <div className="flex flex-wrap items-center gap-3">
-                    <div
-                        role="group"
-                        aria-label="责任范围"
-                        className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                    >
-                        {(
-                            [
-                                { value: "mine" as const, label: "我的待办" },
-                                {
-                                    value: "role_pool" as const,
-                                    label: "团队待认领",
-                                },
-                            ] as const
-                        ).map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                aria-pressed={scope === opt.value}
-                                onClick={() =>
-                                    replaceUrl({
-                                        scope:
-                                            opt.value === "mine"
-                                                ? null
-                                                : opt.value,
-                                        queueContextId: null,
-                                        currentWorkItemId: null,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    scope === opt.value
-                                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                        : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                )}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div
-                        role="group"
-                        aria-label="到期时限"
-                        className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                    >
-                        {(
-                            [
-                                { value: "all" as const, label: "全部时限" },
-                                { value: "today" as const, label: "今日到期" },
-                                { value: "overdue" as const, label: "已超期" },
-                            ] as const
-                        ).map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                aria-pressed={
-                                    opt.value === "all"
-                                        ? due === "active"
-                                        : due === opt.value
-                                }
-                                onClick={() =>
-                                    replaceUrl({
-                                        due:
-                                            opt.value === "all"
-                                                ? null
-                                                : opt.value,
-                                        currentWorkItemId: null,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    (
-                                        opt.value === "all"
-                                            ? due === "active"
-                                            : due === opt.value
-                                    )
-                                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                        : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                )}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                    <span className="ml-auto hidden text-xs text-muted-foreground md:inline">
-                        快捷键：j / k 切换 · ⌘S 保存 · ⌘↵ 通过确认 · /
-                        按单号搜索
-                    </span>
-                </div>
-                <ListToolbar
-                    aria-label="二次确认筛选"
-                    search={
-                        <form
-                            onSubmit={(event) => {
-                                event.preventDefault()
-                                commitOrderNo()
-                            }}
-                        >
-                            <InputGroup>
-                                <InputGroupAddon>
-                                    <SearchIcon
-                                        className="size-4"
-                                        aria-hidden="true"
-                                    />
-                                </InputGroupAddon>
-                                <InputGroupInput
-                                    ref={orderNoInputRef}
-                                    value={orderNoDraft}
-                                    onChange={(event) =>
-                                        setOrderNoDraft(event.target.value)
-                                    }
-                                    placeholder="按销售单号搜索"
-                                    aria-label="按单号搜索队列"
-                                />
-                            </InputGroup>
-                        </form>
-                    }
-                    actions={
-                        <>
-                            {hasActiveFilter ? (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={clearFilters}
-                                >
-                                    清除筛选
-                                </Button>
-                            ) : null}
-                            <div className="flex items-center gap-2">
-                                <Label
-                                    htmlFor="auto-next"
-                                    className="text-muted-foreground"
-                                >
-                                    自动下一项
-                                </Label>
-                                <Switch
-                                    id="auto-next"
-                                    checked={autoNext}
-                                    onCheckedChange={toggleAutoNext}
-                                    aria-describedby="auto-next-hint"
-                                />
-                                <span id="auto-next-hint" className="sr-only">
-                                    该偏好仅在本次操作内生效
-                                </span>
-                            </div>
-                            <Badge variant="outline" className="font-normal">
-                                仅本次会话
-                            </Badge>
-                        </>
-                    }
-                />
-            </div>
+            <ProcurementQueueControls
+                scope={scope}
+                due={due}
+                orderNoInputRef={orderNoInputRef}
+                orderNoDraft={orderNoDraft}
+                onOrderNoDraftChange={setOrderNoDraft}
+                onCommitOrderNo={commitOrderNo}
+                hasActiveFilter={hasActiveFilter}
+                onClearFilters={clearFilters}
+                autoNext={autoNext}
+                onToggleAutoNext={toggleAutoNext}
+                onScopeChange={(nextScope) =>
+                    replaceUrl({
+                        scope: nextScope === "mine" ? null : nextScope,
+                        queueContextId: null,
+                        currentWorkItemId: null,
+                    })
+                }
+                onDueChange={(nextDue) =>
+                    replaceUrl({
+                        due: nextDue === "active" ? null : nextDue,
+                        currentWorkItemId: null,
+                    })
+                }
+            />
 
-            {finishedResult && !lastResult ? (
-                <div
-                    role="status"
-                    className={`${surfaceInsetClassName} flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm`}
-                >
-                    <CircleCheckIcon
-                        className="size-4 shrink-0 text-success-soft-foreground"
-                        aria-hidden="true"
-                    />
-                    <span className="font-medium">
-                        上一项已
-                        {finishedResult.status === "rejected" ? "驳回" : "通过"}
-                    </span>
-                    {finishedResult.reference ? (
-                        <span className="num text-muted-foreground">
-                            {finishedResult.reference}
-                        </span>
-                    ) : null}
-                    {finishedResult.status === "rejected" ? (
-                        <span className="text-muted-foreground">
-                            销售可在销售单选择三条固定出路
-                        </span>
-                    ) : (
-                        <span className="text-muted-foreground">
-                            已自动生成采购单草稿，可直接核对并提交
-                        </span>
-                    )}
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={
-                                <Link
-                                    href={w05Href(
-                                        finishedResult.outcome &&
-                                            "salesOrderId" in
-                                                finishedResult.outcome
-                                            ? finishedResult.outcome
-                                                  .salesOrderId
-                                            : (task?.salesSubmission
-                                                  .salesOrderId ?? "#"),
-                                        returnTo,
-                                    )}
-                                />
-                            }
-                        >
-                            打开销售单
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setFinishedResult(null)}
-                        >
-                            关闭
-                        </Button>
-                    </div>
-                </div>
-            ) : null}
-
-            {lastResult ? (
-                <div ref={resultRef} tabIndex={-1} className="outline-none">
-                    <FormalActionResult
-                        status={
-                            lastResult.status === "failed"
-                                ? "blocked"
-                                : lastResult.status
-                        }
-                        title={lastResult.title}
-                        description={lastResult.description}
-                        reference={lastResult.reference}
-                        facts={buildProcurementResultFacts(
-                            lastResult.outcome,
-                            context,
-                            task?.salesSubmission.submissionNo,
-                        )}
-                        actions={
-                            <ProcurementResultActions
-                                lastResult={lastResult}
-                                taskSalesOrderId={
-                                    lastResult.outcome &&
-                                    "salesOrderId" in lastResult.outcome
-                                        ? lastResult.outcome.salesOrderId
-                                        : task?.salesSubmission.salesOrderId
-                                }
-                                returnTo={returnTo}
-                                onNext={() => {
-                                    const next =
-                                        context?.nextWorkItemId ??
-                                        neighborId(1) ??
-                                        tasks[0]?.workItemId
-                                    goToWorkItem(next)
-                                }}
-                            />
-                        }
-                    />
-                    {lastResult.outcome?.kind === "REJECTED_TO_SALES" ? (
-                        <ProcurementRejectionNextSteps
-                            salesOrderId={lastResult.outcome.salesOrderId}
-                            returnTo={returnTo}
-                        />
-                    ) : null}
-                </div>
-            ) : null}
+            <ProcurementOutcomeFeedback
+                finishedResult={finishedResult}
+                lastResult={lastResult}
+                fallbackSalesOrderId={task?.salesSubmission.salesOrderId}
+                context={context}
+                submissionNo={task?.salesSubmission.submissionNo}
+                returnTo={returnTo}
+                resultRef={resultRef}
+                onDismissFinished={() => setFinishedResult(null)}
+                onNext={() => {
+                    const next =
+                        context?.nextWorkItemId ??
+                        neighborId(1) ??
+                        tasks[0]?.workItemId
+                    goToWorkItem(next)
+                }}
+            />
 
             {actionError ? (
                 <Alert variant="destructive" role="alert">
@@ -1537,966 +1300,55 @@ export function ProcurementConfirmationPage() {
                                 }
                             />
 
-                            <Card className="hidden min-w-0" size="sm">
-                                <CardHeader className="border-b">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <CardTitle>
-                                            <h2
-                                                tabIndex={-1}
-                                                className="outline-none"
-                                                aria-live="polite"
-                                            >
-                                                最低成本采购方案
-                                            </h2>
-                                        </CardTitle>
-                                        <BusinessStatusBadge
-                                            context="list"
-                                            label={
-                                                recommendation?.ready
-                                                    ? "可执行"
-                                                    : "待补齐"
-                                            }
-                                            tone={
-                                                recommendation?.ready
-                                                    ? "success"
-                                                    : "warning"
-                                            }
-                                        />
-                                        <Badge variant="secondary">
-                                            系统推荐 · 可人工调整
-                                        </Badge>
-                                    </div>
-                                    <CardDescription>
-                                        按供应商当前有效供给、能力、起订量、可供量、采购价及费用组合；审批时系统重新校验。
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-5">
-                                    <Alert
-                                        variant={
-                                            recommendationQuery.isError
-                                                ? "destructive"
-                                                : recommendation?.ready
-                                                  ? "success"
-                                                  : "warning"
-                                        }
-                                    >
-                                        {recommendation?.ready ? (
-                                            <CircleCheckIcon aria-hidden="true" />
-                                        ) : (
-                                            <TriangleAlertIcon aria-hidden="true" />
-                                        )}
-                                        <AlertTitle>
-                                            {recommendationQuery.isPending
-                                                ? "正在计算最低成本方案"
-                                                : recommendationQuery.isError
-                                                  ? "最低成本方案计算失败"
-                                                  : recommendation?.ready
-                                                    ? `已组合 ${recommendation.purchaseOrders.length} 张采购单草稿`
-                                                    : "当前无法形成完整采购方案"}
-                                        </AlertTitle>
-                                        <AlertDescription>
-                                            {recommendation?.ready
-                                                ? `预计采购含税 ${money.format(Number(recommendation.estimatedPurchaseGross))}，预计毛利 ${money.format(Number(recommendation.estimatedGrossMargin))}。交期仍需采购核对。`
-                                                : recommendation?.blockingIssues
-                                                      .map(
-                                                          (issue) =>
-                                                              issue.message,
-                                                      )
-                                                      .join("；") ||
-                                                  "请等待系统完成计算，或刷新后重试。"}
-                                        </AlertDescription>
-                                    </Alert>
-
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <p className="text-xs text-muted-foreground">
-                                            推荐策略：
-                                            {recommendation?.policyVersion ??
-                                                "正在读取"}
-                                        </p>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            disabled={
-                                                formalPending ||
-                                                recommendationQuery.isPending ||
-                                                !recommendation?.ready
-                                            }
-                                            onClick={applyRecommendation}
-                                        >
-                                            重新载入最低成本方案
-                                        </Button>
-                                    </div>
-
-                                    <Separator />
-
-                                    <section aria-labelledby="confirm-lines-title">
-                                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                            <h3
-                                                id="confirm-lines-title"
-                                                className="text-sm font-semibold"
-                                            >
-                                                采购明细
-                                            </h3>
-                                            <span className="text-xs text-muted-foreground">
-                                                同一商品可向多个供应商采购；每条销售明细分别核对数量
-                                            </span>
-                                        </div>
-
-                                        <div className="space-y-5">
-                                            {task.salesSubmission.lines.map(
-                                                (subLine) => {
-                                                    const lines =
-                                                        lineDrafts.filter(
-                                                            (l) =>
-                                                                l.submissionLineId ===
-                                                                subLine.submissionLineId,
-                                                        )
-                                                    const cov = coverage.find(
-                                                        (c) =>
-                                                            c.submissionLineId ===
-                                                            subLine.submissionLineId,
-                                                    )
-                                                    return (
-                                                        <div
-                                                            key={
-                                                                subLine.submissionLineId
-                                                            }
-                                                            id={`submission-line-${subLine.submissionLineId}`}
-                                                            className="rounded-xl border border-border"
-                                                            tabIndex={-1}
-                                                        >
-                                                            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
-                                                                <div>
-                                                                    <p className="text-sm font-medium">
-                                                                        {
-                                                                            subLine.itemName
-                                                                        }
-                                                                    </p>
-                                                                    <p className="text-xs text-muted-foreground">
-                                                                        承诺{" "}
-                                                                        <span className="num">
-                                                                            {
-                                                                                subLine.committedQuantity
-                                                                            }{" "}
-                                                                            {
-                                                                                subLine.unit
-                                                                            }
-                                                                        </span>{" "}
-                                                                        ·
-                                                                        客户期望{" "}
-                                                                        {
-                                                                            subLine.requestedDeliveryDate
-                                                                        }
-                                                                        {subLine.referenceSupplier
-                                                                            ? ` · 参考 ${subLine.referenceSupplier} / ${money.format(Number(subLine.referenceCost))}`
-                                                                            : null}
-                                                                    </p>
-                                                                </div>
-                                                                <div
-                                                                    className="text-right text-xs"
-                                                                    aria-live="polite"
-                                                                >
-                                                                    <Badge
-                                                                        variant={
-                                                                            cov?.complete
-                                                                                ? "secondary"
-                                                                                : "destructive"
-                                                                        }
-                                                                    >
-                                                                        覆盖{" "}
-                                                                        {
-                                                                            cov?.confirmed
-                                                                        }
-                                                                        /
-                                                                        {
-                                                                            cov?.required
-                                                                        }{" "}
-                                                                        {
-                                                                            subLine.unit
-                                                                        }
-                                                                        {cov &&
-                                                                        !cov.complete
-                                                                            ? ` · 缺口 ${cov.gap} ${subLine.unit}`
-                                                                            : " · 完整"}
-                                                                    </Badge>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="overflow-x-auto">
-                                                                <table className="w-full min-w-[40rem] text-sm">
-                                                                    <caption className="sr-only">
-                                                                        {
-                                                                            subLine.itemName
-                                                                        }{" "}
-                                                                        采购明细
-                                                                    </caption>
-                                                                    <thead>
-                                                                        <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                                                                            <th className="px-3 py-2 font-medium">
-                                                                                供应商
-                                                                            </th>
-                                                                            <th className="px-3 py-2 font-medium num">
-                                                                                确认数量
-                                                                            </th>
-                                                                            <th className="px-3 py-2 font-medium num">
-                                                                                含税成本
-                                                                            </th>
-                                                                            <th className="hidden px-3 py-2 font-medium num md:table-cell">
-                                                                                进项税率
-                                                                            </th>
-                                                                            <th className="hidden px-3 py-2 font-medium sm:table-cell">
-                                                                                预计交期
-                                                                            </th>
-                                                                            <th className="px-3 py-2 font-medium">
-                                                                                交付方式
-                                                                            </th>
-                                                                            <th className="hidden px-3 py-2 font-medium lg:table-cell">
-                                                                                供应资质
-                                                                            </th>
-                                                                            <th className="px-3 py-2 font-medium text-right">
-                                                                                操作
-                                                                            </th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody>
-                                                                        {lines.map(
-                                                                            (
-                                                                                line,
-                                                                            ) => (
-                                                                                <tr
-                                                                                    key={
-                                                                                        line.lineKey
-                                                                                    }
-                                                                                    className="border-b border-border last:border-0"
-                                                                                >
-                                                                                    <td className="px-3 py-2">
-                                                                                        <OptionCombobox
-                                                                                            value={
-                                                                                                line.offeringRevisionId ||
-                                                                                                undefined
-                                                                                            }
-                                                                                            onValueChange={(
-                                                                                                revisionId,
-                                                                                            ) => {
-                                                                                                const offering =
-                                                                                                    supplyOptions.find(
-                                                                                                        (
-                                                                                                            option,
-                                                                                                        ) =>
-                                                                                                            option.offeringRevisionId ===
-                                                                                                            revisionId,
-                                                                                                    )
-                                                                                                const supplier =
-                                                                                                    supplierOptions?.find(
-                                                                                                        (
-                                                                                                            option,
-                                                                                                        ) =>
-                                                                                                            option.supplierId ===
-                                                                                                            offering?.supplierId,
-                                                                                                    )
-                                                                                                const onlyCapability =
-                                                                                                    offering?.capabilities.filter(
-                                                                                                        (
-                                                                                                            capability,
-                                                                                                        ) =>
-                                                                                                            capability.capabilityCode ===
-                                                                                                            capabilityCodeForMode(
-                                                                                                                line.fulfillmentMode,
-                                                                                                            ),
-                                                                                                    )
-                                                                                                        .length ===
-                                                                                                    1
-                                                                                                        ? offering.capabilities.find(
-                                                                                                              (
-                                                                                                                  capability,
-                                                                                                              ) =>
-                                                                                                                  capability.capabilityCode ===
-                                                                                                                  capabilityCodeForMode(
-                                                                                                                      line.fulfillmentMode,
-                                                                                                                  ),
-                                                                                                          )
-                                                                                                        : undefined
-                                                                                                updateLine(
-                                                                                                    line.lineKey,
-                                                                                                    {
-                                                                                                        supplierId:
-                                                                                                            offering?.supplierId ??
-                                                                                                            "",
-                                                                                                        supplierName:
-                                                                                                            supplier?.supplierName ??
-                                                                                                            "",
-                                                                                                        offeringRevisionId:
-                                                                                                            offering?.offeringRevisionId ??
-                                                                                                            "",
-                                                                                                        latestCostGross:
-                                                                                                            offering
-                                                                                                                ? supplyCostForQuantity(
-                                                                                                                      offering,
-                                                                                                                      line.confirmedQuantity,
-                                                                                                                  )
-                                                                                                                : "",
-                                                                                                        inputTaxRate:
-                                                                                                            offering?.inputTaxRate ??
-                                                                                                            "",
-                                                                                                        capabilityRevisionId:
-                                                                                                            onlyCapability?.revisionId ??
-                                                                                                            "",
-                                                                                                        capabilitySummary:
-                                                                                                            onlyCapability?.label ??
-                                                                                                            "请选择有效供应资质",
-                                                                                                        qualificationStatus:
-                                                                                                            onlyCapability
-                                                                                                                ? "VALID"
-                                                                                                                : "INVALID",
-                                                                                                    },
-                                                                                                )
-                                                                                            }}
-                                                                                            options={offeringOptionsForSku(
-                                                                                                subLine.itemSku,
-                                                                                            )}
-                                                                                            disabled={
-                                                                                                formalPending
-                                                                                            }
-                                                                                            placeholder="选择供应商报价"
-                                                                                            className="min-w-[12rem]"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2">
-                                                                                        <Input
-                                                                                            className="num w-20"
-                                                                                            inputMode="decimal"
-                                                                                            value={
-                                                                                                line.confirmedQuantity
-                                                                                            }
-                                                                                            onChange={(
-                                                                                                e,
-                                                                                            ) => {
-                                                                                                const confirmedQuantity =
-                                                                                                    e
-                                                                                                        .target
-                                                                                                        .value
-                                                                                                const offering =
-                                                                                                    supplyOptions.find(
-                                                                                                        (
-                                                                                                            option,
-                                                                                                        ) =>
-                                                                                                            option.offeringRevisionId ===
-                                                                                                            line.offeringRevisionId,
-                                                                                                    )
-                                                                                                updateLine(
-                                                                                                    line.lineKey,
-                                                                                                    {
-                                                                                                        confirmedQuantity,
-                                                                                                        latestCostGross:
-                                                                                                            offering
-                                                                                                                ? supplyCostForQuantity(
-                                                                                                                      offering,
-                                                                                                                      confirmedQuantity,
-                                                                                                                  )
-                                                                                                                : line.latestCostGross,
-                                                                                                    },
-                                                                                                )
-                                                                                            }}
-                                                                                            disabled={
-                                                                                                formalPending
-                                                                                            }
-                                                                                            aria-label={`${line.supplierName} 确认数量`}
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2">
-                                                                                        <Input
-                                                                                            className="num w-24"
-                                                                                            inputMode="decimal"
-                                                                                            value={
-                                                                                                line.latestCostGross
-                                                                                            }
-                                                                                            onChange={(
-                                                                                                e,
-                                                                                            ) =>
-                                                                                                updateLine(
-                                                                                                    line.lineKey,
-                                                                                                    {
-                                                                                                        latestCostGross:
-                                                                                                            e
-                                                                                                                .target
-                                                                                                                .value,
-                                                                                                    },
-                                                                                                )
-                                                                                            }
-                                                                                            disabled={
-                                                                                                formalPending
-                                                                                            }
-                                                                                            aria-label="最新含税成本"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="hidden px-3 py-2 md:table-cell">
-                                                                                        <Input
-                                                                                            className="num w-16"
-                                                                                            inputMode="decimal"
-                                                                                            value={
-                                                                                                line.inputTaxRate
-                                                                                            }
-                                                                                            onChange={(
-                                                                                                e,
-                                                                                            ) =>
-                                                                                                updateLine(
-                                                                                                    line.lineKey,
-                                                                                                    {
-                                                                                                        inputTaxRate:
-                                                                                                            e
-                                                                                                                .target
-                                                                                                                .value,
-                                                                                                    },
-                                                                                                )
-                                                                                            }
-                                                                                            disabled={
-                                                                                                formalPending
-                                                                                            }
-                                                                                            aria-label="进项税率"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="hidden px-3 py-2 sm:table-cell">
-                                                                                        <DatePicker
-                                                                                            className="w-[9.5rem]"
-                                                                                            value={
-                                                                                                line.expectedDeliveryDate ||
-                                                                                                undefined
-                                                                                            }
-                                                                                            onValueChange={(
-                                                                                                next,
-                                                                                            ) =>
-                                                                                                updateLine(
-                                                                                                    line.lineKey,
-                                                                                                    {
-                                                                                                        expectedDeliveryDate:
-                                                                                                            next ??
-                                                                                                            "",
-                                                                                                    },
-                                                                                                )
-                                                                                            }
-                                                                                            disabled={
-                                                                                                formalPending
-                                                                                            }
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2">
-                                                                                        <OptionCombobox
-                                                                                            value={
-                                                                                                line.fulfillmentMode
-                                                                                            }
-                                                                                            onValueChange={(
-                                                                                                value,
-                                                                                            ) => {
-                                                                                                if (
-                                                                                                    !value
-                                                                                                )
-                                                                                                    return
-                                                                                                const fulfillmentMode =
-                                                                                                    value as FulfillmentMode
-                                                                                                const offering =
-                                                                                                    supplyOptions.find(
-                                                                                                        (
-                                                                                                            option,
-                                                                                                        ) =>
-                                                                                                            option.offeringRevisionId ===
-                                                                                                            line.offeringRevisionId,
-                                                                                                    )
-                                                                                                const capabilities =
-                                                                                                    offering?.capabilities.filter(
-                                                                                                        (
-                                                                                                            capability,
-                                                                                                        ) =>
-                                                                                                            capability.capabilityCode ===
-                                                                                                            capabilityCodeForMode(
-                                                                                                                fulfillmentMode,
-                                                                                                            ),
-                                                                                                    ) ??
-                                                                                                    []
-                                                                                                const onlyCapability =
-                                                                                                    capabilities.length ===
-                                                                                                    1
-                                                                                                        ? capabilities[0]
-                                                                                                        : undefined
-                                                                                                updateLine(
-                                                                                                    line.lineKey,
-                                                                                                    {
-                                                                                                        fulfillmentMode,
-                                                                                                        capabilityRevisionId:
-                                                                                                            onlyCapability?.revisionId ??
-                                                                                                            "",
-                                                                                                        capabilitySummary:
-                                                                                                            onlyCapability?.label ??
-                                                                                                            "请选择有效供应资质",
-                                                                                                        qualificationStatus:
-                                                                                                            onlyCapability
-                                                                                                                ? "VALID"
-                                                                                                                : "INVALID",
-                                                                                                    },
-                                                                                                )
-                                                                                            }}
-                                                                                            options={fulfillmentOptionsForOffering(
-                                                                                                line.offeringRevisionId,
-                                                                                            )}
-                                                                                            size="sm"
-                                                                                            allowClear={
-                                                                                                false
-                                                                                            }
-                                                                                            disabled={
-                                                                                                formalPending
-                                                                                            }
-                                                                                            aria-label="交付方式"
-                                                                                            placeholder="交付方式"
-                                                                                            className="min-w-[8rem]"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="hidden px-3 py-2 lg:table-cell">
-                                                                                        <OptionCombobox
-                                                                                            value={
-                                                                                                line.capabilityRevisionId ||
-                                                                                                undefined
-                                                                                            }
-                                                                                            onValueChange={(
-                                                                                                revisionId,
-                                                                                            ) => {
-                                                                                                const capability =
-                                                                                                    capabilityOptionsForOffering(
-                                                                                                        line.offeringRevisionId,
-                                                                                                        line.fulfillmentMode,
-                                                                                                    ).find(
-                                                                                                        (
-                                                                                                            option,
-                                                                                                        ) =>
-                                                                                                            option.value ===
-                                                                                                            revisionId,
-                                                                                                    )
-                                                                                                updateLine(
-                                                                                                    line.lineKey,
-                                                                                                    {
-                                                                                                        capabilityRevisionId:
-                                                                                                            revisionId ??
-                                                                                                            "",
-                                                                                                        capabilitySummary:
-                                                                                                            capability?.label ??
-                                                                                                            "",
-                                                                                                        qualificationStatus:
-                                                                                                            revisionId
-                                                                                                                ? "VALID"
-                                                                                                                : "INVALID",
-                                                                                                    },
-                                                                                                )
-                                                                                            }}
-                                                                                            options={capabilityOptionsForOffering(
-                                                                                                line.offeringRevisionId,
-                                                                                                line.fulfillmentMode,
-                                                                                            )}
-                                                                                            size="sm"
-                                                                                            disabled={
-                                                                                                formalPending
-                                                                                            }
-                                                                                            placeholder="选择供应资质"
-                                                                                            className="min-w-[8rem]"
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2 text-right">
-                                                                                        <Button
-                                                                                            type="button"
-                                                                                            size="sm"
-                                                                                            variant="ghost"
-                                                                                            disabled={
-                                                                                                formalPending ||
-                                                                                                lines.length <=
-                                                                                                    1
-                                                                                            }
-                                                                                            onClick={() =>
-                                                                                                removeLine(
-                                                                                                    line.lineKey,
-                                                                                                )
-                                                                                            }
-                                                                                        >
-                                                                                            删除
-                                                                                        </Button>
-                                                                                    </td>
-                                                                                </tr>
-                                                                            ),
-                                                                        )}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-
-                                                            <div className="border-t border-border px-3 py-2">
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    disabled={
-                                                                        formalPending
-                                                                    }
-                                                                    onClick={() =>
-                                                                        addSplitLine(
-                                                                            subLine.submissionLineId,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    <PlusIcon
-                                                                        data-icon="inline-start"
-                                                                        aria-hidden="true"
-                                                                    />
-                                                                    拆分供应商
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                },
-                                            )}
-                                        </div>
-                                    </section>
-
-                                    {saveMessage ? (
-                                        <p
-                                            className="text-xs text-muted-foreground"
-                                            role="status"
-                                        >
-                                            {saveMessage}
-                                            {dirty
-                                                ? " · 之后有未保存修改"
-                                                : null}
-                                        </p>
-                                    ) : dirty ? (
-                                        <p
-                                            className="text-xs text-warning-soft-foreground"
-                                            role="status"
-                                        >
-                                            有未保存的确认分行修改（⌘S 保存）
-                                        </p>
-                                    ) : null}
-                                </CardContent>
-                            </Card>
+                            <LegacyProcurementPlanEditor
+                                task={task}
+                                recommendation={recommendation}
+                                recommendationPending={
+                                    recommendationQuery.isPending
+                                }
+                                recommendationFailed={
+                                    recommendationQuery.isError
+                                }
+                                lineDrafts={lineDrafts}
+                                coverage={coverage}
+                                supplyOptions={supplyOptions}
+                                supplierOptions={supplierOptions}
+                                offeringOptionsForSku={offeringOptionsForSku}
+                                capabilityOptionsForOffering={
+                                    capabilityOptionsForOffering
+                                }
+                                fulfillmentOptionsForOffering={
+                                    fulfillmentOptionsForOffering
+                                }
+                                formalPending={formalPending}
+                                onApplyRecommendation={applyRecommendation}
+                                onUpdateLine={updateLine}
+                                onAddSplitLine={addSplitLine}
+                                onRemoveLine={removeLine}
+                                saveMessage={saveMessage}
+                                dirty={dirty}
+                            />
                         </div>
 
                         {/* 决策摘要：桌面 sticky；top 避开 sticky 处理条 */}
-                        <aside className="space-y-3 md:space-y-4 xl:sticky xl:top-16 xl:self-start">
-                            <Card size="sm" className={surfacePanelClassName}>
-                                <CardHeader className="rounded-t-lg border-b border-border/30">
-                                    <CardTitle>
-                                        <h2
-                                            ref={headingRef}
-                                            tabIndex={-1}
-                                            className="outline-none"
-                                        >
-                                            本次确认
-                                        </h2>
-                                    </CardTitle>
-                                    <CardDescription>
-                                        系统将在你点击确认通过后计算采购方案。
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <dl className="space-y-2 text-sm">
-                                        <div className="flex justify-between gap-2">
-                                            <dt className="text-muted-foreground">
-                                                销售单
-                                            </dt>
-                                            <dd className="font-medium">
-                                                {
-                                                    task.salesSubmission
-                                                        .salesOrderNo
-                                                }
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between gap-2">
-                                            <dt className="text-muted-foreground">
-                                                商品明细
-                                            </dt>
-                                            <dd>
-                                                {
-                                                    task.salesSubmission.lines
-                                                        .length
-                                                }{" "}
-                                                项
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between gap-2">
-                                            <dt className="text-muted-foreground">
-                                                销售含税金额
-                                            </dt>
-                                            <dd className="num">
-                                                {money.format(
-                                                    Number(
-                                                        task.salesSubmission
-                                                            .grossAmount,
-                                                    ),
-                                                )}
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                    <Alert variant="info">
-                                        <CircleCheckIcon aria-hidden="true" />
-                                        <AlertTitle>
-                                            确认通过不会立即生成采购单
-                                        </AlertTitle>
-                                        <AlertDescription>
-                                            系统会先展示成本最低的采购组合，只有再次确认该方案后才生成采购单。
-                                        </AlertDescription>
-                                    </Alert>
-                                    <div
-                                        className="grid grid-cols-3 gap-2"
-                                        role="group"
-                                        aria-label="本次确认操作"
-                                    >
-                                        <Button
-                                            type="button"
-                                            variant="destructive"
-                                            disabled={formalPending}
-                                            onClick={() => {
-                                                void (async () => {
-                                                    if (
-                                                        !(await guardTerminalOpen())
-                                                    )
-                                                        return
-                                                    setRejectOpen(true)
-                                                })()
-                                            }}
-                                        >
-                                            驳回
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            disabled={formalPending}
-                                            onClick={() => {
-                                                void ensureLease()
-                                                    .then(() => {
-                                                        setAdvanceAfterConfirm(
-                                                            autoNext,
-                                                        )
-                                                        setConfirmOpen(true)
-                                                    })
-                                                    .catch((error) => {
-                                                        setActionError(
-                                                            getErrorMessage(
-                                                                error,
-                                                                "领取任务失败",
-                                                            ),
-                                                        )
-                                                    })
-                                            }}
-                                        >
-                                            确认通过
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled={formalPending}
-                                            onClick={() => void handleDefer()}
-                                        >
-                                            跳过
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card
-                                size="sm"
-                                className={cn(surfacePanelClassName, "hidden")}
-                            >
-                                <CardHeader className="rounded-t-lg border-b border-border/30">
-                                    <CardTitle>决策摘要</CardTitle>
-                                    <CardDescription>
-                                        数量覆盖按明细独立展示，不可跨行抵消。
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <ul
-                                        className="space-y-2"
-                                        aria-label="逐明细数量覆盖"
-                                    >
-                                        {coverage.map((c) => {
-                                            const unit =
-                                                task.salesSubmission.lines.find(
-                                                    (l) =>
-                                                        l.submissionLineId ===
-                                                        c.submissionLineId,
-                                                )?.unit
-                                            return (
-                                                <li
-                                                    key={c.submissionLineId}
-                                                    className="flex items-start justify-between gap-2 text-sm"
-                                                >
-                                                    <span className="min-w-0 truncate">
-                                                        {c.itemName}
-                                                    </span>
-                                                    <span
-                                                        className={
-                                                            c.complete
-                                                                ? "num shrink-0 text-success-soft-foreground"
-                                                                : "num shrink-0 text-destructive"
-                                                        }
-                                                    >
-                                                        {c.confirmed}/
-                                                        {c.required}{" "}
-                                                        {unit ?? ""}
-                                                        {!c.complete
-                                                            ? ` 缺${c.gap} ${unit ?? ""}`
-                                                            : ""}
-                                                    </span>
-                                                </li>
-                                            )
-                                        })}
-                                    </ul>
-                                    <Separator />
-                                    <dl className="space-y-2 text-sm">
-                                        <div className="flex justify-between gap-2">
-                                            <dt className="text-muted-foreground">
-                                                推荐采购含税
-                                            </dt>
-                                            <dd className="num font-medium">
-                                                {estimatedPurchase
-                                                    ? money.format(
-                                                          Number(
-                                                              estimatedPurchase,
-                                                          ),
-                                                      )
-                                                    : "—"}
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between gap-2">
-                                            <dt className="text-muted-foreground">
-                                                销售含税
-                                            </dt>
-                                            <dd className="num">
-                                                {money.format(
-                                                    Number(
-                                                        task.salesSubmission
-                                                            .grossAmount,
-                                                    ),
-                                                )}
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between gap-2">
-                                            <dt className="text-muted-foreground">
-                                                供应商数
-                                            </dt>
-                                            <dd className="num">
-                                                {
-                                                    new Set(
-                                                        lineDrafts.map(
-                                                            (l) => l.supplierId,
-                                                        ),
-                                                    ).size
-                                                }{" "}
-                                                家
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                    {recommendation?.purchaseOrders.length ? (
-                                        <>
-                                            <Separator />
-                                            <div className="space-y-2">
-                                                <p className="text-xs font-medium text-muted-foreground">
-                                                    审批后自动生成
-                                                </p>
-                                                <ul className="space-y-2">
-                                                    {recommendation.purchaseOrders.map(
-                                                        (order) => (
-                                                            <li
-                                                                key={`${order.supplierId}-${order.fulfillmentMode}`}
-                                                                className="rounded-md border border-border bg-muted/30 p-2 text-xs"
-                                                            >
-                                                                <div className="flex justify-between gap-2">
-                                                                    <span className="font-medium">
-                                                                        {
-                                                                            order.supplierName
-                                                                        }
-                                                                    </span>
-                                                                    <span className="num">
-                                                                        {money.format(
-                                                                            Number(
-                                                                                order.estimatedGross,
-                                                                            ),
-                                                                        )}
-                                                                    </span>
-                                                                </div>
-                                                                <p className="mt-1 text-muted-foreground">
-                                                                    {
-                                                                        FULFILLMENT_MODE_LABEL[
-                                                                            order
-                                                                                .fulfillmentMode
-                                                                        ]
-                                                                    }{" "}
-                                                                    ·{" "}
-                                                                    {
-                                                                        order.lineCount
-                                                                    }{" "}
-                                                                    条明细 ·
-                                                                    采购单草稿
-                                                                </p>
-                                                            </li>
-                                                        ),
-                                                    )}
-                                                </ul>
-                                            </div>
-                                        </>
-                                    ) : null}
-                                    {clientBlocking.length > 0 ? (
-                                        <ValidationSummary
-                                            title="通过前须补齐"
-                                            issues={clientBlocking}
-                                        />
-                                    ) : (
-                                        <p className="flex items-center gap-2 text-sm text-success-soft-foreground">
-                                            <CircleCheckIcon
-                                                className="size-4"
-                                                aria-hidden="true"
-                                            />
-                                            当前编辑态覆盖完整（最终以系统重验为准）
-                                        </p>
-                                    )}
-                                    {(
-                                        recommendation?.warnings ??
-                                        task.decisionSummary.warnings
-                                    ).map((w, index) => (
-                                        <p
-                                            key={`${w.code}-${w.lineId ?? "none"}-${index}`}
-                                            className="text-xs text-muted-foreground"
-                                        >
-                                            警告：{w.message}
-                                        </p>
-                                    ))}
-                                </CardContent>
-                            </Card>
-
-                            <Card size="sm" className={surfacePanelClassName}>
-                                <CardHeader className="rounded-t-lg border-b border-border/30">
-                                    <CardTitle>销售单详情</CardTitle>
-                                    <CardDescription>
-                                        深挖后返回仍恢复队列位置、筛选与当前项。
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <Button
-                                        variant="outline"
-                                        className="w-full"
-                                        render={
-                                            <Link
-                                                href={w05Href(
-                                                    task.salesSubmission
-                                                        .salesOrderId,
-                                                    returnTo,
-                                                    task.workItemId,
-                                                )}
-                                            />
-                                        }
-                                    >
-                                        <FileSearchIcon
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                        />
-                                        打开销售单 ·{" "}
-                                        {task.salesSubmission.salesOrderNo}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        </aside>
+                        <ProcurementConfirmationSidebar
+                            task={task}
+                            headingRef={headingRef}
+                            formalPending={formalPending}
+                            onReject={handleOpenReject}
+                            onConfirm={handleOpenConfirm}
+                            onDefer={handleDefer}
+                            coverage={coverage}
+                            estimatedPurchase={estimatedPurchase}
+                            lineDrafts={lineDrafts}
+                            recommendation={recommendation}
+                            clientBlocking={clientBlocking}
+                            salesOrderHref={w05Href(
+                                task.salesSubmission.salesOrderId,
+                                returnTo,
+                                task.workItemId,
+                            )}
+                        />
                     </div>
 
                     {contractQuery.data ? (
