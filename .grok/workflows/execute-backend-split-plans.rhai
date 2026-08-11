@@ -4,7 +4,7 @@ let meta = #{
     when_to_use: "需要按 docs/split/backend/**/plan.md 逐个完成 Rust 大文件拆分并验证无方案漂移时",
     phases: [
         #{ title: "Discover", detail: "选择未解决计划并检查工作区安全性" },
-        #{ title: "Design", detail: "按风险分配互补职责的同模型设计代理并综合方案" },
+        #{ title: "Design", detail: "按风险分配一体化或互补职责的同模型设计代理并定稿" },
         #{ title: "Implement", detail: "由 lightweight 代理在共享工作区实现" },
         #{ title: "Review", detail: "独立全量审查，Fix 后按变更范围执行全量或增量复核" },
         #{ title: "Resolve", detail: "Review 通过后在 plan.md 标记已解决" },
@@ -82,7 +82,7 @@ let role_design_schema = #{
         "role": #{
             "type": "string",
             "enum": [
-                "integrated", "module-boundaries", "contracts-and-verification",
+                "module-boundaries", "contracts-and-verification",
                 "api-behavior", "verification-side-effects"
             ],
         },
@@ -333,7 +333,7 @@ while plan_index < selected_plans.len() {
     coordinator_prompt += "判断计划是否可执行：源文件存在；计划有具体 split 方案；若代码已经完成该拆分，也可 executable=true，后续将验证并标记。\n";
     coordinator_prompt += "只负责风险分级、设计代理数量、原始测试和质量门禁，不要提前输出完整拆分设计。\n";
     coordinator_prompt += "低风险且边界清晰用 1 个设计代理，中风险/多模块用 2 个，高风险、事务/API/宏/生成逻辑复杂用 3 个；上限 " + max_designers.to_string() + "。\n";
-    coordinator_prompt += "workflow 会固定分配互补角色：1 个时做 integrated；2 个时做 module-boundaries 与 contracts-and-verification；3 个时做 module-boundaries、api-behavior 与 verification-side-effects。\n";
+    coordinator_prompt += "workflow 会按数量分配设计职责：1 个时由 integrated 一体化覆盖并直接产出最终方案；2 个时拆为 module-boundaries 与 contracts-and-verification；3 个时拆为 module-boundaries、api-behavior 与 verification-side-effects。\n";
     coordinator_prompt += "original_tests 列出现有测试的精确命令或测试模块；required_gates 包含 plan 和仓库要求的格式、编译、Clippy、测试命令。\n";
     coordinator_prompt += "返回 source_file 必须是 backend/ 下真实相对路径。";
 
@@ -390,7 +390,7 @@ while plan_index < selected_plans.len() {
         let role = design_roles[designer_i];
         let role_scope = "";
         if role == "integrated" {
-            role_scope = "这是低风险单代理路径。覆盖文件/符号边界、API 与行为不变量、调用方和验证命令，但保持结论精炼，避免重复转述 plan。";
+            role_scope = "这是单设计代理路径。完整覆盖文件/符号边界、API 与行为不变量、调用方和验证命令，但保持结论精炼，避免重复转述 plan。";
         } else if role == "module-boundaries" {
             role_scope = "只分析模块边界：逐文件符号归属、imports/trait scope、可见性与 re-export、私有 helper 归属、依赖方向和循环依赖。不要完整重做事务、业务行为或测试矩阵；跨范围问题只写入 cross_scope_blockers。";
         } else if role == "contracts-and-verification" {
@@ -401,17 +401,29 @@ while plan_index < selected_plans.len() {
             role_scope = "只分析验证与工作区副作用：原始测试、契约测试、格式/编译/Clippy/测试门禁、生成物和 build script、副作用命令、验证前后 git diff 基线。不要重做文件拆分或完整业务分析；跨范围问题只写入 cross_scope_blockers。";
         }
 
-        let design_prompt = "你是互补职责的代码拆分设计代理，使用与主会话相同的模型。只读，不得修改文件。\n";
-        design_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`；你的唯一角色：" + role + "。\n";
-        design_prompt += role_scope + "\n";
-        design_prompt += "必须真实读取 plan、角色所需源码/调用方/测试、AGENTS.md 与适用编码规范，并在 evidence 中给出真实路径或符号依据。\n";
-        design_prompt += "deliverables 只能覆盖本角色范围，不得为了显得完整而复制其他角色的分析；发现跨范围阻塞时只记录到 cross_scope_blockers，交给综合代理处理。\n";
-        design_prompt += "所有建议都必须保持纯拆分：不得顺手修改业务规则、错误语义、公开 API、DTO、数据库查询、事务顺序或生成逻辑。role 字段必须精确返回 `" + role + "`。";
+        let design_prompt = "";
+        let design_output_schema = role_design_schema;
+        if role == "integrated" {
+            design_output_schema = synthesis_schema;
+            design_prompt = "你是代码拆分的一体化设计代理，使用与主会话相同的模型。只读，不得修改文件。你是本路径唯一的设计代理，将直接产出最终实施方案，不会再有 synthesize 代理。\n";
+            design_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`。\n";
+            design_prompt += role_scope + "\n";
+            design_prompt += "必须真实读取 plan、相关源码、调用方、测试、AGENTS.md 与适用编码规范；implementation_plan 中的关键判断必须附真实路径或符号依据。\n";
+            design_prompt += "直接输出可供冷启动 lightweight 实现代理执行的最终方案：implementation_plan 给出有顺序的文件与符号迁移步骤；expected_files 列出精确变更范围；public_api_invariants 与 behavior_invariants 分别列出必须保持的契约；verification_commands 合并安全的质量门禁；original_tests 列出拆分前已有相关测试。\n";
+            design_prompt += "方案应完整但精炼，不得假设后续代理会补齐遗漏。所有建议都必须保持纯拆分：不得顺手修改业务规则、错误语义、公开 API、DTO、数据库查询、事务顺序或生成逻辑。";
+        } else {
+            design_prompt = "你是互补职责的代码拆分设计代理，使用与主会话相同的模型。只读，不得修改文件。\n";
+            design_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`；你的唯一角色：" + role + "。\n";
+            design_prompt += role_scope + "\n";
+            design_prompt += "必须真实读取 plan、角色所需源码/调用方/测试、AGENTS.md 与适用编码规范，并在 evidence 中给出真实路径或符号依据。\n";
+            design_prompt += "deliverables 只能覆盖本角色范围，不得为了显得完整而复制其他角色的分析；发现跨范围阻塞时只记录到 cross_scope_blockers，交给综合代理处理。\n";
+            design_prompt += "所有建议都必须保持纯拆分：不得顺手修改业务规则、错误语义、公开 API、DTO、数据库查询、事务顺序或生成逻辑。role 字段必须精确返回 `" + role + "`。";
+        }
         design_jobs.push(#{
             prompt: design_prompt,
             label: "design:" + plan_index.to_string() + ":" + role,
             capability_mode: "read-only",
-            output_schema: role_design_schema,
+            output_schema: design_output_schema,
         });
         designer_i += 1;
     }
@@ -421,11 +433,17 @@ while plan_index < selected_plans.len() {
     let dr_i = 0;
     while dr_i < design_results.len() {
         let dr = design_results[dr_i];
-        if dr != () && dr.success && dr.output.summary != ()
-            && dr.output.role == design_roles[dr_i] {
+        let usable = false;
+        if designer_count == 1 {
+            usable = dr != () && dr.success && dr.output.implementation_plan != ();
+        } else {
+            usable = dr != () && dr.success && dr.output.summary != ()
+                && dr.output.role == design_roles[dr_i];
+        }
+        if usable {
             usable_designs.push(dr.output);
         } else {
-            log("丢弃失败或角色不匹配的设计结果：" + design_roles[dr_i]);
+            log("丢弃失败或格式不匹配的设计结果：" + design_roles[dr_i]);
         }
         dr_i += 1;
     }
@@ -436,26 +454,32 @@ while plan_index < selected_plans.len() {
         continue;
     }
 
-    let synthesis_prompt = "你是代码拆分主方案综合代理，使用与主会话相同模型。只读，不得改文件。\n";
-    synthesis_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`。\n";
-    synthesis_prompt += "协调信息：" + json_encode(coord) + "\n";
-    synthesis_prompt += "互补职责设计结果：" + json_encode(usable_designs) + "\n";
-    synthesis_prompt += "这些结果按角色刻意不重复。请再次抽查真实代码，合并互补交付、处理 cross_scope_blockers、解决分歧并补齐角色间空隙，输出唯一可执行方案。\n";
-    synthesis_prompt += "implementation_plan 必须足够详细，供冷启动 lightweight 实现代理直接执行，但不要把多个角色的原文机械拼接。\n";
-    synthesis_prompt += "强制保持公开 API/re-export、DTO、事务边界、幂等语义、审计顺序、外部调用位置、测试行为；私有 helper 跟随唯一调用方；不得机械按行数切割。\n";
-    synthesis_prompt += "verification_commands 合并 plan 与仓库门禁，并优先使用只读或限定 crate/文件范围的命令；会改写无关文件或生成物的命令必须改为隔离执行或记录前后工作区基线。original_tests 必须覆盖拆分前已有测试。";
-    let synthesis = agent(synthesis_prompt, #{
-        label: "synthesize:" + plan_index.to_string(),
-        capability_mode: "read-only",
-        output_schema: synthesis_schema,
-    });
-    if synthesis == () || !synthesis.success {
-        processed = add_result(processed, plan_path, "blocked", "主方案综合失败");
-        blocked_count += 1;
-        plan_index += 1;
-        continue;
+    let final_plan = ();
+    if designer_count == 1 {
+        final_plan = usable_designs[0];
+        log("单设计代理路径直接采用 integrated 最终方案，跳过 synthesize agent。");
+    } else {
+        let synthesis_prompt = "你是代码拆分主方案综合代理，使用与主会话相同模型。只读，不得改文件。\n";
+        synthesis_prompt += "计划：`" + plan_path + "`；源文件：`" + coord.source_file + "`。\n";
+        synthesis_prompt += "协调信息：" + json_encode(coord) + "\n";
+        synthesis_prompt += "互补职责设计结果：" + json_encode(usable_designs) + "\n";
+        synthesis_prompt += "这些结果按角色刻意不重复。请再次抽查真实代码，合并互补交付、处理 cross_scope_blockers、解决分歧并补齐角色间空隙，输出唯一可执行方案。\n";
+        synthesis_prompt += "implementation_plan 必须足够详细，供冷启动 lightweight 实现代理直接执行，但不要把多个角色的原文机械拼接。\n";
+        synthesis_prompt += "强制保持公开 API/re-export、DTO、事务边界、幂等语义、审计顺序、外部调用位置、测试行为；私有 helper 跟随唯一调用方；不得机械按行数切割。\n";
+        synthesis_prompt += "verification_commands 合并 plan 与仓库门禁，并优先使用只读或限定 crate/文件范围的命令；会改写无关文件或生成物的命令必须改为隔离执行或记录前后工作区基线。original_tests 必须覆盖拆分前已有测试。";
+        let synthesis = agent(synthesis_prompt, #{
+            label: "synthesize:" + plan_index.to_string(),
+            capability_mode: "read-only",
+            output_schema: synthesis_schema,
+        });
+        if synthesis == () || !synthesis.success {
+            processed = add_result(processed, plan_path, "blocked", "主方案综合失败");
+            blocked_count += 1;
+            plan_index += 1;
+            continue;
+        }
+        final_plan = synthesis.output;
     }
-    let final_plan = synthesis.output;
 
     // =================================================================
     // Phase 3: lightweight implementation in shared workspace
