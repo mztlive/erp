@@ -24,7 +24,7 @@ use entities::supplier_offering::SupplierOfferingRevision;
 use id_generator::next_id;
 use mongodb::Database;
 
-use super::{fulfillment_from_mode, today_stamp};
+use super::shared::{fulfillment_from_mode, today_stamp};
 use crate::errors::{Error, Result};
 
 /// 审批事务中待写入的一张采购单草稿聚合。
