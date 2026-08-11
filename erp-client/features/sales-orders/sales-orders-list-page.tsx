@@ -369,7 +369,8 @@ export function SalesOrdersListPage() {
                                 </Button>
                                 <BusinessStatusBadge
                                     context="list"
-                                    {...row.original.primaryStatus}
+                                    label={row.original.primaryStatus.label}
+                                    tone={row.original.primaryStatus.tone}
                                 />
                             </div>
                             <div className="truncate text-xs text-muted-foreground">
