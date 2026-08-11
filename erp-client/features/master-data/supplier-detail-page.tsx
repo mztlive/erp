@@ -30,17 +30,7 @@ import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { DatePicker } from "@/components/ui/date-picker"
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
     InputGroup,
@@ -49,8 +39,6 @@ import {
     InputGroupText,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -62,23 +50,40 @@ import { masterDataCopy } from "@/features/master-data/copy"
 import {
     INVOICE_TYPE_OPTIONS,
     SETTLEMENT_MODE_OPTIONS,
-    SUPPLIER_CAPABILITY_OPTIONS,
     SUPPLIER_RATING_OPTIONS,
     buildResourceFields,
-    currentResourceFieldValues,
     defaultImmediateEffectiveFrom,
 } from "@/features/master-data/resource-fields"
 import {
-    revealMasterDataSensitive,
     useCreateMasterDataMutation,
     useCreateRevisionMutation,
     useMasterDataCenterQuery,
 } from "@/features/master-data/queries"
 import type {
-    MasterDataCenterView,
     MasterDataMutationResult,
     SupplierFields,
 } from "@/features/master-data/types"
+import {
+    CapabilityCheckboxGroup,
+    CredentialGroup,
+    FieldShell,
+    SectionPanel,
+    SensitiveEditableField,
+} from "@/features/master-data/supplier-editor-fields"
+import {
+    SupplierSectionTabs,
+    SupplierSummaryStrip,
+} from "@/features/master-data/supplier-editor-navigation"
+import {
+    createSupplierEditorDefaults,
+    hydrateSupplierEditor,
+    validateSupplierEditorFields,
+} from "@/features/master-data/supplier-editor-model"
+import type {
+    SupplierEditorFormValues,
+    SupplierFieldKey,
+} from "@/features/master-data/supplier-editor-model"
+import { SupplierSaveReasonDialog } from "@/features/master-data/supplier-save-reason-dialog"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
@@ -87,440 +92,6 @@ import { cn } from "@/lib/utils"
 function newIdempotencyKey(prefix: string): string {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
-
-const CAPABILITY_SEPARATOR = "、"
-
-/**
- * 敏感字段：
- * - 无 revealToken（新建 / 后端未提供门禁）→ 直接可编辑，避免卡死无法输入
- * - 有 revealToken → 默认打码，短时查看后可编辑（15 秒自动隐藏）
- */
-function SensitiveEditableField({
-    label,
-    id,
-    value,
-    maskedValue,
-    revealToken,
-    onChange,
-    disabled,
-    canReveal = false,
-    getRevealToken,
-    placeholder,
-}: {
-    label: string
-    id: string
-    value: string
-    maskedValue?: string
-    revealToken?: string
-    onChange: (next: string) => void
-    disabled?: boolean
-    canReveal?: boolean
-    getRevealToken?: () => Promise<string | undefined>
-    placeholder?: string
-}) {
-    const [revealed, setRevealed] = React.useState(false)
-    const [revealedValue, setRevealedValue] = React.useState<string | null>(
-        null,
-    )
-    const [revealError, setRevealError] = React.useState<string | null>(null)
-
-    React.useEffect(() => {
-        if (!revealed) return
-        const timer = window.setTimeout(() => {
-            setRevealed(false)
-            setRevealedValue(null)
-        }, 15000)
-        return () => window.clearTimeout(timer)
-    }, [revealed])
-
-    // 新建或无揭示令牌时直接可编辑（创建场景必走此分支）
-    if (!revealToken) {
-        return (
-            <div className="space-y-1.5">
-                <Label htmlFor={id}>{label}</Label>
-                <Input
-                    id={id}
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    disabled={disabled}
-                    placeholder={placeholder}
-                />
-            </div>
-        )
-    }
-
-    const reveal = async () => {
-        try {
-            const activeToken = (await getRevealToken?.()) ?? revealToken
-            if (!activeToken)
-                throw new Error("敏感字段查看凭证已失效，请刷新后重试")
-            const plaintext =
-                value || (await revealMasterDataSensitive(activeToken))
-            setRevealedValue(plaintext)
-            setRevealError(null)
-            setRevealed(true)
-        } catch (error) {
-            setRevealError(getErrorMessage(error, "无权查看"))
-        }
-    }
-
-    if (!revealed) {
-        return (
-            <div className="space-y-1.5">
-                <Label htmlFor={id}>{label}</Label>
-                <div className="flex flex-wrap items-center gap-2">
-                    <code className="num rounded-md bg-muted px-2 py-1.5 text-sm">
-                        {maskedValue || "****"}
-                    </code>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!canReveal}
-                        onClick={() => void reveal()}
-                    >
-                        短时查看
-                    </Button>
-                </div>
-                {revealError ? (
-                    <p className="text-xs text-destructive" role="alert">
-                        {revealError}
-                    </p>
-                ) : (
-                    <p className="text-xs text-muted-foreground">
-                        敏感信息已打码；查看后 15 秒自动隐藏。
-                    </p>
-                )}
-            </div>
-        )
-    }
-    return (
-        <div className="space-y-1.5">
-            <Label htmlFor={id}>{label}</Label>
-            <Input
-                id={id}
-                value={revealedValue ?? value}
-                autoFocus
-                onChange={(e) => {
-                    setRevealedValue(e.target.value)
-                    onChange(e.target.value)
-                }}
-                onBlur={() => {
-                    setRevealed(false)
-                    setRevealedValue(null)
-                }}
-                disabled={disabled}
-                placeholder={placeholder}
-            />
-            <p className="text-xs text-muted-foreground">
-                已显示明文；离开输入框后自动打码。
-            </p>
-        </div>
-    )
-}
-
-/** 分区导航：真正的标签切换（每次只挂载一个分区），避免整页长滚动堆叠。 */
-const SUPPLIER_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
-    { id: "basic", label: "基本信息" },
-    { id: "commercial", label: "商务合作" },
-    { id: "contract", label: "合同资质" },
-    { id: "invoice", label: "开票信息" },
-    { id: "history", label: "历史引用" },
-]
-
-function parseCapabilities(value: string): string[] {
-    return value
-        .split(/[、,，]/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-}
-
-function CapabilityCheckboxGroup({
-    value,
-    onChange,
-    disabled,
-}: {
-    value: string
-    onChange: (next: string) => void
-    disabled?: boolean
-}) {
-    const selected = parseCapabilities(value)
-    const toggle = (option: string, checked: boolean) => {
-        const next = checked
-            ? [...selected, option]
-            : selected.filter((item) => item !== option)
-        onChange(next.join(CAPABILITY_SEPARATOR))
-    }
-    return (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
-            {SUPPLIER_CAPABILITY_OPTIONS.map((option) => (
-                <label
-                    key={option}
-                    className="flex items-center gap-2 text-sm leading-none"
-                >
-                    <Checkbox
-                        checked={selected.includes(option)}
-                        disabled={disabled}
-                        onCheckedChange={(checked) =>
-                            toggle(option, checked === true)
-                        }
-                    />
-                    {option}
-                </label>
-            ))}
-        </div>
-    )
-}
-
-function FieldShell({
-    className,
-    children,
-}: {
-    className?: string
-    children: React.ReactNode
-}) {
-    return (
-        <div
-            className={cn(
-                "space-y-2 [&_[data-slot=label]]:text-[13px] [&_[data-slot=label]]:font-medium [&_[data-slot=label]]:text-foreground/80",
-                className,
-            )}
-        >
-            {children}
-        </div>
-    )
-}
-
-/** 分区内容：只在切到该标签时挂载，不再是卡片，直接铺在共享卡片的内容区里。 */
-function SectionPanel({
-    title,
-    description,
-    children,
-}: {
-    title: string
-    description?: string
-    children: React.ReactNode
-}) {
-    return (
-        <section className="space-y-5">
-            <div className="space-y-1 border-b border-border/60 pb-3">
-                <h2 className="text-base font-semibold tracking-tight">
-                    {title}
-                </h2>
-                {description ? (
-                    <p className="max-w-3xl text-sm leading-5 text-muted-foreground">
-                        {description}
-                    </p>
-                ) : null}
-            </div>
-            {children}
-        </section>
-    )
-}
-
-/** 合同资质页内的业务对象分组，避免把不同文件与有效期混排。 */
-function CredentialGroup({
-    title,
-    description,
-    children,
-}: {
-    title: string
-    description: string
-    children: React.ReactNode
-}) {
-    return (
-        <section className={cn(surfaceInsetClassName, "overflow-hidden")}>
-            <div className="border-b border-border/60 px-4 py-3">
-                <h3 className="text-sm font-semibold text-foreground">
-                    {title}
-                </h3>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {description}
-                </p>
-            </div>
-            <div className="p-4">{children}</div>
-        </section>
-    )
-}
-
-type SupplierEditorFormValues = Readonly<{
-    name: string
-    company: string
-    creditCode: string
-    contactName: string
-    contactPhone: string
-    address: string
-    capability: string
-    settlement: string
-    businessCategory: string
-    signingEntity: string
-    paymentEntity: string
-    qualification: string
-    contractNo: string
-    contractValidFrom: string
-    contractValidTo: string
-    contractFile: string
-    authorizationFile: string
-    authorizationValidFrom: string
-    authorizationValidTo: string
-    foodLicense: string
-    legalPersonIdCard: string
-    taxNo: string
-    bankName: string
-    bankAccount: string
-    invoiceType: string
-    invoiceTaxRate: string
-    initialScore: string
-    supplierRating: string
-    currentScore: string
-    changeReason: string
-}>
-
-/** 保存前字段校验（不含变更原因；原因在右上角保存弹窗中填写）。 */
-type SupplierValidationContext = Readonly<{
-    hasStoredContactPhone?: boolean
-    originalContactName?: string
-    hasStoredBankAccount?: boolean
-    originalBankName?: string
-}>
-
-function validateSupplierEditorFields(
-    values: SupplierEditorFormValues,
-    context: SupplierValidationContext = {},
-): string | null {
-    if (values.name.trim().length < 2) return "请填写供应商名称"
-    if (values.company.trim().length < 1) return "请填写企业主体"
-    if (
-        values.creditCode.trim() &&
-        !/^[0-9A-Z]{18}$/i.test(values.creditCode.trim())
-    ) {
-        return "统一社会信用代码必须是 18 位字母或数字"
-    }
-    const hasContactName = Boolean(values.contactName.trim())
-    const hasContactPhone = Boolean(values.contactPhone.trim())
-    const preservesStoredContact =
-        hasContactName &&
-        !hasContactPhone &&
-        context.hasStoredContactPhone === true &&
-        values.contactName.trim() === context.originalContactName?.trim()
-    if (hasContactName !== hasContactPhone && !preservesStoredContact) {
-        return "联系人姓名和联系电话必须同时填写；修改联系人姓名前请先短时查看联系电话"
-    }
-    const hasBankName = Boolean(values.bankName.trim())
-    const hasBankAccount = Boolean(values.bankAccount.trim())
-    const preservesStoredBankAccount =
-        hasBankName &&
-        !hasBankAccount &&
-        context.hasStoredBankAccount === true &&
-        values.bankName.trim() === context.originalBankName?.trim()
-    if (hasBankName !== hasBankAccount && !preservesStoredBankAccount) {
-        return "开户银行和银行账号必须同时填写；修改开户银行前请先短时查看银行账号"
-    }
-    if (!values.signingEntity.trim()) return "请选择公司签约主体"
-    if (!values.paymentEntity.trim()) return "请选择公司付款主体"
-    for (const [label, score] of [
-        ["合作期初评分", values.initialScore],
-        ["合作中评分", values.currentScore],
-    ] as const) {
-        if (score.trim() && !/^(100|[1-9]?\d)$/.test(score.trim())) {
-            return `${label}必须是 0–100 的整数`
-        }
-    }
-    const taxRate = values.invoiceTaxRate.trim()
-    if (taxRate && !/^(0|[1-9]\d?)$/.test(taxRate)) {
-        return "发票税点必须是 0–99 的整数"
-    }
-    if (
-        values.contractValidFrom &&
-        values.contractValidTo &&
-        values.contractValidTo <= values.contractValidFrom
-    ) {
-        return "合同有效期止必须晚于有效期起"
-    }
-    if (
-        values.authorizationValidFrom &&
-        values.authorizationValidTo &&
-        values.authorizationValidTo <= values.authorizationValidFrom
-    ) {
-        return "授权书有效期止必须晚于有效期起"
-    }
-    return null
-}
-
-function hydrateFromCenter(
-    data: MasterDataCenterView,
-): SupplierEditorFormValues {
-    const fields = currentResourceFieldValues(data)
-    return {
-        name: data.name,
-        company: fields.company ?? "",
-        creditCode: fields.creditCode ?? "",
-        contactName: fields.contactName ?? "",
-        contactPhone: fields.contactPhone ?? "",
-        address: fields.address ?? "",
-        capability: fields.capability ?? "",
-        settlement: fields.settlement ?? "",
-        businessCategory: fields.businessCategory ?? "",
-        signingEntity: fields.signingEntity ?? "",
-        paymentEntity: fields.paymentEntity ?? "",
-        qualification: fields.qualification ?? "",
-        contractNo: fields.contractNo ?? "",
-        contractValidFrom: fields.contractValidFrom ?? "",
-        contractValidTo: fields.contractValidTo ?? "",
-        contractFile: fields.contractFile ?? "",
-        authorizationFile: fields.authorizationFile ?? "",
-        authorizationValidFrom: fields.authorizationValidFrom ?? "",
-        authorizationValidTo: fields.authorizationValidTo ?? "",
-        foodLicense: fields.foodLicense ?? "",
-        legalPersonIdCard: fields.legalPersonIdCard ?? "",
-        taxNo: fields.taxNo ?? "",
-        bankName: fields.bankName ?? "",
-        bankAccount: fields.bankAccount ?? "",
-        invoiceType: fields.invoiceType ?? "",
-        invoiceTaxRate: fields.invoiceTaxRate ?? "",
-        initialScore: fields.initialScore ?? "",
-        supplierRating: fields.supplierRating ?? "",
-        currentScore: fields.currentScore ?? "",
-        changeReason: "",
-    }
-}
-
-function createDefaults(isCreate: boolean): SupplierEditorFormValues {
-    return {
-        name: "",
-        company: "",
-        creditCode: "",
-        contactName: "",
-        contactPhone: "",
-        address: "",
-        capability: "",
-        settlement: "",
-        businessCategory: "",
-        signingEntity: "",
-        paymentEntity: "",
-        qualification: "",
-        contractNo: "",
-        contractValidFrom: "",
-        contractValidTo: "",
-        contractFile: "",
-        authorizationFile: "",
-        authorizationValidFrom: "",
-        authorizationValidTo: "",
-        foodLicense: "",
-        legalPersonIdCard: "",
-        taxNo: "",
-        bankName: "",
-        bankAccount: "",
-        invoiceType: "",
-        invoiceTaxRate: "",
-        initialScore: "",
-        supplierRating: "",
-        currentScore: "",
-        changeReason: isCreate ? "新建供应商" : "",
-    }
-}
-
-type SupplierFieldKey = keyof SupplierEditorFormValues
 
 export function SupplierDetailPage({ stableId }: { stableId: string }) {
     const router = useRouter()
@@ -663,8 +234,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     const initialFormValues = React.useMemo(
         () =>
             !isCreate && data
-                ? hydrateFromCenter(data)
-                : createDefaults(isCreate),
+                ? hydrateSupplierEditor(data)
+                : createSupplierEditorDefaults(isCreate),
         [data, isCreate],
     )
 
@@ -792,7 +363,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
         if (isCreate || !data) return
         const key = `${data.stableId}:${data.lockVersion}:${data.currentRevision.revisionId}`
         if (hydratedKeyRef.current === key) return
-        form.reset(hydrateFromCenter(data))
+        form.reset(hydrateSupplierEditor(data))
         editedSensitiveRef.current.clear()
         hydratedKeyRef.current = key
     }, [data, form, isCreate])
@@ -1212,30 +783,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                         </div>
                                     ) : null}
 
-                                    {/* 关键信息条：切换标签时始终可见，避免来回跳转确认合作事实。 */}
-                                    <dl
-                                        className={cn(
-                                            surfaceInsetClassName,
-                                            "grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3 sm:grid-cols-4",
-                                        )}
-                                    >
-                                        {summaryRows.map((row) => (
-                                            <div
-                                                key={row.label}
-                                                className="min-w-0"
-                                            >
-                                                <dt className="text-tiny text-muted-foreground">
-                                                    {row.label}
-                                                </dt>
-                                                <dd
-                                                    className="mt-0.5 truncate text-sm font-medium text-foreground"
-                                                    title={row.value}
-                                                >
-                                                    {row.value}
-                                                </dd>
-                                            </div>
-                                        ))}
-                                    </dl>
+                                    <SupplierSummaryStrip rows={summaryRows} />
 
                                     <div
                                         className={cn(
@@ -1243,35 +791,11 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                             "overflow-hidden",
                                         )}
                                     >
-                                        <Tabs
+                                        <SupplierSectionTabs
                                             value={activeSection}
-                                            onValueChange={(value) => {
-                                                if (value)
-                                                    setActiveSection(value)
-                                            }}
-                                            className="gap-0"
-                                        >
-                                            <TabsList
-                                                variant="line"
-                                                aria-label="供应商编辑分区"
-                                                className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-0 overflow-x-auto rounded-none border-b border-border/60 bg-card/95 px-4 py-0 backdrop-blur supports-backdrop-filter:bg-card/85"
-                                            >
-                                                {SUPPLIER_SECTIONS.filter(
-                                                    (section) =>
-                                                        !isCreate ||
-                                                        section.id !==
-                                                            "history",
-                                                ).map((section) => (
-                                                    <TabsTrigger
-                                                        key={section.id}
-                                                        value={section.id}
-                                                        className="h-11 flex-none rounded-none px-4 text-sm after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary data-active:font-semibold"
-                                                    >
-                                                        {section.label}
-                                                    </TabsTrigger>
-                                                ))}
-                                            </TabsList>
-                                        </Tabs>
+                                            isCreate={isCreate}
+                                            onValueChange={setActiveSection}
+                                        />
 
                                         <div className="p-4 md:p-5">
                                             {activeSection === "basic" && (
@@ -2429,80 +1953,22 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                 />
                             ) : null}
 
-                            <Dialog
+                            <SupplierSaveReasonDialog
                                 open={saveReasonOpen}
                                 onOpenChange={(open) => {
                                     setSaveReasonOpen(open)
                                     if (!open) setReasonError(null)
                                 }}
-                            >
-                                <DialogContent className="sm:max-w-md">
-                                    <DialogHeader>
-                                        <DialogTitle>
-                                            {isCreate ? "确认创建" : "确认保存"}
-                                        </DialogTitle>
-                                        <DialogDescription>
-                                            {isCreate
-                                                ? "创建后生成供应商档案；请填写创建说明。"
-                                                : "保存将生成新版本；变更原因必填。"}
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="space-y-1.5">
-                                        <Label htmlFor="supplier-save-reason">
-                                            {masterDataCopy.fieldChangeReason} *
-                                        </Label>
-                                        <Textarea
-                                            id="supplier-save-reason"
-                                            value={reasonDraft}
-                                            onChange={(e) => {
-                                                setReasonDraft(e.target.value)
-                                                if (reasonError)
-                                                    setReasonError(null)
-                                            }}
-                                            rows={3}
-                                            placeholder={
-                                                isCreate
-                                                    ? "新建原因"
-                                                    : "说明本次修改内容，保存后形成新版本"
-                                            }
-                                            autoFocus
-                                        />
-                                        {reasonError ? (
-                                            <p
-                                                className="text-xs text-destructive"
-                                                role="alert"
-                                            >
-                                                {reasonError}
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                    <DialogFooter>
-                                        <DialogClose
-                                            render={
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                />
-                                            }
-                                        >
-                                            取消
-                                        </DialogClose>
-                                        <Button
-                                            type="button"
-                                            disabled={pending}
-                                            onClick={confirmSaveWithReason}
-                                        >
-                                            <SaveIcon
-                                                data-icon="inline-start"
-                                                aria-hidden
-                                            />
-                                            {isCreate
-                                                ? masterDataCopy.createSubmit
-                                                : masterDataCopy.reviseSubmit}
-                                        </Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                                isCreate={isCreate}
+                                reason={reasonDraft}
+                                onReasonChange={(reason) => {
+                                    setReasonDraft(reason)
+                                    if (reasonError) setReasonError(null)
+                                }}
+                                reasonError={reasonError}
+                                pending={pending}
+                                onConfirm={confirmSaveWithReason}
+                            />
 
                             <DiscardConfirmDialog
                                 open={discardOpen}

@@ -6,7 +6,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
     CircleCheckIcon,
     PauseIcon,
-    ReceiptIcon,
     SearchIcon,
     TriangleAlertIcon,
     XIcon,
@@ -14,24 +13,18 @@ import {
 import { z } from "zod"
 
 import {
-    AllocationWorkspace,
-    BusinessDiffPanel,
     BusinessEmptyState,
     BusinessFailureState,
     BusinessStatusBadge,
     DataFreshness,
     DiscardConfirmDialog,
-    DocumentSummary,
     FormalActionConfirmDialog,
     FormalActionResult,
-    MetricItem,
-    MetricStrip,
     ListToolbar,
     OptionCombobox,
     PageHeader,
     PageScaffold,
     SequentialProcessBar,
-    surfaceInsetClassName,
     surfacePanelClassName,
 } from "@/components/business"
 import { cn } from "@/lib/utils"
@@ -56,7 +49,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { DatePicker } from "@/components/ui/date-picker"
 import {
     InputGroup,
     InputGroupAddon,
@@ -94,12 +86,10 @@ import {
 import { freshnessText, openWorkspaceLabel, versionText } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
-
-const money = new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
-    minimumFractionDigits: 2,
-})
+import { CardFundsAllocationEditor } from "./components/card-funds-allocation-editor"
+import { CardFundsOverview } from "./components/card-funds-overview"
+import { CardFundsRecords } from "./components/card-funds-records"
+import { formatMoney, moneyStrSafe, shortHash } from "./presentation"
 
 type SessionLease = {
     workItemId: string
@@ -114,15 +104,6 @@ type ConfirmMode =
     | { kind: "reject" }
     | { kind: "hold" }
     | null
-
-function shortHash(hash: string) {
-    if (hash.length <= 20) return hash
-    return `${hash.slice(0, 12)}…${hash.slice(-6)}`
-}
-
-function formatMoney(value: string) {
-    return money.format(Number(value) || 0)
-}
 
 const rejectSchema = z.object({
     reasonCode: z.enum([
@@ -1343,697 +1324,34 @@ export function CardFundsReviewPage() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <DocumentSummary
-                                        columns="two"
-                                        items={[
-                                            {
-                                                id: "order",
-                                                label: "卡券销售单",
-                                                value: task.salesOrder.orderNo,
-                                                emphasized: true,
-                                            },
-                                            {
-                                                id: "hash",
-                                                label: "当前数据版本",
-                                                value: (
-                                                    <span className="num font-mono text-sm">
-                                                        {shortHash(
-                                                            task.workItem
-                                                                .subjectHash,
-                                                        )}
-                                                    </span>
-                                                ),
-                                                description:
-                                                    task.workItem.subjectHash,
-                                            },
-                                            {
-                                                id: "counterparty",
-                                                label: "收款/开票往来主体",
-                                                value: task.account
-                                                    .counterpartyPartyName,
-                                            },
-                                            {
-                                                id: "reason",
-                                                label: "任务原因",
-                                                value: task.workItem.reason,
-                                            },
-                                        ]}
+                                    <CardFundsOverview task={task} />
+                                    <CardFundsRecords
+                                        task={task}
+                                        w11Href={w11Href}
+                                        openAllocation={openAllocation}
                                     />
 
-                                    <MetricStrip
-                                        columns={5}
-                                        aria-label="票款记录指标"
-                                    >
-                                        <MetricItem
-                                            label="同步成交额"
-                                            value={formatMoney(
-                                                task.account.syncedGrossAmount,
-                                            )}
-                                            detail="商城当前版本"
-                                        />
-                                        <MetricItem
-                                            label="当前应收"
-                                            value={formatMoney(
-                                                task.account.grossTotal,
-                                            )}
-                                            detail={`开放 ${formatMoney(task.account.openTotal)}`}
-                                        />
-                                        <MetricItem
-                                            label="净已收"
-                                            value={formatMoney(
-                                                task.account.settledTotal,
-                                            )}
-                                            detail="净额（已收减冲正）"
-                                        />
-                                        <MetricItem
-                                            label="净已开票"
-                                            value={formatMoney(
-                                                task.account.invoicedTotal,
-                                            )}
-                                            detail={`可开 ${formatMoney(task.account.openInvoiceableTotal)}`}
-                                        />
-                                        <MetricItem
-                                            label={versionText.versionStatus}
-                                            value={task.fingerprintStatus.label}
-                                            detail={
-                                                task.fingerprintStatus.detail
-                                            }
-                                            status={{
-                                                label: task.fingerprintStatus
-                                                    .label,
-                                                tone: task.fingerprintStatus
-                                                    .tone,
-                                            }}
-                                        />
-                                    </MetricStrip>
-
-                                    <Alert
-                                        variant={
-                                            task.account.fundsReliability ===
-                                            "VERIFIED"
-                                                ? "default"
-                                                : "destructive"
+                                    <CardFundsAllocationEditor
+                                        allocationMode={allocationMode}
+                                        task={task}
+                                        receiptForm={receiptForm}
+                                        setReceiptForm={setReceiptForm}
+                                        invoiceForm={invoiceForm}
+                                        setInvoiceForm={setInvoiceForm}
+                                        allocLines={allocLines}
+                                        setAllocLines={setAllocLines}
+                                        allocTarget={allocTarget}
+                                        allocatedSum={allocatedSum}
+                                        receiptPending={
+                                            registerReceiptMutation.isPending
                                         }
-                                    >
-                                        <TriangleAlertIcon aria-hidden="true" />
-                                        <AlertTitle>
-                                            {task.account.fundsReliability ===
-                                            "UNRELIABLE_PENDING_REVIEW"
-                                                ? "票款指标不可靠（复核未完成）"
-                                                : task.account
-                                                        .fundsReliability ===
-                                                    "STALE_FINGERPRINT"
-                                                  ? "数据已变更 · 指标不可靠"
-                                                  : "可靠性"}
-                                        </AlertTitle>
-                                        <AlertDescription>
-                                            {task.account.reliabilityNote}
-                                            复核未完成前，指标不可视为已核实。
-                                        </AlertDescription>
-                                    </Alert>
-
-                                    {task.reviewType === "SYNC_DELTA" &&
-                                    task.difference ? (
-                                        <div className="space-y-2">
-                                            {(() => {
-                                                const moneyChanges =
-                                                    task.difference!.changes.filter(
-                                                        (c) =>
-                                                            /成交额|应收|已收|已开票/.test(
-                                                                c.field,
-                                                            ) &&
-                                                            Number.isFinite(
-                                                                Number(
-                                                                    c.before,
-                                                                ),
-                                                            ) &&
-                                                            Number.isFinite(
-                                                                Number(c.after),
-                                                            ),
-                                                    )
-                                                if (moneyChanges.length === 0)
-                                                    return null
-                                                const totalDelta =
-                                                    moneyChanges.reduce(
-                                                        (s, c) =>
-                                                            s +
-                                                            (Number(c.after) -
-                                                                Number(
-                                                                    c.before,
-                                                                )),
-                                                        0,
-                                                    )
-                                                return (
-                                                    <p className="text-sm text-muted-foreground">
-                                                        金额类字段合计差额：{" "}
-                                                        <span
-                                                            className={
-                                                                totalDelta >= 0
-                                                                    ? "num text-foreground"
-                                                                    : "num text-destructive"
-                                                            }
-                                                        >
-                                                            {formatMoney(
-                                                                Math.abs(
-                                                                    totalDelta,
-                                                                ).toFixed(2),
-                                                            )}
-                                                        </span>
-                                                        {totalDelta >= 0
-                                                            ? "（增加）"
-                                                            : "（减少）"}
-                                                    </p>
-                                                )
-                                            })()}
-                                            <BusinessDiffPanel
-                                                title={task.difference.title}
-                                                caption="上一有效复核与当前记录对比（系统最新数据）"
-                                                changes={task.difference.changes.map(
-                                                    (c) => ({
-                                                        id: c.id,
-                                                        field: c.field,
-                                                        before: c.before,
-                                                        after: c.after,
-                                                        note: [
-                                                            c.note,
-                                                            c.sourceObject,
-                                                            c.occurredAt,
-                                                        ]
-                                                            .filter(Boolean)
-                                                            .join(" · "),
-                                                    }),
-                                                )}
-                                            />
-                                        </div>
-                                    ) : null}
-
-                                    <Card
-                                        size="sm"
-                                        className={surfacePanelClassName}
-                                    >
-                                        <CardHeader className="border-b border-border/30 py-3">
-                                            <CardTitle className="text-base">
-                                                回款与发票明细
-                                            </CardTitle>
-                                            <CardDescription>
-                                                仅展示客户往来业务记录；登记为新增分配，不覆盖已有金额
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-3 pt-4">
-                                            {task.receiptFacts.length === 0 &&
-                                            task.invoiceFacts.length === 0 ? (
-                                                <p className="text-sm text-muted-foreground">
-                                                    尚无回款/发票。可登记历史记录，或确认期初净额为
-                                                    0 时选择从 0 起。
-                                                </p>
-                                            ) : null}
-                                            {task.receiptFacts.map((r) => (
-                                                <div
-                                                    key={r.receiptId}
-                                                    className={`${surfaceInsetClassName} px-3 py-2 text-sm`}
-                                                >
-                                                    <div className="flex flex-wrap gap-2 font-medium">
-                                                        <ReceiptIcon className="size-4 text-muted-foreground" />
-                                                        回款 {r.receiptNo}
-                                                        {r.reversed ? (
-                                                            <Badge variant="destructive">
-                                                                已冲正
-                                                            </Badge>
-                                                        ) : null}
-                                                    </div>
-                                                    <p className="mt-1 text-muted-foreground">
-                                                        {r.receivedAt} · 含税{" "}
-                                                        {formatMoney(
-                                                            r.grossAmount,
-                                                        )}{" "}
-                                                        · 分配本应收{" "}
-                                                        {formatMoney(
-                                                            r.allocatedToAccount,
-                                                        )}
-                                                        {r.otherAllocationSummary
-                                                            ? ` · ${r.otherAllocationSummary}`
-                                                            : ""}
-                                                    </p>
-                                                </div>
-                                            ))}
-                                            {task.invoiceFacts.map((inv) => (
-                                                <div
-                                                    key={inv.invoiceId}
-                                                    className={`${surfaceInsetClassName} px-3 py-2 text-sm`}
-                                                >
-                                                    <div className="flex flex-wrap gap-2 font-medium">
-                                                        发票 {inv.invoiceNo}
-                                                        <Badge variant="outline">
-                                                            {inv.direction ===
-                                                            "BLUE"
-                                                                ? "蓝字"
-                                                                : "红字"}
-                                                        </Badge>
-                                                        {inv.reversed ? (
-                                                            <Badge variant="destructive">
-                                                                已红冲
-                                                            </Badge>
-                                                        ) : null}
-                                                    </div>
-                                                    <p className="mt-1 text-muted-foreground">
-                                                        {inv.issuedAt} · 含税{" "}
-                                                        {formatMoney(
-                                                            inv.grossAmount,
-                                                        )}{" "}
-                                                        · 分配本子账{" "}
-                                                        {formatMoney(
-                                                            inv.allocatedToAccount,
-                                                        )}
-                                                    </p>
-                                                </div>
-                                            ))}
-                                            <div className="flex flex-wrap gap-2 pt-1">
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        openAllocation(
-                                                            "receipt",
-                                                        )
-                                                    }
-                                                >
-                                                    登记历史回款
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        openAllocation(
-                                                            "invoice",
-                                                        )
-                                                    }
-                                                >
-                                                    登记历史发票
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    render={
-                                                        <Link href={w11Href} />
-                                                    }
-                                                >
-                                                    {openWorkspaceLabel("W11")}
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-
-                                    {allocationMode ? (
-                                        <div className="space-y-3">
-                                            <Card
-                                                size="sm"
-                                                className={
-                                                    surfacePanelClassName
-                                                }
-                                            >
-                                                <CardHeader className="border-b border-border/30 py-3">
-                                                    <CardTitle className="text-base">
-                                                        {allocationMode ===
-                                                        "receipt"
-                                                            ? "登记历史回款"
-                                                            : "登记历史发票"}
-                                                    </CardTitle>
-                                                    <CardDescription>
-                                                        登记为新增分配，不覆盖已有金额；禁止
-                                                        0 元单据
-                                                    </CardDescription>
-                                                </CardHeader>
-                                                <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">
-                                                    {allocationMode ===
-                                                    "receipt" ? (
-                                                        <>
-                                                            <div className="space-y-1.5">
-                                                                <Label htmlFor="rcpt-no">
-                                                                    回款单号
-                                                                </Label>
-                                                                <Input
-                                                                    id="rcpt-no"
-                                                                    value={
-                                                                        receiptForm.receiptNo
-                                                                    }
-                                                                    onChange={(
-                                                                        e,
-                                                                    ) =>
-                                                                        setReceiptForm(
-                                                                            (
-                                                                                f,
-                                                                            ) => ({
-                                                                                ...f,
-                                                                                receiptNo:
-                                                                                    e
-                                                                                        .target
-                                                                                        .value,
-                                                                            }),
-                                                                        )
-                                                                    }
-                                                                    placeholder="可空则系统生成"
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1.5">
-                                                                <Label htmlFor="rcpt-amt">
-                                                                    含税金额
-                                                                </Label>
-                                                                <Input
-                                                                    id="rcpt-amt"
-                                                                    className="num"
-                                                                    value={
-                                                                        receiptForm.grossAmount
-                                                                    }
-                                                                    onChange={(
-                                                                        e,
-                                                                    ) => {
-                                                                        const grossAmount =
-                                                                            e
-                                                                                .target
-                                                                                .value
-                                                                        setReceiptForm(
-                                                                            (
-                                                                                f,
-                                                                            ) => ({
-                                                                                ...f,
-                                                                                grossAmount,
-                                                                            }),
-                                                                        )
-                                                                        setAllocLines(
-                                                                            (
-                                                                                lines,
-                                                                            ) =>
-                                                                                lines.map(
-                                                                                    (
-                                                                                        l,
-                                                                                        i,
-                                                                                    ) =>
-                                                                                        i ===
-                                                                                        0
-                                                                                            ? {
-                                                                                                  ...l,
-                                                                                                  amount:
-                                                                                                      grossAmount ||
-                                                                                                      "0.00",
-                                                                                              }
-                                                                                            : l,
-                                                                                ),
-                                                                        )
-                                                                    }}
-                                                                    placeholder="须 > 0"
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1.5">
-                                                                <Label htmlFor="rcpt-at">
-                                                                    到账日期
-                                                                </Label>
-                                                                <DatePicker
-                                                                    value={
-                                                                        receiptForm.receivedAt ||
-                                                                        undefined
-                                                                    }
-                                                                    onValueChange={(
-                                                                        next,
-                                                                    ) =>
-                                                                        setReceiptForm(
-                                                                            (
-                                                                                f,
-                                                                            ) => ({
-                                                                                ...f,
-                                                                                receivedAt:
-                                                                                    next ??
-                                                                                    "",
-                                                                            }),
-                                                                        )
-                                                                    }
-                                                                />
-                                                            </div>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <div className="space-y-1.5">
-                                                                <Label htmlFor="inv-no">
-                                                                    发票号码
-                                                                </Label>
-                                                                <Input
-                                                                    id="inv-no"
-                                                                    value={
-                                                                        invoiceForm.invoiceNo
-                                                                    }
-                                                                    onChange={(
-                                                                        e,
-                                                                    ) =>
-                                                                        setInvoiceForm(
-                                                                            (
-                                                                                f,
-                                                                            ) => ({
-                                                                                ...f,
-                                                                                invoiceNo:
-                                                                                    e
-                                                                                        .target
-                                                                                        .value,
-                                                                            }),
-                                                                        )
-                                                                    }
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1.5">
-                                                                <Label htmlFor="inv-amt">
-                                                                    含税金额
-                                                                </Label>
-                                                                <Input
-                                                                    id="inv-amt"
-                                                                    className="num"
-                                                                    value={
-                                                                        invoiceForm.grossAmount
-                                                                    }
-                                                                    onChange={(
-                                                                        e,
-                                                                    ) => {
-                                                                        const grossAmount =
-                                                                            e
-                                                                                .target
-                                                                                .value
-                                                                        setInvoiceForm(
-                                                                            (
-                                                                                f,
-                                                                            ) => ({
-                                                                                ...f,
-                                                                                grossAmount,
-                                                                            }),
-                                                                        )
-                                                                        setAllocLines(
-                                                                            (
-                                                                                lines,
-                                                                            ) =>
-                                                                                lines.map(
-                                                                                    (
-                                                                                        l,
-                                                                                        i,
-                                                                                    ) =>
-                                                                                        i ===
-                                                                                        0
-                                                                                            ? {
-                                                                                                  ...l,
-                                                                                                  amount:
-                                                                                                      grossAmount ||
-                                                                                                      "0.00",
-                                                                                              }
-                                                                                            : l,
-                                                                                ),
-                                                                        )
-                                                                    }}
-                                                                    placeholder="须 > 0"
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1.5">
-                                                                <Label htmlFor="inv-at">
-                                                                    开票日期
-                                                                </Label>
-                                                                <DatePicker
-                                                                    value={
-                                                                        invoiceForm.issuedAt ||
-                                                                        undefined
-                                                                    }
-                                                                    onValueChange={(
-                                                                        next,
-                                                                    ) =>
-                                                                        setInvoiceForm(
-                                                                            (
-                                                                                f,
-                                                                            ) => ({
-                                                                                ...f,
-                                                                                issuedAt:
-                                                                                    next ??
-                                                                                    "",
-                                                                            }),
-                                                                        )
-                                                                    }
-                                                                />
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </CardContent>
-                                            </Card>
-
-                                            <AllocationWorkspace
-                                                title="多对多分配"
-                                                description="分配合计须等于本次单据含税金额；登记不覆盖已有金额，差额以提交后系统结果为准。"
-                                                summary={{
-                                                    totalToAllocate:
-                                                        formatMoney(
-                                                            moneyStrSafe(
-                                                                allocTarget,
-                                                            ),
-                                                        ),
-                                                    allocated: formatMoney(
-                                                        moneyStrSafe(
-                                                            allocatedSum,
-                                                        ),
-                                                    ),
-                                                    difference: formatMoney(
-                                                        moneyStrSafe(
-                                                            allocTarget -
-                                                                allocatedSum,
-                                                        ),
-                                                    ),
-                                                }}
-                                                allocations={allocLines}
-                                                getRowId={(row) => row.lineId}
-                                                columns={[
-                                                    {
-                                                        id: "target",
-                                                        header: "分配对象",
-                                                        renderValue: ({
-                                                            item,
-                                                        }) => item.targetLabel,
-                                                        renderEditor: ({
-                                                            item,
-                                                        }) => (
-                                                            <span className="text-sm">
-                                                                {
-                                                                    item.targetLabel
-                                                                }
-                                                            </span>
-                                                        ),
-                                                    },
-                                                    {
-                                                        id: "amount",
-                                                        header: "分配金额",
-                                                        numeric: true,
-                                                        align: "end",
-                                                        renderValue: ({
-                                                            item,
-                                                        }) =>
-                                                            formatMoney(
-                                                                item.amount,
-                                                            ),
-                                                        renderEditor: ({
-                                                            item,
-                                                            rowIndex,
-                                                        }) => (
-                                                            <Input
-                                                                className="num"
-                                                                value={
-                                                                    item.amount
-                                                                }
-                                                                onChange={(
-                                                                    e,
-                                                                ) => {
-                                                                    const amount =
-                                                                        e.target
-                                                                            .value
-                                                                    setAllocLines(
-                                                                        (
-                                                                            lines,
-                                                                        ) =>
-                                                                            lines.map(
-                                                                                (
-                                                                                    l,
-                                                                                    i,
-                                                                                ) =>
-                                                                                    i ===
-                                                                                    rowIndex
-                                                                                        ? {
-                                                                                              ...l,
-                                                                                              amount,
-                                                                                          }
-                                                                                        : l,
-                                                                            ),
-                                                                    )
-                                                                }}
-                                                            />
-                                                        ),
-                                                    },
-                                                ]}
-                                                onAddAllocation={() => {
-                                                    if (!task) return
-                                                    setAllocLines((lines) => [
-                                                        ...lines,
-                                                        {
-                                                            lineId: `al_${Date.now().toString(36)}`,
-                                                            targetAccountId:
-                                                                task.account.id,
-                                                            targetLabel: `${task.salesOrder.orderNo} · 本应收`,
-                                                            amount: "0.00",
-                                                        },
-                                                    ])
-                                                }}
-                                                onRemoveAllocation={(
-                                                    _row,
-                                                    _id,
-                                                    rowIndex,
-                                                ) => {
-                                                    setAllocLines((lines) =>
-                                                        lines.length <= 1
-                                                            ? lines
-                                                            : lines.filter(
-                                                                  (_, i) =>
-                                                                      i !==
-                                                                      rowIndex,
-                                                              ),
-                                                    )
-                                                }}
-                                                actions={
-                                                    <>
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            onClick={() =>
-                                                                setAllocationMode(
-                                                                    null,
-                                                                )
-                                                            }
-                                                        >
-                                                            取消
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            disabled={
-                                                                registerReceiptMutation.isPending ||
-                                                                registerInvoiceMutation.isPending
-                                                            }
-                                                            onClick={() => {
-                                                                if (
-                                                                    allocationMode ===
-                                                                    "receipt"
-                                                                ) {
-                                                                    void submitReceipt()
-                                                                } else {
-                                                                    void submitInvoice()
-                                                                }
-                                                            }}
-                                                        >
-                                                            提交分配
-                                                        </Button>
-                                                    </>
-                                                }
-                                            />
-                                        </div>
-                                    ) : null}
+                                        invoicePending={
+                                            registerInvoiceMutation.isPending
+                                        }
+                                        setAllocationMode={setAllocationMode}
+                                        submitReceipt={submitReceipt}
+                                        submitInvoice={submitInvoice}
+                                    />
                                 </CardContent>
                             </Card>
 
@@ -2534,11 +1852,6 @@ export function CardFundsReviewPage() {
             />
         </PageScaffold>
     )
-}
-
-function moneyStrSafe(n: number): string {
-    if (!Number.isFinite(n)) return "0.00"
-    return n.toFixed(2)
 }
 
 function buildResultFacts(

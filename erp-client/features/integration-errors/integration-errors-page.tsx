@@ -4,21 +4,15 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-    ExternalLinkIcon,
     PauseIcon,
     RefreshCwIcon,
     SearchIcon,
-    ShieldAlertIcon,
     SkipForwardIcon,
 } from "lucide-react"
 import {
-    AuditTimeline,
-    BusinessDiffPanel,
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessStatusBadge,
     DataFreshness,
-    FormalActionConfirmDialog,
     FormalActionResult,
     InterfaceErrorResolutionPanel,
     ListToolbar,
@@ -30,7 +24,6 @@ import {
     PageScaffold,
     SequentialProcessBar,
     surfacePanelClassName,
-    WorkTaskItem,
     type InterfaceErrorClass,
     type InterfaceErrorStatus,
 } from "@/components/business"
@@ -39,7 +32,6 @@ import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { leaseText, freshnessText } from "@/lib/ui-text"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -75,14 +67,11 @@ import type {
     IntegrationView,
 } from "./types"
 import {
-    DIFFERENCE_TYPE_LABEL,
     ENV_LABEL,
     EVIDENCE_KIND_LABEL,
     ERROR_CLASS_LABEL,
-    FUNDS_LABEL,
     MODE_LABEL,
     OWNER_LABEL,
-    REVIEWER_SEPARATION_LABEL,
     VIEW_LABEL,
 } from "./types"
 import {
@@ -90,6 +79,14 @@ import {
     parseIntegrationSearchParams,
     toResolutionQuery,
 } from "./url-state"
+import { IntegrationEvidencePanel } from "./components/integration-evidence-panel"
+import { IntegrationItemSummary } from "./components/integration-item-summary"
+import { IntegrationQueuePanel } from "./components/integration-queue-panel"
+import {
+    TerminalActionDialog,
+    type TerminalConfirm,
+} from "./components/terminal-action-dialog"
+import { INTEGRATION_ACTION_LABEL } from "./presentation"
 
 type SessionLease = {
     workItemId: string
@@ -98,67 +95,6 @@ type SessionLease = {
 function newKey(prefix: string) {
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
-
-const ACTION_LABEL: Record<string, string> = {
-    QUERY_ORIGINAL_RESULT: "查询原结果",
-    REPLAY_ORIGINAL: "重新提交",
-    ADD_EVIDENCE: "补充证据",
-    LINK_COMPENSATION: "关联补偿",
-    REATTRIBUTE: "重新归集",
-    TRANSFER: "转交",
-    RESOLVE: "处理完成",
-    DEFER: "先跳过",
-    SKIP: "跳过当前项",
-    CLOSE_DUPLICATE: "关闭重复",
-    CLOSE_MISROUTED: "关闭错误路由",
-    CONFIRM_NO_ERROR: "确认无误",
-    CONFIRM_VALID_DIFFERENCE: "确认有效差异",
-}
-
-function severityTone(
-    s: IntegrationResolutionItemView["classification"]["severity"],
-): "destructive" | "warning" | "info" | "neutral" {
-    if (s === "critical") return "destructive"
-    if (s === "high") return "warning"
-    if (s === "medium") return "info"
-    return "neutral"
-}
-
-/** 状态徽章 tone 取自状态语义而非严重度 */
-function statusTone(
-    item: IntegrationResolutionItemView,
-): "destructive" | "warning" | "info" | "neutral" | "success" {
-    const code = item.status.code
-    if (
-        code === "COMPLETED" ||
-        code === "RESOLVED" ||
-        code === "CONFIRMED_NO_ERROR" ||
-        code === "CONFIRMED_VALID_DIFFERENCE"
-    )
-        return "success"
-    if (
-        code === "CLOSED" ||
-        code === "HELD" ||
-        code === "SKIPPED" ||
-        item.status.label.includes("已跳过")
-    )
-        return "neutral"
-    if (
-        code === "MANUAL_REQUIRED" ||
-        code === "SECURITY_FAULT" ||
-        item.status.label.includes("人工")
-    )
-        return "destructive"
-    if (code === "AUTO_RETRYING") return "info"
-    return "warning"
-}
-
-type TerminalConfirm =
-    | { kind: "TRANSFER" }
-    | { kind: "CLOSE_DUPLICATE" }
-    | { kind: "RESOLVE" }
-    | { kind: "CONFIRM_NO_ERROR" }
-    | { kind: "CONFIRM_VALID_DIFFERENCE" }
 
 function mapPanelStatus(
     item: IntegrationResolutionItemView,
@@ -1393,115 +1329,11 @@ export function IntegrationErrorsPage({
                     )}
                 >
                     {!focusMode ? (
-                        <Card
-                            size="sm"
-                            className={cn(
-                                "min-h-[28rem]",
-                                surfacePanelClassName,
-                            )}
-                        >
-                            <CardHeader className="border-b border-border/30">
-                                <CardTitle>任务 / 差异队列</CardTitle>
-                                <CardDescription>
-                                    共 {items.length} 项 ·
-                                    安全故障与结果未知优先
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="max-h-[70vh] space-y-2 overflow-y-auto pt-3">
-                                {items.map((row) => {
-                                    const selected =
-                                        row.identity.id === item?.identity.id
-                                    const detailHref =
-                                        row.identity.itemType === "ERROR_TASK"
-                                            ? `/governance/integration-errors/errors/${row.identity.id}`
-                                            : `/governance/integration-errors/differences/${row.identity.id}`
-                                    return (
-                                        <div
-                                            key={row.identity.id}
-                                            role="button"
-                                            tabIndex={0}
-                                            className={cn(
-                                                "w-full cursor-pointer rounded-xl text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                                                selected
-                                                    ? "ring-2 ring-primary"
-                                                    : "hover:bg-muted/40",
-                                            )}
-                                            onClick={() => goToItem(row)}
-                                            onKeyDown={(e) => {
-                                                if (
-                                                    e.key === "Enter" ||
-                                                    e.key === " "
-                                                ) {
-                                                    e.preventDefault()
-                                                    goToItem(row)
-                                                }
-                                            }}
-                                        >
-                                            <WorkTaskItem
-                                                density="compact"
-                                                taskType={
-                                                    row.classification.label
-                                                }
-                                                businessObject={
-                                                    row.businessObject.title
-                                                }
-                                                counterparty={
-                                                    row.identity.number
-                                                }
-                                                enteredAt={formatDateTime(
-                                                    row.createdAt,
-                                                    "default",
-                                                )}
-                                                enteredDateTime={row.createdAt}
-                                                dueAt={
-                                                    row.dueAt
-                                                        ? formatDateTime(
-                                                              row.dueAt,
-                                                              "default",
-                                                          )
-                                                        : "—"
-                                                }
-                                                dueDateTime={row.dueAt}
-                                                responsibleParty={
-                                                    row.ownerUser ??
-                                                    row.ownerRole
-                                                }
-                                                reason={
-                                                    row.classification.label
-                                                }
-                                                impact={row.fundsImpactLabel}
-                                                status={{
-                                                    label: row.status.label,
-                                                    tone: statusTone(row),
-                                                }}
-                                                nextAction={
-                                                    <span className="flex flex-wrap items-center gap-1">
-                                                        <Badge variant="outline">
-                                                            {
-                                                                row.environmentLabel
-                                                            }
-                                                        </Badge>
-                                                        <Badge variant="outline">
-                                                            {
-                                                                row
-                                                                    .classification
-                                                                    .severityLabel
-                                                            }
-                                                        </Badge>
-                                                        <Link
-                                                            href={detailHref}
-                                                            className="text-xs text-primary underline-offset-2 hover:underline"
-                                                        >
-                                                            详情
-                                                        </Link>
-                                                    </span>
-                                                }
-                                            />
-                                        </div>
-                                    )
-                                })}
-                            </CardContent>
-                        </Card>
+                        <IntegrationQueuePanel
+                            items={items}
+                            selectedId={item?.identity.id}
+                            onSelect={goToItem}
+                        />
                     ) : null}
 
                     <div className="flex min-w-0 flex-col gap-3">
@@ -1593,427 +1425,12 @@ export function IntegrationErrorsPage({
                                     </Button>
                                 </div>
 
-                                <Card
-                                    size="sm"
-                                    className={surfacePanelClassName}
-                                >
-                                    <CardHeader className="border-b border-border/30">
-                                        <CardTitle
-                                            ref={headingRef}
-                                            tabIndex={-1}
-                                            className="outline-none"
-                                        >
-                                            {item.identity.number} ·{" "}
-                                            {item.businessObject.title}
-                                        </CardTitle>
-                                        <CardDescription>
-                                            {item.identity.itemType ===
-                                            "ERROR_TASK"
-                                                ? "错误任务"
-                                                : "对账差异"}
-                                            {item.workItem
-                                                ? " · 关联任务"
-                                                : " · 无关联任务（直接对账）"}
-                                        </CardDescription>
-                                        <div className="flex flex-wrap gap-2 pt-1">
-                                            <BusinessStatusBadge
-                                                context="detail"
-                                                label={
-                                                    item.classification.label
-                                                }
-                                                tone={severityTone(
-                                                    item.classification
-                                                        .severity,
-                                                )}
-                                            />
-                                            <Badge variant="outline">
-                                                环境：{item.environmentLabel}
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                严重度：
-                                                {
-                                                    item.classification
-                                                        .severityLabel
-                                                }
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                状态：{item.status.label}
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                {FUNDS_LABEL[item.fundsImpact]}
-                                            </Badge>
-                                            {item.compensationOpen ? (
-                                                <Badge variant="destructive">
-                                                    补偿未闭环
-                                                </Badge>
-                                            ) : null}
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3 pt-4">
-                                        {item.classification.errorClass ===
-                                        "result-unknown" ? (
-                                            <Alert variant="destructive">
-                                                <ShieldAlertIcon aria-hidden />
-                                                <AlertTitle>
-                                                    结果未知
-                                                </AlertTitle>
-                                                <AlertDescription>
-                                                    主动作仅为「查询原结果」。禁止直接重新提交下单/取消/退款。
-                                                    系统按原任务号重发，不手动指定。
-                                                </AlertDescription>
-                                            </Alert>
-                                        ) : null}
-
-                                        {item.classification.errorClass ===
-                                            "authentication-or-signature" ||
-                                        item.classification.errorClass ===
-                                            "parameter-or-mapping" ||
-                                        item.classification.errorClass ===
-                                            "business-rejected" ? (
-                                            <Alert variant="warning">
-                                                <AlertTitle>
-                                                    {item.classification.label}{" "}
-                                                    · 禁止无意义自动重试
-                                                </AlertTitle>
-                                                <AlertDescription>
-                                                    页面不提供自动重试按钮；
-                                                    {item.classification
-                                                        .errorClass ===
-                                                    "authentication-or-signature"
-                                                        ? "不展示密钥或完整签名材料。"
-                                                        : item.classification
-                                                                .errorClass ===
-                                                            "parameter-or-mapping"
-                                                          ? "请先到供应商供给或商城同步修复主数据引用。"
-                                                          : "请进入供应商订单售后/补偿路径。"}
-                                                </AlertDescription>
-                                            </Alert>
-                                        ) : null}
-
-                                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                            <Fact
-                                                label="滞留"
-                                                value={item.ageLabel}
-                                            />
-                                            <Fact
-                                                label="责任"
-                                                value={
-                                                    item.ownerUser ??
-                                                    item.ownerRole
-                                                }
-                                            />
-                                            <Fact
-                                                label="方向"
-                                                value={
-                                                    item.message
-                                                        ?.directionLabel ?? "—"
-                                                }
-                                            />
-                                            {item.originalAction ? (
-                                                <>
-                                                    <Fact
-                                                        label="原动作"
-                                                        value={
-                                                            item.originalAction
-                                                                .actionLabel
-                                                        }
-                                                    />
-                                                    <Fact
-                                                        label="原任务号摘要"
-                                                        value={
-                                                            item.originalAction
-                                                                .originalActionIdempotencyKeySummary
-                                                        }
-                                                        mono
-                                                    />
-                                                </>
-                                            ) : null}
-                                            {item.message ? (
-                                                <>
-                                                    <Fact
-                                                        label="事件摘要"
-                                                        value={
-                                                            item.message
-                                                                .eventIdSummary
-                                                        }
-                                                        mono
-                                                    />
-                                                    <Fact
-                                                        label="消息摘要"
-                                                        value={
-                                                            item.message
-                                                                .maskedPayloadSummary
-                                                        }
-                                                    />
-                                                </>
-                                            ) : null}
-                                        </div>
-
-                                        {item.difference ? (
-                                            <>
-                                                <BusinessDiffPanel
-                                                    title="对账左右证据"
-                                                    caption="左右侧金额与行数对照"
-                                                    fieldColumnLabel="对照项"
-                                                    beforeColumnLabel={
-                                                        item.difference
-                                                            .leftLabel
-                                                    }
-                                                    afterColumnLabel={
-                                                        item.difference
-                                                            .rightLabel
-                                                    }
-                                                    noteColumnLabel="差异说明"
-                                                    count={2}
-                                                    changes={[
-                                                        {
-                                                            id: "side",
-                                                            field: "对照摘要",
-                                                            before: item
-                                                                .difference
-                                                                .leftSummary,
-                                                            after: item
-                                                                .difference
-                                                                .rightSummary,
-                                                            note: "两侧对照，只读证据",
-                                                        },
-                                                        {
-                                                            id: "summary",
-                                                            field: "差异摘要",
-                                                            before: "—",
-                                                            after: item
-                                                                .difference
-                                                                .differenceSummary,
-                                                            note:
-                                                                DIFFERENCE_TYPE_LABEL[
-                                                                    item
-                                                                        .difference
-                                                                        .differenceType
-                                                                ] ??
-                                                                item.difference
-                                                                    .differenceType,
-                                                        },
-                                                    ]}
-                                                />
-                                                <p className="text-xs text-muted-foreground">
-                                                    数据范围{" "}
-                                                    {item.difference.boundary} ·
-                                                    更新时间{" "}
-                                                    {formatDateTime(
-                                                        item.difference
-                                                            .watermark,
-                                                        "default",
-                                                    )}
-                                                </p>
-                                            </>
-                                        ) : null}
-
-                                        {item.repairLinks.length > 0 ? (
-                                            <div className="flex flex-wrap gap-2">
-                                                {item.repairLinks.map(
-                                                    (link) => (
-                                                        <Button
-                                                            key={link.href}
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            render={
-                                                                <Link
-                                                                    href={
-                                                                        link.href
-                                                                    }
-                                                                />
-                                                            }
-                                                        >
-                                                            <ExternalLinkIcon
-                                                                data-icon="inline-start"
-                                                                aria-hidden
-                                                            />
-                                                            {link.label}
-                                                        </Button>
-                                                    ),
-                                                )}
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    onClick={returnRefresh}
-                                                >
-                                                    <RefreshCwIcon
-                                                        data-icon="inline-start"
-                                                        aria-hidden
-                                                    />
-                                                    刷新当前任务
-                                                </Button>
-                                            </div>
-                                        ) : null}
-                                    </CardContent>
-                                </Card>
-
-                                {/* Evidence — append-only timelines */}
-                                <Card
-                                    size="sm"
-                                    className={surfacePanelClassName}
-                                >
-                                    <CardHeader className="border-b border-border/30">
-                                        <CardTitle>
-                                            证据与尝试（历史保留）
-                                        </CardTitle>
-                                        <CardDescription>
-                                            消息、尝试与处理记录只保留，不提供覆盖控件
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4 pt-4">
-                                        {item.attempts.length > 0 ? (
-                                            <div className="space-y-2">
-                                                <h4 className="text-sm font-medium">
-                                                    尝试历史
-                                                </h4>
-                                                <ul className="space-y-2">
-                                                    {item.attempts.map((a) => (
-                                                        <li
-                                                            key={`${a.attemptNumber}-${a.attemptedAt}`}
-                                                            className="rounded-lg border bg-muted/30 px-3 py-2 text-sm"
-                                                        >
-                                                            <div className="font-medium">
-                                                                第{" "}
-                                                                {
-                                                                    a.attemptNumber
-                                                                }{" "}
-                                                                次 · {a.result}
-                                                            </div>
-                                                            <div className="text-xs text-muted-foreground">
-                                                                {formatDateTime(
-                                                                    a.attemptedAt,
-                                                                    "default",
-                                                                )}
-                                                                {a.requestSummary
-                                                                    ? ` · 请求 ${a.requestSummary}`
-                                                                    : ""}
-                                                                {a.responseSummary
-                                                                    ? ` · 响应 ${a.responseSummary}`
-                                                                    : ""}
-                                                            </div>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ) : null}
-
-                                        <div>
-                                            <h4 className="mb-2 text-sm font-medium">
-                                                证据时间线
-                                            </h4>
-                                            <AuditTimeline
-                                                entries={item.evidenceTimeline.map(
-                                                    (e) => ({
-                                                        id: e.id,
-                                                        action: e.action,
-                                                        operator: e.actor,
-                                                        occurredAt: e.at,
-                                                        occurredAtLabel:
-                                                            formatDateTime(
-                                                                e.at,
-                                                                "default",
-                                                            ),
-                                                        source: "证据",
-                                                        note: e.detail,
-                                                    }),
-                                                )}
-                                                emptyMessage="暂无证据记录"
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <h4 className="mb-2 text-sm font-medium">
-                                                处理审计
-                                            </h4>
-                                            <AuditTimeline
-                                                entries={item.auditTrail.map(
-                                                    (e) => ({
-                                                        id: e.id,
-                                                        action:
-                                                            ACTION_LABEL[
-                                                                e.action
-                                                            ] ?? e.action,
-                                                        operator: e.actor,
-                                                        occurredAt: e.at,
-                                                        occurredAtLabel:
-                                                            formatDateTime(
-                                                                e.at,
-                                                                "default",
-                                                            ),
-                                                        source: "处理",
-                                                        note: e.detail,
-                                                    }),
-                                                )}
-                                                emptyMessage="暂无审计记录"
-                                            />
-                                        </div>
-
-                                        {item.linkedEvidence.length > 0 ? (
-                                            <div className="space-y-1">
-                                                <h4 className="text-sm font-medium">
-                                                    已关联核验记录
-                                                </h4>
-                                                <ul className="text-sm">
-                                                    {item.linkedEvidence.map(
-                                                        (e) => (
-                                                            <li
-                                                                key={e.recordId}
-                                                            >
-                                                                {
-                                                                    EVIDENCE_KIND_LABEL[
-                                                                        e.kind
-                                                                    ]
-                                                                }{" "}
-                                                                · {e.label}
-                                                            </li>
-                                                        ),
-                                                    )}
-                                                </ul>
-                                            </div>
-                                        ) : null}
-
-                                        {item.resolutionEvidencePolicy ? (
-                                            <Alert variant="info">
-                                                <AlertTitle>
-                                                    解决证据策略
-                                                </AlertTitle>
-                                                <AlertDescription>
-                                                    需要{" "}
-                                                    {item.resolutionEvidencePolicy.requiredEvidenceKinds
-                                                        .map(
-                                                            (k) =>
-                                                                EVIDENCE_KIND_LABEL[
-                                                                    k
-                                                                ],
-                                                        )
-                                                        .join("、")}
-                                                    {" · 岗位分离 "}
-                                                    {REVIEWER_SEPARATION_LABEL[
-                                                        item
-                                                            .resolutionEvidencePolicy
-                                                            .reviewerSeparation
-                                                    ] ??
-                                                        item
-                                                            .resolutionEvidencePolicy
-                                                            .reviewerSeparation}
-                                                </AlertDescription>
-                                            </Alert>
-                                        ) : item.hasWorkItem ? (
-                                            <Alert variant="warning">
-                                                <AlertTitle>
-                                                    解决证据规则尚未配置
-                                                </AlertTitle>
-                                                <AlertDescription>
-                                                    处理完成已从可操作范围排除；只允许补证、先跳过或转交。
-                                                </AlertDescription>
-                                            </Alert>
-                                        ) : null}
-                                    </CardContent>
-                                </Card>
-
+                                <IntegrationItemSummary
+                                    item={item}
+                                    headingRef={headingRef}
+                                    onRefresh={returnRefresh}
+                                />
+                                <IntegrationEvidencePanel item={item} />
                                 {panelErrorClass ? (
                                     <InterfaceErrorResolutionPanel
                                         errorClass={panelErrorClass}
@@ -2091,7 +1508,7 @@ export function IntegrationErrorsPage({
                                                             key={`${b.action}-${b.code}`}
                                                         >
                                                             <span className="font-medium text-foreground">
-                                                                {ACTION_LABEL[
+                                                                {INTEGRATION_ACTION_LABEL[
                                                                     b.action
                                                                 ] ?? b.action}
                                                             </span>
@@ -2501,130 +1918,5 @@ export function IntegrationErrorsPage({
                 </div>
             )}
         </PageScaffold>
-    )
-}
-
-function Fact({
-    label,
-    value,
-    mono,
-}: {
-    label: string
-    value: React.ReactNode
-    mono?: boolean
-}) {
-    return (
-        <div className="space-y-0.5">
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div className={mono ? "num font-mono text-sm" : "text-sm"}>
-                {value}
-            </div>
-        </div>
-    )
-}
-
-/** 终态动作的二次确认层：转交 / 关闭重复 / 标记已解决 / 直接对账终结 */
-function TerminalActionDialog({
-    confirm,
-    item,
-    transferRole,
-    pending,
-    onConfirm,
-    onCancel,
-}: {
-    confirm: TerminalConfirm
-    item: IntegrationResolutionItemView
-    transferRole: string
-    pending: boolean
-    onConfirm: () => void | Promise<void>
-    onCancel: () => void
-}) {
-    const policy = item.resolutionEvidencePolicy
-    const evidenceKinds = policy?.requiredEvidenceKinds ?? []
-
-    if (confirm.kind === "TRANSFER") {
-        return (
-            <FormalActionConfirmDialog
-                open
-                onOpenChange={(open) => {
-                    if (!open) onCancel()
-                }}
-                actionLabel="转交"
-                title="确认转交任务"
-                description="任务将转交给所选角色；转交只变更处理人，不改变任务结论。"
-                fromStatus={{ label: item.status.label, tone: "warning" }}
-                toStatus={{ label: "已转交", tone: "info" }}
-                effects={[
-                    "转交不是解决，任务仍待处理",
-                    `目标角色：${transferRole}`,
-                ]}
-                irreversibleEffects={["转交记录进入处理审计"]}
-                pending={pending}
-                onConfirm={onConfirm}
-            />
-        )
-    }
-    if (confirm.kind === "CLOSE_DUPLICATE") {
-        return (
-            <FormalActionConfirmDialog
-                open
-                onOpenChange={(open) => {
-                    if (!open) onCancel()
-                }}
-                actionLabel="关闭重复"
-                title="确认关闭重复任务"
-                description="仅关闭重复任务本身；不写业务解决结论，不影响业务记录。"
-                fromStatus={{ label: item.status.label, tone: "warning" }}
-                toStatus={{ label: "已关闭", tone: "neutral" }}
-                effects={["任务退出待处理队列", "不改变业务记录"]}
-                irreversibleEffects={["关闭后不再出现在待处理列表"]}
-                pending={pending}
-                onConfirm={onConfirm}
-            />
-        )
-    }
-    if (confirm.kind === "RESOLVE") {
-        return (
-            <FormalActionConfirmDialog
-                open
-                onOpenChange={(open) => {
-                    if (!open) onCancel()
-                }}
-                actionLabel="标记已解决"
-                title="确认标记已解决"
-                description="处理完成要求证据齐备；系统将按证据策略登记处理凭证。"
-                fromStatus={{ label: item.status.label, tone: "warning" }}
-                toStatus={{ label: "已完成", tone: "success" }}
-                effects={[
-                    evidenceKinds.length > 0
-                        ? `系统将自动登记 ${evidenceKinds.length} 类处理凭证：${evidenceKinds
-                              .map((k) => EVIDENCE_KIND_LABEL[k])
-                              .join("、")}`
-                        : "系统将登记本次处理凭证",
-                    "任务完成并退出待处理队列",
-                ]}
-                irreversibleEffects={["处理结论写入审计，不可自动撤回"]}
-                pending={pending}
-                onConfirm={onConfirm}
-            />
-        )
-    }
-    const isNoError = confirm.kind === "CONFIRM_NO_ERROR"
-    return (
-        <FormalActionConfirmDialog
-            open
-            onOpenChange={(open) => {
-                if (!open) onCancel()
-            }}
-            actionLabel={isNoError ? "确认无误" : "确认有效差异"}
-            title={isNoError ? "确认差异无误" : "确认差异为有效差异"}
-            description="按已选注册原因追加对账处理记录；本操作不涉及任务关闭。"
-            fromStatus={{ label: item.status.label, tone: "warning" }}
-            toStatus={{ label: "已确认", tone: "success" }}
-            effects={["按注册原因追加对账处理记录", "不改变两侧业务数据"]}
-            irreversibleEffects={["对账结论写入审计，不可自动撤回"]}
-            pending={pending}
-            onConfirm={onConfirm}
-        />
     )
 }

@@ -1,22 +1,9 @@
 "use client"
 
 import * as React from "react"
-import {
-    ArrowDownIcon,
-    ArrowUpDownIcon,
-    ArrowUpIcon,
-    ChevronsLeftIcon,
-    ChevronsRightIcon,
-    ChevronLeftIcon,
-    ChevronRightIcon,
-    Columns3Icon,
-    PanelLeftIcon,
-    PanelRightIcon,
-    PinOffIcon,
-} from "lucide-react"
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from "lucide-react"
 import {
     flexRender,
-    functionalUpdate,
     getCoreRowModel,
     getFilteredRowModel,
     getPaginationRowModel,
@@ -29,26 +16,34 @@ import {
     type ColumnPinningState,
     type ColumnSizingInfoState,
     type ColumnSizingState,
-    type OnChangeFn,
     type PaginationState,
-    type Row,
     type RowData,
     type RowSelectionState,
     type SortingState,
-    type Table as TanStackTable,
-    type Updater,
     type VisibilityState,
 } from "@tanstack/react-table"
 
 import { BusinessFailureState } from "@/components/business/feedback"
-import { OptionCombobox } from "@/components/business/option-combobox"
+import {
+    DataTablePagination,
+    DataTableViewOptions,
+} from "@/components/business/data-table-controls"
+import type { DataTableProps } from "@/components/business/data-table-contracts"
+import {
+    alignmentClass,
+    columnRuntimeWidth,
+    columnWidthClass,
+    pinningClass,
+    sortableHeaderClass,
+} from "@/components/business/data-table-layout"
+import type {
+    DataTableAlignment,
+    DataTableColumnWidth,
+    DataTableLayout,
+} from "@/components/business/data-table-layout"
+import { useControlledTableState } from "@/components/business/data-table-state"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -61,27 +56,6 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-
-type DataTableAlignment = "start" | "center" | "end"
-type DataTableColumnWidth =
-    | "default"
-    | "reference"
-    | "status"
-    | "amount"
-    | "quantity"
-    | "rate"
-    | "tracks"
-type DataTableLayout = "inset" | "flush"
-
-const dataTableColumnWidthClasses: Record<DataTableColumnWidth, string> = {
-    default: "w-table-column-default min-w-table-column-default-min",
-    reference: "w-table-column-reference min-w-table-column-reference-min",
-    status: "w-table-column-status min-w-table-column-status-min",
-    amount: "w-table-column-amount min-w-table-column-amount-min",
-    quantity: "w-table-column-quantity min-w-table-column-quantity-min",
-    rate: "w-table-column-rate min-w-table-column-rate-min",
-    tracks: "w-table-column-tracks min-w-table-column-tracks-min",
-}
 
 const emptyColumnSizingInfo: ColumnSizingInfoState = {
     columnSizingStart: [],
@@ -145,116 +119,6 @@ declare module "@tanstack/react-table" {
         /** 系统列使用固定的语义布局，不开放业务列尺寸配置。 */
         role?: "selection"
     }
-}
-
-type ControlledTableStateProps<T> = {
-    value?: T
-    defaultValue: T
-    onChange?: (value: T) => void
-}
-
-function useControlledTableState<T>({
-    value,
-    defaultValue,
-    onChange,
-}: ControlledTableStateProps<T>): [T, OnChangeFn<T>] {
-    const [internalValue, setInternalValue] = React.useState(defaultValue)
-    const currentValue = value ?? internalValue
-
-    const handleChange = React.useCallback(
-        (updater: Updater<T>) => {
-            const nextValue = functionalUpdate(updater, currentValue)
-            if (value === undefined) setInternalValue(nextValue)
-            onChange?.(nextValue)
-        },
-        [currentValue, onChange, value],
-    )
-
-    return [currentValue, handleChange]
-}
-
-type DataTableProps<TData> = {
-    data: TData[]
-    columns: ColumnDef<TData, unknown>[]
-    /** 必须使用 ERP 稳定 ID；业务单号和外部单号不能作为行身份。 */
-    getRowId: (row: TData, index: number, parent?: Row<TData>) => string
-    /** 服务端准确总数；用于普通页面分页，不用于商城同步游标。 */
-    rowCount: number
-    rowLabel?: (row: TData) => string
-    caption?: string
-
-    sorting?: SortingState
-    defaultSorting?: SortingState
-    onSortingChange?: (sorting: SortingState) => void
-    pagination?: PaginationState
-    defaultPagination?: PaginationState
-    onPaginationChange?: (pagination: PaginationState) => void
-    rowSelection?: RowSelectionState
-    defaultRowSelection?: RowSelectionState
-    onRowSelectionChange?: (selection: RowSelectionState) => void
-    columnVisibility?: VisibilityState
-    defaultColumnVisibility?: VisibilityState
-    onColumnVisibilityChange?: (visibility: VisibilityState) => void
-    columnOrder?: ColumnOrderState
-    defaultColumnOrder?: ColumnOrderState
-    onColumnOrderChange?: (order: ColumnOrderState) => void
-    columnPinning?: ColumnPinningState
-    defaultColumnPinning?: ColumnPinningState
-    onColumnPinningChange?: (pinning: ColumnPinningState) => void
-    columnSizing?: ColumnSizingState
-    defaultColumnSizing?: ColumnSizingState
-    onColumnSizingChange?: (sizing: ColumnSizingState) => void
-    columnSizingInfo?: ColumnSizingInfoState
-    onColumnSizingInfoChange?: (sizingInfo: ColumnSizingInfoState) => void
-    columnFilters?: ColumnFiltersState
-    defaultColumnFilters?: ColumnFiltersState
-    onColumnFiltersChange?: (filters: ColumnFiltersState) => void
-    globalFilter?: string
-    defaultGlobalFilter?: string
-    onGlobalFilterChange?: (filter: string) => void
-
-    /** ERP 列表默认由 TanStack Query 拉取服务端页。 */
-    manualPagination?: boolean
-    manualSorting?: boolean
-    manualFiltering?: boolean
-    enableRowSelection?: boolean | ((row: Row<TData>) => boolean)
-    enableColumnResizing?: boolean
-    enableColumnPinning?: boolean
-    /** inset 自带卡片内距与圆角边框；flush 由外部框架提供边界。 */
-    layout?: DataTableLayout
-    density?: "compact" | "comfortable"
-    striped?: boolean
-    loading?: boolean
-    /**
-     * 查询失败时的整表错误内容（优先级最高）。页面把 isError 时构造的
-     * BusinessFailureState 传进来，避免「系统故障」被误报成「当前筛选没有结果」。
-     */
-    errorState?: React.ReactNode
-    /** 内置错误块的标题；默认「数据加载失败」。 */
-    errorTitle?: React.ReactNode
-    /** 内置错误块的说明；错误说下一步不说原理。 */
-    errorSummary?: React.ReactNode
-    /** 内置错误块的重试回调；渲染「重试」按钮。 */
-    onRetry?: () => void
-    /** 空态标题；默认「当前筛选没有结果」。 */
-    emptyTitle?: React.ReactNode
-    /** 空态说明；默认空。 */
-    emptyDescription?: React.ReactNode
-    /** 空态引导动作（如「清除筛选」「新建销售单」）。 */
-    emptyAction?: React.ReactNode
-    /** 正在刷新时显示「正在刷新，当前内容会保留」提示条；轮询页可关闭避免噪声。 */
-    showRefreshingBanner?: boolean
-    refreshingLabel?: React.ReactNode
-    emptyState?: React.ReactNode
-    renderToolbar?: (table: TanStackTable<TData>) => React.ReactNode
-    showColumnVisibility?: boolean
-    showPagination?: boolean
-    pageSizeOptions?: readonly number[]
-    /** 单击非交互区域时打开快速预览。 */
-    onRowPreview?: (row: TData) => void
-    /** 聚焦行后按 Enter 优先打开详情；鼠标入口应由业务列提供明确按钮或链接。 */
-    onRowOpen?: (row: TData) => void
-    className?: string
 }
 
 function DataTable<TData>({
@@ -1084,357 +948,6 @@ function DataTable<TData>({
             ) : null}
         </section>
     )
-}
-
-function DataTableViewOptions<TData>({
-    table,
-}: {
-    table: TanStackTable<TData>
-}) {
-    const columns = table
-        .getAllLeafColumns()
-        .filter((column) => column.getCanHide())
-    const visibleColumnCount = columns.filter((column) =>
-        column.getIsVisible(),
-    ).length
-
-    if (columns.length === 0) return null
-
-    return (
-        <Popover>
-            <PopoverTrigger
-                render={
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="max-sm:hidden"
-                    />
-                }
-            >
-                <Columns3Icon data-icon="inline-start" aria-hidden="true" />
-                列设置
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-auto min-w-72">
-                <div className="space-y-3">
-                    <div>
-                        <div className="text-sm font-medium">列设置</div>
-                        <p className="text-xs text-muted-foreground">
-                            调整顺序、显隐和固定位置
-                        </p>
-                    </div>
-                    <div className="space-y-1">
-                        {columns.map((column, index) => {
-                            const label =
-                                column.columnDef.meta?.label ?? column.id
-                            const pinned = column.getIsPinned()
-
-                            return (
-                                <div
-                                    key={column.id}
-                                    className="flex items-center gap-1 rounded-lg px-1 py-1 hover:bg-accent"
-                                >
-                                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
-                                        <Checkbox
-                                            checked={column.getIsVisible()}
-                                            disabled={
-                                                column.getIsVisible() &&
-                                                visibleColumnCount === 1
-                                            }
-                                            onCheckedChange={(checked) =>
-                                                column.toggleVisibility(
-                                                    checked === true,
-                                                )
-                                            }
-                                        />
-                                        <span className="truncate">
-                                            {label}
-                                        </span>
-                                    </label>
-                                    <div
-                                        role="group"
-                                        aria-label={`${label}列设置`}
-                                        className="flex"
-                                    >
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon-xs"
-                                            onClick={() =>
-                                                moveColumn(
-                                                    table,
-                                                    columns,
-                                                    index,
-                                                    -1,
-                                                )
-                                            }
-                                            disabled={index === 0}
-                                            aria-label={`前移${label}列`}
-                                        >
-                                            <ArrowUpIcon aria-hidden="true" />
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon-xs"
-                                            onClick={() =>
-                                                moveColumn(
-                                                    table,
-                                                    columns,
-                                                    index,
-                                                    1,
-                                                )
-                                            }
-                                            disabled={
-                                                index === columns.length - 1
-                                            }
-                                            aria-label={`后移${label}列`}
-                                        >
-                                            <ArrowDownIcon aria-hidden="true" />
-                                        </Button>
-                                        {column.getCanPin() ? (
-                                            <>
-                                                <Button
-                                                    type="button"
-                                                    variant={
-                                                        pinned === "left"
-                                                            ? "secondary"
-                                                            : "ghost"
-                                                    }
-                                                    size="icon-xs"
-                                                    onClick={() =>
-                                                        column.pin("left")
-                                                    }
-                                                    disabled={
-                                                        !column.getIsVisible()
-                                                    }
-                                                    aria-label={`固定${label}列到左侧`}
-                                                >
-                                                    <PanelLeftIcon aria-hidden="true" />
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant={
-                                                        pinned === "right"
-                                                            ? "secondary"
-                                                            : "ghost"
-                                                    }
-                                                    size="icon-xs"
-                                                    onClick={() =>
-                                                        column.pin("right")
-                                                    }
-                                                    disabled={
-                                                        !column.getIsVisible()
-                                                    }
-                                                    aria-label={`固定${label}列到右侧`}
-                                                >
-                                                    <PanelRightIcon aria-hidden="true" />
-                                                </Button>
-                                                {pinned ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon-xs"
-                                                        onClick={() =>
-                                                            column.pin(false)
-                                                        }
-                                                        aria-label={`取消固定${label}列`}
-                                                    >
-                                                        <PinOffIcon aria-hidden="true" />
-                                                    </Button>
-                                                ) : null}
-                                            </>
-                                        ) : null}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                </div>
-            </PopoverContent>
-        </Popover>
-    )
-}
-
-function moveColumn<TData>(
-    table: TanStackTable<TData>,
-    configurableColumns: ReturnType<TanStackTable<TData>["getAllLeafColumns"]>,
-    index: number,
-    offset: -1 | 1,
-) {
-    const targetIndex = index + offset
-    if (targetIndex < 0 || targetIndex >= configurableColumns.length) return
-
-    const reorderedIds = configurableColumns.map((column) => column.id)
-    const [movedId] = reorderedIds.splice(index, 1)
-    reorderedIds.splice(targetIndex, 0, movedId)
-
-    const nextMovableIds = [...reorderedIds]
-    table.setColumnOrder(
-        table
-            .getAllLeafColumns()
-            .map((column) =>
-                column.getCanHide()
-                    ? (nextMovableIds.shift() ?? column.id)
-                    : column.id,
-            ),
-    )
-}
-
-function DataTablePagination<TData>({
-    table,
-    pageSizeOptions,
-    layout = "flush",
-}: {
-    table: TanStackTable<TData>
-    pageSizeOptions: readonly number[]
-    layout?: DataTableLayout
-}) {
-    const { pageIndex, pageSize } = table.getState().pagination
-    const pageCount = table.getPageCount()
-    const rowCount = table.getRowCount()
-    const selectedCount = Object.keys(table.getState().rowSelection).length
-
-    return (
-        <div
-            data-slot="data-table-pagination"
-            className={cn(
-                // 移动端两行；桌面单行：左侧条数，右侧每页/页码/翻页成组，组间距统一。
-                "flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between",
-                // flush 贴在全宽表格下：对齐 BusinessTableFrame / CardFooter 的卡片内边距。
-                layout === "flush" && "px-(--card-spacing) py-3",
-            )}
-        >
-            <div className="min-w-0 text-muted-foreground">
-                <span className="num">
-                    共 {rowCount.toLocaleString("zh-CN")} 条
-                </span>
-                {selectedCount > 0 ? (
-                    <span className="num">
-                        ，已选择 {selectedCount.toLocaleString("zh-CN")} 条
-                    </span>
-                ) : null}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:justify-end">
-                <label className="flex shrink-0 items-center gap-2 text-muted-foreground">
-                    每页
-                    <OptionCombobox
-                        size="sm"
-                        value={String(pageSize)}
-                        onValueChange={(next) => {
-                            if (next == null) return
-                            table.setPageSize(Number(next))
-                        }}
-                        options={pageSizeOptions.map((size) => ({
-                            value: String(size),
-                            label: String(size),
-                        }))}
-                        allowClear={false}
-                        aria-label="每页记录数"
-                        className="w-[5.5rem]"
-                    />
-                </label>
-
-                <span className="num shrink-0 text-muted-foreground">
-                    第 {pageCount === 0 ? 0 : pageIndex + 1} / {pageCount} 页
-                </span>
-
-                <div
-                    role="group"
-                    aria-label="翻页"
-                    className="flex items-center gap-1"
-                >
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => table.firstPage()}
-                        disabled={!table.getCanPreviousPage()}
-                        aria-label="第一页"
-                    >
-                        <ChevronsLeftIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                        aria-label="上一页"
-                    >
-                        <ChevronLeftIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                        aria-label="下一页"
-                    >
-                        <ChevronRightIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => table.lastPage()}
-                        disabled={!table.getCanNextPage()}
-                        aria-label="最后一页"
-                    >
-                        <ChevronsRightIcon aria-hidden="true" />
-                    </Button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function alignmentClass(alignment: DataTableAlignment = "start") {
-    // align="end" 已由 globals.css 的 [data-align="end"] 选择器统一处理（text-right + num）。
-    if (alignment === "end") return undefined
-    if (alignment === "center") return "text-center"
-    return "text-left"
-}
-
-function columnRuntimeWidth(
-    enableColumnResizing: boolean,
-    role: "selection" | undefined,
-    runtimeWidth: number | undefined,
-) {
-    return enableColumnResizing && !role ? runtimeWidth : undefined
-}
-
-function sortableHeaderClass(alignment: DataTableAlignment = "start") {
-    if (alignment === "end") {
-        return "flex-row-reverse justify-start text-right"
-    }
-    if (alignment === "center") return "justify-center text-center"
-    return "justify-start text-left"
-}
-
-function pinningClass(
-    pinned: false | "left" | "right",
-    area: "header" | "cell",
-) {
-    if (!pinned) return undefined
-    // 冻结列必须用不透明底，否则横向滚动时非冻结列文字会从下方透出。
-    // 表体默认跟卡片面；悬停/选中跟随行状态（TableRow 提供 group/row）。
-    return area === "header"
-        ? "sticky z-10 bg-table-header"
-        : "sticky z-10 bg-card group-hover/row:bg-row-hover group-data-[state=selected]/row:bg-row-selected"
-}
-
-function columnWidthClass(
-    width: DataTableColumnWidth = "default",
-    role?: "selection",
-) {
-    if (role === "selection") {
-        return "w-table-column-selection min-w-table-column-selection max-w-table-column-selection"
-    }
-
-    return dataTableColumnWidthClasses[width]
 }
 
 export {
