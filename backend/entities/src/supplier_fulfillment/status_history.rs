@@ -16,7 +16,7 @@ use crate::errors::{Error, Result};
 use crate::ids::{SupplierApiConnectionId, SupplierOrderStatusHistoryId};
 use crate::validation::normalize_required_text;
 
-use super::fulfillment_order::FulfillmentStatus;
+use super::status::FulfillmentStatus;
 
 /// 供应商状态版本最大长度。
 const STATUS_VERSION_MAX_LEN: usize = 64;

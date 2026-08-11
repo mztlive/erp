@@ -39,6 +39,16 @@ use super::{
     RevealCustomerSensitiveRequest, SaveCustomerProfileRequest,
 };
 
+/// 事务失败后核对幂等命令所需的请求上下文。
+#[derive(Clone, Copy)]
+struct TransactionResolutionContext<'a> {
+    idempotency_key: &'a str,
+    operation: &'a str,
+    customer_id: Option<&'a str>,
+    initiated_by: &'a str,
+    fingerprint: &'a str,
+}
+
 /// 完整客户资料的根级服务。
 pub struct CustomerProfileService {
     db: Database,
@@ -85,11 +95,13 @@ impl CustomerProfileService {
         self.resolve_transaction(
             transaction,
             intended,
-            &idempotency_key,
-            "create",
-            None,
-            actor.id(),
-            &fingerprint,
+            TransactionResolutionContext {
+                idempotency_key: &idempotency_key,
+                operation: "create",
+                customer_id: None,
+                initiated_by: actor.id(),
+                fingerprint: &fingerprint,
+            },
         )
         .await
     }
@@ -122,11 +134,13 @@ impl CustomerProfileService {
         self.resolve_transaction(
             transaction,
             intended,
-            &idempotency_key,
-            "update",
-            Some(customer_id),
-            actor.id(),
-            &fingerprint,
+            TransactionResolutionContext {
+                idempotency_key: &idempotency_key,
+                operation: "update",
+                customer_id: Some(customer_id),
+                initiated_by: actor.id(),
+                fingerprint: &fingerprint,
+            },
         )
         .await
     }
@@ -233,21 +247,27 @@ impl CustomerProfileService {
             .await?)
     }
 
-    /// 在事务错误后查询同幂等键结果，处理并发首请求已经提交的场景。
+    /// 解析客户资料事务结果，并在失败后尝试重放同幂等键的已提交命令。
+    ///
+    /// `transaction` 是本次事务结果，`intended` 是成功时的稳定视图，`context` 提供幂等核对字段。
+    /// 事务成功时直接返回预期视图；事务失败但并发请求已提交相同命令时返回已提交结果。
+    /// 查询幂等记录失败、记录与请求上下文冲突或原事务失败且没有已提交记录时返回错误。
     async fn resolve_transaction(
         &self,
         transaction: Result<()>,
         intended: CustomerProfileMutationView,
-        idempotency_key: &str,
-        operation: &str,
-        customer_id: Option<&str>,
-        initiated_by: &str,
-        fingerprint: &str,
+        context: TransactionResolutionContext<'_>,
     ) -> Result<CustomerProfileMutationView> {
         match transaction {
             Ok(()) => Ok(intended),
-            Err(error) => match self.command_record(idempotency_key).await? {
-                Some(command) => replay_command(command, operation, customer_id, initiated_by, fingerprint),
+            Err(error) => match self.command_record(context.idempotency_key).await? {
+                Some(command) => replay_command(
+                    command,
+                    context.operation,
+                    context.customer_id,
+                    context.initiated_by,
+                    context.fingerprint,
+                ),
                 None => Err(error),
             },
         }

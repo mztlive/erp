@@ -12,17 +12,19 @@
 //! APPLY 分配；锁定原履约/成本/应付、追加成本与应付冲减、付款分配 REVERSE 及通用现金
 //! 退款事实等跨聚合编排留给 P3。
 
+pub mod fulfillment_item;
 pub mod fulfillment_order;
 pub mod order_action;
 pub mod refund;
+pub mod status;
 pub mod status_history;
 
 pub use crate::ids::{
     SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOrderActionId, SupplierOrderActionLineId,
     SupplierOrderStatusHistoryId, SupplierRefundAllocationId, SupplierRefundFactId,
 };
+pub use fulfillment_item::{SupplierFulfillmentItem, SupplierFulfillmentItemData};
 pub use fulfillment_order::{
-    CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentItemData,
     SupplierFulfillmentOrder, SupplierFulfillmentOrderData, SupplierFulfillmentOrderUpdate,
 };
 pub use order_action::{
@@ -33,4 +35,5 @@ pub use refund::{
     AllocationAction, SupplierRefundAllocation, SupplierRefundAllocationData, SupplierRefundFact,
     SupplierRefundFactData,
 };
+pub use status::{CancelStatus, FulfillmentStatus, RefundStatus};
 pub use status_history::{SupplierOrderStatusHistory, SupplierOrderStatusHistoryData};

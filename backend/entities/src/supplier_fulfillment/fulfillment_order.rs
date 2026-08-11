@@ -1,25 +1,24 @@
-//! `supplier_fulfillment_order` 与 `supplier_fulfillment_item`（数据模型 §6.19 供应商履约订单与明细）。
+//! `supplier_fulfillment_order`（数据模型 §6.19 供应商履约订单）。
 //!
-//! 履约主线、取消与退款是三条正交状态机（§7.6），`CANCEL_PENDING`/`CANCELED`/
-//! `REFUND_PENDING`/`REFUNDED` 不得折叠为单一状态枚举（§6.19）；COMPLETED/REJECTED 是
-//! 终态，乱序或重复回调经 [`ensure_transition`] 拒绝（从高状态回低状态即非法迁移）。
+//! 履约主线、取消与退款是三条正交状态机（§7.6），定义与邻接矩阵见 [`super::status`]；
+//! 明细见 [`super::fulfillment_item`]。`COMPLETED`/`REJECTED` 是终态，乱序或重复回调
+//! 经 [`crate::common::state::ensure_transition`] 拒绝（从高状态回低状态即非法迁移）。
 
 use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
+use crate::common::state::ensure_transition;
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{
-    MallOrderId, MallOrderItemId, SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentItemId,
-    SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
-};
-use crate::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use crate::ids::{MallOrderId, SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId};
 use crate::validation::{normalize_optional_text, normalize_required_text};
+
+// 兼容既有深层导入路径：`supplier_fulfillment::fulfillment_order::{...}`。
+pub use super::fulfillment_item::{SupplierFulfillmentItem, SupplierFulfillmentItemData};
+pub use super::status::{CancelStatus, FulfillmentStatus, RefundStatus};
 
 /// 供应商子订单号（ERP 下单幂等键）最大长度。
 const ORDER_NO_MAX_LEN: usize = 64;
@@ -29,231 +28,6 @@ const EXTERNAL_ORDER_NO_MAX_LEN: usize = 64;
 const ADDRESS_ENCRYPTED_MAX_LEN: usize = 8192;
 /// 履约地址快照 HMAC 查询指纹最大长度。
 const ADDRESS_FINGERPRINT_MAX_LEN: usize = 128;
-/// 供应商侧商品与 SKU 编码快照最大长度。
-const SUPPLIER_ITEM_CODE_MAX_LEN: usize = 128;
-
-/// 供应商履约主线状态（数据模型 §6.19、§7.6）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum FulfillmentStatus {
-    /// 接收：已形成子订单，尚未提交供应商。
-    Received,
-    /// 提交中：下单请求已发出，等待接单结果。
-    Submitting,
-    /// 已接单：供应商明确接单。
-    Accepted,
-    /// 明确拒绝：供应商明确拒单，终态；退款/余额恢复闭环由 refund_status 与退款事实表达。
-    Rejected,
-    /// 结果未知：网络超时或查询能力不足，先查询原请求，不盲目重复下单。
-    ResultUnknown,
-    /// 履约中：供应商履约中（含已发货）。
-    Fulfilling,
-    /// 已发货：适用时（存在发货阶段的履约）。
-    Shipped,
-    /// 已完成：终态。
-    Completed,
-    /// 异常：需人工查询或补偿；恢复动作以追加事实表达，不直接改状态。
-    Exception,
-}
-
-impl FulfillmentStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Received => "接收",
-            Self::Submitting => "提交中",
-            Self::Accepted => "已接单",
-            Self::Rejected => "明确拒绝",
-            Self::ResultUnknown => "结果未知",
-            Self::Fulfilling => "履约中",
-            Self::Shipped => "已发货",
-            Self::Completed => "已完成",
-            Self::Exception => "异常",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Received => "RECEIVED",
-            Self::Submitting => "SUBMITTING",
-            Self::Accepted => "ACCEPTED",
-            Self::Rejected => "REJECTED",
-            Self::ResultUnknown => "RESULT_UNKNOWN",
-            Self::Fulfilling => "FULFILLING",
-            Self::Shipped => "SHIPPED",
-            Self::Completed => "COMPLETED",
-            Self::Exception => "EXCEPTION",
-        }
-    }
-
-    /// 判断是否处于终态。
-    ///
-    /// # 返回
-    /// `COMPLETED`、`REJECTED` 或 `EXCEPTION` 时返回 `true`。
-    pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Completed | Self::Rejected | Self::Exception)
-    }
-}
-
-impl DocumentState for FulfillmentStatus {
-    /// 返回全部合法后继状态（数据模型 §7.6，禁止运行时扩展）。
-    ///
-    /// # 返回
-    /// 后继状态切片（不含自身；终态返回空）。
-    fn allowed_next(self) -> &'static [Self] {
-        match self {
-            Self::Received => &[Self::Submitting, Self::Exception],
-            Self::Submitting => &[
-                Self::Accepted,
-                Self::Rejected,
-                Self::ResultUnknown,
-                Self::Exception,
-            ],
-            Self::Accepted => &[Self::Fulfilling, Self::Exception],
-            Self::Fulfilling => &[Self::Shipped, Self::Completed, Self::Exception],
-            Self::Shipped => &[Self::Completed, Self::Exception],
-            Self::ResultUnknown => &[Self::Accepted, Self::Rejected, Self::Exception],
-            Self::Completed | Self::Rejected | Self::Exception => &[],
-        }
-    }
-}
-
-/// 供应商履约取消进度状态（数据模型 §6.19、§7.6，独立于履约主线的正交状态）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum CancelStatus {
-    /// 无。
-    None,
-    /// 取消中。
-    CancelPending,
-    /// 已取消：终态。
-    Canceled,
-    /// 取消失败：终态。
-    Failed,
-    /// 待人工：终态。
-    Manual,
-}
-
-impl CancelStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::None => "无",
-            Self::CancelPending => "取消中",
-            Self::Canceled => "已取消",
-            Self::Failed => "取消失败",
-            Self::Manual => "待人工",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::None => "NONE",
-            Self::CancelPending => "CANCEL_PENDING",
-            Self::Canceled => "CANCELED",
-            Self::Failed => "FAILED",
-            Self::Manual => "MANUAL",
-        }
-    }
-}
-
-impl DocumentState for CancelStatus {
-    /// 返回全部合法后继状态（数据模型 §7.6：NONE→CANCEL_PENDING→CANCELED|FAILED|MANUAL）。
-    ///
-    /// # 返回
-    /// 后继状态切片（不含自身；终态返回空）。
-    fn allowed_next(self) -> &'static [Self] {
-        match self {
-            Self::None => &[Self::CancelPending],
-            Self::CancelPending => &[Self::Canceled, Self::Failed, Self::Manual],
-            Self::Canceled | Self::Failed | Self::Manual => &[],
-        }
-    }
-}
-
-/// 供应商履约退款进度状态（数据模型 §6.19、§7.6，独立于履约主线的正交状态）。
-///
-/// 主线 `NONE → REFUND_PENDING → PARTIAL → REFUNDED`；`REFUND_PENDING` 可分支到
-/// `REFUND_FAILED`/`MANUAL`。多次部分退款表达为 `PARTIAL` 的幂等停留（新退款请求的
-/// 在途状态由 `supplier_order_action` 的 REFUND 动作承载），`PARTIAL` 之后的退款失败
-/// 进入 `REFUND_FAILED`、人工接手进入 `MANUAL`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum RefundStatus {
-    /// 无。
-    None,
-    /// 退款中。
-    RefundPending,
-    /// 部分退款。
-    Partial,
-    /// 全部退款：终态。
-    Refunded,
-    /// 退款失败：终态。
-    RefundFailed,
-    /// 待人工：终态。
-    Manual,
-}
-
-impl RefundStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::None => "无",
-            Self::RefundPending => "退款中",
-            Self::Partial => "部分退款",
-            Self::Refunded => "全部退款",
-            Self::RefundFailed => "退款失败",
-            Self::Manual => "待人工",
-        }
-    }
-
-    /// 返回状态的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::None => "NONE",
-            Self::RefundPending => "REFUND_PENDING",
-            Self::Partial => "PARTIAL",
-            Self::Refunded => "REFUNDED",
-            Self::RefundFailed => "REFUND_FAILED",
-            Self::Manual => "MANUAL",
-        }
-    }
-}
-
-impl DocumentState for RefundStatus {
-    /// 返回全部合法后继状态（数据模型 §7.6，禁止运行时扩展）。
-    ///
-    /// # 返回
-    /// 后继状态切片（不含自身；终态返回空）。
-    fn allowed_next(self) -> &'static [Self] {
-        match self {
-            Self::None => &[Self::RefundPending],
-            Self::RefundPending => &[Self::Partial, Self::Refunded, Self::RefundFailed, Self::Manual],
-            Self::Partial => &[Self::Refunded, Self::RefundFailed, Self::Manual],
-            Self::Refunded | Self::RefundFailed | Self::Manual => &[],
-        }
-    }
-}
 
 /// 供应商子订单创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -547,138 +321,6 @@ fn ensure_timestamp_consistency(
     Ok(())
 }
 
-/// 供应商履约明细创建数据（不含系统字段）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SupplierFulfillmentItemData {
-    /// 所属供应商子订单。
-    pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
-    /// 来源商城商品明细。
-    pub mall_order_item_id: MallOrderItemId,
-    /// 下单时固定的供给修订。
-    pub supplier_offering_revision_id: SupplierOfferingRevisionId,
-    /// 下单时固定的供应商侧订货 SKU 编码。
-    pub supplier_sku_code_snapshot: String,
-    /// 下单时固定的供应商侧商品编码。
-    pub supplier_product_code_snapshot: Option<String>,
-    /// 整条明细数量（SKU 基础单位，最多 6 位小数）。
-    pub quantity: Quantity,
-    /// 下单含税单位成本快照（最多 4 位小数）。
-    pub unit_cost_snapshot_gross: UnitPrice,
-    /// 明细含税成本快照（= 单位成本 × 数量，按分舍入）。
-    pub cost_snapshot_total_gross: Amount,
-    /// 下单成本进项税率（最多 6 位小数）。
-    pub input_tax_rate: Rate,
-}
-
-/// 供应商履约明细实体（数据模型 §6.19）。
-///
-/// 随子订单同事务创建，创建后不可修改（后续供给关系变化不影响已支付订单）；
-/// 一条商城商品明细只属于一个供应商子订单（跨记录唯一性由唯一索引保证，P3）。
-#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
-pub struct SupplierFulfillmentItem {
-    #[serde(flatten)]
-    pub base: BaseModel,
-    /// 所属供应商子订单。
-    pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
-    /// 来源商城商品明细。
-    pub mall_order_item_id: MallOrderItemId,
-    /// 下单时固定的供给修订。
-    pub supplier_offering_revision_id: SupplierOfferingRevisionId,
-    /// 下单时固定的供应商侧订货 SKU 编码。
-    pub supplier_sku_code_snapshot: String,
-    /// 下单时固定的供应商侧商品编码。
-    pub supplier_product_code_snapshot: Option<String>,
-    /// 整条明细数量。
-    pub quantity: Quantity,
-    /// 下单含税单位成本快照。
-    pub unit_cost_snapshot_gross: UnitPrice,
-    /// 明细含税成本快照。
-    pub cost_snapshot_total_gross: Amount,
-    /// 下单成本进项税率。
-    pub input_tax_rate: Rate,
-}
-
-impl SupplierFulfillmentItem {
-    /// 创建供应商履约明细。
-    ///
-    /// 校验数量大于零，并强制成本快照恒等（§4.2：明细含税成本必须等于
-    /// 单位成本 × 数量后按分舍入）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`entities::ids::SupplierFulfillmentItemId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的明细实体。
-    ///
-    /// # 错误
-    /// 数量非正、成本快照与单价数量不一致或金额精度非法时返回错误。
-    pub fn new(id: SupplierFulfillmentItemId, data: SupplierFulfillmentItemData) -> Result<Self> {
-        ensure_positive_quantity(data.quantity, "明细数量必须大于零")?;
-        ensure_snapshot_consistent(
-            data.quantity,
-            data.unit_cost_snapshot_gross,
-            data.cost_snapshot_total_gross,
-        )?;
-        let supplier_sku_code_snapshot = normalize_required_text(
-            data.supplier_sku_code_snapshot,
-            "供应商 SKU 编码快照不能为空",
-            SUPPLIER_ITEM_CODE_MAX_LEN,
-            "供应商 SKU 编码快照过长",
-        )?;
-        let supplier_product_code_snapshot = normalize_optional_text(
-            data.supplier_product_code_snapshot,
-            "供应商商品编码快照",
-            SUPPLIER_ITEM_CODE_MAX_LEN,
-        )?;
-        Ok(Self {
-            base: BaseModel::new(id.to_string()),
-            supplier_fulfillment_order_id: data.supplier_fulfillment_order_id,
-            mall_order_item_id: data.mall_order_item_id,
-            supplier_offering_revision_id: data.supplier_offering_revision_id,
-            supplier_sku_code_snapshot,
-            supplier_product_code_snapshot,
-            quantity: data.quantity,
-            unit_cost_snapshot_gross: data.unit_cost_snapshot_gross,
-            cost_snapshot_total_gross: data.cost_snapshot_total_gross,
-            input_tax_rate: data.input_tax_rate,
-        })
-    }
-}
-
-/// 校验数量大于零。
-///
-/// # 参数
-/// * `value` - 数量
-/// * `message` - 失败时的错误信息
-///
-/// # 错误
-/// 数量小于等于零时返回错误。
-fn ensure_positive_quantity(value: Quantity, message: &str) -> Result<()> {
-    if value.to_decimal() <= Decimal::ZERO {
-        return Err(Error::from(message));
-    }
-    Ok(())
-}
-
-/// 校验明细成本快照恒等：`round_to_cent(单位成本 × 数量) == 明细成本`（§4.2 铁律 1）。
-///
-/// # 参数
-/// * `quantity` - 数量
-/// * `unit_cost` - 含税单位成本
-/// * `total_gross` - 明细含税成本
-///
-/// # 错误
-/// 恒等式不成立或舍入结果无法表示为 `Amount` 时返回错误。
-fn ensure_snapshot_consistent(quantity: Quantity, unit_cost: UnitPrice, total_gross: Amount) -> Result<()> {
-    let expected = Amount::try_from(round_to_cent(unit_cost.to_decimal() * quantity.to_decimal()))
-        .map_err(|_| Error::from("明细成本快照金额无效"))?;
-    if expected != total_gross {
-        return Err(Error::from("明细成本快照必须等于下单单位成本 × 数量并舍入到分"));
-    }
-    Ok(())
-}
-
 /// 计算敏感值的带密钥 HMAC 查询指纹（数据模型 §4.5.5，禁止裸摘要）。
 ///
 /// # 参数
@@ -709,8 +351,6 @@ pub fn fingerprint(plain: &str, key: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::state::ensure_transition;
-    use std::str::FromStr;
 
     fn sample_data() -> SupplierFulfillmentOrderData {
         SupplierFulfillmentOrderData {
@@ -733,20 +373,6 @@ mod tests {
 
     fn sample_order() -> SupplierFulfillmentOrder {
         SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-1"), sample_data()).unwrap()
-    }
-
-    fn sample_item_data() -> SupplierFulfillmentItemData {
-        SupplierFulfillmentItemData {
-            supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
-            mall_order_item_id: MallOrderItemId::new("mall-item-1"),
-            supplier_offering_revision_id: SupplierOfferingRevisionId::new("offering-rev-1"),
-            supplier_sku_code_snapshot: "SUP-SKU-1".to_string(),
-            supplier_product_code_snapshot: Some("SUP-SPU-1".to_string()),
-            quantity: Quantity::from_str("3.000000").unwrap(),
-            unit_cost_snapshot_gross: UnitPrice::from_str("9.9900").unwrap(),
-            cost_snapshot_total_gross: Amount::from_str("29.97").unwrap(),
-            input_tax_rate: Rate::from_str("0.130000").unwrap(),
-        }
     }
 
     #[test]
@@ -863,61 +489,6 @@ mod tests {
     }
 
     #[test]
-    fn terminal_states_are_absorbing() {
-        let mut order = sample_order();
-        order.advance_fulfillment(FulfillmentStatus::Submitting).unwrap();
-        order.advance_fulfillment(FulfillmentStatus::Rejected).unwrap();
-        assert!(FulfillmentStatus::Rejected.allowed_next().is_empty());
-        assert!(FulfillmentStatus::Completed.allowed_next().is_empty());
-        assert!(FulfillmentStatus::Exception.allowed_next().is_empty());
-        assert!(FulfillmentStatus::Rejected.is_terminal());
-        assert!(FulfillmentStatus::Completed.is_terminal());
-
-        for (from, to) in [
-            (FulfillmentStatus::Completed, FulfillmentStatus::Fulfilling),
-            (FulfillmentStatus::Completed, FulfillmentStatus::Exception),
-            (FulfillmentStatus::Rejected, FulfillmentStatus::Received),
-            (FulfillmentStatus::Exception, FulfillmentStatus::Accepted),
-        ] {
-            let error = ensure_transition(from, to).unwrap_err();
-            assert!(
-                matches!(error, Error::InvalidStateTransition { .. }),
-                "终态定向断言：{from:?} → {to:?} 必须被拒绝"
-            );
-        }
-    }
-
-    #[test]
-    fn exception_branches_and_result_unknown_resolution() {
-        for start in [
-            FulfillmentStatus::Received,
-            FulfillmentStatus::Submitting,
-            FulfillmentStatus::Accepted,
-            FulfillmentStatus::Fulfilling,
-            FulfillmentStatus::Shipped,
-            FulfillmentStatus::ResultUnknown,
-        ] {
-            assert!(
-                ensure_transition(start, FulfillmentStatus::Exception).is_ok(),
-                "任一可恢复节点可进入 EXCEPTION：{start:?}"
-            );
-        }
-
-        assert!(ensure_transition(FulfillmentStatus::Submitting, FulfillmentStatus::ResultUnknown).is_ok());
-        for to in [
-            FulfillmentStatus::Accepted,
-            FulfillmentStatus::Rejected,
-            FulfillmentStatus::Exception,
-        ] {
-            assert!(
-                ensure_transition(FulfillmentStatus::ResultUnknown, to).is_ok(),
-                "RESULT_UNKNOWN 可解析为 {to:?}"
-            );
-        }
-        assert!(ensure_transition(FulfillmentStatus::Submitting, FulfillmentStatus::Rejected).is_ok());
-    }
-
-    #[test]
     fn cancel_status_progresses_and_is_terminal() {
         let mut order = sample_order();
         order.advance_cancel(CancelStatus::CancelPending).unwrap();
@@ -928,19 +499,6 @@ mod tests {
         failed.advance_cancel(CancelStatus::CancelPending).unwrap();
         failed.advance_cancel(CancelStatus::Failed).unwrap();
         assert_eq!(failed.cancel_status, CancelStatus::Failed);
-
-        assert!(
-            ensure_transition(CancelStatus::None, CancelStatus::Canceled).is_err(),
-            "跳过 CANCEL_PENDING 非法"
-        );
-        assert!(
-            ensure_transition(CancelStatus::Canceled, CancelStatus::Manual).is_err(),
-            "CANCELED 是终态"
-        );
-        assert!(
-            ensure_transition(CancelStatus::Canceled, CancelStatus::None).is_err(),
-            "取消进度不得倒退"
-        );
     }
 
     #[test]
@@ -961,19 +519,6 @@ mod tests {
         after_partial.advance_refund(RefundStatus::Partial).unwrap();
         after_partial.advance_refund(RefundStatus::Manual).unwrap();
         assert_eq!(after_partial.refund_status, RefundStatus::Manual);
-
-        assert!(
-            ensure_transition(RefundStatus::None, RefundStatus::Refunded).is_err(),
-            "跳过 REFUND_PENDING 非法"
-        );
-        assert!(
-            ensure_transition(RefundStatus::Refunded, RefundStatus::Partial).is_err(),
-            "REFUNDED 是终态"
-        );
-        assert!(
-            ensure_transition(RefundStatus::RefundFailed, RefundStatus::None).is_err(),
-            "退款进度不得倒退"
-        );
     }
 
     #[test]
@@ -1018,61 +563,5 @@ mod tests {
                 external_order_no: Some("x".repeat(65)),
             })
             .is_err());
-    }
-
-    #[test]
-    fn item_new_accepts_valid_item_and_keeps_snapshot() {
-        let item = SupplierFulfillmentItem::new(SupplierFulfillmentItemId::new("item-1"), sample_item_data())
-            .unwrap();
-
-        assert_eq!(item.quantity, Quantity::from_str("3.000000").unwrap());
-        assert_eq!(item.cost_snapshot_total_gross, Amount::from_str("29.97").unwrap());
-        assert_eq!(item.input_tax_rate, Rate::from_str("0.130000").unwrap());
-        assert_eq!(item.supplier_sku_code_snapshot, "SUP-SKU-1");
-        assert_eq!(item.supplier_product_code_snapshot.as_deref(), Some("SUP-SPU-1"));
-    }
-
-    #[test]
-    fn item_new_rejects_blank_supplier_sku_snapshot() {
-        let data = SupplierFulfillmentItemData {
-            supplier_sku_code_snapshot: "   ".to_string(),
-            ..sample_item_data()
-        };
-        assert!(SupplierFulfillmentItem::new(SupplierFulfillmentItemId::new("item-blank"), data).is_err());
-    }
-
-    #[test]
-    fn item_new_rejects_non_positive_quantity() {
-        for quantity in [
-            Quantity::from_str("0.000000").unwrap(),
-            Quantity::from_str("-1.000000").unwrap(),
-        ] {
-            let data = SupplierFulfillmentItemData {
-                quantity,
-                ..sample_item_data()
-            };
-            assert!(SupplierFulfillmentItem::new(SupplierFulfillmentItemId::new("item-2"), data).is_err());
-        }
-    }
-
-    #[test]
-    fn item_new_rejects_inconsistent_cost_snapshot() {
-        let data = SupplierFulfillmentItemData {
-            cost_snapshot_total_gross: Amount::from_str("30.00").unwrap(),
-            ..sample_item_data()
-        };
-        assert!(SupplierFulfillmentItem::new(SupplierFulfillmentItemId::new("item-3"), data).is_err());
-    }
-
-    #[test]
-    fn item_new_rejects_over_scale_money() {
-        assert!(
-            UnitPrice::from_str("9.99999").is_err(),
-            "单价最多 4 位小数，超位必须拒绝"
-        );
-        assert!(
-            Quantity::from_str("1.0000001").is_err(),
-            "数量最多 6 位小数，超位必须拒绝"
-        );
     }
 }

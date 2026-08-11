@@ -33,11 +33,10 @@ use entities::sales_order::{
     BusinessType, CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, GoodsLineFields,
     InvoiceProgress, LineType, OriginSystem, ReviewStatus, SalesOrder, SalesOrderData, SalesOrderId,
     SalesOrderLine, SalesOrderLineData, SalesOrderLineId, SalesOrderRevisionId, SalesOrderSubmission,
-    SalesOrderSubmissionData, SalesOrderSubmissionId, SalesOrderSubmissionLine,
-    SalesOrderSubmissionLineData, SalesOrderSubmissionLineId, SalesOrderWorkingCopy,
-    SalesOrderWorkingCopyData, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine,
-    SalesOrderWorkingCopyLineData, SalesOrderWorkingCopyLineId, SalesOrderWorkingCopyUpdate,
-    VoucherLineDraft, WorkingPurpose,
+    SalesOrderSubmissionData, SalesOrderSubmissionId, SalesOrderSubmissionLine, SalesOrderSubmissionLineData,
+    SalesOrderSubmissionLineId, SalesOrderWorkingCopy, SalesOrderWorkingCopyData, SalesOrderWorkingCopyId,
+    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, SalesOrderWorkingCopyLineId,
+    SalesOrderWorkingCopyUpdate, VoucherLineDraft, WorkingPurpose,
 };
 use entities::sales_review::{
     ProcurementConfirmation, ProcurementConfirmationData, ProcurementConfirmationStatus, SalesOrderReview,
@@ -248,8 +247,12 @@ impl SalesOrderService {
             .items
             .into_iter()
             .map(|row| {
-                let (code, label, tone) =
-                    stage_code_label_tone(row.commercial_status, row.review_status, row.close_status, row.fulfillment_progress);
+                let (code, label, tone) = stage_code_label_tone(
+                    row.commercial_status,
+                    row.review_status,
+                    row.close_status,
+                    row.fulfillment_progress,
+                );
                 let (owner_role, owner_user_id, owner_user_name, due_at) =
                     owners.get(&row.id).cloned().unwrap_or_default();
                 SalesOrderView {
@@ -404,15 +407,15 @@ impl SalesOrderService {
             .receivable_accounts()
             .find_many(mongodb::bson::doc! { "sales_order_id": id }, &mut NoTransaction)
             .await?;
-        let (settled_total, gross_total) = receivable_accounts.iter().fold(
-            (zero_amount(), zero_amount()),
-            |(settled, gross), account| {
-                (
-                    settled.checked_add(account.settled_total),
-                    gross.checked_add(account.gross_total),
-                )
-            },
-        );
+        let (settled_total, gross_total) =
+            receivable_accounts
+                .iter()
+                .fold((zero_amount(), zero_amount()), |(settled, gross), account| {
+                    (
+                        settled.checked_add(account.settled_total),
+                        gross.checked_add(account.gross_total),
+                    )
+                });
         let close_eligibility = compute_close_eligibility(
             order.business_type,
             order.stable.status,
@@ -437,8 +440,12 @@ impl SalesOrderService {
                 .is_some(),
             None => false,
         };
-        let (can_start_sales_change_order, change_order_blocker) =
-            compute_can_start_sales_change(order.origin_system, stage_code, stage_label, has_active_change_order);
+        let (can_start_sales_change_order, change_order_blocker) = compute_can_start_sales_change(
+            order.origin_system,
+            stage_code,
+            stage_label,
+            has_active_change_order,
+        );
 
         Ok(SalesOrderDetailView {
             id: order.base.id.clone(),
@@ -1037,7 +1044,11 @@ impl SalesOrderService {
             ReviewStatus::PendingSalesLeader => self
                 .db
                 .sales_order_reviews()
-                .find_by_submission_and_stage(submission_id, SalesReviewStage::SalesLeader, &mut NoTransaction)
+                .find_by_submission_and_stage(
+                    submission_id,
+                    SalesReviewStage::SalesLeader,
+                    &mut NoTransaction,
+                )
                 .await?
                 .map(|review| ("sales_order_review", review.base.id)),
             ReviewStatus::PendingOperations => self
@@ -1198,7 +1209,10 @@ impl SalesOrderService {
                 .as_ref()
                 .and_then(|user_id| names.get(user_id).cloned().flatten());
             let due_at = item.and_then(|i| i.due_at.map(|instant| instant.unix_secs() as u64));
-            owners.insert(order_id.clone(), (owner_role, owner_user_id, owner_user_name, due_at));
+            owners.insert(
+                order_id.clone(),
+                (owner_role, owner_user_id, owner_user_name, due_at),
+            );
         }
 
         Ok(owners)
@@ -1276,7 +1290,9 @@ fn compute_close_eligibility(
     let fulfillment_done = fulfillment == FulfillmentProgress::Completed;
     let collection_settled = collection == CollectionProgress::Settled;
 
-    if close == CloseStatus::Closed || commercial == CommercialStatus::Voided || commercial == CommercialStatus::Draft
+    if close == CloseStatus::Closed
+        || commercial == CommercialStatus::Voided
+        || commercial == CommercialStatus::Draft
     {
         let closed = close == CloseStatus::Closed;
         let (blockers, note) = if closed {
@@ -1355,7 +1371,10 @@ fn compute_can_start_sales_change(
         );
     }
     if matches!(stage_code, "draft" | "voided" | "closed") {
-        return (false, Some(format!("当前状态是「{stage_label}」，不能发起改单。")));
+        return (
+            false,
+            Some(format!("当前状态是「{stage_label}」，不能发起改单。")),
+        );
     }
     if matches!(
         stage_code,
@@ -2059,7 +2078,10 @@ mod tests {
                 ReviewStatus::PendingLowMarginSuperior,
                 ("awaiting_sales", "待销售处理", "warning"),
             ),
-            (ReviewStatus::Rejected, ("awaiting_sales", "待销售处理", "warning")),
+            (
+                ReviewStatus::Rejected,
+                ("awaiting_sales", "待销售处理", "warning"),
+            ),
             (
                 ReviewStatus::PendingSalesLeader,
                 ("awaiting_sales_lead", "待销售领导审批", "warning"),
@@ -2195,7 +2217,8 @@ mod tests {
 
     #[test]
     fn can_start_sales_change_blocks_mall_origin() {
-        let (allowed, reason) = compute_can_start_sales_change(OriginSystem::Mall, "effective", "已生效", false);
+        let (allowed, reason) =
+            compute_can_start_sales_change(OriginSystem::Mall, "effective", "已生效", false);
         assert!(!allowed);
         assert!(reason.unwrap().contains("商城"));
     }
@@ -2220,11 +2243,13 @@ mod tests {
 
     #[test]
     fn can_start_sales_change_blocks_active_change_order_else_allows() {
-        let (allowed, reason) = compute_can_start_sales_change(OriginSystem::Erp, "effective", "已生效", true);
+        let (allowed, reason) =
+            compute_can_start_sales_change(OriginSystem::Erp, "effective", "已生效", true);
         assert!(!allowed);
         assert!(reason.unwrap().contains("处理中"));
 
-        let (allowed, reason) = compute_can_start_sales_change(OriginSystem::Erp, "effective", "已生效", false);
+        let (allowed, reason) =
+            compute_can_start_sales_change(OriginSystem::Erp, "effective", "已生效", false);
         assert!(allowed);
         assert!(reason.is_none());
     }
