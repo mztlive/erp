@@ -682,11 +682,6 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         }
                     >
                         <form id={formId} onSubmit={handleSubmit}>
-                            {/*
-                本页专用吸顶作业条：身份信息 + 主操作。
-                与 PageHeader / DocumentHeader 职责差异过大（无面包屑、合入表单动作、吸顶），
-                故不复用通用组件，避免为单页堆叠不兼容 props。
-              */}
                             <header
                                 ref={stickyHeaderRef}
                                 className="sticky top-0 z-30 border-b border-border/30 bg-background/95 py-3 backdrop-blur"

@@ -3,73 +3,59 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import {
-    ArrowUpRightIcon,
-    BanIcon,
-    ChevronDownIcon,
-    DownloadIcon,
-    FilterIcon,
-    HistoryIcon,
-    PlusIcon,
-    SearchIcon,
-} from "lucide-react"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import { DownloadIcon, PlusIcon } from "lucide-react"
+import type { PaginationState } from "@tanstack/react-table"
 import {
     BackgroundJobProgress,
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessStatusBadge,
     BusinessTableFrame,
     DataFreshness,
     DataTable,
-    FixedOptionCheckboxFilter,
-    FixedOptionRadioFilter,
     FormalActionResult,
-    ListToolbar,
     MetricFilterItem,
     MetricItem,
     MetricStrip,
-    MoneyValue,
-    OptionCombobox,
     PageActions,
     PageHeader,
     PageScaffold,
-    QuickPreviewSheet,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupButton,
-    InputGroupInput,
-} from "@/components/ui/input-group"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Switch } from "@/components/ui/switch"
 import {
     buildMasterDataExportCsv,
     downloadCsv,
 } from "@/features/master-data/queries"
 import {
     masterDataCopy,
-    masterDataSearchPlaceholder,
     lifecycleFilterLabel,
     revisionTimingFilterLabel,
 } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
+import { useMasterDataColumns } from "@/features/master-data/master-data-columns"
+import { MasterDataListToolbar } from "@/features/master-data/master-data-list-toolbar"
+import { MasterDataPreviewSheet } from "@/features/master-data/master-data-preview-sheet"
+import {
+    CREATE_PERMISSION_BY_RESOURCE,
+    csvFilterValue,
+    isResource,
+    productSalesPriceRangeError,
+    PRODUCT_COVERAGE_FILTER_OPTIONS,
+    PRODUCT_LISTING_FILTER_OPTIONS,
+    qualificationHealthLabel,
+    ResourceNav,
+    selectedSupplierOptionLabels,
+    selectedSupplierOptionValues,
+    SUPPLIER_CAPABILITY_OPTIONS,
+    SUPPLIER_QUALIFICATION_HEALTH_OPTIONS,
+    SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
+} from "@/features/master-data/master-data-list-presentation"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { formatEffectiveRange } from "@/features/master-data/filter"
 import { CategoryTreePage } from "@/features/master-data/category-tree-page"
 import {
     MasterDataCreateDialog,
     MasterDataDisableDialog,
     MasterDataReviseDialog,
 } from "@/features/master-data/master-data-action-dialog"
-import {
-    MasterDataPreviewPanel,
-    SellableItemPreviewPanel,
-} from "@/features/master-data/master-data-preview"
 import { ProductSupplyDialog } from "@/features/master-data/product-supply-dialog"
 import { VoucherCategoryFormDialog } from "@/features/master-data/voucher-category-form-dialog"
 import {
@@ -81,7 +67,6 @@ import {
     useProductListingMutation,
 } from "@/features/master-data/queries"
 import {
-    MASTER_DATA_RESOURCES,
     PRODUCT_KIND_LABELS,
     PRODUCT_KIND_VALUES,
     type MasterDataListItem,
@@ -97,247 +82,6 @@ import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/
 import type { FixedSku } from "@/features/supplier-offerings/types"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
-
-const VALID = new Set(MASTER_DATA_RESOURCES.map((item) => item.key))
-
-const CNY_FORMATTER = new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-})
-
-const PRODUCT_KIND_FILTER_OPTIONS = PRODUCT_KIND_VALUES.map((value) => ({
-    value,
-    label: PRODUCT_KIND_LABELS[value],
-}))
-
-const PRODUCT_KIND_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    ...PRODUCT_KIND_FILTER_OPTIONS,
-] as const
-
-const PRODUCT_LISTING_FILTER_OPTIONS = [
-    { value: "listed", label: "全部已上架" },
-    { value: "partially_listed", label: "部分已上架" },
-    { value: "unlisted", label: "全部未上架" },
-] as const
-
-const PRODUCT_COVERAGE_FILTER_OPTIONS = [
-    { value: "complete", label: "全部 SKU 有供给" },
-    { value: "partial", label: "部分 SKU 有供给" },
-    { value: "none", label: "所有 SKU 均无供给" },
-] as const
-
-const PRODUCT_LISTING_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    ...PRODUCT_LISTING_FILTER_OPTIONS,
-] as const
-
-const PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    ...PRODUCT_COVERAGE_FILTER_OPTIONS,
-] as const
-
-const LIFECYCLE_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    { value: "enabled", label: masterDataCopy.lifecycleEnabled },
-    { value: "disabled", label: masterDataCopy.lifecycleDisabled },
-] as const
-
-const REVISION_TIMING_RADIO_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    { value: "current", label: "当前生效" },
-    { value: "future", label: "待生效" },
-] as const
-
-const SUPPLIER_CAPABILITY_OPTIONS = [
-    { value: "physical", label: "实物商品" },
-    { value: "virtual", label: "虚拟商品" },
-    { value: "offline_service", label: "线下服务" },
-    { value: "api", label: "API" },
-    { value: "printing", label: "印刷" },
-] as const
-
-const SUPPLIER_QUALIFICATION_TYPE_OPTIONS = [
-    { value: "certificate", label: "资质证照" },
-    { value: "contract", label: "合同" },
-    { value: "authorization", label: "授权书" },
-    { value: "food_license", label: "食品经营许可证" },
-    { value: "legal_person_id", label: "法人身份证" },
-] as const
-
-const SUPPLIER_QUALIFICATION_HEALTH_OPTIONS = [
-    { value: "all", label: "资质状态：全部" },
-    { value: "valid", label: "资质状态：有效" },
-    { value: "expiring_30", label: "资质状态：30 天内到期" },
-    { value: "expired", label: "资质状态：已过期" },
-    { value: "not_registered", label: "资质状态：未登记" },
-] as const
-
-/** 读取 URL 中逗号分隔的多选条件，去空、去重并固定排序。 */
-function selectedCsvValues(value: string | null): string[] {
-    if (!value) return []
-    return [
-        ...new Set(
-            value
-                .split(",")
-                .map((item) => item.trim())
-                .filter(Boolean),
-        ),
-    ].sort()
-}
-
-/** 将多选条件压缩为 URL 与接口共用的逗号分隔值。 */
-function csvFilterValue(values: readonly string[]): string | null {
-    const normalized = [
-        ...new Set(values.map((item) => item.trim()).filter(Boolean)),
-    ].sort()
-    return normalized.length > 0 ? normalized.join(",") : null
-}
-
-/** 返回资质状态的业务文案。 */
-function qualificationHealthLabel(
-    value: SupplierQualificationHealth | undefined,
-): string {
-    return (
-        SUPPLIER_QUALIFICATION_HEALTH_OPTIONS.find(
-            (option) => option.value === value,
-        )?.label.replace("资质状态：", "") ?? "全部"
-    )
-}
-
-/** 仅保留当前页面已声明的多选枚举值，避免 URL 中的无效值成为隐形状态。 */
-function selectedSupplierOptionValues(
-    value: string | null,
-    options: readonly { value: string; label: string }[],
-): string[] {
-    return selectedCsvValues(value).filter((item) =>
-        options.some((option) => option.value === item),
-    )
-}
-
-/** 把已选固定枚举代码转换为业务文案，用于导出筛选摘要。 */
-function selectedSupplierOptionLabels(
-    values: readonly string[],
-    options: readonly { value: string; label: string }[],
-): string[] {
-    return values.flatMap((value) => {
-        const label = options.find((option) => option.value === value)?.label
-        return label ? [label] : []
-    })
-}
-
-/** 校验销售价输入，并使用分值整数比较上下界，避免浮点误差。 */
-function productSalesPriceRangeError(
-    minimum: string,
-    maximum: string,
-): string | null {
-    const pricePattern = /^\d+(?:\.\d{1,2})?$/
-    if (minimum && !pricePattern.test(minimum)) {
-        return "最低价应为最多两位小数的非负金额"
-    }
-    if (maximum && !pricePattern.test(maximum)) {
-        return "最高价应为最多两位小数的非负金额"
-    }
-    const normalizedParts = (value: string): readonly [string, string] => {
-        const [yuan, fraction = ""] = value.split(".")
-        return [yuan.replace(/^0+(?=\d)/, ""), fraction.padEnd(2, "0")]
-    }
-    if (minimum && maximum) {
-        const [minimumYuan, minimumFraction] = normalizedParts(minimum)
-        const [maximumYuan, maximumFraction] = normalizedParts(maximum)
-        const minimumIsHigher =
-            minimumYuan.length > maximumYuan.length ||
-            (minimumYuan.length === maximumYuan.length &&
-                (minimumYuan > maximumYuan ||
-                    (minimumYuan === maximumYuan &&
-                        minimumFraction > maximumFraction)))
-        if (minimumIsHigher) return "最低价不能高于最高价"
-    }
-    return null
-}
-
-function productSkuPriceRange(skus: readonly ProductListSkuSummary[]): string {
-    const prices = skus
-        .flatMap((sku) => {
-            const raw = sku.salesVisiblePriceGross?.trim()
-            if (!raw) return []
-            const price = Number(raw)
-            return Number.isFinite(price) ? [price] : []
-        })
-        .sort((left, right) => left - right)
-    if (prices.length === 0) return "未填写"
-    const minimum = CNY_FORMATTER.format(prices[0])
-    const maximum = CNY_FORMATTER.format(prices[prices.length - 1])
-    return prices[0] === prices[prices.length - 1]
-        ? minimum
-        : `${minimum}–${maximum}`
-}
-
-const CREATE_PERMISSION_BY_RESOURCE: Partial<
-    Record<MasterDataResource, string>
-> = {
-    products: "product:create",
-    categories: "product_category:create",
-    brands: "product_brand:create",
-    "unit-of-measures": "unit_of_measure:create",
-    "voucher-categories": "voucher_category_profile:create",
-    suppliers: "supplier:create",
-    warehouses: "warehouse:create",
-}
-
-function isResource(value: string): value is MasterDataResource {
-    return VALID.has(value as MasterDataResource)
-}
-
-function ResourceNav({
-    resource,
-    navRef,
-}: {
-    resource: string
-    navRef: React.RefObject<HTMLElement | null>
-}) {
-    return (
-        <nav
-            ref={navRef}
-            aria-label={masterDataCopy.resourceNavAria}
-            className="flex flex-wrap gap-2 border-b border-border/30 pb-3"
-        >
-            {MASTER_DATA_RESOURCES.map((item) => {
-                const selected = item.key === resource
-                return (
-                    <Button
-                        key={item.key}
-                        size="sm"
-                        aria-current={selected ? "page" : undefined}
-                        variant={selected ? "secondary" : "ghost"}
-                        render={<Link href={`/master-data/${item.key}`} />}
-                    >
-                        {item.label}
-                    </Button>
-                )
-            })}
-        </nav>
-    )
-}
-
-/** 禁用按钮的阻断原因提示：disabled 状态下浏览器不显示 title，用外层 span 承载。 */
-function DisabledActionHint({
-    message,
-    children,
-}: {
-    message?: string
-    children: React.ReactNode
-}) {
-    return message ? (
-        <span title={message} className="inline-flex">
-            {children}
-        </span>
-    ) : (
-        <>{children}</>
-    )
-}
 
 export function MasterDataPage({ resource }: { resource: string }) {
     const navRef = React.useRef<HTMLElement | null>(null)
@@ -1142,623 +886,33 @@ function MasterDataListWorkspace({
         [productListingMutation],
     )
 
-    const columns = React.useMemo<ColumnDef<MasterDataListItem>[]>(
-        () => [
-            ...(!isSellableResource && !isSupplierResource
-                ? [
-                      {
-                          id: "stableNo",
-                          accessorKey: "stableNo",
-                          header: masterDataCopy.colStableNo,
-                          meta: {
-                              label: masterDataCopy.colStableNo,
-                              width: "default" as const,
-                          },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <span className="num text-sm">
-                                  {row.original.stableNo}
-                              </span>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                  ]
-                : []),
-            {
-                id: "name",
-                accessorKey: "name",
-                header: isSellableResource
-                    ? "商品名称 · 规格"
-                    : masterDataCopy.colName,
-                meta: {
-                    label: isSellableResource
-                        ? "商品名称 · 规格"
-                        : masterDataCopy.colName,
-                },
-                cell: ({ row }) => {
-                    const sellable = row.original.sellableItem
-                    return (
-                        <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">
-                                {row.original.name}
-                                {sellable ? (
-                                    <span className="text-muted-foreground">
-                                        {" "}
-                                        · {sellable.specificationLabel}
-                                    </span>
-                                ) : null}
-                            </div>
-                            {sellable ? (
-                                <div className="truncate text-xs text-muted-foreground">
-                                    SKU 编号：
-                                    <span className="num">
-                                        {row.original.stableNo}
-                                    </span>
-                                </div>
-                            ) : row.original.keyFacts[0] ? (
-                                <div className="truncate text-xs text-muted-foreground">
-                                    {row.original.keyFacts[0].label}：
-                                    {row.original.keyFacts[0].value}
-                                </div>
-                            ) : null}
-                        </div>
-                    )
-                },
-            },
-            ...(isSellableResource
-                ? [
-                      {
-                          id: "productNo",
-                          header: "SPU 编号",
-                          meta: {
-                              label: "SPU 编号",
-                              width: "default" as const,
-                          },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <span className="num text-sm">
-                                  {row.original.sellableItem?.productNo ?? "—"}
-                              </span>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                      {
-                          id: "price",
-                          header: "价格",
-                          meta: { label: "价格", width: "amount" as const },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <div className="flex flex-col gap-0.5">
-                                  <MoneyValue
-                                      value={
-                                          row.original.sellableItem
-                                              ?.salesVisiblePriceGross
-                                      }
-                                  />
-                                  <span className="text-tiny text-muted-foreground">
-                                      销售价 · 含税
-                                  </span>
-                              </div>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                      {
-                          id: "supplyRegions",
-                          header: "可供区域",
-                          meta: { label: "可供区域" },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => {
-                              const regions =
-                                  row.original.sellableItem?.supplyRegions ?? []
-                              const label =
-                                  regions.length > 0
-                                      ? regions.join("、")
-                                      : "未标注"
-                              return (
-                                  <span
-                                      className="line-clamp-2 max-w-64 text-sm"
-                                      title={label}
-                                  >
-                                      {label}
-                                  </span>
-                              )
-                          },
-                      } satisfies ColumnDef<MasterDataListItem>,
-                      {
-                          id: "supplierCount",
-                          header: "有效供应商",
-                          meta: {
-                              label: "有效供应商",
-                              width: "status" as const,
-                          },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <Badge variant="outline">
-                                  <span className="num">
-                                      {row.original.sellableItem
-                                          ?.supplierCount ?? 0}
-                                  </span>{" "}
-                                  家
-                              </Badge>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                  ]
-                : [
-                      {
-                          id: "revisionNo",
-                          header: masterDataCopy.colVersion,
-                          meta: {
-                              label: masterDataCopy.colVersion,
-                              width: "amount" as const,
-                          },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <span className="num text-sm">
-                                  v{row.original.revisionNo}
-                              </span>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                      {
-                          id: "lifecycle",
-                          header: masterDataCopy.colLifecycle,
-                          meta: { label: masterDataCopy.colLifecycle },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <div className="flex flex-col gap-1">
-                                  <BusinessStatusBadge
-                                      context="list"
-                                      label={row.original.lifecycleStatusLabel}
-                                      tone={row.original.lifecycleTone}
-                                  />
-                                  {row.original.scheduledLifecycleLabel ? (
-                                      <span className="text-tiny text-muted-foreground">
-                                          {row.original.scheduledLifecycleLabel}
-                                      </span>
-                                  ) : null}
-                              </div>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                  ]),
-            ...(isProductResource
-                ? [
-                      {
-                          id: "skuPriceRange",
-                          header: "SKU 售价",
-                          meta: { label: "SKU 售价", width: "amount" as const },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <span className="num text-sm">
-                                  {productSkusQuery.isPending
-                                      ? "读取中…"
-                                      : productSkusQuery.isError
-                                        ? "暂不可查"
-                                        : productSkuPriceRange(
-                                              productSkusByProduct.get(
-                                                  row.original.stableId,
-                                              ) ?? [],
-                                          )}
-                              </span>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                      {
-                          id: "skuCount",
-                          header: "SKU 数量",
-                          meta: { label: "SKU 数量", width: "amount" as const },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <span className="num text-sm">
-                                  {row.original.skuCount ?? 0} 个
-                              </span>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                      {
-                          id: "supply",
-                          header: "供给",
-                          meta: { label: "供给", width: "status" as const },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => {
-                              const item = row.original
-                              const productSkus =
-                                  productSkusByProduct.get(item.stableId) ?? []
-                              const suppliedSkuCount = productSkus.filter(
-                                  (sku) => currentSupplySkuIds.has(sku.skuId),
-                              ).length
-                              const skuDataPending = productSkusQuery.isPending
-                              const skuDataFailed = productSkusQuery.isError
-                              const offeringPending =
-                                  productSkus.length > 0 &&
-                                  supplierOfferingsQuery.isPending
-                              const offeringFailed =
-                                  productSkus.length > 0 &&
-                                  supplierOfferingsQuery.isError
-                              const statusLabel = skuDataPending
-                                  ? "读取中…"
-                                  : skuDataFailed || offeringFailed
-                                    ? "暂不可查"
-                                    : suppliedSkuCount > 0
-                                      ? "有供给"
-                                      : "无供给"
-                              return (
-                                  <Button
-                                      type="button"
-                                      size="xs"
-                                      variant="ghost"
-                                      className="h-auto gap-1.5 px-1 py-0.5"
-                                      aria-label={`${item.name}供给详情：${statusLabel}`}
-                                      onClick={(event) => {
-                                          event.stopPropagation()
-                                          lastFocusedRowId.current =
-                                              item.stableId
-                                          setSupplyProduct(item)
-                                      }}
-                                  >
-                                      <Badge
-                                          variant={
-                                              suppliedSkuCount > 0 &&
-                                              !skuDataPending &&
-                                              !offeringPending &&
-                                              !skuDataFailed &&
-                                              !offeringFailed
-                                                  ? "success"
-                                                  : "outline"
-                                          }
-                                      >
-                                          {offeringPending
-                                              ? "读取中…"
-                                              : statusLabel}
-                                      </Badge>
-                                      {!skuDataPending &&
-                                      !skuDataFailed &&
-                                      !offeringPending &&
-                                      !offeringFailed &&
-                                      productSkus.length > 0 ? (
-                                          <span className="num text-xs text-muted-foreground">
-                                              {suppliedSkuCount}/
-                                              {productSkus.length} SKU
-                                          </span>
-                                      ) : null}
-                                  </Button>
-                              )
-                          },
-                      } satisfies ColumnDef<MasterDataListItem>,
-                      {
-                          id: "listing",
-                          header: "上架状态",
-                          meta: { label: "上架状态" },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => {
-                              const item = row.original
-                              const inherited = item.listingStatus ?? "UNLISTED"
-                              const pending =
-                                  productListingMutation.isPending &&
-                                  productListingMutation.variables
-                                      ?.productId === item.stableId
-                              const label =
-                                  inherited === "LISTED"
-                                      ? "已上架"
-                                      : inherited === "PARTIALLY_LISTED"
-                                        ? "部分上架"
-                                        : "已下架"
-                              return (
-                                  <div className="flex items-center gap-2">
-                                      <Switch
-                                          size="sm"
-                                          checked={inherited === "LISTED"}
-                                          disabled={
-                                              pending ||
-                                              !canUpdateProductListing ||
-                                              (item.lifecycleStatus !==
-                                                  "ENABLED" &&
-                                                  inherited === "UNLISTED") ||
-                                              (item.skuCount ?? 0) === 0
-                                          }
-                                          onCheckedChange={(checked) =>
-                                              void updateProductListing(
-                                                  item,
-                                                  checked,
-                                              )
-                                          }
-                                          aria-label={`${item.name}整组上架状态`}
-                                      />
-                                      <span className="whitespace-nowrap text-xs text-muted-foreground">
-                                          {pending
-                                              ? "更新中…"
-                                              : `${label} ${item.listedSkuCount ?? 0}/${item.skuCount ?? 0}`}
-                                      </span>
-                                  </div>
-                              )
-                          },
-                      } satisfies ColumnDef<MasterDataListItem>,
-                  ]
-                : []),
-            ...(!isSellableResource
-                ? [
-                      {
-                          id: "revisionTiming",
-                          header: masterDataCopy.colVersionState,
-                          meta: { label: masterDataCopy.colVersionState },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <Badge
-                                  variant={
-                                      row.original.revisionTiming === "FUTURE"
-                                          ? "warning"
-                                          : "secondary"
-                                  }
-                              >
-                                  {row.original.revisionTimingLabel}
-                              </Badge>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                  ]
-                : []),
-            ...(showEffectiveColumn
-                ? [
-                      {
-                          id: "period",
-                          header: masterDataCopy.colEffective,
-                          meta: {
-                              label: masterDataCopy.colEffective,
-                          },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) => (
-                              <span className="num text-xs">
-                                  {formatEffectiveRange(
-                                      row.original.effectiveFrom,
-                                      row.original.effectiveTo,
-                                  )}
-                              </span>
-                          ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                  ]
-                : []),
-            ...(rows.some((r) => r.primaryBlocker)
-                ? [
-                      {
-                          id: "blocker",
-                          header: masterDataCopy.colBlocker,
-                          meta: { label: masterDataCopy.colBlocker },
-                          cell: ({
-                              row,
-                          }: {
-                              row: { original: MasterDataListItem }
-                          }) =>
-                              row.original.primaryBlocker ? (
-                                  <span className="text-xs text-destructive">
-                                      {row.original.primaryBlocker}
-                                  </span>
-                              ) : (
-                                  <span className="text-xs text-muted-foreground">
-                                      —
-                                  </span>
-                              ),
-                      } satisfies ColumnDef<MasterDataListItem>,
-                  ]
-                : []),
-            ...(!isSellableResource
-                ? [
-                      {
-                          id: "actions",
-                          header: masterDataCopy.colActions,
-                          meta: { label: masterDataCopy.colActions },
-                          cell: ({ row }) => {
-                              const item = row.original
-                              const canRevise =
-                                  item.allowedActions.includes(
-                                      "CREATE_REVISION",
-                                  )
-                              const canDisable =
-                                  item.allowedActions.includes("DISABLE")
-                              const reviseBlocker = item.actionBlockers.find(
-                                  (b) => b.action === "CREATE_REVISION",
-                              )
-                              const disableBlocker = item.actionBlockers.find(
-                                  (b) => b.action === "DISABLE",
-                              )
-                              // 卡券类目：仅原地编辑。
-                              if (isVoucherCategoryResource) {
-                                  return (
-                                      <div className="flex flex-wrap gap-1">
-                                          <DisabledActionHint
-                                              message={reviseBlocker?.message}
-                                          >
-                                              <Button
-                                                  type="button"
-                                                  size="xs"
-                                                  variant="ghost"
-                                                  disabled={!canRevise}
-                                                  title={reviseBlocker?.message}
-                                                  onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      lastFocusedRowId.current =
-                                                          item.stableId
-                                                      setReviseTarget(item)
-                                                  }}
-                                              >
-                                                  <HistoryIcon
-                                                      data-icon="inline-start"
-                                                      aria-hidden
-                                                  />
-                                                  {masterDataCopy.actionUpdate}
-                                              </Button>
-                                          </DisabledActionHint>
-                                      </div>
-                                  )
-                              }
-                              // 商品点击行进入详情；品牌 / 计量单位点击行打开更新 Dialog。操作列均仅保留「停用」。
-                              if (
-                                  isProductResource ||
-                                  isBrandResource ||
-                                  isUnitOfMeasureResource
-                              ) {
-                                  return (
-                                      <div className="flex flex-wrap gap-1">
-                                          <DisabledActionHint
-                                              message={disableBlocker?.message}
-                                          >
-                                              <Button
-                                                  type="button"
-                                                  size="xs"
-                                                  variant="ghost"
-                                                  disabled={!canDisable}
-                                                  title={
-                                                      disableBlocker?.message
-                                                  }
-                                                  onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      lastFocusedRowId.current =
-                                                          item.stableId
-                                                      setDisableTarget(item)
-                                                  }}
-                                              >
-                                                  <BanIcon
-                                                      data-icon="inline-start"
-                                                      aria-hidden
-                                                  />
-                                                  {masterDataCopy.actionDisable}
-                                              </Button>
-                                          </DisabledActionHint>
-                                      </div>
-                                  )
-                              }
-                              return (
-                                  <div className="flex flex-wrap gap-1">
-                                      <Button
-                                          type="button"
-                                          size="xs"
-                                          variant="ghost"
-                                          onClick={(e) => {
-                                              e.stopPropagation()
-                                              lastFocusedRowId.current =
-                                                  item.stableId
-                                              if (isSupplierResource) {
-                                                  router.push(
-                                                      `/master-data/${resource}/${item.stableId}?section=overview`,
-                                                  )
-                                              } else {
-                                                  setPreviewId(item.stableId)
-                                              }
-                                          }}
-                                      >
-                                          {masterDataCopy.actionView}
-                                      </Button>
-                                      <DisabledActionHint
-                                          message={reviseBlocker?.message}
-                                      >
-                                          <Button
-                                              type="button"
-                                              size="xs"
-                                              variant="ghost"
-                                              disabled={!canRevise}
-                                              title={reviseBlocker?.message}
-                                              onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  if (isSupplierResource) {
-                                                      // 详情页即编辑，与「查看」同一路由
-                                                      router.push(
-                                                          `/master-data/${resource}/${item.stableId}?section=overview`,
-                                                      )
-                                                  } else {
-                                                      setReviseTarget(item)
-                                                  }
-                                              }}
-                                          >
-                                              <HistoryIcon
-                                                  data-icon="inline-start"
-                                                  aria-hidden
-                                              />
-                                              {masterDataCopy.actionUpdate}
-                                          </Button>
-                                      </DisabledActionHint>
-                                      <DisabledActionHint
-                                          message={disableBlocker?.message}
-                                      >
-                                          <Button
-                                              type="button"
-                                              size="xs"
-                                              variant="ghost"
-                                              disabled={!canDisable}
-                                              title={disableBlocker?.message}
-                                              onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  setDisableTarget(item)
-                                              }}
-                                          >
-                                              <BanIcon
-                                                  data-icon="inline-start"
-                                                  aria-hidden
-                                              />
-                                              {masterDataCopy.actionDisable}
-                                          </Button>
-                                      </DisabledActionHint>
-                                  </div>
-                              )
-                          },
-                      } satisfies ColumnDef<MasterDataListItem>,
-                  ]
-                : []),
-        ],
-        [
-            isProductResource,
-            isSupplierResource,
-            isBrandResource,
-            isUnitOfMeasureResource,
-            isVoucherCategoryResource,
-            isSellableResource,
-            canUpdateProductListing,
-            currentSupplySkuIds,
-            lastFocusedRowId,
-            productSkusByProduct,
-            productSkusQuery.isError,
-            productSkusQuery.isPending,
-            productListingMutation.isPending,
-            productListingMutation.variables,
-            resource,
-            router,
-            rows,
-            showEffectiveColumn,
-            supplierOfferingsQuery.isError,
-            supplierOfferingsQuery.isPending,
-            updateProductListing,
-        ],
-    )
-
+    const columns = useMasterDataColumns({
+        isProductResource,
+        isSupplierResource,
+        isBrandResource,
+        isUnitOfMeasureResource,
+        isVoucherCategoryResource,
+        isSellableResource,
+        canUpdateProductListing,
+        currentSupplySkuIds,
+        lastFocusedRowId,
+        productSkusByProduct,
+        productSkusPending: productSkusQuery.isPending,
+        productSkusError: productSkusQuery.isError,
+        productListingPending: productListingMutation.isPending,
+        productListingProductId: productListingMutation.variables?.productId,
+        resource,
+        rows,
+        showEffectiveColumn,
+        supplierOfferingsPending: supplierOfferingsQuery.isPending,
+        supplierOfferingsError: supplierOfferingsQuery.isError,
+        onUpdateProductListing: updateProductListing,
+        onSupplyProduct: setSupplyProduct,
+        onReviseTarget: setReviseTarget,
+        onDisableTarget: setDisableTarget,
+        onPreview: setPreviewId,
+        onNavigate: router.push,
+    })
     const isWarehouse = resource === "warehouses"
 
     if (listQuery.isPending) {
@@ -2009,628 +1163,85 @@ function MasterDataListWorkspace({
                           : masterDataCopy.listDescription(rows.length)
                 }
                 toolbar={
-                    isProductResource ? (
-                        <form
-                            onSubmit={(event) => {
-                                event.preventDefault()
-                                applyProductFilters()
-                            }}
-                        >
-                            <ListToolbar
-                                search={
-                                    <InputGroup>
-                                        <InputGroupAddon>
-                                            <SearchIcon aria-hidden="true" />
-                                        </InputGroupAddon>
-                                        <InputGroupInput
-                                            ref={searchInputRef}
-                                            value={searchDraft}
-                                            onChange={(e) =>
-                                                setSearchDraft(e.target.value)
-                                            }
-                                            placeholder={masterDataSearchPlaceholder(
-                                                resource,
-                                            )}
-                                            aria-label={
-                                                masterDataCopy.searchAria
-                                            }
-                                        />
-                                    </InputGroup>
-                                }
-                                filters={
-                                    <>
-                                        {!productFilterPanelOpen ? (
-                                            <Button type="submit" size="sm">
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                搜索
-                                            </Button>
-                                        ) : null}
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            aria-expanded={
-                                                productFilterPanelOpen
-                                            }
-                                            onClick={() =>
-                                                setProductFilterPanelOpen(
-                                                    (open) => !open,
-                                                )
-                                            }
-                                        >
-                                            <FilterIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                            />
-                                            高级筛选
-                                            {hasStructuredProductFilters ? (
-                                                <Badge variant="info">
-                                                    已启用
-                                                </Badge>
-                                            ) : null}
-                                            <ChevronDownIcon
-                                                data-icon="inline-end"
-                                                aria-hidden="true"
-                                                className={
-                                                    productFilterPanelOpen
-                                                        ? "rotate-180 transition-transform"
-                                                        : "transition-transform"
-                                                }
-                                            />
-                                        </Button>
-                                    </>
-                                }
-                                secondary={
-                                    productFilterPanelOpen ? (
-                                        <div
-                                            className="flex w-full flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
-                                            aria-label="商品筛选条件"
-                                        >
-                                            <FixedOptionRadioFilter
-                                                label="类型"
-                                                value={productKindDraft}
-                                                onValueChange={
-                                                    setProductKindDraft
-                                                }
-                                                options={
-                                                    PRODUCT_KIND_RADIO_FILTER_OPTIONS
-                                                }
-                                            />
-                                            <FixedOptionRadioFilter
-                                                label="启停"
-                                                value={lifecycleStatusDraft}
-                                                onValueChange={
-                                                    setLifecycleStatusDraft
-                                                }
-                                                options={
-                                                    LIFECYCLE_RADIO_FILTER_OPTIONS
-                                                }
-                                                aria-label={
-                                                    masterDataCopy.filterLifecycleAria
-                                                }
-                                            />
-                                            <FixedOptionRadioFilter
-                                                label="版本"
-                                                value={revisionTimingDraft}
-                                                onValueChange={
-                                                    setRevisionTimingDraft
-                                                }
-                                                options={
-                                                    REVISION_TIMING_RADIO_FILTER_OPTIONS
-                                                }
-                                                aria-label={
-                                                    masterDataCopy.filterVersionAria
-                                                }
-                                            />
-                                            <FixedOptionRadioFilter
-                                                label="上架"
-                                                value={
-                                                    productListingStatusDraft
-                                                }
-                                                onValueChange={
-                                                    setProductListingStatusDraft
-                                                }
-                                                options={
-                                                    PRODUCT_LISTING_RADIO_FILTER_OPTIONS
-                                                }
-                                            />
-                                            <FixedOptionRadioFilter
-                                                label="供给覆盖"
-                                                value={
-                                                    productSupplyCoverageDraft
-                                                }
-                                                onValueChange={
-                                                    setProductSupplyCoverageDraft
-                                                }
-                                                options={
-                                                    PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS
-                                                }
-                                            />
-
-                                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                                <label className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                    <span className="text-muted-foreground">
-                                                        分类
-                                                    </span>
-                                                    <OptionCombobox
-                                                        className="w-full"
-                                                        value={
-                                                            productCategoryIdDraft
-                                                        }
-                                                        aria-label="商品分类"
-                                                        onValueChange={
-                                                            setProductCategoryIdDraft
-                                                        }
-                                                        options={
-                                                            productFilterOptionsQuery
-                                                                .data
-                                                                ?.categories ??
-                                                            []
-                                                        }
-                                                        loading={
-                                                            productFilterOptionsQuery.isPending
-                                                        }
-                                                        placeholder="全部分类"
-                                                        searchPlaceholder="搜索分类名称或代码"
-                                                    />
-                                                </label>
-                                                <label className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                    <span className="text-muted-foreground">
-                                                        品牌
-                                                    </span>
-                                                    <OptionCombobox
-                                                        className="w-full"
-                                                        value={
-                                                            productBrandIdDraft
-                                                        }
-                                                        aria-label="商品品牌"
-                                                        onValueChange={
-                                                            setProductBrandIdDraft
-                                                        }
-                                                        options={
-                                                            productFilterOptionsQuery
-                                                                .data?.brands ??
-                                                            []
-                                                        }
-                                                        loading={
-                                                            productFilterOptionsQuery.isPending
-                                                        }
-                                                        placeholder="全部品牌"
-                                                        searchPlaceholder="搜索品牌名称或代码"
-                                                    />
-                                                </label>
-                                                <label className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                    <span className="text-muted-foreground">
-                                                        供应商
-                                                    </span>
-                                                    <OptionCombobox
-                                                        className="w-full"
-                                                        value={
-                                                            productSupplierIdDraft
-                                                        }
-                                                        aria-label="供应商"
-                                                        onValueChange={
-                                                            setProductSupplierIdDraft
-                                                        }
-                                                        options={
-                                                            productFilterOptionsQuery
-                                                                .data
-                                                                ?.suppliers ??
-                                                            []
-                                                        }
-                                                        loading={
-                                                            productFilterOptionsQuery.isPending
-                                                        }
-                                                        placeholder="全部供应商"
-                                                        searchPlaceholder="搜索供应商名称或代码"
-                                                    />
-                                                </label>
-                                                <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                    <span className="text-muted-foreground">
-                                                        销售价
-                                                    </span>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Input
-                                                            className="w-0 min-w-0 flex-1"
-                                                            value={
-                                                                productSalesPriceMinDraft
-                                                            }
-                                                            onChange={(
-                                                                event,
-                                                            ) => {
-                                                                setProductSalesPriceMinDraft(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                                setProductSalesPriceError(
-                                                                    null,
-                                                                )
-                                                            }}
-                                                            inputMode="decimal"
-                                                            autoComplete="off"
-                                                            placeholder="最低价"
-                                                            aria-label="最低销售价"
-                                                            aria-invalid={Boolean(
-                                                                productSalesPriceError,
-                                                            )}
-                                                            aria-describedby="product-sales-price-error"
-                                                        />
-                                                        <span className="text-muted-foreground">
-                                                            至
-                                                        </span>
-                                                        <Input
-                                                            className="w-0 min-w-0 flex-1"
-                                                            value={
-                                                                productSalesPriceMaxDraft
-                                                            }
-                                                            onChange={(
-                                                                event,
-                                                            ) => {
-                                                                setProductSalesPriceMaxDraft(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                                setProductSalesPriceError(
-                                                                    null,
-                                                                )
-                                                            }}
-                                                            inputMode="decimal"
-                                                            autoComplete="off"
-                                                            placeholder="最高价"
-                                                            aria-label="最高销售价"
-                                                            aria-invalid={Boolean(
-                                                                productSalesPriceError,
-                                                            )}
-                                                            aria-describedby="product-sales-price-error"
-                                                        />
-                                                    </div>
-                                                    {productSalesPriceError ? (
-                                                        <span
-                                                            id="product-sales-price-error"
-                                                            className="text-xs text-destructive"
-                                                            role="alert"
-                                                        >
-                                                            {
-                                                                productSalesPriceError
-                                                            }
-                                                        </span>
-                                                    ) : null}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex justify-end">
-                                                <Button type="submit" size="sm">
-                                                    <SearchIcon
-                                                        data-icon="inline-start"
-                                                        aria-hidden="true"
-                                                    />
-                                                    搜索
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ) : undefined
-                                }
-                                actions={
-                                    <>
-                                        <span
-                                            className="text-xs text-muted-foreground"
-                                            aria-live="polite"
-                                        >
-                                            {resourceLabel(resource)} ·{" "}
-                                            {rows.length} 条
-                                        </span>
-                                        {hasActiveFilters ? (
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={clearAllFilters}
-                                            >
-                                                清除筛选
-                                            </Button>
-                                        ) : null}
-                                    </>
-                                }
-                            />
-                        </form>
-                    ) : isSupplierResource ? (
-                        <form
-                            onSubmit={(event) => {
-                                event.preventDefault()
-                                applySupplierFilters()
-                            }}
-                        >
-                            <ListToolbar
-                                search={
-                                    <InputGroup>
-                                        <InputGroupAddon>
-                                            <SearchIcon aria-hidden="true" />
-                                        </InputGroupAddon>
-                                        <InputGroupInput
-                                            ref={searchInputRef}
-                                            value={searchDraft}
-                                            onChange={(event) =>
-                                                setSearchDraft(
-                                                    event.target.value,
-                                                )
-                                            }
-                                            placeholder={masterDataSearchPlaceholder(
-                                                resource,
-                                            )}
-                                            aria-label={
-                                                masterDataCopy.searchAria
-                                            }
-                                        />
-                                    </InputGroup>
-                                }
-                                filters={
-                                    <>
-                                        {!supplierFilterPanelOpen ? (
-                                            <Button type="submit" size="sm">
-                                                <SearchIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                搜索
-                                            </Button>
-                                        ) : null}
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            aria-expanded={
-                                                supplierFilterPanelOpen
-                                            }
-                                            onClick={() =>
-                                                setSupplierFilterPanelOpen(
-                                                    (open) => !open,
-                                                )
-                                            }
-                                        >
-                                            <FilterIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                            />
-                                            高级筛选
-                                            {hasStructuredSupplierFilters ? (
-                                                <Badge variant="info">
-                                                    已启用
-                                                </Badge>
-                                            ) : null}
-                                            <ChevronDownIcon
-                                                data-icon="inline-end"
-                                                aria-hidden="true"
-                                                className={
-                                                    supplierFilterPanelOpen
-                                                        ? "rotate-180 transition-transform"
-                                                        : "transition-transform"
-                                                }
-                                            />
-                                        </Button>
-                                    </>
-                                }
-                                secondary={
-                                    supplierFilterPanelOpen ? (
-                                        <div
-                                            className="flex w-full flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
-                                            aria-label="供应商筛选条件"
-                                        >
-                                            <FixedOptionRadioFilter
-                                                label="启停"
-                                                value={lifecycleStatusDraft}
-                                                onValueChange={
-                                                    setLifecycleStatusDraft
-                                                }
-                                                options={
-                                                    LIFECYCLE_RADIO_FILTER_OPTIONS
-                                                }
-                                                aria-label={
-                                                    masterDataCopy.filterLifecycleAria
-                                                }
-                                            />
-                                            <FixedOptionRadioFilter
-                                                label="资质状态"
-                                                value={
-                                                    supplierQualificationHealthDraft
-                                                }
-                                                onValueChange={
-                                                    setSupplierQualificationHealthDraft
-                                                }
-                                                options={
-                                                    SUPPLIER_QUALIFICATION_HEALTH_OPTIONS
-                                                }
-                                                aria-label="资质状态"
-                                            />
-                                            <FixedOptionCheckboxFilter
-                                                label="供应能力"
-                                                value={
-                                                    supplierCapabilityCodesDraft
-                                                }
-                                                onValueChange={
-                                                    setSupplierCapabilityCodesDraft
-                                                }
-                                                options={
-                                                    SUPPLIER_CAPABILITY_OPTIONS
-                                                }
-                                                aria-label="供应能力，可多选"
-                                            />
-                                            <FixedOptionCheckboxFilter
-                                                label="资质类型"
-                                                value={
-                                                    supplierQualificationTypesDraft
-                                                }
-                                                onValueChange={
-                                                    setSupplierQualificationTypesDraft
-                                                }
-                                                options={
-                                                    SUPPLIER_QUALIFICATION_TYPE_OPTIONS
-                                                }
-                                                aria-label="资质类型，可多选"
-                                            />
-
-                                            <div className="flex justify-end">
-                                                <Button type="submit" size="sm">
-                                                    <SearchIcon
-                                                        data-icon="inline-start"
-                                                        aria-hidden="true"
-                                                    />
-                                                    搜索
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ) : undefined
-                                }
-                                actions={
-                                    <>
-                                        <span
-                                            className="text-xs text-muted-foreground"
-                                            aria-live="polite"
-                                        >
-                                            {resourceLabel(resource)} ·{" "}
-                                            {rows.length} 条
-                                        </span>
-                                        {hasActiveFilters ? (
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={clearAllFilters}
-                                            >
-                                                清除筛选
-                                            </Button>
-                                        ) : null}
-                                    </>
-                                }
-                            />
-                        </form>
-                    ) : (
-                        <ListToolbar
-                            search={
-                                <form
-                                    onSubmit={(e) => {
-                                        e.preventDefault()
-                                        if (searchDraft.trim() === q) return
-                                        patchUrl({
-                                            q: searchDraft.trim() || null,
-                                            page: null,
-                                        })
-                                        resetPagination()
-                                    }}
-                                >
-                                    <InputGroup>
-                                        <InputGroupAddon>
-                                            <SearchIcon aria-hidden="true" />
-                                        </InputGroupAddon>
-                                        <InputGroupInput
-                                            ref={searchInputRef}
-                                            value={searchDraft}
-                                            onChange={(e) =>
-                                                setSearchDraft(e.target.value)
-                                            }
-                                            placeholder={masterDataSearchPlaceholder(
-                                                resource,
-                                            )}
-                                            aria-label={
-                                                masterDataCopy.searchAria
-                                            }
-                                        />
-                                        <InputGroupAddon align="inline-end">
-                                            <InputGroupButton
-                                                type="submit"
-                                                aria-label="执行搜索"
-                                            >
-                                                搜索
-                                            </InputGroupButton>
-                                        </InputGroupAddon>
-                                    </InputGroup>
-                                </form>
-                            }
-                            filters={
-                                <>
-                                    <ToggleGroup
-                                        value={[lifecycleStatus]}
-                                        onValueChange={(values) => {
-                                            const next =
-                                                (values[0] as
-                                                    | typeof lifecycleStatus
-                                                    | undefined) ?? "all"
-                                            changeLifecycle(next)
-                                        }}
-                                        variant="outline"
-                                        size="sm"
-                                        spacing={0}
-                                        aria-label={
-                                            masterDataCopy.filterLifecycleAria
-                                        }
-                                    >
-                                        <ToggleGroupItem value="all">
-                                            全部
-                                        </ToggleGroupItem>
-                                        <ToggleGroupItem value="enabled">
-                                            {masterDataCopy.lifecycleEnabled}
-                                        </ToggleGroupItem>
-                                        <ToggleGroupItem value="disabled">
-                                            {masterDataCopy.lifecycleDisabled}
-                                        </ToggleGroupItem>
-                                    </ToggleGroup>
-                                    <OptionCombobox
-                                        className="w-[10.5rem]"
-                                        value={revisionTiming}
-                                        aria-label={
-                                            masterDataCopy.filterVersionAria
-                                        }
-                                        onValueChange={(v) => {
-                                            changeRevisionTiming(
-                                                (v ??
-                                                    "all") as typeof revisionTiming,
-                                            )
-                                        }}
-                                        options={[
-                                            {
-                                                value: "all",
-                                                label: masterDataCopy.versionAll,
-                                            },
-                                            {
-                                                value: "current",
-                                                label: masterDataCopy.versionCurrent,
-                                            },
-                                            {
-                                                value: "future",
-                                                label: masterDataCopy.versionFuture,
-                                            },
-                                        ]}
-                                        size="sm"
-                                        allowClear={false}
-                                        placeholder={masterDataCopy.versionAll}
-                                    />
-                                </>
-                            }
-                            actions={
-                                <>
-                                    <span
-                                        className="text-xs text-muted-foreground"
-                                        aria-live="polite"
-                                    >
-                                        {resourceLabel(resource)} ·{" "}
-                                        {rows.length} 条
-                                    </span>
-                                    {hasActiveFilters ? (
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={clearAllFilters}
-                                        >
-                                            清除筛选
-                                        </Button>
-                                    ) : null}
-                                </>
-                            }
-                        />
-                    )
+                    <MasterDataListToolbar
+                        isProductResource={isProductResource}
+                        isSupplierResource={isSupplierResource}
+                        resource={resource}
+                        searchInputRef={searchInputRef}
+                        searchDraft={searchDraft}
+                        setSearchDraft={setSearchDraft}
+                        rowCount={rows.length}
+                        hasActiveFilters={hasActiveFilters}
+                        clearAllFilters={clearAllFilters}
+                        patchUrl={patchUrl}
+                        resetPagination={resetPagination}
+                        q={q}
+                        lifecycleStatus={lifecycleStatus}
+                        revisionTiming={revisionTiming}
+                        changeLifecycle={changeLifecycle}
+                        changeRevisionTiming={changeRevisionTiming}
+                        productFilterPanelOpen={productFilterPanelOpen}
+                        setProductFilterPanelOpen={setProductFilterPanelOpen}
+                        hasStructuredProductFilters={
+                            hasStructuredProductFilters
+                        }
+                        applyProductFilters={applyProductFilters}
+                        productKindDraft={productKindDraft}
+                        setProductKindDraft={setProductKindDraft}
+                        lifecycleStatusDraft={lifecycleStatusDraft}
+                        setLifecycleStatusDraft={setLifecycleStatusDraft}
+                        revisionTimingDraft={revisionTimingDraft}
+                        setRevisionTimingDraft={setRevisionTimingDraft}
+                        productListingStatusDraft={productListingStatusDraft}
+                        setProductListingStatusDraft={
+                            setProductListingStatusDraft
+                        }
+                        productSupplyCoverageDraft={productSupplyCoverageDraft}
+                        setProductSupplyCoverageDraft={
+                            setProductSupplyCoverageDraft
+                        }
+                        productCategoryIdDraft={productCategoryIdDraft}
+                        setProductCategoryIdDraft={setProductCategoryIdDraft}
+                        productBrandIdDraft={productBrandIdDraft}
+                        setProductBrandIdDraft={setProductBrandIdDraft}
+                        productSupplierIdDraft={productSupplierIdDraft}
+                        setProductSupplierIdDraft={setProductSupplierIdDraft}
+                        productSalesPriceMinDraft={productSalesPriceMinDraft}
+                        setProductSalesPriceMinDraft={
+                            setProductSalesPriceMinDraft
+                        }
+                        productSalesPriceMaxDraft={productSalesPriceMaxDraft}
+                        setProductSalesPriceMaxDraft={
+                            setProductSalesPriceMaxDraft
+                        }
+                        productSalesPriceError={productSalesPriceError}
+                        setProductSalesPriceError={setProductSalesPriceError}
+                        productFilterOptionsQuery={productFilterOptionsQuery}
+                        supplierFilterPanelOpen={supplierFilterPanelOpen}
+                        setSupplierFilterPanelOpen={setSupplierFilterPanelOpen}
+                        hasStructuredSupplierFilters={
+                            hasStructuredSupplierFilters
+                        }
+                        applySupplierFilters={applySupplierFilters}
+                        supplierQualificationHealthDraft={
+                            supplierQualificationHealthDraft
+                        }
+                        setSupplierQualificationHealthDraft={
+                            setSupplierQualificationHealthDraft
+                        }
+                        supplierCapabilityCodesDraft={
+                            supplierCapabilityCodesDraft
+                        }
+                        setSupplierCapabilityCodesDraft={
+                            setSupplierCapabilityCodesDraft
+                        }
+                        supplierQualificationTypesDraft={
+                            supplierQualificationTypesDraft
+                        }
+                        setSupplierQualificationTypesDraft={
+                            setSupplierQualificationTypesDraft
+                        }
+                    />
                 }
                 table={
                     <DataTable
@@ -2742,214 +1353,18 @@ function MasterDataListWorkspace({
                     />
                 }
             />
-
-            {!skipPreviewSheet ? (
-                <QuickPreviewSheet
-                    open={previewRow != null}
-                    onOpenChange={(open) => {
-                        if (!open) {
-                            setPreviewId(null)
-                            if (lastFocusedRowId.current) {
-                                const el = document.querySelector(
-                                    `[data-row-id="${lastFocusedRowId.current}"]`,
-                                )
-                                if (el instanceof HTMLElement) el.focus()
-                            }
-                        }
-                    }}
-                    size={isSellableResource ? "preview" : "detail"}
-                    title={
-                        previewRow?.sellableItem
-                            ? `${previewRow.name} · ${previewRow.sellableItem.specificationLabel}`
-                            : (previewRow?.name ?? "基础资料预览")
-                    }
-                    description={
-                        previewRow?.sellableItem
-                            ? "公司商品池中当前符合销售资格的 SKU"
-                            : undefined
-                    }
-                    identity={
-                        previewRow ? (
-                            <span className="num">
-                                {previewRow.sellableItem ? "SKU 编号：" : null}
-                                {previewRow.stableNo}
-                                {!previewRow.sellableItem
-                                    ? ` · v${previewRow.revisionNo}`
-                                    : null}
-                            </span>
-                        ) : null
-                    }
-                    summary={
-                        previewRow ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                                {previewRow.sellableItem ? (
-                                    <>
-                                        <Badge variant="success">
-                                            当前可售
-                                        </Badge>
-                                        <Badge variant="outline">
-                                            {
-                                                previewRow.sellableItem
-                                                    .productKindLabel
-                                            }
-                                        </Badge>
-                                        <Badge variant="outline">
-                                            <span className="num">
-                                                {
-                                                    previewRow.sellableItem
-                                                        .supplierCount
-                                                }
-                                            </span>{" "}
-                                            家有效供应商
-                                        </Badge>
-                                    </>
-                                ) : (
-                                    <>
-                                        <BusinessStatusBadge
-                                            context="preview"
-                                            label={
-                                                previewRow.lifecycleStatusLabel
-                                            }
-                                            tone={previewRow.lifecycleTone}
-                                        />
-                                        <Badge
-                                            variant={
-                                                previewRow.revisionTiming ===
-                                                "FUTURE"
-                                                    ? "warning"
-                                                    : "secondary"
-                                            }
-                                        >
-                                            {previewRow.revisionTimingLabel}
-                                        </Badge>
-                                    </>
-                                )}
-                            </div>
-                        ) : null
-                    }
-                    footer={
-                        previewRow ? (
-                            previewRow.sellableItem ? (
-                                <>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => setPreviewId(null)}
-                                    >
-                                        关闭
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        render={
-                                            <Link
-                                                href={`/master-data/products/${previewRow.sellableItem.productId}?section=overview`}
-                                            />
-                                        }
-                                    >
-                                        打开商品资料
-                                        <ArrowUpRightIcon
-                                            data-icon="inline-end"
-                                            aria-hidden
-                                        />
-                                    </Button>
-                                </>
-                            ) : (
-                                <>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => setPreviewId(null)}
-                                    >
-                                        关闭
-                                    </Button>
-                                    <DisabledActionHint
-                                        message={
-                                            previewRow.actionBlockers.find(
-                                                (b) =>
-                                                    b.action ===
-                                                    "CREATE_REVISION",
-                                            )?.message
-                                        }
-                                    >
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled={
-                                                !previewRow.allowedActions.includes(
-                                                    "CREATE_REVISION",
-                                                )
-                                            }
-                                            title={
-                                                previewRow.actionBlockers.find(
-                                                    (b) =>
-                                                        b.action ===
-                                                        "CREATE_REVISION",
-                                                )?.message
-                                            }
-                                            onClick={() =>
-                                                setReviseTarget(previewRow)
-                                            }
-                                        >
-                                            {masterDataCopy.actionUpdate}
-                                        </Button>
-                                    </DisabledActionHint>
-                                    <DisabledActionHint
-                                        message={
-                                            previewRow.actionBlockers.find(
-                                                (b) => b.action === "DISABLE",
-                                            )?.message
-                                        }
-                                    >
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled={
-                                                !previewRow.allowedActions.includes(
-                                                    "DISABLE",
-                                                )
-                                            }
-                                            title={
-                                                previewRow.actionBlockers.find(
-                                                    (b) =>
-                                                        b.action === "DISABLE",
-                                                )?.message
-                                            }
-                                            onClick={() =>
-                                                setDisableTarget(previewRow)
-                                            }
-                                        >
-                                            {masterDataCopy.actionDisable}
-                                        </Button>
-                                    </DisabledActionHint>
-                                    <Button
-                                        type="button"
-                                        render={
-                                            <Link
-                                                href={`/master-data/${resource}/${previewRow.stableId}?section=overview`}
-                                            />
-                                        }
-                                    >
-                                        {masterDataCopy.actionOpenDetail}
-                                    </Button>
-                                </>
-                            )
-                        ) : null
-                    }
-                >
-                    {previewRow ? (
-                        previewRow.sellableItem ? (
-                            <SellableItemPreviewPanel row={previewRow} />
-                        ) : (
-                            <MasterDataPreviewPanel
-                                row={previewRow}
-                                detail={previewDetailQuery.data}
-                                detailLoading={previewDetailQuery.isPending}
-                            />
-                        )
-                    ) : null}
-                </QuickPreviewSheet>
-            ) : null}
-
+            <MasterDataPreviewSheet
+                skipPreviewSheet={skipPreviewSheet}
+                previewRow={previewRow}
+                lastFocusedRowId={lastFocusedRowId}
+                isSellableResource={isSellableResource}
+                resource={resource}
+                previewDetail={previewDetailQuery.data}
+                previewDetailLoading={previewDetailQuery.isPending}
+                onClose={() => setPreviewId(null)}
+                onRevise={setReviseTarget}
+                onDisable={setDisableTarget}
+            />
             <ProductSupplyDialog
                 product={supplyProduct}
                 skus={
