@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type { PaginationState } from "@tanstack/react-table"
 import {
     ExternalLinkIcon,
     PauseIcon,
@@ -12,15 +12,9 @@ import {
     ShieldAlertIcon,
     TriangleAlertIcon,
 } from "lucide-react"
-import { z } from "zod"
 
 import {
-    BusinessDiffPanel,
-    BusinessEmptyState,
-    BusinessStatusBadge,
-    BusinessTableFrame,
     DataFreshness,
-    DataTable,
     FormalActionConfirmDialog,
     FormalActionResult,
     MaintenanceBanner,
@@ -30,20 +24,12 @@ import {
     OptionCombobox,
     PageHeader,
     PageScaffold,
-    SequentialProcessBar,
     surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import {
     Dialog,
     DialogClose,
@@ -59,15 +45,8 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type {
-    MallSnapshotRow,
-    MallSyncJobRow,
-    MallSyncViewName,
-    MappingTaskView,
-    ReconciliationDifference,
-} from "@/features/mall-sync/types"
+import type { MallSyncViewName } from "@/features/mall-sync/types"
 import {
     DEFER_REASON_OPTIONS,
     DIRECTION_LABEL,
@@ -85,75 +64,26 @@ import {
     useTriggerIncrementalMutation,
     useTriggerSingleOrderMutation,
 } from "@/features/mall-sync/queries"
+import { useMallSyncColumns } from "@/features/mall-sync/mall-sync-columns"
+import { MallSyncMappingView } from "@/features/mall-sync/mall-sync-mapping-view"
+import { MallSyncReadViews } from "@/features/mall-sync/mall-sync-read-views"
+import {
+    ALL_OBJECT_PARAMS,
+    confirmSchema,
+    deferSchema,
+    incrementalSchema,
+    parseView,
+    pullSchema,
+    type SessionLease,
+    VIEW_OBJECT_PARAMS,
+    VIEWS,
+} from "@/features/mall-sync/presentation"
 import { SourceSystemsCard } from "@/features/mall-sync/source-systems-card"
-import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { type ResultState } from "@/components/business/feedback"
-import { freshnessText, versionText, workspaceLabel } from "@/lib/ui-text"
-import { JOB_ERROR_CLASS_LABEL } from "@/features/mall-sync/types"
-
-const VIEWS: MallSyncViewName[] = [
-    "overview",
-    "jobs",
-    "snapshots",
-    "mapping",
-    "reconciliation",
-    "history",
-]
-
-/** 每个视图可携带的对象定位参数；切视图时清理其它视图的残留参数 */
-const VIEW_OBJECT_PARAMS: Record<MallSyncViewName, readonly string[]> = {
-    overview: [],
-    jobs: ["jobId"],
-    snapshots: ["snapshotId"],
-    mapping: ["mappingTaskId", "workItemId", "currentWorkItemId"],
-    reconciliation: ["differenceId"],
-    history: [],
-}
-
-const ALL_OBJECT_PARAMS = [
-    "jobId",
-    "snapshotId",
-    "mappingTaskId",
-    "workItemId",
-    "currentWorkItemId",
-    "differenceId",
-] as const
-
-function parseView(raw: string | null): MallSyncViewName {
-    if (raw && (VIEWS as string[]).includes(raw)) return raw as MallSyncViewName
-    return "overview"
-}
-
-type SessionLease = {
-    workItemId: string
-    subjectVersion: string
-}
-
-const confirmSchema = z.object({
-    evidenceNote: z.string().trim().min(4, "请填写至少 4 个字的确认依据"),
-})
-
-const deferSchema = z.object({
-    reasonCode: z.enum([
-        "WAITING_SOURCE",
-        "NEED_CLARIFICATION",
-        "WAITING_MASTER_DATA",
-        "OTHER",
-    ]),
-    note: z.string(),
-})
-
-const pullSchema = z.object({
-    externalOrderNo: z.string().trim().min(1, "请填写商城销售单号"),
-    reason: z.string().trim().min(4, "请填写至少 4 个字的理由"),
-})
-
-const incrementalSchema = z.object({
-    reason: z.string().trim().min(4, "请填写至少 4 个字的理由"),
-})
+import { workspaceLabel } from "@/lib/ui-text"
 
 export function MallSyncPage() {
     const router = useRouter()
@@ -636,312 +566,8 @@ export function MallSyncPage() {
             ? "来源不可用时不新建推进任务（可重试既有失败）"
             : null
 
-    const jobColumns = React.useMemo<ColumnDef<MallSyncJobRow>[]>(
-        () => [
-            {
-                id: "jobNo",
-                accessorFn: (r) => r.jobNo,
-                header: "任务号",
-                cell: ({ row }) => (
-                    <button
-                        type="button"
-                        className="text-left text-sm font-medium text-primary hover:underline"
-                        onClick={() =>
-                            patchUrl({
-                                view: "jobs",
-                                jobId: row.original.jobId,
-                            })
-                        }
-                    >
-                        {row.original.jobNo}
-                    </button>
-                ),
-            },
-            {
-                id: "type",
-                accessorFn: (r) => r.jobTypeLabel,
-                header: "类型",
-                cell: ({ row }) => (
-                    <span className="text-sm">{row.original.jobTypeLabel}</span>
-                ),
-            },
-            {
-                id: "status",
-                header: "状态",
-                cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        label={row.original.statusLabel}
-                        tone={row.original.statusTone}
-                    />
-                ),
-            },
-            {
-                id: "counts",
-                header: "页 / 条 / 错",
-                meta: { align: "end", numeric: true },
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {row.original.pageCount}/{row.original.itemCount}/
-                        {row.original.errorCount}
-                    </span>
-                ),
-            },
-            {
-                id: "wm",
-                header: freshnessText.syncProgress,
-                cell: ({ row }) => (
-                    <span className="text-sm text-muted-foreground">
-                        {row.original.watermarkAdvanced ? "已推进" : "未推进"}
-                    </span>
-                ),
-            },
-            {
-                id: "started",
-                header: "开始",
-                cell: ({ row }) => (
-                    <span className="text-sm tabular-nums">
-                        {formatDateTime(row.original.startedAt, "default")}
-                    </span>
-                ),
-            },
-        ],
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [searchParams],
-    )
-
-    const snapshotColumns = React.useMemo<ColumnDef<MallSnapshotRow>[]>(
-        () => [
-            {
-                id: "order",
-                header: "商城销售单号",
-                cell: ({ row }) => (
-                    <button
-                        type="button"
-                        className="font-mono text-sm text-primary hover:underline"
-                        onClick={() =>
-                            patchUrl({
-                                view: "snapshots",
-                                snapshotId: row.original.snapshotId,
-                            })
-                        }
-                    >
-                        {row.original.externalOrderNo}
-                    </button>
-                ),
-            },
-            {
-                id: "status",
-                header: "商城状态",
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.sourceStatusLabel}
-                    </span>
-                ),
-            },
-            {
-                id: "mapping",
-                header: "数据映射状态",
-                cell: ({ row }) => (
-                    <Badge variant="outline">
-                        {row.original.mappingStatusLabel}
-                    </Badge>
-                ),
-            },
-            {
-                id: "hash",
-                header: versionText.dataVersion,
-                cell: ({ row }) => (
-                    <span className="font-mono text-xs text-muted-foreground">
-                        {row.original.contentHashShort}
-                    </span>
-                ),
-            },
-            {
-                id: "applied",
-                header: "ERP 版本",
-                cell: ({ row }) =>
-                    row.original.appliedSalesOrderNo ? (
-                        <Link
-                            href={`/sales/orders/${row.original.appliedSalesOrderId}`}
-                            className="text-sm text-primary hover:underline"
-                        >
-                            {row.original.appliedSalesOrderNo}
-                        </Link>
-                    ) : (
-                        <span className="text-sm text-muted-foreground">
-                            未形成
-                        </span>
-                    ),
-            },
-        ],
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [searchParams],
-    )
-
-    const mappingColumns = React.useMemo<ColumnDef<MappingTaskView>[]>(
-        () => [
-            {
-                id: "order",
-                header: "来源单号",
-                cell: ({ row }) => (
-                    <button
-                        type="button"
-                        className="font-mono text-sm text-primary hover:underline"
-                        onClick={() =>
-                            patchUrl({
-                                view: "mapping",
-                                mappingTaskId: row.original.mappingTaskId,
-                                workItemId:
-                                    row.original.ownerRoutingState ===
-                                    "CONFIGURED"
-                                        ? row.original.workItem.workItemId
-                                        : null,
-                            })
-                        }
-                    >
-                        {row.original.externalOrderNo}
-                    </button>
-                ),
-            },
-            {
-                id: "type",
-                header: "映射类型",
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.mappingTypeLabel}
-                    </span>
-                ),
-            },
-            {
-                id: "mapStatus",
-                header: "映射状态",
-                cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        label={row.original.mappingTaskStatusLabel}
-                        tone={
-                            row.original.mappingTaskStatus === "RESOLVED"
-                                ? "success"
-                                : row.original.mappingTaskStatus === "PENDING"
-                                  ? "warning"
-                                  : "neutral"
-                        }
-                    />
-                ),
-            },
-            {
-                id: "reapply",
-                header: "重新归集",
-                cell: ({ row }) =>
-                    row.original.reapplyOperation ? (
-                        <BusinessStatusBadge
-                            context="list"
-                            label={row.original.reapplyOperation.statusLabel}
-                            tone={
-                                row.original.reapplyOperation.status ===
-                                "SUCCEEDED"
-                                    ? "success"
-                                    : row.original.reapplyOperation.status ===
-                                        "UNKNOWN"
-                                      ? "destructive"
-                                      : "info"
-                            }
-                        />
-                    ) : (
-                        <span className="text-sm text-muted-foreground">
-                            未开始
-                        </span>
-                    ),
-            },
-            {
-                id: "owner",
-                header: "责任",
-                cell: ({ row }) =>
-                    row.original.ownerRoutingState === "MISSING" ? (
-                        <Badge variant="destructive">待责任配置</Badge>
-                    ) : (
-                        <span className="text-sm">
-                            {row.original.ownerRoleLabel}
-                        </span>
-                    ),
-            },
-            {
-                id: "wi",
-                header: "待办",
-                cell: ({ row }) =>
-                    row.original.ownerRoutingState === "CONFIGURED" ? (
-                        <span className="text-sm">
-                            {row.original.workItem.statusLabel}
-                        </span>
-                    ) : (
-                        <span className="text-sm text-muted-foreground">
-                            无
-                        </span>
-                    ),
-            },
-        ],
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [searchParams],
-    )
-
-    const diffColumns = React.useMemo<ColumnDef<ReconciliationDifference>[]>(
-        () => [
-            {
-                id: "order",
-                header: "来源单号",
-                cell: ({ row }) => (
-                    <button
-                        type="button"
-                        className="font-mono text-sm text-primary hover:underline"
-                        onClick={() =>
-                            patchUrl({
-                                view: "reconciliation",
-                                differenceId: row.original.differenceId,
-                            })
-                        }
-                    >
-                        {row.original.externalOrderNo}
-                    </button>
-                ),
-            },
-            {
-                id: "type",
-                header: "差异类型",
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.differenceTypeLabel}
-                    </span>
-                ),
-            },
-            {
-                id: "fp",
-                header: versionText.dataVersion,
-                cell: ({ row }) => (
-                    <span className="font-mono text-xs text-muted-foreground">
-                        {row.original.sourceFingerprintShort ?? "—"}
-                        {row.original.erpFingerprintShort
-                            ? ` ↔ ${row.original.erpFingerprintShort}`
-                            : ""}
-                    </span>
-                ),
-            },
-            {
-                id: "status",
-                header: "状态",
-                cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        label={row.original.statusLabel}
-                        tone={row.original.statusTone}
-                    />
-                ),
-            },
-        ],
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [searchParams],
-    )
-
+    const { diffColumns, jobColumns, mappingColumns, snapshotColumns } =
+        useMallSyncColumns({ patchUrl, searchParams })
     const leaseStatus: "active" | "unclaimed" | "lost" | "released" =
         mappingTask?.ownerRoutingState !== "CONFIGURED"
             ? "released"
@@ -958,6 +584,59 @@ export function MallSyncPage() {
         leaseStatus === "active" &&
         !!selectedCandidateId &&
         !mappingTask.hasConflict
+
+    const mappingConfirmForm =
+        mappingTask?.ownerRoutingState === "CONFIGURED" &&
+        mappingTask.mappingTaskStatus === "PENDING" ? (
+            <form
+                className="space-y-2"
+                onSubmit={(e) => {
+                    e.preventDefault()
+                    void confirmForm.handleSubmit()
+                }}
+            >
+                <confirmForm.AppField
+                    name="evidenceNote"
+                    children={(field) => (
+                        <field.TextareaField
+                            label="确认依据"
+                            placeholder="说明选择该 ERP 对象的业务依据"
+                        />
+                    )}
+                />
+                <div className="flex flex-wrap gap-2">
+                    <confirmForm.AppForm>
+                        <confirmForm.SubmitButton
+                            label="确认映射"
+                            disabled={!canConfirmMapping}
+                        />
+                    </confirmForm.AppForm>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={leaseStatus !== "active"}
+                        onClick={() => setDeferOpen(true)}
+                    >
+                        <PauseIcon className="size-4" />
+                        先跳过
+                    </Button>
+                </div>
+                {!selectedCandidateId ? (
+                    <p className="text-xs text-muted-foreground">
+                        请先选择左侧 ERP 候选后即可确认。
+                    </p>
+                ) : mappingTask.hasConflict ? (
+                    <p className="text-xs text-muted-foreground">
+                        冲突未解决前确认禁用。
+                    </p>
+                ) : leaseStatus !== "active" ? (
+                    <p className="text-xs text-muted-foreground">
+                        请先领取任务后确认。
+                    </p>
+                ) : null}
+            </form>
+        ) : null
 
     const pageJobs = React.useMemo(() => {
         const rows = data?.jobs ?? []
@@ -1327,940 +1006,52 @@ export function MallSyncPage() {
             ) : null}
 
             {/* ── 子视图内容 ── */}
-            {view === "overview" ? (
-                <div className="grid gap-4 lg:grid-cols-2">
-                    <Card size="sm" className={surfacePanelClassName}>
-                        <CardHeader className="border-b border-border/30">
-                            <CardTitle>运行摘要</CardTitle>
-                            <CardDescription>
-                                同步进度仅证明来源数据已捕获，不证明映射或应收已成功。
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-sm">
-                            <div className="flex justify-between gap-2">
-                                <span className="text-muted-foreground">
-                                    当前同步进度
-                                </span>
-                                <span className="num text-xs">
-                                    {context?.freshness.currentWatermark
-                                        ? formatDateTime(
-                                              context.freshness
-                                                  .currentWatermark,
-                                              "default",
-                                          )
-                                        : "—"}
-                                </span>
-                            </div>
-                            <div className="flex justify-between gap-2">
-                                <span className="text-muted-foreground">
-                                    最近成功
-                                </span>
-                                <span>
-                                    {formatDateTime(
-                                        context?.freshness
-                                            .latestSuccessfulJobAt,
-                                        "default",
-                                    )}
-                                </span>
-                            </div>
-                            <div className="flex justify-between gap-2">
-                                <span className="text-muted-foreground">
-                                    来源数据更新时间
-                                </span>
-                                <span>
-                                    {formatDateTime(
-                                        context?.freshness.sourceSafeTime,
-                                        "default",
-                                    )}
-                                </span>
-                            </div>
-                            <div className="flex justify-between gap-2">
-                                <span className="text-muted-foreground">
-                                    主责数量
-                                </span>
-                                <span>
-                                    商城 {ownership?.mallOwnedOrderCount ?? "—"}{" "}
-                                    · ERP {ownership?.erpOwnedOrderCount ?? "—"}
-                                </span>
-                            </div>
-                            <Separator />
-                            <p className="text-muted-foreground">
-                                同步失败不阻塞商城销售/制卡/绑定/激活/消费；差异在
-                                ERP 侧处理，无「手工补建销售单」入口。
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card size="sm" className={surfacePanelClassName}>
-                        <CardHeader className="border-b border-border/30">
-                            <CardTitle>最近同步任务</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            {(data?.jobs ?? []).slice(0, 4).map((job) => (
-                                <button
-                                    key={job.jobId}
-                                    type="button"
-                                    className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm hover:bg-accent/50"
-                                    onClick={() =>
-                                        patchUrl({
-                                            view: "jobs",
-                                            jobId: job.jobId,
-                                        })
-                                    }
-                                >
-                                    <span className="font-medium">
-                                        {job.jobNo}
-                                    </span>
-                                    <BusinessStatusBadge
-                                        context="list"
-                                        label={job.statusLabel}
-                                        tone={job.statusTone}
-                                    />
-                                </button>
-                            ))}
-                            {(data?.jobs ?? []).length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                    暂无同步任务。
-                                </p>
-                            ) : null}
-                        </CardContent>
-                    </Card>
-                </div>
-            ) : null}
-
-            {view === "jobs" ? (
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
-                    <BusinessTableFrame
-                        title="同步任务"
-                        description="基线 / 增量 / 单号补拉。同步进度不因映射失败回退。"
-                        table={
-                            <DataTable
-                                data={pageJobs}
-                                columns={jobColumns}
-                                getRowId={(r) => r.jobId}
-                                rowCount={data?.jobs.length ?? 0}
-                                pagination={pagination}
-                                onPaginationChange={setPagination}
-                                layout="flush"
-                                density="compact"
-                            />
-                        }
-                    />
-                    {data?.selectedJob ? (
-                        <Card size="sm" className={surfacePanelClassName}>
-                            <CardHeader className="border-b border-border/30">
-                                <CardTitle className="text-base">
-                                    {data.selectedJob.jobNo}
-                                </CardTitle>
-                                <CardDescription>
-                                    {data.selectedJob.jobTypeLabel} ·{" "}
-                                    {data.selectedJob.triggeredBy}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3 text-sm">
-                                <BusinessStatusBadge
-                                    context="detail"
-                                    label={data.selectedJob.statusLabel}
-                                    tone={data.selectedJob.statusTone}
-                                />
-                                {data.selectedJob.impactSummary ? (
-                                    <p>{data.selectedJob.impactSummary}</p>
-                                ) : null}
-                                {data.selectedJob.errorClass ? (
-                                    <p className="text-muted-foreground">
-                                        错误分类：
-                                        {JOB_ERROR_CLASS_LABEL[
-                                            data.selectedJob.errorClass
-                                        ] ?? data.selectedJob.errorClass}
-                                    </p>
-                                ) : null}
-                                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                                    <span>
-                                        游标前{" "}
-                                        {data.selectedJob.cursorBefore
-                                            ? formatDateTime(
-                                                  data.selectedJob.cursorBefore,
-                                                  "default",
-                                              )
-                                            : "—"}
-                                    </span>
-                                    <span>
-                                        游标后{" "}
-                                        {data.selectedJob.cursorAfter
-                                            ? formatDateTime(
-                                                  data.selectedJob.cursorAfter,
-                                                  "default",
-                                              )
-                                            : "—"}
-                                    </span>
-                                </div>
-                                {data.selectedJob.allowedActions.includes(
-                                    "RETRY_FAILED_JOB",
-                                ) ? (
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="secondary"
-                                        disabled={retryJob.isPending}
-                                        onClick={() =>
-                                            setRetryConfirmOpen(true)
-                                        }
-                                    >
-                                        重试失败任务
-                                    </Button>
-                                ) : null}
-                                {data.selectedJob.actionBlockers.map((b) => (
-                                    <p
-                                        key={b.code}
-                                        className="text-xs text-warning-soft-foreground"
-                                    >
-                                        {b.message}
-                                    </p>
-                                ))}
-                            </CardContent>
-                        </Card>
-                    ) : null}
-                </div>
-            ) : null}
-
-            {view === "snapshots" ? (
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,1fr)]">
-                    <BusinessTableFrame
-                        title="来源数据"
-                        description="仅白名单商业字段。不含玩法、卡号、卡密、绑定手机、连接或密钥。"
-                        table={
-                            <DataTable
-                                data={data?.snapshots ?? []}
-                                columns={snapshotColumns}
-                                getRowId={(r) => r.snapshotId}
-                                rowCount={(data?.snapshots ?? []).length}
-                                layout="flush"
-                                density="compact"
-                            />
-                        }
-                    />
-                    {data?.selectedSnapshot ? (
-                        <Card size="sm" className={surfacePanelClassName}>
-                            <CardHeader className="border-b border-border/30">
-                                <CardTitle className="font-mono text-base">
-                                    {data.selectedSnapshot.externalOrderNo}
-                                </CardTitle>
-                                <CardDescription>
-                                    {versionText.version}{" "}
-                                    {data.selectedSnapshot.contentHashShort} ·
-                                    任务 {data.selectedSnapshot.syncJobNo}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                                <Badge variant="outline">
-                                    {data.selectedSnapshot.mappingStatusLabel}
-                                </Badge>
-                                {data.selectedSnapshot.conflictFlags.length >
-                                0 ? (
-                                    <Alert variant="warning">
-                                        <AlertTitle>冲突标记</AlertTitle>
-                                        <AlertDescription>
-                                            {data.selectedSnapshot.conflictFlags.join(
-                                                "、",
-                                            )}
-                                        </AlertDescription>
-                                    </Alert>
-                                ) : null}
-                                <dl className="space-y-1.5 text-sm">
-                                    {data.selectedSnapshot.whitelistFields.map(
-                                        (f) => (
-                                            <div
-                                                key={f.field}
-                                                className="flex justify-between gap-2 border-b border-dashed border-border/60 py-1"
-                                            >
-                                                <dt className="text-muted-foreground">
-                                                    {f.label}
-                                                </dt>
-                                                <dd className="text-right font-medium">
-                                                    {f.value}
-                                                </dd>
-                                            </div>
-                                        ),
-                                    )}
-                                </dl>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <BusinessEmptyState
-                            kind="no-data"
-                            title="选择结果"
-                            description="从左侧列表选择一条记录"
-                            className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-                        />
-                    )}
-                </div>
-            ) : null}
+            <MallSyncReadViews
+                view={view}
+                context={context}
+                ownership={ownership}
+                data={data}
+                pageJobs={pageJobs}
+                jobColumns={jobColumns}
+                snapshotColumns={snapshotColumns}
+                diffColumns={diffColumns}
+                pagination={pagination}
+                onPaginationChange={setPagination}
+                retryPending={retryJob.isPending}
+                onRetryJob={() => setRetryConfirmOpen(true)}
+                patchUrl={patchUrl}
+                firstPhase={firstPhase}
+                policyMissing={policyMissing}
+                sealed={sealed}
+                onPullDifference={(externalOrderNo) => {
+                    setPullOpen(true)
+                    pullForm.setFieldValue("externalOrderNo", externalOrderNo)
+                }}
+            />
 
             {view === "mapping" ? (
-                <div className="space-y-4">
-                    {data?.emptyReason === "NO_TASKS" ||
-                    data?.emptyReason === "FILTER_NO_RESULT" ? (
-                        <BusinessEmptyState
-                            kind={
-                                data.emptyReason === "FILTER_NO_RESULT"
-                                    ? "filter"
-                                    : "no-tasks"
-                            }
-                            title={
-                                data.emptyReason === "NO_TASKS"
-                                    ? "当前没有待处理映射"
-                                    : "筛选无结果"
-                            }
-                            description={
-                                data.emptyReason === "FILTER_NO_RESULT"
-                                    ? "清除筛选后查看其它任务。"
-                                    : "新任务到达后刷新"
-                            }
-                            className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-                        />
-                    ) : null}
-
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-                        <BusinessTableFrame
-                            title="映射任务"
-                            description="映射状态与重新归集状态分列；责任未配置时不可执行。"
-                            table={
-                                <DataTable
-                                    data={data?.mappingTasks ?? []}
-                                    columns={mappingColumns}
-                                    getRowId={(r) => r.mappingTaskId}
-                                    rowCount={(data?.mappingTasks ?? []).length}
-                                    layout="flush"
-                                    density="compact"
-                                />
-                            }
-                        />
-
-                        {mappingTask ? (
-                            <div className="space-y-3">
-                                <Card
-                                    size="sm"
-                                    className={surfacePanelClassName}
-                                >
-                                    <CardHeader className="space-y-2 border-b border-border/30">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <CardTitle className="text-base">
-                                                {mappingTask.mappingTypeLabel}
-                                            </CardTitle>
-                                            <BusinessStatusBadge
-                                                context="detail"
-                                                label={`映射 · ${mappingTask.mappingTaskStatusLabel}`}
-                                                tone={
-                                                    mappingTask.mappingTaskStatus ===
-                                                    "RESOLVED"
-                                                        ? "success"
-                                                        : "warning"
-                                                }
-                                            />
-                                            {mappingTask.reapplyOperation ? (
-                                                <BusinessStatusBadge
-                                                    context="detail"
-                                                    label={`归集 · ${mappingTask.reapplyOperation.statusLabel}`}
-                                                    tone={
-                                                        mappingTask
-                                                            .reapplyOperation
-                                                            .status ===
-                                                        "UNKNOWN"
-                                                            ? "destructive"
-                                                            : mappingTask
-                                                                    .reapplyOperation
-                                                                    .status ===
-                                                                "SUCCEEDED"
-                                                              ? "success"
-                                                              : "info"
-                                                    }
-                                                />
-                                            ) : (
-                                                <Badge variant="outline">
-                                                    归集 · 未开始
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <CardDescription>
-                                            {mappingTask.externalOrderNo}
-                                            {mappingTask.ownerRoutingState ===
-                                            "CONFIGURED" ? (
-                                                <>
-                                                    {" "}
-                                                    · 责任{" "}
-                                                    {mappingTask.ownerRoleLabel}
-                                                </>
-                                            ) : (
-                                                " · 待责任配置"
-                                            )}
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        <Alert>
-                                            <AlertTitle>
-                                                确认的是身份关系
-                                            </AlertTitle>
-                                            <AlertDescription>
-                                                不是修改来源销售单；相似候选绝不自动确认/合并。
-                                            </AlertDescription>
-                                        </Alert>
-
-                                        {mappingTask.ownerRoutingState ===
-                                        "MISSING" ? (
-                                            <Alert variant="destructive">
-                                                <AlertTitle>
-                                                    责任归属未配置
-                                                </AlertTitle>
-                                                <AlertDescription>
-                                                    结算主体责任未配置唯一负责角色；领域差异已保存，确认禁用，不向销售与财务同时生成可完成待办。
-                                                </AlertDescription>
-                                            </Alert>
-                                        ) : null}
-
-                                        {mappingTask.hasConflict ? (
-                                            <Alert variant="warning">
-                                                <AlertTitle>
-                                                    映射冲突
-                                                </AlertTitle>
-                                                <AlertDescription>
-                                                    当前谱系与候选并存。请刷新候选并明确确认依据；冲突未解决前确认禁用。
-                                                </AlertDescription>
-                                            </Alert>
-                                        ) : null}
-
-                                        <p className="text-sm">
-                                            <span className="font-medium">
-                                                业务影响：
-                                            </span>
-                                            {mappingTask.impactSummary}
-                                        </p>
-
-                                        <div className="grid gap-3 md:grid-cols-2">
-                                            <div>
-                                                <h4 className="mb-2 text-sm font-semibold">
-                                                    来源白名单记录
-                                                </h4>
-                                                <dl className="space-y-1 text-sm">
-                                                    {mappingTask.sourceEvidence.map(
-                                                        (e) => (
-                                                            <div
-                                                                key={e.field}
-                                                                className="flex justify-between gap-2 border-b border-dashed py-1"
-                                                            >
-                                                                <dt className="text-muted-foreground">
-                                                                    {e.label}
-                                                                </dt>
-                                                                <dd className="text-right">
-                                                                    {e.sensitive
-                                                                        ? "***"
-                                                                        : e.value}
-                                                                </dd>
-                                                            </div>
-                                                        ),
-                                                    )}
-                                                </dl>
-                                            </div>
-                                            <div>
-                                                <h4 className="mb-2 text-sm font-semibold">
-                                                    ERP 候选
-                                                </h4>
-                                                <ul className="space-y-2">
-                                                    {mappingTask.candidateTargets.map(
-                                                        (c) => (
-                                                            <li
-                                                                key={c.objectId}
-                                                            >
-                                                                <button
-                                                                    type="button"
-                                                                    disabled={
-                                                                        c.eligibility !==
-                                                                            "ELIGIBLE" ||
-                                                                        mappingTask.mappingTaskStatus !==
-                                                                            "PENDING" ||
-                                                                        mappingTask.ownerRoutingState ===
-                                                                            "MISSING"
-                                                                    }
-                                                                    onClick={() =>
-                                                                        setSelectedCandidateId(
-                                                                            c.objectId,
-                                                                        )
-                                                                    }
-                                                                    className={cn(
-                                                                        "w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                                                                        selectedCandidateId ===
-                                                                            c.objectId
-                                                                            ? "border-primary bg-accent"
-                                                                            : "hover:bg-muted/60",
-                                                                        c.eligibility !==
-                                                                            "ELIGIBLE" &&
-                                                                            "opacity-60",
-                                                                    )}
-                                                                >
-                                                                    <div className="flex items-center justify-between gap-2">
-                                                                        <span className="font-medium">
-                                                                            {
-                                                                                c.stableNo
-                                                                            }
-                                                                        </span>
-                                                                        <Badge
-                                                                            variant={
-                                                                                c.eligibility ===
-                                                                                "ELIGIBLE"
-                                                                                    ? "secondary"
-                                                                                    : "outline"
-                                                                            }
-                                                                        >
-                                                                            {c.eligibility ===
-                                                                            "ELIGIBLE"
-                                                                                ? "可选"
-                                                                                : "不可用"}
-                                                                        </Badge>
-                                                                    </div>
-                                                                    <p>
-                                                                        {
-                                                                            c.label
-                                                                        }
-                                                                    </p>
-                                                                    <p className="text-xs text-muted-foreground">
-                                                                        {
-                                                                            c.reason
-                                                                        }
-                                                                    </p>
-                                                                </button>
-                                                            </li>
-                                                        ),
-                                                    )}
-                                                </ul>
-                                            </div>
-                                        </div>
-
-                                        {mappingTask.currentTargets.length >
-                                        0 ? (
-                                            <div>
-                                                <h4 className="mb-2 text-sm font-semibold">
-                                                    当前谱系
-                                                </h4>
-                                                <ul className="space-y-1 text-sm">
-                                                    {mappingTask.currentTargets.map(
-                                                        (t) => (
-                                                            <li
-                                                                key={`${t.objectId}-${t.validFrom}`}
-                                                                className="rounded-md border px-2 py-1"
-                                                            >
-                                                                {t.stableNo}{" "}
-                                                                {t.label} ·{" "}
-                                                                {t.relationRole}{" "}
-                                                                · {t.status}
-                                                                {t.validTo
-                                                                    ? ` · 至 ${t.validTo}`
-                                                                    : ""}
-                                                            </li>
-                                                        ),
-                                                    )}
-                                                </ul>
-                                            </div>
-                                        ) : null}
-
-                                        {selectedCandidateId &&
-                                        mappingTask.mappingTaskStatus ===
-                                            "PENDING" ? (
-                                            <BusinessDiffPanel
-                                                title="确认依据对照"
-                                                changes={[
-                                                    {
-                                                        id: "identity",
-                                                        field: "身份关系",
-                                                        before: "未确认 / 旧谱系",
-                                                        after:
-                                                            mappingTask.candidateTargets.find(
-                                                                (c) =>
-                                                                    c.objectId ===
-                                                                    selectedCandidateId,
-                                                            )?.label ??
-                                                            selectedCandidateId,
-                                                        note: "确认后建立身份对应关系，不改动来源单",
-                                                    },
-                                                    {
-                                                        id: "impact",
-                                                        field: "业务影响",
-                                                        before: "未归属",
-                                                        after: "映射解决 → 待重新归集",
-                                                        note: mappingTask.impactSummary,
-                                                    },
-                                                ]}
-                                            />
-                                        ) : null}
-
-                                        {mappingTask.resolutionHistory.length >
-                                        0 ? (
-                                            <div>
-                                                <h4 className="mb-2 text-sm font-semibold">
-                                                    处理历史
-                                                </h4>
-                                                <ul className="space-y-1 text-xs text-muted-foreground">
-                                                    {mappingTask.resolutionHistory.map(
-                                                        (h, i) => (
-                                                            <li
-                                                                key={`${h.handledAt}-${i}`}
-                                                            >
-                                                                {formatDateTime(
-                                                                    h.handledAt,
-                                                                    "default",
-                                                                )}{" "}
-                                                                · {h.action} ·{" "}
-                                                                {h.result} ·{" "}
-                                                                {h.handledBy}
-                                                            </li>
-                                                        ),
-                                                    )}
-                                                </ul>
-                                            </div>
-                                        ) : null}
-
-                                        {mappingTask.ownerRoutingState ===
-                                            "CONFIGURED" &&
-                                        mappingTask.mappingTaskStatus ===
-                                            "PENDING" ? (
-                                            <form
-                                                className="space-y-2"
-                                                onSubmit={(e) => {
-                                                    e.preventDefault()
-                                                    void confirmForm.handleSubmit()
-                                                }}
-                                            >
-                                                <confirmForm.AppField
-                                                    name="evidenceNote"
-                                                    children={(field) => (
-                                                        <field.TextareaField
-                                                            label="确认依据"
-                                                            placeholder="说明选择该 ERP 对象的业务依据"
-                                                        />
-                                                    )}
-                                                />
-                                                <div className="flex flex-wrap gap-2">
-                                                    <confirmForm.AppForm>
-                                                        <confirmForm.SubmitButton
-                                                            label="确认映射"
-                                                            disabled={
-                                                                !canConfirmMapping
-                                                            }
-                                                        />
-                                                    </confirmForm.AppForm>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        disabled={
-                                                            leaseStatus !==
-                                                            "active"
-                                                        }
-                                                        onClick={() =>
-                                                            setDeferOpen(true)
-                                                        }
-                                                    >
-                                                        <PauseIcon className="size-4" />
-                                                        先跳过
-                                                    </Button>
-                                                </div>
-                                                {!selectedCandidateId ? (
-                                                    <p className="text-xs text-muted-foreground">
-                                                        请先选择左侧 ERP
-                                                        候选后即可确认。
-                                                    </p>
-                                                ) : mappingTask.hasConflict ? (
-                                                    <p className="text-xs text-muted-foreground">
-                                                        冲突未解决前确认禁用。
-                                                    </p>
-                                                ) : leaseStatus !== "active" ? (
-                                                    <p className="text-xs text-muted-foreground">
-                                                        请先领取任务后确认。
-                                                    </p>
-                                                ) : null}
-                                            </form>
-                                        ) : null}
-
-                                        {mappingTask.mappingTaskStatus ===
-                                        "RESOLVED" ? (
-                                            <div className="space-y-2 rounded-xl border p-3">
-                                                <p className="text-sm font-medium">
-                                                    固定下一步：使用原数据重新归集
-                                                </p>
-                                                {mappingTask.reapplyOperation
-                                                    ?.status === "UNKNOWN" ? (
-                                                    <Alert variant="destructive">
-                                                        <AlertTitle>
-                                                            重新归集结果未知
-                                                        </AlertTitle>
-                                                        <AlertDescription>
-                                                            映射结论保持已解决，不回滚、不自动下一项。
-                                                        </AlertDescription>
-                                                    </Alert>
-                                                ) : null}
-                                                {mappingTask.reapplyOperation
-                                                    ?.status === "SUCCEEDED" ? (
-                                                    <p className="text-sm">
-                                                        已形成{" "}
-                                                        <Link
-                                                            className="text-primary hover:underline"
-                                                            href={`/sales/orders/${mappingTask.reapplyOperation.salesOrderId}`}
-                                                        >
-                                                            {
-                                                                mappingTask
-                                                                    .reapplyOperation
-                                                                    .salesOrderNo
-                                                            }
-                                                        </Link>
-                                                        {mappingTask
-                                                            .reapplyOperation
-                                                            .receivableResultReference
-                                                            ? ` · 应收 ${mappingTask.reapplyOperation.receivableResultReference}`
-                                                            : ""}
-                                                    </p>
-                                                ) : (
-                                                    <div className="flex flex-wrap gap-2">
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            disabled={
-                                                                reapplyMutation.isPending
-                                                            }
-                                                            onClick={() =>
-                                                                void handleReapply()
-                                                            }
-                                                        >
-                                                            重新归集
-                                                        </Button>
-                                                        {mappingTask
-                                                            .reapplyOperation
-                                                            ?.status ===
-                                                        "UNKNOWN" ? (
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="secondary"
-                                                                onClick={() =>
-                                                                    void handleResolveUnknownReapply()
-                                                                }
-                                                            >
-                                                                查询处理结果
-                                                            </Button>
-                                                        ) : null}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ) : null}
-
-                                        {mappingTask.actionBlockers.map((b) => (
-                                            <p
-                                                key={`${b.action}-${b.code}`}
-                                                className="text-xs text-warning-soft-foreground"
-                                            >
-                                                {b.message}
-                                            </p>
-                                        ))}
-                                    </CardContent>
-                                </Card>
-
-                                {mappingTask.ownerRoutingState ===
-                                    "CONFIGURED" &&
-                                mappingTask.mappingTaskStatus === "PENDING" ? (
-                                    <SequentialProcessBar
-                                        current={mappingIndex.current}
-                                        total={mappingIndex.total}
-                                        leaseStatus={leaseStatus}
-                                        processLabel="确认映射"
-                                        // 没有独立的「并打开下一条」路径：两个 handler 同义
-                                        showProcessNext={false}
-                                        processDisabled={!canConfirmMapping}
-                                        onBack={() =>
-                                            router.push(
-                                                `/workspace/tasks?queueContextId=${encodeURIComponent(queueContextId)}`,
-                                            )
-                                        }
-                                        onProcess={() => {
-                                            if (canConfirmMapping)
-                                                void confirmForm.handleSubmit()
-                                        }}
-                                        onProcessNext={() => {
-                                            if (canConfirmMapping)
-                                                void confirmForm.handleSubmit()
-                                        }}
-                                        onReclaim={() => void handleClaim()}
-                                    />
-                                ) : null}
-                            </div>
-                        ) : (
-                            <BusinessEmptyState
-                                kind="no-data"
-                                title="选择映射任务"
-                                description="从左侧列表打开处理区"
-                                className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-                            />
-                        )}
-                    </div>
-                </div>
+                <MallSyncMappingView
+                    data={data}
+                    mappingTask={mappingTask}
+                    mappingColumns={mappingColumns}
+                    selectedCandidateId={selectedCandidateId}
+                    onSelectCandidate={setSelectedCandidateId}
+                    confirmFormContent={mappingConfirmForm}
+                    mappingIndex={mappingIndex}
+                    leaseStatus={leaseStatus}
+                    canConfirmMapping={canConfirmMapping}
+                    reapplyPending={reapplyMutation.isPending}
+                    onReapply={handleReapply}
+                    onResolveUnknownReapply={handleResolveUnknownReapply}
+                    onBackToQueue={() =>
+                        router.push(
+                            `/workspace/tasks?queueContextId=${encodeURIComponent(queueContextId)}`,
+                        )
+                    }
+                    onConfirm={() => confirmForm.handleSubmit()}
+                    onClaim={handleClaim}
+                />
             ) : null}
-
-            {view === "reconciliation" ? (
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,1fr)]">
-                    {data?.reconciliation ? (
-                        <>
-                            <div className="space-y-3">
-                                <Card
-                                    size="sm"
-                                    className={surfacePanelClassName}
-                                >
-                                    <CardHeader className="border-b border-border/30">
-                                        <CardTitle>
-                                            {data.reconciliation.jobNo}
-                                        </CardTitle>
-                                        <CardDescription>
-                                            {data.reconciliation.boundaryLabel}{" "}
-                                            · 商城{" "}
-                                            {data.reconciliation.mallCount} /
-                                            ERP {data.reconciliation.erpCount} ·
-                                            差异{" "}
-                                            {
-                                                data.reconciliation
-                                                    .differenceCount
-                                            }
-                                        </CardDescription>
-                                    </CardHeader>
-                                </Card>
-                                <BusinessTableFrame
-                                    title="核对差异"
-                                    description="比较完整商业数据标识，只产生差异与任务，不直接覆盖记录。"
-                                    table={
-                                        <DataTable
-                                            data={
-                                                data.reconciliation.differences
-                                            }
-                                            columns={diffColumns}
-                                            getRowId={(r) => r.differenceId}
-                                            rowCount={
-                                                data.reconciliation.differences
-                                                    .length
-                                            }
-                                            layout="flush"
-                                            density="compact"
-                                        />
-                                    }
-                                />
-                            </div>
-                            {data.selectedDifference ? (
-                                <Card
-                                    size="sm"
-                                    className={surfacePanelClassName}
-                                >
-                                    <CardHeader className="border-b border-border/30">
-                                        <CardTitle className="font-mono text-base">
-                                            {
-                                                data.selectedDifference
-                                                    .externalOrderNo
-                                            }
-                                        </CardTitle>
-                                        <CardDescription>
-                                            {
-                                                data.selectedDifference
-                                                    .differenceTypeLabel
-                                            }
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-2 text-sm">
-                                        <BusinessStatusBadge
-                                            context="detail"
-                                            label={
-                                                data.selectedDifference
-                                                    .statusLabel
-                                            }
-                                            tone={
-                                                data.selectedDifference
-                                                    .statusTone
-                                            }
-                                        />
-                                        <p>
-                                            {
-                                                data.selectedDifference
-                                                    .impactSummary
-                                            }
-                                        </p>
-                                        {data.selectedDifference
-                                            .erpSalesOrderNo ? (
-                                            <p>
-                                                ERP 销售单{" "}
-                                                {
-                                                    data.selectedDifference
-                                                        .erpSalesOrderNo
-                                                }
-                                            </p>
-                                        ) : null}
-                                        {firstPhase && !policyMissing ? (
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="secondary"
-                                                onClick={() => {
-                                                    setPullOpen(true)
-                                                    pullForm.setFieldValue(
-                                                        "externalOrderNo",
-                                                        data.selectedDifference!
-                                                            .externalOrderNo,
-                                                    )
-                                                }}
-                                            >
-                                                按此单号补拉
-                                            </Button>
-                                        ) : null}
-                                    </CardContent>
-                                </Card>
-                            ) : null}
-                        </>
-                    ) : (
-                        <BusinessEmptyState
-                            kind="no-scope"
-                            title="当前无核对范围"
-                            description="当前没有可核对的差异；清除筛选后重试。"
-                            className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-                        />
-                    )}
-                </div>
-            ) : null}
-
-            {view === "history" ? (
-                <div className="space-y-3">
-                    {sealed ? (
-                        <Alert>
-                            <AlertTitle>历史只读</AlertTitle>
-                            <AlertDescription>
-                                第一期同步已完成归档。请前往执行信息与对账工作区查看后续内容。
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-                    {(data?.history ?? []).map((h) => (
-                        <Card
-                            key={h.id}
-                            size="sm"
-                            className={surfacePanelClassName}
-                        >
-                            <CardHeader className="border-b border-border/30">
-                                <CardTitle className="text-base">
-                                    {h.title}
-                                </CardTitle>
-                                <CardDescription>
-                                    {formatDateTime(h.recordedAt, "default")}
-                                    {h.watermark
-                                        ? ` · ${formatDateTime(h.watermark, "default")}`
-                                        : ""}
-                                    {h.reference ? ` · ${h.reference}` : ""}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="text-sm text-muted-foreground">
-                                {h.summary}
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            ) : null}
-
             {/* 立即增量 */}
             <Dialog open={incrementalOpen} onOpenChange={setIncrementalOpen}>
                 <DialogContent>
