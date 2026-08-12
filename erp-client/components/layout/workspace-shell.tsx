@@ -28,7 +28,7 @@ function WorkspaceSidebarHeader() {
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     return (
         <ErpAppShell
-            className="min-h-svh"
+            className="h-svh overflow-hidden"
             contentLabel="主工作区"
             sidebarCollapsible="none"
             showSidebarRail={false}

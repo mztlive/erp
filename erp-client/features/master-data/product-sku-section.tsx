@@ -9,7 +9,6 @@ import {
     XIcon,
 } from "lucide-react"
 
-import { surfacePanelClassName } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -95,14 +94,12 @@ function ProductSkuSection({
             <fieldset
                 id="product-section-sku"
                 className={cn(
-                    surfacePanelClassName,
-                    "scroll-mt-[var(--product-section-scroll-margin)] space-y-4 p-5",
+                    "scroll-mt-[var(--product-section-scroll-margin)] space-y-4 border-b border-border/70 p-5 last:border-b-0",
                 )}
                 disabled={!canRevise}
             >
-                <legend className="px-1 text-base font-semibold">
-                    商品规格
-                </legend>
+                <legend className="sr-only">商品规格</legend>
+                <div className="text-base font-semibold">商品规格</div>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-muted-foreground">
                         规格值会自动组合成 SKU；调整规格顺序时保留可匹配的原 SKU
@@ -138,7 +135,7 @@ function ProductSkuSection({
                                     </Label>
                                     <Input
                                         id={`product-spec-name-${index}`}
-                                        className="bg-background font-medium shadow-sm"
+                                        className="bg-card font-medium shadow-sm"
                                         value={draft.name}
                                         onChange={(event) => {
                                             const next = [...specDrafts]
@@ -320,11 +317,11 @@ function ProductSkuSection({
 
             <fieldset
                 className={cn(
-                    surfacePanelClassName,
-                    "min-w-0 max-w-full space-y-4 overflow-hidden p-5",
+                    "min-w-0 max-w-full space-y-4 overflow-hidden border-b border-border/70 p-5 last:border-b-0",
                 )}
             >
-                <legend className="px-1 text-base font-semibold">SKU</legend>
+                <legend className="sr-only">SKU</legend>
+                <div className="text-base font-semibold">SKU</div>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                         <p className="text-xs text-muted-foreground">
@@ -403,7 +400,7 @@ function ProductSkuSection({
                 ) : (
                     <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border">
                         <table className="w-full min-w-[64rem] border-collapse text-sm">
-                            <thead className="bg-surface-sunken">
+                            <thead>
                                 <tr className="border-b border-border text-left text-xs text-muted-foreground">
                                     {activeSpecs.length > 0 ? (
                                         <th
@@ -419,19 +416,19 @@ function ProductSkuSection({
                                     )}
                                     <th
                                         colSpan={4}
-                                        className="border-l border-border px-3 py-2 font-medium"
+                                        className="px-3 py-2 font-medium"
                                     >
                                         身份
                                     </th>
                                     <th
                                         colSpan={2}
-                                        className="border-l border-border px-3 py-2 font-medium"
+                                        className="px-3 py-2 font-medium"
                                     >
                                         公司商品池价格
                                     </th>
                                     <th
                                         colSpan={4}
-                                        className="border-l border-border px-3 py-2 font-medium"
+                                        className="px-3 py-2 font-medium"
                                     >
                                         关联与状态
                                     </th>
@@ -451,7 +448,7 @@ function ProductSkuSection({
                                             —
                                         </th>
                                     )}
-                                    <th className="min-w-32 border-l border-border px-3 py-2 font-medium">
+                                    <th className="min-w-32 px-3 py-2 font-medium">
                                         {masterDataCopy.fProductCode}
                                     </th>
                                     <th className="min-w-40 px-3 py-2 font-medium">
@@ -463,13 +460,13 @@ function ProductSkuSection({
                                     <th className="min-w-36 px-3 py-2 font-medium">
                                         {masterDataCopy.fMainImage}
                                     </th>
-                                    <th className="min-w-28 border-l border-border px-3 py-2 font-medium">
+                                    <th className="min-w-28 px-3 py-2 font-medium">
                                         {masterDataCopy.fSalePrice}
                                     </th>
                                     <th className="min-w-28 px-3 py-2 font-medium">
                                         {masterDataCopy.fMarketPrice}
                                     </th>
-                                    <th className="min-w-32 border-l border-border px-3 py-2 font-medium">
+                                    <th className="min-w-32 px-3 py-2 font-medium">
                                         供给
                                     </th>
                                     <th className="min-w-28 px-3 py-2 font-medium">
@@ -518,7 +515,7 @@ function ProductSkuSection({
                                                     </Badge>
                                                 </td>
                                             )}
-                                            <td className="border-l border-border px-3 py-3">
+                                            <td className="px-3 py-3">
                                                 <Input
                                                     className="h-8"
                                                     value={sku.skuNo}
@@ -615,7 +612,7 @@ function ProductSkuSection({
                                                     }}
                                                 />
                                             </td>
-                                            <td className="border-l border-border px-3 py-3">
+                                            <td className="px-3 py-3">
                                                 <MoneyInput
                                                     value={sku.salePrice ?? ""}
                                                     disabled={!canRevise}
@@ -645,7 +642,7 @@ function ProductSkuSection({
                                                     aria-label={`${sku.specLabel} 市场价`}
                                                 />
                                             </td>
-                                            <td className="border-l border-border px-3 py-3">
+                                            <td className="px-3 py-3">
                                                 <div className="space-y-1.5">
                                                     {sku.skuId && !isCreate ? (
                                                         <HoverCard>

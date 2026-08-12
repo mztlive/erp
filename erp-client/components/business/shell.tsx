@@ -301,7 +301,7 @@ function ErpAppShell({
             <SidebarInset
                 id={contentId}
                 aria-label={contentLabel}
-                className="min-w-0 overflow-hidden"
+                className="min-h-0 min-w-0 overflow-hidden"
             >
                 {topbar}
                 {maintenanceBanner}

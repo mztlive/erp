@@ -8,7 +8,6 @@ import {
     DocumentSection,
     OptionCombobox,
     RevisionTimeline,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -69,14 +68,16 @@ function ProductBasicSection({
         <fieldset
             id="product-section-basic"
             className={cn(
-                surfacePanelClassName,
-                "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 p-5",
+                "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 border-b border-border/70 p-5 last:border-b-0",
             )}
             disabled={!canRevise}
         >
-            <legend className="px-1 text-base font-semibold">
+            <legend className="sr-only">
                 {masterDataCopy.fieldIdentitySection}
             </legend>
+            <div className="text-base font-semibold">
+                {masterDataCopy.fieldIdentitySection}
+            </div>
             <p className="text-xs text-muted-foreground">
                 {masterDataCopy.productEditDesc}
             </p>
@@ -246,14 +247,16 @@ function ProductMediaSection({
         <fieldset
             id="product-section-media"
             className={cn(
-                surfacePanelClassName,
-                "scroll-mt-[var(--product-section-scroll-margin)] space-y-5 p-5",
+                "scroll-mt-[var(--product-section-scroll-margin)] space-y-5 border-b border-border/70 p-5 last:border-b-0",
             )}
             disabled={!canRevise}
         >
-            <legend className="px-1 text-base font-semibold">
+            <legend className="sr-only">
                 {masterDataCopy.fieldMediaSection}
             </legend>
+            <div className="text-base font-semibold">
+                {masterDataCopy.fieldMediaSection}
+            </div>
             <p className="text-xs text-muted-foreground">
                 {masterDataCopy.productSpuMediaHint}
             </p>
@@ -356,12 +359,12 @@ function ProductEffectiveSection({
         <fieldset
             id="product-section-effective"
             className={cn(
-                surfacePanelClassName,
-                "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 p-5",
+                "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 border-b border-border/70 p-5 last:border-b-0",
             )}
             disabled={!canRevise}
         >
-            <legend className="px-1 text-base font-semibold">生效与原因</legend>
+            <legend className="sr-only">生效与原因</legend>
+            <div className="text-base font-semibold">生效与原因</div>
             <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                     <Label htmlFor="ef-from">
@@ -414,8 +417,7 @@ function ProductHistorySection({ data }: ProductHistorySectionProps) {
             id="product-section-history"
             aria-label="历史与引用"
             className={cn(
-                surfacePanelClassName,
-                "scroll-mt-[var(--product-section-scroll-margin)] overflow-hidden px-5",
+                "scroll-mt-[var(--product-section-scroll-margin)] px-5",
             )}
         >
             <DocumentSection

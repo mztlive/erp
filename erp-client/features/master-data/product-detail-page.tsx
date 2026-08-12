@@ -24,6 +24,7 @@ import {
     FormalActionResult,
     PageHeader,
     PageScaffold,
+    surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -142,7 +143,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
     const errorRef = React.useRef<HTMLDivElement | null>(null)
     const checkedSnapshotRef = React.useRef<string | null>(null)
     const stickyHeaderRef = React.useRef<HTMLElement>(null)
-    const [stickyHeaderHeight, setStickyHeaderHeight] = React.useState(64)
+    const [stickyHeaderHeight, setStickyHeaderHeight] = React.useState(160)
     const hydratedKeyRef = React.useRef<string | null>(null)
     const [uploadingMedia, setUploadingMedia] = React.useState(false)
     /** 本会话选择但尚未上传的图片文件；保存时按 fileName / SKU 行号上传并回填。 */
@@ -435,8 +436,8 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
     }, [])
 
     const listHref = "/master-data/products"
-    const stickyOffsetPx = stickyHeaderHeight
-    const sectionScrollMarginPx = stickyHeaderHeight + 56
+    /** 吸顶卡片总高度；分区锚点需额外留一点空隙避免贴边 */
+    const sectionScrollMarginPx = stickyHeaderHeight + 12
     const pending =
         createMutation.isPending || reviseMutation.isPending || uploadingMedia
     const granted = accountQuery.data?.permissions
@@ -678,17 +679,23 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                     <PageScaffold
                         style={
                             {
-                                "--product-sticky-offset": `${stickyOffsetPx}px`,
                                 "--product-section-scroll-margin": `${sectionScrollMarginPx}px`,
                             } as React.CSSProperties
                         }
                     >
-                        <form id={formId} onSubmit={handleSubmit}>
+                        <form
+                            id={formId}
+                            className="flex flex-col gap-4"
+                            onSubmit={handleSubmit}
+                        >
                             <header
                                 ref={stickyHeaderRef}
-                                className="sticky top-0 z-30 border-b border-border/30 bg-background/95 py-3 backdrop-blur"
+                                className={cn(
+                                    surfacePanelClassName,
+                                    "sticky top-0 z-30 overflow-hidden",
+                                )}
                             >
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                <div className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
                                     <div className="min-w-0 space-y-1">
                                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <h1 className="truncate text-lg font-semibold tracking-tight">
@@ -817,24 +824,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         </Button>
                                     </div>
                                 </div>
-                            </header>
-
-                            <div className="flex flex-col gap-4">
-                                {!isCreate && !canRevise ? (
-                                    <Alert variant="info">
-                                        <AlertTitle>你只能查看</AlertTitle>
-                                        <AlertDescription>
-                                            {reviseBlocker
-                                                ? masterDataCopy.centerUpdateBlocked(
-                                                      reviseBlocker.message,
-                                                  )
-                                                : "当前账号没有维护商品资料的权限；需要修改请联系有权限的同事。"}
-                                        </AlertDescription>
-                                    </Alert>
-                                ) : null}
 
                                 {!isCreate && data?.productConstraints ? (
-                                    <div className="rounded-lg bg-muted/50 p-3 text-xs">
+                                    <div className="border-t border-border/60 bg-muted/40 px-4 py-2.5 text-xs">
                                         <p>
                                             基础单位{" "}
                                             <span className="num">
@@ -863,51 +855,15 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     </div>
                                 ) : null}
 
-                                {result?.outcome === "blocked" ? (
-                                    <FormalActionResult
-                                        status="blocked"
-                                        title={
-                                            isCreate
-                                                ? masterDataCopy.createBlockedTitle
-                                                : masterDataCopy.reviseBlockedTitle
-                                        }
-                                        description={result.message}
-                                        facts={
-                                            result.detail
-                                                ? [
-                                                      {
-                                                          label: "说明",
-                                                          value: result.detail,
-                                                      },
-                                                  ]
-                                                : undefined
-                                        }
-                                    />
-                                ) : null}
-
-                                {result?.outcome === "conflict" ? (
-                                    <FormalActionResult
-                                        status="blocked"
-                                        title={
-                                            masterDataCopy.reviseConflictTitle
-                                        }
-                                        description={
-                                            result.message ||
-                                            masterDataCopy.reviseConflictHint
-                                        }
-                                    />
-                                ) : null}
-
-                                <div className="min-w-0 space-y-4">
+                                <div className="border-t border-border/60 p-2 sm:px-3 sm:pb-3">
                                     <nav
                                         aria-label="商品编辑分区"
                                         className={cn(
-                                            "sticky z-10 grid grid-cols-2 gap-0.5 rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10",
+                                            "grid grid-cols-2 gap-0.5 rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10",
                                             isCreate
                                                 ? "sm:grid-cols-4"
                                                 : "sm:grid-cols-5",
                                         )}
-                                        style={{ top: stickyOffsetPx }}
                                     >
                                         {PRODUCT_EDITOR_SECTIONS.filter(
                                             (section) =>
@@ -947,38 +903,93 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                             )
                                         })}
                                     </nav>
+                                </div>
+                            </header>
 
-                                    {formError ? (
-                                        <div ref={errorRef}>
-                                            <Alert variant="destructive">
-                                                <CircleAlertIcon aria-hidden />
-                                                <AlertTitle>
-                                                    {formErrorTitle}
-                                                </AlertTitle>
-                                                <AlertDescription>
-                                                    {formError}
-                                                </AlertDescription>
-                                            </Alert>
-                                        </div>
-                                    ) : null}
+                            <div className="flex min-w-0 flex-col gap-4">
+                                {!isCreate && !canRevise ? (
+                                    <Alert variant="info">
+                                        <AlertTitle>你只能查看</AlertTitle>
+                                        <AlertDescription>
+                                            {reviseBlocker
+                                                ? masterDataCopy.centerUpdateBlocked(
+                                                      reviseBlocker.message,
+                                                  )
+                                                : "当前账号没有维护商品资料的权限；需要修改请联系有权限的同事。"}
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : null}
 
-                                    {checkPassed &&
-                                    checkedSnapshotRef.current ===
-                                        JSON.stringify({
-                                            ...values,
-                                            fields,
-                                        }) ? (
-                                        <Alert variant="success">
-                                            <CheckCircle2Icon aria-hidden />
+                                {result?.outcome === "blocked" ? (
+                                    <FormalActionResult
+                                        status="blocked"
+                                        title={
+                                            isCreate
+                                                ? masterDataCopy.createBlockedTitle
+                                                : masterDataCopy.reviseBlockedTitle
+                                        }
+                                        description={result.message}
+                                        facts={
+                                            result.detail
+                                                ? [
+                                                      {
+                                                          label: "说明",
+                                                          value: result.detail,
+                                                      },
+                                                  ]
+                                                : undefined
+                                        }
+                                    />
+                                ) : null}
+
+                                {result?.outcome === "conflict" ? (
+                                    <FormalActionResult
+                                        status="blocked"
+                                        title={
+                                            masterDataCopy.reviseConflictTitle
+                                        }
+                                        description={
+                                            result.message ||
+                                            masterDataCopy.reviseConflictHint
+                                        }
+                                    />
+                                ) : null}
+
+                                {formError ? (
+                                    <div ref={errorRef}>
+                                        <Alert variant="destructive">
+                                            <CircleAlertIcon aria-hidden />
                                             <AlertTitle>
-                                                填写检查通过
+                                                {formErrorTitle}
                                             </AlertTitle>
                                             <AlertDescription>
-                                                必填项完整，保存时仍以系统校验结果为准。
+                                                {formError}
                                             </AlertDescription>
                                         </Alert>
-                                    ) : null}
+                                    </div>
+                                ) : null}
 
+                                {checkPassed &&
+                                checkedSnapshotRef.current ===
+                                    JSON.stringify({
+                                        ...values,
+                                        fields,
+                                    }) ? (
+                                    <Alert variant="success">
+                                        <CheckCircle2Icon aria-hidden />
+                                        <AlertTitle>填写检查通过</AlertTitle>
+                                        <AlertDescription>
+                                            必填项完整，保存时仍以系统校验结果为准。
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : null}
+
+                                <div
+                                    className={cn(
+                                        surfacePanelClassName,
+                                        "overflow-hidden",
+                                    )}
+                                >
                                     <ProductBasicSection
                                         isCreate={isCreate}
                                         canRevise={canRevise}

@@ -224,7 +224,7 @@ function MediaListEditor({
                                     首图
                                 </Badge>
                             ) : null}
-                            <div className="flex items-center justify-center gap-1 border-t border-border bg-background/95 p-1">
+                            <div className="flex items-center justify-center gap-1 border-t border-border bg-surface-sunken/95 p-1">
                                 <Button
                                     type="button"
                                     variant="ghost"
