@@ -34,6 +34,13 @@ import { resultText } from "@/lib/ui-text"
 import { getErrorMessage } from "@/lib/api/errors"
 
 const REJECT_REASON_LABEL: Record<string, string> = {
+    // 后端 `ProcurementRejectReasonCode` 稳定码
+    CANNOT_FULFILL: "无法履约",
+    COST_INCREASE: "成本上涨",
+    DELIVERY_NOT_MET: "交期不满足",
+    QUALIFICATION_EXPIRED: "资质失效",
+    OTHER: "其他",
+    // 历史/前端草稿文案兼容
     MARGIN_TOO_LOW: "预计毛利过低",
     COST_TOO_HIGH: "采购成本过高",
     ITEM_UNAVAILABLE: "商品/服务无法采购",

@@ -53,10 +53,11 @@ use crate::errors::{Error, Result};
 mod dto;
 
 pub use self::dto::{
-    CloseEligibilityView, CreateSalesOrderRequest, PageView, RevisionView, SalesOrderCreateIntent,
-    SalesOrderDetailView, SalesOrderDraftLineRequest, SalesOrderDraftRequest, SalesOrderLineView,
-    SalesOrderListParams, SalesOrderStageSummary, SalesOrderView, SalesOrderWorkingCopyLineView,
-    SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
+    CloseEligibilityView, CreateSalesOrderRequest, OpenProcurementRejectionView, PageView, RevisionView,
+    SalesOrderCreateIntent, SalesOrderDetailView, SalesOrderDraftLineRequest, SalesOrderDraftRequest,
+    SalesOrderLineView, SalesOrderListParams, SalesOrderStageSummary, SalesOrderView,
+    SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
+    VoidSalesOrderRequest, WorkingCopyView,
 };
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
@@ -243,16 +244,32 @@ impl SalesOrderService {
             )
             .await?;
 
+        let open_rejection_order_ids = self
+            .resolve_open_rejection_order_ids(
+                &page
+                    .items
+                    .iter()
+                    .filter(|row| row.commercial_status == CommercialStatus::Draft)
+                    .map(|row| row.id.clone())
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
+
         let items = page
             .items
             .into_iter()
             .map(|row| {
-                let (code, label, tone) = stage_code_label_tone(
+                let (mut code, mut label, mut tone) = stage_code_label_tone(
                     row.commercial_status,
                     row.review_status,
                     row.close_status,
                     row.fulfillment_progress,
                 );
+                if open_rejection_order_ids.contains(&row.id) {
+                    code = "awaiting_sales";
+                    label = "待销售处理";
+                    tone = "warning";
+                }
                 let (owner_role, owner_user_id, owner_user_name, due_at) =
                     owners.get(&row.id).cloned().unwrap_or_default();
                 SalesOrderView {
@@ -388,6 +405,10 @@ impl SalesOrderService {
 
         let owner_user_name = self.account_name(&owner_user_id).await?;
 
+        let open_procurement_rejection = self
+            .resolve_open_procurement_rejection(&order_id, order.stable.status)
+            .await?;
+
         let (stage_owner_role, stage_owner_user_id, stage_due_at) = self
             .resolve_stage_owner(order.review_status, submission_ids.first())
             .await?;
@@ -395,12 +416,19 @@ impl SalesOrderService {
             Some(user_id) => self.account_name(user_id).await?,
             None => None,
         };
-        let (stage_code, stage_label, stage_tone) = stage_code_label_tone(
+        let (mut stage_code, mut stage_label, mut stage_tone) = stage_code_label_tone(
             order.stable.status,
             order.review_status,
             order.close_status,
             order.fulfillment_progress,
         );
+        // 采购驳回后订单回到草稿且审核轨被清成 NotSubmitted；若存在开放驳回，
+        // 阶段应对齐「待销售处理」，而不是普通草稿。
+        if open_procurement_rejection.is_some() {
+            stage_code = "awaiting_sales";
+            stage_label = "待销售处理";
+            stage_tone = "warning";
+        }
 
         let receivable_accounts = self
             .db
@@ -503,6 +531,7 @@ impl SalesOrderService {
             close_eligibility,
             can_start_sales_change_order,
             change_order_blocker,
+            open_procurement_rejection,
         })
     }
 
@@ -1006,6 +1035,122 @@ impl SalesOrderService {
             .find_by_id(user_id, &mut NoTransaction)
             .await?
             .map(|account| account.name))
+    }
+
+    /// 解析销售单是否存在「开放中的采购二次确认驳回」。
+    ///
+    /// 规则：
+    /// - 主状态必须为草稿（驳回后 `return_to_draft`）；
+    /// - 存在最近一次 `REJECTED` 采购确认；
+    /// - 同一销售单下没有 `PENDING` 采购确认（否则已重提进入新一轮）。
+    ///
+    /// 结果挂在销售单详情上，使销售角色不依赖 `procurement_confirmation:list`
+    /// 也能看到改价重提 / 作废入口。
+    ///
+    /// # 参数
+    /// * `order_id` - 销售单 ID
+    /// * `commercial_status` - 当前商业主状态
+    ///
+    /// # 返回
+    /// 开放驳回摘要；不满足条件时返回 `None`。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    async fn resolve_open_procurement_rejection(
+        &self,
+        order_id: &SalesOrderId,
+        commercial_status: CommercialStatus,
+    ) -> Result<Option<OpenProcurementRejectionView>> {
+        if commercial_status != CommercialStatus::Draft {
+            return Ok(None);
+        }
+
+        let pending = self
+            .db
+            .procurement_confirmations()
+            .find_pending_by_sales_order(order_id, &mut NoTransaction)
+            .await?;
+        if pending.is_some() {
+            return Ok(None);
+        }
+
+        let Some(rejected) = self
+            .db
+            .procurement_confirmations()
+            .find_latest_rejected_by_sales_order(order_id, &mut NoTransaction)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(OpenProcurementRejectionView {
+            procurement_confirmation_id: rejected.base.id,
+            submission_id: rejected.submission_id.to_string(),
+            reject_reason_code: rejected
+                .reject_reason_code
+                .map(|code| code.as_str().to_string()),
+            comment: rejected.comment,
+            handled_by: rejected.handled_by,
+            handled_at: rejected.handled_at.map(|instant| instant.unix_secs() as u64),
+        }))
+    }
+
+    /// 批量识别本页草稿中仍有开放采购驳回的销售单 ID。
+    ///
+    /// 列表阶段展示需要把「驳回后回草稿」对齐为「待销售处理」；本方法对草稿子集
+    /// 固定两次查询（REJECTED / PENDING），避免逐行查库。
+    ///
+    /// # 参数
+    /// * `draft_order_ids` - 本页主状态为草稿的销售单 ID
+    ///
+    /// # 返回
+    /// 返回存在开放驳回的销售单 ID 集合（有 REJECTED、且无 PENDING）。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    async fn resolve_open_rejection_order_ids(
+        &self,
+        draft_order_ids: &[String],
+    ) -> Result<HashSet<String>> {
+        if draft_order_ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+
+        let rejected = self
+            .db
+            .procurement_confirmations()
+            .find_many(
+                mongodb::bson::doc! {
+                    "sales_order_id": { "$in": draft_order_ids },
+                    "status": ProcurementConfirmationStatus::Rejected.as_str(),
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        let pending = self
+            .db
+            .procurement_confirmations()
+            .find_many(
+                mongodb::bson::doc! {
+                    "sales_order_id": { "$in": draft_order_ids },
+                    "status": ProcurementConfirmationStatus::Pending.as_str(),
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+
+        let pending_ids: HashSet<String> = pending
+            .into_iter()
+            .map(|row| row.sales_order_id.to_string())
+            .collect();
+        let mut open = HashSet::new();
+        for row in rejected {
+            let order_id = row.sales_order_id.to_string();
+            if !pending_ids.contains(&order_id) {
+                open.insert(order_id);
+            }
+        }
+        Ok(open)
     }
 
     /// 解析当前审核轨阶段的责任角色/责任人/时限（详情页专用）。

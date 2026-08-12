@@ -395,28 +395,28 @@ export function SalesOrderDetailPage({
 
     const visibleNav = navItems.filter((item) => item.show)
 
-    const primaryTaskAction =
-        order.primaryStatus.code === "draft" ? (
-            <Button
-                type="button"
-                size="sm"
-                render={
-                    <Link
-                        href={`/sales/orders?mode=create&salesOrderId=${order.id}`}
-                    />
-                }
-            >
-                继续编辑
-            </Button>
-        ) : actionableFocusTask ? (
-            <Button
-                type="button"
-                size="sm"
-                onClick={() => selectSection(actionableFocusTask.id)}
-            >
-                {actionableFocusTask.actionLabel}
-            </Button>
-        ) : null
+    // 采购驳回等焦点任务优先于「继续编辑」草稿入口，避免销售只看到编辑而找不到作废。
+    const primaryTaskAction = actionableFocusTask ? (
+        <Button
+            type="button"
+            size="sm"
+            onClick={() => selectSection(actionableFocusTask.id)}
+        >
+            {actionableFocusTask.actionLabel}
+        </Button>
+    ) : order.primaryStatus.code === "draft" ? (
+        <Button
+            type="button"
+            size="sm"
+            render={
+                <Link
+                    href={`/sales/orders?mode=create&salesOrderId=${order.id}`}
+                />
+            }
+        >
+            继续编辑
+        </Button>
+    ) : null
 
     return (
         <PageScaffold>

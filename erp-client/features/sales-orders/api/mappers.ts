@@ -1,6 +1,7 @@
 import type { StatusTone } from "@/components/ui/status-badge"
 import type {
     BackendCloseEligibility,
+    BackendOpenProcurementRejection,
     BackendProcurementConfirmation,
     BackendRevision,
     BackendSalesChangeOrder,
@@ -443,6 +444,15 @@ export function mapDetailToListItem(
     },
 ): SalesOrderListItem {
     const commercial = pickCommercialContent(detail)
+    const openRejectionSubmissionNo = detail.submissions.find(
+        (s) => s.id === detail.open_procurement_rejection?.submission_id,
+    )?.submission_no
+    const procurementRejection =
+        extras?.procurementRejection ??
+        mapOpenProcurementRejection(
+            detail.open_procurement_rejection,
+            openRejectionSubmissionNo,
+        )
     return mapListItemFromBackend(
         {
             id: detail.id,
@@ -481,7 +491,7 @@ export function mapDetailToListItem(
             fulfillmentDeadline: commercial.fulfillmentDeadline,
             remark: commercial.remark,
             revisions: mapRevisions(detail.revisions),
-            procurementRejection: extras?.procurementRejection,
+            procurementRejection,
             activeCardSalesApproval: extras?.activeCardSalesApproval,
             activeChangeOrder: extras?.activeChangeOrder,
             settlementEntity:
@@ -539,6 +549,38 @@ export function mapRejectedProcurement(
         rejectComment: "",
         rejectedByLabel: conf.handled_by ?? "",
         rejectedAt: formatInstant(conf.handled_at),
+        reviewStatus: "REJECTED",
+        draftDifference: {
+            changedItemOrService: false,
+            changedSalesPrice: false,
+            commercialTermsUnchanged: true,
+            diffSummary: [],
+        },
+        fixedResolutions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
+        allowedActions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
+        actionBlockers: [],
+    }
+}
+
+/**
+ * 将销售单详情内嵌的开放采购驳回映射为前端处理卡契约。
+ * 权威来源为 `GET /admin/sales-orders/{id}`，不依赖采购队列 list 权限。
+ */
+export function mapOpenProcurementRejection(
+    open: BackendOpenProcurementRejection | null | undefined,
+    submissionNo?: number,
+): ProcurementRejectionResolution | null {
+    if (!open) return null
+    return {
+        rejectedProcurementConfirmationId: open.procurement_confirmation_id,
+        rejectedProcurementWorkItemId: "",
+        rejectedSubmissionId: open.submission_id,
+        rejectedSubmissionNo: submissionNo ?? 0,
+        rejectedSubjectHash: open.submission_id,
+        rejectReasonCode: open.reject_reason_code ?? "",
+        rejectComment: open.comment ?? "",
+        rejectedByLabel: open.handled_by ?? "",
+        rejectedAt: formatInstant(open.handled_at),
         reviewStatus: "REJECTED",
         draftDifference: {
             changedItemOrService: false,

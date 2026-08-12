@@ -26,7 +26,6 @@ import {
     type BackendContractDetail,
     type BackendCustomerDetail,
     type BackendPartyContact,
-    type BackendProcurementConfirmation,
     type BackendSalesChangeOrder,
     type BackendSalesOrderDetail,
     type BackendSalesOrderReview,
@@ -51,7 +50,6 @@ import {
     mapFulfillmentMode,
     mapListItemFromBackend,
     mapNature,
-    mapRejectedProcurement,
     mapReviewToCardApproval,
     mapSortBy,
     mapStatusFilterToBackend,
@@ -134,52 +132,46 @@ export async function fetchSalesOrders(
     }
 }
 
+/**
+ * 详情页附属信息：卡券审批与在途改单。
+ *
+ * 采购驳回摘要由销售单详情字段 `open_procurement_rejection` 权威下发，
+ * 不再侧查采购确认列表（销售角色通常无 `procurement_confirmation:list`，
+ * 且旧实现仅取全局第 1 页 50 条，会静默丢入口）。
+ */
 async function loadDetailExtras(
     salesOrderId: string,
     nature: SalesOrderNature,
 ) {
-    const [reviewsPage, confirmationsPage, changeOrdersPage] =
-        await Promise.all([
-            apiGet<PageView<BackendSalesOrderReview>>(
-                "/admin/sales-order-reviews",
-                {
-                    sales_order_id: salesOrderId,
-                    status: "PENDING",
-                    page: 1,
-                    page_size: 20,
-                },
-            ).catch(() => ({
-                items: [] as BackendSalesOrderReview[],
-                total: 0,
+    const [reviewsPage, changeOrdersPage] = await Promise.all([
+        apiGet<PageView<BackendSalesOrderReview>>(
+            "/admin/sales-order-reviews",
+            {
+                sales_order_id: salesOrderId,
+                status: "PENDING",
                 page: 1,
                 page_size: 20,
-            })),
-            apiGet<PageView<BackendProcurementConfirmation>>(
-                "/admin/procurement-confirmations",
-                {
-                    page: 1,
-                    page_size: 50,
-                },
-            ).catch(() => ({
-                items: [] as BackendProcurementConfirmation[],
-                total: 0,
-                page: 1,
-                page_size: 50,
-            })),
-            apiGet<PageView<BackendSalesChangeOrder>>(
-                "/admin/sales-change-orders",
-                {
-                    sales_order_id: salesOrderId,
-                    page: 1,
-                    page_size: 10,
-                },
-            ).catch(() => ({
-                items: [] as BackendSalesChangeOrder[],
-                total: 0,
+            },
+        ).catch(() => ({
+            items: [] as BackendSalesOrderReview[],
+            total: 0,
+            page: 1,
+            page_size: 20,
+        })),
+        apiGet<PageView<BackendSalesChangeOrder>>(
+            "/admin/sales-change-orders",
+            {
+                sales_order_id: salesOrderId,
                 page: 1,
                 page_size: 10,
-            })),
-        ])
+            },
+        ).catch(() => ({
+            items: [] as BackendSalesChangeOrder[],
+            total: 0,
+            page: 1,
+            page_size: 10,
+        })),
+    ])
 
     const pendingReview =
         reviewsPage.items.find(
@@ -188,11 +180,6 @@ async function loadDetailExtras(
                 r.status === "PENDING" &&
                 (r.review_stage === "SALES_LEADER" ||
                     r.review_stage === "OPERATIONS"),
-        ) ?? null
-
-    const rejected =
-        confirmationsPage.items.find(
-            (c) => c.sales_order_id === salesOrderId && c.status === "REJECTED",
         ) ?? null
 
     const activeChange =
@@ -207,9 +194,6 @@ async function loadDetailExtras(
     return {
         activeCardSalesApproval: pendingReview
             ? mapReviewToCardApproval(pendingReview)
-            : null,
-        procurementRejection: rejected
-            ? mapRejectedProcurement(rejected)
             : null,
         activeChangeOrder: activeChange
             ? mapChangeOrder(activeChange, nature)

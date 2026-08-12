@@ -189,6 +189,16 @@ export type BackendRevision = {
     created_at: number
 }
 
+/** 开放中的采购驳回摘要（销售单详情内嵌，不依赖采购队列权限）。 */
+export type BackendOpenProcurementRejection = {
+    procurement_confirmation_id: string
+    submission_id: string
+    reject_reason_code?: string | null
+    comment?: string | null
+    handled_by?: string | null
+    handled_at?: number | null
+}
+
 export type BackendSalesOrderDetail = {
     id: string
     order_no: string
@@ -217,6 +227,7 @@ export type BackendSalesOrderDetail = {
     close_eligibility: BackendCloseEligibility
     can_start_sales_change_order: boolean
     change_order_blocker?: string | null
+    open_procurement_rejection?: BackendOpenProcurementRejection | null
 }
 
 export type BackendContractDetail = {

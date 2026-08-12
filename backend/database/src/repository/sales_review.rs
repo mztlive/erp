@@ -372,6 +372,68 @@ impl<'a> Repository<'a, ProcurementConfirmation> {
         )
         .await
     }
+
+    /// 按销售单查找是否存在待处理采购确认。
+    ///
+    /// 销售单回草稿后，若仍有 `PENDING` 确认则说明已重新提交并进入新一轮采购确认，
+    /// 此时不应再展示「采购驳回待销售处理」入口。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 销售单 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回待处理确认批次；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_pending_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProcurementConfirmation>> {
+        self.find_one(
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "status": ProcurementConfirmationStatus::Pending.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 按销售单取最近一次驳回的采购确认（`handled_at` 降序，缺省时按 `created_at`）。
+    ///
+    /// 用于销售单详情在**不依赖采购队列 list 权限**的前提下，向销售暴露开放驳回
+    /// 处理入口（改价重提 / 作废）。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 销售单 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最近驳回的确认实体；无驳回记录时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_latest_rejected_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProcurementConfirmation>> {
+        let rows = self
+            .find_many_sorted(
+                doc! {
+                    "sales_order_id": sales_order_id.to_string(),
+                    "status": ProcurementConfirmationStatus::Rejected.as_str(),
+                },
+                doc! { "handled_at": -1, "created_at": -1 },
+                executor,
+            )
+            .await?;
+        // `handled_at`/`created_at` 降序：首条即最近驳回。
+        Ok(rows.into_iter().next())
+    }
 }
 
 impl<'a> Repository<'a, ProcurementConfirmationLine> {

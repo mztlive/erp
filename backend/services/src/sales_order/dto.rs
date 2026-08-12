@@ -596,6 +596,26 @@ pub struct RevisionView {
     pub created_at: u64,
 }
 
+/// 开放中的采购二次确认驳回摘要（销售单详情内嵌，供销售处理）。
+///
+/// 仅在「销售单仍为草稿、存在驳回确认、且无新的待处理确认」时出现；不依赖
+/// 采购队列 list 权限，避免销售角色静默丢入口。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct OpenProcurementRejectionView {
+    /// 被驳回的采购确认 ID。
+    pub procurement_confirmation_id: String,
+    /// 被驳回的销售提交快照 ID。
+    pub submission_id: String,
+    /// 驳回原因代码（稳定码，如 `CANNOT_FULFILL`）。
+    pub reject_reason_code: Option<String>,
+    /// 驳回补充说明。
+    pub comment: Option<String>,
+    /// 采购处理人账号 ID。
+    pub handled_by: Option<String>,
+    /// 处理时间（秒级时间戳）。
+    pub handled_at: Option<u64>,
+}
+
 /// 销售单详情视图（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderDetailView {
@@ -653,6 +673,8 @@ pub struct SalesOrderDetailView {
     pub can_start_sales_change_order: bool,
     /// 不可发起销售变更单时的原因；可发起时为 `None`。
     pub change_order_blocker: Option<String>,
+    /// 开放中的采购驳回（无则为 `None`）。
+    pub open_procurement_rejection: Option<OpenProcurementRejectionView>,
 }
 
 #[cfg(test)]
