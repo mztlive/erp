@@ -34,7 +34,7 @@ pub use dictionary::{ProductBrandFilter, ProductBrandRow, UnitOfMeasureFilter, U
 #[allow(unused_imports)]
 pub use product::{ProductFilter, ProductRevisionFilter, ProductRevisionRow, ProductRow};
 #[allow(unused_imports)]
-pub use sellable::SellableSkuRow;
+pub use sellable::{SellableSkuFilter, SellableSkuRow};
 #[allow(unused_imports)]
 pub use sku::{SkuFilter, SkuRevisionFilter, SkuRevisionRow, SkuRow};
 #[allow(unused_imports)]

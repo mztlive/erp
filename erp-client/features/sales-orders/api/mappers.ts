@@ -623,43 +623,101 @@ export function mapChangeOrder(
     }
 }
 
-export function mapStatusFilterToBackend(status?: string): {
-    commercial_status?: string
-    review_status?: string
-} {
+export function mapCommercialStatusFilterToBackend(
+    status?: string,
+): string | undefined {
     switch (status) {
         case "draft":
-            return { commercial_status: "DRAFT" }
-        case "voided":
-            return { commercial_status: "VOIDED" }
+            return "DRAFT"
+        case "pending_review":
+            return "PENDING_REVIEW"
         case "effective":
-            return { commercial_status: "EFFECTIVE" }
-        case "closed":
-            return { commercial_status: "EFFECTIVE" }
-        case "awaiting_confirm":
-            return {
-                commercial_status: "PENDING_REVIEW",
-                review_status: "PENDING_PROCUREMENT_CONFIRMATION",
-            }
-        case "awaiting_sales":
-            return {
-                commercial_status: "PENDING_REVIEW",
-                review_status: "REJECTED",
-            }
-        case "awaiting_sales_lead":
-            return {
-                commercial_status: "PENDING_REVIEW",
-                review_status: "PENDING_SALES_LEADER",
-            }
-        case "awaiting_ops":
-            return {
-                commercial_status: "PENDING_REVIEW",
-                review_status: "PENDING_OPERATIONS",
-            }
-        case "fulfilling":
-            return { commercial_status: "EFFECTIVE" }
+            return "EFFECTIVE"
+        case "voided":
+            return "VOIDED"
         default:
-            return {}
+            return undefined
+    }
+}
+
+export function mapReviewStatusFilterToBackend(
+    status?: string,
+): string | undefined {
+    switch (status) {
+        case "not_submitted":
+            return "NOT_SUBMITTED"
+        case "pending_procurement_confirmation":
+            return "PENDING_PROCUREMENT_CONFIRMATION"
+        case "pending_low_margin_superior":
+            return "PENDING_LOW_MARGIN_SUPERIOR"
+        case "pending_sales_leader":
+            return "PENDING_SALES_LEADER"
+        case "pending_operations":
+            return "PENDING_OPERATIONS"
+        case "approved":
+            return "APPROVED"
+        case "rejected":
+            return "REJECTED"
+        default:
+            return undefined
+    }
+}
+
+export function mapFulfillmentFilterToBackend(
+    progress?: string,
+): string | undefined {
+    switch (progress) {
+        case "not_started":
+            return "NOT_STARTED"
+        case "partially_fulfilled":
+            return "PARTIALLY_FULFILLED"
+        case "completed":
+            return "COMPLETED"
+        default:
+            return undefined
+    }
+}
+
+export function mapCollectionFilterToBackend(
+    progress?: string,
+): string | undefined {
+    switch (progress) {
+        case "not_collected":
+            return "NOT_COLLECTED"
+        case "partially_collected":
+            return "PARTIALLY_COLLECTED"
+        case "settled":
+            return "SETTLED"
+        default:
+            return undefined
+    }
+}
+
+export function mapInvoiceFilterToBackend(
+    progress?: string,
+): string | undefined {
+    switch (progress) {
+        case "not_invoiced":
+            return "NOT_INVOICED"
+        case "partially_invoiced":
+            return "PARTIALLY_INVOICED"
+        case "completed":
+            return "COMPLETED"
+        default:
+            return undefined
+    }
+}
+
+export function mapCloseFilterToBackend(status?: string): string | undefined {
+    switch (status) {
+        case "not_satisfied":
+            return "NOT_SATISFIED"
+        case "closeable":
+            return "CLOSEABLE"
+        case "closed":
+            return "CLOSED"
+        default:
+            return undefined
     }
 }
 

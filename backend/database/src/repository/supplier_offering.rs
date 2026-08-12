@@ -5,7 +5,7 @@
 
 use entities::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use entities::supplier_offering::{
-    OfferingSourceType, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
+    AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
     SupplierOfferingCommand, SupplierOfferingRevision,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
@@ -77,12 +77,16 @@ pub struct SupplierOfferingRow {
 /// 供给列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SupplierOfferingFilter {
+    /// 允许命中的供给主键；用于关联当前可供投影后的分页前筛选。
+    pub offering_ids: Option<Vec<SupplierOfferingId>>,
     /// 公司 SKU。
     pub sku_id: Option<SkuId>,
     /// 供应商。
     pub supplier_id: Option<SupplierAccountId>,
     /// 供给关系状态。
     pub status: Option<OfferingStatus>,
+    /// 登记来源。
+    pub source_type: Option<OfferingSourceType>,
     /// 供应商 SKU 编码模糊查询。
     pub supplier_sku_code: Option<String>,
     /// 页码。
@@ -98,6 +102,9 @@ pub struct SupplierOfferingFilter {
 impl QueryFilter for SupplierOfferingFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(offering_ids) = &self.offering_ids {
+            filter.extend(in_filter("id", offering_ids.iter().map(ToString::to_string)));
+        }
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }
@@ -106,6 +113,9 @@ impl QueryFilter for SupplierOfferingFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(source_type) = self.source_type {
+            filter.insert("source_type", source_type.as_str());
         }
         insert_literal_regex_filter(
             &mut filter,
@@ -245,6 +255,28 @@ impl<'a> Repository<'a, SupplierOfferingRevision> {
 }
 
 impl<'a> Repository<'a, SupplierOfferingAvailability> {
+    /// 按当前可供状态查询供给主键。
+    ///
+    /// # 参数
+    /// * `status` - 当前可供状态
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回状态匹配的供给主键集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn find_offering_ids_by_status(
+        &self,
+        status: AvailabilityStatus,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOfferingId>> {
+        let rows = self
+            .find_many(doc! { "availability_status": status.as_str() }, executor)
+            .await?;
+        Ok(rows.into_iter().map(|row| row.supplier_offering_id).collect())
+    }
+
     /// 按供给主键查询实时可供投影。
     ///
     /// # 参数
@@ -423,9 +455,11 @@ mod tests {
     #[test]
     fn offering_filter_uses_direct_supplier_identity() {
         let filter = SupplierOfferingFilter {
+            offering_ids: None,
             sku_id: None,
             supplier_id: None,
             status: None,
+            source_type: None,
             supplier_sku_code: Some("SKU-1".to_string()),
             page: 1,
             page_size: 20,
@@ -434,6 +468,25 @@ mod tests {
         }
         .to_doc();
         assert!(filter.contains_key("supplier_sku_code"));
+    }
+
+    #[test]
+    fn offering_filter_combines_source_and_candidate_ids() {
+        let filter = SupplierOfferingFilter {
+            offering_ids: Some(vec![entities::ids::SupplierOfferingId::new("offering-1")]),
+            sku_id: None,
+            supplier_id: None,
+            status: None,
+            source_type: Some(entities::supplier_offering::OfferingSourceType::Excel),
+            supplier_sku_code: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+        .to_doc();
+        assert_eq!(filter.get_str("source_type"), Ok("EXCEL"));
+        assert_eq!(filter.get_document("id"), Ok(&doc! { "$in": ["offering-1"] }));
     }
 
     #[test]

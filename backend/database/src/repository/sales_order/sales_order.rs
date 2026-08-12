@@ -60,12 +60,28 @@ pub struct SalesOrderFilter {
     pub order_no: Option<String>,
     /// 客户；`None` 表示不筛选。
     pub customer_id: Option<String>,
+    /// 合同；`None` 表示不筛选。
+    pub contract_id: Option<String>,
+    /// 最初创建入口；`None` 表示不筛选。
+    pub origin_system: Option<entities::sales_order::OriginSystem>,
     /// 商业主状态；`None` 表示不筛选。
     pub commercial_status: Option<CommercialStatus>,
     /// 审核轨状态；`None` 表示不筛选。
     pub review_status: Option<ReviewStatus>,
     /// 业务性质；`None` 表示不筛选。
     pub business_type: Option<BusinessType>,
+    /// 履约进度；`None` 表示不筛选。
+    pub fulfillment_progress: Option<entities::sales_order::FulfillmentProgress>,
+    /// 回款进度；`None` 表示不筛选。
+    pub collection_progress: Option<entities::sales_order::CollectionProgress>,
+    /// 开票进度；`None` 表示不筛选。
+    pub invoice_progress: Option<entities::sales_order::InvoiceProgress>,
+    /// 关闭状态；`None` 表示不筛选。
+    pub close_status: Option<entities::sales_order::CloseStatus>,
+    /// 创建时间下界（含）；`None` 表示不设下界。
+    pub created_from: Option<u64>,
+    /// 创建时间上界（含）；`None` 表示不设上界。
+    pub created_to: Option<u64>,
     /// 创建人账号；`None` 表示不筛选（"我创建的"/"待我处理"视图用）。
     pub created_by: Option<String>,
     /// "待我处理"视图：仅草稿或被驳回/低毛利待处理回销售的单
@@ -95,6 +111,12 @@ impl QueryFilter for SalesOrderFilter {
         if let Some(customer_id) = &self.customer_id {
             filter.insert("customer_id", customer_id);
         }
+        if let Some(contract_id) = &self.contract_id {
+            filter.insert("contract_id", contract_id);
+        }
+        if let Some(origin_system) = self.origin_system {
+            filter.insert("origin_system", origin_system.as_str());
+        }
         if let Some(status) = self.commercial_status {
             filter.insert("commercial_status", status.as_str());
         }
@@ -103,6 +125,28 @@ impl QueryFilter for SalesOrderFilter {
         }
         if let Some(business_type) = self.business_type {
             filter.insert("business_type", business_type.as_str());
+        }
+        if let Some(progress) = self.fulfillment_progress {
+            filter.insert("fulfillment_progress", progress.as_str());
+        }
+        if let Some(progress) = self.collection_progress {
+            filter.insert("collection_progress", progress.as_str());
+        }
+        if let Some(progress) = self.invoice_progress {
+            filter.insert("invoice_progress", progress.as_str());
+        }
+        if let Some(status) = self.close_status {
+            filter.insert("close_status", status.as_str());
+        }
+        if self.created_from.is_some() || self.created_to.is_some() {
+            let mut created_at = Document::new();
+            if let Some(from) = self.created_from {
+                created_at.insert("$gte", i64::try_from(from).unwrap_or(i64::MAX));
+            }
+            if let Some(to) = self.created_to {
+                created_at.insert("$lte", i64::try_from(to).unwrap_or(i64::MAX));
+            }
+            filter.insert("created_at", created_at);
         }
         if let Some(created_by) = &self.created_by {
             filter.insert("created_by", created_by);
@@ -291,9 +335,17 @@ mod tests {
         let filter = SalesOrderFilter {
             order_no: Some("SO-2026".to_string()),
             customer_id: Some("cust-1".to_string()),
+            contract_id: Some("contract-1".to_string()),
+            origin_system: Some(entities::sales_order::OriginSystem::Erp),
             commercial_status: Some(CommercialStatus::PendingReview),
             review_status: Some(ReviewStatus::PendingOperations),
             business_type: Some(BusinessType::Voucher),
+            fulfillment_progress: Some(entities::sales_order::FulfillmentProgress::NotStarted),
+            collection_progress: Some(entities::sales_order::CollectionProgress::NotCollected),
+            invoice_progress: Some(entities::sales_order::InvoiceProgress::NotInvoiced),
+            close_status: Some(entities::sales_order::CloseStatus::NotSatisfied),
+            created_from: Some(1_700_000_000),
+            created_to: Some(1_800_000_000),
             created_by: Some("user-1".to_string()),
             my_todo: false,
             exception_only: false,
@@ -314,9 +366,23 @@ mod tests {
             r"SO\-2026"
         );
         assert_eq!(document.get_str("customer_id").unwrap(), "cust-1");
+        assert_eq!(document.get_str("contract_id").unwrap(), "contract-1");
+        assert_eq!(document.get_str("origin_system").unwrap(), "ERP");
         assert_eq!(document.get_str("commercial_status").unwrap(), "PENDING_REVIEW");
         assert_eq!(document.get_str("review_status").unwrap(), "PENDING_OPERATIONS");
         assert_eq!(document.get_str("business_type").unwrap(), "VOUCHER");
+        assert_eq!(document.get_str("fulfillment_progress").unwrap(), "NOT_STARTED");
+        assert_eq!(document.get_str("collection_progress").unwrap(), "NOT_COLLECTED");
+        assert_eq!(document.get_str("invoice_progress").unwrap(), "NOT_INVOICED");
+        assert_eq!(document.get_str("close_status").unwrap(), "NOT_SATISFIED");
+        assert_eq!(
+            document
+                .get_document("created_at")
+                .unwrap()
+                .get_i64("$gte")
+                .unwrap(),
+            1_700_000_000
+        );
         assert_eq!(document.get_str("created_by").unwrap(), "user-1");
     }
 
@@ -325,9 +391,17 @@ mod tests {
         let filter = SalesOrderFilter {
             order_no: Some("SO-2026.[x]".to_string()),
             customer_id: None,
+            contract_id: None,
+            origin_system: None,
             commercial_status: None,
             review_status: None,
             business_type: None,
+            fulfillment_progress: None,
+            collection_progress: None,
+            invoice_progress: None,
+            close_status: None,
+            created_from: None,
+            created_to: None,
             created_by: None,
             my_todo: false,
             exception_only: false,

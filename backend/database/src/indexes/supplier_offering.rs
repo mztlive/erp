@@ -59,6 +59,10 @@ fn offering_indexes() -> Vec<IndexModel> {
             "idx_supplier_offerings_source_connection",
             doc! { "source_connection_id": 1, "status": 1 },
         ),
+        named_index(
+            "idx_supplier_offerings_source_status",
+            doc! { "source_type": 1, "status": 1 },
+        ),
     ]
 }
 
@@ -138,5 +142,12 @@ mod tests {
             index.keys == doc! { "supplier_offering_id": 1 }
                 && index.options.as_ref().and_then(|value| value.unique) == Some(true)
         }));
+    }
+
+    #[test]
+    fn offering_source_filter_has_an_index() {
+        assert!(offering_indexes()
+            .iter()
+            .any(|index| index.keys == doc! { "source_type": 1, "status": 1 }));
     }
 }

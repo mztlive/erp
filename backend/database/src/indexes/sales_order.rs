@@ -57,7 +57,12 @@ pub(crate) const SALES_ORDER_VOUCHER_LINE_REVISIONS: &str =
 /// - 数据模型「负责人参与人 + 状态」「履约期限」索引：负责人字段不落在
 ///   `sales_order` 主表实体上（归属后续批次），本域以审核轨
 ///   `review_status + created_at` 覆盖审核列表，履约期限按版本行落地
-///   `idx_sales_order_revision_lines_due`。
+///   `idx_sales_order_revision_lines_due`；
+/// - 销售单列表的「待我处理 / 我创建的」固定视图以 `created_by` 为首要等值条件，
+///   并按 `created_at` 倒序分页，因此增加 `created_by + created_at` 复合索引。
+///   来源、合同和各进度筛选均为低选择性可选组合，不为每种组合建立索引，避免
+///   写放大与索引爆炸；后续依据慢查询样本补充高频组合。若需回滚，删除该普通
+///   索引即可，不影响字段兼容性和查询正确性。
 ///
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
@@ -107,6 +112,10 @@ fn sales_order_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_sales_orders_review_status_created",
             doc! { "review_status": 1, "created_at": -1 },
+        ),
+        named_index(
+            "idx_sales_orders_created_by_created",
+            doc! { "created_by": 1, "created_at": -1 },
         ),
     ]
 }
@@ -286,6 +295,11 @@ mod tests {
 
         assert!(indexes.iter().any(|index| {
             index.keys == doc! { "customer_id": 1, "commercial_status": 1, "created_at": -1 }
+        }));
+        assert!(indexes.iter().any(|index| {
+            index.keys == doc! { "created_by": 1, "created_at": -1 }
+                && index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("idx_sales_orders_created_by_created")
         }));
     }
 

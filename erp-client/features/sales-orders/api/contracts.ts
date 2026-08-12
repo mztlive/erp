@@ -21,13 +21,23 @@ export type SalesOrdersListQuery = {
     page: number
     pageSize: number
     search?: string
+    customerId?: string
+    contractId?: string
+    createdBy?: string
     nature?: "all" | "physical_service" | "card_voucher"
     /** 四个固定工作视图；"mine"/"createdByMe" 需要 `currentUserId`。 */
     summary?: "all" | "mine" | "createdByMe" | "exception"
     /** 当前登录人账号 id；"待我处理"/"我创建的" 视图按此过滤创建人。 */
     currentUserId?: string
     origin?: "all" | SalesOrderOrigin
-    status?: string
+    commercialStatus?: string
+    reviewStatus?: string
+    fulfillment?: string
+    collection?: string
+    invoice?: string
+    closeStatus?: string
+    createdFrom?: number
+    createdTo?: number
     sortBy?:
         | "documentNumber"
         | "contractNumber"

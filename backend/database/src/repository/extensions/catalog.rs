@@ -14,8 +14,8 @@ use mongodb::Database;
 
 use super::super::catalog::{
     CatalogRepository, ProductBrandFilter, ProductCategoryAttributeFilter, ProductCategoryFilter,
-    ProductFilter, ProductRevisionFilter, SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter,
-    SkuRevisionFilter, UnitOfMeasureFilter, VoucherCategoryProfileRevisionFilter,
+    ProductFilter, ProductRevisionFilter, SellableSkuFilter, SkuAttributeFilter, SkuAttributeValueFilter,
+    SkuFilter, SkuRevisionFilter, UnitOfMeasureFilter, VoucherCategoryProfileRevisionFilter,
 };
 use crate::Repository;
 
@@ -68,6 +68,9 @@ pub trait CatalogExt {
 
     /// 商品列表筛选条件类型（定义见 `repository::catalog`）。
     type ProductFilter;
+
+    /// 公司商品池列表筛选条件类型（定义见 `repository::catalog`）。
+    type SellableSkuFilter;
 
     /// 商品修订列表筛选条件类型（定义见 `repository::catalog`）。
     type ProductRevisionFilter;
@@ -174,6 +177,7 @@ impl CatalogExt for Database {
     type SkuAttributeValueFilter = SkuAttributeValueFilter;
     type ProductCategoryAttributeFilter = ProductCategoryAttributeFilter;
     type ProductFilter = ProductFilter;
+    type SellableSkuFilter = SellableSkuFilter;
     type ProductRevisionFilter = ProductRevisionFilter;
     type SkuFilter = SkuFilter;
     type SkuRevisionFilter = SkuRevisionFilter;

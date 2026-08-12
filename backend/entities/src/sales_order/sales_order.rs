@@ -179,6 +179,18 @@ impl FulfillmentProgress {
             Self::Completed => "已完成",
         }
     }
+
+    /// 返回进度的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::NotStarted => "NOT_STARTED",
+            Self::PartiallyFulfilled => "PARTIALLY_FULFILLED",
+            Self::Completed => "COMPLETED",
+        }
+    }
 }
 
 /// 回款进度（数据模型 §6.4：未收、部分回款、已结清）。
@@ -203,6 +215,18 @@ impl CollectionProgress {
             Self::NotCollected => "未收",
             Self::PartiallyCollected => "部分回款",
             Self::Settled => "已结清",
+        }
+    }
+
+    /// 返回进度的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::NotCollected => "NOT_COLLECTED",
+            Self::PartiallyCollected => "PARTIALLY_COLLECTED",
+            Self::Settled => "SETTLED",
         }
     }
 }
@@ -231,6 +255,18 @@ impl InvoiceProgress {
             Self::Completed => "已完成",
         }
     }
+
+    /// 返回进度的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::NotInvoiced => "NOT_INVOICED",
+            Self::PartiallyInvoiced => "PARTIALLY_INVOICED",
+            Self::Completed => "COMPLETED",
+        }
+    }
 }
 
 /// 关闭状态（数据模型 §6.4：未满足关闭、可关闭、已关闭；进入 `CLOSED` 只表示
@@ -256,6 +292,18 @@ impl CloseStatus {
             Self::NotSatisfied => "未满足关闭",
             Self::Closeable => "可关闭",
             Self::Closed => "已关闭",
+        }
+    }
+
+    /// 返回状态的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::NotSatisfied => "NOT_SATISFIED",
+            Self::Closeable => "CLOSEABLE",
+            Self::Closed => "CLOSED",
         }
     }
 }

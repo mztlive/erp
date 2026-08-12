@@ -16,6 +16,8 @@ export function fetchSupplierOfferings(
         sku_id: query.skuId || undefined,
         supplier_id: query.supplierId || undefined,
         status: query.status || undefined,
+        source_type: query.sourceType || undefined,
+        availability_status: query.availabilityStatus || undefined,
         page: query.page ?? 1,
         page_size: query.pageSize ?? 50,
         sort_by: "created_at",

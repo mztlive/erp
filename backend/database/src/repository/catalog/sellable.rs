@@ -22,6 +22,64 @@ const SUPPLIER_OFFERING_REVISIONS: &str =
 const SUPPLIER_OFFERING_AVAILABILITIES: &str =
     <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES;
 
+/// 公司商品池列表筛选条件。
+///
+/// 资格硬条件（启用、销售可见价、有效供给等）由聚合管道固定施加；本结构只承载
+/// 调用方可选的业务筛选。供应商身份仅用于筛选匹配，不会写入投影行。
+#[derive(Debug, Clone)]
+pub struct SellableSkuFilter {
+    /// SKU 编号、SKU 名称、商品编号、商品名称、规格或条码关键字；`None` 表示不筛选。
+    pub keyword: Option<String>,
+    /// 商品业务类型；`None` 表示不筛选。
+    pub product_kind: Option<ProductKind>,
+    /// 当前商品分类；`None` 表示不筛选。
+    pub category_id: Option<String>,
+    /// 当前商品品牌；`None` 表示不筛选。
+    pub brand_id: Option<String>,
+    /// 当前有效供给中的供应商；`None` 表示不筛选。
+    pub supplier_id: Option<String>,
+    /// 当前有效供给可供区域（精确匹配并集中的任一区域）；`None` 表示不筛选。
+    pub supply_region: Option<String>,
+    /// 销售可见含税价下限（含）；`None` 表示无下限。
+    pub sales_price_min: Option<Amount>,
+    /// 销售可见含税价上限（含）；`None` 表示无上限。
+    pub sales_price_max: Option<Amount>,
+    /// 服务端解释的销售资格业务日期。
+    pub eligibility_as_of: BusinessDate,
+    /// 页码（1 起）。
+    pub page: u64,
+    /// 单页条数。
+    pub page_size: u32,
+}
+
+impl SellableSkuFilter {
+    /// 构造仅携带资格业务日、无业务筛选的空条件（用于精确修订复核）。
+    ///
+    /// # 参数
+    /// * `eligibility_as_of` - 资格业务日期
+    ///
+    /// # 返回
+    /// 返回无可选筛选、分页占位为 1 的过滤条件。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn as_of(eligibility_as_of: BusinessDate) -> Self {
+        Self {
+            keyword: None,
+            product_kind: None,
+            category_id: None,
+            brand_id: None,
+            supplier_id: None,
+            supply_region: None,
+            sales_price_min: None,
+            sales_price_max: None,
+            eligibility_as_of,
+            page: 1,
+            page_size: 1,
+        }
+    }
+}
+
 /// 公司商品池只读查询行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SellableSkuRow {
@@ -93,14 +151,10 @@ impl<'a> CatalogRepository<'a> {
     ///
     /// 资格固定为：稳定 SKU 启用、当前 SKU 修订启用且处于生效区间并已配置
     /// 销售可见价、至少一条启用且当前修订可供并处于有效区间的供给。结果不含
-    /// 供应商身份、采购成本、税率或起订量。
+    /// 供应商身份、采购成本、税率或起订量；`supplier_id` 仅参与筛选。
     ///
     /// # 参数
-    /// * `keyword` - 可选名称、编码或条码关键字
-    /// * `product_kind` - 可选公司商品类型
-    /// * `eligibility_as_of` - 服务端解释的销售资格业务日期
-    /// * `page` - 从一开始的页码
-    /// * `page_size` - 单页条数
+    /// * `filter` - 关键字、类型、分类、品牌、供应商、区域、销售价与分页
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -110,15 +164,11 @@ impl<'a> CatalogRepository<'a> {
     /// MongoDB 聚合、游标读取或结果反序列化失败时返回错误。
     pub async fn search_sellable_skus(
         &self,
-        keyword: Option<&str>,
-        product_kind: Option<ProductKind>,
-        eligibility_as_of: BusinessDate,
-        page: u64,
-        page_size: u32,
+        filter: &SellableSkuFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SellableSkuRow>> {
-        let match_doc = sellable_sku_match(keyword, product_kind, &[]);
-        let pipeline = sellable_sku_pipeline(match_doc, eligibility_as_of, Some((page, page_size)));
+        let match_doc = sellable_sku_match(None, None, &[]);
+        let pipeline = sellable_sku_pipeline(match_doc, filter, Some((filter.page, filter.page_size)));
         let facet = self.aggregate_sellable_skus(pipeline, executor).await?;
         Ok(PageResult {
             items: facet.items,
@@ -148,7 +198,8 @@ impl<'a> CatalogRepository<'a> {
             return Ok(Vec::new());
         }
         let match_doc = sellable_sku_match(None, None, refs);
-        let pipeline = sellable_sku_pipeline(match_doc, eligibility_as_of, None);
+        let filter = SellableSkuFilter::as_of(eligibility_as_of);
+        let pipeline = sellable_sku_pipeline(match_doc, &filter, None);
         Ok(self.aggregate_sellable_skus(pipeline, executor).await?.items)
     }
 
@@ -187,8 +238,8 @@ impl<'a> CatalogRepository<'a> {
 }
 
 fn sellable_sku_match(
-    keyword: Option<&str>,
-    product_kind: Option<ProductKind>,
+    _keyword: Option<&str>,
+    _product_kind: Option<ProductKind>,
     refs: &[(String, String)],
 ) -> Document {
     let mut filter = doc! {
@@ -210,12 +261,6 @@ fn sellable_sku_match(
                 .collect::<Vec<_>>(),
         );
     }
-    if let Some(kind) = product_kind {
-        filter.insert("__product_kind", bson_for(kind));
-    }
-    if let Some(value) = keyword.map(str::trim).filter(|value| !value.is_empty()) {
-        filter.insert("__keyword", regex::escape(value));
-    }
     filter
 }
 
@@ -224,32 +269,127 @@ fn bson_for<T: Serialize>(value: T) -> Bson {
     mongodb::bson::to_bson(&value).expect("域枚举必须可序列化为 BSON")
 }
 
-/// 构造公司商品池资格与只读投影聚合管道。
-fn sellable_sku_pipeline(
-    mut initial_match: Document,
-    eligibility_as_of: BusinessDate,
-    paging: Option<(u64, u32)>,
-) -> Vec<Document> {
-    let product_kind = initial_match.remove("__product_kind");
-    let keyword = initial_match.remove("__keyword");
-    let as_of = eligibility_as_of.to_string();
-    let not_deleted = NOT_DELETED_TIMESTAMP_BSON;
-    let zero_quantity = Bson::Decimal128("0".parse().expect("零必须可转换为 MongoDB Decimal128"));
-    let mut after_lookups = Vec::new();
-    if let Some(kind) = product_kind {
-        after_lookups.push(doc! { "$match": { "product.product_kind": kind } });
+/// 把查询金额转换为与库内价格一致的 BSON Decimal128。
+///
+/// # 参数
+/// * `amount` - 已通过服务层校验的非负金额
+///
+/// # 返回
+/// 返回可直接写入 `$match` 区间的 Decimal128 BSON。
+///
+/// # 错误
+/// 无；合法 `Amount` 必须可转换为 Decimal128，否则在测试阶段即失败。
+fn amount_filter_bson(amount: Amount) -> Bson {
+    Bson::Decimal128(
+        amount
+            .to_string()
+            .parse()
+            .expect("合法 Amount 必须可转换为 MongoDB Decimal128"),
+    )
+}
+
+/// 在资格聚合完成后追加可选业务筛选。
+///
+/// # 参数
+/// * `pipeline` - 已完成资格 lookup 的聚合阶段列表
+/// * `filter` - 调用方可选筛选
+///
+/// # 返回
+/// 无；就地追加 `$match` 阶段。
+///
+/// # 错误
+/// 无。
+fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &SellableSkuFilter) {
+    if let Some(kind) = filter.product_kind {
+        pipeline.push(doc! { "$match": { "product.product_kind": bson_for(kind) } });
     }
-    if let Some(Bson::String(pattern)) = keyword {
-        after_lookups.push(doc! {
+    if let Some(category_id) = filter
+        .category_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        pipeline.push(doc! { "$match": { "product_revision.category_id": category_id } });
+    }
+    if let Some(brand_id) = filter
+        .brand_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        pipeline.push(doc! { "$match": { "product_revision.brand_id": brand_id } });
+    }
+    if let Some(supplier_id) = filter
+        .supplier_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        // 仅匹配资格供给中的供应商；响应投影仍不返回供应商身份。
+        pipeline.push(doc! { "$match": { "supplier_ids": supplier_id } });
+    }
+    if let Some(region) = filter
+        .supply_region
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        pipeline.push(doc! { "$match": { "supply_regions": region } });
+    }
+    if filter.sales_price_min.is_some() || filter.sales_price_max.is_some() {
+        let mut range = Document::new();
+        if let Some(minimum) = filter.sales_price_min {
+            range.insert("$gte", amount_filter_bson(minimum));
+        }
+        if let Some(maximum) = filter.sales_price_max {
+            range.insert("$lte", amount_filter_bson(maximum));
+        }
+        pipeline.push(doc! {
+            "$match": { "sku_revision.sales_visible_price_gross": range }
+        });
+    }
+    if let Some(value) = filter
+        .keyword
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let pattern = regex::escape(value);
+        pipeline.push(doc! {
             "$match": {
                 "$or": [
                     { "sku_no": { "$regex": &pattern, "$options": "i" } },
                     { "sku_revision.name": { "$regex": &pattern, "$options": "i" } },
+                    { "sku_revision.specification": { "$regex": &pattern, "$options": "i" } },
+                    { "sku_revision.barcode": { "$regex": &pattern, "$options": "i" } },
                     { "product.product_no": { "$regex": &pattern, "$options": "i" } },
+                    { "product_revision.name": { "$regex": &pattern, "$options": "i" } },
                 ]
             }
         });
     }
+}
+
+/// 构造公司商品池资格与只读投影聚合管道。
+///
+/// # 参数
+/// * `initial_match` - 稳定 SKU 初始匹配（含可选精确修订引用）
+/// * `filter` - 可选业务筛选与资格业务日
+/// * `paging` - 分页；`None` 表示返回全部匹配行（资格复核路径）
+///
+/// # 返回
+/// 返回含 facet 分页与总数的聚合管道。
+///
+/// # 错误
+/// 无。
+fn sellable_sku_pipeline(
+    initial_match: Document,
+    filter: &SellableSkuFilter,
+    paging: Option<(u64, u32)>,
+) -> Vec<Document> {
+    let as_of = filter.eligibility_as_of.to_string();
+    let not_deleted = NOT_DELETED_TIMESTAMP_BSON;
+    let zero_quantity = Bson::Decimal128("0".parse().expect("零必须可转换为 MongoDB Decimal128"));
 
     let (skip, limit) = paging.map_or((0_i64, i64::MAX), |(page, page_size)| {
         (
@@ -432,7 +572,7 @@ fn sellable_sku_pipeline(
             }
         },
     ];
-    pipeline.extend(after_lookups);
+    append_sellable_optional_filters(&mut pipeline, filter);
     pipeline.push(doc! {
         "$facet": {
             "items": item_stages,
@@ -445,15 +585,31 @@ fn sellable_sku_pipeline(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
+
     use entities::catalog::ProductKind;
     use entities::common::time::BusinessDate;
+    use entities::money::Amount;
 
     /// 公司商品池管道同时约束 SKU 已上架、当前修订与有效供给，并禁止投影采购成本。
     #[test]
     fn sellable_sku_pipeline_is_fail_closed_and_cost_safe() {
         let date = BusinessDate::from_ymd(2026, 8, 8).unwrap();
-        let filter = sellable_sku_match(Some("礼盒"), Some(ProductKind::Physical), &[]);
-        let pipeline = sellable_sku_pipeline(filter, date, Some((2, 20)));
+        let filter = SellableSkuFilter {
+            keyword: Some("礼盒".to_string()),
+            product_kind: Some(ProductKind::Physical),
+            category_id: Some("cat-1".to_string()),
+            brand_id: Some("brand-1".to_string()),
+            supplier_id: Some("supplier-1".to_string()),
+            supply_region: Some("全国".to_string()),
+            sales_price_min: Some(Amount::from_str("10.00").unwrap()),
+            sales_price_max: Some(Amount::from_str("100.00").unwrap()),
+            eligibility_as_of: date,
+            page: 2,
+            page_size: 20,
+        };
+        let match_doc = sellable_sku_match(None, None, &[]);
+        let pipeline = sellable_sku_pipeline(match_doc, &filter, Some((2, 20)));
         let json = format!("{pipeline:?}");
 
         assert!(json.contains("sales_visible_price_gross"));
@@ -466,6 +622,11 @@ mod tests {
         assert!(json.contains("product_revision"));
         assert!(json.contains("specification_signature"));
         assert!(json.contains("supplier_count"));
+        assert!(json.contains("category_id"));
+        assert!(json.contains("brand_id"));
+        assert!(json.contains("supplier_ids"));
+        assert!(json.contains("supply_regions"));
+        assert!(json.contains("barcode"));
         assert!(json.contains("eligibility") || json.contains("valid_from"));
         assert!(!json.contains("dropship_supply_price"));
         assert!(!json.contains("bulk_supply_price"));

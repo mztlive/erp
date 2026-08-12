@@ -58,6 +58,8 @@ export type SupplierOfferingListQuery = Readonly<{
     skuId?: string
     supplierId?: string
     status?: OfferingStatus
+    sourceType?: OfferingSourceType
+    availabilityStatus?: AvailabilityStatus
     page?: number
     pageSize?: number
 }>

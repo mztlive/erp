@@ -31,10 +31,14 @@ export const salesOrderKeys = {
     ) => [...salesOrderKeys.acceptanceRoot(id), filters] as const,
 }
 
-export function useSalesOrdersQuery(query: SalesOrdersListQuery) {
+export function useSalesOrdersQuery(
+    query: SalesOrdersListQuery,
+    enabled = true,
+) {
     return useQuery({
         queryKey: salesOrderKeys.list(query),
         queryFn: () => fetchSalesOrders(query),
+        enabled,
     })
 }
 

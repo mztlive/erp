@@ -89,6 +89,10 @@ pub struct SupplierOfferingListParams {
     pub supplier_id: Option<String>,
     /// 供给关系状态。
     pub status: Option<OfferingStatus>,
+    /// 登记来源。
+    pub source_type: Option<OfferingSourceType>,
+    /// 当前可供状态。
+    pub availability_status: Option<AvailabilityStatus>,
     /// 页码。
     #[validate(range(min = 1, message = "页码必须大于 0"))]
     pub page: Option<u64>,
@@ -345,8 +349,10 @@ pub struct UpdateSupplierOfferingAvailabilityResult {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, SortDir, SupplierOfferingView, OFFERING_SORT_FIELDS};
-    use entities::supplier_offering::{OfferingSourceType, OfferingStatus};
+    use super::{
+        normalize_sort, SortDir, SupplierOfferingListParams, SupplierOfferingView, OFFERING_SORT_FIELDS,
+    };
+    use entities::supplier_offering::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
 
     #[test]
     fn sort_contract_rejects_unknown_fields() {
@@ -360,6 +366,17 @@ mod tests {
             ("status", SortDir::Asc)
         );
         assert!(normalize_sort(&Some("unsafe".to_string()), &None, OFFERING_SORT_FIELDS).is_err());
+    }
+
+    #[test]
+    fn list_filter_contract_accepts_source_and_availability() {
+        let params: SupplierOfferingListParams = serde_json::from_value(serde_json::json!({
+            "source_type": "EXCEL",
+            "availability_status": "AVAILABLE"
+        }))
+        .unwrap();
+        assert_eq!(params.source_type, Some(OfferingSourceType::Excel));
+        assert_eq!(params.availability_status, Some(AvailabilityStatus::Available));
     }
 
     #[test]

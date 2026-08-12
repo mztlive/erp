@@ -150,9 +150,13 @@ export type MasterDataListQuery = Readonly<{
     revisionTiming?: "current" | "future" | "all"
     metricKey?: string
     productKind?: ProductKind
+    /** 公司商品池：资格判定业务日期（YYYY-MM-DD）；空表示服务端今天。日常 UI 不暴露。 */
+    eligibilityAsOf?: string
     productCategoryId?: string
     productBrandId?: string
     productSupplierId?: string
+    /** 公司商品池：可供区域精确匹配。 */
+    supplyRegion?: string
     productListingStatus?: ProductListingFilter
     productSupplyCoverage?: ProductSkuCoverageFilter
     productSalesPriceMin?: string
@@ -189,13 +193,17 @@ export type ProductListSkuSummary = Readonly<{
     salesVisiblePriceGross?: string
 }>
 
+/** 商品 / 公司商品池筛选使用的分类树节点（供 `CategoryCombobox`）。 */
+export type ProductFilterCategoryOption = Readonly<{
+    categoryId: string
+    categoryCode: string
+    categoryName: string
+    parentId?: string
+}>
+
 /** 商品列表筛选使用的归属与有效供给供应商选项。 */
 export type ProductFilterOptions = Readonly<{
-    categories: readonly Readonly<{
-        value: string
-        label: string
-        keywords: string
-    }>[]
+    categories: readonly ProductFilterCategoryOption[]
     brands: readonly Readonly<{
         value: string
         label: string

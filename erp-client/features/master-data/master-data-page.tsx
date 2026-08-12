@@ -217,19 +217,26 @@ function MasterDataListWorkspace({
         revisionTimingParam === "current" || revisionTimingParam === "future"
             ? revisionTimingParam
             : "all"
-    const productKind = isProductResource
-        ? PRODUCT_KIND_VALUES.find(
-              (value) => value === searchParams.get("productKind"),
-          )
-        : undefined
-    const productCategoryId = isProductResource
-        ? searchParams.get("productCategoryId")?.trim() || undefined
-        : undefined
-    const productBrandId = isProductResource
-        ? searchParams.get("productBrandId")?.trim() || undefined
-        : undefined
-    const productSupplierId = isProductResource
-        ? searchParams.get("productSupplierId")?.trim() || undefined
+    const productKind =
+        isProductResource || isSellableResource
+            ? PRODUCT_KIND_VALUES.find(
+                  (value) => value === searchParams.get("productKind"),
+              )
+            : undefined
+    const productCategoryId =
+        isProductResource || isSellableResource
+            ? searchParams.get("productCategoryId")?.trim() || undefined
+            : undefined
+    const productBrandId =
+        isProductResource || isSellableResource
+            ? searchParams.get("productBrandId")?.trim() || undefined
+            : undefined
+    const productSupplierId =
+        isProductResource || isSellableResource
+            ? searchParams.get("productSupplierId")?.trim() || undefined
+            : undefined
+    const supplyRegion = isSellableResource
+        ? searchParams.get("supplyRegion")?.trim() || undefined
         : undefined
     const productListingStatus = isProductResource
         ? PRODUCT_LISTING_FILTER_OPTIONS.find(
@@ -243,12 +250,14 @@ function MasterDataListWorkspace({
                   option.value === searchParams.get("productSupplyCoverage"),
           )?.value
         : undefined
-    const productSalesPriceMin = isProductResource
-        ? searchParams.get("productSalesPriceMin")?.trim() || undefined
-        : undefined
-    const productSalesPriceMax = isProductResource
-        ? searchParams.get("productSalesPriceMax")?.trim() || undefined
-        : undefined
+    const productSalesPriceMin =
+        isProductResource || isSellableResource
+            ? searchParams.get("productSalesPriceMin")?.trim() || undefined
+            : undefined
+    const productSalesPriceMax =
+        isProductResource || isSellableResource
+            ? searchParams.get("productSalesPriceMax")?.trim() || undefined
+            : undefined
     const supplierCapabilityCodesParam = searchParams.get(
         "supplierCapabilityCodes",
     )
@@ -300,12 +309,25 @@ function MasterDataListWorkspace({
         productSalesPriceMin ||
         productSalesPriceMax,
     )
+    /** 公司商品池结构化筛选（不含搜索词）。 */
+    const hasStructuredSellableFilters = Boolean(
+        productKind ||
+        productCategoryId ||
+        productBrandId ||
+        productSupplierId ||
+        supplyRegion ||
+        productSalesPriceMin ||
+        productSalesPriceMax,
+    )
     const hasStructuredSupplierFilters = Boolean(
         lifecycleStatus !== "all" ||
         supplierQualificationHealth ||
         supplierCapabilityCodes.length ||
         supplierQualificationTypes.length,
     )
+    /** 通用列表（品牌/计量单位/卡券类目/仓库）已生效结构化筛选（启停/版本）。 */
+    const hasStructuredListFilters =
+        lifecycleStatus !== "all" || revisionTiming !== "all"
     const pageParamRaw = Number(searchParams.get("page"))
     const pageParamIndex =
         Number.isFinite(pageParamRaw) && pageParamRaw > 0
@@ -317,9 +339,16 @@ function MasterDataListWorkspace({
     const [productFilterPanelOpen, setProductFilterPanelOpen] = React.useState(
         hasStructuredProductFilters,
     )
+    /** 公司商品池 §3.6 筛选面板展开态；深链带入条件时自动展开。 */
+    const [sellableFilterPanelOpen, setSellableFilterPanelOpen] =
+        React.useState(hasStructuredSellableFilters)
     /** 供应商显式提交筛选面板展开态；深链带入条件时自动展开。 */
     const [supplierFilterPanelOpen, setSupplierFilterPanelOpen] =
         React.useState(hasStructuredSupplierFilters)
+    /** 通用列表显式提交筛选面板展开态；深链带入条件时自动展开（§3.6）。 */
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(
+        hasStructuredListFilters,
+    )
     const [supplierCapabilityCodesDraft, setSupplierCapabilityCodesDraft] =
         React.useState<string[]>(supplierCapabilityCodes)
     const [
@@ -364,6 +393,9 @@ function MasterDataListWorkspace({
         React.useState(productSalesPriceMin ?? "")
     const [productSalesPriceMaxDraft, setProductSalesPriceMaxDraft] =
         React.useState(productSalesPriceMax ?? "")
+    const [supplyRegionDraft, setSupplyRegionDraft] = React.useState(
+        supplyRegion ?? "",
+    )
     const [productSalesPriceError, setProductSalesPriceError] = React.useState<
         string | null
     >(null)
@@ -419,17 +451,46 @@ function MasterDataListWorkspace({
         [lifecycleStatus, patchUrl, resetPagination],
     )
 
-    const changeRevisionTiming = React.useCallback(
-        (next: "current" | "future" | "all") => {
-            if (next === revisionTiming) return
-            patchUrl({
-                revisionTiming: next === "all" ? null : next,
-                page: null,
-            })
-            resetPagination()
-        },
-        [patchUrl, resetPagination, revisionTiming],
-    )
+    /** 搜索提交：写 URL 并回第 1 页；与草稿相同时跳过。 */
+    const commitSearch = React.useCallback(() => {
+        const next = searchDraft.trim()
+        if (next === q.trim()) return
+        patchUrl({ q: next || null, page: null })
+        resetPagination()
+    }, [patchUrl, q, resetPagination, searchDraft])
+
+    /** 公司商品池筛选面板整体提交（§3.6）：草稿一次性写入 URL。 */
+    const applySellableFilters = React.useCallback(() => {
+        const minimum = productSalesPriceMinDraft.trim()
+        const maximum = productSalesPriceMaxDraft.trim()
+        const error = productSalesPriceRangeError(minimum, maximum)
+        setProductSalesPriceError(error)
+        if (error) return
+        patchUrl({
+            q: searchDraft.trim() || null,
+            productKind: productKindDraft === "all" ? null : productKindDraft,
+            productCategoryId: productCategoryIdDraft,
+            productBrandId: productBrandIdDraft,
+            productSupplierId: productSupplierIdDraft,
+            supplyRegion: supplyRegionDraft.trim() || null,
+            productSalesPriceMin: minimum || null,
+            productSalesPriceMax: maximum || null,
+            eligibilityAsOf: null,
+            page: null,
+        })
+        resetPagination()
+    }, [
+        patchUrl,
+        productBrandIdDraft,
+        productCategoryIdDraft,
+        productKindDraft,
+        productSalesPriceMaxDraft,
+        productSalesPriceMinDraft,
+        productSupplierIdDraft,
+        resetPagination,
+        searchDraft,
+        supplyRegionDraft,
+    ])
 
     /** 提交供应商筛选面板；全部草稿字段一次性写入 URL。 */
     const applySupplierFilters = React.useCallback(() => {
@@ -460,6 +521,27 @@ function MasterDataListWorkspace({
         supplierCapabilityCodesDraft,
         supplierQualificationHealthDraft,
         supplierQualificationTypesDraft,
+    ])
+
+    /** 提交通用列表筛选面板；草稿一次性写入 URL（§3.6）。 */
+    const applyListFilters = React.useCallback(() => {
+        patchUrl({
+            q: searchDraft.trim() || null,
+            lifecycleStatus:
+                lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
+            metricKey:
+                lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
+            revisionTiming:
+                revisionTimingDraft === "all" ? null : revisionTimingDraft,
+            page: null,
+        })
+        resetPagination()
+    }, [
+        patchUrl,
+        resetPagination,
+        searchDraft,
+        lifecycleStatusDraft,
+        revisionTimingDraft,
     ])
 
     /** 商品筛选面板整体提交：点击"搜索"才把全部草稿字段一次性写入 URL。 */
@@ -522,21 +604,26 @@ function MasterDataListWorkspace({
         setProductSupplierIdDraft(null)
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
+        setSupplyRegionDraft("")
         setProductSalesPriceError(null)
         setProductFilterPanelOpen(false)
+        setSellableFilterPanelOpen(false)
         setSupplierCapabilityCodesDraft([])
         setSupplierQualificationTypesDraft([])
         setSupplierQualificationHealthDraft("all")
         setSupplierFilterPanelOpen(false)
+        setFilterPanelOpen(false)
         patchUrl({
             q: null,
             lifecycleStatus: null,
             metricKey: null,
             revisionTiming: null,
             productKind: null,
+            eligibilityAsOf: null,
             productCategoryId: null,
             productBrandId: null,
             productSupplierId: null,
+            supplyRegion: null,
             productListingStatus: null,
             productSupplyCoverage: null,
             productSalesPriceMin: null,
@@ -549,10 +636,12 @@ function MasterDataListWorkspace({
         resetPagination()
     }, [patchUrl, resetPagination])
 
-    // URL 回填草稿（后退/前进）；输入内容只在显式提交搜索后写入 URL。
+    // URL 回填草稿（后退/前进）；搜索框聚焦时不覆盖正在输入的内容（§4.1 焦点保护）。
     React.useEffect(() => {
-        setSearchDraft(q)
-    }, [q])
+        if (document.activeElement !== searchInputRef.current) {
+            setSearchDraft(q)
+        }
+    }, [q, searchInputRef])
 
     React.useEffect(() => {
         setProductKindDraft(productKind ?? "all")
@@ -565,8 +654,10 @@ function MasterDataListWorkspace({
         setProductSupplierIdDraft(productSupplierId ?? null)
         setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
         setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
+        setSupplyRegionDraft(supplyRegion ?? "")
         setProductSalesPriceError(null)
         setProductFilterPanelOpen(hasStructuredProductFilters)
+        setSellableFilterPanelOpen(hasStructuredSellableFilters)
     }, [
         productKind,
         lifecycleStatus,
@@ -578,7 +669,9 @@ function MasterDataListWorkspace({
         productSupplierId,
         productSalesPriceMax,
         productSalesPriceMin,
+        supplyRegion,
         hasStructuredProductFilters,
+        hasStructuredSellableFilters,
     ])
 
     React.useEffect(() => {
@@ -594,6 +687,11 @@ function MasterDataListWorkspace({
         supplierQualificationHealth,
         supplierQualificationTypes,
     ])
+
+    // URL 外部变化（后退/前进/清除）时，同步通用列表面板展开态（§3.6）。
+    React.useEffect(() => {
+        setFilterPanelOpen(hasStructuredListFilters)
+    }, [hasStructuredListFilters])
 
     // URL page 回读（后退/前进/分享恢复）
     React.useEffect(() => {
@@ -611,12 +709,13 @@ function MasterDataListWorkspace({
     const listQuery = useMasterDataListQuery({
         resource,
         q: q.trim() || undefined,
-        lifecycleStatus,
-        revisionTiming,
+        lifecycleStatus: isSellableResource ? undefined : lifecycleStatus,
+        revisionTiming: isSellableResource ? undefined : revisionTiming,
         productKind,
         productCategoryId,
         productBrandId,
         productSupplierId,
+        supplyRegion,
         productListingStatus,
         productSupplyCoverage,
         productSalesPriceMin,
@@ -627,8 +726,9 @@ function MasterDataListWorkspace({
         // metricKey 只做展示不做筛选：指标与 ToggleGroup 共用 lifecycleStatus 状态源
         metricKey: undefined,
     })
-    const productFilterOptionsQuery =
-        useProductFilterOptionsQuery(isProductResource)
+    const productFilterOptionsQuery = useProductFilterOptionsQuery(
+        isProductResource || isSellableResource,
+    )
     const exportMutation = useMasterDataExportMutation()
     const productListingMutation = useProductListingMutation()
     const [listingError, setListingError] = React.useState<string | null>(null)
@@ -692,8 +792,8 @@ function MasterDataListWorkspace({
     const selectedCategoryLabel = React.useMemo(
         () =>
             productFilterOptionsQuery.data?.categories.find(
-                (option) => option.value === productCategoryId,
-            )?.label ?? productCategoryId,
+                (option) => option.categoryId === productCategoryId,
+            )?.categoryName ?? productCategoryId,
         [productCategoryId, productFilterOptionsQuery.data?.categories],
     )
     const selectedBrandLabel = React.useMemo(
@@ -739,6 +839,29 @@ function MasterDataListWorkspace({
     }, [listQuery.data, rows])
 
     const filterSnapshotLabel = React.useMemo(() => {
+        if (isSellableResource) {
+            const parts = [
+                `分类=${resourceLabel(resource)}`,
+                ...(productKind
+                    ? [`商品类型=${PRODUCT_KIND_LABELS[productKind]}`]
+                    : []),
+                ...(selectedCategoryLabel
+                    ? [`商品分类=${selectedCategoryLabel}`]
+                    : []),
+                ...(selectedBrandLabel ? [`品牌=${selectedBrandLabel}`] : []),
+                ...(selectedSupplierLabel
+                    ? [`供应商=${selectedSupplierLabel}`]
+                    : []),
+                ...(supplyRegion ? [`可供区域=${supplyRegion}`] : []),
+                ...(productSalesPriceMin || productSalesPriceMax
+                    ? [
+                          `销售价=${productSalesPriceMin ? `¥${productSalesPriceMin}` : "不限"}–${productSalesPriceMax ? `¥${productSalesPriceMax}` : "不限"}`,
+                      ]
+                    : []),
+                q.trim() ? `搜索=${q.trim()}` : "搜索=空",
+            ]
+            return parts.join(" · ")
+        }
         const parts = [
             `分类=${resourceLabel(resource)}`,
             `启用状态=${lifecycleFilterLabel(lifecycleStatus)}`,
@@ -792,6 +915,7 @@ function MasterDataListWorkspace({
         ]
         return parts.join(" · ")
     }, [
+        isSellableResource,
         lifecycleStatus,
         productKind,
         productListingStatus,
@@ -802,6 +926,7 @@ function MasterDataListWorkspace({
         resource,
         revisionTiming,
         isSupplierResource,
+        supplyRegion,
         supplierCapabilityCodes,
         supplierQualificationHealth,
         supplierQualificationTypes,
@@ -810,17 +935,77 @@ function MasterDataListWorkspace({
         selectedSupplierLabel,
     ])
 
+    /** 公司商品池表头说明：有筛选时写人读摘要，否则默认操作说明。 */
+    const sellableTableDescription = React.useMemo(() => {
+        if (!isSellableResource) return null
+        const active: string[] = []
+        if (q.trim()) active.push(`搜索「${q.trim()}」`)
+        if (productKind) active.push(`类型 ${PRODUCT_KIND_LABELS[productKind]}`)
+        if (selectedCategoryLabel) active.push(`分类 ${selectedCategoryLabel}`)
+        if (selectedBrandLabel) active.push(`品牌 ${selectedBrandLabel}`)
+        if (selectedSupplierLabel) active.push(`供应商 ${selectedSupplierLabel}`)
+        if (supplyRegion) active.push(`区域 ${supplyRegion}`)
+        if (productSalesPriceMin || productSalesPriceMax) {
+            active.push(
+                `销售价 ${productSalesPriceMin ? `¥${productSalesPriceMin}` : "不限"}–${productSalesPriceMax ? `¥${productSalesPriceMax}` : "不限"}`,
+            )
+        }
+        if (active.length === 0) {
+            return masterDataCopy.sellableListDescription(rows.length)
+        }
+        return `共 ${rows.length} 条 · 当前筛选：${active.join(" · ")}`
+    }, [
+        isSellableResource,
+        productKind,
+        productSalesPriceMax,
+        productSalesPriceMin,
+        q,
+        rows.length,
+        selectedBrandLabel,
+        selectedCategoryLabel,
+        selectedSupplierLabel,
+        supplyRegion,
+    ])
+
+    /** 通用列表表头说明：有筛选时写人读摘要（与控件一致），否则默认操作说明（§2.2）。 */
+    const listTableDescription = React.useMemo(() => {
+        if (isProductResource || isSupplierResource || isSellableResource) {
+            return null
+        }
+        const active: string[] = []
+        if (q.trim()) active.push(`搜索「${q.trim()}」`)
+        if (lifecycleStatus !== "all") {
+            active.push(`启用状态 ${lifecycleFilterLabel(lifecycleStatus)}`)
+        }
+        if (revisionTiming !== "all") {
+            active.push(`版本状态 ${revisionTimingFilterLabel(revisionTiming)}`)
+        }
+        if (active.length === 0) {
+            return masterDataCopy.listDescription(rows.length)
+        }
+        return `共 ${rows.length} 条 · 当前筛选：${active.join(" · ")}`
+    }, [
+        isProductResource,
+        isSellableResource,
+        isSupplierResource,
+        lifecycleStatus,
+        q,
+        revisionTiming,
+        rows.length,
+    ])
+
     const handleExport = React.useCallback(async () => {
         if (!listQuery.data || rows.length === 0) return
         const refreshed = await exportMutation.mutateAsync({
             resource,
             q: q.trim() || undefined,
-            lifecycleStatus,
-            revisionTiming,
+            lifecycleStatus: isSellableResource ? undefined : lifecycleStatus,
+            revisionTiming: isSellableResource ? undefined : revisionTiming,
             productKind,
             productCategoryId,
             productBrandId,
             productSupplierId,
+            supplyRegion,
             productListingStatus,
             productSupplyCoverage,
             productSalesPriceMin,
@@ -842,6 +1027,7 @@ function MasterDataListWorkspace({
     }, [
         exportMutation,
         filterSnapshotLabel,
+        isSellableResource,
         lifecycleStatus,
         listQuery.data,
         productBrandId,
@@ -856,6 +1042,7 @@ function MasterDataListWorkspace({
         resource,
         revisionTiming,
         rows.length,
+        supplyRegion,
         supplierCapabilityCodes,
         supplierQualificationHealth,
         supplierQualificationTypes,
@@ -931,28 +1118,32 @@ function MasterDataListWorkspace({
     }
 
     const listLoadFailed = listQuery.isError || !listQuery.data
-    const hasActiveFilters =
-        q.trim() !== "" ||
-        lifecycleStatus !== "all" ||
-        (!isSupplierResource && revisionTiming !== "all") ||
-        Boolean(
-            supplierQualificationHealth ||
-            supplierCapabilityCodes.length ||
-            supplierQualificationTypes.length,
-        ) ||
-        Boolean(
-            productKind ||
-            productCategoryId ||
-            productBrandId ||
-            productSupplierId ||
-            productListingStatus ||
-            productSupplyCoverage ||
-            productSalesPriceMin ||
-            productSalesPriceMax,
-        )
-    const metrics = isSupplierResource
-        ? syncedMetrics.filter((metric) => metric.key !== "pending")
-        : syncedMetrics
+    const hasActiveFilters = isSellableResource
+        ? q.trim() !== "" || hasStructuredSellableFilters
+        : q.trim() !== "" ||
+          lifecycleStatus !== "all" ||
+          (!isSupplierResource && revisionTiming !== "all") ||
+          Boolean(
+              supplierQualificationHealth ||
+              supplierCapabilityCodes.length ||
+              supplierQualificationTypes.length,
+          ) ||
+          Boolean(
+              productKind ||
+              productCategoryId ||
+              productBrandId ||
+              productSupplierId ||
+              productListingStatus ||
+              productSupplyCoverage ||
+              productSalesPriceMin ||
+              productSalesPriceMax,
+          )
+    // 公司商品池是资格投影，启停/待生效指标无业务含义；不展示伪筛选指标条。
+    const metrics = isSellableResource
+        ? []
+        : isSupplierResource
+          ? syncedMetrics.filter((metric) => metric.key !== "pending")
+          : syncedMetrics
     const noDataWithCreate = !listLoadFailed && rows.length === 0
 
     return (
@@ -1156,36 +1347,49 @@ function MasterDataListWorkspace({
             <BusinessTableFrame
                 title={`${resourceLabel(resource)}列表`}
                 description={
-                    isProductResource
-                        ? masterDataCopy.productListDescription(rows.length)
-                        : isSupplierResource
-                          ? masterDataCopy.supplierListDescription(rows.length)
-                          : masterDataCopy.listDescription(rows.length)
+                    isSellableResource
+                        ? (sellableTableDescription ??
+                          masterDataCopy.sellableListDescription(rows.length))
+                        : isProductResource
+                          ? masterDataCopy.productListDescription(rows.length)
+                          : isSupplierResource
+                            ? masterDataCopy.supplierListDescription(
+                                  rows.length,
+                              )
+                            : (listTableDescription ??
+                              masterDataCopy.listDescription(rows.length))
                 }
                 toolbar={
                     <MasterDataListToolbar
                         isProductResource={isProductResource}
                         isSupplierResource={isSupplierResource}
+                        isSellableResource={isSellableResource}
                         resource={resource}
                         searchInputRef={searchInputRef}
                         searchDraft={searchDraft}
                         setSearchDraft={setSearchDraft}
+                        commitSearch={commitSearch}
                         rowCount={rows.length}
                         hasActiveFilters={hasActiveFilters}
                         clearAllFilters={clearAllFilters}
-                        patchUrl={patchUrl}
-                        resetPagination={resetPagination}
-                        q={q}
-                        lifecycleStatus={lifecycleStatus}
-                        revisionTiming={revisionTiming}
-                        changeLifecycle={changeLifecycle}
-                        changeRevisionTiming={changeRevisionTiming}
+                        filterPanelOpen={filterPanelOpen}
+                        setFilterPanelOpen={setFilterPanelOpen}
+                        hasStructuredListFilters={hasStructuredListFilters}
+                        applyListFilters={applyListFilters}
                         productFilterPanelOpen={productFilterPanelOpen}
                         setProductFilterPanelOpen={setProductFilterPanelOpen}
                         hasStructuredProductFilters={
                             hasStructuredProductFilters
                         }
                         applyProductFilters={applyProductFilters}
+                        sellableFilterPanelOpen={sellableFilterPanelOpen}
+                        setSellableFilterPanelOpen={setSellableFilterPanelOpen}
+                        hasStructuredSellableFilters={
+                            hasStructuredSellableFilters
+                        }
+                        applySellableFilters={applySellableFilters}
+                        supplyRegionDraft={supplyRegionDraft}
+                        setSupplyRegionDraft={setSupplyRegionDraft}
                         productKindDraft={productKindDraft}
                         setProductKindDraft={setProductKindDraft}
                         lifecycleStatusDraft={lifecycleStatusDraft}
@@ -1284,13 +1488,24 @@ function MasterDataListWorkspace({
                                     description={
                                         hasActiveFilters
                                             ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                                            : isSellableResource
+                                              ? "当前资格日期下没有可销售的公司 SKU。请确认商品已上架、资料有效且存在有效供给。"
+                                              : "点击「新建」创建第一份资料；历史记录会随资料保留。"
                                     }
                                     action={
-                                        !hasActiveFilters &&
-                                        !isWarehouse &&
-                                        !isSellableResource &&
-                                        canCreate ? (
+                                        hasActiveFilters ? (
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                size="sm"
+                                                className="rounded-lg shadow-none"
+                                                onClick={clearAllFilters}
+                                            >
+                                                清除筛选
+                                            </Button>
+                                        ) : !isWarehouse &&
+                                          !isSellableResource &&
+                                          canCreate ? (
                                             <Button
                                                 type="button"
                                                 variant="secondary"

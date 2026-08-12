@@ -3,7 +3,13 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { DownloadIcon, FilterIcon, PlusIcon, SearchIcon } from "lucide-react"
+import {
+    ChevronDownIcon,
+    DownloadIcon,
+    FilterIcon,
+    PlusIcon,
+    SearchIcon,
+} from "lucide-react"
 import type {
     ColumnDef,
     PaginationState,
@@ -17,6 +23,7 @@ import {
     BusinessTableFrame,
     DataFreshness,
     DataTable,
+    FixedOptionRadioFilter,
     FormalActionResult,
     ListToolbar,
     MoneyValue,
@@ -33,12 +40,9 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
+import { DatePicker } from "@/components/ui/date-picker"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
 import {
     isPendingReviewStage,
     NATURE_LABEL,
@@ -48,9 +52,19 @@ import {
 } from "@/features/sales-orders/labels"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
 import {
-    salesOrderStatusLabel,
+    salesOrderCloseLabel,
+    salesOrderCollectionLabel,
+    salesOrderCommercialStatusLabel,
+    salesOrderFulfillmentLabel,
+    salesOrderInvoiceLabel,
+    salesOrderReviewStatusLabel,
     salesOrderSummaryLabels,
-    SALES_ORDER_STATUS_OPTIONS,
+    SALES_ORDER_CLOSE_OPTIONS,
+    SALES_ORDER_COLLECTION_OPTIONS,
+    SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
+    SALES_ORDER_FULFILLMENT_OPTIONS,
+    SALES_ORDER_INVOICE_OPTIONS,
+    SALES_ORDER_REVIEW_STATUS_OPTIONS,
 } from "@/features/sales-orders/filter-orders"
 import {
     fetchSalesOrders,
@@ -61,9 +75,16 @@ import {
     useSalesOrdersQuery,
 } from "@/features/sales-orders/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import {
+    ContractSearchCombobox,
+    CustomerSearchCombobox,
+} from "@/features/entity-selectors"
+import { OwnerCombobox } from "@/components/business"
+import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import {
-    buildSalesOrdersSearchParams,
+    mergeSalesOrdersSearchParams,
+    normalizedSalesOrdersSearchParams,
     parseSalesOrdersSearchParams,
     type SalesOrdersUrlState,
 } from "@/features/sales-orders/url-state"
@@ -79,11 +100,43 @@ const SORT_COLUMN_TO_FIELD: Record<
     submittedAt: "submittedAt",
 }
 
+const BUSINESS_TIME_ZONE_OFFSET_SECONDS = 8 * 60 * 60
+
+function businessDateBoundary(
+    value: string | undefined,
+    endOfDay: boolean,
+): number | undefined {
+    if (!value) return undefined
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+    if (!match) return undefined
+    const [, year, month, day] = match
+    const utcSeconds =
+        Date.UTC(
+            Number(year),
+            Number(month) - 1,
+            Number(day),
+            endOfDay ? 23 : 0,
+            endOfDay ? 59 : 0,
+            endOfDay ? 59 : 0,
+        ) / 1000
+    const seconds = utcSeconds - BUSINESS_TIME_ZONE_OFFSET_SECONDS
+    return Number.isFinite(seconds) ? seconds : undefined
+}
+
+function businessDateStart(value?: string): number | undefined {
+    return businessDateBoundary(value, false)
+}
+
+function businessDateEnd(value?: string): number | undefined {
+    return businessDateBoundary(value, true)
+}
+
 export function SalesOrdersListPage() {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const profileQuery = useAccountProfileQuery()
+    const ownerOptionsQuery = useOwnerOptionsQuery()
     const currentUserId = profileQuery.data?.userid?.trim() ?? ""
     const url = React.useMemo(
         () => parseSalesOrdersSearchParams(searchParams),
@@ -93,29 +146,48 @@ export function SalesOrdersListPage() {
     const pushUrl = React.useCallback(
         (patch: Partial<SalesOrdersUrlState>) => {
             const next = { ...url, ...patch }
-            const qs = buildSalesOrdersSearchParams(next)
+            const qs = mergeSalesOrdersSearchParams(searchParams, next)
             router.replace(`${pathname}${qs}`, { scroll: false })
         },
-        [pathname, router, url],
+        [pathname, router, searchParams, url],
     )
+
+    React.useEffect(() => {
+        const normalized = normalizedSalesOrdersSearchParams(searchParams, url)
+        if (normalized === undefined) return
+        router.replace(`${pathname}${normalized}`, { scroll: false })
+    }, [pathname, router, searchParams, url])
 
     const query = React.useMemo<SalesOrdersListQuery>(
         () => ({
             page: url.page,
             pageSize: url.pageSize,
             search: url.search,
+            customerId: url.customerId,
+            contractId: url.contractId,
+            createdBy: url.createdBy,
             nature: url.nature,
             summary: url.summary,
             currentUserId,
             origin: url.origin,
-            status: url.status,
+            commercialStatus: url.commercialStatus,
+            reviewStatus: url.reviewStatus,
+            fulfillment: url.fulfillment,
+            collection: url.collection,
+            invoice: url.invoice,
+            closeStatus: url.closeStatus,
+            createdFrom: businessDateStart(url.createdFrom),
+            createdTo: businessDateEnd(url.createdTo),
             sortBy: url.sort ? SORT_COLUMN_TO_FIELD[url.sort] : undefined,
             sortDir: url.dir,
         }),
         [url, currentUserId],
     )
 
-    const ordersQuery = useSalesOrdersQuery(query)
+    const identityReady =
+        (url.summary !== "mine" && url.summary !== "createdByMe") ||
+        Boolean(currentUserId)
+    const ordersQuery = useSalesOrdersQuery(query, identityReady)
     const exportMutation = useCreateSalesOrderExportJobMutation()
     const items = React.useMemo(
         () => ordersQuery.data?.items ?? [],
@@ -124,6 +196,38 @@ export function SalesOrdersListPage() {
     const total = ordersQuery.data?.total ?? 0
 
     const [searchDraft, setSearchDraft] = React.useState(url.search ?? "")
+    const [filterPanelOpen, setFilterPanelOpen] = React.useState(
+        Boolean(
+            url.customerId ||
+            url.contractId ||
+            url.createdBy ||
+            url.nature !== "all" ||
+            url.origin !== "all" ||
+            url.commercialStatus !== "all" ||
+            url.reviewStatus !== "all" ||
+            url.fulfillment !== "all" ||
+            url.collection !== "all" ||
+            url.invoice !== "all" ||
+            url.closeStatus !== "all" ||
+            url.createdFrom ||
+            url.createdTo,
+        ),
+    )
+    const [filterDraft, setFilterDraft] = React.useState(() => ({
+        customerId: url.customerId ?? "",
+        contractId: url.contractId ?? "",
+        createdBy: url.createdBy ?? "",
+        nature: url.nature,
+        origin: url.origin,
+        commercialStatus: url.commercialStatus,
+        reviewStatus: url.reviewStatus,
+        fulfillment: url.fulfillment,
+        collection: url.collection,
+        invoice: url.invoice,
+        closeStatus: url.closeStatus,
+        createdFrom: url.createdFrom ?? "",
+        createdTo: url.createdTo ?? "",
+    }))
     const [paperId, setPaperId] = React.useState<string | null>(null)
     const [exportJob, setExportJob] = React.useState<{
         jobId: string
@@ -139,30 +243,79 @@ export function SalesOrdersListPage() {
         setPaperId(id)
     }, [])
 
+    const hasStructuredFilters = Boolean(
+        url.customerId ||
+        url.contractId ||
+        url.createdBy ||
+        url.nature !== "all" ||
+        url.origin !== "all" ||
+        url.commercialStatus !== "all" ||
+        url.reviewStatus !== "all" ||
+        url.fulfillment !== "all" ||
+        url.collection !== "all" ||
+        url.invoice !== "all" ||
+        url.closeStatus !== "all" ||
+        url.createdFrom ||
+        url.createdTo,
+    )
+
     React.useEffect(() => {
         setSearchDraft(url.search ?? "")
-    }, [url.search])
+        setFilterDraft({
+            customerId: url.customerId ?? "",
+            contractId: url.contractId ?? "",
+            createdBy: url.createdBy ?? "",
+            nature: url.nature,
+            origin: url.origin,
+            commercialStatus: url.commercialStatus,
+            reviewStatus: url.reviewStatus,
+            fulfillment: url.fulfillment,
+            collection: url.collection,
+            invoice: url.invoice,
+            closeStatus: url.closeStatus,
+            createdFrom: url.createdFrom ?? "",
+            createdTo: url.createdTo ?? "",
+        })
+        setFilterPanelOpen(hasStructuredFilters)
+    }, [
+        hasStructuredFilters,
+        url.closeStatus,
+        url.collection,
+        url.commercialStatus,
+        url.contractId,
+        url.createdBy,
+        url.createdFrom,
+        url.createdTo,
+        url.customerId,
+        url.fulfillment,
+        url.invoice,
+        url.nature,
+        url.origin,
+        url.reviewStatus,
+        url.search,
+    ])
 
     React.useEffect(() => {
         setFocusedIndex(0)
     }, [
+        url.closeStatus,
+        url.collection,
+        url.commercialStatus,
+        url.contractId,
+        url.createdBy,
+        url.createdFrom,
+        url.createdTo,
+        url.customerId,
+        url.fulfillment,
+        url.invoice,
         url.nature,
         url.origin,
         url.page,
+        url.reviewStatus,
         url.search,
-        url.status,
         url.summary,
         items.length,
     ])
-
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchDraft.trim() === (url.search ?? "")) return
-            pushUrl({ search: searchDraft.trim() || undefined, page: 1 })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- pushUrl 以当前 URL 快照为准
-    }, [searchDraft])
 
     React.useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -309,23 +462,78 @@ export function SalesOrdersListPage() {
         URL.revokeObjectURL(url)
     }, [exportMutation, query, total])
 
-    const advancedActive = url.origin !== "all" || url.status !== "all"
+    const filtersActive = Boolean(url.search) || hasStructuredFilters
 
-    const filtersActive =
-        Boolean(url.search) ||
-        url.nature !== "all" ||
-        url.summary !== "all" ||
-        url.origin !== "all" ||
-        url.status !== "all"
+    const applyFilters = React.useCallback(() => {
+        const [createdFrom, createdTo] =
+            filterDraft.createdFrom &&
+            filterDraft.createdTo &&
+            filterDraft.createdFrom > filterDraft.createdTo
+                ? [filterDraft.createdTo, filterDraft.createdFrom]
+                : [filterDraft.createdFrom, filterDraft.createdTo]
+        const summaryConflictsWithDraft =
+            (url.summary === "mine" &&
+                (Boolean(filterDraft.createdBy) ||
+                    filterDraft.commercialStatus !== "all" ||
+                    filterDraft.reviewStatus !== "all")) ||
+            (url.summary === "createdByMe" && Boolean(filterDraft.createdBy)) ||
+            (url.summary === "exception" &&
+                (filterDraft.commercialStatus !== "all" ||
+                    filterDraft.reviewStatus !== "all"))
+
+        pushUrl({
+            search: searchDraft.trim() || undefined,
+            customerId: filterDraft.customerId || undefined,
+            contractId: filterDraft.contractId || undefined,
+            createdBy: filterDraft.createdBy || undefined,
+            nature: filterDraft.nature,
+            summary: summaryConflictsWithDraft ? "all" : url.summary,
+            origin: filterDraft.origin,
+            commercialStatus: filterDraft.commercialStatus,
+            reviewStatus: filterDraft.reviewStatus,
+            fulfillment: filterDraft.fulfillment,
+            collection: filterDraft.collection,
+            invoice: filterDraft.invoice,
+            closeStatus: filterDraft.closeStatus,
+            createdFrom: createdFrom || undefined,
+            createdTo: createdTo || undefined,
+            page: 1,
+        })
+    }, [filterDraft, pushUrl, searchDraft, url.summary])
 
     const clearFilters = React.useCallback(() => {
         setSearchDraft("")
+        setFilterPanelOpen(false)
+        setFilterDraft({
+            customerId: "",
+            contractId: "",
+            createdBy: "",
+            nature: "all",
+            origin: "all",
+            commercialStatus: "all",
+            reviewStatus: "all",
+            fulfillment: "all",
+            collection: "all",
+            invoice: "all",
+            closeStatus: "all",
+            createdFrom: "",
+            createdTo: "",
+        })
         pushUrl({
             search: undefined,
+            customerId: undefined,
+            contractId: undefined,
+            createdBy: undefined,
             nature: "all",
-            summary: "all",
             origin: "all",
-            status: "all",
+            commercialStatus: "all",
+            reviewStatus: "all",
+            fulfillment: "all",
+            collection: "all",
+            invoice: "all",
+            closeStatus: "all",
+            createdFrom: undefined,
+            createdTo: undefined,
             page: 1,
         })
     }, [pushUrl])
@@ -609,8 +817,14 @@ export function SalesOrdersListPage() {
                     const next = values[0] as
                         | SalesOrdersUrlState["summary"]
                         | undefined
-                    // summary 与主状态高级筛选是两个维度，切视图时重置 status 避免矛盾空结果
-                    pushUrl({ summary: next ?? "all", status: "all", page: 1 })
+                    // 工作视图会约束创建人或审核轨；切换时清掉重叠条件，避免同字段冲突。
+                    pushUrl({
+                        summary: next ?? "all",
+                        createdBy: undefined,
+                        commercialStatus: "all",
+                        reviewStatus: "all",
+                        page: 1,
+                    })
                 }}
                 variant="outline"
                 size="sm"
@@ -626,210 +840,517 @@ export function SalesOrdersListPage() {
             <BusinessTableFrame
                 title="销售单列表"
                 description={
-                    url.summary === "all" &&
-                    url.origin === "all" &&
-                    url.status === "all" &&
-                    url.nature === "all" &&
-                    !url.search
-                        ? "按提交时间查看当前业务范围内的销售单；业务性质与创建来源展示。"
-                        : `当前筛选：${salesOrderSummaryLabels(url.summary)}${
+                    !filtersActive
+                        ? "设置一个或多个条件后统一搜索；筛选条件会保存在网址中，便于刷新、返回与分享。"
+                        : `当前筛选：${[
+                              url.summary !== "all"
+                                  ? salesOrderSummaryLabels(url.summary)
+                                  : null,
                               url.nature !== "all"
-                                  ? ` · ${NATURE_LABEL[url.nature]}`
-                                  : ""
-                          }${
+                                  ? NATURE_LABEL[url.nature]
+                                  : null,
                               url.origin !== "all"
-                                  ? ` · ${ORIGIN_LABEL[url.origin]}`
-                                  : ""
-                          }${
-                              url.status !== "all"
-                                  ? ` · ${salesOrderStatusLabel(url.status)}`
-                                  : ""
-                          }${url.search ? ` · 关键词“${url.search}”` : ""}`
+                                  ? ORIGIN_LABEL[url.origin]
+                                  : null,
+                              url.commercialStatus !== "all"
+                                  ? salesOrderCommercialStatusLabel(
+                                        url.commercialStatus,
+                                    )
+                                  : null,
+                              url.reviewStatus !== "all"
+                                  ? salesOrderReviewStatusLabel(
+                                        url.reviewStatus,
+                                    )
+                                  : null,
+                              url.fulfillment !== "all"
+                                  ? salesOrderFulfillmentLabel(url.fulfillment)
+                                  : null,
+                              url.collection !== "all"
+                                  ? salesOrderCollectionLabel(url.collection)
+                                  : null,
+                              url.invoice !== "all"
+                                  ? salesOrderInvoiceLabel(url.invoice)
+                                  : null,
+                              url.closeStatus !== "all"
+                                  ? salesOrderCloseLabel(url.closeStatus)
+                                  : null,
+                              url.customerId ? "已选客户" : null,
+                              url.contractId ? "已选合同" : null,
+                              url.createdBy ? "已选创建人" : null,
+                              url.createdFrom || url.createdTo
+                                  ? `创建日期 ${url.createdFrom || "不限"} 至 ${url.createdTo || "不限"}`
+                                  : null,
+                              url.search ? `关键词“${url.search}”` : null,
+                          ]
+                              .filter(Boolean)
+                              .join(" · ")}`
                 }
                 toolbar={
-                    <ListToolbar
-                        search={
-                            <InputGroup>
-                                <InputGroupAddon>
-                                    <SearchIcon aria-hidden="true" />
-                                </InputGroupAddon>
-                                <InputGroupInput
-                                    data-slot="so-list-search"
-                                    value={searchDraft}
-                                    onChange={(event) => {
-                                        setSearchDraft(event.target.value)
-                                    }}
-                                    onKeyDown={(event) => {
-                                        if (event.key === "Enter") {
-                                            pushUrl({
-                                                search:
-                                                    searchDraft.trim() ||
-                                                    undefined,
-                                                page: 1,
-                                            })
-                                        }
-                                    }}
-                                    placeholder="单号、客户、合同、负责人"
-                                    aria-label="搜索销售单"
-                                />
-                            </InputGroup>
-                        }
-                        filters={
-                            <ToggleGroup
-                                value={[url.nature]}
-                                onValueChange={(values) => {
-                                    const next = values[0] as
-                                        | SalesOrdersUrlState["nature"]
-                                        | undefined
-                                    pushUrl({ nature: next ?? "all", page: 1 })
-                                }}
-                                variant="outline"
-                                size="sm"
-                                spacing={0}
-                            >
-                                <ToggleGroupItem value="all">
-                                    全部
-                                </ToggleGroupItem>
-                                <ToggleGroupItem value="physical_service">
-                                    实物与服务
-                                </ToggleGroupItem>
-                                <ToggleGroupItem value="card_voucher">
-                                    卡券
-                                </ToggleGroupItem>
-                            </ToggleGroup>
-                        }
-                        secondary={
-                            <Popover>
-                                <PopoverTrigger
-                                    render={
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                        />
-                                    }
-                                >
-                                    <FilterIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
+                    <form
+                        onSubmit={(event) => {
+                            event.preventDefault()
+                            applyFilters()
+                        }}
+                    >
+                        <ListToolbar
+                            search={
+                                <InputGroup>
+                                    <InputGroupAddon>
+                                        <SearchIcon aria-hidden="true" />
+                                    </InputGroupAddon>
+                                    <InputGroupInput
+                                        data-slot="so-list-search"
+                                        value={searchDraft}
+                                        onChange={(event) => {
+                                            setSearchDraft(event.target.value)
+                                        }}
+                                        placeholder="销售单号"
+                                        aria-label="搜索销售单号"
                                     />
-                                    高级筛选
-                                    {advancedActive ? (
-                                        <Badge variant="info">已启用</Badge>
+                                </InputGroup>
+                            }
+                            filters={
+                                <>
+                                    {!filterPanelOpen ? (
+                                        <Button type="submit" size="sm">
+                                            <SearchIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                            />
+                                            搜索
+                                        </Button>
                                     ) : null}
-                                </PopoverTrigger>
-                                <PopoverContent align="end" className="w-80">
-                                    <div>
-                                        <div className="font-medium">
-                                            高级筛选
-                                        </div>
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            创建来源与主状态筛选。
-                                        </p>
-                                    </div>
-                                    <label className="grid gap-1.5 text-sm">
-                                        <span>创建来源</span>
-                                        <OptionCombobox
-                                            value={url.origin}
-                                            onValueChange={(v) => {
-                                                pushUrl({
-                                                    origin: (v ??
-                                                        "all") as SalesOrdersUrlState["origin"],
-                                                    page: 1,
-                                                })
-                                            }}
-                                            options={[
-                                                {
-                                                    value: "all",
-                                                    label: "全部来源",
-                                                },
-                                                {
-                                                    value: "erp",
-                                                    label: "创建于 ERP",
-                                                },
-                                                {
-                                                    value: "mall",
-                                                    label: "创建于商城",
-                                                },
-                                            ]}
-                                            allowClear={false}
-                                            aria-label="创建来源"
-                                            placeholder="创建来源"
-                                        />
-                                    </label>
-                                    <label className="grid gap-1.5 text-sm">
-                                        <span>主状态</span>
-                                        <OptionCombobox
-                                            value={url.status}
-                                            onValueChange={(v) => {
-                                                pushUrl({
-                                                    status: (v ??
-                                                        "all") as SalesOrdersUrlState["status"],
-                                                    page: 1,
-                                                })
-                                            }}
-                                            options={[
-                                                {
-                                                    value: "all",
-                                                    label: "全部状态",
-                                                },
-                                                ...SALES_ORDER_STATUS_OPTIONS.map(
-                                                    (option) => ({
-                                                        value: option.value,
-                                                        label: option.label,
-                                                    }),
-                                                ),
-                                            ]}
-                                            allowClear={false}
-                                            aria-label="主状态"
-                                            placeholder="主状态"
-                                        />
-                                    </label>
                                     <Button
                                         type="button"
-                                        variant="ghost"
+                                        variant="outline"
                                         size="sm"
-                                        disabled={!advancedActive}
+                                        aria-expanded={filterPanelOpen}
+                                        aria-controls="sales-order-filter-panel"
                                         onClick={() => {
-                                            pushUrl({
-                                                origin: "all",
-                                                status: "all",
-                                                page: 1,
-                                            })
+                                            setFilterPanelOpen((open) => !open)
                                         }}
                                     >
-                                        清除高级筛选
+                                        <FilterIcon
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                        />
+                                        高级筛选
+                                        {hasStructuredFilters ? (
+                                            <Badge variant="info">已启用</Badge>
+                                        ) : null}
+                                        <ChevronDownIcon
+                                            data-icon="inline-end"
+                                            aria-hidden="true"
+                                            className={
+                                                filterPanelOpen
+                                                    ? "rotate-180 transition-transform"
+                                                    : "transition-transform"
+                                            }
+                                        />
                                     </Button>
-                                </PopoverContent>
-                            </Popover>
-                        }
-                        actions={
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span aria-live="polite">
-                                    共 {total.toLocaleString("zh-CN")} 条
-                                </span>
-                                <span
-                                    className="hidden md:inline"
-                                    aria-hidden="true"
-                                >
-                                    ·
-                                </span>
-                                <span className="hidden md:inline">
-                                    / 聚焦搜索 · ↑↓ 选择行 · Enter 打开详情
-                                </span>
-                                {filtersActive ? (
-                                    <Button
-                                        type="button"
-                                        size="xs"
-                                        variant="ghost"
-                                        onClick={clearFilters}
+                                </>
+                            }
+                            secondary={
+                                filterPanelOpen ? (
+                                    <div
+                                        id="sales-order-filter-panel"
+                                        className="flex w-full flex-col gap-4 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
+                                        aria-label="销售单筛选条件"
                                     >
-                                        清除筛选
-                                    </Button>
-                                ) : null}
-                            </div>
-                        }
-                    />
+                                        <FixedOptionRadioFilter
+                                            label="业务性质"
+                                            value={filterDraft.nature}
+                                            onValueChange={(nature) => {
+                                                setFilterDraft((draft) => ({
+                                                    ...draft,
+                                                    nature,
+                                                }))
+                                            }}
+                                            options={[
+                                                { value: "all", label: "全部" },
+                                                {
+                                                    value: "physical_service",
+                                                    label: "实物与服务",
+                                                },
+                                                {
+                                                    value: "card_voucher",
+                                                    label: "卡券",
+                                                },
+                                            ]}
+                                        />
+                                        <FixedOptionRadioFilter
+                                            label="创建来源"
+                                            value={filterDraft.origin}
+                                            onValueChange={(origin) => {
+                                                setFilterDraft((draft) => ({
+                                                    ...draft,
+                                                    origin,
+                                                }))
+                                            }}
+                                            options={[
+                                                { value: "all", label: "全部" },
+                                                { value: "erp", label: "ERP" },
+                                                {
+                                                    value: "mall",
+                                                    label: "商城",
+                                                },
+                                            ]}
+                                        />
+
+                                        <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                            <Field>
+                                                <FieldLabel>客户</FieldLabel>
+                                                <CustomerSearchCombobox
+                                                    purpose="filter"
+                                                    scope="all_authorized"
+                                                    value={
+                                                        filterDraft.customerId ||
+                                                        undefined
+                                                    }
+                                                    onValueChange={(
+                                                        customerId,
+                                                    ) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                customerId:
+                                                                    customerId ??
+                                                                    "",
+                                                                contractId:
+                                                                    customerId ===
+                                                                    draft.customerId
+                                                                        ? draft.contractId
+                                                                        : "",
+                                                            }),
+                                                        )
+                                                    }}
+                                                    placeholder="全部客户"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>合同</FieldLabel>
+                                                <ContractSearchCombobox
+                                                    purpose="filter"
+                                                    customerId={
+                                                        filterDraft.customerId ||
+                                                        undefined
+                                                    }
+                                                    value={
+                                                        filterDraft.contractId ||
+                                                        undefined
+                                                    }
+                                                    onValueChange={(
+                                                        contractId,
+                                                    ) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                contractId:
+                                                                    contractId ??
+                                                                    "",
+                                                            }),
+                                                        )
+                                                    }}
+                                                    placeholder="全部合同"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>创建人</FieldLabel>
+                                                <OwnerCombobox
+                                                    owners={
+                                                        ownerOptionsQuery.data ??
+                                                        []
+                                                    }
+                                                    loading={
+                                                        ownerOptionsQuery.isFetching
+                                                    }
+                                                    value={
+                                                        filterDraft.createdBy ||
+                                                        undefined
+                                                    }
+                                                    onValueChange={(
+                                                        createdBy,
+                                                    ) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                createdBy:
+                                                                    createdBy ??
+                                                                    "",
+                                                            }),
+                                                        )
+                                                    }}
+                                                    placeholder="全部创建人"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>
+                                                    商业状态
+                                                </FieldLabel>
+                                                <OptionCombobox
+                                                    value={
+                                                        filterDraft.commercialStatus
+                                                    }
+                                                    onValueChange={(value) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                commercialStatus:
+                                                                    (value ??
+                                                                        "all") as SalesOrdersUrlState["commercialStatus"],
+                                                            }),
+                                                        )
+                                                    }}
+                                                    options={[
+                                                        {
+                                                            value: "all",
+                                                            label: "全部商业状态",
+                                                        },
+                                                        ...SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
+                                                    ]}
+                                                    allowClear={false}
+                                                    placeholder="全部商业状态"
+                                                    aria-label="商业状态"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>
+                                                    审核状态
+                                                </FieldLabel>
+                                                <OptionCombobox
+                                                    value={
+                                                        filterDraft.reviewStatus
+                                                    }
+                                                    onValueChange={(value) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                reviewStatus:
+                                                                    (value ??
+                                                                        "all") as SalesOrdersUrlState["reviewStatus"],
+                                                            }),
+                                                        )
+                                                    }}
+                                                    options={[
+                                                        {
+                                                            value: "all",
+                                                            label: "全部审核状态",
+                                                        },
+                                                        ...SALES_ORDER_REVIEW_STATUS_OPTIONS,
+                                                    ]}
+                                                    allowClear={false}
+                                                    placeholder="全部审核状态"
+                                                    aria-label="审核状态"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>
+                                                    履约进度
+                                                </FieldLabel>
+                                                <OptionCombobox
+                                                    value={
+                                                        filterDraft.fulfillment
+                                                    }
+                                                    onValueChange={(value) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                fulfillment:
+                                                                    (value ??
+                                                                        "all") as SalesOrdersUrlState["fulfillment"],
+                                                            }),
+                                                        )
+                                                    }}
+                                                    options={[
+                                                        {
+                                                            value: "all",
+                                                            label: "全部履约进度",
+                                                        },
+                                                        ...SALES_ORDER_FULFILLMENT_OPTIONS,
+                                                    ]}
+                                                    allowClear={false}
+                                                    placeholder="全部履约进度"
+                                                    aria-label="履约进度"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>
+                                                    回款进度
+                                                </FieldLabel>
+                                                <OptionCombobox
+                                                    value={
+                                                        filterDraft.collection
+                                                    }
+                                                    onValueChange={(value) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                collection:
+                                                                    (value ??
+                                                                        "all") as SalesOrdersUrlState["collection"],
+                                                            }),
+                                                        )
+                                                    }}
+                                                    options={[
+                                                        {
+                                                            value: "all",
+                                                            label: "全部回款进度",
+                                                        },
+                                                        ...SALES_ORDER_COLLECTION_OPTIONS,
+                                                    ]}
+                                                    allowClear={false}
+                                                    placeholder="全部回款进度"
+                                                    aria-label="回款进度"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>
+                                                    开票进度
+                                                </FieldLabel>
+                                                <OptionCombobox
+                                                    value={filterDraft.invoice}
+                                                    onValueChange={(value) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                invoice:
+                                                                    (value ??
+                                                                        "all") as SalesOrdersUrlState["invoice"],
+                                                            }),
+                                                        )
+                                                    }}
+                                                    options={[
+                                                        {
+                                                            value: "all",
+                                                            label: "全部开票进度",
+                                                        },
+                                                        ...SALES_ORDER_INVOICE_OPTIONS,
+                                                    ]}
+                                                    allowClear={false}
+                                                    placeholder="全部开票进度"
+                                                    aria-label="开票进度"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>
+                                                    关闭状态
+                                                </FieldLabel>
+                                                <OptionCombobox
+                                                    value={
+                                                        filterDraft.closeStatus
+                                                    }
+                                                    onValueChange={(value) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                closeStatus:
+                                                                    (value ??
+                                                                        "all") as SalesOrdersUrlState["closeStatus"],
+                                                            }),
+                                                        )
+                                                    }}
+                                                    options={[
+                                                        {
+                                                            value: "all",
+                                                            label: "全部关闭状态",
+                                                        },
+                                                        ...SALES_ORDER_CLOSE_OPTIONS,
+                                                    ]}
+                                                    allowClear={false}
+                                                    placeholder="全部关闭状态"
+                                                    aria-label="关闭状态"
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>
+                                                    创建日期自
+                                                </FieldLabel>
+                                                <DatePicker
+                                                    className="w-full"
+                                                    value={
+                                                        filterDraft.createdFrom ||
+                                                        undefined
+                                                    }
+                                                    onValueChange={(
+                                                        createdFrom,
+                                                    ) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                createdFrom:
+                                                                    createdFrom ??
+                                                                    "",
+                                                            }),
+                                                        )
+                                                    }}
+                                                />
+                                            </Field>
+                                            <Field>
+                                                <FieldLabel>
+                                                    创建日期至
+                                                </FieldLabel>
+                                                <DatePicker
+                                                    className="w-full"
+                                                    value={
+                                                        filterDraft.createdTo ||
+                                                        undefined
+                                                    }
+                                                    onValueChange={(
+                                                        createdTo,
+                                                    ) => {
+                                                        setFilterDraft(
+                                                            (draft) => ({
+                                                                ...draft,
+                                                                createdTo:
+                                                                    createdTo ??
+                                                                    "",
+                                                            }),
+                                                        )
+                                                    }}
+                                                />
+                                            </Field>
+                                        </FieldGroup>
+
+                                        <div className="flex justify-end">
+                                            <Button type="submit" size="sm">
+                                                <SearchIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                搜索
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : undefined
+                            }
+                            actions={
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span aria-live="polite">
+                                        共 {total.toLocaleString("zh-CN")} 条
+                                    </span>
+                                    <span
+                                        className="hidden md:inline"
+                                        aria-hidden="true"
+                                    >
+                                        ·
+                                    </span>
+                                    <span className="hidden md:inline">
+                                        / 聚焦搜索 · ↑↓ 选择行 · Enter 打开详情
+                                    </span>
+                                    {filtersActive ? (
+                                        <Button
+                                            type="button"
+                                            size="xs"
+                                            variant="ghost"
+                                            onClick={clearFilters}
+                                        >
+                                            清除筛选
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            }
+                        />
+                    </form>
                 }
                 table={
                     ordersQuery.isError ? (
@@ -840,7 +1361,7 @@ export function SalesOrdersListPage() {
                                 void ordersQuery.refetch()
                             }}
                         />
-                    ) : items.length === 0 ? (
+                    ) : !ordersQuery.isPending && items.length === 0 ? (
                         <BusinessEmptyState
                             kind={filtersActive ? "filter" : "no-data"}
                             title={filtersActive ? undefined : "还没有销售单"}

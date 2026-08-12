@@ -164,8 +164,8 @@ function useMasterDataColumns({
                       } satisfies ColumnDef<MasterDataListItem>,
                       {
                           id: "price",
-                          header: "价格",
-                          meta: { label: "价格", width: "amount" as const },
+                          header: "销售价",
+                          meta: { label: "销售价", width: "amount" as const },
                           cell: ({
                               row,
                           }: {
@@ -179,10 +179,31 @@ function useMasterDataColumns({
                                       }
                                   />
                                   <span className="text-tiny text-muted-foreground">
-                                      销售价 · 含税
+                                      含税
                                   </span>
                               </div>
                           ),
+                      } satisfies ColumnDef<MasterDataListItem>,
+                      {
+                          id: "marketPrice",
+                          header: "市场价",
+                          meta: { label: "市场价", width: "amount" as const },
+                          cell: ({
+                              row,
+                          }: {
+                              row: { original: MasterDataListItem }
+                          }) => {
+                              const marketPrice =
+                                  row.original.sellableItem?.marketPrice
+                              if (!marketPrice) {
+                                  return (
+                                      <span className="text-sm text-muted-foreground">
+                                          —
+                                      </span>
+                                  )
+                              }
+                              return <MoneyValue value={marketPrice} />
+                          },
                       } satisfies ColumnDef<MasterDataListItem>,
                       {
                           id: "supplyRegions",

@@ -244,12 +244,28 @@ pub struct SalesOrderListParams {
     pub order_no: Option<String>,
     /// 客户筛选。
     pub customer_id: Option<CustomerAccountId>,
+    /// 合同筛选。
+    pub contract_id: Option<ContractId>,
+    /// 最初创建入口筛选。
+    pub origin_system: Option<OriginSystem>,
     /// 商业主状态筛选。
     pub commercial_status: Option<CommercialStatus>,
     /// 审核轨状态筛选。
     pub review_status: Option<entities::sales_order::ReviewStatus>,
     /// 业务性质筛选。
     pub business_type: Option<BusinessType>,
+    /// 履约进度筛选。
+    pub fulfillment_progress: Option<entities::sales_order::FulfillmentProgress>,
+    /// 回款进度筛选。
+    pub collection_progress: Option<entities::sales_order::CollectionProgress>,
+    /// 开票进度筛选。
+    pub invoice_progress: Option<entities::sales_order::InvoiceProgress>,
+    /// 关闭状态筛选。
+    pub close_status: Option<entities::sales_order::CloseStatus>,
+    /// 创建时间下界（含，秒级时间戳）。
+    pub created_from: Option<u64>,
+    /// 创建时间上界（含，秒级时间戳）。
+    pub created_to: Option<u64>,
     /// 创建人账号筛选（"我创建的"/"待我处理"视图用）。
     pub created_by: Option<String>,
     /// "待我处理"视图：仅草稿或被驳回/低毛利待处理回销售的单；与
@@ -278,12 +294,28 @@ pub(crate) struct SalesOrderListQuery {
     pub order_no: Option<String>,
     /// 客户筛选。
     pub customer_id: Option<String>,
+    /// 合同筛选。
+    pub contract_id: Option<String>,
+    /// 最初创建入口筛选。
+    pub origin_system: Option<OriginSystem>,
     /// 商业主状态筛选。
     pub commercial_status: Option<CommercialStatus>,
     /// 审核轨状态筛选。
     pub review_status: Option<entities::sales_order::ReviewStatus>,
     /// 业务性质筛选。
     pub business_type: Option<BusinessType>,
+    /// 履约进度筛选。
+    pub fulfillment_progress: Option<entities::sales_order::FulfillmentProgress>,
+    /// 回款进度筛选。
+    pub collection_progress: Option<entities::sales_order::CollectionProgress>,
+    /// 开票进度筛选。
+    pub invoice_progress: Option<entities::sales_order::InvoiceProgress>,
+    /// 关闭状态筛选。
+    pub close_status: Option<entities::sales_order::CloseStatus>,
+    /// 创建时间下界（含）。
+    pub created_from: Option<u64>,
+    /// 创建时间上界（含）。
+    pub created_to: Option<u64>,
     /// 创建人账号筛选。
     pub created_by: Option<String>,
     /// "待我处理"视图。
@@ -306,12 +338,25 @@ impl SalesOrderListParams {
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SalesOrderListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SALES_ORDER_SORT_FIELDS)?;
+        if matches!((self.created_from, self.created_to), (Some(from), Some(to)) if from > to) {
+            return Err(crate::errors::Error::ValidationError(
+                "创建时间下界不能晚于上界".to_string(),
+            ));
+        }
         Ok(SalesOrderListQuery {
             order_no: normalized_text(self.order_no.as_deref()),
             customer_id: self.customer_id.as_ref().map(ToString::to_string),
+            contract_id: self.contract_id.as_ref().map(ToString::to_string),
+            origin_system: self.origin_system,
             commercial_status: self.commercial_status,
             review_status: self.review_status,
             business_type: self.business_type,
+            fulfillment_progress: self.fulfillment_progress,
+            collection_progress: self.collection_progress,
+            invoice_progress: self.invoice_progress,
+            close_status: self.close_status,
+            created_from: self.created_from,
+            created_to: self.created_to,
             created_by: normalized_text(self.created_by.as_deref()),
             my_todo: self.my_todo,
             exception_only: self.exception_only,
@@ -703,14 +748,46 @@ mod tests {
 
         let params: SalesOrderListParams = serde_json::from_value(json!({
             "order_no": " SO-2026 ",
+            "customer_id": "cust-1",
+            "contract_id": "contract-1",
+            "origin_system": "ERP",
             "business_type": "GOODS_SERVICE",
+            "fulfillment_progress": "PARTIALLY_FULFILLED",
+            "collection_progress": "PARTIALLY_COLLECTED",
+            "invoice_progress": "PARTIALLY_INVOICED",
+            "close_status": "CLOSEABLE",
+            "created_from": 1700000000,
+            "created_to": 1800000000,
             "page_size": 50,
         }))
         .unwrap();
         let query = params.normalized().unwrap();
         assert_eq!(query.order_no.as_deref(), Some("SO-2026"));
+        assert_eq!(query.customer_id.as_deref(), Some("cust-1"));
+        assert_eq!(query.contract_id.as_deref(), Some("contract-1"));
+        assert_eq!(query.origin_system, Some(super::OriginSystem::Erp));
         assert_eq!(query.business_type, Some(super::BusinessType::GoodsService));
+        assert_eq!(
+            query.fulfillment_progress,
+            Some(entities::sales_order::FulfillmentProgress::PartiallyFulfilled)
+        );
+        assert_eq!(query.created_from, Some(1_700_000_000));
+        assert_eq!(query.created_to, Some(1_800_000_000));
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 50);
+    }
+
+    #[test]
+    fn list_params_reject_reversed_created_range() {
+        use super::SalesOrderListParams;
+        use serde_json::json;
+
+        let params: SalesOrderListParams = serde_json::from_value(json!({
+            "created_from": 1800000000,
+            "created_to": 1700000000,
+        }))
+        .unwrap();
+
+        assert!(params.normalized().is_err());
     }
 }

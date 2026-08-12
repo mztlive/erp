@@ -21,7 +21,7 @@ use entities::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
 use entities::party::{Party, PartyRevision};
 use entities::supplier::{CapabilityCode, SupplierAccount};
 use entities::supplier_offering::{
-    OfferingStatus, PrefillSourceRefs, SupplierOffering, SupplierOfferingAvailability,
+    AvailabilityStatus, OfferingStatus, PrefillSourceRefs, SupplierOffering, SupplierOfferingAvailability,
     SupplierOfferingAvailabilityData, SupplierOfferingCommand, SupplierOfferingCommandData,
     SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData,
 };
@@ -88,10 +88,15 @@ impl SupplierOfferingService {
         params.validate()?;
         let (sort_by, sort_dir) =
             dto::normalize_sort(&params.sort_by, &params.sort_dir, OFFERING_SORT_FIELDS)?;
+        let offering_ids = self
+            .offering_ids_by_availability(params.availability_status)
+            .await?;
         let filter = SupplierOfferingFilter {
+            offering_ids,
             sku_id: typed_id(params.sku_id.as_deref(), SkuId::new),
             supplier_id: typed_id(params.supplier_id.as_deref(), SupplierAccountId::new),
             status: params.status,
+            source_type: params.source_type,
             supplier_sku_code: normalized_text(params.q.as_deref()),
             page: page_or_default(params.page),
             page_size: page_size_or_default(params.page_size),
@@ -130,6 +135,22 @@ impl SupplierOfferingService {
             page: filter.page,
             page_size: filter.page_size,
         })
+    }
+
+    /// 将当前可供状态转换为供给主键候选集，确保关联条件在分页前生效。
+    async fn offering_ids_by_availability(
+        &self,
+        status: Option<AvailabilityStatus>,
+    ) -> Result<Option<Vec<SupplierOfferingId>>> {
+        let Some(status) = status else {
+            return Ok(None);
+        };
+        let offering_ids = self
+            .db
+            .supplier_offering_availabilities()
+            .find_offering_ids_by_status(status, &mut NoTransaction)
+            .await?;
+        Ok(Some(offering_ids))
     }
 
     /// 新增公司 SKU 的供应商供给。
