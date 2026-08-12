@@ -12,6 +12,14 @@
 | 风险 | medium |
 | 生成来源 | workflow `analyze-large-files` |
 | 生成日期 | 2026-08-11 |
+| 实施状态 | 已完成（2026-08-12） |
+
+## 实施结果
+
+- `backend/services/src/mall_sync/dto.rs` 已改为薄门面，五个子模块均为私有模块。
+- DTO 已按共享基础设施、同步作业、快照、核对、映射任务拆分到 `dto/`；公开与 crate 可见名称集合与拆分前一致。
+- 所有生产子文件均低于 800 行；`mall_sync/mod.rs` 根 re-export 与下游 Handler 文件未修改。
+- 已通过：`cargo test -p services mall_sync::dto::`、`cargo test -p services --all-features`、`cargo check -p services --all-targets --all-features`、`cargo clippy -p services --all-targets --all-features -- -D warnings`、`cargo check -p web-api --all-targets --all-features`、`cargo clippy -p web-api --all-targets --all-features -- -D warnings`。
 
 ## 拆分方案
 

@@ -7,11 +7,19 @@
 | 源文件 | `backend/services/src/integration_ops/dto.rs` |
 | 扫描行数 | 1122 |
 | 分析状态 | 已完成深入分析 |
+| 实施状态 | 已完成（2026-08-12） |
 | 拆分结论 | split |
 | 预估工作量 | M |
 | 风险 | low |
 | 生成来源 | workflow `analyze-large-files` |
 | 生成日期 | 2026-08-11 |
+
+## 实施结果
+
+- `backend/services/src/integration_ops/dto.rs` 已改为薄门面，并按共享分页排序、入站消息、集成错误任务和对账差异拆分为四个私有子模块。
+- facade 按拆分前形状公开重导出 `PageParams`、`PageView`、`SortDir`，`normalize_sort` 保持 `pub(crate)`；`integration_ops/mod.rs` 根模块未修改。
+- facade 为 42 行，最大子文件 `error_task.rs` 为 379 行，所有生产子文件均低于 800 行。
+- 已通过完整 workspace 格式、编译、Clippy（`-D warnings`）和测试门禁；integration_ops DTO 定向测试 5/5 通过。
 
 ## 拆分方案
 

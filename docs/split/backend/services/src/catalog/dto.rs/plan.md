@@ -7,11 +7,19 @@
 | 源文件 | `backend/services/src/catalog/dto.rs` |
 | 扫描行数 | 1961 |
 | 分析状态 | 已完成深入分析 |
+| 实施状态 | 已完成（2026-08-12） |
 | 拆分结论 | split |
 | 预估工作量 | M |
 | 风险 | medium |
 | 生成来源 | workflow `analyze-large-files` |
 | 生成日期 | 2026-08-11 |
+
+## 实施结果
+
+- `backend/services/src/catalog/dto.rs` 已改为薄门面，并按共享基础设施、分类、品牌/单位、规格属性、商品聚合和卡券类目拆分为六个私有子模块。
+- facade 保留原有 public 与 `pub(crate)` 名称及 `catalog/mod.rs` 根 re-export；serde、validator、默认值、规范化逻辑和 `From<Entity>` 转换未改变。
+- facade 为 254 行，最大子文件 `product.rs` 为 734 行，所有生产子文件均低于 800 行。
+- 已通过完整 workspace 格式、编译、Clippy（`-D warnings`）和测试门禁；catalog DTO 定向测试 11/11 通过。
 
 ## 拆分方案
 
