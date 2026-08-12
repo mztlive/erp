@@ -604,13 +604,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W14",
                     href: "/master-data/sellable-items",
-                    label: "公司商品池",
+                    label: "可售商品池",
                     icon: BoxesIcon,
                 },
                 {
                     routeId: "W14",
                     href: "/master-data/products",
-                    label: "商品与 SKU",
+                    label: "商品列表",
                     icon: PackageIcon,
                 },
                 {
