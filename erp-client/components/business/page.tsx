@@ -226,7 +226,7 @@ function PageHeader({
                                 <h1
                                     className={cn(
                                         "font-semibold tracking-tight text-foreground",
-                                        compact ? "text-lg" : "text-2xl",
+                                        compact ? "text-xl" : "text-2xl",
                                     )}
                                 >
                                     {title}
@@ -385,8 +385,8 @@ function MetricItem({
             data-density={density}
             data-detail-mode={detailMode}
             className={cn(
-                "min-w-0 rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]",
-                compact ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3",
+                "min-w-0 rounded-lg border border-border/70 bg-card",
+                compact ? "p-1.5 sm:p-2" : "p-2 sm:p-2.5",
                 className,
             )}
             {...props}
@@ -464,10 +464,10 @@ function MetricFilterItem({
                 aria-pressed={active}
                 data-density={density}
                 className={cn(
-                    "h-full w-full rounded-lg bg-card text-left shadow-xs ring-1 ring-foreground/[0.04] transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    compact ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3",
+                    "h-full w-full rounded-lg border border-border/70 bg-card text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    compact ? "p-1.5 sm:p-2" : "p-2 sm:p-2.5",
                     active &&
-                        "bg-accent text-accent-foreground shadow-none ring-primary/25",
+                        "border-primary/30 bg-accent text-accent-foreground shadow-none",
                     className,
                 )}
                 {...props}
@@ -529,7 +529,7 @@ function MetricStrip({
             data-density={density}
             className={cn(
                 // 浮动画布：各指标独立轻卡，与主表/主任务卡同圆角体系
-                "grid gap-2 sm:gap-3",
+                "grid gap-2",
                 metricColumnClasses[columns],
                 className,
             )}
@@ -637,7 +637,7 @@ function PageScaffold({
 
 /** 主工作面浮起表面：靠浅阴影浮起，避免重描边。 */
 const surfacePanelClassName =
-    "rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]"
+    "rounded-lg border border-border/70 bg-card shadow-sm"
 
 /** 主卡内轻提示/工具条：无描边，仅浅底区分。 */
 const surfaceInsetClassName = "rounded-md bg-muted/40"

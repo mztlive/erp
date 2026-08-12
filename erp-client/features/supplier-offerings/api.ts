@@ -14,6 +14,8 @@ export function fetchSupplierOfferings(
     return apiGet<SupplierOfferingPage>("/admin/supplier-offerings", {
         q: query.q?.trim() || undefined,
         sku_id: query.skuId || undefined,
+        sku_no: query.skuNo?.trim() || undefined,
+        product_no: query.productNo?.trim() || undefined,
         supplier_id: query.supplierId || undefined,
         status: query.status || undefined,
         source_type: query.sourceType || undefined,

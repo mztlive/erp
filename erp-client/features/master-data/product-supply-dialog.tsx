@@ -131,7 +131,7 @@ export function ProductSupplyDialog({
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className="font-medium">
-                                                    {sku.skuNo}
+                                                    {sku.skuName || sku.skuNo}
                                                 </span>
                                                 <Badge variant="secondary">
                                                     {sku.specification}
@@ -153,7 +153,7 @@ export function ProductSupplyDialog({
                                                 ) : null}
                                             </div>
                                             <p className="mt-1 text-xs text-muted-foreground">
-                                                {sku.skuName} · 销售价{" "}
+                                                {sku.skuNo} · 销售价{" "}
                                                 {money(
                                                     sku.salesVisiblePriceGross,
                                                 )}

@@ -55,6 +55,8 @@ fn legacy_sku_listing_status() -> ListingStatus {
 pub struct SkuFilter {
     /// SKU 编号字面量正则（忽略大小写）；`None` 表示不筛选。
     pub sku_no: Option<String>,
+    /// 关键字命中的 SKU 主键（SKU 编号或当前修订名称）；`None` 表示不筛选。
+    pub ids: Option<Vec<String>>,
     /// 所属 SPU；`None` 表示不筛选。
     pub product_id: Option<String>,
     /// 启停状态；`None` 表示不筛选。
@@ -79,6 +81,9 @@ impl QueryFilter for SkuFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "sku_no", self.sku_no.as_deref());
+        if let Some(ids) = &self.ids {
+            filter.extend(in_filter("id", ids.iter().cloned()));
+        }
         if let Some(product_id) = &self.product_id {
             filter.insert("product_id", product_id);
         }
@@ -525,6 +530,7 @@ mod tests {
     fn sku_filter_applies_listing_status() {
         let filter = SkuFilter {
             sku_no: None,
+            ids: None,
             product_id: Some("product-1".to_string()),
             status: Some(EnableStatus::Active),
             listing_status: Some(ListingStatus::Listed),

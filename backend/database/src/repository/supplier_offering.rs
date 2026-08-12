@@ -89,6 +89,10 @@ pub struct SupplierOfferingFilter {
     pub source_type: Option<OfferingSourceType>,
     /// 供应商 SKU 编码模糊查询。
     pub supplier_sku_code: Option<String>,
+    /// 关键字命中的公司 SKU 主键；与 `supplier_sku_code` 做 OR（公司 SKU 编号/名称）。
+    pub keyword_sku_ids: Option<Vec<SkuId>>,
+    /// 按 SPU 编号 / SKU 编号命中的公司 SKU 主键（AND 条件；空集合表示无匹配）。
+    pub sku_ids: Option<Vec<SkuId>>,
     /// 页码。
     pub page: u64,
     /// 每页数量。
@@ -108,6 +112,12 @@ impl QueryFilter for SupplierOfferingFilter {
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }
+        if let Some(sku_ids) = &self.sku_ids {
+            filter.extend(in_filter(
+                "sku_id",
+                sku_ids.iter().map(ToString::to_string),
+            ));
+        }
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
         }
@@ -117,11 +127,34 @@ impl QueryFilter for SupplierOfferingFilter {
         if let Some(source_type) = self.source_type {
             filter.insert("source_type", source_type.as_str());
         }
-        insert_literal_regex_filter(
-            &mut filter,
-            "supplier_sku_code",
+        match (
             self.supplier_sku_code.as_deref(),
-        );
+            self.keyword_sku_ids.as_ref(),
+        ) {
+            (Some(code), Some(sku_ids)) => {
+                let mut code_filter = Document::new();
+                insert_literal_regex_filter(&mut code_filter, "supplier_sku_code", Some(code));
+                let mut or_branches = vec![code_filter];
+                if !sku_ids.is_empty() {
+                    or_branches.push(doc! {
+                        "sku_id": {
+                            "$in": sku_ids.iter().map(ToString::to_string).collect::<Vec<_>>()
+                        }
+                    });
+                }
+                filter.insert("$or", or_branches);
+            }
+            (Some(code), None) => {
+                insert_literal_regex_filter(&mut filter, "supplier_sku_code", Some(code));
+            }
+            (None, Some(sku_ids)) => {
+                filter.extend(in_filter(
+                    "sku_id",
+                    sku_ids.iter().map(ToString::to_string),
+                ));
+            }
+            (None, None) => {}
+        }
         filter
     }
 }
@@ -461,6 +494,8 @@ mod tests {
             status: None,
             source_type: None,
             supplier_sku_code: Some("SKU-1".to_string()),
+            keyword_sku_ids: None,
+            sku_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -479,6 +514,8 @@ mod tests {
             status: None,
             source_type: Some(entities::supplier_offering::OfferingSourceType::Excel),
             supplier_sku_code: None,
+            keyword_sku_ids: None,
+            sku_ids: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -487,6 +524,26 @@ mod tests {
         .to_doc();
         assert_eq!(filter.get_str("source_type"), Ok("EXCEL"));
         assert_eq!(filter.get_document("id"), Ok(&doc! { "$in": ["offering-1"] }));
+    }
+
+    #[test]
+    fn offering_filter_ors_supplier_code_with_keyword_sku_ids() {
+        let filter = SupplierOfferingFilter {
+            offering_ids: None,
+            sku_id: None,
+            supplier_id: None,
+            status: None,
+            source_type: None,
+            supplier_sku_code: Some("SUP-1".to_string()),
+            keyword_sku_ids: Some(vec![entities::ids::SkuId::new("sku-1")]),
+            sku_ids: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+        .to_doc();
+        assert!(filter.contains_key("$or"));
     }
 
     #[test]

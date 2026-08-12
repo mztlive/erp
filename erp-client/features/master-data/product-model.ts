@@ -83,9 +83,12 @@ export function rebuildSkusFromSpecs(input: {
     existing: readonly ProductSkuFields[]
     baseUnit: string
     skuNoPrefix?: string
+    /** 新建 SKU 行时的默认名称（通常取商品名称）。 */
+    defaultSkuName?: string
 }): ProductSkuFields[] {
     const combos = cartesianSpecValues(input.specs)
     const prefix = (input.skuNoPrefix ?? "SKU").replace(/-+$/, "")
+    const defaultSkuName = (input.defaultSkuName ?? "").trim()
     const existingBySignature = new Map<string, ProductSkuFields>()
     for (const sku of input.existing) {
         const signature =
@@ -111,6 +114,8 @@ export function rebuildSkusFromSpecs(input: {
             skuNo:
                 matched?.skuNo ||
                 `${prefix}-${String(index + 1).padStart(2, "0")}`,
+            /** 已有名称优先；新建行默认带入商品名称。 */
+            name: matched?.name?.trim() || defaultSkuName,
             attributeValues: [...attributeValues],
             specLabel: formatSpecLabel(input.specs, attributeValues),
             barcode: matched?.barcode,
@@ -150,6 +155,7 @@ export function emptyProductFields(): ProductFields {
         skus: [
             {
                 skuNo: "SKU-01",
+                name: "",
                 specificationSignature: "",
                 attributeValues: [],
                 specLabel: "默认规格",
@@ -179,6 +185,7 @@ export function validateProductFields(fields: ProductFields): string | null {
     const skuNos = new Set<string>()
     for (const sku of fields.skus) {
         if (!sku.skuNo.trim()) return "SKU 编号不能为空"
+        if (!sku.name.trim()) return `SKU「${sku.skuNo.trim() || "未编号"}」名称不能为空`
         if (skuNos.has(sku.skuNo.trim()))
             return `SKU 编号「${sku.skuNo.trim()}」重复`
         skuNos.add(sku.skuNo.trim())

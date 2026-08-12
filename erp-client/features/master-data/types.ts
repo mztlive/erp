@@ -351,6 +351,11 @@ export type ProductSkuFields = Readonly<{
      * 不能作为身份恢复或重绑键。
      */
     skuNo: string
+    /**
+     * SKU 名称 = `sku_revision.name`。
+     * 与商品（SPU）名称独立维护；新建行可默认带入商品名称后由用户改写。
+     */
+    name: string
     /** 与 specs 顺序对齐的属性取值。 */
     attributeValues: readonly string[]
     /** 展示用规格文案，如「颜色：红 / 规格：大」。 */

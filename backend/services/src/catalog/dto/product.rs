@@ -66,6 +66,9 @@ pub struct ProductSkuInput {
     /// SKU 编号（全局唯一业务编码，允许手动覆盖）。
     #[validate(custom(function = "non_blank", message = "SKU编号不能为空"))]
     pub sku_no: String,
+    /// 公司审核后的 SKU 名称（写入 SKU 修订快照，可与商品名称不同）。
+    #[validate(custom(function = "non_blank", message = "SKU名称不能为空"))]
+    pub name: String,
     /// 唯一基础单位（`unit_of_measure` 启用字典项）。
     pub base_unit_id: UnitOfMeasureId,
     /// 条码原值（可空）。
@@ -500,6 +503,8 @@ pub struct SkuView {
     pub listing_status: ListingStatus,
     /// 当前 SKU 修订 ID。
     pub current_revision_id: Option<String>,
+    /// 当前 SKU 修订名称（公司审核后的 SKU 名称；无当前修订时为空）。
+    pub name: Option<String>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 乐观锁版本。
@@ -524,6 +529,7 @@ impl From<Sku> for SkuView {
             status: sku.stable.status,
             listing_status: sku.listing_status,
             current_revision_id: sku.stable.current_revision_id,
+            name: None,
             created_at: sku.base.created_at,
             version: sku.base.version,
         }
@@ -533,6 +539,8 @@ impl From<Sku> for SkuView {
 /// SKU 列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SkuListParams {
+    /// 关键字：SKU 编号或当前修订名称（模糊、忽略大小写）。
+    pub q: Option<String>,
     /// SKU 编号字面量筛选（忽略大小写）。
     pub sku_no: Option<String>,
     /// 所属 SPU 筛选。
@@ -556,6 +564,8 @@ pub struct SkuListParams {
 /// 归一化后的 SKU 列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SkuListQuery {
+    /// 关键字筛选。
+    pub q: Option<String>,
     /// SKU 编号筛选。
     pub sku_no: Option<String>,
     /// 所属 SPU 筛选。
@@ -581,6 +591,7 @@ impl SkuListParams {
     pub(crate) fn normalized(&self) -> Result<SkuListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SKU_SORT_FIELDS)?;
         Ok(SkuListQuery {
+            q: normalized_text(self.q.as_deref()),
             sku_no: normalized_text(self.sku_no.as_deref()),
             product_id: self.product_id.as_ref().map(|id| id.to_string()),
             status: self.status,

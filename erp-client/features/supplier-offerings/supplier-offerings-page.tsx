@@ -3,7 +3,14 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ChevronDownIcon, FilterIcon, PlusIcon, SearchIcon } from "lucide-react"
+import {
+    ChevronDownIcon,
+    FilePenLineIcon,
+    FilterIcon,
+    PackageCheckIcon,
+    PlusIcon,
+    SearchIcon,
+} from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -12,12 +19,14 @@ import {
     FilterChip,
     FixedOptionRadioFilter,
     ListToolbar,
-    OptionCombobox,
+    MetricItem,
+    MetricStrip,
     PageHeader,
     PageScaffold,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
     InputGroup,
     InputGroupAddon,
@@ -60,6 +69,7 @@ import {
 
 type OfferingStatusFilter = OfferingStatus | "all"
 type OfferingSourceFilter = OfferingSourceType | "all"
+type AvailabilityStatusFilter = AvailabilityStatus | "all"
 
 const OFFERING_STATUS_FILTER_OPTIONS = [
     { value: "all", label: "全部" },
@@ -75,9 +85,13 @@ const SOURCE_TYPE_FILTER_OPTIONS = [
     { value: "API", label: SOURCE_TYPE_LABELS.API },
 ] as const
 
-const AVAILABILITY_STATUS_FILTER_OPTIONS = Object.entries(
-    AVAILABILITY_STATUS_LABELS,
-).map(([value, label]) => ({ value, label }))
+const AVAILABILITY_STATUS_FILTER_OPTIONS = [
+    { value: "all", label: "全部" },
+    { value: "AVAILABLE", label: AVAILABILITY_STATUS_LABELS.AVAILABLE },
+    { value: "UNAVAILABLE", label: AVAILABILITY_STATUS_LABELS.UNAVAILABLE },
+    { value: "STOPPED", label: AVAILABILITY_STATUS_LABELS.STOPPED },
+    { value: "STALE", label: AVAILABILITY_STATUS_LABELS.STALE },
+] as const
 
 /** 返回关系状态对应的徽标样式。 */
 const statusVariant = (status: OfferingStatus) => {
@@ -105,22 +119,45 @@ export const SupplierOfferingsPage = () => {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const panelId = React.useId()
+    /** 稳定序列化签名派生 Applied 状态，避免每次渲染重复回填（§5.4）。 */
+    const appliedQuery = searchParams.toString()
     const urlState = React.useMemo(
-        () => parseSupplierOfferingsSearchParams(searchParams),
-        [searchParams],
+        () =>
+            parseSupplierOfferingsSearchParams(
+                new URLSearchParams(appliedQuery),
+            ),
+        [appliedQuery],
     )
     const skuLocked = Boolean(urlState.skuId && urlState.returnTo)
     const hasStructuredFilters = Boolean(
         (!skuLocked && urlState.skuId) ||
+        urlState.skuNo ||
+        urlState.productNo ||
         urlState.supplierId ||
         urlState.status ||
         urlState.sourceType ||
         urlState.availabilityStatus,
     )
-    const hasFilters = Boolean(urlState.q || hasStructuredFilters)
+    /** 已生效筛选包含来源锁定条件：查询消费的全部参数都计入（§12.6）。 */
+    const hasFilters = Boolean(
+        urlState.q ||
+        urlState.skuId ||
+        urlState.skuNo ||
+        urlState.productNo ||
+        urlState.supplierId ||
+        urlState.status ||
+        urlState.sourceType ||
+        urlState.availabilityStatus,
+    )
     const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
     const [skuIdDraft, setSkuIdDraft] = React.useState<string | null>(
         urlState.skuId ?? null,
+    )
+    const [skuNoDraft, setSkuNoDraft] = React.useState(urlState.skuNo ?? "")
+    const [productNoDraft, setProductNoDraft] = React.useState(
+        urlState.productNo ?? "",
     )
     const [supplierIdDraft, setSupplierIdDraft] = React.useState<string | null>(
         urlState.supplierId ?? null,
@@ -131,8 +168,8 @@ export const SupplierOfferingsPage = () => {
     const [sourceTypeDraft, setSourceTypeDraft] =
         React.useState<OfferingSourceFilter>(urlState.sourceType ?? "all")
     const [availabilityStatusDraft, setAvailabilityStatusDraft] =
-        React.useState<AvailabilityStatus | null>(
-            urlState.availabilityStatus ?? null,
+        React.useState<AvailabilityStatusFilter>(
+            urlState.availabilityStatus ?? "all",
         )
     const [filterPanelOpen, setFilterPanelOpen] =
         React.useState(hasStructuredFilters)
@@ -144,6 +181,8 @@ export const SupplierOfferingsPage = () => {
     const query = useSupplierOfferingsQuery({
         q: urlState.q,
         skuId: urlState.skuId,
+        skuNo: urlState.skuNo,
+        productNo: urlState.productNo,
         supplierId: urlState.supplierId,
         status: urlState.status,
         sourceType: urlState.sourceType,
@@ -173,55 +212,100 @@ export const SupplierOfferingsPage = () => {
         patchUrl({
             q: searchDraft.trim() || undefined,
             skuId: skuIdDraft || undefined,
+            skuNo: skuNoDraft.trim() || undefined,
+            productNo: productNoDraft.trim() || undefined,
             supplierId: supplierIdDraft || undefined,
             status: statusDraft === "all" ? undefined : statusDraft,
             sourceType: sourceTypeDraft === "all" ? undefined : sourceTypeDraft,
-            availabilityStatus: availabilityStatusDraft ?? undefined,
+            availabilityStatus:
+                availabilityStatusDraft === "all"
+                    ? undefined
+                    : availabilityStatusDraft,
             page: 1,
         })
     }, [
         availabilityStatusDraft,
         patchUrl,
+        productNoDraft,
         searchDraft,
         skuIdDraft,
+        skuNoDraft,
         sourceTypeDraft,
         statusDraft,
         supplierIdDraft,
     ])
 
-    /** 清空可编辑筛选；来源页锁定的 SKU 与返回地址保持不变。 */
+    /** 清空关键词、全部结构化筛选与来源锁定条件；保留返回地址等导航上下文（§5.6）。 */
     const clearFilters = React.useCallback(() => {
         setSearchDraft("")
-        setSkuIdDraft(skuLocked ? (urlState.skuId ?? null) : null)
+        setSkuIdDraft(null)
+        setSkuNoDraft("")
+        setProductNoDraft("")
         setSupplierIdDraft(null)
         setStatusDraft("all")
         setSourceTypeDraft("all")
-        setAvailabilityStatusDraft(null)
+        setAvailabilityStatusDraft("all")
         setFilterPanelOpen(false)
         patchUrl({
             q: undefined,
-            skuId: skuLocked ? urlState.skuId : undefined,
+            skuId: undefined,
+            skuNo: undefined,
+            productNo: undefined,
             supplierId: undefined,
             status: undefined,
             sourceType: undefined,
             availabilityStatus: undefined,
             page: 1,
         })
-    }, [patchUrl, skuLocked, urlState.skuId])
+    }, [patchUrl])
 
+    // `/` 聚焦搜索框；Dialog / Sheet 打开时不得聚焦背景搜索框（§3.2、§14.4）。
     React.useEffect(() => {
-        setSearchDraft(urlState.q ?? "")
+        const onKey = (event: KeyboardEvent) => {
+            if (
+                event.key === "/" &&
+                !(event.target instanceof HTMLInputElement) &&
+                !(event.target instanceof HTMLTextAreaElement)
+            ) {
+                if (
+                    document.querySelector(
+                        '[role="dialog"], [data-slot="sheet"]',
+                    )
+                ) {
+                    return
+                }
+                event.preventDefault()
+                searchInputRef.current?.focus()
+            }
+        }
+        window.addEventListener("keydown", onKey)
+        return () => window.removeEventListener("keydown", onKey)
+    }, [])
+
+    // URL 回填关键词草稿（后退/前进/刷新/清除）；正在编辑时做焦点保护（§5.4）。
+    React.useEffect(() => {
+        if (document.activeElement !== searchInputRef.current) {
+            setSearchDraft(urlState.q ?? "")
+        }
+    }, [urlState.q, searchInputRef])
+
+    // URL 回填结构化草稿与面板展开态；深链带入条件时自动展开（§5.4、§5.5）。
+    React.useEffect(() => {
         setSkuIdDraft(urlState.skuId ?? null)
+        setSkuNoDraft(urlState.skuNo ?? "")
+        setProductNoDraft(urlState.productNo ?? "")
         setSupplierIdDraft(urlState.supplierId ?? null)
         setStatusDraft(urlState.status ?? "all")
         setSourceTypeDraft(urlState.sourceType ?? "all")
-        setAvailabilityStatusDraft(urlState.availabilityStatus ?? null)
+        setAvailabilityStatusDraft(urlState.availabilityStatus ?? "all")
         setFilterPanelOpen(hasStructuredFilters)
     }, [hasStructuredFilters, urlState])
 
     const appliedFilterLabels = [
-        urlState.q ? `订货编码包含“${urlState.q}”` : null,
+        urlState.q ? `订货编码/SKU 名称/编号包含“${urlState.q}”` : null,
         !skuLocked && urlState.skuId ? "已选择公司 SKU" : null,
+        urlState.skuNo ? `SKU 编号包含“${urlState.skuNo}”` : null,
+        urlState.productNo ? `SPU 编号包含“${urlState.productNo}”` : null,
         urlState.supplierId ? "已选择供应商" : null,
         urlState.status
             ? `关系状态：${OFFERING_STATUS_LABELS[urlState.status]}`
@@ -268,32 +352,16 @@ export const SupplierOfferingsPage = () => {
                 }
             />
 
-            <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border bg-card px-4 py-3">
-                    <div className="text-xs text-muted-foreground">
-                        当前结果
-                    </div>
-                    <div className="mt-1 text-xl font-semibold">
-                        {query.data?.total ?? 0}
-                    </div>
-                </div>
-                <div className="rounded-lg border bg-card px-4 py-3">
-                    <div className="text-xs text-muted-foreground">
-                        本页启用关系
-                    </div>
-                    <div className="mt-1 text-xl font-semibold">
-                        {activeCount}
-                    </div>
-                </div>
-                <div className="rounded-lg border bg-card px-4 py-3">
-                    <div className="text-xs text-muted-foreground">
-                        本页当前可供
-                    </div>
-                    <div className="mt-1 text-xl font-semibold">
-                        {availableCount}
-                    </div>
-                </div>
-            </div>
+            {/* 只读指标：不属于筛选表单（§2.1、§7）。 */}
+            <MetricStrip
+                columns={3}
+                density="compact"
+                aria-label="供给列表指标"
+            >
+                <MetricItem label="当前结果" value={query.data?.total ?? 0} />
+                <MetricItem label="本页启用关系" value={activeCount} />
+                <MetricItem label="本页当前可供" value={availableCount} />
+            </MetricStrip>
 
             <BusinessTableFrame
                 title="供给关系列表"
@@ -311,16 +379,17 @@ export const SupplierOfferingsPage = () => {
                     >
                         <ListToolbar
                             search={
-                                <InputGroup className="w-full sm:w-80">
+                                <InputGroup>
                                     <InputGroupAddon>
                                         <SearchIcon aria-hidden="true" />
                                     </InputGroupAddon>
                                     <InputGroupInput
+                                        ref={searchInputRef}
                                         value={searchDraft}
                                         onChange={(event) =>
                                             setSearchDraft(event.target.value)
                                         }
-                                        placeholder="供应商订货编码"
+                                        placeholder="订货编码、SKU 名称/编号"
                                         aria-label="搜索供给"
                                     />
                                 </InputGroup>
@@ -341,6 +410,7 @@ export const SupplierOfferingsPage = () => {
                                         size="sm"
                                         variant="outline"
                                         aria-expanded={filterPanelOpen}
+                                        aria-controls={panelId}
                                         onClick={() =>
                                             setFilterPanelOpen((open) => !open)
                                         }
@@ -389,6 +459,7 @@ export const SupplierOfferingsPage = () => {
                                         ) : null}
                                         {filterPanelOpen ? (
                                             <div
+                                                id={panelId}
                                                 className="flex w-full flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
                                                 aria-label="供应商供给筛选条件"
                                             >
@@ -412,7 +483,19 @@ export const SupplierOfferingsPage = () => {
                                                         SOURCE_TYPE_FILTER_OPTIONS
                                                     }
                                                 />
-                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                <FixedOptionRadioFilter
+                                                    label="当前可供"
+                                                    value={
+                                                        availabilityStatusDraft
+                                                    }
+                                                    onValueChange={
+                                                        setAvailabilityStatusDraft
+                                                    }
+                                                    options={
+                                                        AVAILABILITY_STATUS_FILTER_OPTIONS
+                                                    }
+                                                />
+                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                                     {!skuLocked ? (
                                                         <div className="flex min-w-0 flex-col gap-1.5 text-sm">
                                                             <span className="text-muted-foreground">
@@ -439,6 +522,44 @@ export const SupplierOfferingsPage = () => {
                                                     ) : null}
                                                     <div className="flex min-w-0 flex-col gap-1.5 text-sm">
                                                         <span className="text-muted-foreground">
+                                                            SKU 编号
+                                                        </span>
+                                                        <Input
+                                                            className="w-full"
+                                                            value={skuNoDraft}
+                                                            onChange={(event) =>
+                                                                setSkuNoDraft(
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            autoComplete="off"
+                                                            placeholder="如 SKU-001"
+                                                            aria-label="SKU 编号"
+                                                        />
+                                                    </div>
+                                                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                                        <span className="text-muted-foreground">
+                                                            SPU 编号
+                                                        </span>
+                                                        <Input
+                                                            className="w-full"
+                                                            value={
+                                                                productNoDraft
+                                                            }
+                                                            onChange={(event) =>
+                                                                setProductNoDraft(
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            autoComplete="off"
+                                                            placeholder="如 P-1001"
+                                                            aria-label="SPU 编号"
+                                                        />
+                                                    </div>
+                                                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                                        <span className="text-muted-foreground">
                                                             供应商
                                                         </span>
                                                         <SupplierSearchCombobox
@@ -457,30 +578,6 @@ export const SupplierOfferingsPage = () => {
                                                             placeholder="全部供应商"
                                                             className="w-full"
                                                             aria-label="供应商"
-                                                        />
-                                                    </div>
-                                                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                                                        <span className="text-muted-foreground">
-                                                            当前可供
-                                                        </span>
-                                                        <OptionCombobox
-                                                            value={
-                                                                availabilityStatusDraft
-                                                            }
-                                                            onValueChange={(
-                                                                value,
-                                                            ) =>
-                                                                setAvailabilityStatusDraft(
-                                                                    value as AvailabilityStatus | null,
-                                                                )
-                                                            }
-                                                            options={
-                                                                AVAILABILITY_STATUS_FILTER_OPTIONS
-                                                            }
-                                                            placeholder="全部可供状态"
-                                                            searchPlaceholder="搜索可供状态"
-                                                            aria-label="当前可供状态"
-                                                            className="w-full"
                                                         />
                                                     </div>
                                                 </div>
@@ -503,7 +600,10 @@ export const SupplierOfferingsPage = () => {
                             }
                             actions={
                                 <>
-                                    <span className="text-xs text-muted-foreground">
+                                    <span
+                                        className="text-xs text-muted-foreground"
+                                        aria-live="polite"
+                                    >
                                         共 {query.data?.total ?? 0} 条
                                     </span>
                                     {hasFilters ? (
@@ -559,18 +659,17 @@ export const SupplierOfferingsPage = () => {
                             }
                         />
                     ) : (
-                        <Table>
+                        <Table data-density="comfortable">
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead>SKU 名称</TableHead>
                                     <TableHead>公司商品 / SKU</TableHead>
                                     <TableHead>供应商 / 订货编码</TableHead>
                                     <TableHead>供给价格</TableHead>
                                     <TableHead>起订量 / 区域</TableHead>
                                     <TableHead>当前可供</TableHead>
                                     <TableHead>关系状态</TableHead>
-                                    <TableHead className="text-right">
-                                        操作
-                                    </TableHead>
+                                    <TableHead>操作</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -578,9 +677,12 @@ export const SupplierOfferingsPage = () => {
                                     <TableRow key={item.id}>
                                         <TableCell>
                                             <div className="font-medium">
-                                                {item.sku_name ??
-                                                    item.product_no ??
-                                                    "公司商品"}
+                                                {item.sku_name?.trim() || "—"}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="font-medium">
+                                                {item.product_no ?? "公司商品"}
                                             </div>
                                             <div className="mt-1 text-xs text-muted-foreground">
                                                 {item.sku_no ?? item.sku_id}
@@ -669,8 +771,8 @@ export const SupplierOfferingsPage = () => {
                                                     "—"}
                                             </div>
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-1">
+                                        <TableCell>
+                                            <div className="flex gap-1">
                                                 <Button
                                                     type="button"
                                                     size="sm"
@@ -681,16 +783,24 @@ export const SupplierOfferingsPage = () => {
                                                         )
                                                     }
                                                 >
+                                                    <PackageCheckIcon
+                                                        data-icon="inline-start"
+                                                        aria-hidden="true"
+                                                    />
                                                     更新可供
                                                 </Button>
                                                 <Button
                                                     type="button"
                                                     size="sm"
-                                                    variant="outline"
+                                                    variant="ghost"
                                                     onClick={() =>
                                                         setReviseOffering(item)
                                                     }
                                                 >
+                                                    <FilePenLineIcon
+                                                        data-icon="inline-start"
+                                                        aria-hidden="true"
+                                                    />
                                                     修订条款
                                                 </Button>
                                             </div>

@@ -81,10 +81,14 @@ fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError>
 /// 供给列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierOfferingListParams {
-    /// 供应商 SKU 编码查询。
+    /// 关键字：供应商订货编码、公司 SKU 编号或 SKU 名称。
     pub q: Option<String>,
     /// 公司 SKU。
     pub sku_id: Option<String>,
+    /// 公司 SKU 编号筛选（模糊、忽略大小写）。
+    pub sku_no: Option<String>,
+    /// 公司商品（SPU）编号筛选（模糊、忽略大小写）。
+    pub product_no: Option<String>,
     /// 供应商。
     pub supplier_id: Option<String>,
     /// 供给关系状态。

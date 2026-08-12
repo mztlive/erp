@@ -45,6 +45,7 @@ mod work_item;
 
 pub use audit_log::AuditLogFilter;
 pub use base::{PageResult, Pagination, QueryFilter, Repository};
+pub use catalog::SkuRow;
 pub use customer::CustomerAccountRow;
 pub use extensions::DatabaseExt;
 pub use supplier::SupplierAccountRow;

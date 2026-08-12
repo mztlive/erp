@@ -173,7 +173,6 @@ impl CatalogService {
                 .build_new_sku_item(
                     NewSkuContext {
                         product_id: &product_id,
-                        product_name: &req.name,
                         effective_from: req.effective_from,
                         effective_to: req.effective_to,
                         created_by: actor.id(),
@@ -390,7 +389,6 @@ impl CatalogService {
                 let revision = self.build_sku_revision(
                     &existing_sku.base.id,
                     revision_no,
-                    &req.name,
                     req.effective_from,
                     req.effective_to,
                     &sku_input,
@@ -426,7 +424,6 @@ impl CatalogService {
                     .build_new_sku_item(
                         NewSkuContext {
                             product_id: &product_id,
-                            product_name: &req.name,
                             effective_from: req.effective_from,
                             effective_to: req.effective_to,
                             created_by: actor.id(),
@@ -547,9 +544,8 @@ impl CatalogService {
     /// # 参数
     /// * `sku_id` - 既有 SKU
     /// * `revision_no` - 下一个修订序号
-    /// * `product_name` - 商品名称（修订名称快照）
     /// * `effective_from` / `effective_to` - 生效区间
-    /// * `input` - SKU 输入行
+    /// * `input` - SKU 输入行（含独立 SKU 名称）
     ///
     /// # 返回
     /// 返回 SKU 修订实体。
@@ -560,7 +556,6 @@ impl CatalogService {
         &self,
         sku_id: &str,
         revision_no: u32,
-        product_name: &str,
         effective_from: BusinessDate,
         effective_to: Option<BusinessDate>,
         input: &ProductSkuInput,
@@ -570,7 +565,7 @@ impl CatalogService {
             SkuRevisionData {
                 sku_id: sku_id.to_string().into(),
                 revision_no,
-                name: product_name.to_string(),
+                name: input.name.clone(),
                 description: None,
                 specification: None,
                 barcode: input.barcode.clone(),

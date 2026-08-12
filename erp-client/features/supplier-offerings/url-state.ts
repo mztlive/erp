@@ -9,6 +9,8 @@ import type {
 export type SupplierOfferingsUrlState = Readonly<{
     q?: string
     skuId?: string
+    skuNo?: string
+    productNo?: string
     supplierId?: string
     status?: OfferingStatus
     sourceType?: OfferingSourceType
@@ -20,6 +22,8 @@ export type SupplierOfferingsUrlState = Readonly<{
 const codec = createUrlStateCodec<SupplierOfferingsUrlState>([
     { key: "q", type: "string", trim: true },
     { key: "skuId", type: "string", trim: true },
+    { key: "sku_no", name: "skuNo", type: "string", trim: true },
+    { key: "product_no", name: "productNo", type: "string", trim: true },
     { key: "supplierId", type: "string", trim: true },
     {
         key: "status",

@@ -90,7 +90,7 @@ function DocumentHeader({
             data-density={density}
             className={cn(
                 // 浮动画布：身份区轻浮起，避免重描边
-                "rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]",
+                "rounded-lg border border-border/70 bg-card shadow-sm",
                 compact ? "p-3 md:p-4" : "p-4 md:p-5",
                 className,
             )}
@@ -224,7 +224,7 @@ function DocumentSummary({
         <section
             data-slot="document-summary"
             className={cn(
-                "rounded-lg bg-card p-5 shadow-xs ring-1 ring-foreground/[0.04]",
+                "rounded-lg border border-border/70 bg-card p-5 shadow-sm",
                 className,
             )}
             {...props}
@@ -619,7 +619,7 @@ function ResponsibilityPanel({
         <section
             data-slot="responsibility-panel"
             className={cn(
-                "overflow-hidden rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]",
+                "overflow-hidden rounded-lg border border-border/70 bg-card shadow-sm",
                 className,
             )}
             {...props}

@@ -91,13 +91,25 @@ impl SupplierOfferingService {
         let offering_ids = self
             .offering_ids_by_availability(params.availability_status)
             .await?;
+        let keyword = normalized_text(params.q.as_deref());
+        let keyword_sku_ids = match keyword.as_deref() {
+            Some(q) => Some(self.resolve_keyword_sku_ids(q).await?),
+            None => None,
+        };
+        let product_no = normalized_text(params.product_no.as_deref());
+        let sku_no = normalized_text(params.sku_no.as_deref());
+        let sku_ids = self
+            .resolve_sku_ids_by_codes(product_no.as_deref(), sku_no.as_deref())
+            .await?;
         let filter = SupplierOfferingFilter {
             offering_ids,
             sku_id: typed_id(params.sku_id.as_deref(), SkuId::new),
             supplier_id: typed_id(params.supplier_id.as_deref(), SupplierAccountId::new),
             status: params.status,
             source_type: params.source_type,
-            supplier_sku_code: normalized_text(params.q.as_deref()),
+            supplier_sku_code: keyword.clone(),
+            keyword_sku_ids,
+            sku_ids,
             page: page_or_default(params.page),
             page_size: page_size_or_default(params.page_size),
             sort_by: Some(sort_by.to_string()),
@@ -135,6 +147,139 @@ impl SupplierOfferingService {
             page: filter.page,
             page_size: filter.page_size,
         })
+    }
+
+    /// 按关键字解析公司 SKU 主键（SKU 编号或当前修订名称）。
+    ///
+    /// # 参数
+    /// * `keyword` - 已去空白的关键字
+    ///
+    /// # 返回
+    /// 返回可能命中的公司 SKU 主键集合（可为空）。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回错误。
+    async fn resolve_keyword_sku_ids(&self, keyword: &str) -> Result<Vec<SkuId>> {
+        let pattern = regex::escape(keyword);
+        let by_no = self
+            .db
+            .skus()
+            .find_many(
+                doc! {
+                    "deleted_at": 0_i64,
+                    "sku_no": { "$regex": &pattern, "$options": "i" },
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        let by_name = self
+            .db
+            .sku_revisions()
+            .find_many(
+                doc! {
+                    "deleted_at": 0_i64,
+                    "name": { "$regex": &pattern, "$options": "i" },
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        let mut ids = by_no
+            .into_iter()
+            .map(|sku| SkuId::new(sku.base.id))
+            .collect::<Vec<_>>();
+        for revision in by_name {
+            ids.push(revision.sku_id);
+        }
+        ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
+        ids.dedup_by(|left, right| left.as_ref() == right.as_ref());
+        Ok(ids)
+    }
+
+    /// 按 SPU 编号 / SKU 编号解析公司 SKU 主键（模糊、忽略大小写）。
+    ///
+    /// 两者同时给出时取交集；任一条件无命中时返回空集合，表示分页查询必然无结果。
+    ///
+    /// # 参数
+    /// * `product_no` - 已去空白的公司商品编号
+    /// * `sku_no` - 已去空白的公司 SKU 编号
+    ///
+    /// # 返回
+    /// 返回去重后的命中 SKU 主键集合（可为空）。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回错误。
+    async fn resolve_sku_ids_by_codes(
+        &self,
+        product_no: Option<&str>,
+        sku_no: Option<&str>,
+    ) -> Result<Option<Vec<SkuId>>> {
+        let mut by_product: Option<Vec<SkuId>> = None;
+        let mut by_sku: Option<Vec<SkuId>> = None;
+
+        if let Some(no) = product_no {
+            let pattern = regex::escape(no);
+            let products = self
+                .db
+                .products()
+                .find_many(
+                    doc! {
+                        "deleted_at": 0_i64,
+                        "product_no": { "$regex": &pattern, "$options": "i" },
+                    },
+                    &mut NoTransaction,
+                )
+                .await?;
+            if products.is_empty() {
+                return Ok(Some(Vec::new()));
+            }
+            let product_ids = products.iter().map(|product| product.base.id.clone()).collect::<Vec<_>>();
+            let skus = self
+                .db
+                .skus()
+                .find_many(
+                    doc! {
+                        "deleted_at": 0_i64,
+                        "product_id": { "$in": product_ids },
+                    },
+                    &mut NoTransaction,
+                )
+                .await?;
+            by_product = Some(
+                skus.into_iter()
+                    .map(|sku| SkuId::new(sku.base.id))
+                    .collect(),
+            );
+        }
+
+        if let Some(no) = sku_no {
+            let pattern = regex::escape(no);
+            let skus = self
+                .db
+                .skus()
+                .find_many(
+                    doc! {
+                        "deleted_at": 0_i64,
+                        "sku_no": { "$regex": &pattern, "$options": "i" },
+                    },
+                    &mut NoTransaction,
+                )
+                .await?;
+            by_sku = Some(
+                skus.into_iter()
+                    .map(|sku| SkuId::new(sku.base.id))
+                    .collect(),
+            );
+        }
+
+        match (by_product, by_sku) {
+            (None, None) => Ok(None),
+            (Some(ids), None) | (None, Some(ids)) => Ok(Some(ids)),
+            (Some(left), Some(right)) => Ok(Some(
+                left.into_iter()
+                    .filter(|id| right.contains(id))
+                    .collect(),
+            )),
+        }
     }
 
     /// 将当前可供状态转换为供给主键候选集，确保关联条件在分页前生效。

@@ -418,7 +418,7 @@ function ProductSkuSection({
                                         </th>
                                     )}
                                     <th
-                                        colSpan={3}
+                                        colSpan={4}
                                         className="border-l border-border px-3 py-2 font-medium"
                                     >
                                         身份
@@ -453,6 +453,9 @@ function ProductSkuSection({
                                     )}
                                     <th className="min-w-32 border-l border-border px-3 py-2 font-medium">
                                         {masterDataCopy.fProductCode}
+                                    </th>
+                                    <th className="min-w-40 px-3 py-2 font-medium">
+                                        {masterDataCopy.fSkuName}
                                     </th>
                                     <th className="min-w-32 px-3 py-2 font-medium">
                                         {masterDataCopy.fBarcode}
@@ -528,6 +531,25 @@ function ProductSkuSection({
                                                     }
                                                     aria-label={`${sku.specLabel} 产品编码`}
                                                     title="系统默认生成，可手动覆盖"
+                                                />
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                <Input
+                                                    className="h-8"
+                                                    value={sku.name}
+                                                    disabled={!canRevise}
+                                                    onChange={(event) =>
+                                                        updateSku(index, {
+                                                            name: event.target
+                                                                .value,
+                                                        })
+                                                    }
+                                                    placeholder={
+                                                        name.trim() ||
+                                                        "请输入 SKU 名称"
+                                                    }
+                                                    aria-label={`${sku.specLabel} SKU 名称`}
+                                                    title="可与商品名称不同，保存后写入 SKU 修订"
                                                 />
                                             </td>
                                             <td className="px-3 py-3">
@@ -675,6 +697,7 @@ function ProductSkuSection({
                                                                                     skuCode:
                                                                                         sku.skuNo,
                                                                                     skuName:
+                                                                                        sku.name.trim() ||
                                                                                         name,
                                                                                     productKind:
                                                                                         fields.productKind as ProductKind,

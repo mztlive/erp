@@ -106,11 +106,11 @@ function useMasterDataColumns({
                 id: "name",
                 accessorKey: "name",
                 header: isSellableResource
-                    ? "商品名称 · 规格"
+                    ? "SKU 名称 · 规格"
                     : masterDataCopy.colName,
                 meta: {
                     label: isSellableResource
-                        ? "商品名称 · 规格"
+                        ? "SKU 名称 · 规格"
                         : masterDataCopy.colName,
                 },
                 cell: ({ row }) => {
@@ -296,6 +296,57 @@ function useMasterDataColumns({
                   ]),
             ...(isProductResource
                 ? [
+                      {
+                          id: "skuNames",
+                          header: "SKU 名称",
+                          meta: { label: "SKU 名称" },
+                          cell: ({
+                              row,
+                          }: {
+                              row: { original: MasterDataListItem }
+                          }) => {
+                              const skus =
+                                  productSkusByProduct.get(
+                                      row.original.stableId,
+                                  ) ?? []
+                              if (productSkusPending) {
+                                  return (
+                                      <span className="text-sm text-muted-foreground">
+                                          读取中…
+                                      </span>
+                                  )
+                              }
+                              if (productSkusError) {
+                                  return (
+                                      <span className="text-sm text-muted-foreground">
+                                          暂不可查
+                                      </span>
+                                  )
+                              }
+                              if (skus.length === 0) {
+                                  return (
+                                      <span className="text-sm text-muted-foreground">
+                                          —
+                                      </span>
+                                  )
+                              }
+                              const names = skus
+                                  .map((sku) => sku.skuName.trim())
+                                  .filter(Boolean)
+                              const label =
+                                  names.length > 0
+                                      ? names.join("、")
+                                      : "—"
+                              return (
+                                  <span
+                                      className="line-clamp-2 max-w-56 text-sm"
+                                      title={label}
+                                  >
+                                      {label}
+                                  </span>
+                              )
+                          },
+                      } satisfies ColumnDef<MasterDataListItem>,
                       {
                           id: "skuPriceRange",
                           header: "SKU 售价",

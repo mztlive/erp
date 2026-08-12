@@ -52,6 +52,7 @@ const PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
 function applySpecsFromDrafts(
     drafts: readonly ProductSpecDraft[],
     current: ProductFields,
+    productName = "",
 ): ProductFields {
     const specs: ProductSpecDimension[] = drafts
         .map((draft) => ({
@@ -77,6 +78,7 @@ function applySpecsFromDrafts(
         existing: reorderedExisting,
         baseUnit: current.baseUnit,
         skuNoPrefix: "SKU",
+        defaultSkuName: productName,
     })
     return { ...current, specs, skus }
 }

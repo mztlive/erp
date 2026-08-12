@@ -261,6 +261,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
             const nextFields = applySpecsFromDrafts(
                 value.specDrafts,
                 value.fields,
+                value.name,
             )
             const validation = validateProductEditor(value, nextFields)
             if (validation) {
@@ -462,6 +463,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         const nextFields = applySpecsFromDrafts(
             values.specDrafts,
             values.fields,
+            values.name,
         )
         form.setFieldValue("fields", nextFields)
         const validation = validateProductEditor(values, nextFields)
@@ -616,7 +618,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                 const syncSpecDrafts = (next: readonly ProductSpecDraft[]) => {
                     setSpecDrafts(next)
                     setFields((previous) =>
-                        applySpecsFromDrafts(next, previous),
+                        applySpecsFromDrafts(next, previous, values.name),
                     )
                 }
                 const updateSku = (

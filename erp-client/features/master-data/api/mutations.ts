@@ -259,6 +259,7 @@ function mapProductSkus(fields: ProductFields) {
             expected_sku_revision_id: sku.skuRevisionId || null,
             reenable: Boolean(sku.skuId && sku.requiresExplicitReenable),
             sku_no: sku.skuNo,
+            name: sku.name.trim(),
             base_unit_id: fields.baseUnitId,
             barcode: sku.barcode || null,
             main_image_asset_id: sku.mainImageAssetId || null,

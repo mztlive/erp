@@ -19,7 +19,6 @@ import {
 import {
     FieldGroup,
     FieldLegend,
-    FieldSeparator,
     FieldSet,
 } from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
@@ -540,7 +539,7 @@ export function ReviseOfferingDialog({
 
     return (
         <Dialog open onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogContent className="w-[calc(100vw-2rem)] gap-4 p-5 sm:max-w-5xl">
                 <DialogHeader>
                     <DialogTitle>修订供给条款</DialogTitle>
                     <DialogDescription>
@@ -557,138 +556,127 @@ export function ReviseOfferingDialog({
                     </Alert>
                 ) : null}
                 <form
-                    className="space-y-6"
+                    className="flex flex-col gap-4"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    <FieldGroup>
-                        <FieldSet>
-                            <FieldLegend variant="label">
-                                价格与条款
-                            </FieldLegend>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <form.AppField name="dropshipPrice">
-                                    {(field) => (
-                                        <field.TextField label="一件代发供给价（含税）*" />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="bulkPrice">
-                                    {(field) => (
-                                        <field.TextField label="集采供给价（含税）*" />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="minimumQuantity">
-                                    {(field) => (
-                                        <field.TextField label="集采起订量 *" />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="inputTaxPercentage">
-                                    {(field) => (
-                                        <field.TextField
-                                            label="进项税率（%）*"
-                                            description="例如 13 表示 13%"
-                                        />
-                                    )}
-                                </form.AppField>
-                            </div>
-                        </FieldSet>
-
-                        <FieldSeparator />
-
-                        <FieldSet>
-                            <FieldLegend variant="label">
-                                供应范围与时效
-                            </FieldLegend>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <form.AppField name="supplyRegionText">
-                                    {(field) => (
-                                        <div className="sm:col-span-2">
+                    <FieldGroup className="gap-4">
+                        <div className="grid gap-4 lg:grid-cols-2">
+                            <FieldSet className="gap-4 rounded-lg border p-4">
+                                <FieldLegend variant="label">
+                                    价格与条款
+                                </FieldLegend>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <form.AppField name="dropshipPrice">
+                                        {(field) => (
+                                            <field.TextField label="一件代发供给价（含税）*" />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="bulkPrice">
+                                        {(field) => (
+                                            <field.TextField label="集采供给价（含税）*" />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="minimumQuantity">
+                                        {(field) => (
+                                            <field.TextField label="集采起订量 *" />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="inputTaxPercentage">
+                                        {(field) => (
                                             <field.TextField
-                                                label="可供区域 *"
-                                                description="多个区域使用逗号分隔"
+                                                label="进项税率（%）*"
+                                                description="例如 13 表示 13%"
                                             />
-                                        </div>
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="validFrom">
-                                    {(field) => (
-                                        <field.DateField label="生效日期 *" />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="validTo">
-                                    {(field) => (
-                                        <field.DateField label="失效日期" />
-                                    )}
-                                </form.AppField>
-                            </div>
-                        </FieldSet>
+                                        )}
+                                    </form.AppField>
+                                </div>
+                            </FieldSet>
 
-                        <FieldSeparator />
+                            <FieldSet className="gap-4 rounded-lg border p-4">
+                                <FieldLegend variant="label">
+                                    供应范围与时效
+                                </FieldLegend>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <form.AppField name="supplyRegionText">
+                                        {(field) => (
+                                            <div className="sm:col-span-2">
+                                                <field.TextField
+                                                    label="可供区域 *"
+                                                    description="多个区域使用逗号分隔"
+                                                />
+                                            </div>
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="validFrom">
+                                        {(field) => (
+                                            <field.DateField label="生效日期 *" />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="validTo">
+                                        {(field) => (
+                                            <field.DateField label="失效日期" />
+                                        )}
+                                    </form.AppField>
+                                </div>
+                            </FieldSet>
+                        </div>
 
-                        <FieldSet>
-                            <FieldLegend variant="label">
-                                物流与费用
-                            </FieldLegend>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <form.AppField name="dropshipExpress">
-                                    {(field) => (
-                                        <field.TextField label="一件代发快递说明" />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="freightAmount">
-                                    {(field) => (
-                                        <field.TextField label="运费" />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="serviceFeeAmount">
-                                    {(field) => (
-                                        <field.TextField label="服务费" />
-                                    )}
-                                </form.AppField>
-                            </div>
-                        </FieldSet>
+                        <div className="grid gap-4 lg:grid-cols-2">
+                            <FieldSet className="gap-4 rounded-lg border p-4">
+                                <FieldLegend variant="label">
+                                    物流与费用
+                                </FieldLegend>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <form.AppField name="dropshipExpress">
+                                        {(field) => (
+                                            <field.TextField label="一件代发快递说明" />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="freightAmount">
+                                        {(field) => (
+                                            <field.TextField label="运费" />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="serviceFeeAmount">
+                                        {(field) => (
+                                            <field.TextField label="服务费" />
+                                        )}
+                                    </form.AppField>
+                                </div>
+                            </FieldSet>
 
-                        <FieldSeparator />
-
-                        <FieldSet>
-                            <FieldLegend variant="label">
-                                状态与说明
-                            </FieldLegend>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <form.AppField name="status">
-                                    {(field) => (
-                                        <div className="space-y-1.5">
-                                            <Label>供给关系状态 *</Label>
-                                            <OptionCombobox
-                                                value={field.state.value}
-                                                onValueChange={(value) =>
-                                                    field.handleChange(
-                                                        (value ??
-                                                            "ACTIVE") as OfferingStatus,
-                                                    )
-                                                }
+                            <FieldSet className="gap-4 rounded-lg border p-4">
+                                <FieldLegend variant="label">
+                                    状态与说明
+                                </FieldLegend>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <form.AppField name="status">
+                                        {(field) => (
+                                            <field.SelectField
+                                                label="供给关系状态 *"
                                                 options={Object.entries(
                                                     OFFERING_STATUS_LABELS,
                                                 ).map(([value, label]) => ({
                                                     value,
                                                     label,
                                                 }))}
-                                                className="w-full"
+                                                allowClear={false}
                                             />
-                                        </div>
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="changeReason">
-                                    {(field) => (
-                                        <field.TextField label="变更原因 *" />
-                                    )}
-                                </form.AppField>
-                            </div>
-                        </FieldSet>
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="changeReason">
+                                        {(field) => (
+                                            <field.TextField label="变更原因 *" />
+                                        )}
+                                    </form.AppField>
+                                </div>
+                            </FieldSet>
+                        </div>
                     </FieldGroup>
-                    <DialogFooter>
+                    <DialogFooter className="border-t pt-4">
                         <DialogClose
                             render={<Button type="button" variant="outline" />}
                         >

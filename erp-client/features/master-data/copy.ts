@@ -43,7 +43,7 @@ export function masterDataSearchPlaceholder(
         case "voucher-categories":
             return "编号、名称、SKU"
         case "sellable-items":
-            return "SKU/商品编号或名称、规格、条码"
+            return "SKU 名称/编号、商品编号/名称、规格、条码"
     }
 }
 
@@ -183,6 +183,7 @@ export const masterDataCopy = {
     fSalePrice: "销售价",
     fMarketPrice: "市场价",
     fProductCode: "产品编码",
+    fSkuName: "SKU 名称",
     fSpecName: "规格名",
     fSpecValues: "规格取值",
     fSpecLabel: "规格",

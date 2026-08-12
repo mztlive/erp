@@ -297,7 +297,6 @@ impl CatalogService {
             .build_new_sku_item(
                 NewSkuContext {
                     product_id: &product_id,
-                    product_name: &name,
                     effective_from,
                     effective_to,
                     created_by: actor.id(),
@@ -307,6 +306,7 @@ impl CatalogService {
                     expected_sku_revision_id: None,
                     reenable: false,
                     sku_no: voucher_no,
+                    name: name.clone(),
                     base_unit_id: sku.base_unit_id,
                     barcode: sku.barcode,
                     main_image_asset_id: None,

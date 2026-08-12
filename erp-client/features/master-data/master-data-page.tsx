@@ -1603,7 +1603,7 @@ function MasterDataListWorkspace({
                     setSupplyDialogSku({
                         skuId: sku.skuId,
                         skuCode: sku.skuNo,
-                        skuName: supplyProduct.name,
+                        skuName: sku.skuName || supplyProduct.name,
                         specification: sku.specification,
                         baseUnit: sku.baseUnit,
                         productKind: supplyProduct.productKind,

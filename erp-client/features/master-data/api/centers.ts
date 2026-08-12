@@ -358,6 +358,7 @@ export async function centerProduct(
             requiresExplicitReenable: asLifecycle(sku.status) === "DISABLED",
             specificationSignature: sku.specification_signature,
             skuNo: sku.sku_no,
+            name: rev?.name ?? "",
             attributeValues,
             specLabel:
                 (rev?.specification ??

@@ -32,12 +32,10 @@ pub(super) struct SkuEditItem {
     pub(super) revision: SkuRevision,
 }
 
-/// 新 SKU 构建上下文（所属 SPU、名称快照、生效区间、操作人）。
+/// 新 SKU 构建上下文（所属 SPU、生效区间、操作人）。
 pub(super) struct NewSkuContext<'a> {
     /// 所属 SPU。
     pub(super) product_id: &'a ProductId,
-    /// 商品名称（作为 SKU 修订名称快照）。
-    pub(super) product_name: &'a str,
     /// 生效起始日。
     pub(super) effective_from: BusinessDate,
     /// 生效截止日。
@@ -50,8 +48,8 @@ impl CatalogService {
     /// 构造新 SKU 行（规范化自由规格 → 计算签名 → 生成 SKU 身份 + 首个修订）。
     ///
     /// # 参数
-    /// * `ctx` - 新 SKU 上下文（所属 SPU、名称快照、生效区间、操作人）
-    /// * `input` - SKU 输入行
+    /// * `ctx` - 新 SKU 上下文（所属 SPU、生效区间、操作人）
+    /// * `input` - SKU 输入行（含独立 SKU 名称）
     ///
     /// # 返回
     /// 返回 `Create` 动作的规格编辑行。
@@ -72,7 +70,7 @@ impl CatalogService {
             SkuRevisionData {
                 sku_id: sku_id.clone(),
                 revision_no: 1,
-                name: ctx.product_name.to_string(),
+                name: input.name,
                 description: None,
                 specification: None,
                 barcode: input.barcode,
@@ -270,6 +268,7 @@ mod tests {
             expected_sku_revision_id: Some(SkuRevisionId::new("sku-rev-2")),
             reenable,
             sku_no: "SKU-001".to_string(),
+            name: "测试 SKU".to_string(),
             base_unit_id: UnitOfMeasureId::new("unit-1"),
             barcode: None,
             main_image_asset_id: None,

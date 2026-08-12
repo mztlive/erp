@@ -163,8 +163,10 @@
     /* antd borderRadius = 6 */
     --radius: 0.375rem;
 
-    /* colorBgLayout / colorText / colorBgContainer */
-    --background: oklch(0.9849 0.0029 264.5); /* #f9fafc */
+    /* colorBgLayout / colorText / colorBgContainer
+     背景比卡片明显深一档（≈4.5% 亮度差），白卡片才能在灰画布上真正"浮"起来；
+     旧值 0.9849 与卡片的 1.0 只差 1.5%，肉眼几乎分辨不出画布与卡片的边界。 */
+    --background: oklch(0.955 0.004 264.5); /* #eef0f3 */
     --foreground: oklch(0.1913 0 0); /* #141414 ≈ rgba(0,0,0,0.88) */
     --card: oklch(1 0 0); /* #ffffff colorBgContainer */
     --card-foreground: oklch(0.1913 0 0);
@@ -228,7 +230,9 @@
     /* 表单控件静止态背景：与 card 同色，靠 border 提示可编辑，避免和 --muted
      disabled 态（#f5f5f5）灰度太接近而被误读成"已禁用" */
     --surface-control: oklch(1 0 0); /* = card #ffffff */
-    --table-header: oklch(0.9851 0 0);
+    /* 表头比数据行（白底）明显深一档，才能一眼分清"表头带"与正文；
+     旧值 0.9851 与卡片/数据行的 1.0 只差 1.5%，和过去的画布/卡片问题同源。 */
+    --table-header: oklch(0.965 0 0);
     --row-hover: oklch(0.9702 0 0); /* #f5f5f5 */
     --row-selected: oklch(0.96 0.021 241.3); /* #e6f4ff */
     --row-striped: oklch(0.9851 0 0);
@@ -241,14 +245,14 @@
     --chart-4: oklch(0.8016 0.1651 76); /* #faad14 */
     --chart-5: oklch(0.4942 0.2284 295.6); /* #722ed1 */
 
-    /* 侧栏透明；选中项 = antd Menu itemSelectedBg */
-    --sidebar: transparent;
+    /* 侧栏与画布同色，靠一条实边界与内容区分隔；选中项 = antd Menu itemSelectedBg */
+    --sidebar: var(--background);
     --sidebar-foreground: oklch(0.464 0 0); /* #595959 */
     --sidebar-primary: oklch(0.5987 0.2194 259); /* #1677ff */
     --sidebar-primary-foreground: oklch(1 0 0);
     --sidebar-accent: oklch(0.96 0.021 241.3); /* #e6f4ff */
     --sidebar-accent-foreground: oklch(0.5044 0.2095 261); /* #0958d9 */
-    --sidebar-border: transparent;
+    --sidebar-border: oklch(0.85 0 0);
     --sidebar-ring: oklch(0.5987 0.2194 259);
 }
 
@@ -320,13 +324,13 @@
     --chart-4: oklch(0.8016 0.1651 76);
     --chart-5: oklch(0.6 0.2 295);
 
-    --sidebar: transparent;
+    --sidebar: oklch(0.16 0 0); /* 比 --background 深一档，作为背后的凹陷面板 */
     --sidebar-foreground: oklch(0.75 0 0);
     --sidebar-primary: oklch(0.5987 0.2194 259);
     --sidebar-primary-foreground: oklch(1 0 0);
     --sidebar-accent: oklch(0.32 0.06 259);
     --sidebar-accent-foreground: oklch(0.85 0.08 250);
-    --sidebar-border: transparent;
+    --sidebar-border: oklch(1 0 0 / 8%);
     --sidebar-ring: oklch(0.6726 0.176 255.3);
 }
 
