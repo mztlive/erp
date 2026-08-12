@@ -474,11 +474,39 @@ function SalesOrderCreateForm({
                             "min-w-0 overflow-hidden",
                         )}
                     >
-                        <div className="border-b border-border/30 px-4 py-3 md:px-5 md:py-4 lg:px-6">
+                        <div className="flex flex-col gap-3 border-b border-border/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-5 md:py-4 lg:px-6">
                             <WizardSteps
                                 steps={WIZARD_STEPS}
                                 currentStepId={currentStep}
                             />
+                            <form.AppForm>
+                                <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            if (dirty) {
+                                                setDiscardOpen(true)
+                                                return
+                                            }
+                                            router.push("/sales/orders")
+                                        }}
+                                    >
+                                        取消
+                                    </Button>
+                                    <form.SubmitButton
+                                        variant="outline"
+                                        size="sm"
+                                        label="保存草稿"
+                                        pendingLabel="正在保存草稿…"
+                                        onClick={() => {
+                                            submitIntentRef.current =
+                                                "SAVE_DRAFT"
+                                        }}
+                                    />
+                                </div>
+                            </form.AppForm>
                         </div>
 
                         <section
@@ -1494,51 +1522,24 @@ function SalesOrderCreateForm({
                                                 预估。{flowNote}
                                             </>
                                         }
-                                        leftActions={
-                                            currentStepIndex > 0 ? (
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        setCurrentStep(
-                                                            WIZARD_STEPS[
-                                                                currentStepIndex -
-                                                                    1
-                                                            ].id,
-                                                        )
-                                                    }
-                                                >
-                                                    上一步
-                                                </Button>
-                                            ) : null
-                                        }
                                         actions={
                                             <form.AppForm>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    onClick={() => {
-                                                        if (dirty) {
-                                                            setDiscardOpen(true)
-                                                            return
+                                                {currentStepIndex > 0 ? (
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        onClick={() =>
+                                                            setCurrentStep(
+                                                                WIZARD_STEPS[
+                                                                    currentStepIndex -
+                                                                        1
+                                                                ].id,
+                                                            )
                                                         }
-                                                        router.push(
-                                                            "/sales/orders",
-                                                        )
-                                                    }}
-                                                >
-                                                    取消
-                                                </Button>
-                                                <form.SubmitButton
-                                                    variant="outline"
-                                                    label="保存草稿"
-                                                    pendingLabel="正在保存草稿…"
-                                                    onClick={() => {
-                                                        submitIntentRef.current =
-                                                            "SAVE_DRAFT"
-                                                    }}
-                                                />
+                                                    >
+                                                        上一步
+                                                    </Button>
+                                                ) : null}
                                                 {currentStepIndex <
                                                 WIZARD_STEPS.length - 1 ? (
                                                     <Button
