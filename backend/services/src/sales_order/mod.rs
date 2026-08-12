@@ -1086,9 +1086,7 @@ impl SalesOrderService {
         Ok(Some(OpenProcurementRejectionView {
             procurement_confirmation_id: rejected.base.id,
             submission_id: rejected.submission_id.to_string(),
-            reject_reason_code: rejected
-                .reject_reason_code
-                .map(|code| code.as_str().to_string()),
+            reject_reason_code: rejected.reject_reason_code.map(|code| code.as_str().to_string()),
             comment: rejected.comment,
             handled_by: rejected.handled_by,
             handled_at: rejected.handled_at.map(|instant| instant.unix_secs() as u64),
@@ -1108,10 +1106,7 @@ impl SalesOrderService {
     ///
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
-    async fn resolve_open_rejection_order_ids(
-        &self,
-        draft_order_ids: &[String],
-    ) -> Result<HashSet<String>> {
+    async fn resolve_open_rejection_order_ids(&self, draft_order_ids: &[String]) -> Result<HashSet<String>> {
         if draft_order_ids.is_empty() {
             return Ok(HashSet::new());
         }
