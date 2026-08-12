@@ -474,6 +474,13 @@ function SalesOrderCreateForm({
                             "min-w-0 overflow-hidden",
                         )}
                     >
+                        <div className="border-b border-border/30 px-4 py-3 md:px-5 md:py-4 lg:px-6">
+                            <WizardSteps
+                                steps={WIZARD_STEPS}
+                                currentStepId={currentStep}
+                            />
+                        </div>
+
                         <section
                             className="border-b border-border/30 p-4 md:p-5 lg:p-6"
                             hidden={currentStep !== "contract"}
@@ -1488,29 +1495,23 @@ function SalesOrderCreateForm({
                                             </>
                                         }
                                         leftActions={
-                                            <div className="flex flex-wrap items-center gap-3">
-                                                <WizardSteps
-                                                    steps={WIZARD_STEPS}
-                                                    currentStepId={currentStep}
-                                                />
-                                                {currentStepIndex > 0 ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            setCurrentStep(
-                                                                WIZARD_STEPS[
-                                                                    currentStepIndex -
-                                                                        1
-                                                                ].id,
-                                                            )
-                                                        }
-                                                    >
-                                                        上一步
-                                                    </Button>
-                                                ) : null}
-                                            </div>
+                                            currentStepIndex > 0 ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setCurrentStep(
+                                                            WIZARD_STEPS[
+                                                                currentStepIndex -
+                                                                    1
+                                                            ].id,
+                                                        )
+                                                    }
+                                                >
+                                                    上一步
+                                                </Button>
+                                            ) : null
                                         }
                                         actions={
                                             <form.AppForm>
