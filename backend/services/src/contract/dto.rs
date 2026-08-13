@@ -197,6 +197,17 @@ pub struct TerminateContractRequest {
     pub version: u64,
 }
 
+/// 合同列表的客户可见范围。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractListScope {
+    /// 不按客户归属收窄（合同中心默认，兼容既有全量列表）。
+    #[default]
+    All,
+    /// 仅当前用户有效归属（OWNER 或 COLLABORATOR）客户下的合同。
+    Assigned,
+}
+
 /// 合同列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ContractListParams {
@@ -204,6 +215,8 @@ pub struct ContractListParams {
     pub contract_no: Option<String>,
     /// 客户筛选。
     pub customer_id: Option<CustomerAccountId>,
+    /// 客户归属可见范围；缺省视为 [`ContractListScope::All`]。
+    pub scope: Option<ContractListScope>,
     /// 合同状态筛选。
     pub status: Option<ContractStatus>,
     /// 页码（1 起）。
@@ -225,6 +238,8 @@ pub(crate) struct ContractListQuery {
     pub contract_no: Option<String>,
     /// 客户筛选。
     pub customer_id: Option<String>,
+    /// 客户归属可见范围。
+    pub scope: ContractListScope,
     /// 合同状态筛选。
     pub status: Option<ContractStatus>,
     /// 分页与排序参数。
@@ -234,7 +249,8 @@ pub(crate) struct ContractListQuery {
 impl ContractListParams {
     /// 归一化合同列表查询参数。
     ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验；
+    /// 未传 `scope` 时视为 [`ContractListScope::All`]。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
@@ -246,6 +262,7 @@ impl ContractListParams {
         Ok(ContractListQuery {
             contract_no: normalized_text(self.contract_no.as_deref()),
             customer_id: self.customer_id.as_ref().map(ToString::to_string),
+            scope: self.scope.unwrap_or_default(),
             status: self.status,
             paging: PageParams {
                 page: page_or_default(self.page),
@@ -419,7 +436,17 @@ mod tests {
         let query = params.normalized().unwrap();
         assert_eq!(query.contract_no.as_deref(), Some("HT-2026"));
         assert_eq!(query.customer_id.as_deref(), Some("cust-1"));
+        assert_eq!(query.scope, super::ContractListScope::All);
         assert_eq!(query.status, Some(ContractStatus::Effective));
+
+        let assigned: ContractListParams = serde_json::from_value(json!({
+            "scope": "assigned",
+        }))
+        .unwrap();
+        assert_eq!(
+            assigned.normalized().unwrap().scope,
+            super::ContractListScope::Assigned
+        );
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");

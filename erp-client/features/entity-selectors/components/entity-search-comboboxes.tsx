@@ -46,7 +46,9 @@ import {
     useMallSelectorQuery,
     useVoucherCategorySelectorQuery,
 } from "@/features/entity-selectors/hooks/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { getErrorMessage } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 
 type SmartProps<TProps, TItem> = Omit<
     TProps,
@@ -288,14 +290,24 @@ export function ContractSearchCombobox({
     ...props
 }: ContractSearchComboboxProps) {
     const search = useSearchInput()
+    const accountProfile = useAccountProfileQuery()
+    const canReadAllCustomers = hasPermission(
+        accountProfile.data?.permissions,
+        "customer_scope:detail",
+    )
+    const needsAssignedScope = purpose === "sales-order" && !canReadAllCustomers
+    const scopeReady = purpose !== "sales-order" || !accountProfile.isPending
+    const scope = needsAssignedScope ? "assigned" : undefined
     const query = useContractSelectorQuery(
         {
             query: search.input,
             purpose,
             customerId: customerId || undefined,
             selectableOnly,
+            scope,
         },
         value,
+        { enabled: scopeReady },
     )
     const rows = mergeSelected(
         query.list.data,
@@ -313,7 +325,11 @@ export function ContractSearchCombobox({
             }}
             onSearchChange={search.onSearchChange}
             filterMode="remote"
-            loading={query.list.isFetching || query.selected.isFetching}
+            loading={
+                !scopeReady ||
+                query.list.isFetching ||
+                query.selected.isFetching
+            }
             emptyLabel={
                 query.list.isError
                     ? getErrorMessage(query.list.error, "合同加载失败，请重试")

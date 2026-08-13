@@ -745,7 +745,9 @@ function SalesOrderEditableCenter({
                         {[
                             reasonLabel,
                             rejection.rejectComment || null,
-                            `${rejection.rejectedByLabel} · ${rejection.rejectedAt}`,
+                            [rejection.rejectedByLabel, rejection.rejectedAt]
+                                .filter(Boolean)
+                                .join(" · ") || null,
                             `第 ${rejection.rejectedSubmissionNo} 次报给采购`,
                             "改完整单后再报，或点「作废」",
                         ]

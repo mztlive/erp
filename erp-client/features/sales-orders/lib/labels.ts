@@ -13,9 +13,27 @@ export const NATURE_LABEL: Record<SalesOrderListItem["nature"], string> = {
 
 /** 阶段责任角色中文映射（后端固定码，见 `sales_order/mod.rs` 提交编排）。 */
 const STAGE_OWNER_ROLE_LABEL: Record<string, string> = {
+    sales: "销售",
     procurement: "采购",
     sales_leader: "销售领导",
     operations: "运营",
+}
+
+/** 账号稳定身份：24 位 ObjectId 或本系统 32 位 hex，页面不得当做人名展示。 */
+const STABLE_ACCOUNT_ID = /^[0-9a-f]{24}(?:[0-9a-f]{8})?$/i
+
+/**
+ * 把账号姓名收成可展示文案；空值或原始账号 ID 一律回退角色称呼。
+ */
+export function personDisplayName(
+    name?: string | null,
+    fallback = "采购",
+): string {
+    const trimmed = name?.trim() ?? ""
+    if (!trimmed || trimmed === "—" || STABLE_ACCOUNT_ID.test(trimmed)) {
+        return fallback
+    }
+    return trimmed
 }
 
 /** 审核轨进行中的阶段码（草稿/已生效/履约中/已关闭/已作废不在其中）。 */
@@ -35,10 +53,18 @@ export function stageOwnerDisplay(order: SalesOrderListItem): string {
     const ownerRole = order.primaryStatus.ownerRole
     if (ownerRole) {
         const roleLabel = STAGE_OWNER_ROLE_LABEL[ownerRole] ?? ownerRole
-        return `${roleLabel} · ${order.primaryStatus.ownerUserName ?? "待认领"}`
+        const name = personDisplayName(
+            order.primaryStatus.ownerUserName,
+            "",
+        )
+        if (name && name !== roleLabel) return `${roleLabel} · ${name}`
+        if (order.primaryStatus.ownerUserName) return roleLabel
+        return `${roleLabel} · 待认领`
     }
     if (order.primaryStatus.code === "awaiting_sales") {
-        return `销售 · ${order.ownerName}`
+        const name = personDisplayName(order.ownerName, "")
+        if (name && name !== "销售") return `销售 · ${name}`
+        return "销售"
     }
     return "待分配"
 }

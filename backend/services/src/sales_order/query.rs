@@ -419,10 +419,12 @@ impl SalesOrderService {
         })
     }
 
-    /// 查询销售单负责人账号姓名。
+    /// 按账号 ID 查询展示姓名。
+    ///
+    /// 用于销售单负责人、阶段责任人和采购驳回处理人，避免把账号 ID 下发给页面。
     ///
     /// # 参数
-    /// * `user_id` - 负责人账号 ID
+    /// * `user_id` - 账号 ID
     ///
     /// # 返回
     /// 返回账号姓名；账号已不存在时返回 `None`。
@@ -453,7 +455,7 @@ impl SalesOrderService {
     /// * `commercial_status` - 当前商业主状态
     ///
     /// # 返回
-    /// 开放驳回摘要；不满足条件时返回 `None`。
+    /// 开放驳回摘要（含处理人姓名，不把账号 ID 当展示文案）；不满足条件时返回 `None`。
     ///
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
@@ -484,12 +486,19 @@ impl SalesOrderService {
             return Ok(None);
         };
 
+        let handled_by = rejected.handled_by;
+        let handled_by_name = match handled_by.as_deref() {
+            Some(user_id) => self.account_name(user_id).await?,
+            None => None,
+        };
+
         Ok(Some(OpenProcurementRejectionView {
             procurement_confirmation_id: rejected.base.id,
             submission_id: rejected.submission_id.to_string(),
             reject_reason_code: rejected.reject_reason_code.map(|code| code.as_str().to_string()),
             comment: rejected.comment,
-            handled_by: rejected.handled_by,
+            handled_by,
+            handled_by_name,
             handled_at: rejected.handled_at.map(|instant| instant.unix_secs() as u64),
         }))
     }

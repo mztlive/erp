@@ -24,6 +24,7 @@ import type {
     SalesOrderOrigin,
     SalesOrderRevisionSnapshot,
 } from "@/features/sales-orders/types"
+import { personDisplayName } from "@/features/sales-orders/lib/labels"
 import type { ApiError } from "@/lib/api/errors"
 
 const validationError = (message: string): ApiError => ({
@@ -490,7 +491,7 @@ export function mapDetailToListItem(
             amountNet: commercial.amountNet,
             taxAmount: commercial.taxAmount,
             lineItems: mapWorkingCopyLines(commercial.lines),
-            ownerName: extras?.ownerName || commercial.ownerUserId || "",
+            ownerName: extras?.ownerName || "",
             customerContact: extras?.customerContact,
             paymentTerms: commercial.paymentTerms,
             welfareScene: commercial.welfareScene,
@@ -553,7 +554,7 @@ export function mapRejectedProcurement(
         rejectedSubjectHash: conf.submission_id,
         rejectReasonCode: "",
         rejectComment: "",
-        rejectedByLabel: conf.handled_by ?? "",
+        rejectedByLabel: personDisplayName(conf.handled_by),
         rejectedAt: formatInstant(conf.handled_at),
         reviewStatus: "REJECTED",
         draftDifference: {
@@ -585,7 +586,7 @@ export function mapOpenProcurementRejection(
         rejectedSubjectHash: open.submission_id,
         rejectReasonCode: open.reject_reason_code ?? "",
         rejectComment: open.comment ?? "",
-        rejectedByLabel: open.handled_by ?? "",
+        rejectedByLabel: personDisplayName(open.handled_by_name),
         rejectedAt: formatInstant(open.handled_at),
         reviewStatus: "REJECTED",
         draftDifference: {

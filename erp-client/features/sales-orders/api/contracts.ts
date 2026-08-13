@@ -206,6 +206,7 @@ export type BackendOpenProcurementRejection = {
     reject_reason_code?: string | null
     comment?: string | null
     handled_by?: string | null
+    handled_by_name?: string | null
     handled_at?: number | null
 }
 

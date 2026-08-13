@@ -24,14 +24,13 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 mod dto;
+mod query;
+mod scope;
 
 pub use self::dto::{
-    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractRevisionView,
-    ContractView, CreateContractRequest, PageView, TerminateContractRequest,
+    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListScope,
+    ContractRevisionView, ContractView, CreateContractRequest, PageView, TerminateContractRequest,
 };
-
-/// 合同列表筛选条件类型（经 `ContractExt` 关联类型跨 crate 可达）。
-type ContractFilter = <mongodb::Database as ContractExt>::ContractFilter;
 
 /// 合同服务。
 ///
@@ -137,61 +136,6 @@ impl ContractService {
             .await?;
 
         Ok(contract.into())
-    }
-
-    /// 分页查询合同列表。
-    ///
-    /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
-    pub async fn contract_list(&self, params: &ContractListParams) -> Result<PageView<ContractView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let filter = ContractFilter {
-            contract_no: query.contract_no,
-            customer_id: query.customer_id,
-            status: query.status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
-        };
-        let page = self
-            .db
-            .contracts()
-            .search_contracts(&filter, &mut NoTransaction)
-            .await?;
-        // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
-        // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| ContractView {
-                id: row.id,
-                contract_no: row.contract_no,
-                customer_id: row.customer_id,
-                settlement_party_id: row.settlement_party_id,
-                status: row.status,
-                current_revision_id: row.current_revision_id,
-                created_at: row.created_at,
-                version: row.version,
-            })
-            .collect();
-
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
     }
 
     /// 查询合同详情（合同 + 全部不可变版本时间线）。

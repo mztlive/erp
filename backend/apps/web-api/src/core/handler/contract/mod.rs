@@ -34,15 +34,19 @@ use crate::{
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `user_id` - 当前登录用户，用于 `scope=assigned` 按客户归属收窄
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn contract_list(
     State(state): State<AppState>,
+    Extension(UserID(user_id)): Extension<UserID>,
     Query(params): Query<ContractListParams>,
 ) -> Result<PageView<ContractView>> {
-    let page = ContractService::new(state.db()).contract_list(&params).await?;
+    let page = ContractService::new(state.db())
+        .contract_list(&params, &user_id)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

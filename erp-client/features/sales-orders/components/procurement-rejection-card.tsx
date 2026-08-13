@@ -61,7 +61,11 @@ export function ProcurementRejectionCard({
                     <Fact label="原因" value={reasonLabel} />
                     <Fact
                         label="谁驳回 / 何时"
-                        value={`${rejection.rejectedByLabel} · ${rejection.rejectedAt}`}
+                        value={
+                            [rejection.rejectedByLabel, rejection.rejectedAt]
+                                .filter(Boolean)
+                                .join(" · ") || "—"
+                        }
                     />
                     <Fact
                         label="说明"

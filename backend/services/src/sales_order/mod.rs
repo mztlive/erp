@@ -22,6 +22,7 @@
 use mongodb::Database;
 
 mod command;
+mod draft_working_copy;
 mod dto;
 mod mapper;
 mod pricing;

@@ -119,8 +119,15 @@ export type CustomerSearch = EntitySearch &
         scope: "mine" | "collaborating" | "assigned" | "all_authorized"
     }>
 
+export type ContractCustomerScope = "assigned"
+
 export type ContractSearch = EntitySearch &
-    Readonly<{ customerId?: string; selectableOnly?: boolean }>
+    Readonly<{
+        customerId?: string
+        selectableOnly?: boolean
+        /** 仅当前账号有效归属客户下的合同；缺省不按归属收窄。 */
+        scope?: ContractCustomerScope
+    }>
 
 export type SellableSkuSearch = EntitySearch &
     Readonly<{ productKind?: string; excludeProductKind?: string }>
@@ -440,6 +447,7 @@ export async function searchContracts(
     const page = await apiGet<Page<ContractDto>>("/admin/contracts", {
         contract_no: input.query.trim() || undefined,
         customer_id: input.customerId || undefined,
+        scope: input.scope,
         status: input.selectableOnly ? "EFFECTIVE" : undefined,
         page: 1,
         page_size: OPTION_PAGE_SIZE,
@@ -451,14 +459,25 @@ export async function searchContracts(
 
 export async function fetchContractOption(
     contractId: string,
+    input: Pick<ContractSearch, "scope"> = {},
 ): Promise<ContractComboboxItem | null> {
     if (!contractId) return null
     try {
-        return contractItem(
-            await apiGet<ContractDto>(
-                `/admin/contracts/${encodeURIComponent(contractId)}`,
-            ),
+        const row = await apiGet<ContractDto>(
+            `/admin/contracts/${encodeURIComponent(contractId)}`,
         )
+        if (input.scope === "assigned") {
+            const page = await apiGet<Page<ContractDto>>("/admin/contracts", {
+                customer_id: row.customer_id,
+                scope: "assigned",
+                page: 1,
+                page_size: 1,
+            })
+            if (page.total <= 0) {
+                return null
+            }
+        }
+        return contractItem(row)
     } catch {
         return null
     }

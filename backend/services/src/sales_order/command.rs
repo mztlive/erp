@@ -155,7 +155,10 @@ impl SalesOrderService {
 
     /// 保存草稿（整表头覆盖 + 明细整批替换，乐观锁语义）。
     ///
-    /// 期望版本 `req.version` 与工作副本当前版本不一致时返回冲突（409）；
+    /// 采购/销售驳回后订单回到草稿，但首次提交工作副本已是 `Submitted` 终态时，
+    /// 会新开一份 `Editing` 副本，而不是返回「有效工作副本不存在」。
+    /// 已有有效副本时，`req.version` 必须与当前工作副本版本一致；新开副本不校验
+    /// 该版本（前端在无副本时会把销售单版本误当成草稿版本）。
     /// 行替换在事务内「软删旧行 + 写入新行」原子完成。
     ///
     /// # 参数
@@ -167,8 +170,8 @@ impl SalesOrderService {
     /// 返回保存后的工作副本视图。
     ///
     /// # 错误
-    /// * `NotFound` - 销售单或有效工作副本不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
+    /// * `NotFound` - 销售单不存在
+    /// * `ConflictError` - 非草稿，或已有副本但期望版本不一致
     pub async fn save_working_copy(
         &self,
         id: &str,
@@ -183,29 +186,20 @@ impl SalesOrderService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         let order_id = SalesOrderId::new(order.base.id.clone());
-        let mut working_copy = self
-            .db
-            .sales_order_working_copies()
-            .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("有效工作副本不存在".to_string()))?;
-        if working_copy.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
         self.ensure_sellable_draft_lines(&req.draft.lines).await?;
+        let (mut working_copy, stable, opened_new) = self
+            .load_or_reopen_first_submission_working_copy(&order, req.version, &req.draft, actor)
+            .await?;
+        if opened_new {
+            return self.working_copy_view(&working_copy).await;
+        }
 
         let snapshot = header_snapshot(&req.draft)?;
-        let stable_lines = self
-            .db
-            .sales_order_lines()
-            .list_lines_by_order(&order_id, &mut NoTransaction)
-            .await?;
+        let created_stable_lines = stable.created;
         let lines = build_working_copy_lines(
             &order_id,
             &working_copy.base.id.clone().into(),
-            &stable_lines,
+            &stable.all,
             &req.draft.lines,
         )?;
         let (gross, net, tax) = line_totals(&lines);
@@ -246,6 +240,7 @@ impl SalesOrderService {
         let db = self.db.clone();
         let client = db.client().clone();
         let lines_for_tx = lines.clone();
+        let created_stable_for_tx = created_stable_lines;
         let sellable_refs_for_tx = Self::sellable_working_copy_refs(&lines)?;
         let working_copy = client
             .with_transaction(move |session| {
@@ -253,6 +248,9 @@ impl SalesOrderService {
                     SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(&sellable_refs_for_tx, session)
                         .await?;
+                    for line in &created_stable_for_tx {
+                        db.sales_order_lines().create(line, session).await?;
+                    }
                     for mut old in old_lines {
                         db.sales_order_working_copy_lines()
                             .soft_delete(&mut old, session)
@@ -462,6 +460,15 @@ impl SalesOrderService {
     }
 
     /// 校验请求草稿中的实物及服务行仍引用公司商品池内的精确 SKU 修订。
+    ///
+    /// # 参数
+    /// * `lines` - 草稿行请求
+    ///
+    /// # 返回
+    /// 全部引用仍可销售时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一 `sku_id + sku_revision_id` 不再可销售时返回校验错误。
     async fn ensure_sellable_draft_lines(&self, lines: &[SalesOrderDraftLineRequest]) -> Result<()> {
         let refs = lines
             .iter()
@@ -472,13 +479,33 @@ impl SalesOrderService {
     }
 
     /// 提交前重新校验已保存工作副本的精确 SKU 修订资格。
+    ///
+    /// # 参数
+    /// * `lines` - 已保存工作副本行
+    ///
+    /// # 返回
+    /// 全部引用仍可销售时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 缺 SKU/修订或引用失效时返回校验错误。
     async fn ensure_sellable_working_copy_lines(&self, lines: &[SalesOrderWorkingCopyLine]) -> Result<()> {
         let refs = Self::sellable_working_copy_refs(lines)?;
         self.ensure_sellable_refs(&refs, &mut NoTransaction).await
     }
 
     /// 从工作副本行提取必须成对存在的销售 SKU 与修订引用。
-    fn sellable_working_copy_refs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<(String, String)>> {
+    ///
+    /// # 参数
+    /// * `lines` - 工作副本行
+    ///
+    /// # 返回
+    /// 返回 `(sku_id, sku_revision_id)` 列表。
+    ///
+    /// # 错误
+    /// 实物行缺少 SKU 或修订身份时返回校验错误。
+    pub(super) fn sellable_working_copy_refs(
+        lines: &[SalesOrderWorkingCopyLine],
+    ) -> Result<Vec<(String, String)>> {
         let refs = lines
             .iter()
             .filter(|line| line.line_type == LineType::GoodsService)
@@ -498,7 +525,17 @@ impl SalesOrderService {
     }
 
     /// 批量执行公司商品池资格校验并对缺失引用 fail-closed。
-    async fn ensure_sellable_refs(
+    ///
+    /// # 参数
+    /// * `refs` - `(sku_id, sku_revision_id)` 列表
+    /// * `executor` - 事务会话或 `NoTransaction`
+    ///
+    /// # 返回
+    /// 全部引用仍可销售时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一引用不在当日可销售集合中时返回校验错误。
+    pub(super) async fn ensure_sellable_refs(
         &self,
         refs: &[(String, String)],
         executor: &mut dyn Executor,

@@ -51,8 +51,8 @@ export const entitySelectorKeys = {
         [...entitySelectorKeys.all, "warehouse", "detail", id] as const,
     contract: (input: ContractSearch) =>
         [...entitySelectorKeys.all, "contract", input] as const,
-    contractDetail: (id: string) =>
-        [...entitySelectorKeys.all, "contract", "detail", id] as const,
+    contractDetail: (id: string, scope?: ContractSearch["scope"]) =>
+        [...entitySelectorKeys.all, "contract", "detail", id, scope] as const,
     salesOrder: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "sales-order", input] as const,
     salesOrderDetail: (id: string) =>
@@ -159,16 +159,23 @@ export function useWarehouseSelectorQuery(
 export function useContractSelectorQuery(
     input: ContractSearch,
     selectedId?: string,
+    options?: { enabled?: boolean },
 ) {
+    const enabled = options?.enabled ?? true
     const list = useQuery({
         queryKey: entitySelectorKeys.contract(input),
         queryFn: () => searchContracts(input),
         ...commonQueryOptions(),
+        enabled,
     })
     const selected = useQuery({
-        queryKey: entitySelectorKeys.contractDetail(selectedId ?? ""),
-        queryFn: () => fetchContractOption(selectedId ?? ""),
-        enabled: Boolean(selectedId),
+        queryKey: entitySelectorKeys.contractDetail(
+            selectedId ?? "",
+            input.scope,
+        ),
+        queryFn: () =>
+            fetchContractOption(selectedId ?? "", { scope: input.scope }),
+        enabled: enabled && Boolean(selectedId),
         staleTime: STALE_TIME,
     })
     return { list, selected }

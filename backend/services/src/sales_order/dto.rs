@@ -657,6 +657,8 @@ pub struct OpenProcurementRejectionView {
     pub comment: Option<String>,
     /// 采购处理人账号 ID。
     pub handled_by: Option<String>,
+    /// 采购处理人姓名；账号已不存在时为 `None`，前端不得回退展示 `handled_by`。
+    pub handled_by_name: Option<String>,
     /// 处理时间（秒级时间戳）。
     pub handled_at: Option<u64>,
 }

@@ -224,7 +224,9 @@ function rejectionBannerDetail(order: SalesOrderDetailView, canAct: boolean) {
         rejection.draftDifference.changedSalesPrice
     const parts = [
         `第 ${rejection.rejectedSubmissionNo} 次报给采购`,
-        `${rejection.rejectedByLabel} · ${rejection.rejectedAt}`,
+        [rejection.rejectedByLabel, rejection.rejectedAt]
+            .filter(Boolean)
+            .join(" · ") || null,
         rejection.estimatedCost ? `采购成本 ${rejection.estimatedCost}` : null,
         rejection.estimatedMarginPercent
             ? `预计毛利 ${rejection.estimatedMarginPercent}%`

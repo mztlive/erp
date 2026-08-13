@@ -51,8 +51,10 @@ pub struct ContractRow {
 pub struct ContractFilter {
     /// 合同编号（字面量正则，忽略大小写）；`None` 表示不筛选。
     pub contract_no: Option<String>,
-    /// 客户；`None` 表示不筛选。
+    /// 单个客户；`None` 表示不按单客户筛选。
     pub customer_id: Option<String>,
+    /// 多个客户（`$in`）；`None` 表示不按客户集合筛选，空向量匹配不到任何合同。
+    pub customer_ids: Option<Vec<String>>,
     /// 合同状态；`None` 表示不筛选。
     pub status: Option<ContractStatus>,
     /// 页码（1 起）。
@@ -68,14 +70,19 @@ pub struct ContractFilter {
 impl QueryFilter for ContractFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `customer_id` 与 `customer_ids` 同时存在时按交集收窄：请求客户不在集合内
+    /// 时写入空 `$in`，保证分页总数为 0 而不是退回全量合同。
+    ///
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "contract_no", self.contract_no.as_deref());
-        if let Some(customer_id) = &self.customer_id {
-            filter.insert("customer_id", customer_id);
-        }
+        insert_customer_filter(
+            &mut filter,
+            self.customer_id.as_deref(),
+            self.customer_ids.as_deref(),
+        );
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
@@ -308,6 +315,40 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     doc! { sort_by.unwrap_or("created_at"): direction }
 }
 
+/// 写入客户精确匹配或 `$in` 集合条件。
+///
+/// # 参数
+/// * `filter` - 正在组装的查询文档
+/// * `customer_id` - 单个客户；`None` 表示未指定
+/// * `customer_ids` - 可见客户集合；`None` 表示不按集合收窄
+///
+/// # 返回
+/// 无。条件直接写入 `filter`。
+///
+/// # 错误
+/// 无。
+///
+/// # 约束
+/// 两者同时存在时取交集；请求客户不在集合内时写入空 `$in`。
+fn insert_customer_filter(filter: &mut Document, customer_id: Option<&str>, customer_ids: Option<&[String]>) {
+    match (customer_id, customer_ids) {
+        (None, None) => {}
+        (Some(customer_id), None) => {
+            filter.insert("customer_id", customer_id);
+        }
+        (None, Some(customer_ids)) => {
+            filter.insert("customer_id", doc! { "$in": customer_ids });
+        }
+        (Some(customer_id), Some(customer_ids)) => {
+            if customer_ids.iter().any(|id| id == customer_id) {
+                filter.insert("customer_id", customer_id);
+            } else {
+                filter.insert("customer_id", doc! { "$in": Vec::<String>::new() });
+            }
+        }
+    }
+}
+
 /// 合同列表投影字段。
 ///
 /// # 返回
@@ -336,6 +377,7 @@ mod tests {
         let filter = ContractFilter {
             contract_no: Some("HT-2026".to_string()),
             customer_id: Some("cust-1".to_string()),
+            customer_ids: None,
             status: Some(entities::contract::ContractStatus::Effective),
             page: 1,
             page_size: 20,
@@ -362,6 +404,7 @@ mod tests {
         let filter = ContractFilter {
             contract_no: None,
             customer_id: None,
+            customer_ids: None,
             status: None,
             page: 1,
             page_size: 20,
@@ -370,6 +413,41 @@ mod tests {
         };
 
         assert_eq!(filter.to_doc(), doc! { "deleted_at": 0_i64 });
+    }
+
+    #[test]
+    fn contract_filter_customer_ids_use_in_and_intersect_with_single_id() {
+        let in_scope = ContractFilter {
+            contract_no: None,
+            customer_id: None,
+            customer_ids: Some(vec!["cust-1".to_string(), "cust-2".to_string()]),
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        assert_eq!(
+            in_scope.to_doc().get_document("customer_id").unwrap(),
+            &doc! { "$in": ["cust-1", "cust-2"] }
+        );
+
+        let hit = ContractFilter {
+            customer_id: Some("cust-2".to_string()),
+            customer_ids: Some(vec!["cust-1".to_string(), "cust-2".to_string()]),
+            ..in_scope.clone()
+        };
+        assert_eq!(hit.to_doc().get_str("customer_id").unwrap(), "cust-2");
+
+        let miss = ContractFilter {
+            customer_id: Some("cust-9".to_string()),
+            customer_ids: Some(vec!["cust-1".to_string()]),
+            ..in_scope
+        };
+        assert_eq!(
+            miss.to_doc().get_document("customer_id").unwrap(),
+            &doc! { "$in": Vec::<String>::new() }
+        );
     }
 
     #[test]
