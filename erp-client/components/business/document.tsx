@@ -66,6 +66,10 @@ interface DocumentHeaderProps extends Omit<
      * default：正式单据阅读态，保留更大标题与状态轨留白。
      */
     density?: DocumentHeaderDensity
+    /**
+     * 身份卡内补充区：金额摘要等，渲染在状态轨下方，不另开一张卡。
+     */
+    children?: React.ReactNode
 }
 
 function DocumentHeader({
@@ -79,6 +83,7 @@ function DocumentHeader({
     secondaryActions,
     density = "default",
     className,
+    children,
     ...props
 }: DocumentHeaderProps) {
     const hasActions = primaryAction != null || secondaryActions != null
@@ -189,6 +194,17 @@ function DocumentHeader({
                             />
                         </div>
                     ))}
+                </div>
+            ) : null}
+
+            {children ? (
+                <div
+                    className={cn(
+                        "border-t border-border/30",
+                        compact ? "mt-2.5 pt-2.5" : "mt-4 pt-4",
+                    )}
+                >
+                    {children}
                 </div>
             ) : null}
         </header>

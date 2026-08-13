@@ -8,10 +8,7 @@ import { useAppForm } from "@/components/form"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
-    DialogHeader,
-    DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 
@@ -61,12 +58,6 @@ export function VoidSalesOrderDialog({
                 }}
             >
                 <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>作废本单</DialogTitle>
-                        <DialogDescription>
-                            作废后不能恢复。采购驳回与历史记录会保留备查。
-                        </DialogDescription>
-                    </DialogHeader>
                     <form
                         className="space-y-3"
                         onSubmit={(event) => {

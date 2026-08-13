@@ -12,12 +12,8 @@ import {
 
 import {
     BusinessFailureState,
-    DocumentHeader,
     FormalActionConfirmDialog,
     FormalActionResult,
-    MetricItem,
-    MetricStrip,
-    MoneyValue,
     PageActions,
     PageHeader,
     PageScaffold,
@@ -34,19 +30,18 @@ import {
     useSalesOrderDraftResumeQuery,
     useStartSalesChangeOrderMutation,
 } from "@/features/sales-orders/queries"
-import {
-    NATURE_LABEL,
-    PROCUREMENT_REJECT_REASON_LABEL,
-} from "@/features/sales-orders/labels"
+import { PROCUREMENT_REJECT_REASON_LABEL } from "@/features/sales-orders/labels"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api"
 import { SalesOrderCreateForm } from "@/features/sales-orders/sales-order-create-page"
 import { VoidSalesOrderDialog } from "@/features/sales-orders/void-sales-order-dialog"
 import {
     CollaborationPanel,
+    FocusTaskBanner,
     FulfillmentPanel,
     LifecycleRail,
     OverviewPanel,
     ReceivablePanel,
+    SalesOrderIdentityHeader,
     VersionsPanel,
     navItemsFor,
 } from "@/features/sales-orders/sales-order-detail-panels"
@@ -64,22 +59,9 @@ import {
     type NavSectionId,
     type WorkSectionId,
 } from "@/features/sales-orders/sales-order-detail-model"
-import { sumFixed } from "@/lib/fixed-decimal"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
-
-function remainingReceivable(gross: string, received: string) {
-    try {
-        return sumFixed([gross, `-${received}`], {
-            maxScale: 2,
-            outputScale: 2,
-            allowNegative: true,
-        })
-    } catch {
-        return gross
-    }
-}
 
 export function SalesOrderDetailPage({
     salesOrderId,
@@ -289,10 +271,6 @@ export function SalesOrderDetailPage({
             from: fromWorkspace,
         }),
     )
-    const receivableLeft = remainingReceivable(
-        order.amountGross,
-        order.receivedAmount,
-    )
     const visibleNav = navItemsFor(order).filter((item) => item.show)
 
     const openRejection = isOpenProcurementRejection(order)
@@ -311,6 +289,14 @@ export function SalesOrderDetailPage({
                 {actionableFocusTask.actionLabel}
             </Button>
         ) : null
+    const bannerJump =
+        focusTask &&
+        !primaryTaskAction &&
+        ((focusTask.id === "versions" && navSection !== "versions") ||
+            (focusTask.id === "procurement-rejection" &&
+                navSection !== "overview") ||
+            (focusTask.id === "approval" && !showApproval) ||
+            (focusTask.id === "acceptance" && !acceptanceExpanded))
 
     const handleVoidAfterRejection = async (reason: string) => {
         try {
@@ -397,205 +383,105 @@ export function SalesOrderDetailPage({
                 }
             />
 
+            {focusTask ? (
+                <FocusTaskBanner
+                    order={order}
+                    focusTask={focusTask}
+                    canActOnRejection={canResubmit || canVoid}
+                    action={
+                        bannerJump ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => selectSection(focusTask.id)}
+                            >
+                                {focusTask.actionLabel}
+                            </Button>
+                        ) : undefined
+                    }
+                />
+            ) : null}
+
+            {result ? (
+                <FormalActionResult
+                    status={result.status}
+                    title={result.title}
+                    description={result.description}
+                    reference={result.reference}
+                    facts={[
+                        {
+                            label: "销售单",
+                            value: order.documentNumber,
+                        },
+                        { label: "客户", value: order.customerName },
+                        ...(result.nextResponsible
+                            ? [
+                                  {
+                                      label: "下一步",
+                                      value: result.nextResponsible,
+                                  },
+                              ]
+                            : []),
+                    ]}
+                />
+            ) : null}
+
+            <SalesOrderIdentityHeader
+                order={order}
+                primaryAction={primaryTaskAction}
+                secondaryActions={
+                    <div className="flex flex-wrap items-center gap-2">
+                        {openRejection && canVoid ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setVoidOpen(true)}
+                            >
+                                <BanIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                作废
+                            </Button>
+                        ) : null}
+                        {!openRejection ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={
+                                    !canStartChange || changeMutation.isPending
+                                }
+                                title={
+                                    !canStartChange
+                                        ? (changeBlocker?.reason ??
+                                          order.commercialReadOnlyReason ??
+                                          "当前不能改单")
+                                        : undefined
+                                }
+                                onClick={() => setChangeConfirmOpen(true)}
+                            >
+                                <FilePenLineIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                发起改单
+                            </Button>
+                        ) : null}
+                    </div>
+                }
+            />
+
             <div
                 className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
             >
-                <DocumentHeader
-                    density="compact"
-                    className="rounded-none border-0 border-b border-border/30 shadow-none"
-                    title={order.customerName}
-                    documentNumber={order.documentNumber}
-                    version={order.version}
-                    primaryStatus={order.primaryStatus}
-                    meta={
-                        <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                            <Badge variant="secondary" className="font-normal">
-                                {NATURE_LABEL[order.nature]}
-                            </Badge>
-                            <span aria-hidden="true">·</span>
-                            <span>
-                                负责人{" "}
-                                <span className="font-medium text-foreground">
-                                    {order.ownerName}
-                                </span>
-                            </span>
-                        </span>
-                    }
-                    secondaryActions={
-                        <div className="flex flex-wrap items-center gap-2">
-                            {openRejection && canVoid ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setVoidOpen(true)}
-                                >
-                                    <BanIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    作废
-                                </Button>
-                            ) : null}
-                            {!openRejection ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={
-                                        !canStartChange ||
-                                        changeMutation.isPending
-                                    }
-                                    title={
-                                        !canStartChange
-                                            ? (changeBlocker?.reason ??
-                                              order.commercialReadOnlyReason ??
-                                              "当前不能改单")
-                                            : undefined
-                                    }
-                                    onClick={() => setChangeConfirmOpen(true)}
-                                >
-                                    <FilePenLineIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    发起改单
-                                </Button>
-                            ) : null}
-                        </div>
-                    }
-                    primaryAction={primaryTaskAction}
-                />
-
-                {result ? (
-                    <div className="border-b border-border/30 px-3 py-3 md:px-4">
-                        <FormalActionResult
-                            status={result.status}
-                            title={result.title}
-                            description={result.description}
-                            reference={result.reference}
-                            facts={[
-                                {
-                                    label: "销售单",
-                                    value: order.documentNumber,
-                                },
-                                { label: "客户", value: order.customerName },
-                                ...(result.nextResponsible
-                                    ? [
-                                          {
-                                              label: "下一步",
-                                              value: result.nextResponsible,
-                                          },
-                                      ]
-                                    : []),
-                            ]}
-                        />
-                    </div>
-                ) : null}
-
-                <div className="border-b border-border/30 py-2.5">
+                <div className="border-b border-border/30 px-3 py-2 md:px-4">
                     <LifecycleRail order={order} />
                 </div>
 
-                {focusTask &&
-                (focusTask.id === "versions" ||
-                    (focusTask.id === "procurement-rejection" &&
-                        navSection !== "overview")) ? (
-                    <Alert variant="warning" className="mx-3 mt-3 md:mx-4">
-                        <ShieldAlertIcon aria-hidden="true" />
-                        <AlertTitle>{focusTask.title}</AlertTitle>
-                        <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <span>{focusTask.description}</span>
-                            {focusTask.id === "versions" &&
-                            navSection !== "versions" ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    className="shrink-0 self-start"
-                                    onClick={() => selectSection("versions")}
-                                >
-                                    {focusTask.actionLabel}
-                                </Button>
-                            ) : null}
-                            {focusTask.id === "procurement-rejection" ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    className="shrink-0 self-start"
-                                    onClick={() =>
-                                        selectSection("procurement-rejection")
-                                    }
-                                >
-                                    {focusTask.actionLabel}
-                                </Button>
-                            ) : null}
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-
-                <MetricStrip
-                    columns={4}
-                    density="compact"
-                    className="px-3 py-3 md:px-4"
-                    aria-label="销售单金额摘要"
-                >
-                    <MetricItem
-                        density="compact"
-                        className="border-0 bg-muted/40"
-                        label="成交金额（含税）"
-                        value={
-                            <MoneyValue
-                                value={order.amountGross}
-                                taxBasis="gross"
-                            />
-                        }
-                    />
-                    <MetricItem
-                        density="compact"
-                        className="border-0 bg-muted/40"
-                        label="已回款"
-                        value={
-                            <MoneyValue
-                                value={order.receivedAmount}
-                                taxBasis="gross"
-                            />
-                        }
-                        detail={order.collection.label}
-                        detailMode="inline"
-                    />
-                    <MetricItem
-                        density="compact"
-                        className="border-0 bg-muted/40"
-                        label="待回款"
-                        value={
-                            <MoneyValue
-                                value={receivableLeft}
-                                taxBasis="gross"
-                            />
-                        }
-                        detail={
-                            order.closeEligibility.receivableSettled
-                                ? "已收齐"
-                                : undefined
-                        }
-                        detailMode="inline"
-                    />
-                    <MetricItem
-                        density="compact"
-                        className="border-0 bg-muted/40"
-                        label="已开票"
-                        value={
-                            <MoneyValue
-                                value={order.invoicedAmount}
-                                taxBasis="gross"
-                            />
-                        }
-                        detail="开票不挡结案"
-                        detailMode="tooltip"
-                    />
-                </MetricStrip>
-
                 <Tabs
+                    className="gap-1"
                     value={navSection}
                     onValueChange={(next) => {
                         const target = next as NavSectionId
@@ -605,7 +491,7 @@ export function SalesOrderDetailPage({
                 >
                     <TabsList
                         variant="line"
-                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-t border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
+                        className="sticky top-0 z-10 h-11 w-full justify-start gap-1 overflow-visible rounded-none border-b border-border/30 bg-card/95 px-3 group-data-horizontal/tabs:h-11 backdrop-blur supports-backdrop-filter:bg-card/80"
                     >
                         {visibleNav.map((item) => {
                             const todoOnFulfillment =
@@ -617,7 +503,8 @@ export function SalesOrderDetailPage({
                                 <TabsTrigger
                                     key={item.id}
                                     value={item.id}
-                                    className="flex-none"
+                                    title={item.hint}
+                                    className="h-full flex-none px-2 pb-2 leading-5 after:bottom-0"
                                 >
                                     {item.label}
                                     {todoOnFulfillment || changeOnVersions ? (
@@ -645,11 +532,8 @@ export function SalesOrderDetailPage({
                     >
                         <OverviewPanel
                             order={order}
-                            focusTask={focusTask}
-                            selfReturn={selfReturn}
                             showApproval={showApproval}
                             onApprovalResult={setResult}
-                            canActOnRejection={canResubmit || canVoid}
                         />
                     </TabsContent>
 
@@ -853,58 +737,20 @@ function SalesOrderEditableCenter({
                 }
             />
 
-            <DocumentHeader
-                density="compact"
-                title={order.customerName}
-                documentNumber={order.documentNumber}
-                version={order.version}
-                primaryStatus={order.primaryStatus}
-                meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <Badge variant="secondary" className="font-normal">
-                            {NATURE_LABEL[order.nature]}
-                        </Badge>
-                        <span aria-hidden="true">·</span>
-                        <span>
-                            负责人{" "}
-                            <span className="font-medium text-foreground">
-                                {order.ownerName}
-                            </span>
-                        </span>
-                    </span>
-                }
-                secondaryActions={
-                    openRejection && canVoid ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setVoidOpen(true)}
-                        >
-                            <BanIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            作废
-                        </Button>
-                    ) : undefined
-                }
-            />
-
             {openRejection && rejection ? (
-                <Alert variant="warning">
+                <Alert variant="warning" className="rounded-lg px-3 py-2">
                     <ShieldAlertIcon aria-hidden="true" />
-                    <AlertTitle>采购未通过</AlertTitle>
-                    <AlertDescription>
-                        {reasonLabel}
-                        {rejection.rejectComment
-                            ? ` · ${rejection.rejectComment}`
-                            : ""}
-                        <span className="mt-1 block text-xs">
-                            {rejection.rejectedByLabel} · {rejection.rejectedAt}
-                            {" · "}第 {rejection.rejectedSubmissionNo}{" "}
-                            次报给采购。改完整单后再报，或点「作废」。也可返回详情。
-                        </span>
+                    <AlertTitle className="text-sm">采购未通过</AlertTitle>
+                    <AlertDescription className="text-xs [&_p]:mb-0">
+                        {[
+                            reasonLabel,
+                            rejection.rejectComment || null,
+                            `${rejection.rejectedByLabel} · ${rejection.rejectedAt}`,
+                            `第 ${rejection.rejectedSubmissionNo} 次报给采购`,
+                            "改完整单后再报，或点「作废」",
+                        ]
+                            .filter(Boolean)
+                            .join(" · ")}
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -929,6 +775,26 @@ function SalesOrderEditableCenter({
                     ]}
                 />
             ) : null}
+
+            <SalesOrderIdentityHeader
+                order={order}
+                secondaryActions={
+                    openRejection && canVoid ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setVoidOpen(true)}
+                        >
+                            <BanIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            作废
+                        </Button>
+                    ) : undefined
+                }
+            />
 
             {resumeQuery.isPending ? (
                 <div

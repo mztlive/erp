@@ -5,19 +5,27 @@ import Link from "next/link"
 import {
     CheckIcon,
     CircleDashedIcon,
+    InfoIcon,
     PackageIcon,
+    ShieldAlertIcon,
     WalletIcon,
 } from "lucide-react"
 
 import {
+    DocumentHeader,
     DocumentSection,
-    DocumentSummary,
     MoneyValue,
     surfaceInsetClassName,
 } from "@/components/business"
 import { welfareScenarioLabel } from "@/lib/business-options"
+import {
+    Alert,
+    AlertAction,
+    AlertDescription,
+    AlertTitle,
+} from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Tooltip,
     TooltipContent,
@@ -26,12 +34,14 @@ import {
 } from "@/components/ui/tooltip"
 import { AcceptanceWorkspace } from "@/features/sales-orders/acceptance-workspace"
 import { CardSalesApprovalPanel } from "@/features/sales-orders/card-sales-approval-panel"
-import { CloseConditionsCard } from "@/features/sales-orders/close-conditions-card"
-import { ProcurementRejectionCard } from "@/features/sales-orders/procurement-rejection-card"
 import { RevisionHistoryCard } from "@/features/sales-orders/revision-history-card"
 import { SalesOrderCollaborationCard } from "@/features/execution-projections/collaboration-card"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api"
-import { stageDueDisplay } from "@/features/sales-orders/labels"
+import {
+    NATURE_LABEL,
+    ORIGIN_LABEL,
+    stageDueDisplay,
+} from "@/features/sales-orders/labels"
 import {
     fulfillmentWorkspaceHref,
     isOpenProcurementRejection,
@@ -43,14 +53,200 @@ import {
     type LifecycleStep,
     type NavSectionId,
 } from "@/features/sales-orders/sales-order-detail-model"
+import { sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
+
+function remainingReceivable(gross: string, received: string) {
+    try {
+        return sumFixed([gross, `-${received}`], {
+            maxScale: 2,
+            outputScale: 2,
+            allowNegative: true,
+        })
+    } catch {
+        return gross
+    }
+}
+
+export function SalesOrderIdentityHeader({
+    order,
+    primaryAction,
+    secondaryActions,
+}: {
+    order: SalesOrderDetailView
+    primaryAction?: React.ReactNode
+    secondaryActions?: React.ReactNode
+}) {
+    return (
+        <DocumentHeader
+            density="compact"
+            title={order.customerName}
+            documentNumber={order.documentNumber}
+            version={order.version}
+            primaryStatus={order.primaryStatus}
+            statuses={[
+                {
+                    id: "fulfillment",
+                    label: "履约",
+                    status: order.fulfillment,
+                },
+                {
+                    id: "collection",
+                    label: "回款",
+                    status: order.collection,
+                },
+                {
+                    id: "invoicing",
+                    label: "开票",
+                    status: order.invoicing,
+                },
+            ]}
+            meta={
+                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                    <Badge variant="secondary" className="font-normal">
+                        {NATURE_LABEL[order.nature]}
+                    </Badge>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                        负责人{" "}
+                        <span className="font-medium text-foreground">
+                            {order.ownerName}
+                        </span>
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{ORIGIN_LABEL[order.originSystem]}</span>
+                </span>
+            }
+            primaryAction={primaryAction}
+            secondaryActions={secondaryActions}
+        >
+            <SalesOrderAmountSummary order={order} />
+        </DocumentHeader>
+    )
+}
+
+function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
+    const receivableLeft = remainingReceivable(
+        order.amountGross,
+        order.receivedAmount,
+    )
+
+    return (
+        <dl
+            className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-4"
+            aria-label="销售单金额摘要"
+        >
+            <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">
+                    成交金额（含税）
+                </dt>
+                <dd className="mt-0.5 text-sm font-semibold">
+                    <MoneyValue value={order.amountGross} taxBasis="gross" />
+                </dd>
+            </div>
+            <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">已回款</dt>
+                <dd className="mt-0.5 text-sm font-semibold">
+                    <MoneyValue value={order.receivedAmount} taxBasis="gross" />
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        {order.collection.label}
+                    </span>
+                </dd>
+            </div>
+            <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">待回款</dt>
+                <dd className="mt-0.5 text-sm font-semibold">
+                    <MoneyValue value={receivableLeft} taxBasis="gross" />
+                    {order.closeEligibility.receivableSettled ? (
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                            已收齐
+                        </span>
+                    ) : null}
+                </dd>
+            </div>
+            <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">已开票</dt>
+                <dd className="mt-0.5 text-sm font-semibold">
+                    <MoneyValue value={order.invoicedAmount} taxBasis="gross" />
+                </dd>
+            </div>
+        </dl>
+    )
+}
+
+export function FocusTaskBanner({
+    order,
+    focusTask,
+    action,
+    canActOnRejection = false,
+}: {
+    order: SalesOrderDetailView
+    focusTask: FocusTask
+    action?: React.ReactNode
+    canActOnRejection?: boolean
+}) {
+    const due = stageDueDisplay(order)
+    const Icon = focusTask.tone === "warning" ? ShieldAlertIcon : InfoIcon
+    const detail = [
+        focusTask.description,
+        focusTask.id === "procurement-rejection"
+            ? rejectionBannerDetail(order, canActOnRejection)
+            : null,
+        `责任人 ${nextStepOwner(order)}`,
+        due ? `时限 ${due.label}` : null,
+    ]
+        .filter(Boolean)
+        .join(" · ")
+
+    return (
+        <Alert
+            variant={focusTask.tone === "warning" ? "warning" : "info"}
+            className="rounded-lg px-3 py-2"
+        >
+            <Icon aria-hidden="true" />
+            <AlertTitle className="text-sm">
+                现在要处理 · {focusTask.title}
+            </AlertTitle>
+            {action ? <AlertAction>{action}</AlertAction> : null}
+            <AlertDescription className="text-xs [&_p]:mb-0">
+                {detail}
+            </AlertDescription>
+        </Alert>
+    )
+}
+
+function rejectionBannerDetail(order: SalesOrderDetailView, canAct: boolean) {
+    const rejection = order.procurementRejection
+    if (!rejection || !isOpenProcurementRejection(order)) return ""
+
+    const changedCommercial =
+        rejection.draftDifference.changedItemOrService ||
+        rejection.draftDifference.changedSalesPrice
+    const parts = [
+        `第 ${rejection.rejectedSubmissionNo} 次报给采购`,
+        `${rejection.rejectedByLabel} · ${rejection.rejectedAt}`,
+        rejection.estimatedCost ? `采购成本 ${rejection.estimatedCost}` : null,
+        rejection.estimatedMarginPercent
+            ? `预计毛利 ${rejection.estimatedMarginPercent}%`
+            : null,
+        changedCommercial
+            ? "商品或价格已有改动，用页头「改完再报」核对整单"
+            : "还没改商品或价格，改完后才能再报",
+        canAct ? null : "当前账号不能改这张单，也不能作废",
+    ]
+    return parts.filter(Boolean).join(" · ")
+}
+
+export function SectionLead({ children }: { children: React.ReactNode }) {
+    return <p className="mb-2 text-xs text-muted-foreground">{children}</p>
+}
 
 export function LifecycleRail({ order }: { order: SalesOrderDetailView }) {
     const rail = lifecycleSteps(order)
 
     if (rail.voided) {
         return (
-            <p className="px-3 text-sm text-muted-foreground md:px-4">
+            <p className="text-xs text-muted-foreground">
                 本单已作废，不再进入履约或结案。
             </p>
         )
@@ -59,18 +255,29 @@ export function LifecycleRail({ order }: { order: SalesOrderDetailView }) {
     return (
         <TooltipProvider>
             <ol
-                className="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-3 md:px-4"
+                className="flex w-full items-center"
                 aria-label="销售单生命周期"
             >
                 {rail.steps.map((step, index) => (
-                    <li key={step.id} className="flex items-center gap-1">
-                        {index > 0 ? (
+                    <li
+                        key={step.id}
+                        className={cn(
+                            "flex min-w-0 items-center",
+                            index < rail.steps.length - 1 && "flex-1",
+                        )}
+                    >
+                        <RailNode step={step} />
+                        {index < rail.steps.length - 1 ? (
                             <span
                                 aria-hidden="true"
-                                className="mx-0.5 h-px w-3 bg-border sm:w-5"
+                                className={cn(
+                                    "mx-1 h-px min-w-4 flex-1",
+                                    step.state === "done"
+                                        ? "bg-success/50"
+                                        : "bg-border",
+                                )}
                             />
                         ) : null}
-                        <RailNode step={step} />
                     </li>
                 ))}
             </ol>
@@ -82,9 +289,9 @@ function RailNode({ step }: { step: LifecycleStep }) {
     const node = (
         <span
             className={cn(
-                "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs",
+                "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs",
                 step.state === "current" &&
-                    "bg-accent font-medium text-foreground",
+                    "bg-accent font-medium text-foreground ring-1 ring-primary/15",
                 step.state === "done" && "text-muted-foreground",
                 step.state === "todo" && "text-muted-foreground/70",
             )}
@@ -128,79 +335,61 @@ function RailNode({ step }: { step: LifecycleStep }) {
     )
 }
 
-export function NextStepCard({
-    order,
-    focusTask,
-}: {
-    order: SalesOrderDetailView
-    focusTask: FocusTask | null
-}) {
-    const due = stageDueDisplay(order)
-
-    return (
-        <div className={cn(surfaceInsetClassName, "space-y-2 px-3 py-3")}>
-            <div className="flex items-start justify-between gap-2">
-                <h3 className="text-sm font-medium">
-                    {focusTask?.title ?? "当前进度"}
-                </h3>
-                <StatusBadge
-                    tone={order.primaryStatus.tone}
-                    label={order.primaryStatus.label}
-                />
-            </div>
-            <p className="text-xs text-muted-foreground">
-                {focusTask?.description ??
-                    "当前不需要你操作，可以在这里看到进度。"}
-            </p>
-            <dl className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                    <dt className="text-muted-foreground">责任人</dt>
-                    <dd className="mt-0.5 text-foreground">
-                        {nextStepOwner(order)}
-                    </dd>
-                </div>
-                <div>
-                    <dt className="text-muted-foreground">时限</dt>
-                    <dd className="num mt-0.5 text-foreground">
-                        {due ? due.label : "未设置"}
-                    </dd>
-                </div>
-            </dl>
-        </div>
-    )
-}
+const RELATED_LANE_COPY = {
+    purchase: {
+        label: "采购单",
+        hint: "供应商是否已接单、能否交付",
+        actionLabel: "打开采购",
+    },
+    fulfillment: {
+        label: "交付",
+        hint: "发货、直发或服务执行",
+        actionLabel: "打开交付",
+    },
+    receipt: {
+        label: "回款",
+        hint: "登记回款并核销到本单",
+        actionLabel: "打开往来",
+    },
+    invoice: {
+        label: "开票",
+        hint: "开票单独看，不挡结案",
+        actionLabel: "打开往来",
+    },
+} as const
 
 function RelatedLane({
-    label,
+    lane,
     count,
     status,
     href,
-    actionLabel,
 }: {
-    label: string
+    lane: keyof typeof RELATED_LANE_COPY
     count: number
     status: string
     href: string
-    actionLabel: string
 }) {
+    const copy = RELATED_LANE_COPY[lane]
     return (
-        <li className="flex items-center justify-between gap-3 py-2">
+        <li className="flex items-center justify-between gap-3 py-2.5">
             <div className="min-w-0">
-                <div className="text-sm">
-                    {label}
-                    <span className="num ml-1.5 text-muted-foreground">
-                        {count}
+                <div className="text-sm font-medium">
+                    {copy.label}
+                    <span className="num ml-1.5 font-normal text-muted-foreground">
+                        {count} 笔
                     </span>
                 </div>
-                <div className="text-xs text-muted-foreground">{status}</div>
+                <div className="text-xs text-muted-foreground">
+                    {copy.hint} · {status}
+                </div>
             </div>
             <Button
                 type="button"
-                size="xs"
-                variant="outline"
+                size="sm"
+                variant="secondary"
                 render={<Link href={href} />}
             >
-                {actionLabel}
+                {copy.actionLabel}
             </Button>
         </li>
     )
@@ -220,11 +409,10 @@ export function RelatedLanes({
         items.push(
             <RelatedLane
                 key="purchase"
-                label="采购单"
+                lane="purchase"
                 count={order.related.purchaseOrders}
                 status={order.fulfillment.label}
                 href={purchaseOrdersWorkspaceHref(order, selfReturn)}
-                actionLabel="打开采购"
             />,
         )
     }
@@ -232,11 +420,10 @@ export function RelatedLanes({
         items.push(
             <RelatedLane
                 key="fulfillment"
-                label="交付"
+                lane="fulfillment"
                 count={order.related.fulfillments}
                 status={order.fulfillment.label}
                 href={fulfillmentWorkspaceHref(order, selfReturn)}
-                actionLabel="打开交付"
             />,
         )
     }
@@ -244,11 +431,10 @@ export function RelatedLanes({
         items.push(
             <RelatedLane
                 key="receipt"
-                label="回款"
+                lane="receipt"
                 count={order.related.receipts}
                 status={order.collection.label}
                 href={receivableWorkspaceHref(order, selfReturn)}
-                actionLabel="打开往来"
             />,
         )
     }
@@ -256,15 +442,33 @@ export function RelatedLanes({
         items.push(
             <RelatedLane
                 key="invoice"
-                label="开票"
+                lane="invoice"
                 count={order.related.invoices}
                 status={order.invoicing.label}
                 href={receivableWorkspaceHref(order, selfReturn)}
-                actionLabel="打开往来"
             />,
         )
     }
     return <ul className="divide-y divide-border/30">{items}</ul>
+}
+
+function OverviewField({
+    label,
+    value,
+    numeric,
+}: {
+    label: string
+    value: React.ReactNode
+    numeric?: boolean
+}) {
+    return (
+        <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className={cn("mt-0.5 truncate text-sm", numeric && "num")}>
+                {value}
+            </dd>
+        </div>
+    )
 }
 
 export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
@@ -274,16 +478,18 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
             <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-left">
                     <tr>
-                        <th className="px-3 py-2 font-medium">项目</th>
-                        <th className="px-3 py-2 font-medium">数量</th>
+                        <th className="px-3 py-1.5 font-medium">项目</th>
+                        <th className="px-3 py-1.5 font-medium">数量</th>
                         {isCard ? (
-                            <th className="px-3 py-2 font-medium">
+                            <th className="px-3 py-1.5 font-medium">
                                 面额 / 形态
                             </th>
                         ) : (
-                            <th className="px-3 py-2 font-medium">交付方式</th>
+                            <th className="px-3 py-1.5 font-medium">
+                                交付方式
+                            </th>
                         )}
-                        <th className="px-3 py-2 font-medium text-right">
+                        <th className="px-3 py-1.5 font-medium text-right">
                             含税金额
                         </th>
                     </tr>
@@ -291,7 +497,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                 <tbody>
                     {order.lineItems.map((line) => (
                         <tr key={line.id} className="border-t border-border/30">
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-1.5">
                                 <div>{line.name}</div>
                                 {line.sku ? (
                                     <div className="num text-xs text-muted-foreground">
@@ -299,11 +505,11 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                     </div>
                                 ) : null}
                             </td>
-                            <td className="num px-3 py-2">
+                            <td className="num px-3 py-1.5">
                                 {line.quantity} {line.unit}
                             </td>
                             {isCard ? (
-                                <td className="px-3 py-2 text-sm">
+                                <td className="px-3 py-1.5 text-sm">
                                     {line.faceValue ? (
                                         <MoneyValue value={line.faceValue} />
                                     ) : (
@@ -316,7 +522,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                     ) : null}
                                 </td>
                             ) : (
-                                <td className="px-3 py-2 text-sm text-muted-foreground">
+                                <td className="px-3 py-1.5 text-sm text-muted-foreground">
                                     <div>{line.fulfillmentMode ?? "—"}</div>
                                     {line.dueDate ? (
                                         <div className="num mt-0.5 text-xs">
@@ -325,7 +531,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                     ) : null}
                                 </td>
                             )}
-                            <td className="px-3 py-2 text-right">
+                            <td className="px-3 py-1.5 text-right">
                                 <MoneyValue
                                     value={line.amountGross}
                                     taxBasis="gross"
@@ -341,15 +547,10 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
 
 export function OverviewPanel({
     order,
-    focusTask,
-    selfReturn,
     showApproval,
     onApprovalResult,
-    canActOnRejection = false,
 }: {
     order: SalesOrderDetailView
-    focusTask: FocusTask | null
-    selfReturn: string
     showApproval: boolean
     onApprovalResult?: (result: {
         status: "succeeded" | "blocked" | "rejected"
@@ -358,106 +559,58 @@ export function OverviewPanel({
         reference: string
         nextResponsible?: string
     }) => void
-    canActOnRejection?: boolean
 }) {
     const isCard = order.nature === "card_voucher"
-    const openRejection =
-        isOpenProcurementRejection(order) && order.procurementRejection
 
     return (
-        <div className="space-y-6">
-            {openRejection ? (
-                <ProcurementRejectionCard
+        <div className="space-y-4">
+            {showApproval && order.activeCardSalesApproval ? (
+                <CardSalesApprovalPanel
                     order={order}
-                    rejection={openRejection}
-                    canAct={canActOnRejection}
+                    approval={order.activeCardSalesApproval}
+                    onResult={onApprovalResult}
                 />
             ) : null}
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
-                <aside className="order-first space-y-4 xl:order-last xl:sticky xl:top-14 xl:self-start">
-                    <NextStepCard
-                        order={order}
-                        focusTask={openRejection ? null : focusTask}
-                    />
-                    <CloseConditionsCard order={order} />
-                    <div>
-                        <h3 className="mb-1 text-sm font-medium">相关业务</h3>
-                        <RelatedLanes
-                            order={order}
-                            selfReturn={selfReturn}
-                            lanes={
-                                isCard
-                                    ? ["receipt", "invoice"]
-                                    : ["purchase", "fulfillment", "receipt"]
-                            }
-                        />
-                    </div>
-                </aside>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 xl:grid-cols-3">
+                <OverviewField
+                    label="关联合同"
+                    value={order.contractRevisionLabel || "—"}
+                />
+                <OverviewField
+                    label="福利场景"
+                    value={welfareScenarioLabel(order.welfareScene)}
+                />
+                <OverviewField
+                    label="付款条件"
+                    value={order.paymentTerms || "—"}
+                />
+                <OverviewField
+                    label={isCard ? "履约期限（到期交付）" : "履约期限"}
+                    value={order.fulfillmentDeadline || "—"}
+                    numeric
+                />
+                <OverviewField
+                    label="客户联系人"
+                    value={order.customerContact ?? "—"}
+                />
+                <OverviewField
+                    label="当前版本"
+                    value={`v${order.version}`}
+                    numeric
+                />
+            </dl>
 
-                <div className="min-w-0">
-                    {showApproval && order.activeCardSalesApproval ? (
-                        <div className="mb-6">
-                            <CardSalesApprovalPanel
-                                order={order}
-                                approval={order.activeCardSalesApproval}
-                                onResult={onApprovalResult}
-                            />
-                        </div>
-                    ) : null}
-
-                    <DocumentSection title="订单信息">
-                        <DocumentSummary
-                            columns="three"
-                            className="rounded-none border-0 bg-transparent p-0 shadow-none"
-                            items={[
-                                {
-                                    id: "contract",
-                                    label: "关联合同",
-                                    value: order.contractRevisionLabel || "—",
-                                },
-                                {
-                                    id: "scene",
-                                    label: "福利场景",
-                                    value: welfareScenarioLabel(
-                                        order.welfareScene,
-                                    ),
-                                },
-                                {
-                                    id: "payment",
-                                    label: "付款条件",
-                                    value: order.paymentTerms || "—",
-                                },
-                                {
-                                    id: "deadline",
-                                    label: isCard
-                                        ? "履约期限（到期交付）"
-                                        : "履约期限",
-                                    value: order.fulfillmentDeadline || "—",
-                                    numeric: true,
-                                },
-                                {
-                                    id: "contact",
-                                    label: "客户联系人",
-                                    value: order.customerContact ?? "—",
-                                },
-                                {
-                                    id: "version",
-                                    label: "当前版本",
-                                    value: `v${order.version}`,
-                                    numeric: true,
-                                },
-                            ]}
-                        />
-                    </DocumentSection>
-
-                    <DocumentSection
-                        title={isCard ? "卡券明细" : "销售明细"}
-                        description={`${order.lineItems.length} 行`}
-                    >
-                        <LineItemsTable order={order} />
-                    </DocumentSection>
+            <div>
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                    <h2 className="text-sm font-medium">
+                        {isCard ? "卡券明细" : "销售明细"}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                        {order.lineItems.length} 行
+                    </p>
                 </div>
+                <LineItemsTable order={order} />
             </div>
         </div>
     )
@@ -547,9 +700,15 @@ export function FulfillmentPanel({
     const isCard = order.nature === "card_voucher"
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-3">
+            <SectionLead>
+                {isCard
+                    ? "卡券到期即算交付完成。消费多少不影响本单是否交付完毕。"
+                    : "采购接单和发货在对应工作面完成；客户确认后，在本页登记验收。"}
+            </SectionLead>
             <DocumentSection
                 title="采购与交付"
+                className="py-3 first:pt-0 last:pb-0"
                 action={
                     isCard ? undefined : (
                         <Button
@@ -614,36 +773,51 @@ export function ReceivablePanel({
     selfReturn: string
 }) {
     return (
-        <DocumentSection
-            title="回款与开票"
-            action={
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    render={
-                        <Link
-                            href={receivableWorkspaceHref(order, selfReturn)}
+        <div className="space-y-3">
+            <SectionLead>
+                回款收齐后系统自动结案。开票进度单独看，不挡结案。
+            </SectionLead>
+            <DocumentSection
+                title="回款与开票"
+                className="py-3 first:pt-0 last:pb-0"
+                action={
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        render={
+                            <Link
+                                href={receivableWorkspaceHref(
+                                    order,
+                                    selfReturn,
+                                )}
+                            />
+                        }
+                    >
+                        <WalletIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
                         />
-                    }
-                >
-                    <WalletIcon data-icon="inline-start" aria-hidden="true" />
-                    记一笔回款
-                </Button>
-            }
-        >
-            <RelatedLanes
-                order={order}
-                selfReturn={selfReturn}
-                lanes={["receipt", "invoice"]}
-            />
-        </DocumentSection>
+                        记一笔回款
+                    </Button>
+                }
+            >
+                <RelatedLanes
+                    order={order}
+                    selfReturn={selfReturn}
+                    lanes={["receipt", "invoice"]}
+                />
+            </DocumentSection>
+        </div>
     )
 }
 
 export function VersionsPanel({ order }: { order: SalesOrderDetailView }) {
     return (
         <div className="space-y-4">
+            <SectionLead>
+                改单会另开一笔，不会改掉客户正在执行的版本。生效前仍按当前版本履约和回款。
+            </SectionLead>
             <RevisionHistoryCard
                 revisions={order.revisions}
                 currentVersion={order.version}
@@ -671,27 +845,54 @@ export function CollaborationPanel({ order }: { order: SalesOrderDetailView }) {
         )
     }
     return (
-        <SalesOrderCollaborationCard
-            salesOrderId={order.id}
-            salesOrderNo={order.documentNumber}
-        />
+        <div className="space-y-4">
+            <SectionLead>
+                这里只看商城接收和执行投影，不提供第二套改单入口。
+            </SectionLead>
+            <SalesOrderCollaborationCard
+                salesOrderId={order.id}
+                salesOrderNo={order.documentNumber}
+            />
+        </div>
     )
 }
 
 export function navItemsFor(order: SalesOrderDetailView): Array<{
     id: NavSectionId
     label: string
+    hint: string
     show: boolean
 }> {
     return [
-        { id: "overview", label: "概览", show: true },
-        { id: "fulfillment", label: "履约", show: true },
-        { id: "receivable", label: "票款", show: true },
+        {
+            id: "overview",
+            label: "概览",
+            hint: "约定、明细和下一步",
+            show: true,
+        },
+        {
+            id: "fulfillment",
+            label: "履约",
+            hint: "采购、发货和验收",
+            show: true,
+        },
+        {
+            id: "receivable",
+            label: "票款",
+            hint: "回款和开票",
+            show: true,
+        },
         {
             id: "collaboration",
             label: "协同",
+            hint: "商城同步与执行投影",
             show: order.nature === "card_voucher",
         },
-        { id: "versions", label: "版本", show: true },
+        {
+            id: "versions",
+            label: "版本",
+            hint: "改单与历史版本",
+            show: true,
+        },
     ]
 }

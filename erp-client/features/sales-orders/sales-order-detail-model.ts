@@ -1,6 +1,7 @@
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import {
     isPendingReviewStage,
+    PROCUREMENT_REJECT_REASON_LABEL,
     stageOwnerDisplay,
 } from "@/features/sales-orders/labels"
 
@@ -157,12 +158,17 @@ export function resolveFocusTask(
     canAccept: boolean,
 ): FocusTask | null {
     if (isOpenProcurementRejection(order) && order.procurementRejection) {
+        const rejection = order.procurementRejection
+        const reason =
+            PROCUREMENT_REJECT_REASON_LABEL[rejection.rejectReasonCode] ??
+            rejection.rejectReasonCode
+        const comment = rejection.rejectComment.trim()
         return {
             id: "procurement-rejection",
             title: "采购未通过，需要你处理",
-            description:
-                order.procurementRejection.rejectComment ||
-                "可以改价后再报采购，或作废本单。",
+            description: comment
+                ? `${reason}：${comment}`
+                : `${reason}。可以改完再报采购，或作废本单。`,
             actionLabel: "去处理",
             tone: "warning",
         }
