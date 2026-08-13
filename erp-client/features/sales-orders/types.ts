@@ -212,7 +212,7 @@ export type SalesOrderListItem = {
     /** 创建来源：商城（MALL）或本系统（ERP），创建后恒不变 */
     originSystem: SalesOrderOrigin
     /**
-     * `code` 是服务端权威阶段码，与 `filter-orders.ts::SALES_ORDER_STATUS_OPTIONS` 对齐。
+     * `code` 是服务端权威阶段码，与 `lib/filter-orders.ts::SALES_ORDER_STATUS_OPTIONS` 对齐。
      * `ownerRole`/`ownerUserId`/`ownerUserName`/`dueAt` 是当前阶段命中的待办责任人与
      * 时限（审核轨在途时才有值，服务端整页批量解析，列表与详情共用同一来源）。
      */

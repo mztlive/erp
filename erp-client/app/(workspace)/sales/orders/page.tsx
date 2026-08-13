@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { SalesOrdersListPage } from "@/features/sales-orders/sales-orders-list-page"
-import { SalesOrderCreatePage } from "@/features/sales-orders/sales-order-create-page"
+import { SalesOrdersListPage } from "@/features/sales-orders/pages/sales-orders-list-page"
+import { SalesOrderCreatePage } from "@/features/sales-orders/pages/sales-order-create-page"
 
 export const metadata: Metadata = {
     title: "销售单",

@@ -34,7 +34,7 @@ import {
     postCustomerAcceptanceWorkspace,
     reverseCustomerAcceptanceWorkspace,
     saveCustomerAcceptanceDraft,
-} from "@/features/sales-orders/acceptance"
+} from "@/features/sales-orders/api/acceptance"
 import {
     FACT_ONLY_NOTICE,
     FULFILLMENT_TYPE_LABEL,
@@ -43,8 +43,8 @@ import {
     type AcceptanceEligibleFact,
     type AcceptanceHistoryItem,
     type AcceptanceOverallResult,
-} from "@/features/sales-orders/acceptance-types"
-import { salesOrderKeys } from "@/features/sales-orders/queries"
+} from "@/features/sales-orders/lib/acceptance-types"
+import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
 import { useSelector } from "@tanstack/react-form"
 import { cn } from "@/lib/utils"
 import { freshnessText, resultText } from "@/lib/ui-text"

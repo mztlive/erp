@@ -113,7 +113,7 @@ function mapInvoicing(code: string): ProgressTrack {
 }
 
 /**
- * 结案条件卡只在详情页展示（`close-conditions-card.tsx`），列表行从不渲染
+ * 结案条件卡只在详情页展示（`components/close-conditions-card.tsx`），列表行从不渲染
  * 这个字段；纯列表拉取（`sales_order_list`）不携带后端权威结案资格，避免为
  * 不可见字段逐行加查询成本。详情路径（`mapDetailToListItem`）会用
  * `detail.close_eligibility` 覆盖这个占位值。

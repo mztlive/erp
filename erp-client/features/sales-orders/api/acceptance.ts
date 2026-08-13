@@ -18,8 +18,8 @@ import type {
     ReverseAcceptanceInput,
     ReverseAcceptanceResult,
     SaveAcceptanceDraftInput,
-} from "@/features/sales-orders/acceptance-types"
-import { FACT_ONLY_NOTICE } from "@/features/sales-orders/acceptance-types"
+} from "@/features/sales-orders/lib/acceptance-types"
+import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
 import { fetchSalesOrderDetail } from "@/features/sales-orders/api"
 
 // ─── 后端形状 ────────────────────────────────────────────────────────────────

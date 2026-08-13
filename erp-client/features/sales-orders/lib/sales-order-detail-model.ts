@@ -3,7 +3,7 @@ import {
     isPendingReviewStage,
     PROCUREMENT_REJECT_REASON_LABEL,
     stageOwnerDisplay,
-} from "@/features/sales-orders/labels"
+} from "@/features/sales-orders/lib/labels"
 
 export type NavSectionId =
     | "overview"

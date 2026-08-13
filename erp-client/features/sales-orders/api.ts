@@ -2,7 +2,7 @@
  * W05 销售单 HTTP API（queryFn / mutationFn 纯函数）。
  *
  * 后端域：sales_order / sales_review / work_item / bulk_job。
- * 在本文件内将后端 DTO 适配为既有前端视图契约（types.ts / queries.ts 不变）。
+ * 在本文件内将后端 DTO 适配为既有前端视图契约（types.ts / hooks/queries.ts 不变）。
  * 失败统一抛 ApiError（@/lib/api），禁止 throw new Error("string")。
  */
 

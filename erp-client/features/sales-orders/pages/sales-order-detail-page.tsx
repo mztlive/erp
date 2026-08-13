@@ -29,11 +29,11 @@ import {
     useSalesOrderDetailQuery,
     useSalesOrderDraftResumeQuery,
     useStartSalesChangeOrderMutation,
-} from "@/features/sales-orders/queries"
-import { PROCUREMENT_REJECT_REASON_LABEL } from "@/features/sales-orders/labels"
+} from "@/features/sales-orders/hooks/queries"
+import { PROCUREMENT_REJECT_REASON_LABEL } from "@/features/sales-orders/lib/labels"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api"
-import { SalesOrderCreateForm } from "@/features/sales-orders/sales-order-create-page"
-import { VoidSalesOrderDialog } from "@/features/sales-orders/void-sales-order-dialog"
+import { SalesOrderCreateForm } from "@/features/sales-orders/components/sales-order-create-form"
+import { VoidSalesOrderDialog } from "@/features/sales-orders/components/void-sales-order-dialog"
 import {
     CollaborationPanel,
     FocusTaskBanner,
@@ -44,7 +44,7 @@ import {
     SalesOrderIdentityHeader,
     VersionsPanel,
     navItemsFor,
-} from "@/features/sales-orders/sales-order-detail-panels"
+} from "@/features/sales-orders/components/sales-order-detail-panels"
 import {
     buildSelfHref,
     isActionableFocusTask,
@@ -58,7 +58,7 @@ import {
     shouldOpenSalesOrderEditor,
     type NavSectionId,
     type WorkSectionId,
-} from "@/features/sales-orders/sales-order-detail-model"
+} from "@/features/sales-orders/lib/sales-order-detail-model"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"

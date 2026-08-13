@@ -10,11 +10,11 @@ import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CARD_APPROVAL_TYPE_LABEL } from "@/features/sales-orders/labels"
+import { CARD_APPROVAL_TYPE_LABEL } from "@/features/sales-orders/lib/labels"
 import {
     useClaimCardSalesApprovalMutation,
     useCompleteCardSalesApprovalMutation,
-} from "@/features/sales-orders/queries"
+} from "@/features/sales-orders/hooks/queries"
 import type {
     CardSalesApproval,
     SalesOrderListItem,

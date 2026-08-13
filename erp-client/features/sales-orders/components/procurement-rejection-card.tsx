@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 
 import { DocumentSection, MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { PROCUREMENT_REJECT_REASON_LABEL } from "@/features/sales-orders/labels"
+import { PROCUREMENT_REJECT_REASON_LABEL } from "@/features/sales-orders/lib/labels"
 import type {
     ProcurementRejectionResolution,
     SalesOrderListItem,

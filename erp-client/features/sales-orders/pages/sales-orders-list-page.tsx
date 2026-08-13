@@ -50,8 +50,8 @@ import {
     ORIGIN_LABEL,
     stageDueDisplay,
     stageOwnerDisplay,
-} from "@/features/sales-orders/labels"
-import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
+} from "@/features/sales-orders/lib/labels"
+import { SalesOrderPaperDialog } from "@/features/sales-orders/components/sales-order-paper-dialog"
 import {
     salesOrderCloseLabel,
     salesOrderCollectionLabel,
@@ -66,7 +66,7 @@ import {
     SALES_ORDER_FULFILLMENT_OPTIONS,
     SALES_ORDER_INVOICE_OPTIONS,
     SALES_ORDER_REVIEW_STATUS_OPTIONS,
-} from "@/features/sales-orders/filter-orders"
+} from "@/features/sales-orders/lib/filter-orders"
 import {
     downloadSalesOrderContractPdf,
     fetchSalesOrders,
@@ -76,7 +76,7 @@ import { getErrorMessage } from "@/lib/api/errors"
 import {
     useCreateSalesOrderExportJobMutation,
     useSalesOrdersQuery,
-} from "@/features/sales-orders/queries"
+} from "@/features/sales-orders/hooks/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     ContractSearchCombobox,
@@ -90,7 +90,7 @@ import {
     normalizedSalesOrdersSearchParams,
     parseSalesOrdersSearchParams,
     type SalesOrdersUrlState,
-} from "@/features/sales-orders/url-state"
+} from "@/features/sales-orders/lib/url-state"
 
 const SORT_COLUMN_TO_FIELD: Record<
     string,

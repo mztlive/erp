@@ -32,16 +32,16 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { AcceptanceWorkspace } from "@/features/sales-orders/acceptance-workspace"
-import { CardSalesApprovalPanel } from "@/features/sales-orders/card-sales-approval-panel"
-import { RevisionHistoryCard } from "@/features/sales-orders/revision-history-card"
+import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
+import { CardSalesApprovalPanel } from "@/features/sales-orders/components/card-sales-approval-panel"
+import { RevisionHistoryCard } from "@/features/sales-orders/components/revision-history-card"
 import { SalesOrderCollaborationCard } from "@/features/execution-projections/collaboration-card"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api"
 import {
     NATURE_LABEL,
     ORIGIN_LABEL,
     stageDueDisplay,
-} from "@/features/sales-orders/labels"
+} from "@/features/sales-orders/lib/labels"
 import {
     fulfillmentWorkspaceHref,
     isOpenProcurementRejection,
@@ -52,7 +52,7 @@ import {
     type FocusTask,
     type LifecycleStep,
     type NavSectionId,
-} from "@/features/sales-orders/sales-order-detail-model"
+} from "@/features/sales-orders/lib/sales-order-detail-model"
 import { sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 

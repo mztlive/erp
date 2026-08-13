@@ -8,7 +8,7 @@ import type {
     SalesOrderOriginFilter,
     SalesOrderReviewStatusFilter,
     SalesOrderSummaryFilter,
-} from "@/features/sales-orders/filter-orders"
+} from "@/features/sales-orders/lib/filter-orders"
 import {
     SALES_ORDER_CLOSE_OPTIONS,
     SALES_ORDER_COLLECTION_OPTIONS,
@@ -16,7 +16,7 @@ import {
     SALES_ORDER_FULFILLMENT_OPTIONS,
     SALES_ORDER_INVOICE_OPTIONS,
     SALES_ORDER_REVIEW_STATUS_OPTIONS,
-} from "@/features/sales-orders/filter-orders"
+} from "@/features/sales-orders/lib/filter-orders"
 import { createUrlStateCodec } from "@/lib/url-state"
 
 export type SalesOrdersUrlState = {

@@ -10,7 +10,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { welfareScenarioLabel } from "@/lib/business-options"
-import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/labels"
+import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
 import type {
     SalesOrderLineItem,
     SalesOrderListItem,
