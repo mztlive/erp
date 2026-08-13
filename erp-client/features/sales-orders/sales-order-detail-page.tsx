@@ -613,8 +613,6 @@ export function SalesOrderDetailPage({
                             const changeOnVersions =
                                 item.id === "versions" &&
                                 Boolean(order.activeChangeOrder)
-                            const rejectionOnOverview =
-                                item.id === "overview" && openRejection
                             return (
                                 <TabsTrigger
                                     key={item.id}
@@ -622,12 +620,9 @@ export function SalesOrderDetailPage({
                                     className="flex-none"
                                 >
                                     {item.label}
-                                    {todoOnFulfillment ||
-                                    changeOnVersions ||
-                                    rejectionOnOverview ? (
+                                    {todoOnFulfillment || changeOnVersions ? (
                                         <Badge
                                             variant={
-                                                rejectionOnOverview ||
                                                 changeOnVersions
                                                     ? "warning"
                                                     : "info"
@@ -654,12 +649,7 @@ export function SalesOrderDetailPage({
                             selfReturn={selfReturn}
                             showApproval={showApproval}
                             onApprovalResult={setResult}
-                            onEnterRejectionEdit={
-                                canResubmit ? enterRejectionEdit : undefined
-                            }
-                            onVoidAfterRejection={
-                                canVoid ? () => setVoidOpen(true) : undefined
-                            }
+                            canActOnRejection={canResubmit || canVoid}
                         />
                     </TabsContent>
 

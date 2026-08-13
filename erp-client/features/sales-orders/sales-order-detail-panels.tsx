@@ -345,8 +345,7 @@ export function OverviewPanel({
     selfReturn,
     showApproval,
     onApprovalResult,
-    onEnterRejectionEdit,
-    onVoidAfterRejection,
+    canActOnRejection = false,
 }: {
     order: SalesOrderDetailView
     focusTask: FocusTask | null
@@ -359,8 +358,7 @@ export function OverviewPanel({
         reference: string
         nextResponsible?: string
     }) => void
-    onEnterRejectionEdit?: () => void
-    onVoidAfterRejection?: () => void
+    canActOnRejection?: boolean
 }) {
     const isCard = order.nature === "card_voucher"
     const openRejection =
@@ -372,14 +370,16 @@ export function OverviewPanel({
                 <ProcurementRejectionCard
                     order={order}
                     rejection={openRejection}
-                    onEnterEdit={onEnterRejectionEdit}
-                    onVoid={onVoidAfterRejection}
+                    canAct={canActOnRejection}
                 />
             ) : null}
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
                 <aside className="order-first space-y-4 xl:order-last xl:sticky xl:top-14 xl:self-start">
-                    <NextStepCard order={order} focusTask={focusTask} />
+                    <NextStepCard
+                        order={order}
+                        focusTask={openRejection ? null : focusTask}
+                    />
                     <CloseConditionsCard order={order} />
                     <div>
                         <h3 className="mb-1 text-sm font-medium">相关业务</h3>

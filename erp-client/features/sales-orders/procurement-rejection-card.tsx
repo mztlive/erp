@@ -1,13 +1,9 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { BanIcon, RefreshCwIcon } from "lucide-react"
 
 import { DocumentSection, MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { PROCUREMENT_REJECT_REASON_LABEL } from "@/features/sales-orders/labels"
 import type {
     ProcurementRejectionResolution,
@@ -17,28 +13,17 @@ import type {
 type ProcurementRejectionCardProps = {
     order: SalesOrderListItem
     rejection: ProcurementRejectionResolution
-    onEnterEdit?: () => void
-    onVoid?: () => void
+    canAct: boolean
 }
 
 /**
- * 采购驳回处理区：先展示原因和差异，有权限时再进入整单编辑或作废。
+ * 采购驳回事实区：只展示原因和差异。改完再报 / 作废放在对象头，不在这里重复。
  */
 export function ProcurementRejectionCard({
     order,
     rejection,
-    onEnterEdit,
-    onVoid,
+    canAct,
 }: ProcurementRejectionCardProps) {
-    const canResubmit =
-        Boolean(onEnterEdit) &&
-        rejection.allowedActions.includes("RESUBMIT_CHANGED_TERMS")
-    const canVoid =
-        Boolean(onVoid) &&
-        rejection.allowedActions.includes("VOID_AFTER_REJECTION")
-    const resubmitBlocker = rejection.actionBlockers.find(
-        (b) => b.action === "RESUBMIT_CHANGED_TERMS",
-    )
     const resolved =
         rejection.reviewStatus === "RESOLVED" ||
         rejection.reviewStatus === "VOIDED" ||
@@ -46,28 +31,13 @@ export function ProcurementRejectionCard({
     const reasonLabel =
         PROCUREMENT_REJECT_REASON_LABEL[rejection.rejectReasonCode] ??
         rejection.rejectReasonCode
-    const resubmitBlockerText = resubmitBlocker
-        ? friendlyResubmitBlocker(resubmitBlocker.reason)
-        : null
     const hasDiff = rejection.draftDifference.diffSummary.length > 0
     const changedCommercial =
         rejection.draftDifference.changedItemOrService ||
         rejection.draftDifference.changedSalesPrice
 
     return (
-        <DocumentSection
-            title="采购未通过，请销售处理"
-            description="先看清驳回原因。有权限时可以改完整单再报采购，或作废本单。"
-            action={
-                <Badge variant="warning">
-                    {rejection.reviewStatus === "VOIDED"
-                        ? "已作废"
-                        : rejection.reviewStatus === "RESOLVED"
-                          ? "已处理"
-                          : "待你处理"}
-                </Badge>
-            }
-        >
+        <DocumentSection title="采购驳回">
             <div className="space-y-4">
                 {rejection.resolutionOutcome ? (
                     <Alert
@@ -87,48 +57,45 @@ export function ProcurementRejectionCard({
                     </Alert>
                 ) : null}
 
-                <section aria-label="采购驳回说明">
-                    <h3 className="text-sm font-semibold">采购为什么驳回</h3>
-                    <dl className="mt-2 grid gap-px overflow-hidden rounded-lg border border-grid bg-grid sm:grid-cols-2">
-                        <Fact label="原因" value={reasonLabel} />
+                <dl className="grid gap-px overflow-hidden rounded-lg border border-grid bg-grid sm:grid-cols-2">
+                    <Fact label="原因" value={reasonLabel} />
+                    <Fact
+                        label="谁驳回 / 何时"
+                        value={`${rejection.rejectedByLabel} · ${rejection.rejectedAt}`}
+                    />
+                    <Fact
+                        label="说明"
+                        value={rejection.rejectComment || "—"}
+                        className="sm:col-span-2"
+                    />
+                    {rejection.estimatedCost ? (
                         <Fact
-                            label="谁驳回 / 何时"
-                            value={`${rejection.rejectedByLabel} · ${rejection.rejectedAt}`}
+                            label="采购最新成本"
+                            value={
+                                <MoneyValue
+                                    value={rejection.estimatedCost}
+                                    taxBasis="gross"
+                                />
+                            }
                         />
+                    ) : null}
+                    {rejection.estimatedMarginPercent ? (
                         <Fact
-                            label="说明"
-                            value={rejection.rejectComment || "—"}
-                            className="sm:col-span-2"
-                        />
-                        {rejection.estimatedCost ? (
-                            <Fact
-                                label="采购最新成本"
-                                value={
-                                    <MoneyValue
-                                        value={rejection.estimatedCost}
-                                        taxBasis="gross"
-                                    />
-                                }
-                            />
-                        ) : null}
-                        {rejection.estimatedMarginPercent ? (
-                            <Fact
-                                label="预计毛利"
-                                value={`${rejection.estimatedMarginPercent}%`}
-                                numeric
-                            />
-                        ) : null}
-                        <Fact
-                            label="报给采购的次数"
-                            value={`第 ${rejection.rejectedSubmissionNo} 次`}
+                            label="预计毛利"
+                            value={`${rejection.estimatedMarginPercent}%`}
                             numeric
                         />
-                    </dl>
-                </section>
+                    ) : null}
+                    <Fact
+                        label="报给采购的次数"
+                        value={`第 ${rejection.rejectedSubmissionNo} 次`}
+                        numeric
+                    />
+                </dl>
 
-                <section aria-label="你已改了什么">
+                <section aria-label="相对被驳回内容的变化">
                     <h3 className="text-sm font-semibold">
-                        相对被驳回内容，草稿有何变化
+                        相对被驳回内容的变化
                     </h3>
                     {hasDiff ? (
                         <ul className="mt-2 space-y-1.5 text-sm">
@@ -151,8 +118,8 @@ export function ProcurementRejectionCard({
                     ) : (
                         <p className="mt-2 text-sm text-muted-foreground">
                             {changedCommercial
-                                ? "商品或价格已有改动，进入编辑可核对整单后再报。"
-                                : "还没改商品或价格。进入编辑改完后才能再报给采购。"}
+                                ? "商品或价格已有改动，可用页头「改完再报」核对整单。"
+                                : "还没改商品或价格。改完后才能再报给采购。"}
                         </p>
                     )}
                     <p className="mt-2 text-xs text-muted-foreground">
@@ -166,48 +133,7 @@ export function ProcurementRejectionCard({
                     </p>
                 </section>
 
-                {!resolved && (canResubmit || canVoid) ? (
-                    <>
-                        <Separator />
-                        <div className="flex flex-wrap gap-2">
-                            {canResubmit ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    title={resubmitBlockerText ?? undefined}
-                                    onClick={onEnterEdit}
-                                >
-                                    <RefreshCwIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    改完再报
-                                </Button>
-                            ) : null}
-                            {canVoid ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={onVoid}
-                                >
-                                    <BanIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    作废
-                                </Button>
-                            ) : null}
-                        </div>
-                        {resubmitBlockerText ? (
-                            <p className="text-xs text-warning">
-                                {resubmitBlockerText}
-                            </p>
-                        ) : null}
-                    </>
-                ) : null}
-
-                {!resolved && !canResubmit && !canVoid ? (
+                {!resolved && !canAct ? (
                     <p className="text-xs text-muted-foreground">
                         当前账号不能改这张单，也不能作废。销售单{" "}
                         {order.documentNumber} 仍停在采购驳回后的待处理。
@@ -216,17 +142,6 @@ export function ProcurementRejectionCard({
             </div>
         </DocumentSection>
     )
-}
-
-function friendlyResubmitBlocker(reason: string): string {
-    if (
-        reason.includes("尚无改品") ||
-        reason.includes("改品/改价") ||
-        reason.includes("NO_COMMERCIAL")
-    ) {
-        return "还没改商品或价格。请先进入编辑改完，再点「再报给采购」。"
-    }
-    return reason
 }
 
 function Fact({
