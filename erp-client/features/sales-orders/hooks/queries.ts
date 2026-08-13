@@ -16,7 +16,7 @@ import {
     startSalesChangeOrder,
     submitSalesOrder,
     type SalesOrdersListQuery,
-} from "@/features/sales-orders/api"
+} from "@/features/sales-orders/api/sales-orders"
 
 export const salesOrderKeys = {
     all: ["sales-orders"] as const,

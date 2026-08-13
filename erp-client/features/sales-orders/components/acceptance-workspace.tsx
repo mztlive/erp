@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
 import { RotateCcwIcon } from "lucide-react"
@@ -45,6 +45,7 @@ import {
     type AcceptanceOverallResult,
 } from "@/features/sales-orders/lib/acceptance-types"
 import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
+import { useAcceptanceWorkspaceUrlState } from "@/features/sales-orders/hooks/acceptance-url-state"
 import { useSelector } from "@tanstack/react-form"
 import { cn } from "@/lib/utils"
 import { freshnessText, resultText } from "@/lib/ui-text"
@@ -275,14 +276,8 @@ export function AcceptanceWorkspace({
 }) {
     const queryClient = useQueryClient()
     const router = useRouter()
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
-    const workItemId = searchParams.get("workItemId")
-
-    /** 交付记录筛选随 URL 持久化，刷新/分享不丢失（契约：参数与控件一一对应）。 */
-    const [remainingOnly, setRemainingOnlyState] = React.useState(
-        searchParams.get("remainingOnly") !== "false",
-    )
+    const { workItemId, remainingOnly, setRemainingOnly } =
+        useAcceptanceWorkspaceUrlState()
     const [selected, setSelected] = React.useState<
         Map<string, { fact: AcceptanceEligibleFact; qty: string }>
     >(() => new Map())
@@ -307,19 +302,6 @@ export function AcceptanceWorkspace({
     const restoredDraftRef = React.useRef(false)
     /** 提交瞬间的总体结果快照（含服务不通过），用于结果反馈不被服务端降级。 */
     const submittedOverallRef = React.useRef<AcceptanceOverallResult>("PASS")
-
-    const setRemainingOnly = React.useCallback(
-        (next: boolean) => {
-            setRemainingOnlyState(next)
-            const params = new URLSearchParams(searchParams.toString())
-            params.set("section", "acceptance")
-            params.set("remainingOnly", next ? "1" : "0")
-            router.replace(`${pathname}?${params.toString()}`, {
-                scroll: false,
-            })
-        },
-        [pathname, router, searchParams],
-    )
 
     const workspaceQuery = useQuery({
         queryKey: salesOrderKeys.acceptance(salesOrderId, {

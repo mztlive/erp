@@ -59,13 +59,13 @@ import {
     useIntegrationQueueQuery,
     useResolveIntegrationMutation,
     useTransferIntegrationMutation,
-} from "./queries"
-import { ReplacementWorkItemSearchCombobox } from "./replacement-work-item-search-combobox"
+} from "../hooks/queries"
+import { ReplacementWorkItemSearchCombobox } from "../components/replacement-work-item-search-combobox"
 import type {
     IntegrationFormalResult,
     IntegrationResolutionItemView,
     IntegrationView,
-} from "./types"
+} from "../types"
 import {
     ENV_LABEL,
     EVIDENCE_KIND_LABEL,
@@ -73,20 +73,20 @@ import {
     MODE_LABEL,
     OWNER_LABEL,
     VIEW_LABEL,
-} from "./types"
+} from "../types"
 import {
     buildIntegrationSearchParams,
     parseIntegrationSearchParams,
     toResolutionQuery,
-} from "./url-state"
-import { IntegrationEvidencePanel } from "./components/integration-evidence-panel"
-import { IntegrationItemSummary } from "./components/integration-item-summary"
-import { IntegrationQueuePanel } from "./components/integration-queue-panel"
+} from "../lib/url-state"
+import { IntegrationEvidencePanel } from "../components/integration-evidence-panel"
+import { IntegrationItemSummary } from "../components/integration-item-summary"
+import { IntegrationQueuePanel } from "../components/integration-queue-panel"
 import {
     TerminalActionDialog,
     type TerminalConfirm,
-} from "./components/terminal-action-dialog"
-import { INTEGRATION_ACTION_LABEL } from "./presentation"
+} from "../components/terminal-action-dialog"
+import { INTEGRATION_ACTION_LABEL } from "../lib/presentation"
 
 type SessionLease = {
     workItemId: string

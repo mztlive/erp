@@ -12,7 +12,7 @@ import {
     saveAllocationDraft,
     submitInvoice,
     submitPayment,
-} from "@/features/supplier-payables/api"
+} from "@/features/supplier-payables/api/requests"
 import type {
     AllocationTrack,
     SupplierAccountsQuery,

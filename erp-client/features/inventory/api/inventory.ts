@@ -10,7 +10,7 @@ import type { ApiError } from "@/lib/api/errors"
 import {
     decodeInventoryCursor,
     encodeInventoryCursor,
-} from "@/features/inventory/cursor"
+} from "@/features/inventory/lib/cursor"
 import type {
     AdjustmentDraftView,
     AdjustmentReasonType,

@@ -8,8 +8,8 @@ import type {
     FulfillmentDraft,
     FulfillmentResultCode,
     FulfillmentTask,
-} from "./types"
-import { RESULT_OPTIONS } from "./types"
+} from "@/features/fulfillment-operations/types"
+import { RESULT_OPTIONS } from "@/features/fulfillment-operations/types"
 
 export function FulfillmentElectronicForm({
     task,

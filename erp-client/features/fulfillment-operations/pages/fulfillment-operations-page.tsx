@@ -66,21 +66,21 @@ import {
     usePostFulfillmentMutation,
     useResolveUnknownFulfillmentMutation,
     useSaveFulfillmentMutation,
-} from "@/features/fulfillment-operations/queries"
+} from "@/features/fulfillment-operations/hooks/queries"
 import {
     DEFAULT_FULFILLMENT_ROLE,
     FULFILLMENT_ROLES,
-} from "@/features/fulfillment-operations/fulfillment-roles"
+} from "@/features/fulfillment-operations/lib/fulfillment-roles"
 import {
     laneHeader,
     resolveLane,
-} from "@/features/fulfillment-operations/lanes"
+} from "@/features/fulfillment-operations/lib/lanes"
 import {
     parseDueParam,
     parseGateParam,
     parseTypeParam,
     typeParamValue,
-} from "@/features/fulfillment-operations/filters"
+} from "@/features/fulfillment-operations/lib/filters"
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
@@ -88,17 +88,17 @@ import {
     clientValidation,
     cloneDraft,
     impactPreview,
-} from "@/features/fulfillment-operations/validation"
+} from "@/features/fulfillment-operations/lib/validation"
 import {
     FIRST_INPUT_ID,
     FulfillmentDraftForm,
-} from "@/features/fulfillment-operations/fulfillment-draft-form"
-import { FulfillmentQueueList } from "@/features/fulfillment-operations/fulfillment-queue-list"
-import { FulfillmentQueueToolbar } from "@/features/fulfillment-operations/fulfillment-queue-toolbar"
+} from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
+import { FulfillmentQueueList } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-list"
+import { FulfillmentQueueToolbar } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-toolbar"
 import {
     FulfillmentDeferDialog,
     type DeferSubmitValue,
-} from "@/features/fulfillment-operations/fulfillment-defer-dialog"
+} from "@/features/fulfillment-operations/components/fulfillment-defer-dialog"
 import { freshnessText, resultText, workspaceLabel } from "@/lib/ui-text"
 import type { WorkspaceId } from "@/lib/workspace-registry"
 

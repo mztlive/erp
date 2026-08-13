@@ -36,7 +36,7 @@ import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptan
 import { CardSalesApprovalPanel } from "@/features/sales-orders/components/card-sales-approval-panel"
 import { RevisionHistoryCard } from "@/features/sales-orders/components/revision-history-card"
 import { SalesOrderCollaborationCard } from "@/features/execution-projections/collaboration-card"
-import type { SalesOrderDetailView } from "@/features/sales-orders/api"
+import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import {
     NATURE_LABEL,
     ORIGIN_LABEL,

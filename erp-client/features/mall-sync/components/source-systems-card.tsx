@@ -11,7 +11,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { useSourceSystemsQuery } from "@/features/mall-sync/queries"
+import { useSourceSystemsQuery } from "@/features/mall-sync/hooks/queries"
 import {
     SOURCE_SYSTEM_STATUS_LABEL,
     SOURCE_SYSTEM_TYPE_LABEL,

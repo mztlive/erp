@@ -18,7 +18,7 @@ import {
     GATE_FILTER_OPTIONS,
     type DueFilter,
     type GateFilter,
-} from "./filters"
+} from "@/features/fulfillment-operations/lib/filters"
 
 export type QueueFilterPatch = Record<string, string | null>
 

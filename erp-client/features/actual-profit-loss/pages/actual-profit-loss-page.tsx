@@ -9,11 +9,7 @@ import {
     RefreshCwIcon,
     SearchIcon,
 } from "lucide-react"
-import type {
-    ColumnDef,
-    PaginationState,
-    SortingState,
-} from "@tanstack/react-table"
+import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import {
     BackgroundJobProgress,
@@ -48,12 +44,6 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
@@ -69,189 +59,37 @@ import {
     usePeriodBasisConfigQuery,
     useProfitLossViewQuery,
     useStartProfitLossExportMutation,
-} from "@/features/actual-profit-loss/queries"
-import type {
-    CostEntryDetail,
-    PeriodPreset,
-    ProfitLossCoverage,
-    ProfitLossDimension,
-    ProfitLossExportJob,
-    ProfitLossQuery,
-    ProfitLossRow,
-    ProjectionFreshnessState,
-} from "@/features/actual-profit-loss/types"
+} from "@/features/actual-profit-loss/hooks/queries"
 import {
     COVERAGE_FILTER_LABEL,
     COVERAGE_STATE_UI,
     DIMENSION_LABEL,
+    type CostEntryDetail,
+    type ProfitLossCoverage,
+    type ProfitLossDimension,
+    type ProfitLossExportJob,
+    type ProfitLossQuery,
+    type ProfitLossRow,
 } from "@/features/actual-profit-loss/types"
-import type { DataFreshnessState } from "@/components/business/page"
+import { CostEntryDetailBody } from "@/features/actual-profit-loss/components/cost-entry-detail-body"
+import { buildProfitLossColumns } from "@/features/actual-profit-loss/hooks/columns"
+import {
+    basisLabel,
+    coveragePercentNumber,
+    mapFreshnessState,
+    parseCoverage,
+    parseDimension,
+    parsePreset,
+    resolvePeriod,
+    W16_FORMULA_HINT,
+} from "@/features/actual-profit-loss/lib/url-state"
+import { buildProfitLossCsv } from "@/features/actual-profit-loss/lib/csv"
 import { openWorkspaceLabel } from "@/lib/ui-text"
-import { ProfitLossChartsAndStageReference } from "./components/profit-loss-charts-and-stage-reference"
+import { ProfitLossChartsAndStageReference } from "@/features/actual-profit-loss/components/profit-loss-charts-and-stage-reference"
 import {
     formatMoneyDisplay,
     PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL,
-} from "./presentation"
-
-const PERIOD_BASIS_LABEL: Record<string, string> = {
-    sales_revenue_recognition_date: "销售收入确认日",
-    sales_order_effective_date: "销售单生效日",
-    fulfillment_complete_date: "履约完成日",
-    cost_occurred_date: "成本发生日",
-}
-
-function basisLabel(code: string): string {
-    return PERIOD_BASIS_LABEL[code] ?? code
-}
-
-function parseCoverage(raw: string | null): ProfitLossCoverage {
-    if (raw === "uncovered" || raw === "all" || raw === "covered") return raw
-    return "covered"
-}
-
-function parseDimension(raw: string | null): ProfitLossDimension {
-    if (
-        raw === "customer" ||
-        raw === "scenario" ||
-        raw === "fulfillment" ||
-        raw === "cost_type" ||
-        raw === "sales_order"
-    ) {
-        return raw
-    }
-    return "sales_order"
-}
-
-function parsePreset(raw: string | null): PeriodPreset {
-    if (
-        raw === "last-month" ||
-        raw === "quarter-to-date" ||
-        raw === "month-to-date"
-    ) {
-        return raw
-    }
-    return "month-to-date"
-}
-
-function toISODate(date: Date): string {
-    const y = date.getFullYear()
-    const m = String(date.getMonth() + 1).padStart(2, "0")
-    const d = String(date.getDate()).padStart(2, "0")
-    return `${y}-${m}-${d}`
-}
-
-/** periodPreset → 明确 from/to（运行时锚定当前月，避免「本月迄今」解析为单日） */
-function resolvePeriod(preset: PeriodPreset): { from: string; to: string } {
-    const now = new Date()
-    const today = toISODate(now)
-    if (preset === "last-month") {
-        const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-        const lastOfLastMonth = new Date(firstOfThisMonth.getTime() - 1)
-        return {
-            from: toISODate(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
-            to: toISODate(lastOfLastMonth),
-        }
-    }
-    if (preset === "quarter-to-date") {
-        const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3
-        return {
-            from: toISODate(new Date(now.getFullYear(), quarterStartMonth, 1)),
-            to: today,
-        }
-    }
-    return {
-        from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)),
-        to: today,
-    }
-}
-
-function mapFreshnessState(
-    state: ProjectionFreshnessState,
-    options?: { refreshFailed?: boolean; refreshing?: boolean },
-): {
-    uiState: DataFreshnessState
-    statusLabel: string
-} {
-    if (options?.refreshing) {
-        return { uiState: "syncing", statusLabel: "正在刷新数据" }
-    }
-    if (options?.refreshFailed) {
-        return { uiState: "failed", statusLabel: "刷新失败 · 保留旧数据" }
-    }
-    switch (state) {
-        case "stale":
-            return {
-                uiState: "stale",
-                statusLabel: "数据陈旧 · 来源更新时间已超前",
-            }
-        case "rebuilding":
-            return { uiState: "syncing", statusLabel: "数据更新中" }
-        case "failed":
-            return { uiState: "failed", statusLabel: "数据更新失败" }
-        default:
-            return { uiState: "fresh", statusLabel: "数据已更新" }
-    }
-}
-
-function coveragePercentNumber(rate: string): number {
-    const n = Number(rate.replace("%", ""))
-    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0
-}
-
-function MoneyCell({
-    value,
-    negativeAsText = true,
-    href,
-    onClick,
-    ariaLabel,
-}: {
-    value: string | undefined
-    negativeAsText?: boolean
-    href?: string
-    onClick?: () => void
-    ariaLabel?: string
-}) {
-    const display = formatMoneyDisplay(value)
-    const isNeg =
-        negativeAsText && value != null && value !== "—" && Number(value) < 0
-    const content = (
-        <span
-            className={`num text-sm ${isNeg ? "text-destructive" : ""}`}
-            aria-label={
-                ariaLabel ??
-                (value == null
-                    ? "金额不可用"
-                    : `人民币 ${display}，不含税${isNeg ? "，负值" : ""}`)
-            }
-        >
-            {isNeg ? `亏损 ${display}` : display}
-        </span>
-    )
-    if (onClick) {
-        return (
-            <button
-                type="button"
-                className="text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={onClick}
-            >
-                {content}
-            </button>
-        )
-    }
-    if (href) {
-        return (
-            <Link
-                href={href}
-                className="underline-offset-2 hover:underline"
-                target="_blank"
-                rel="noreferrer"
-            >
-                {content}
-            </Link>
-        )
-    }
-    return content
-}
+} from "@/features/actual-profit-loss/lib/presentation"
 
 export function ActualProfitLossPage() {
     const router = useRouter()
@@ -467,274 +305,7 @@ export function ActualProfitLossPage() {
         setSelectedCostEntryId(row.costEntryIds[0] ?? null)
     }, [])
 
-    const columns = React.useMemo<ColumnDef<ProfitLossRow>[]>(
-        () => [
-            {
-                id: "identityLabel",
-                accessorFn: (r) => r.identityLabel,
-                header: "销售单号",
-                meta: { label: "销售单号", width: "default" as const },
-                cell: ({ row }) => {
-                    const r = row.original
-                    const href = r.objectId
-                        ? `/sales/orders/${encodeURIComponent(r.objectId)}`
-                        : undefined
-                    return (
-                        <div className="flex flex-col gap-0.5">
-                            {href ? (
-                                <Link
-                                    href={href}
-                                    className="font-medium text-primary underline-offset-2 hover:underline"
-                                    ref={(el) => {
-                                        rowFocusRef.current.set(r.rowId, el)
-                                    }}
-                                >
-                                    {r.identityLabel}
-                                </Link>
-                            ) : (
-                                <span className="font-medium">
-                                    {r.identityLabel}
-                                </span>
-                            )}
-                            <span className="text-xs text-muted-foreground">
-                                {r.customerLabel}
-                            </span>
-                        </div>
-                    )
-                },
-            },
-            {
-                id: "benefitScenarios",
-                accessorFn: (r) => r.benefitScenarios?.join("、") ?? "",
-                header: "福利场景",
-                meta: { label: "福利场景" },
-                cell: ({ row }) => (
-                    <span className="text-sm text-muted-foreground">
-                        {row.original.benefitScenarios?.join("、") || "—"}
-                    </span>
-                ),
-            },
-            {
-                id: "fulfillmentModes",
-                accessorFn: (r) => r.fulfillmentModes?.join("、") ?? "",
-                header: "履约方式",
-                meta: { label: "履约方式" },
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.fulfillmentModes?.join("、") || "—"}
-                    </span>
-                ),
-            },
-            {
-                id: "netSalesRevenue",
-                accessorFn: (r) => r.netSalesRevenue,
-                header: "不含税收入",
-                meta: {
-                    label: "不含税收入",
-                    numeric: true,
-                    align: "end" as const,
-                },
-                cell: ({ row }) => (
-                    <MoneyCell value={row.original.netSalesRevenue} />
-                ),
-            },
-            {
-                id: "actualProcurementCostNet",
-                accessorFn: (r) => r.actualProcurementCostNet ?? "",
-                header: "实际采购成本",
-                meta: {
-                    label: "实际采购成本（不含税）",
-                    numeric: true,
-                    align: "end" as const,
-                },
-                cell: ({ row }) => {
-                    const r = row.original
-                    if (r.coverageState === "UNCOVERED") {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                未覆盖
-                            </span>
-                        )
-                    }
-                    if (r.actualProcurementCostNet == null) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                无权限
-                            </span>
-                        )
-                    }
-                    return (
-                        <MoneyCell
-                            value={r.actualProcurementCostNet}
-                            negativeAsText={false}
-                            onClick={
-                                r.allowedDrilldowns.includes("cost_entry") &&
-                                r.costEntryIds.length > 0
-                                    ? () => openCostDetail(r)
-                                    : undefined
-                            }
-                        />
-                    )
-                },
-            },
-            {
-                id: "actualFulfillmentCostNet",
-                accessorFn: (r) => r.actualFulfillmentCostNet ?? "",
-                header: "实际履约费用",
-                meta: {
-                    label: "实际履约费用（不含税）",
-                    numeric: true,
-                    align: "end" as const,
-                },
-                cell: ({ row }) => {
-                    const r = row.original
-                    if (r.coverageState === "UNCOVERED") {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                未覆盖
-                            </span>
-                        )
-                    }
-                    if (r.actualFulfillmentCostNet == null) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                无权限
-                            </span>
-                        )
-                    }
-                    return (
-                        <MoneyCell
-                            value={r.actualFulfillmentCostNet}
-                            negativeAsText={false}
-                            onClick={
-                                r.allowedDrilldowns.includes("cost_entry") &&
-                                r.costEntryIds.length > 0
-                                    ? () => openCostDetail(r)
-                                    : undefined
-                            }
-                        />
-                    )
-                },
-            },
-            {
-                id: "reductionsNet",
-                accessorFn: (r) => r.reductionsNet ?? "",
-                header: "成本冲减（负值＝冲减）",
-                meta: {
-                    label: "成本冲减",
-                    numeric: true,
-                    align: "end" as const,
-                },
-                cell: ({ row }) => {
-                    const r = row.original
-                    if (r.reductionsNet == null) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                —
-                            </span>
-                        )
-                    }
-                    return (
-                        <MoneyCell
-                            value={r.reductionsNet}
-                            negativeAsText={false}
-                        />
-                    )
-                },
-            },
-            {
-                id: "actualProfitLossNet",
-                accessorFn: (r) => r.actualProfitLossNet ?? "",
-                header: "实际盈亏",
-                meta: {
-                    label: "实际盈亏（不含税）",
-                    numeric: true,
-                    align: "end" as const,
-                },
-                cell: ({ row }) => {
-                    const r = row.original
-                    if (r.actualProfitLossNet == null) {
-                        return (
-                            <span
-                                className="text-sm text-muted-foreground"
-                                title={r.marginUnavailableReason}
-                            >
-                                {r.coverageState === "UNCOVERED"
-                                    ? "不可用（未覆盖）"
-                                    : (r.marginUnavailableReason ?? "不可用")}
-                            </span>
-                        )
-                    }
-                    const href = r.objectId
-                        ? `/sales/orders/${encodeURIComponent(r.objectId)}`
-                        : undefined
-                    return (
-                        <MoneyCell value={r.actualProfitLossNet} href={href} />
-                    )
-                },
-            },
-            {
-                id: "marginRate",
-                accessorFn: (r) => r.marginRate ?? "",
-                header: "实际利润率",
-                meta: {
-                    label: "实际利润率",
-                    numeric: true,
-                    align: "end" as const,
-                },
-                cell: ({ row }) => {
-                    const r = row.original
-                    if (r.marginRate == null) {
-                        return (
-                            <span
-                                className="text-sm text-muted-foreground"
-                                title={r.marginUnavailableReason}
-                            >
-                                {r.marginUnavailableReason ?? "不适用"}
-                            </span>
-                        )
-                    }
-                    return <span className="num text-sm">{r.marginRate}</span>
-                },
-            },
-            {
-                id: "coverageState",
-                accessorFn: (r) => r.coverageState,
-                header: "覆盖状态",
-                meta: { label: "覆盖状态" },
-                cell: ({ row }) => {
-                    const r = row.original
-                    const ui = COVERAGE_STATE_UI[r.coverageState]
-                    const reason = r.coverageBlockers
-                        .map((b) => b.message)
-                        .join("；")
-                    return (
-                        <BusinessStatusBadge
-                            context="list"
-                            label={ui.label}
-                            tone={ui.tone}
-                            description={reason || undefined}
-                        />
-                    )
-                },
-            },
-            {
-                id: "latestCostOccurredAt",
-                accessorFn: (r) => r.latestCostOccurredAt ?? "",
-                header: "最近成本发生",
-                meta: { label: "最近成本发生" },
-                cell: ({ row }) => (
-                    <span className="num text-xs text-muted-foreground">
-                        {formatDateTime(
-                            row.original.latestCostOccurredAt,
-                            "full",
-                        )}
-                    </span>
-                ),
-            },
-        ],
-        [openCostDetail],
-    )
+    const columns = buildProfitLossColumns({ openCostDetail, rowFocusRef })
 
     const freshnessUi = data
         ? mapFreshnessState(data.freshness.state, {
@@ -779,46 +350,13 @@ export function ActualProfitLossPage() {
             })
             setExportJob(job)
 
-            // 客户端落盘附带水印元数据（与后台任务一致；用户产物使用中文口径）
-            const wm = job.watermark
-            const quote = (v: string) => `"${v.replaceAll('"', '""')}"`
-            const metaLines = [
-                "# 业务口径=非卡券·不含税",
-                `# 期间=${wm.periodFrom} ~ ${wm.periodTo}`,
-                `# 归属口径=${basisLabel(wm.periodBasis)}`,
-                `# 覆盖口径=${COVERAGE_FILTER_LABEL[wm.coverage]}`,
-                `# 范围=${wm.scopeLabel}`,
-                `# 数据更新时间=${wm.projectedAt}`,
-                `# 来源更新=${wm.sourceWatermark}`,
-                `# 金额口径=不含税`,
-                `# 业务类型=非卡券`,
-                `# 行数=${wm.rowCount}`,
-            ]
-            const header =
-                "销售单号,客户,不含税收入,实际采购成本,实际履约费用,成本冲减,实际盈亏,利润率,覆盖状态,缺口原因"
-            const body = data.rows.items.map((r) =>
-                [
-                    r.identityLabel,
-                    r.customerLabel ?? "",
-                    r.netSalesRevenue,
-                    r.actualProcurementCostNet ?? "",
-                    r.actualFulfillmentCostNet ?? "",
-                    r.reductionsNet ?? "",
-                    r.actualProfitLossNet ?? "",
-                    r.marginRate ?? r.marginUnavailableReason ?? "",
-                    COVERAGE_STATE_UI[r.coverageState].label,
-                    r.coverageBlockers.map((b) => b.message).join("|"),
-                ]
-                    .map((c) => quote(String(c)))
-                    .join(","),
-            )
-            const csv = [...metaLines, header, ...body].join("\n")
+            const csv = buildProfitLossCsv(data, job.watermark, coverage)
             const url = URL.createObjectURL(
                 new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }),
             )
             const anchor = document.createElement("a")
             anchor.href = url
-            anchor.download = `实际盈亏-非卡券不含税-${wm.periodFrom}_${wm.periodTo}.csv`
+            anchor.download = `实际盈亏-非卡券不含税-${job.watermark.periodFrom}_${job.watermark.periodTo}.csv`
             anchor.click()
             URL.revokeObjectURL(url)
         } catch (error) {
@@ -1813,150 +1351,5 @@ export function ActualProfitLossPage() {
                 </div>
             </QuickPreviewSheet>
         </PageScaffold>
-    )
-}
-
-const W16_FORMULA_HINT =
-    "实际经营盈亏（不含税）= 非卡券不含税销售收入 − 非卡券不含税实际采购成本 − 非卡券不含税实际履约费用"
-
-function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
-    return (
-        <div className="space-y-4">
-            <DescriptionList columns="two">
-                <DescriptionItem>
-                    <DescriptionTerm>费用类型</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.costTypeLabel}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>阶段</DescriptionTerm>
-                    <DescriptionDetails>
-                        <Badge variant="secondary">{entry.stageLabel}</Badge>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>范围</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.costScopeLabel}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>供应商</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.supplierName ?? "—"}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>含税金额</DescriptionTerm>
-                    <DescriptionDetails>
-                        <span className="num">
-                            {formatMoneyDisplay(entry.amountGross)}
-                        </span>
-                        <span className="ml-1 text-xs text-muted-foreground">
-                            仅展示，不参与利润
-                        </span>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>税率 / 税额</DescriptionTerm>
-                    <DescriptionDetails>
-                        <span className="num">
-                            {entry.taxRate} /{" "}
-                            {formatMoneyDisplay(entry.taxAmount)}
-                        </span>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>不含税金额</DescriptionTerm>
-                    <DescriptionDetails>
-                        <span className="num font-medium">
-                            {formatMoneyDisplay(entry.amountNet)}
-                        </span>
-                        <span className="ml-1 text-xs text-muted-foreground">
-                            利润口径
-                        </span>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>发生时间</DescriptionTerm>
-                    <DescriptionDetails>
-                        <span className="num">
-                            {formatDateTime(entry.occurredAt, "full")}
-                        </span>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>来源类型</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.sourceTypeLabel}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>来源单据</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.sourceDocumentNo}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>来源明细</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.sourceLineLabel ?? "—"}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>来源单据版本</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.sourceVersion}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>销售单 / 明细</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.salesOrderNo}
-                        {entry.salesOrderLineLabel
-                            ? ` · ${entry.salesOrderLineLabel}`
-                            : ""}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>原成本引用</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.originalCostEntryLabel ?? "—（非冲减）"}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>凭证授权摘要</DescriptionTerm>
-                    <DescriptionDetails>
-                        {entry.voucherSummary ?? "—"}
-                    </DescriptionDetails>
-                </DescriptionItem>
-            </DescriptionList>
-
-            {entry.correctionHref ? (
-                <Alert>
-                    <AlertTitle>前往纠错来源</AlertTitle>
-                    <AlertDescription className="flex flex-col gap-2">
-                        <span>
-                            本页不执行变更确认。打开原业务对象使用变更/冲减流程后，返回本页等待数据刷新。
-                        </span>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={
-                                <Link
-                                    href={entry.correctionHref}
-                                    target="_blank"
-                                />
-                            }
-                        >
-                            {entry.correctionLabel ?? "打开来源"}
-                            <ExternalLinkIcon className="ml-1 size-3.5" />
-                        </Button>
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-        </div>
     )
 }

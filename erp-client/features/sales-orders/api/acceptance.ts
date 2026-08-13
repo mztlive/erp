@@ -20,7 +20,7 @@ import type {
     SaveAcceptanceDraftInput,
 } from "@/features/sales-orders/lib/acceptance-types"
 import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
-import { fetchSalesOrderDetail } from "@/features/sales-orders/api"
+import { fetchSalesOrderDetail } from "@/features/sales-orders/api/sales-orders"
 
 // ─── 后端形状 ────────────────────────────────────────────────────────────────
 

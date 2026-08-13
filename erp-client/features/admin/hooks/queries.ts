@@ -12,7 +12,7 @@ import {
     updateAdmin,
     updateAdminRole,
     updateRole,
-} from "@/features/admin/api"
+} from "@/features/admin/api/admin"
 import type {
     CreateAdminPayload,
     CreateRolePayload,

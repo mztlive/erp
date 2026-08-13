@@ -31,7 +31,10 @@ import {
     DescriptionTerm,
 } from "@/components/ui/description-list"
 import type { ProfitLossView } from "../types"
-import { formatMoneyDisplay, PROFIT_LOSS_SCOPE_LABEL } from "../presentation"
+import {
+    formatMoneyDisplay,
+    PROFIT_LOSS_SCOPE_LABEL,
+} from "@/features/actual-profit-loss/lib/presentation"
 
 const trendChartConfig = {
     revenue: { label: "不含税收入", color: "var(--chart-1)" },

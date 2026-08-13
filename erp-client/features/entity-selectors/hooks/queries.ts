@@ -22,7 +22,7 @@ import {
     type CustomerSearch,
     type EntitySearch,
     type SellableSkuSearch,
-} from "@/features/entity-selectors/api"
+} from "@/features/entity-selectors/api/index"
 import {
     fetchSalesOrderDetail,
     fetchSalesOrders,

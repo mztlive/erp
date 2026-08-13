@@ -12,7 +12,7 @@ import {
     fetchUnifiedTaskQueueCounts,
     transferWorkItem,
     WorkItemApiError,
-} from "@/features/unified-task-queue/api"
+} from "@/features/unified-task-queue/api/work-items"
 import type {
     InTaskActionKind,
     SessionLease,

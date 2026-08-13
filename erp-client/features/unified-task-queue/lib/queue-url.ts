@@ -1,4 +1,4 @@
-import type { QueueScopeSlug, WorkItemFamily } from "./types"
+import type { QueueScopeSlug, WorkItemFamily } from "../types"
 
 const SCOPE_SLUGS: QueueScopeSlug[] = ["mine", "role_pool", "team", "hold"]
 

@@ -31,7 +31,7 @@ import {
     useStartSalesChangeOrderMutation,
 } from "@/features/sales-orders/hooks/queries"
 import { PROCUREMENT_REJECT_REASON_LABEL } from "@/features/sales-orders/lib/labels"
-import type { SalesOrderDetailView } from "@/features/sales-orders/api"
+import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderCreateForm } from "@/features/sales-orders/components/sales-order-create-form"
 import { VoidSalesOrderDialog } from "@/features/sales-orders/components/void-sales-order-dialog"
 import {

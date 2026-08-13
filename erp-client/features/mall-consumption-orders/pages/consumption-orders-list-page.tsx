@@ -47,19 +47,30 @@ import {
     useConsumptionOrderDetailQuery,
     useConsumptionOrderExportMutation,
     useConsumptionOrderListQuery,
-} from "@/features/mall-consumption-orders/queries"
-import { ConsumptionOrderPreviewPanel } from "@/features/mall-consumption-orders/consumption-order-preview-panel"
+} from "@/features/mall-consumption-orders/hooks/queries"
+import { ConsumptionOrderPreviewPanel } from "@/features/mall-consumption-orders/components/consumption-order-preview-panel"
+import {
+    costBasisLabel,
+    factSummaryLabel,
+    paymentCompositionLabel,
+    previewDataSourceLabel,
+    supplierSummaryLabel,
+} from "@/features/mall-consumption-orders/lib/labels"
+import {
+    DATA_SOURCES,
+    FACT_TYPES,
+    SUPPLIER_STATUSES,
+    parseMetric,
+    parseMultiValue,
+} from "@/features/mall-consumption-orders/lib/url-state"
 import type {
     AttributionStatus,
     CostBasis,
-    FactType,
     FulfillmentChain,
     MallConsumptionOrderListQuery,
     MallConsumptionOrderMetricKey,
     MallConsumptionOrderRow,
-    MallConsumptionOrderView,
     PaymentSourceFilter,
-    SupplierFulfillmentStatus,
 } from "@/features/mall-consumption-orders/types"
 import {
     ATTRIBUTION_STATUS_LABEL,
@@ -73,92 +84,6 @@ import {
     SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
 import { formatDateTime } from "@/lib/datetime"
-
-function parseMetric(
-    raw: string | null,
-): MallConsumptionOrderMetricKey | "all" {
-    if (
-        raw === "paid" ||
-        raw === "pending_attr" ||
-        raw === "fact_diff" ||
-        raw === "auto_exception" ||
-        raw === "cost_none"
-    ) {
-        return raw
-    }
-    return "all"
-}
-
-/** 逗号分隔多值 URL 参数 → 白名单过滤后的数组；非法值忽略。 */
-function parseMultiValue<T extends string>(
-    raw: string | null,
-    allowed: readonly T[],
-): T[] {
-    if (!raw) return []
-    const set = new Set<string>(allowed)
-    return raw
-        .split(",")
-        .map((v) => v.trim())
-        .filter((v): v is T => v !== "" && set.has(v))
-}
-
-const FACT_TYPES = Object.keys(FACT_TYPE_LABEL) as FactType[]
-const SUPPLIER_STATUSES = Object.keys(
-    SUPPLIER_STATUS_LABEL,
-) as SupplierFulfillmentStatus[]
-const DATA_SOURCES = ["REALTIME", "BACKFILL"] as const
-
-function paymentCompositionLabel(row: MallConsumptionOrderRow) {
-    const { cardAmount, wechatAmount, sourceCount } = row.paymentComposition
-    const card = Number(cardAmount) > 0
-    const wx = Number(wechatAmount) > 0
-    if (card && wx) {
-        return `组合 · 卡券 ¥${cardAmount} / 微信 ¥${wechatAmount}`
-    }
-    if (card) return `卡券 ¥${cardAmount}`
-    if (wx) return `微信 ¥${wechatAmount}`
-    return `${sourceCount} 来源`
-}
-
-function factSummaryLabel(row: MallConsumptionOrderRow) {
-    return row.factSummary
-        .map(
-            (f) =>
-                `${FACT_TYPE_LABEL[f.factType]}${f.count > 1 ? `×${f.count}` : ""}`,
-        )
-        .join(" · ")
-}
-
-function costBasisLabel(row: MallConsumptionOrderRow) {
-    return row.costBasisBreakdown
-        .map((b) => {
-            const basisLabel = COST_BASIS_LABEL[b.basis] ?? b.basis
-            return `${basisLabel}${b.lineCount > 1 ? `×${b.lineCount}` : ""}`
-        })
-        .join(" / ")
-}
-
-function supplierSummaryLabel(row: MallConsumptionOrderRow) {
-    const s = row.supplierOrderSummary
-    if (s.total === 0) {
-        if (row.fulfillmentChain === "LEGACY_MANUAL") return "原人工 · 无子订单"
-        return "尚未生成子订单"
-    }
-    const statusText = s.statuses
-        .map(
-            (st) =>
-                SUPPLIER_STATUS_LABEL[st as SupplierFulfillmentStatus] ?? st,
-        )
-        .join("/")
-    return `${s.total} 单 · ${statusText}${s.hasException ? " · 异常" : ""}`
-}
-
-function previewDataSourceLabel(view: MallConsumptionOrderView): string {
-    if (view.facts.length === 0) return "—"
-    const kinds = Array.from(new Set(view.facts.map((f) => f.dataSource)))
-    if (kinds.length === 1) return DATA_SOURCE_LABEL[kinds[0]]
-    return DATA_SOURCE_LABEL.MIXED
-}
 
 export function ConsumptionOrdersListPage() {
     const router = useRouter()

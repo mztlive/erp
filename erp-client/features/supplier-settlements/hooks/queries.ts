@@ -18,7 +18,7 @@ import {
     resolveDifference,
     submitSettlementReview,
     type ListQueryInput,
-} from "@/features/supplier-settlements/api"
+} from "@/features/supplier-settlements/api/settlements"
 
 const settlementKeys = {
     all: ["supplier-settlements"] as const,

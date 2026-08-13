@@ -9,7 +9,7 @@ import {
     buildSettlementsSearchParams,
     parseSettlementsSearchParams,
     type SettlementsUrlState,
-} from "@/features/supplier-settlements/url-state"
+} from "@/features/supplier-settlements/lib/url-state"
 
 export function SupplierSettlementsPage() {
     const router = useRouter()

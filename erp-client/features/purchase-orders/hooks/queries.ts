@@ -13,8 +13,8 @@ import {
     savePurchaseOrderDraft,
     startPurchaseChange,
     submitPurchaseOrderForReview,
-} from "@/features/purchase-orders/api"
-import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api"
+} from "@/features/purchase-orders/api/purchase-orders"
+import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
 
 export const purchaseOrderKeys = {
     all: ["purchase-orders"] as const,

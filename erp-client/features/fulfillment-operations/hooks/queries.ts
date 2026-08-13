@@ -11,7 +11,7 @@ import {
     saveFulfillmentOperation,
     type FulfillmentQueueFilters,
 } from "@/features/fulfillment-operations/api"
-import type { FulfillmentLane } from "@/features/fulfillment-operations/lanes"
+import type { FulfillmentLane } from "@/features/fulfillment-operations/lib/lanes"
 
 export const fulfillmentKeys = {
     all: ["fulfillment-operations"] as const,

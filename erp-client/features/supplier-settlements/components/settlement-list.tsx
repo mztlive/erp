@@ -2,18 +2,13 @@
 
 import * as React from "react"
 import Link from "next/link"
-import type {
-    ColumnDef,
-    ColumnPinningState,
-    PaginationState,
-} from "@tanstack/react-table"
+import type { ColumnPinningState, PaginationState } from "@tanstack/react-table"
 import {
     ExternalLinkIcon,
     PlusIcon,
     RefreshCwIcon,
     SearchIcon,
 } from "lucide-react"
-import { z } from "zod"
 
 import {
     BusinessEmptyState,
@@ -35,42 +30,27 @@ import {
     QuickPreviewSheet,
 } from "@/components/business"
 import type { ResultState } from "@/components/business/feedback"
-import { useAppForm } from "@/components/form"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
+import { CreateDraftDialog } from "@/features/supplier-settlements/components/create-draft-dialog"
 import { CrossEntryBanner } from "@/features/supplier-settlements/components/cross-entry-banner"
-import {
-    newKey,
-    outcomeToResult,
-} from "@/features/supplier-settlements/operations"
-import {
-    useCreateDraftMutation,
-    useSettlementListQuery,
-} from "@/features/supplier-settlements/queries"
-import type { SettlementListRow } from "@/features/supplier-settlements/types"
+import { useSettlementListQuery } from "@/features/supplier-settlements/hooks/queries"
+import { useSettlementListColumns } from "@/features/supplier-settlements/hooks/use-settlement-list-columns"
+import { useSettlementListSearchHotkey } from "@/features/supplier-settlements/hooks/use-settlement-list-search-hotkey"
+import { outcomeToResult } from "@/features/supplier-settlements/lib/operations"
+import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import {
     DIFF_TYPE_LABEL,
     STATUS_LABEL,
     VIEW_LABEL,
 } from "@/features/supplier-settlements/types"
-import type { SettlementsUrlState } from "@/features/supplier-settlements/url-state"
 import { formatDateTime } from "@/lib/datetime"
 
 function SettlementList({
@@ -91,7 +71,6 @@ function SettlementList({
         left: ["statementNo"],
         right: ["actions"],
     })
-    const createMutation = useCreateDraftMutation()
 
     React.useEffect(() => {
         setSearchDraft(urlState.q ?? "")
@@ -144,237 +123,14 @@ function SettlementList({
         })
     }, [patchUrl])
 
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            )
-                return
-            const target = event.target as HTMLElement | null
-            const tag = target?.tagName
-            if (
-                tag === "INPUT" ||
-                tag === "TEXTAREA" ||
-                tag === "SELECT" ||
-                target?.isContentEditable
-            ) {
-                return
-            }
-            event.preventDefault()
-            document
-                .querySelector<HTMLInputElement>(
-                    '[data-slot="settlement-list-search"]',
-                )
-                ?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
+    useSettlementListSearchHotkey()
 
     const previewRow =
         data?.rows.find((r) => r.statementId === urlState.preview) ?? null
 
-    const columns = React.useMemo<ColumnDef<SettlementListRow>[]>(
-        () => [
-            {
-                id: "statementNo",
-                accessorFn: (row) => row.statementNo,
-                header: "结算单号",
-                meta: { label: "结算单号", width: "reference" },
-                cell: ({ row }) => (
-                    <div className="num text-sm font-medium">
-                        {row.original.statementNo}
-                    </div>
-                ),
-            },
-            {
-                id: "supplier",
-                accessorFn: (row) => row.supplierName,
-                header: "供应商",
-                meta: { label: "供应商" },
-                cell: ({ row }) => (
-                    <span className="text-sm">{row.original.supplierName}</span>
-                ),
-            },
-            {
-                id: "period",
-                accessorFn: (row) => row.periodLabel,
-                header: "期间",
-                meta: { label: "期间", width: "status" },
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {row.original.periodStart} ~ {row.original.periodEnd}
-                    </span>
-                ),
-            },
-            {
-                id: "erpAmount",
-                accessorFn: (row) => row.erpAmountGross,
-                header: "ERP 金额",
-                meta: {
-                    label: "ERP 计算金额（含税）",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) => (
-                    <MoneyValue
-                        value={row.original.erpAmountGross}
-                        taxBasis="gross"
-                    />
-                ),
-            },
-            {
-                id: "supplierAmount",
-                accessorFn: (row) => row.supplierAmountGross ?? "",
-                header: "账单金额",
-                meta: {
-                    label: "供应商账单金额（含税）",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) =>
-                    row.original.supplierAmountGross != null ? (
-                        <MoneyValue
-                            value={row.original.supplierAmountGross}
-                            taxBasis="gross"
-                        />
-                    ) : (
-                        <span className="text-xs text-muted-foreground">
-                            账单未同步
-                        </span>
-                    ),
-            },
-            {
-                id: "difference",
-                accessorFn: (row) => row.differenceAmountGross ?? "",
-                header: "差异",
-                meta: {
-                    label: "差异金额（含税）",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) => (
-                    <div className="text-right">
-                        {row.original.differenceAmountGross != null ? (
-                            <MoneyValue
-                                value={row.original.differenceAmountGross}
-                                taxBasis="gross"
-                            />
-                        ) : (
-                            <span className="text-xs text-muted-foreground">
-                                —
-                            </span>
-                        )}
-                        {row.original.differenceDirectionLabel ? (
-                            <div className="text-tiny text-muted-foreground">
-                                {row.original.differenceDirectionLabel}
-                            </div>
-                        ) : null}
-                        {row.original.unresolvedDifferenceCount > 0 ? (
-                            <Badge
-                                variant="outline"
-                                className="mt-0.5 text-2xs"
-                            >
-                                未决 {row.original.unresolvedDifferenceCount}
-                            </Badge>
-                        ) : null}
-                    </div>
-                ),
-            },
-            {
-                id: "status",
-                accessorFn: (row) => row.statusLabel,
-                header: "状态",
-                meta: { label: "状态", width: "status" },
-                cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        label={row.original.statusLabel}
-                        tone={row.original.statusTone}
-                    />
-                ),
-            },
-            {
-                id: "actors",
-                accessorFn: (row) =>
-                    `${row.preparedByLabel}/${row.reviewedByLabel}`,
-                header: "经办/复核",
-                meta: { label: "经办/复核" },
-                cell: ({ row }) => (
-                    <div className="text-xs text-muted-foreground">
-                        <div>经办 {row.original.preparedByLabel}</div>
-                        <div>复核 {row.original.reviewedByLabel}</div>
-                    </div>
-                ),
-            },
-            {
-                id: "actions",
-                header: "操作",
-                meta: { label: "操作", width: "status" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <div className="flex flex-wrap gap-1">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                                patchUrl({ preview: row.original.statementId })
-                            }
-                        >
-                            预览
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => onOpen(row.original.statementId)}
-                        >
-                            打开
-                        </Button>
-                    </div>
-                ),
-            },
-        ],
-        [onOpen, patchUrl],
-    )
+    const columns = useSettlementListColumns(patchUrl, onOpen)
 
     const canCreate = data?.hasModulePermission && data?.hasDataScope
-
-    const createSchema = z.object({
-        supplierId: z.string().min(1, "请选择供应商"),
-        periodStart: z.string().min(1, "请选择期间起"),
-        periodEnd: z.string().min(1, "请选择期间止"),
-    })
-
-    const form = useAppForm({
-        defaultValues: {
-            supplierId: "",
-            periodStart: "",
-            periodEnd: "",
-        },
-        validators: { onChange: createSchema },
-        onSubmit: async ({ value }) => {
-            const outcome = await createMutation.mutateAsync({
-                supplierId: value.supplierId,
-                periodStart: value.periodStart,
-                periodEnd: value.periodEnd,
-                requestId: newKey("req"),
-                idempotencyKey: newKey("create"),
-            })
-            setResult(outcomeToResult(outcome))
-            if (outcome.status === "succeeded" && outcome.statementId) {
-                setCreateOpen(false)
-                form.reset()
-                onOpen(outcome.statementId)
-            }
-        },
-    })
 
     if (listQuery.isPending) {
         return (
@@ -928,81 +684,16 @@ function SettlementList({
                 )}
             </QuickPreviewSheet>
 
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>新建结算草稿</DialogTitle>
-                        <DialogDescription>
-                            选择供应商与结算期间，创建后进入待对账。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form
-                        className="space-y-3"
-                        onSubmit={(e) => {
-                            e.preventDefault()
-                            void form.handleSubmit()
-                        }}
-                    >
-                        <form.AppField
-                            name="supplierId"
-                            children={(field) => (
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="supplierId">供应商</Label>
-                                    <SupplierSearchCombobox
-                                        value={field.state.value || undefined}
-                                        onValueChange={(id) =>
-                                            field.handleChange(id ?? "")
-                                        }
-                                        placeholder="请选择供应商"
-                                    />
-                                </div>
-                            )}
-                        />
-                        <form.AppField
-                            name="periodStart"
-                            children={(field) => (
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="periodStart">期间起</Label>
-                                    <DatePicker
-                                        className="w-full"
-                                        value={field.state.value || undefined}
-                                        onValueChange={(next) =>
-                                            field.handleChange(next ?? "")
-                                        }
-                                    />
-                                </div>
-                            )}
-                        />
-                        <form.AppField
-                            name="periodEnd"
-                            children={(field) => (
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="periodEnd">期间止</Label>
-                                    <DatePicker
-                                        className="w-full"
-                                        value={field.state.value || undefined}
-                                        onValueChange={(next) =>
-                                            field.handleChange(next ?? "")
-                                        }
-                                    />
-                                </div>
-                            )}
-                        />
-                        <DialogFooter>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => setCreateOpen(false)}
-                            >
-                                取消
-                            </Button>
-                            <form.AppForm>
-                                <form.SubmitButton label="确认创建草稿" />
-                            </form.AppForm>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+            <CreateDraftDialog
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                onCreated={(outcome) => {
+                    setResult(outcomeToResult(outcome))
+                    if (outcome.status === "succeeded" && outcome.statementId) {
+                        onOpen(outcome.statementId)
+                    }
+                }}
+            />
         </PageScaffold>
     )
 }

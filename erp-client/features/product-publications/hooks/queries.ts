@@ -8,7 +8,7 @@ import {
     manualPausePublication,
     publishRevision,
     retryDelivery,
-} from "@/features/product-publications/api"
+} from "@/features/product-publications/api/publications"
 import type { ProductPublicationListQuery } from "@/features/product-publications/types"
 
 const publicationKeys = {

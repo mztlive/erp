@@ -4,7 +4,7 @@ import {
     OptionCombobox,
     type OptionComboboxProps,
 } from "@/components/business/option-combobox"
-import { useIntegrationQueueQuery } from "@/features/integration-errors/queries"
+import { useIntegrationQueueQuery } from "../hooks/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 
 export type ReplacementWorkItemSearchComboboxProps = Omit<

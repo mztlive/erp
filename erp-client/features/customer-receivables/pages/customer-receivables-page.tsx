@@ -42,36 +42,36 @@ import {
 } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AllocationSessionPanel } from "@/features/customer-receivables/allocation-session-panel"
+import { AllocationSessionPanel } from "@/features/customer-receivables/components/allocation-session-panel"
 import {
     createInvoiceColumns,
     createReceivableColumns,
     createReceiptColumns,
     type CustomerAccountPreviewTarget,
-} from "@/features/customer-receivables/customer-account-columns"
+} from "@/features/customer-receivables/components/customer-account-columns"
 import {
     CustomerAccountDetailPreview,
     type ReverseRequest,
-} from "@/features/customer-receivables/customer-account-detail-preview"
+} from "@/features/customer-receivables/components/customer-account-detail-preview"
 import {
     buildAccountsCsv,
     downloadCsv,
-} from "@/features/customer-receivables/export-csv"
-import { ReceivableActionDialogs } from "@/features/customer-receivables/receivable-action-dialogs"
+} from "@/features/customer-receivables/lib/export-csv"
+import { ReceivableActionDialogs } from "@/features/customer-receivables/components/receivable-action-dialogs"
 import {
     useAllocationSessionQuery,
     useCreateAllocationSessionMutation,
     useCustomerAccountsDetailQuery,
     useCustomerAccountsListQuery,
     useReverseFactMutation,
-} from "@/features/customer-receivables/queries"
+} from "@/features/customer-receivables/hooks/queries"
 import type {
     AllocationMode,
     CustomerAccountsQuery,
     CustomerAccountsView,
     DueFilter,
 } from "@/features/customer-receivables/types"
-import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receivables/receivable-counterparty-search-combobox"
+import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receivables/components/receivable-counterparty-search-combobox"
 import { DUE_LABEL, VIEW_LABEL } from "@/features/customer-receivables/types"
 import { freshnessText } from "@/lib/ui-text"
 

@@ -9,7 +9,7 @@ import {
     resolveAdjustmentUnknown,
     startInventoryExport,
     submitAdjustment,
-} from "@/features/inventory/api"
+} from "@/features/inventory/api/inventory"
 import type { InventoryQuery } from "@/features/inventory/types"
 
 const inventoryKeys = {

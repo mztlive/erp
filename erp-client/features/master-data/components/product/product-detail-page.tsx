@@ -33,9 +33,7 @@ import {
     applySpecsFromDrafts,
     PRODUCT_EDITOR_SECTIONS,
     scrollToProductSection,
-    type ProductEditorFormValues,
     type ProductSpecDraft,
-    validateProductEditor,
 } from "@/features/master-data/lib/product-editor-model"
 import {
     ProductBasicSection,
@@ -48,10 +46,7 @@ import {
     ProductInventoryPreviewSheet,
     type ProductInventoryPreviewSku,
 } from "@/features/master-data/components/product/product-inventory-preview-sheet"
-import {
-    RegisterSupplyForSkuDialog,
-    type FixedSku,
-} from "@/features/supplier-offerings/offering-dialogs"
+import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import { useProductEditor } from "@/features/master-data/hooks/use-product-editor"
@@ -79,7 +74,6 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         formError,
         formErrorTitle,
         checkPassed,
-        setCheckPassed,
         result,
         disableOpen,
         setDisableOpen,
@@ -111,10 +105,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         reviseBlocker,
         disableBlocker,
         runLocalCheck,
-        setFormError,
-        setFormErrorTitle,
     } = editor
-    const canEdit = canRevise
 
     if (!isCreate && detailQuery.isPending) {
         return (

@@ -5,7 +5,10 @@ import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CARRIER_OPTIONS } from "@/lib/business-options"
-import type { FulfillmentDraft, FulfillmentTask } from "./types"
+import type {
+    FulfillmentDraft,
+    FulfillmentTask,
+} from "@/features/fulfillment-operations/types"
 
 export function FulfillmentShipForm({
     task,

@@ -1,19 +1,13 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { PlusIcon, SearchIcon } from "lucide-react"
-import type {
-    ColumnDef,
-    PaginationState,
-    SortingState,
-} from "@tanstack/react-table"
+import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessStatusBadge,
     BusinessTableFrame,
     DataFreshness,
     DataTable,
@@ -23,7 +17,6 @@ import {
     PageHeader,
     PageScaffold,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     InputGroup,
@@ -32,53 +25,23 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { cn } from "@/lib/utils"
-import { CustomerCreateDialog } from "@/features/customers/customer-create-dialog"
+import { CustomerCreateDialog } from "@/features/customers/components/customer-create-dialog"
 import {
     parseCustomerScope,
     SCOPE_LABELS,
     SCOPE_ORDER,
-} from "@/features/customers/filter-customers"
-import { useCustomerDirectoryQuery } from "@/features/customers/queries"
+} from "@/features/customers/lib/filter-customers"
+import {
+    parsePage,
+    SORT_COLUMN_TO_FIELD,
+    writeDirectoryUrl,
+} from "@/features/customers/lib/directory-url"
+import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
+import { useCustomerDirectoryColumns } from "@/features/customers/hooks/use-directory-columns"
+import { useCustomerDirectoryQuery } from "@/features/customers/hooks/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import type {
-    CustomerDirectoryItem,
-    CustomerScope,
-} from "@/features/customers/types"
+import type { CustomerScope } from "@/features/customers/types"
 import { hasPermission } from "@/lib/permissions"
-
-type DirectoryStatus = "active" | "disabled" | "all"
-
-function writeDirectoryUrl(
-    pathname: string,
-    params: {
-        scope: CustomerScope
-        status: DirectoryStatus
-        q: string
-        sort: string
-        dir: "asc" | "desc"
-        page: number
-    },
-): string {
-    const sp = new URLSearchParams()
-    if (params.scope !== "mine") sp.set("scope", params.scope)
-    if (params.status !== "active") sp.set("status", params.status)
-    if (params.q.trim()) sp.set("q", params.q.trim())
-    if (params.sort && params.sort !== "business") sp.set("sort", params.sort)
-    if (params.dir === "asc") sp.set("dir", "asc")
-    if (params.page > 1) sp.set("page", String(params.page))
-    const qs = sp.toString()
-    return qs ? `${pathname}?${qs}` : pathname
-}
-
-/** 表头排序列到服务端目录排序键。 */
-const SORT_COLUMN_TO_FIELD: Record<string, string> = {
-    business: "updated_at",
-}
-
-function parsePage(value: string | null): number {
-    const page = Number.parseInt(value ?? "", 10)
-    return Number.isFinite(page) && page > 0 ? page : 1
-}
 
 export function CustomerCenterPage() {
     const router = useRouter()
@@ -252,83 +215,7 @@ export function CustomerCenterPage() {
 
     const hasActiveFilters = status !== "active" || q.trim().length > 0
 
-    const columns = React.useMemo<ColumnDef<CustomerDirectoryItem>[]>(
-        () => [
-            {
-                id: "customer",
-                accessorFn: (row) => row.shortName || row.legalName,
-                header: "客户",
-                meta: { label: "客户", width: "reference" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <div className="min-w-0">
-                        <Link
-                            href={`/sales/customers/${row.original.id}`}
-                            className="font-medium text-foreground underline-offset-4 hover:underline"
-                        >
-                            {row.original.shortName || row.original.legalName}
-                        </Link>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="num text-xs text-muted-foreground">
-                                {row.original.customerNo}
-                            </span>
-                            {row.original.attentionTags?.map((tag) => (
-                                <Badge
-                                    key={tag}
-                                    variant="outline"
-                                    className="text-2xs"
-                                >
-                                    {tag}
-                                </Badge>
-                            ))}
-                        </div>
-                    </div>
-                ),
-            },
-            {
-                id: "owner",
-                accessorKey: "ownerName",
-                header: "负责销售",
-                meta: { label: "负责销售", width: "default" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <div className="text-sm">
-                        <div>{row.original.ownerName}</div>
-                        {row.original.collaboratorCount > 0 ? (
-                            <div className="text-xs text-muted-foreground">
-                                协作 {row.original.collaboratorCount} 人
-                            </div>
-                        ) : null}
-                    </div>
-                ),
-            },
-            {
-                id: "status",
-                accessorFn: (row) => row.statusLabel.label,
-                header: "状态",
-                meta: { label: "状态", width: "status" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        {...row.original.statusLabel}
-                    />
-                ),
-            },
-            {
-                id: "business",
-                accessorFn: (row) => row.updatedAt,
-                header: "资料更新",
-                meta: { label: "资料更新", width: "default", numeric: true },
-                cell: ({ row }) => (
-                    <span className="num text-sm text-muted-foreground">
-                        {row.original.updatedAt.slice(0, 10)}
-                    </span>
-                ),
-            },
-        ],
-        [],
-    )
+    const columns = useCustomerDirectoryColumns()
 
     return (
         <PageScaffold>

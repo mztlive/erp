@@ -20,7 +20,7 @@ import {
     type Page,
 } from "@/lib/api"
 import { PAYMENT_TERM_OPTIONS, paymentTermLabel } from "@/lib/business-options"
-import { contractPdfError } from "@/features/contracts/pdf"
+import { contractPdfError } from "@/features/contracts/lib/pdf"
 import type {
     ContractAction,
     ContractAttachmentView,

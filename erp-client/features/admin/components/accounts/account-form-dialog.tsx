@@ -20,7 +20,7 @@ import {
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { useAdminMutations } from "@/features/admin/queries"
+import { useAdminMutations } from "@/features/admin/hooks/queries"
 
 /** 账号表单所需的最小账号信息（编辑模式）。 */
 export type AccountDraft = {

@@ -15,7 +15,7 @@ import type {
     WorkspaceMetric,
     WorkspaceTaskGroup,
     WorkspaceWorkItem,
-} from "./types"
+} from "../types"
 
 /** 后端 work_item 列表行（WorkItemView）。 */
 type WorkItemDto = {

@@ -14,7 +14,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useRoleMutations } from "@/features/admin/queries"
+import { useRoleMutations } from "@/features/admin/hooks/queries"
 
 /** 删除角色确认对话框；系统内置角色会被后端拒绝删除。 */
 export function DeleteRoleDialog({

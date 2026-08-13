@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useConsumptionOrderDetailQuery } from "@/features/mall-consumption-orders/queries"
+import { useConsumptionOrderDetailQuery } from "@/features/mall-consumption-orders/hooks/queries"
 import type {
     MallConsumptionOrderView,
     MallOrderFactView,
@@ -54,7 +54,8 @@ import {
     SUPPLIER_REFUND_LABEL,
     SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
-import { customerLabelFor } from "@/features/mall-consumption-orders/customer-title"
+import { customerLabelFor } from "@/features/mall-consumption-orders/lib/customer-title"
+import { parseSection } from "@/features/mall-consumption-orders/lib/url-state"
 import { cn } from "@/lib/utils"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
@@ -63,11 +64,6 @@ import { formatDateTime } from "@/lib/datetime"
 const BLOCKED_ACTION_LABEL: Record<string, string> = {
     EDIT_MALL_ORDER: "修改商城订单",
     RETRY_SUPPLIER: "重试供应商下单",
-}
-
-function parseSection(raw: string | null): ObjectCenterSectionId {
-    const found = OBJECT_CENTER_SECTIONS.find((s) => s.id === raw)
-    return found?.id ?? "overview"
 }
 
 function sourceColumnTitle(source: PaymentSourceView) {

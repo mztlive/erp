@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 
-import { fetchWorkspaceDashboard } from "@/features/workspace/api"
+import { fetchWorkspaceDashboard } from "@/features/workspace/api/dashboard"
 import type { TodayWorkspaceQuery } from "@/features/workspace/types"
 
 const workspaceHomeKeys = {

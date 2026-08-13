@@ -36,10 +36,10 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CustomerForm } from "@/features/customers/customer-form"
-import { CustomerAssignmentDialog } from "@/features/customers/customer-assignment-dialog"
-import { useCustomerCenterQuery } from "@/features/customers/queries"
-import { revealCustomerSensitiveField } from "@/features/customers/queries"
+import { CustomerForm } from "@/features/customers/components/customer-form"
+import { CustomerAssignmentDialog } from "@/features/customers/components/customer-assignment-dialog"
+import { useCustomerCenterQuery } from "@/features/customers/hooks/queries"
+import { revealCustomerSensitiveField } from "@/features/customers/hooks/queries"
 import type {
     CustomerCenterView,
     CustomerAssignmentView,

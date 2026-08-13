@@ -4,11 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { DownloadIcon, FileUpIcon, PrinterIcon, SearchIcon } from "lucide-react"
-import type {
-    ColumnDef,
-    PaginationState,
-    SortingState,
-} from "@tanstack/react-table"
+import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
@@ -34,114 +30,30 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
-import { ContractPreviewPanel } from "@/features/contracts/contract-preview-panel"
-import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
+import { ContractPaperDialog } from "@/features/contracts/components/contract-paper-dialog"
+import { ContractPreviewPanel } from "@/features/contracts/components/contract-preview-panel"
+import { ContractUploadDialog } from "@/features/contracts/components/contract-upload-dialog"
 import {
     computeContractMetrics,
     contractMetricLabel,
     filterContracts,
     type ContractMetricFilter,
-} from "@/features/contracts/filter-contracts"
+} from "@/features/contracts/lib/filter-contracts"
+import { sortRows } from "@/features/contracts/lib/contract-list-sort"
+import {
+    contractsUrlCodec,
+    type ContractsUrlState,
+} from "@/features/contracts/lib/contracts-url-state"
 import {
     useContractCenterQuery,
     useContractsQuery,
     useCreateContractExportJobMutation,
-} from "@/features/contracts/queries"
+} from "@/features/contracts/hooks/queries"
+import { useContractListColumns } from "@/features/contracts/hooks/use-contract-list-columns"
 import type {
     ContractExportJob,
-    ContractListRow,
     UploadContractPdfResult,
 } from "@/features/contracts/types"
-import { contractOwnerLabel } from "@/features/contracts/types"
-import { createUrlStateCodec } from "@/lib/url-state"
-
-/** URL 契约：q（旧 search 别名只读兼容）/metric/page/pageSize/sort/dir/customerId。 */
-const CONTRACT_METRIC_VALUES: ContractMetricFilter[] = [
-    "all",
-    "effective",
-    "expiring_30d",
-    "expired",
-    "terminated",
-]
-
-const CONTRACTS_URL_FIELDS = [
-    { key: "q", type: "string", trim: true, aliases: ["search"] as const },
-    {
-        key: "metric",
-        type: "enum",
-        values: CONTRACT_METRIC_VALUES,
-        defaultValue: "all",
-    },
-    { key: "page", type: "number", defaultValue: 1 },
-    { key: "pageSize", type: "number", defaultValue: 20, min: 1, max: 100 },
-    { key: "sort", type: "string" },
-    { key: "dir", type: "enum", values: ["asc", "desc"] as const },
-    { key: "customerId", type: "string" },
-] as const
-
-type ContractsUrlState = {
-    q?: string
-    metric: ContractMetricFilter
-    page: number
-    pageSize: number
-    sort?: string
-    dir?: "asc" | "desc"
-    customerId?: string
-}
-
-const contractsUrlCodec =
-    createUrlStateCodec<ContractsUrlState>(CONTRACTS_URL_FIELDS)
-
-/** 表头排序列 → 全量排序键（对整表排序后再分页，杜绝「当前页伪排序」）。 */
-function sortRows(
-    rows: readonly ContractListRow[],
-    sorting: SortingState,
-): ContractListRow[] {
-    const sorted = [...rows]
-    if (sorting.length === 0) {
-        // 默认：将到期优先，再按有效期止升序（与列表描述文案一致）。
-        return sorted.sort((a, b) => {
-            if (a.expiringWithin30Days !== b.expiringWithin30Days) {
-                return a.expiringWithin30Days ? -1 : 1
-            }
-            return a.validTo.localeCompare(b.validTo)
-        })
-    }
-    const { id, desc } = sorting[0]
-    const dir = desc ? -1 : 1
-    return sorted.sort((a, b) => {
-        let cmp = 0
-        switch (id) {
-            case "contractNo":
-                cmp = a.contractNo.localeCompare(b.contractNo)
-                break
-            case "customer":
-                cmp = a.customer.displayName.localeCompare(
-                    b.customer.displayName,
-                )
-                break
-            case "settlement":
-                cmp = a.settlementParty.displayName.localeCompare(
-                    b.settlementParty.displayName,
-                )
-                break
-            case "validity":
-                cmp = a.validTo.localeCompare(b.validTo)
-                break
-            case "revision":
-                cmp = a.revisionNo - b.revisionNo
-                break
-            case "sales":
-                cmp = a.salesOrderCount - b.salesOrderCount
-                break
-            case "owner":
-                cmp = a.ownerLabel.localeCompare(b.ownerLabel)
-                break
-        }
-        return cmp * dir
-    })
-}
 
 export function ContractsListPage() {
     const router = useRouter()
@@ -332,181 +244,10 @@ export function ContractsListPage() {
         })
     }, [exportMutation, filterSnapshotLabel, filtered.length])
 
-    const columns = React.useMemo<ColumnDef<ContractListRow>[]>(
-        () => [
-            {
-                id: "contractNo",
-                accessorKey: "contractNo",
-                header: "合同编号",
-                meta: { label: "合同编号", width: "reference" },
-                cell: ({ row }) => (
-                    <div className="min-w-0">
-                        <Button
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            className="num px-0"
-                            aria-label={`打开合同 ${row.original.contractNo}`}
-                            render={
-                                <Link
-                                    href={`/sales/contracts/${row.original.contractId}`}
-                                />
-                            }
-                        >
-                            {row.original.contractNo}
-                        </Button>
-                        <div className="truncate text-xs text-muted-foreground">
-                            {row.original.customer.displayName}
-                            {" · "}
-                            <span className="num">
-                                {row.original.customer.customerNo}
-                            </span>
-                        </div>
-                    </div>
-                ),
-            },
-            {
-                id: "settlement",
-                accessorFn: (row) => row.settlementParty.displayName,
-                header: "结算主体",
-                meta: { label: "结算主体", width: "default" },
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.settlementParty.displayName}
-                    </span>
-                ),
-            },
-            {
-                id: "validity",
-                header: "有效期",
-                meta: { label: "有效期", width: "default", numeric: true },
-                cell: ({ row }) => (
-                    <div className="num text-sm">
-                        <div>
-                            {row.original.validFrom} ~ {row.original.validTo}
-                        </div>
-                        {row.original.expiringWithin30Days ? (
-                            <div className="text-xs text-warning-foreground">
-                                将到期
-                            </div>
-                        ) : null}
-                    </div>
-                ),
-            },
-            {
-                id: "status",
-                header: "状态",
-                meta: { label: "状态", width: "status" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        label={row.original.statusLabel}
-                        tone={row.original.statusTone}
-                    />
-                ),
-            },
-            {
-                id: "revision",
-                header: "版本",
-                meta: { label: "版本", width: "status", numeric: true },
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        v{row.original.revisionNo}
-                    </span>
-                ),
-            },
-            {
-                id: "sales",
-                header: "销售单",
-                meta: { label: "关联销售单", width: "status", numeric: true },
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {row.original.salesOrderCount}
-                        {row.original.activeSalesOrderCount > 0 ? (
-                            <span className="text-muted-foreground">
-                                {" "}
-                                · 进行中 {row.original.activeSalesOrderCount}
-                            </span>
-                        ) : null}
-                    </span>
-                ),
-            },
-            {
-                id: "owner",
-                accessorKey: "ownerLabel",
-                header: "负责人",
-                meta: { label: "负责人", width: "default" },
-                cell: ({ row }) => (
-                    <span className="text-sm text-muted-foreground">
-                        {contractOwnerLabel(row.original.ownerLabel)}
-                    </span>
-                ),
-            },
-            {
-                id: "actions",
-                header: "操作",
-                meta: { label: "操作", width: "default", align: "end" },
-                enableSorting: false,
-                cell: ({ row }) => {
-                    const canPrint =
-                        row.original.allowedActions.includes("PRINT")
-                    const printBlocker = row.original.actionBlockers.find(
-                        (b) => b.action === "PRINT",
-                    )
-                    return (
-                        <div
-                            className="flex justify-end gap-1"
-                            onClick={(event) => event.stopPropagation()}
-                            onKeyDown={(event) => event.stopPropagation()}
-                        >
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                onClick={() =>
-                                    setPreviewId(row.original.contractId)
-                                }
-                            >
-                                预览
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                render={
-                                    <Link
-                                        href={`/sales/contracts/${row.original.contractId}`}
-                                    />
-                                }
-                            >
-                                打开
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                disabled={!canPrint}
-                                title={
-                                    !canPrint
-                                        ? (printBlocker?.message ??
-                                          "当前不可打印")
-                                        : "纸质预览"
-                                }
-                                onClick={() => {
-                                    if (canPrint)
-                                        setPaperId(row.original.contractId)
-                                }}
-                            >
-                                打印
-                            </Button>
-                        </div>
-                    )
-                },
-            },
-        ],
-        [],
-    )
+    const columns = useContractListColumns({
+        onPreview: setPreviewId,
+        onPaper: setPaperId,
+    })
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {

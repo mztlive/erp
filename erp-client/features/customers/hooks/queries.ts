@@ -10,7 +10,7 @@ import {
     queryCustomerMutationByIdempotency,
     revealCustomerSensitiveField,
     saveCustomerDetails,
-} from "@/features/customers/api"
+} from "@/features/customers/api/index"
 import type {
     CreateCustomerInput,
     CustomerAssignmentChangeInput,

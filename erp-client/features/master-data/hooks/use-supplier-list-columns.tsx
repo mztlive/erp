@@ -10,7 +10,7 @@ import {
     nameColumn,
     revisionNoColumn,
     revisionTimingColumn,
-} from "@/features/master-data/lib/list-column-primitives"
+} from "@/features/master-data/components/list/list-column-primitives"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 export function useSupplierListColumns({

@@ -6,7 +6,7 @@ import {
     fetchHistoryBackfillDetail,
     fetchHistoryBackfillList,
     submitHistoryBackfillCommand,
-} from "@/features/history-backfill/api"
+} from "@/features/history-backfill/api/history-backfill"
 import type {
     HistoryBackfillCommandInput,
     HistoryBackfillDetailQuery,

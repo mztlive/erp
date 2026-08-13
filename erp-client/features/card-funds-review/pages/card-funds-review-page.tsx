@@ -2,15 +2,12 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
     CircleCheckIcon,
     PauseIcon,
-    SearchIcon,
     TriangleAlertIcon,
     XIcon,
 } from "lucide-react"
-import { z } from "zod"
 
 import {
     BusinessEmptyState,
@@ -20,8 +17,6 @@ import {
     DiscardConfirmDialog,
     FormalActionConfirmDialog,
     FormalActionResult,
-    ListToolbar,
-    OptionCombobox,
     PageHeader,
     PageScaffold,
     SequentialProcessBar,
@@ -29,7 +24,6 @@ import {
 } from "@/components/business"
 import { cn } from "@/lib/utils"
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
-import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -40,37 +34,19 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import type {
     AllocationDraftLine,
     ApproveConclusion,
     CardFundsReviewDecision,
     FormalOutcome,
-    RejectReasonCode,
     ReviewType,
 } from "@/features/card-funds-review/types"
 import {
     APPROVE_CONCLUSION_LABEL,
     REJECT_FOLLOW_UP_COLLABORATION,
-    REJECT_REASON_LABEL,
     REVIEW_TYPE_LABEL,
     WORK_ITEM_TYPE_LABEL,
 } from "@/features/card-funds-review/types"
@@ -82,14 +58,23 @@ import {
     useRegisterInvoiceMutation,
     useRegisterReceiptMutation,
     useSaveCardFundsEvidenceMutation,
-} from "@/features/card-funds-review/queries"
+} from "../hooks/queries"
+import {
+    useCardFundsReviewDefaultUrlSync,
+    useCardFundsReviewUrlState,
+} from "../hooks/use-card-funds-review-url-state"
 import { freshnessText, openWorkspaceLabel, versionText } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
-import { CardFundsAllocationEditor } from "./components/card-funds-allocation-editor"
-import { CardFundsOverview } from "./components/card-funds-overview"
-import { CardFundsRecords } from "./components/card-funds-records"
-import { formatMoney, moneyStrSafe, shortHash } from "./presentation"
+import { CardFundsAllocationEditor } from "../components/card-funds-allocation-editor"
+import { CardFundsOverview } from "../components/card-funds-overview"
+import { CardFundsRecords } from "../components/card-funds-records"
+import { EvidenceNavPanel } from "../components/evidence-nav-panel"
+import { QueueFilterToolbar } from "../components/queue-filter-toolbar"
+import { RejectReviewDialog } from "../components/reject-review-dialog"
+import type { RejectReviewValue } from "../components/reject-review-dialog"
+import { ReviewChainPanel } from "../components/review-chain-panel"
+import { formatMoney, moneyStrSafe, shortHash } from "../lib/presentation"
 
 type SessionLease = {
     workItemId: string
@@ -105,45 +90,24 @@ type ConfirmMode =
     | { kind: "hold" }
     | null
 
-const rejectSchema = z.object({
-    reasonCode: z.enum([
-        "EVIDENCE_INSUFFICIENT",
-        "FACTS_MISMATCH",
-        "COUNTERPARTY_UNCLEAR",
-        "OTHER",
-    ]),
-    comment: z.string().trim().min(5, "请填写至少 5 个字的驳回说明"),
-})
-
 export function CardFundsReviewPage() {
-    const router = useRouter()
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
-
-    const scope: "mine" | "role_pool" =
-        searchParams.get("scope") === "role_pool" ? "role_pool" : "mine"
-    const typeParam = searchParams.get("type")
-    const type: "all" | "opening" | "delta" =
-        typeParam === "opening" || typeParam === "delta" ? typeParam : "all"
-    const statusParam = searchParams.get("status")
-    const status: "pending" | "held" =
-        statusParam === "held" ? "held" : "pending"
-    const dueParam = searchParams.get("due")
-    const due: "all" | "today" | "overdue" =
-        dueParam === "today" || dueParam === "overdue" ? dueParam : "all"
-    const q = searchParams.get("q") ?? undefined
-    const currentWorkItemId = searchParams.get("currentWorkItemId") ?? undefined
-    const queueContextId =
-        searchParams.get("queueContextId") ?? `queue:card-funds-review:${scope}`
-
-    const autoNextExplicit = searchParams.get("autoNext")
-    const [sessionAutoNext, setSessionAutoNext] = React.useState(true)
-    const autoNext =
-        autoNextExplicit === "0"
-            ? false
-            : autoNextExplicit === "1"
-              ? true
-              : sessionAutoNext
+    const {
+        scope,
+        type,
+        status,
+        due,
+        q,
+        currentWorkItemId,
+        queueContextId,
+        autoNext,
+        searchInput,
+        setSearchInput,
+        setAutoNext,
+        replaceUrl,
+        pathname,
+        searchParams,
+        router,
+    } = useCardFundsReviewUrlState()
 
     const filters = React.useMemo(
         () => ({
@@ -181,6 +145,17 @@ export function CardFundsReviewPage() {
               ),
           )
         : 0
+
+    useCardFundsReviewDefaultUrlSync({
+        queuePending: queueQuery.isPending,
+        view,
+        task,
+        taskCount: tasks.length,
+        scope,
+        type,
+        queueContextId,
+    })
+
     const completed = Boolean(view) && tasks.length === 0
 
     const [confirmMode, setConfirmMode] = React.useState<ConfirmMode>(null)
@@ -207,7 +182,6 @@ export function CardFundsReviewPage() {
     const [allocLines, setAllocLines] = React.useState<AllocationDraftLine[]>(
         [],
     )
-    const [searchInput, setSearchInput] = React.useState(q ?? "")
     const [evidenceSavedAt, setEvidenceSavedAt] = React.useState<string | null>(
         null,
     )
@@ -245,44 +219,6 @@ export function CardFundsReviewPage() {
         setEvidenceSavedAt(null)
         setEvidenceDirty(false)
     }, [task])
-
-    // 搜索输入（q）与 URL 对齐
-    React.useEffect(() => {
-        setSearchInput(q ?? "")
-    }, [q])
-
-    // URL 默认：保留 queueContextId / scope / currentWorkItemId；
-    // type 默认「all」不写 URL（默认值省略，D18）
-    React.useEffect(() => {
-        if (queueQuery.isPending || !view) return
-        const hasScope = searchParams.has("scope")
-        const hasType = searchParams.has("type")
-        const hasItem = searchParams.has("currentWorkItemId")
-        const hasCtx = searchParams.has("queueContextId")
-        if (hasScope && hasType && hasCtx && (hasItem || tasks.length === 0))
-            return
-        const params = new URLSearchParams(searchParams.toString())
-        if (!hasScope) params.set("scope", scope)
-        if (!hasType && type !== "all") params.set("type", type)
-        if (!hasCtx) params.set("queueContextId", queueContextId)
-        if (!hasItem && task) {
-            params.set("currentWorkItemId", task.workItem.workItemId)
-        }
-        const qs = params.toString()
-        if (qs === searchParams.toString()) return
-        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-    }, [
-        queueQuery.isPending,
-        view,
-        searchParams,
-        scope,
-        type,
-        queueContextId,
-        task,
-        tasks.length,
-        pathname,
-        router,
-    ])
 
     // 自动领取（含登记票款后版本刷新：任务 subjectVersion 变化时重新领取）
     React.useEffect(() => {
@@ -325,38 +261,6 @@ export function CardFundsReviewPage() {
         }
     }, [task, lastResult])
 
-    const replaceUrl = React.useCallback(
-        (patch: Record<string, string | null | undefined>) => {
-            const params = new URLSearchParams(searchParams.toString())
-            for (const [key, value] of Object.entries(patch)) {
-                if (value == null || value === "") params.delete(key)
-                else params.set(key, value)
-            }
-            // 跨 W05/W11 返回时不丢 queueContextId
-            if (!params.has("queueContextId")) {
-                params.set("queueContextId", queueContextId)
-            }
-            const qs = params.toString()
-            router.replace(qs ? `${pathname}?${qs}` : pathname, {
-                scroll: false,
-            })
-        },
-        [pathname, queueContextId, router, searchParams],
-    )
-
-    // 300ms 防抖写 URL；q/replaceUrl 入依赖保证闭包不陈旧，
-    // 避免防抖期间切换 scope/type 等参数后被旧 URL 快照覆盖（D18 竞态）
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchInput.trim() === (q ?? "")) return
-            replaceUrl({
-                q: searchInput.trim() || null,
-                currentWorkItemId: null,
-            })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-    }, [q, replaceUrl, searchInput])
-
     const goToWorkItem = React.useCallback(
         (workItemId: string | undefined | null) => {
             setLastResult(null)
@@ -384,7 +288,7 @@ export function CardFundsReviewPage() {
             q: null,
             currentWorkItemId: null,
         })
-    }, [replaceUrl])
+    }, [replaceUrl, setSearchInput])
 
     const neighborId = React.useCallback(
         (delta: number) => {
@@ -543,13 +447,8 @@ export function CardFundsReviewPage() {
         ],
     )
 
-    const rejectForm = useAppForm({
-        defaultValues: {
-            reasonCode: "EVIDENCE_INSUFFICIENT" as RejectReasonCode,
-            comment: "",
-        },
-        validators: { onChange: rejectSchema },
-        onSubmit: async ({ value }) => {
+    const submitReject = React.useCallback(
+        async (value: RejectReviewValue) => {
             if (!task) return
             setActionError(null)
             try {
@@ -559,7 +458,7 @@ export function CardFundsReviewPage() {
                     ...base,
                     reviewResult: "REJECTED",
                     conclusion: "REJECTED",
-                    reasonCode: value.reasonCode as RejectReasonCode,
+                    reasonCode: value.reasonCode,
                     comment: value.comment.trim(),
                     evidenceDocumentIds:
                         base.evidenceDocumentIds.length > 0
@@ -601,7 +500,15 @@ export function CardFundsReviewPage() {
                 setActionError(getErrorMessage(error, "驳回失败"))
             }
         },
-    })
+        [
+            advanceIfNeeded,
+            autoNext,
+            buildDecisionBase,
+            completeMutation,
+            ensureLease,
+            task,
+        ],
+    )
 
     const handleHold = React.useCallback(async () => {
         if (!task) return
@@ -944,192 +851,17 @@ export function CardFundsReviewPage() {
                 }
             />
 
-            <div
-                className={`${surfacePanelClassName} sticky top-0 z-10 space-y-2.5 px-3 py-2.5 text-sm`}
-            >
-                <div className="flex flex-wrap items-center gap-3">
-                    <div
-                        role="group"
-                        aria-label="责任范围"
-                        className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                    >
-                        {(
-                            [
-                                { value: "mine" as const, label: "我的待办" },
-                                {
-                                    value: "role_pool" as const,
-                                    label: "团队待认领",
-                                },
-                            ] as const
-                        ).map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                aria-pressed={scope === opt.value}
-                                onClick={() =>
-                                    replaceUrl({
-                                        scope:
-                                            opt.value === "mine"
-                                                ? null
-                                                : opt.value,
-                                        queueContextId: null,
-                                        currentWorkItemId: null,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    scope === opt.value
-                                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                        : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                )}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div
-                        role="group"
-                        aria-label="任务类型"
-                        className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                    >
-                        {(
-                            [
-                                { value: "all" as const, label: "全部类型" },
-                                { value: "opening" as const, label: "期初" },
-                                { value: "delta" as const, label: "同步差额" },
-                            ] as const
-                        ).map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                aria-pressed={type === opt.value}
-                                onClick={() =>
-                                    replaceUrl({
-                                        type: opt.value,
-                                        currentWorkItemId: null,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    type === opt.value
-                                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                        : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                )}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div
-                        role="group"
-                        aria-label="到期时限"
-                        className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                    >
-                        {(
-                            [
-                                { value: "all" as const, label: "全部时限" },
-                                { value: "today" as const, label: "今日到期" },
-                                { value: "overdue" as const, label: "已超期" },
-                            ] as const
-                        ).map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                aria-pressed={due === opt.value}
-                                onClick={() =>
-                                    replaceUrl({
-                                        due:
-                                            opt.value === "all"
-                                                ? null
-                                                : opt.value,
-                                        currentWorkItemId: null,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    due === opt.value
-                                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                        : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                )}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div
-                        role="group"
-                        aria-label="队列范围"
-                        className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                    >
-                        {(
-                            [
-                                { value: "pending" as const, label: "待处理" },
-                                { value: "held" as const, label: "已跳过" },
-                            ] as const
-                        ).map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                aria-pressed={status === opt.value}
-                                onClick={() =>
-                                    replaceUrl({
-                                        status:
-                                            opt.value === "pending"
-                                                ? null
-                                                : opt.value,
-                                        currentWorkItemId: null,
-                                    })
-                                }
-                                className={cn(
-                                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    status === opt.value
-                                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                        : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                )}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                <ListToolbar
-                    aria-label="票款复核筛选"
-                    search={
-                        <InputGroup>
-                            <InputGroupAddon>
-                                <SearchIcon
-                                    className="size-4"
-                                    aria-hidden="true"
-                                />
-                            </InputGroupAddon>
-                            <InputGroupInput
-                                value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
-                                placeholder="搜索单号 / 客户 / 往来主体"
-                                aria-label="搜索复核队列"
-                            />
-                        </InputGroup>
-                    }
-                    actions={
-                        <div className="flex items-center gap-2">
-                            <Label
-                                htmlFor="auto-next"
-                                className="text-muted-foreground"
-                            >
-                                自动下一项
-                            </Label>
-                            <Switch
-                                id="auto-next"
-                                checked={autoNext}
-                                onCheckedChange={(on) => {
-                                    setSessionAutoNext(on)
-                                    replaceUrl({ autoNext: on ? "1" : "0" })
-                                }}
-                            />
-                        </div>
-                    }
-                />
-            </div>
+            <QueueFilterToolbar
+                scope={scope}
+                type={type}
+                due={due}
+                status={status}
+                searchInput={searchInput}
+                onSearchInputChange={setSearchInput}
+                autoNext={autoNext}
+                setAutoNext={setAutoNext}
+                replaceUrl={replaceUrl}
+            />
 
             {lastResult ? (
                 <div ref={resultRef} tabIndex={-1} className="outline-none">
@@ -1532,98 +1264,13 @@ export function CardFundsReviewPage() {
                         </div>
 
                         <aside className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:self-start">
-                            <Card size="sm" className={surfacePanelClassName}>
-                                <CardHeader className="border-b border-border/30 py-3">
-                                    <CardTitle className="text-base">
-                                        复核记录（只读）
-                                    </CardTitle>
-                                    <CardDescription>
-                                        历史复核记录只读，不可修改或删除；本次将形成复核号{" "}
-                                        {task.reviewChain.nextReviewNo}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-3 pt-4">
-                                    {task.reviewChain.items.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground">
-                                            尚无历史复核。本次通过/驳回将形成首条复核记录。
-                                        </p>
-                                    ) : (
-                                        task.reviewChain.items.map((item) => (
-                                            <div
-                                                key={item.reviewId}
-                                                className="rounded-lg border border-border px-3 py-2 text-sm"
-                                            >
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="font-medium">
-                                                        复核号 {item.reviewNo}
-                                                    </span>
-                                                    <Badge variant="outline">
-                                                        {
-                                                            REVIEW_TYPE_LABEL[
-                                                                item.reviewType
-                                                            ]
-                                                        }
-                                                    </Badge>
-                                                    <BusinessStatusBadge
-                                                        context="list"
-                                                        label={
-                                                            item.reviewResult ===
-                                                            "APPROVED"
-                                                                ? "通过"
-                                                                : "驳回"
-                                                        }
-                                                        tone={
-                                                            item.reviewResult ===
-                                                            "APPROVED"
-                                                                ? "success"
-                                                                : "destructive"
-                                                        }
-                                                    />
-                                                    <Badge variant="secondary">
-                                                        只读
-                                                    </Badge>
-                                                </div>
-                                                <p className="mt-1 text-muted-foreground">
-                                                    {item.reviewerLabel} ·{" "}
-                                                    {item.completedAt}
-                                                </p>
-                                            </div>
-                                        ))
-                                    )}
-                                </CardContent>
-                            </Card>
+                            <ReviewChainPanel task={task} />
 
-                            <Card size="sm" className={surfacePanelClassName}>
-                                <CardHeader className="border-b border-border/30 py-3">
-                                    <CardTitle className="text-base">
-                                        证据与导航
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-3 pt-4 text-sm">
-                                    <p className="text-muted-foreground">
-                                        {task.workItem.impact}
-                                    </p>
-                                    <Separator />
-                                    <div className="flex flex-col gap-2">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            render={<Link href={w05Href} />}
-                                        >
-                                            打开销售单
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            render={<Link href={w11Href} />}
-                                        >
-                                            {openWorkspaceLabel("W11")}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <EvidenceNavPanel
+                                task={task}
+                                w05Href={w05Href}
+                                w11Href={w11Href}
+                            />
                         </aside>
                     </div>
                 </>
@@ -1741,95 +1388,14 @@ export function CardFundsReviewPage() {
                 onConfirm={() => void handleHold()}
             />
 
-            <Dialog
+            <RejectReviewDialog
                 open={confirmMode?.kind === "reject"}
                 onOpenChange={(open) => {
                     if (!open) setConfirmMode(null)
                 }}
-            >
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>驳回复核</DialogTitle>
-                        <DialogDescription>
-                            仅记录本次驳回并完成任务；未决问题不会自动创建后续任务。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form
-                        className="space-y-3"
-                        onSubmit={(e) => {
-                            e.preventDefault()
-                            void rejectForm.handleSubmit()
-                        }}
-                    >
-                        <rejectForm.AppField
-                            name="reasonCode"
-                            children={(field) => (
-                                <div className="space-y-1.5">
-                                    <Label>驳回原因</Label>
-                                    <OptionCombobox
-                                        value={field.state.value}
-                                        onValueChange={(v) =>
-                                            field.handleChange(
-                                                v as RejectReasonCode,
-                                            )
-                                        }
-                                        options={(
-                                            Object.keys(
-                                                REJECT_REASON_LABEL,
-                                            ) as RejectReasonCode[]
-                                        ).map((code) => ({
-                                            value: code,
-                                            label: REJECT_REASON_LABEL[code],
-                                        }))}
-                                        className="w-full"
-                                        allowClear={false}
-                                    />
-                                </div>
-                            )}
-                        />
-                        <rejectForm.AppField
-                            name="comment"
-                            children={(field) => (
-                                <div className="space-y-1.5">
-                                    <Label htmlFor="reject-comment">
-                                        补充说明
-                                    </Label>
-                                    <Textarea
-                                        id="reject-comment"
-                                        value={field.state.value}
-                                        onChange={(e) =>
-                                            field.handleChange(e.target.value)
-                                        }
-                                        onBlur={field.handleBlur}
-                                        rows={3}
-                                    />
-                                    {field.state.meta.errors?.[0] ? (
-                                        <p className="text-xs text-destructive">
-                                            {String(field.state.meta.errors[0])}
-                                        </p>
-                                    ) : null}
-                                </div>
-                            )}
-                        />
-                        <DialogFooter>
-                            <DialogClose
-                                render={
-                                    <Button type="button" variant="outline" />
-                                }
-                            >
-                                取消
-                            </DialogClose>
-                            <Button
-                                type="submit"
-                                variant="destructive"
-                                disabled={completeMutation.isPending}
-                            >
-                                确认驳回
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+                pending={completeMutation.isPending}
+                onSubmit={submitReject}
+            />
 
             {/* 证据/备注未保存时切换任务确认 */}
             <DiscardConfirmDialog

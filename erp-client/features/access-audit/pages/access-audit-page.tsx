@@ -46,17 +46,15 @@ import {
     useEffectiveAccessQuery,
     usePreviewAccessChangeMutation,
     useSubmitAccessChangeMutation,
-} from "@/features/access-audit/queries"
-import { useAccessColumns } from "@/features/access-audit/access-columns"
-import { AccessListToolbar } from "@/features/access-audit/access-list-toolbar"
-import { AccessPreviewSheets } from "@/features/access-audit/access-preview-sheets"
-import {
-    changeReasonSchema,
-    EmptyByReason,
-    parseView,
-    PolicyBanner,
-    riskLabel,
-} from "@/features/access-audit/presentation"
+} from "@/features/access-audit/hooks/queries"
+import { useAccessColumns } from "@/features/access-audit/hooks/use-access-columns"
+import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
+import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
+import { changeReasonSchema } from "@/features/access-audit/lib/change-reason-schema"
+import { EmptyByReason } from "@/features/access-audit/components/empty-by-reason"
+import { parseView } from "@/features/access-audit/lib/url-state"
+import { PolicyBanner } from "@/features/access-audit/components/policy-banner"
+import { riskLabel } from "@/features/access-audit/lib/risk-labels"
 import {
     AccountFormDialog,
     type AccountDraft,

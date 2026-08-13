@@ -27,8 +27,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { HistoryBackfillFact as Fact } from "@/features/history-backfill/components/history-backfill-fact"
-import { formatHistoryBackfillDay as formatDay } from "@/features/history-backfill/components/format"
-import { useHistoryBackfillDetailQuery } from "@/features/history-backfill/queries"
+import { formatHistoryBackfillDay as formatDay } from "@/features/history-backfill/lib/format"
+import { useHistoryBackfillDetailQuery } from "@/features/history-backfill/hooks/queries"
 import type {
     BackfillPipelineStage,
     CostBasis,
@@ -49,7 +49,7 @@ import {
     REPORT_REVIEW_STATUS_LABEL,
     REPORT_REVIEW_STATUS_TONE,
 } from "@/features/history-backfill/types"
-import type { HistoryBackfillUrlState } from "@/features/history-backfill/url-state"
+import type { HistoryBackfillUrlState } from "@/features/history-backfill/lib/url-state"
 import { formatDateTime } from "@/lib/datetime"
 
 function ItemFilters({

@@ -48,7 +48,7 @@ import {
     useSaveSalesOrderDraftMutation,
     useSubmitSalesOrderMutation,
 } from "@/features/sales-orders/hooks/queries"
-import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api"
+import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders"
 import {
     calculateTotals,
     CARD_FORM_OPTIONS,

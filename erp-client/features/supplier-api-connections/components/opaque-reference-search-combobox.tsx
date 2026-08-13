@@ -1,12 +1,10 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
-
 import {
     OptionCombobox,
     type OptionComboboxProps,
 } from "@/components/business/option-combobox"
-import { fetchOpaqueReferenceOptions } from "@/features/supplier-api-connections/api"
+import { useOpaqueReferenceOptionsQuery } from "@/features/supplier-api-connections/hooks/use-opaque-reference-options"
 import { getErrorMessage } from "@/lib/api/errors"
 
 export type OpaqueReferenceSearchComboboxProps = Omit<
@@ -20,15 +18,7 @@ export function OpaqueReferenceSearchCombobox({
     emptyLabel,
     ...props
 }: OpaqueReferenceSearchComboboxProps) {
-    const query = useQuery({
-        queryKey: [
-            "supplier-api-connections",
-            "opaque-reference-options",
-            kind,
-        ],
-        queryFn: () => fetchOpaqueReferenceOptions(kind),
-        staleTime: 5 * 60 * 1000,
-    })
+    const query = useOpaqueReferenceOptionsQuery(kind)
     return (
         <OptionCombobox
             {...props}

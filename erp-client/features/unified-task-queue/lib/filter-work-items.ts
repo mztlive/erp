@@ -1,5 +1,5 @@
-import { FAMILY_LABELS } from "./types"
-import type { QueueWorkItemView, UnifiedQueueFilters } from "./types"
+import { FAMILY_LABELS } from "../types"
+import type { QueueWorkItemView, UnifiedQueueFilters } from "../types"
 
 function isOverdue(item: QueueWorkItemView): boolean {
     return (

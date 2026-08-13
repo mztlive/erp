@@ -3,15 +3,10 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type {
-    ColumnDef,
-    PaginationState,
-    SortingState,
-} from "@tanstack/react-table"
+import type { PaginationState, SortingState } from "@tanstack/react-table"
 import {
     CalendarRangeIcon,
     DownloadIcon,
-    ExternalLinkIcon,
     InfoIcon,
     RefreshCwIcon,
 } from "lucide-react"
@@ -20,7 +15,6 @@ import {
     BackgroundJobProgress,
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessStatusBadge,
     BusinessTableFrame,
     CostCoverageNotice,
     DataFreshness,
@@ -44,7 +38,6 @@ import {
 } from "@/features/entity-selectors"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
-import type { DataFreshnessState } from "@/components/business/page"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -67,196 +60,39 @@ import {
     useCardBusinessAnalyticsQuery,
     useDateBasisConfigQuery,
     useStartCardBusinessExportMutation,
-} from "@/features/card-business-analytics/queries"
+} from "@/features/card-business-analytics/hooks/queries"
 import type {
     CardBusinessAnalyticsQuery,
-    CardBusinessAnalyticsView,
     CardBusinessDimension,
     CardBusinessExportJob,
-    CardBusinessRow,
-    CostBasisCode,
-    CoverageFilter,
     DateBasis,
-    ExpiryState,
     PeriodPreset,
-    ProjectionFreshnessState,
     TaxBasis,
 } from "@/features/card-business-analytics/types"
 import {
     COVERAGE_FILTER_LABEL,
     COVERAGE_STATUS_UI,
-    COST_BASIS_LABEL,
-    COST_BASIS_ROW_UI,
     DATE_BASIS_LABEL,
     DIMENSION_LABEL,
 } from "@/features/card-business-analytics/types"
 import { openWorkspaceLabel } from "@/lib/ui-text"
-import { CardBusinessCharts } from "./components/card-business-charts"
-import { formatMoneyDisplay } from "./presentation"
+import { CardBusinessCharts } from "../components/card-business-charts"
+import { formatMoneyDisplay } from "../lib/presentation"
+import { downloadCardBusinessCsv } from "../lib/export-csv"
+import { mapFreshnessUi } from "../lib/freshness"
+import {
+    parseCostBasis,
+    parseCoverage,
+    parseDateBasis,
+    parseDimension,
+    parseExpiry,
+    parsePreset,
+    resolvePeriod,
+} from "../lib/url-state"
+import { useCardBusinessColumns } from "../hooks/use-card-business-columns"
 
 function taxBadge(basis: TaxBasis): string {
     return basis === "GROSS" ? "含税" : "不含税"
-}
-
-/** 导出成功条的真实下载入口：按当前视图行生成 CSV（含口径/筛选/时间水印）。 */
-function downloadCardBusinessCsv(
-    data: CardBusinessAnalyticsView,
-    job: CardBusinessExportJob,
-) {
-    const wm = job.watermark
-    const quote = (v: string) => `"${v.replaceAll('"', '""')}"`
-    const metaLines = [
-        "# 业务口径=卡券经营（销售/面值/消费/余额为含税；成本/毛差/经营贡献为不含税）",
-        `# 期间=${wm.periodFrom} ~ ${wm.periodTo}`,
-        `# 日期口径=${DATE_BASIS_LABEL[wm.dateBasis]}`,
-        `# 筛选=${wm.filterSummary}`,
-        `# 覆盖率=${wm.coverageRate ?? "—"}`,
-        `# 数据更新时间=${wm.projectionUpdatedAt}`,
-        `# 同步时间=${wm.consumedOutboxWatermark}`,
-        `# 余额快照时间=${wm.balanceSnapshotAt ?? "—"}`,
-        `# 延迟=${wm.lagSeconds} 秒`,
-        `# 行数=${wm.rowCount}`,
-        `# 微信排除=${wm.wechatExcludedNote}`,
-    ]
-    const header =
-        "客户,销售单,卡券类目,卡实例引用,消费(含税),退款(含税),成本口径,成本(不含税),覆盖,未履约余额(含税)"
-    const body = data.rows.items.map((r) =>
-        [
-            r.customerLabel,
-            r.salesOrderNo ?? "",
-            r.voucherCategoryLabel,
-            r.cardInstanceRef ?? "",
-            r.consumptionGross,
-            r.refundGross,
-            COST_BASIS_LABEL[r.costBasis],
-            r.costNet ?? "",
-            r.coverageStatus === "covered"
-                ? "已覆盖"
-                : r.coverageStatus === "partial"
-                  ? "部分"
-                  : "未覆盖",
-            r.unfulfilledBalanceGross,
-        ]
-            .map((c) => quote(String(c)))
-            .join(","),
-    )
-    const csv = [...metaLines, header, ...body].join("\n")
-    const url = URL.createObjectURL(
-        new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }),
-    )
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download =
-        wm.periodFrom && wm.periodTo
-            ? `卡券经营分析_${wm.periodFrom}_${wm.periodTo}.csv`
-            : "卡券经营分析.csv"
-    anchor.click()
-    URL.revokeObjectURL(url)
-}
-
-function parseDateBasis(raw: string | null): DateBasis | "" {
-    if (raw === "consumption" || raw === "sales" || raw === "expiry") return raw
-    return ""
-}
-
-function parseDimension(raw: string | null): CardBusinessDimension {
-    if (
-        raw === "customer" ||
-        raw === "sales_order" ||
-        raw === "voucher_category" ||
-        raw === "card_instance"
-    ) {
-        return raw
-    }
-    return "customer"
-}
-
-function parsePreset(raw: string | null): PeriodPreset {
-    if (
-        raw === "last-month" ||
-        raw === "quarter-to-date" ||
-        raw === "month-to-date"
-    ) {
-        return raw
-    }
-    return "month-to-date"
-}
-
-function parseExpiry(raw: string | null): ExpiryState {
-    if (raw === "active" || raw === "expired" || raw === "all") return raw
-    return "all"
-}
-
-function parseCoverage(raw: string | null): CoverageFilter {
-    if (raw === "below_threshold" || raw === "none" || raw === "all") return raw
-    return "all"
-}
-
-function parseCostBasis(raw: string | null): CostBasisCode[] | undefined {
-    if (!raw) return undefined
-    const parts = raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(
-            (s): s is CostBasisCode =>
-                s === "ACTUAL" || s === "STANDARD" || s === "NONE",
-        )
-    return parts.length > 0 ? parts : undefined
-}
-
-/** periodPreset → 相对当前日期计算 from/to。 */
-function resolvePeriod(preset: PeriodPreset): { from: string; to: string } {
-    const today = new Date()
-    const iso = (d: Date): string => {
-        const y = d.getFullYear()
-        const m = `${d.getMonth() + 1}`.padStart(2, "0")
-        const day = `${d.getDate()}`.padStart(2, "0")
-        return `${y}-${m}-${day}`
-    }
-    if (preset === "last-month") {
-        const last = new Date(today.getFullYear(), today.getMonth(), 0)
-        const first = new Date(last.getFullYear(), last.getMonth(), 1)
-        return { from: iso(first), to: iso(last) }
-    }
-    if (preset === "quarter-to-date") {
-        const qStart = new Date(
-            today.getFullYear(),
-            Math.floor(today.getMonth() / 3) * 3,
-            1,
-        )
-        return { from: iso(qStart), to: iso(today) }
-    }
-    return { from: iso(today), to: iso(today) }
-}
-
-function mapFreshnessUi(
-    state: ProjectionFreshnessState,
-    options?: {
-        refreshFailed?: boolean
-        refreshing?: boolean
-        breached?: boolean
-    },
-): { uiState: DataFreshnessState; statusLabel: string } {
-    if (options?.refreshing) {
-        return { uiState: "syncing", statusLabel: "正在刷新数据" }
-    }
-    if (options?.refreshFailed) {
-        return { uiState: "failed", statusLabel: "刷新失败 · 保留旧数据" }
-    }
-    if (options?.breached || state === "stale") {
-        return {
-            uiState: "stale",
-            statusLabel: "SLA 超时 · 数据陈旧 · 非实时",
-        }
-    }
-    switch (state) {
-        case "rebuilding":
-            return { uiState: "syncing", statusLabel: "数据更新中" }
-        case "failed":
-            return { uiState: "failed", statusLabel: "数据更新失败" }
-        default:
-            return { uiState: "fresh", statusLabel: "数据已更新" }
-    }
 }
 
 function metricValue(
@@ -521,251 +357,7 @@ export function CardBusinessAnalyticsPage() {
 
     const data = viewQuery.data
 
-    const columns = React.useMemo<ColumnDef<CardBusinessRow>[]>(
-        () => [
-            {
-                id: "customer",
-                accessorFn: (r) => r.customerLabel,
-                header: "客户",
-                meta: { label: "客户" },
-                cell: ({ row }) =>
-                    row.original.customerId ? (
-                        <Link
-                            href={`/sales/customers/${row.original.customerId}`}
-                            className="text-sm underline-offset-2 hover:underline"
-                        >
-                            {row.original.customerLabel}
-                        </Link>
-                    ) : (
-                        <span className="text-sm">
-                            {row.original.customerLabel}
-                        </span>
-                    ),
-            },
-            {
-                id: "salesOrder",
-                accessorFn: (r) => r.salesOrderNo ?? "",
-                header: "销售单",
-                meta: { label: "销售单" },
-                cell: ({ row }) =>
-                    row.original.salesOrderId ? (
-                        <Link
-                            href={`/sales/orders/${row.original.salesOrderId}`}
-                            className="text-sm underline-offset-2 hover:underline"
-                        >
-                            {row.original.salesOrderNo}
-                        </Link>
-                    ) : (
-                        <span className="text-sm">
-                            {row.original.salesOrderNo ?? "—"}
-                        </span>
-                    ),
-            },
-            {
-                id: "category",
-                accessorFn: (r) => r.voucherCategoryLabel,
-                header: "卡券类目",
-                meta: { label: "卡券类目" },
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.voucherCategoryLabel}
-                    </span>
-                ),
-            },
-            {
-                id: "cardRef",
-                accessorFn: (r) => r.cardInstanceRef ?? "",
-                header: "卡实例引用",
-                meta: { label: "稳定卡实例引用摘要" },
-                cell: ({ row }) =>
-                    row.original.cardInstanceRef ? (
-                        <span
-                            className="num text-sm"
-                            title="不可逆稳定引用，不可反推卡号/卡密"
-                        >
-                            {row.original.cardInstanceRef}
-                        </span>
-                    ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    ),
-            },
-            {
-                id: "consumption",
-                accessorFn: (r) => r.consumptionGross,
-                header: "消费(含税)",
-                meta: {
-                    label: "消费金额含税",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) => (
-                    <MoneyValue value={row.original.consumptionGross} />
-                ),
-            },
-            {
-                id: "refund",
-                accessorFn: (r) => r.refundGross,
-                header: "退款(含税)",
-                meta: {
-                    label: "退款含税",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) => (
-                    <MoneyValue value={row.original.refundGross} />
-                ),
-            },
-            {
-                id: "costBasis",
-                accessorFn: (r) => r.costBasis,
-                header: "成本口径",
-                meta: { label: "成本口径" },
-                cell: ({ row }) => {
-                    const ui = COST_BASIS_ROW_UI[row.original.costBasis]
-                    return (
-                        <BusinessStatusBadge
-                            context="list"
-                            label={ui.label}
-                            tone={ui.tone}
-                        />
-                    )
-                },
-            },
-            {
-                id: "cost",
-                accessorFn: (r) => r.costNet ?? "",
-                header: "成本(不含税)",
-                meta: {
-                    label: "成本不含税",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) => {
-                    if (row.original.costBasis === "NONE") {
-                        return (
-                            <MoneyValue
-                                value={null}
-                                unavailableReason="无可用成本 · 不显示金额"
-                            />
-                        )
-                    }
-                    return <MoneyValue value={row.original.costNet} />
-                },
-            },
-            {
-                id: "coverage",
-                accessorFn: (r) => r.coverageStatus,
-                header: "覆盖",
-                meta: { label: "覆盖状态" },
-                cell: ({ row }) => {
-                    const s = row.original.coverageStatus
-                    return (
-                        <BusinessStatusBadge
-                            context="list"
-                            label={
-                                s === "covered"
-                                    ? "已覆盖"
-                                    : s === "partial"
-                                      ? "部分"
-                                      : "未覆盖"
-                            }
-                            tone={
-                                s === "covered"
-                                    ? "success"
-                                    : s === "partial"
-                                      ? "warning"
-                                      : "destructive"
-                            }
-                        />
-                    )
-                },
-            },
-            {
-                id: "balance",
-                accessorFn: (r) => r.unfulfilledBalanceGross,
-                header: "未履约余额(含税)",
-                meta: {
-                    label: "未履约余额含税",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) => (
-                    <MoneyValue value={row.original.unfulfilledBalanceGross} />
-                ),
-            },
-            {
-                id: "actions",
-                header: "下钻",
-                meta: { label: "下钻" },
-                cell: ({ row }) => (
-                    <div className="flex flex-wrap gap-1">
-                        {row.original.consumptionOrderHref ? (
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                render={
-                                    <Link
-                                        href={row.original.consumptionOrderHref}
-                                    />
-                                }
-                            >
-                                {openWorkspaceLabel("W25")}
-                                <ExternalLinkIcon
-                                    className="size-3"
-                                    aria-hidden
-                                />
-                            </Button>
-                        ) : null}
-                        {row.original.supplierOrderHref ? (
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                render={
-                                    <Link
-                                        href={row.original.supplierOrderHref}
-                                    />
-                                }
-                            >
-                                {openWorkspaceLabel("W26")}
-                                <ExternalLinkIcon
-                                    className="size-3"
-                                    aria-hidden
-                                />
-                            </Button>
-                        ) : null}
-                        {row.original.costBasis === "NONE" && data ? (
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                render={
-                                    <Link
-                                        href={
-                                            data.governanceLinks
-                                                .noneCoverageHref
-                                        }
-                                    />
-                                }
-                            >
-                                {openWorkspaceLabel("W29")}
-                                <ExternalLinkIcon
-                                    className="size-3"
-                                    aria-hidden
-                                />
-                            </Button>
-                        ) : null}
-                    </div>
-                ),
-            },
-        ],
-        [data],
-    )
+    const columns = useCardBusinessColumns(data)
 
     // —— Loading shells ——
     if (basisQuery.isPending) {

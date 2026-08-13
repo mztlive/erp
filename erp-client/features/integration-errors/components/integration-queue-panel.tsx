@@ -9,7 +9,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { integrationStatusTone } from "../presentation"
+import { integrationStatusTone } from "../lib/presentation"
 import type { IntegrationResolutionItemView } from "../types"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"

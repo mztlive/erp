@@ -15,7 +15,7 @@ import {
     revisionNoColumn,
     revisionTimingColumn,
     stableNoColumn,
-} from "@/features/master-data/lib/list-column-primitives"
+} from "@/features/master-data/components/list/list-column-primitives"
 import type {
     MasterDataListItem,
     ProductListSkuSummary,

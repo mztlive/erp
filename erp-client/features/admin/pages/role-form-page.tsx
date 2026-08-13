@@ -24,8 +24,8 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
-import { PermissionOptionsPanel } from "@/features/admin/permission-panel"
-import { useRoleMutations, useRolesQuery } from "@/features/admin/queries"
+import { PermissionOptionsPanel } from "@/features/admin/components/roles/permission-panel"
+import { useRoleMutations, useRolesQuery } from "@/features/admin/hooks/queries"
 
 type RoleFormValues = {
     name: string

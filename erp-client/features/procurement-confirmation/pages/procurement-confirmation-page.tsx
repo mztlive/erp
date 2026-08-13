@@ -4,7 +4,6 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { TriangleAlertIcon } from "lucide-react"
-import { z } from "zod"
 
 import {
     BusinessEmptyState,
@@ -40,18 +39,27 @@ import type {
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
 import { useContractCenterQuery } from "@/features/contracts/queries"
-import { ProcurementSalesDocument } from "@/features/procurement-confirmation/procurement-sales-document"
+import { ProcurementSalesDocument } from "@/features/procurement-confirmation/components/procurement-sales-document"
 import { ProcurementPlanConfirmationDialog } from "@/features/procurement-confirmation/components/procurement-plan-confirmation-dialog"
 import { LegacyProcurementPlanEditor } from "@/features/procurement-confirmation/components/legacy-procurement-plan-editor"
 import { ProcurementConfirmationSidebar } from "@/features/procurement-confirmation/components/procurement-confirmation-sidebar"
 import { ProcurementQueueControls } from "@/features/procurement-confirmation/components/procurement-queue-controls"
 import { ProcurementOutcomeFeedback } from "@/features/procurement-confirmation/components/procurement-result"
-import type { ProcurementSupplyOption } from "@/features/procurement-confirmation/api"
 import {
     FULFILLMENT_MODE_LABEL,
     NEXT_SALES_RESOLUTION_COPY,
     REJECT_REASON_LABEL,
 } from "@/features/procurement-confirmation/types"
+import { money } from "@/features/procurement-confirmation/lib/format"
+import {
+    capabilityCodeForMode,
+    supplyCostForQuantity,
+} from "@/features/procurement-confirmation/lib/supply-cost"
+import {
+    buildReturnHref,
+    w05Href,
+} from "@/features/procurement-confirmation/lib/urls"
+import { rejectSchema } from "@/features/procurement-confirmation/lib/validation"
 import {
     useClaimProcurementMutation,
     useCompleteProcurementMutation,
@@ -60,34 +68,8 @@ import {
     useProcurementRecommendationQuery,
     useProcurementSupplyOptionsQuery,
     useSaveProcurementConfirmationMutation,
-} from "@/features/procurement-confirmation/queries"
+} from "@/features/procurement-confirmation/hooks/queries"
 import { freshnessText } from "@/lib/ui-text"
-
-const rejectSchema = z.object({
-    reasonCode: z.string().min(1, "请选择驳回原因"),
-    comment: z.string().trim().min(5, "请填写至少 5 个字的补充说明"),
-})
-
-const money = new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
-    minimumFractionDigits: 2,
-})
-
-function capabilityCodeForMode(mode: FulfillmentMode) {
-    if (mode === "ELECTRONIC") return "virtual"
-    if (mode === "SERVICE") return "offline_service"
-    return "physical"
-}
-
-function supplyCostForQuantity(
-    option: ProcurementSupplyOption,
-    quantity: string,
-) {
-    return Number(quantity) >= Number(option.bulkMinimumOrderQuantity)
-        ? option.bulkCostGross
-        : option.dropshipCostGross
-}
 
 /** 会话内存中的处理权（不写 URL / localStorage） */
 type SessionLease = {
@@ -96,20 +78,6 @@ type SessionLease = {
 }
 
 type ResultState = SharedResultState<FormalOutcome>
-
-function buildReturnHref(searchParams: URLSearchParams) {
-    const qs = searchParams.toString()
-    return qs ? `/procurement/confirm?${qs}` : "/procurement/confirm"
-}
-
-function w05Href(salesOrderId: string, returnTo: string, workItemId?: string) {
-    const params = new URLSearchParams({
-        from: "W07",
-        returnTo,
-    })
-    if (workItemId) params.set("sourceWorkItemId", workItemId)
-    return `/sales/orders/${salesOrderId}?${params.toString()}`
-}
 
 export function ProcurementConfirmationPage() {
     const router = useRouter()

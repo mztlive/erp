@@ -48,13 +48,13 @@ import {
     buildViewHref,
     buildWarningHref,
     resolveWorkspaceHref,
-} from "@/features/workspace/destination"
+} from "@/features/workspace/lib/destination"
 import {
     deriveProjectionFreshness,
     deriveWorkItemsFreshness,
     greetingForNow,
-} from "@/features/workspace/freshness"
-import { useWorkspaceDashboardQuery } from "@/features/workspace/queries"
+} from "@/features/workspace/lib/freshness"
+import { useWorkspaceDashboardQuery } from "@/features/workspace/hooks/queries"
 import {
     buildGroupAllHref,
     buildTaskQueueHref,
@@ -65,7 +65,7 @@ import {
     toTodayWorkspaceQuery,
     urlStateFromMetricKey,
     type WorkspaceUrlState,
-} from "@/features/workspace/url-state"
+} from "@/features/workspace/lib/url-state"
 import { actionLabelForWorkItemType, goToWorkspaceLabel } from "@/lib/ui-text"
 import type {
     WorkspaceMetricKey,

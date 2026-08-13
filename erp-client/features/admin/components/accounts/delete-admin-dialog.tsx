@@ -14,7 +14,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useAdminMutations } from "@/features/admin/queries"
+import { useAdminMutations } from "@/features/admin/hooks/queries"
 
 /** 删除账号确认对话框；系统内置账号会被后端拒绝删除。 */
 export function DeleteAdminDialog({

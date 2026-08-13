@@ -6,11 +6,8 @@ import {
     fetchCustomerQuality,
     fetchCustomerQualityPeriodPolicy,
     startCustomerQualityExport,
-} from "@/features/customer-quality/api"
-import type {
-    CustomerQualityQuery,
-    CustomerQualityScenario,
-} from "@/features/customer-quality/types"
+} from "../api/customer-quality"
+import type { CustomerQualityQuery, CustomerQualityScenario } from "../types"
 
 const customerQualityKeys = {
     all: ["customer-quality"] as const,

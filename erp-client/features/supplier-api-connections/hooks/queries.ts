@@ -14,7 +14,7 @@ import {
     startCatalogSync,
     updateCapabilities,
     type ListQueryInput,
-} from "@/features/supplier-api-connections/api"
+} from "@/features/supplier-api-connections/api/connections"
 
 const supplierConnectionKeys = {
     all: ["supplier-api-connections"] as const,

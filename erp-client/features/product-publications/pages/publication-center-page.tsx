@@ -11,7 +11,6 @@ import {
     RefreshCwIcon,
     SendIcon,
 } from "lucide-react"
-import { z } from "zod"
 
 import {
     BusinessEmptyState,
@@ -44,7 +43,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -61,29 +59,21 @@ import {
     usePublicationDetailQuery,
     usePublishRevisionMutation,
     useRetryDeliveryMutation,
-} from "@/features/product-publications/queries"
-import { SafetyPausePanel } from "@/features/product-publications/safety-pause-panel"
-import type {
-    ProductPublicationRevisionView,
-    ProductPublicationView,
-    PublicationPublishGate,
-    SaleStatus,
-} from "@/features/product-publications/types"
+} from "@/features/product-publications/hooks/queries"
+import { PublishGateAlert } from "@/features/product-publications/components/publish-gate-alert"
+import { RevisionContent } from "@/features/product-publications/components/revision-content"
+import { SafetyPausePanel } from "@/features/product-publications/components/safety-pause-panel"
+import {
+    publishSchema,
+    type SessionEdit,
+} from "@/features/product-publications/lib/publish-form"
+import type { SaleStatus } from "@/features/product-publications/types"
 import {
     MEDIA_ROLE_LABEL,
-    MEDIA_SCAN_STATUS_LABEL,
     SALE_STATUS_LABEL,
 } from "@/features/product-publications/types"
 import { cn } from "@/lib/utils"
-import { compareDecimal } from "@/lib/fixed-decimal"
 import { goToWorkspaceLabel } from "@/lib/ui-text"
-
-/** 税率小数 → 百分比展示（0.13 → 13%） */
-function percentLabel(rate: string): string {
-    const value = Number(rate)
-    if (Number.isFinite(value)) return `${Math.round(value * 100)}%`
-    return rate
-}
 
 const SECTIONS = [
     { id: "overview", label: "概览" },
@@ -99,283 +89,6 @@ type SectionId = (typeof SECTIONS)[number]["id"]
 function parseSection(raw: string | null): SectionId {
     const found = SECTIONS.find((s) => s.id === raw)
     return found?.id ?? "overview"
-}
-
-type SessionEdit = {
-    baselineRevisionId: string
-    name: string
-    specification: string
-    salesDescription: string
-    minimumPurchaseQuantity: string
-    salesPriceGross: string
-    salesTaxRate: string
-    saleStatus: SaleStatus
-    baseUnitCode: string
-    salesRegion: string[]
-    categoryId: string
-    skuRevisionId: string
-    supplierOfferingRevisionId: string
-    productCapabilities: string[]
-    validFrom: string
-    validTo?: string
-    media: ProductPublicationRevisionView["media"]
-}
-
-const publishDecimal = (label: string, maxScale: number, positive = false) =>
-    z
-        .string()
-        .trim()
-        .regex(
-            new RegExp(`^\\d+(?:\\.\\d{1,${maxScale}})?$`),
-            `${label}最多保留 ${maxScale} 位小数`,
-        )
-        .refine(
-            (value) => !positive || /[1-9]/.test(value),
-            `${label}必须大于 0`,
-        )
-
-function decimalAtMost(value: string, maximum: string, maxScale: number) {
-    try {
-        return compareDecimal(value, maximum, maxScale) <= 0
-    } catch {
-        return false
-    }
-}
-
-const publishSchema = z.object({
-    name: z.string().trim().min(1, "请填写展示名称"),
-    specification: z.string().trim().min(1, "请填写规格"),
-    salesDescription: z.string().trim().min(1, "销售说明必填"),
-    minimumPurchaseQuantity: publishDecimal("最小购买量", 6, true),
-    salesPriceGross: publishDecimal("含税销售价", 4, true),
-    salesTaxRate: publishDecimal("销项税率", 6).refine(
-        (value) => decimalAtMost(value, "1", 6),
-        "税率请填 0 到 1 之间的小数，如 0.13 表示 13%",
-    ),
-    categoryId: z.string().trim().min(1, "请填写商城类目 ID"),
-    skuRevisionId: z.string().trim().min(1, "请填写 SKU 修订 ID"),
-    supplierOfferingRevisionId: z.string().trim().min(1, "请选择固定供给修订"),
-    baseUnitCode: z.string().trim().min(1, "请填写基础单位代码"),
-    salesRegionText: z.string().trim().min(1, "请填写可销售区域"),
-    productCapabilitiesText: z.string(),
-    validFrom: z.string().min(1, "请选择生效时间"),
-    validTo: z.string(),
-    media: z
-        .array(
-            z.object({
-                fileAssetId: z.string().min(1),
-                mediaRole: z.enum(["MAIN", "CAROUSEL", "DETAIL"]),
-                sortNo: z.number().int().nonnegative(),
-                altText: z.string().trim().min(1, "图片说明必填"),
-            }),
-        )
-        .min(1, "至少需要一张图片"),
-    saleStatus: z.enum(["ON_SALE", "OFF_SALE", "PAUSED"]),
-})
-
-function PublishGateAlert({ gate }: { gate: PublicationPublishGate }) {
-    if (gate.kind === "READY") {
-        return (
-            <Alert variant="info">
-                <AlertTitle>可提交发布</AlertTitle>
-                <AlertDescription>
-                    {gate.priceOrTaxChanged
-                        ? "价格/税率有变化且复核已满足，可提交发布。"
-                        : "价格/税率无变化，可直接提交发布。"}
-                </AlertDescription>
-            </Alert>
-        )
-    }
-    if (gate.kind === "REVIEW_POLICY_UNCONFIGURED") {
-        return (
-            <Alert variant="warning" role="alert">
-                <AlertTitle>复核政策未配置</AlertTitle>
-                <AlertDescription>{gate.blocker.message}</AlertDescription>
-            </Alert>
-        )
-    }
-    if (gate.kind === "RECOVERY_RESPONSIBILITY_UNCONFIRMED") {
-        return (
-            <Alert variant="destructive" role="alert">
-                <AlertTitle>恢复责任未确认</AlertTitle>
-                <AlertDescription>{gate.blocker.message}</AlertDescription>
-            </Alert>
-        )
-    }
-    return (
-        <Alert variant="warning" role="alert">
-            <AlertTitle>发布复核阻断</AlertTitle>
-            <AlertDescription>{gate.blocker.message}</AlertDescription>
-        </Alert>
-    )
-}
-
-function RevisionContent({
-    rev,
-    fieldPermissions,
-}: {
-    rev: ProductPublicationRevisionView
-    fieldPermissions: ProductPublicationView["fieldPermissions"]
-}) {
-    const supplyMasked = fieldPermissions.supplyPriceGross === "masked"
-    return (
-        <div className="space-y-4">
-            <DocumentSummary
-                columns="three"
-                items={[
-                    { id: "name", label: "展示名称", value: rev.name },
-                    { id: "spec", label: "规格", value: rev.specification },
-                    { id: "cat", label: "类目", value: rev.categoryLabel },
-                    {
-                        id: "price",
-                        label: "含税销售价",
-                        value: (
-                            <span className="num">
-                                ¥{rev.salesPriceGross}
-                                <span className="ml-1 text-xs text-muted-foreground">
-                                    税率 {percentLabel(rev.salesTaxRate)}
-                                </span>
-                            </span>
-                        ),
-                    },
-                    {
-                        id: "moq",
-                        label: "最小购买量",
-                        value: (
-                            <span className="num">
-                                {rev.minimumPurchaseQuantity} {rev.baseUnitCode}
-                            </span>
-                        ),
-                    },
-                    {
-                        id: "saleStatus",
-                        label: "商城销售状态",
-                        value: rev.saleStatusLabel,
-                    },
-                    {
-                        id: "region",
-                        label: "可销售区域",
-                        value: rev.salesRegionLabel,
-                    },
-                    {
-                        id: "valid",
-                        label: "生效区间",
-                        value: (
-                            <span className="num text-xs">
-                                {formatDateTime(rev.validFrom, "default")}
-                                {rev.validTo
-                                    ? ` ~ ${formatDateTime(rev.validTo, "default")}`
-                                    : " 起"}
-                            </span>
-                        ),
-                    },
-                ]}
-            />
-            <div>
-                <div className="mb-1 text-xs font-medium text-muted-foreground">
-                    商城销售说明
-                </div>
-                <p className="whitespace-pre-wrap text-sm">
-                    {rev.salesDescription}
-                </p>
-            </div>
-            <div>
-                <div className="mb-1 text-xs font-medium text-muted-foreground">
-                    商品能力
-                </div>
-                <div className="flex flex-wrap gap-1">
-                    {rev.productCapabilities.map((c) => (
-                        <Badge key={c} variant="secondary">
-                            {c}
-                        </Badge>
-                    ))}
-                </div>
-            </div>
-            <div>
-                <div className="mb-1 text-xs font-medium text-muted-foreground">
-                    唯一固定供给
-                </div>
-                <Card
-                    size="sm"
-                    className="border-0 bg-muted/40 shadow-none ring-0"
-                >
-                    <CardContent className="space-y-1 pt-3 text-sm">
-                        <div>
-                            {rev.fixedOffering.supplierName} ·{" "}
-                            {rev.fixedOffering.availabilityLabel}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                            供货价{" "}
-                            {supplyMasked ||
-                            !rev.fixedOffering.supplyPriceVisible
-                                ? "******"
-                                : rev.fixedOffering.supplyPriceGross
-                                  ? `¥${rev.fixedOffering.supplyPriceGross}`
-                                  : "—"}
-                            {rev.fixedOffering.supplierMoq ? (
-                                <>
-                                    {" · 供应商起订 "}
-                                    <span className="num">
-                                        {rev.fixedOffering.supplierMoq}
-                                    </span>
-                                    （不自动写入最小购买量）
-                                </>
-                            ) : null}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            本修订恰好绑定一条固定供给；供货价变化不会自动修改销售价。
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
-            <div>
-                <div className="mb-1 text-xs font-medium text-muted-foreground">
-                    媒体
-                </div>
-                <ul className="grid gap-2 sm:grid-cols-2">
-                    {rev.media.map((m) => (
-                        <li
-                            key={`${m.fileAssetId}-${m.sortNo}`}
-                            className="flex gap-2 rounded-lg bg-muted/40 p-2 text-sm"
-                        >
-                            <div className="flex size-14 shrink-0 items-center justify-center rounded bg-muted text-2xs text-muted-foreground">
-                                {MEDIA_ROLE_LABEL[m.mediaRole]}
-                            </div>
-                            <div className="min-w-0">
-                                <div className="font-medium">
-                                    {MEDIA_ROLE_LABEL[m.mediaRole]} · #
-                                    {m.sortNo}
-                                </div>
-                                <div className="truncate text-xs text-muted-foreground">
-                                    {m.altText || "（缺图片说明）"}
-                                </div>
-                                <div className="text-xs">
-                                    安全检查{" "}
-                                    <Badge
-                                        variant={
-                                            m.securityScanStatus === "PASSED"
-                                                ? "secondary"
-                                                : "destructive"
-                                        }
-                                        className="text-2xs"
-                                    >
-                                        {
-                                            MEDIA_SCAN_STATUS_LABEL[
-                                                m.securityScanStatus
-                                            ]
-                                        }
-                                    </Badge>
-                                </div>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            </div>
-            <p className="text-xs text-muted-foreground">
-                历史记录不随后续主档变化覆盖
-            </p>
-        </div>
-    )
 }
 
 export function PublicationCenterPage({

@@ -11,7 +11,7 @@ import {
     fetchIntegrationQueue,
     resolveIntegrationTask,
     transferIntegrationTask,
-} from "@/features/integration-errors/api"
+} from "@/features/integration-errors/api/requests"
 import type {
     DirectReconciliationInput,
     IntegrationCloseInput,

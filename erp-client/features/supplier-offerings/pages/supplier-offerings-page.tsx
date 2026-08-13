@@ -44,12 +44,10 @@ import {
     CompanySkuSearchCombobox,
     SupplierSearchCombobox,
 } from "@/features/entity-selectors"
-import {
-    RegisterSupplyForSkuDialog,
-    ReviseOfferingDialog,
-    UpdateAvailabilityDialog,
-} from "@/features/supplier-offerings/offering-dialogs"
-import { useSupplierOfferingsQuery } from "@/features/supplier-offerings/queries"
+import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/components/dialogs/register-supply-for-sku-dialog"
+import { ReviseOfferingDialog } from "@/features/supplier-offerings/components/dialogs/revise-offering-dialog"
+import { UpdateAvailabilityDialog } from "@/features/supplier-offerings/components/dialogs/update-availability-dialog"
+import { useSupplierOfferingsQuery } from "@/features/supplier-offerings/hooks/queries"
 import type {
     AvailabilityStatus,
     OfferingSourceType,
@@ -65,7 +63,7 @@ import {
     buildSupplierOfferingsSearchParams,
     parseSupplierOfferingsSearchParams,
     type SupplierOfferingsUrlState,
-} from "@/features/supplier-offerings/url-state"
+} from "@/features/supplier-offerings/lib/url-state"
 
 type OfferingStatusFilter = OfferingStatus | "all"
 type OfferingSourceFilter = OfferingSourceType | "all"

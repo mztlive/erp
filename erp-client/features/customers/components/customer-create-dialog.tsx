@@ -10,7 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { CustomerForm } from "@/features/customers/customer-form"
+import { CustomerForm } from "@/features/customers/components/customer-form"
 
 /**
  * 新建客户对话框：仅负责容器（居中 Dialog + 页头），

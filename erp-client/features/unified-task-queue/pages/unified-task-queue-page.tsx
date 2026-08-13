@@ -59,7 +59,10 @@ import {
     sequentialText,
     versionText,
 } from "@/lib/ui-text"
-import { buildFilterSummary, filterAndSortWorkItems } from "./filter-work-items"
+import {
+    buildFilterSummary,
+    filterAndSortWorkItems,
+} from "../lib/filter-work-items"
 import {
     buildW02SearchParams,
     parseDue,
@@ -68,7 +71,7 @@ import {
     readW02FocusId,
     scopeLabel,
     writeW02FocusId,
-} from "./queue-url"
+} from "../lib/queue-url"
 import {
     useBatchClaimWorkItemMutation,
     useClaimWorkItemMutation,
@@ -78,12 +81,12 @@ import {
     useUnifiedTaskQueueQuery,
     useWorkItemActionMutation,
     WorkItemApiError,
-} from "./queries"
+} from "../hooks/queries"
 import type {
     QueueScopeSlug,
     QueueWorkItemView,
     UnifiedQueueFilters,
-} from "./types"
+} from "../types"
 import { useTeamOptionsQuery } from "@/hooks/use-options"
 
 const decisionSchema = z.object({

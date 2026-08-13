@@ -35,7 +35,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/queries"
+import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     PAYMENT_TERM_OPTIONS,
@@ -45,7 +45,7 @@ import {
 import {
     positiveDecimal,
     taxRateValid,
-} from "@/features/purchase-orders/purchase-order-validation"
+} from "@/features/purchase-orders/lib/purchase-order-validation"
 import { cn } from "@/lib/utils"
 
 export function LinesTable({

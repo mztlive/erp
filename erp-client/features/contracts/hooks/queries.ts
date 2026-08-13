@@ -7,7 +7,7 @@ import {
     fetchContractCenter,
     fetchContracts,
     uploadContractPdf,
-} from "@/features/contracts/api"
+} from "@/features/contracts/api/contracts"
 import type { UploadContractPdfInput } from "@/features/contracts/types"
 
 const contractKeys = {

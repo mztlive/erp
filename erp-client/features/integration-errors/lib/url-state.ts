@@ -9,7 +9,7 @@ import type {
     IntegrationOwnerFilter,
     IntegrationResolutionQuery,
     IntegrationView,
-} from "./types"
+} from "../types"
 import { createUrlStateCodec } from "@/lib/url-state"
 
 export type IntegrationUrlState = {

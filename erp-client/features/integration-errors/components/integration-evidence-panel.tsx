@@ -8,7 +8,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { formatDateTime } from "@/lib/datetime"
-import { INTEGRATION_ACTION_LABEL } from "../presentation"
+import { INTEGRATION_ACTION_LABEL } from "../lib/presentation"
 import type { IntegrationResolutionItemView } from "../types"
 import { EVIDENCE_KIND_LABEL, REVIEWER_SEPARATION_LABEL } from "../types"
 

@@ -21,7 +21,7 @@ import type {
     AllocationDraftLine,
     CardFundsReviewItemView,
 } from "@/features/card-funds-review/types"
-import { formatMoney, moneyStrSafe } from "../presentation"
+import { formatMoney, moneyStrSafe } from "../lib/presentation"
 
 type ReceiptDraft = Readonly<{
     receiptNo: string

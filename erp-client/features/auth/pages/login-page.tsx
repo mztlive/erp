@@ -13,7 +13,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { useLoginMutation } from "@/features/auth/queries"
+import { useLoginMutation } from "@/features/auth/hooks/queries"
 import type { ApiError } from "@/lib/api/errors"
 
 const loginSchema = z.object({

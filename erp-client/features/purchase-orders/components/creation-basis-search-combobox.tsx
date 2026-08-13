@@ -6,7 +6,7 @@ import {
     OptionCombobox,
     type OptionComboboxProps,
 } from "@/components/business/option-combobox"
-import { useCreationBasesQuery } from "@/features/purchase-orders/queries"
+import { useCreationBasesQuery } from "@/features/purchase-orders/hooks/queries"
 import {
     PURCHASE_TYPE_LABEL,
     type PurchaseCreationBasis,

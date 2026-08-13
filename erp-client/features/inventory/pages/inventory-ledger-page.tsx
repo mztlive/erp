@@ -54,18 +54,18 @@ import { Input } from "@/components/ui/input"
 import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { InventoryBalancePreview } from "@/features/inventory/inventory-balance-preview"
-import { useInventoryColumns } from "@/features/inventory/inventory-columns"
+import { InventoryBalancePreview } from "@/features/inventory/components/inventory-balance-preview"
+import { useInventoryColumns } from "@/features/inventory/hooks/use-inventory-columns"
+import { ChipFilter } from "@/features/inventory/components/presentation"
 import {
     adjustSchema,
-    ChipFilter,
     defaultSortValue,
     localNowInput,
     MOVEMENT_TYPE_OPTIONS,
     parseAvailability,
     parseView,
     sortOptions,
-} from "@/features/inventory/presentation"
+} from "@/features/inventory/lib/presentation"
 import {
     useBalanceDetailQuery,
     useCreateAdjustmentDraftMutation,
@@ -73,7 +73,7 @@ import {
     useResolveAdjustmentUnknownMutation,
     useStartInventoryExportMutation,
     useSubmitAdjustmentMutation,
-} from "@/features/inventory/queries"
+} from "@/features/inventory/hooks/queries"
 import type {
     AdjustmentReasonType,
     InventoryAvailability,
@@ -92,8 +92,8 @@ import {
 import {
     decodeInventoryCursor,
     encodeInventoryCursor,
-} from "@/features/inventory/cursor"
-import type { InventoryExportJob } from "@/features/inventory/api"
+} from "@/features/inventory/lib/cursor"
+import type { InventoryExportJob } from "@/features/inventory/api/inventory"
 import { resultText } from "@/lib/ui-text"
 
 export function InventoryLedgerPage() {

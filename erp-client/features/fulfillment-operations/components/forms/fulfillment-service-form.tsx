@@ -10,8 +10,8 @@ import type {
     FulfillmentDraft,
     FulfillmentResultCode,
     FulfillmentTask,
-} from "./types"
-import { RESULT_OPTIONS } from "./types"
+} from "@/features/fulfillment-operations/types"
+import { RESULT_OPTIONS } from "@/features/fulfillment-operations/types"
 
 /** 本地时区 YYYY-MM-DDTHH:mm，用于「填当前时间」快捷填充。 */
 function nowLocal(): string {

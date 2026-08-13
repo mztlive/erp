@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { PlusIcon } from "lucide-react"
-import { z } from "zod"
 
 import {
     ConflictResolutionDialog,
@@ -21,7 +20,7 @@ import {
     useCreateCustomerMutation,
     useQueryCustomerIdempotencyMutation,
     useSaveCustomerDetailsMutation,
-} from "@/features/customers/queries"
+} from "@/features/customers/hooks/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import type {
     CustomerCenterView,
@@ -29,89 +28,10 @@ import type {
 } from "@/features/customers/types"
 import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import { hasPermission } from "@/lib/permissions"
-
-const contactRowSchema = z
-    .object({
-        existingId: z.string().optional(),
-        name: z.string().trim().min(1, "请填写联系人姓名"),
-        title: z.string(),
-        phone: z.string(),
-        telephone: z.string(),
-        email: z.string(),
-        isDefault: z.boolean(),
-    })
-    .superRefine((value, context) => {
-        if (!value.existingId && !value.phone.trim()) {
-            context.addIssue({
-                code: "custom",
-                path: ["phone"],
-                message: "请填写手机号",
-            })
-        }
-    })
-
-const addressRowSchema = z
-    .object({
-        existingId: z.string().optional(),
-        addressType: z.string().trim().min(1, "请选择地址类型"),
-        contactName: z.string(),
-        address: z.string(),
-        isDefault: z.boolean(),
-    })
-    .superRefine((value, context) => {
-        if (!value.existingId && !value.address.trim()) {
-            context.addIssue({
-                code: "custom",
-                path: ["address"],
-                message: "请填写地址",
-            })
-        }
-    })
-
-const bankAccountRowSchema = z
-    .object({
-        existingId: z.string().optional(),
-        accountName: z.string().trim().min(1, "请填写户名"),
-        bankName: z.string().trim().min(1, "请填写银行名称"),
-        branchName: z.string(),
-        accountNumber: z.string(),
-        isDefault: z.boolean(),
-    })
-    .superRefine((value, context) => {
-        if (!value.existingId && !value.accountNumber.trim()) {
-            context.addIssue({
-                code: "custom",
-                path: ["accountNumber"],
-                message: "请填写银行账号",
-            })
-        }
-    })
-
-const createSchema = z.object({
-    legalName: z.string().trim().min(2, "请填写法定名称"),
-    shortName: z.string(),
-    unifiedCreditCode: z.string(),
-    ownerUserId: z.string().min(1, "请选择负责销售"),
-    defaultPaymentTerm: z.string(),
-    status: z.enum(["active", "disabled"]),
-    changeReason: z.string(),
-    contacts: z.array(contactRowSchema),
-    addresses: z.array(addressRowSchema),
-    bankAccounts: z.array(bankAccountRowSchema),
-})
-
-const editSchema = z.object({
-    legalName: z.string().trim().min(2, "请填写法定名称"),
-    shortName: z.string(),
-    unifiedCreditCode: z.string(),
-    ownerUserId: z.string(),
-    defaultPaymentTerm: z.string(),
-    status: z.enum(["active", "disabled"]),
-    changeReason: z.string().trim().min(2, "请填写修订原因"),
-    contacts: z.array(contactRowSchema),
-    addresses: z.array(addressRowSchema),
-    bankAccounts: z.array(bankAccountRowSchema),
-})
+import {
+    createSchema,
+    editSchema,
+} from "@/features/customers/lib/customer-form-schemas"
 
 type ContactRow = {
     existingId?: string

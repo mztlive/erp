@@ -32,7 +32,7 @@ import {
 import type {
     EntitySelectorPurpose,
     SellableSkuComboboxItem,
-} from "@/features/entity-selectors/api"
+} from "@/features/entity-selectors/api/index"
 import {
     useCompanySkuSelectorQuery,
     useContractSelectorQuery,
@@ -45,7 +45,7 @@ import {
     useWarehouseSelectorQuery,
     useMallSelectorQuery,
     useVoucherCategorySelectorQuery,
-} from "@/features/entity-selectors/queries"
+} from "@/features/entity-selectors/hooks/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 
 type SmartProps<TProps, TItem> = Omit<

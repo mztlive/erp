@@ -365,3 +365,21 @@ export const PAYABLE_STATUS_TONE: Record<PayableStatus, StatusTone> = {
     PARTIAL: "info",
     SETTLED: "success",
 }
+
+/** 页面核销会话状态（URL 深链与本地会话共用） */
+export type SessionState = {
+    track: AllocationTrack
+    supplierId: string
+    draftSessionId?: string
+    purchaseOrderId?: string
+    returnTo?: string
+    fromWorkspace?: string
+    existingPaymentId?: string
+    existingInvoiceId?: string
+    preselectPayableAccountId?: string
+}
+
+/** 冲正/红票弹窗目标 */
+export type ReverseTarget =
+    | { kind: "payment"; id: string; no: string }
+    | { kind: "invoice"; id: string; no: string }

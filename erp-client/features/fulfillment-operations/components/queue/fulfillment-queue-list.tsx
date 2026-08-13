@@ -12,8 +12,8 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import type { FulfillmentTask } from "./types"
-import { OPERATION_TYPE_LABEL } from "./types"
+import type { FulfillmentTask } from "@/features/fulfillment-operations/types"
+import { OPERATION_TYPE_LABEL } from "@/features/fulfillment-operations/types"
 
 export function FulfillmentQueueList({
     tasks,

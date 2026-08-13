@@ -14,7 +14,7 @@ import type {
     CardBusinessAnalyticsView,
     CardBusinessExportJob,
     DateBasisConfig,
-} from "@/features/card-business-analytics/types"
+} from "../types"
 
 export type DateBasisConfigQuery = {
     /** QA：basisConfig=missing；真后端无对应参数时忽略 */

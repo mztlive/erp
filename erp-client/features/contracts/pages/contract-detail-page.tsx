@@ -36,8 +36,8 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
-import { useContractCenterQuery } from "@/features/contracts/queries"
+import { ContractPaperDialog } from "@/features/contracts/components/contract-paper-dialog"
+import { useContractCenterQuery } from "@/features/contracts/hooks/queries"
 import {
     CONTRACT_AUDIT_ACTION_LABEL,
     contractOwnerLabel,

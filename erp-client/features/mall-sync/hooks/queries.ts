@@ -14,7 +14,7 @@ import {
     triggerManualIncremental,
     triggerSingleOrderPull,
     type MallSyncQueryInput,
-} from "@/features/mall-sync/api"
+} from "@/features/mall-sync/api/index"
 import type { SourceSystemListParams } from "@/features/mall-sync/types"
 import { isAuthenticated } from "@/lib/api"
 

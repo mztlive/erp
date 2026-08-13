@@ -7,7 +7,7 @@ import {
     fetchDateBasisConfig,
     startCardBusinessExport,
     type DateBasisConfigQuery,
-} from "@/features/card-business-analytics/api"
+} from "@/features/card-business-analytics/api/card-business-analytics"
 import type { CardBusinessAnalyticsQuery } from "@/features/card-business-analytics/types"
 
 const cardBusinessKeys = {

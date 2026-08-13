@@ -34,7 +34,7 @@ import {
     usePostAllocationMutation,
     useResolvePostUnknownMutation,
     useSaveAllocationDraftMutation,
-} from "@/features/customer-receivables/queries"
+} from "@/features/customer-receivables/hooks/queries"
 import type {
     AllocationDraftLine,
     AllocationSessionView,

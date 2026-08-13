@@ -4,7 +4,7 @@ import type {
     FulfillmentDraft,
     FulfillmentOperationType,
     FulfillmentTask,
-} from "./types"
+} from "@/features/fulfillment-operations/types"
 
 /**
  * 切到下一条时把光标放在「第一个真的要动手填的框」上。

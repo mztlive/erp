@@ -10,7 +10,7 @@ import {
     submitProjectionDeliveryCommand,
     type BulkCommandInput,
     type DeliveryCommandInput,
-} from "@/features/execution-projections/api"
+} from "@/features/execution-projections/api/projections"
 import type { ExecutionProjectionListQuery } from "@/features/execution-projections/types"
 
 const executionProjectionKeys = {

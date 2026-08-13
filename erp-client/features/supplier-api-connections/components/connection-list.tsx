@@ -1,14 +1,12 @@
 "use client"
 
 import * as React from "react"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type { PaginationState } from "@tanstack/react-table"
 import { PlusIcon, RefreshCwIcon, SearchIcon } from "lucide-react"
-import { z } from "zod"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessStatusBadge,
     BusinessTableFrame,
     DataFreshness,
     DataTable,
@@ -22,37 +20,19 @@ import {
     PageScaffold,
 } from "@/components/business"
 import type { ResultState } from "@/components/business/feedback"
-import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { Label } from "@/components/ui/label"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
-import {
-    newIdempotencyKey,
-    outcomeToResult,
-} from "@/features/supplier-api-connections/operations"
-import {
-    useConnectionListQuery,
-    useCreateConnectionMutation,
-} from "@/features/supplier-api-connections/queries"
-import type { ConnectionListItem } from "@/features/supplier-api-connections/types"
+import { ConnectionCreateDialog } from "@/features/supplier-api-connections/components/connection-create-dialog"
+import { useConnectionListColumns } from "@/features/supplier-api-connections/hooks/use-connection-list-columns"
+import { useConnectionListQuery } from "@/features/supplier-api-connections/hooks/queries"
+import type { ConnectionsUrlState } from "@/features/supplier-api-connections/lib/url-state"
 import { CAPABILITY_LABEL } from "@/features/supplier-api-connections/types"
-import type { ConnectionsUrlState } from "@/features/supplier-api-connections/url-state"
 import { formatDateTime } from "@/lib/datetime"
-import { freshnessText } from "@/lib/ui-text"
 
 function ConnectionList({
     urlState,
@@ -68,7 +48,6 @@ function ConnectionList({
     const [result, setResult] = React.useState<
         (ResultState & { actions?: React.ReactNode }) | null
     >(null)
-    const createMutation = useCreateConnectionMutation()
 
     React.useEffect(() => {
         setSearchDraft(urlState.q ?? "")
@@ -117,217 +96,7 @@ function ConnectionList({
         }))
     }, [urlState.page, urlState.pageSize])
 
-    const columns = React.useMemo<ColumnDef<ConnectionListItem>[]>(
-        () => [
-            {
-                id: "identity",
-                accessorFn: (row) => row.connectionCode,
-                header: "连接身份",
-                meta: { label: "连接身份", width: "reference" },
-                cell: ({ row }) => {
-                    const r = row.original
-                    return (
-                        <div className="min-w-0 py-0.5">
-                            <Button
-                                type="button"
-                                variant="link"
-                                size="xs"
-                                className="num h-auto justify-start px-0 font-medium"
-                                aria-label={`打开连接 ${r.connectionCode}`}
-                                onClick={() => onOpen(r.connectionId)}
-                            >
-                                {r.connectionCode}
-                            </Button>
-                            <div className="truncate text-xs text-muted-foreground">
-                                {r.supplier.name}
-                            </div>
-                        </div>
-                    )
-                },
-            },
-            {
-                id: "environment",
-                accessorFn: (row) => row.environmentLabel,
-                header: "环境",
-                meta: { label: "环境", width: "status" },
-                cell: ({ row }) => {
-                    const env = row.original.environment
-                    const isProd = env === "PRODUCTION"
-                    return (
-                        <span
-                            className={
-                                isProd
-                                    ? "text-sm font-medium text-destructive"
-                                    : "text-sm text-muted-foreground"
-                            }
-                            aria-label={`环境：${row.original.environmentLabel}${
-                                isProd ? "（生产环境）" : ""
-                            }`}
-                        >
-                            {row.original.environmentLabel}
-                            {isProd ? (
-                                <span className="sr-only">生产环境</span>
-                            ) : null}
-                        </span>
-                    )
-                },
-            },
-            {
-                id: "status",
-                accessorFn: (row) => row.statusLabel,
-                header: "状态",
-                meta: { label: "状态", width: "status" },
-                cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        label={row.original.statusLabel}
-                        tone={row.original.statusTone}
-                    />
-                ),
-            },
-            {
-                id: "capabilities",
-                accessorFn: (row) => row.capabilitySummary,
-                header: "能力摘要",
-                meta: { label: "能力摘要" },
-                cell: ({ row }) => (
-                    <div className="max-w-[14rem]">
-                        <div className="truncate text-sm">
-                            {row.original.capabilitySummary}
-                        </div>
-                        <div className="text-tiny text-muted-foreground">
-                            连接级 · 非商品级
-                        </div>
-                    </div>
-                ),
-            },
-            {
-                id: "health",
-                accessorFn: (row) => row.healthLabel,
-                header: "健康",
-                meta: { label: "健康", width: "status" },
-                cell: ({ row }) => (
-                    <div className="space-y-0.5">
-                        <BusinessStatusBadge
-                            context="list"
-                            label={row.original.healthLabel}
-                            tone={row.original.healthTone}
-                        />
-                        <div className="text-tiny text-muted-foreground">
-                            {formatDateTime(
-                                row.original.lastHealthAt,
-                                "default",
-                            )}
-                        </div>
-                    </div>
-                ),
-            },
-            {
-                id: "catalog",
-                accessorFn: (row) => row.catalogLabel,
-                header: freshnessText.catalogSyncAt,
-                meta: { label: freshnessText.catalogSyncAt },
-                cell: ({ row }) => (
-                    <span className="text-sm">{row.original.catalogLabel}</span>
-                ),
-            },
-            {
-                id: "nextStep",
-                accessorFn: (row) => row.nextStep,
-                header: "下一步",
-                meta: { label: "下一步" },
-                cell: ({ row }) => (
-                    <span className="line-clamp-2 text-sm text-muted-foreground">
-                        {row.original.nextStep}
-                    </span>
-                ),
-            },
-            {
-                id: "owners",
-                accessorFn: (row) =>
-                    `${row.businessOwner ?? "—"} / ${row.technicalOwner ?? "—"}`,
-                header: "业务/技术",
-                meta: { label: "业务/技术负责人" },
-                cell: ({ row }) => (
-                    <span className="text-xs text-muted-foreground">
-                        {row.original.businessOwner ?? "—"} /{" "}
-                        {row.original.technicalOwner ?? "—"}
-                    </span>
-                ),
-            },
-            {
-                id: "actions",
-                header: "操作",
-                meta: { label: "操作", width: "status" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onOpen(row.original.connectionId)}
-                    >
-                        打开
-                    </Button>
-                ),
-            },
-        ],
-        [onOpen],
-    )
-
-    const createSchema = z.object({
-        connectionCode: z.string().trim().min(3, "请填写连接代码"),
-        supplierId: z.string().trim().min(1, "请选择供应商"),
-        supplierName: z.string().trim().min(2, "请选择供应商"),
-        environment: z.enum(["DEVELOPMENT", "STAGING", "PRODUCTION"]),
-    })
-
-    const form = useAppForm({
-        defaultValues: {
-            connectionCode: "",
-            supplierId: "",
-            supplierName: "",
-            environment: "PRODUCTION" as
-                | "DEVELOPMENT"
-                | "STAGING"
-                | "PRODUCTION",
-        },
-        validators: { onChange: createSchema },
-        onSubmit: async ({ value }) => {
-            const outcome = await createMutation.mutateAsync({
-                connectionCode: value.connectionCode,
-                supplierId: value.supplierId,
-                supplierName: value.supplierName,
-                environment: value.environment,
-                idempotencyKey: newIdempotencyKey("create"),
-            })
-            const mapped = outcomeToResult(outcome)
-            if (outcome.status === "succeeded" && outcome.connectionId) {
-                setCreateOpen(false)
-                form.reset()
-                setResult(
-                    mapped
-                        ? {
-                              ...mapped,
-                              actions: (
-                                  <Button
-                                      type="button"
-                                      size="sm"
-                                      onClick={() =>
-                                          onOpen(outcome.connectionId!)
-                                      }
-                                  >
-                                      打开连接详情
-                                  </Button>
-                              ),
-                          }
-                        : mapped,
-                )
-            } else {
-                setResult(mapped)
-            }
-        },
-    })
+    const columns = useConnectionListColumns(onOpen)
 
     if (listQuery.isPending) {
         return (
@@ -727,121 +496,12 @@ function ConnectionList({
                 }
             />
 
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>新建连接身份</DialogTitle>
-                        <DialogDescription>
-                            连接代码全局唯一，不可与环境组合复用。创建成功后可在结果中打开连接详情完成配置。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form
-                        className="flex flex-col gap-3"
-                        onSubmit={(e) => {
-                            e.preventDefault()
-                            void form.handleSubmit()
-                        }}
-                    >
-                        <form.AppField
-                            name="connectionCode"
-                            children={(field) => (
-                                <field.TextField
-                                    label="连接代码"
-                                    placeholder="CONN-XXX-PROD"
-                                />
-                            )}
-                        />
-                        <form.AppField
-                            name="supplierId"
-                            children={(field) => {
-                                const isInvalid =
-                                    field.state.meta.isTouched &&
-                                    !field.state.meta.isValid
-                                const errors = toFieldErrors(
-                                    field.state.meta.errors,
-                                )
-                                return (
-                                    <Field
-                                        data-invalid={isInvalid || undefined}
-                                    >
-                                        <FieldLabel htmlFor="create-supplierId">
-                                            供应商
-                                        </FieldLabel>
-                                        <SupplierSearchCombobox
-                                            value={
-                                                field.state.value || undefined
-                                            }
-                                            onValueChange={(id) => {
-                                                field.handleChange(id ?? "")
-                                            }}
-                                            onItemChange={(supplier) => {
-                                                form.setFieldValue(
-                                                    "supplierName",
-                                                    supplier?.supplierName ??
-                                                        "",
-                                                )
-                                            }}
-                                            placeholder="搜索供应商名称或编码"
-                                        />
-                                        {isInvalid ? (
-                                            <FieldError errors={errors} />
-                                        ) : null}
-                                    </Field>
-                                )
-                            }}
-                        />
-                        <form.AppField
-                            name="environment"
-                            children={(field) => (
-                                <div className="space-y-1.5">
-                                    <Label>环境</Label>
-                                    <OptionCombobox
-                                        value={field.state.value}
-                                        onValueChange={(v) => {
-                                            if (v)
-                                                field.handleChange(
-                                                    v as typeof field.state.value,
-                                                )
-                                        }}
-                                        options={[
-                                            {
-                                                value: "PRODUCTION",
-                                                label: "生产",
-                                            },
-                                            { value: "STAGING", label: "测试" },
-                                            {
-                                                value: "DEVELOPMENT",
-                                                label: "开发",
-                                            },
-                                        ]}
-                                        allowClear={false}
-                                    />
-                                    {field.state.value === "PRODUCTION" ? (
-                                        <p
-                                            className="text-xs text-muted-foreground"
-                                            role="status"
-                                        >
-                                            正在创建生产环境连接身份
-                                        </p>
-                                    ) : null}
-                                </div>
-                            )}
-                        />
-                        <DialogFooter>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => setCreateOpen(false)}
-                            >
-                                取消
-                            </Button>
-                            <form.AppForm>
-                                <form.SubmitButton label="创建" />
-                            </form.AppForm>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+            <ConnectionCreateDialog
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                onOpen={onOpen}
+                onResult={setResult}
+            />
         </PageScaffold>
     )
 }

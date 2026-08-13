@@ -8,7 +8,7 @@ import {
     fetchSupplierOfferingsForSkus,
     reviseSupplierOffering,
     updateSupplierOfferingAvailability,
-} from "@/features/supplier-offerings/api"
+} from "@/features/supplier-offerings/api/offerings"
 import type {
     CreateSupplierOfferingInput,
     ReviseSupplierOfferingInput,

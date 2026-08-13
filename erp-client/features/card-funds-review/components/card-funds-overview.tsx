@@ -8,7 +8,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { CardFundsReviewItemView } from "../types"
-import { formatMoney, shortHash } from "../presentation"
+import { formatMoney, shortHash } from "../lib/presentation"
 import { versionText } from "@/lib/ui-text"
 
 export function CardFundsOverview({ task }: { task: CardFundsReviewItemView }) {

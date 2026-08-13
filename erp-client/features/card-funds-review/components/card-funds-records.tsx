@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import type { CardFundsReviewItemView } from "../types"
-import { formatMoney } from "../presentation"
+import { formatMoney } from "../lib/presentation"
 
 export function CardFundsRecords({
     task,

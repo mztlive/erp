@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import type { DeferReasonCode } from "./types"
-import { DEFER_REASON_LABEL } from "./types"
+import type { DeferReasonCode } from "@/features/fulfillment-operations/types"
+import { DEFER_REASON_LABEL } from "@/features/fulfillment-operations/types"
 
 const deferSchema = z.object({
     reasonCode: z.enum([

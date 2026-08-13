@@ -29,11 +29,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MallSearchCombobox } from "@/features/entity-selectors"
 import { CreateBackfillSheet } from "@/features/history-backfill/components/create-backfill-sheet"
 import { HistoryBackfillResultBanner as FormalResultBanner } from "@/features/history-backfill/components/history-backfill-result-banner"
-import { newRequestId } from "@/features/history-backfill/presentation"
+import { newRequestId } from "@/features/history-backfill/lib/presentation"
 import {
     useHistoryBackfillCommandMutation,
     useHistoryBackfillListQuery,
-} from "@/features/history-backfill/queries"
+} from "@/features/history-backfill/hooks/queries"
 import type {
     CostBasis,
     HistoryBackfillCommandResult,
@@ -52,7 +52,7 @@ import {
     REPORT_REVIEW_STATUS_TONE,
     VIEW_LABEL,
 } from "@/features/history-backfill/types"
-import type { HistoryBackfillUrlState } from "@/features/history-backfill/url-state"
+import type { HistoryBackfillUrlState } from "@/features/history-backfill/lib/url-state"
 import { formatDateTime } from "@/lib/datetime"
 
 function JobListView({

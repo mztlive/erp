@@ -7,7 +7,7 @@ import {
     fetchConsumptionOrderDetail,
     fetchConsumptionOrderList,
     fetchSalesOrderConsumptionSummary,
-} from "@/features/mall-consumption-orders/api"
+} from "@/features/mall-consumption-orders/api/consumption-orders"
 import type {
     ExportCommand,
     MallConsumptionOrderListQuery,

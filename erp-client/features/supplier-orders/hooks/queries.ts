@@ -12,7 +12,7 @@ import {
     replaySupplierOrder,
     revealSupplierOrderAddress,
     submitAfterSalesAction,
-} from "@/features/supplier-orders/api"
+} from "@/features/supplier-orders/api/index"
 import type {
     ExportCommand,
     SupplierOrderListQuery,

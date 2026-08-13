@@ -1,4 +1,4 @@
-import type { IntegrationResolutionItemView } from "./types"
+import type { IntegrationResolutionItemView } from "../types"
 
 export const INTEGRATION_ACTION_LABEL: Readonly<Record<string, string>> = {
     QUERY_ORIGINAL_RESULT: "查询原结果",

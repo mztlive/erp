@@ -66,7 +66,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { clearAddressReveal } from "@/features/supplier-orders/api"
+import { clearAddressReveal } from "@/features/supplier-orders/api/index"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
@@ -78,7 +78,7 @@ import {
     useReplayOrderMutation,
     useRevealAddressMutation,
     useSupplierOrderDetailQuery,
-} from "@/features/supplier-orders/queries"
+} from "@/features/supplier-orders/hooks/queries"
 import type { OrderSection } from "@/features/supplier-orders/types"
 import {
     CANCEL_STATUS_LABEL,

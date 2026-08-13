@@ -46,16 +46,16 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 
-import { PurchaseOrderPreviewPanel } from "@/features/purchase-orders/purchase-order-preview-panel"
-import { CreationBasisSearchCombobox } from "@/features/purchase-orders/creation-basis-search-combobox"
+import { PurchaseOrderPreviewPanel } from "@/features/purchase-orders/components/purchase-order-preview-panel"
+import { CreationBasisSearchCombobox } from "@/features/purchase-orders/components/creation-basis-search-combobox"
 import {
     useCreateFromBasisMutation,
     useCreationBasesQuery,
     usePurchaseOrderCenterQuery,
     usePurchaseOrderExportDataQuery,
     usePurchaseOrdersQuery,
-} from "@/features/purchase-orders/queries"
-import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api"
+} from "@/features/purchase-orders/hooks/queries"
+import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
 import type {
     PurchaseOrderListItem,
     PurchaseOrderMetricFilter,
@@ -71,7 +71,7 @@ import {
     buildPurchaseOrdersSearchParams,
     parsePurchaseOrdersSearchParams,
     type PurchaseOrdersUrlState,
-} from "@/features/purchase-orders/url-state"
+} from "@/features/purchase-orders/lib/url-state"
 
 function displayNo(row: PurchaseOrderListItem) {
     return row.purchaseNo ?? row.draftLabel ?? "采购单（未编号）"

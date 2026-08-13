@@ -11,7 +11,7 @@ import {
 import { TriangleAlertIcon } from "lucide-react"
 
 import { HistoryBackfillFact } from "@/features/history-backfill/components/history-backfill-fact"
-import { formatHistoryBackfillDay } from "@/features/history-backfill/components/format"
+import { formatHistoryBackfillDay } from "@/features/history-backfill/lib/format"
 import { HistoryBackfillResultBanner } from "@/features/history-backfill/components/history-backfill-result-banner"
 import type {
     CreateBackfillContext,

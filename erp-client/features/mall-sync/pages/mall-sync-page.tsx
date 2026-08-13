@@ -63,10 +63,10 @@ import {
     useRetryJobMutation,
     useTriggerIncrementalMutation,
     useTriggerSingleOrderMutation,
-} from "@/features/mall-sync/queries"
-import { useMallSyncColumns } from "@/features/mall-sync/mall-sync-columns"
-import { MallSyncMappingView } from "@/features/mall-sync/mall-sync-mapping-view"
-import { MallSyncReadViews } from "@/features/mall-sync/mall-sync-read-views"
+} from "@/features/mall-sync/hooks/queries"
+import { useMallSyncColumns } from "@/features/mall-sync/hooks/mall-sync-columns"
+import { MallSyncMappingView } from "@/features/mall-sync/components/mall-sync-mapping-view"
+import { MallSyncReadViews } from "@/features/mall-sync/components/mall-sync-read-views"
 import {
     ALL_OBJECT_PARAMS,
     confirmSchema,
@@ -77,8 +77,8 @@ import {
     type SessionLease,
     VIEW_OBJECT_PARAMS,
     VIEWS,
-} from "@/features/mall-sync/presentation"
-import { SourceSystemsCard } from "@/features/mall-sync/source-systems-card"
+} from "@/features/mall-sync/lib/presentation"
+import { SourceSystemsCard } from "@/features/mall-sync/components/source-systems-card"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"

@@ -3,13 +3,13 @@
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
-import { JobDetailView } from "@/features/history-backfill/components/job-detail-view"
-import { JobListView } from "@/features/history-backfill/components/job-list-view"
+import { JobDetailView } from "@/features/history-backfill/pages/job-detail-view"
+import { JobListView } from "@/features/history-backfill/pages/job-list-view"
 import {
     buildHistoryBackfillSearchParams,
     parseHistoryBackfillSearchParams,
     type HistoryBackfillUrlState,
-} from "@/features/history-backfill/url-state"
+} from "@/features/history-backfill/lib/url-state"
 
 export function HistoryBackfillPage({
     routeJobId,

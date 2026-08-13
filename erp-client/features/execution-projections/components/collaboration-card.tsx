@@ -13,7 +13,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { useSalesOrderCollaborationQuery } from "@/features/execution-projections/queries"
+import { useSalesOrderCollaborationQuery } from "@/features/execution-projections/hooks/queries"
 import { useSalesOrderConsumptionSummaryQuery } from "@/features/mall-consumption-orders/queries"
 import {
     DELIVERY_STATUS_LABEL,

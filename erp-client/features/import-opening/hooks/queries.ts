@@ -6,7 +6,7 @@ import {
     fetchImportBatchDetail,
     fetchImportBatchList,
     fetchImportIssues,
-} from "@/features/import-opening/api"
+} from "@/features/import-opening/api/legacy-import"
 import type {
     ImportBatchListQuery,
     ImportIssueQuery,

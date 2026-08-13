@@ -30,7 +30,7 @@ import {
 import {
     resolveRole,
     type FulfillmentRole,
-} from "@/features/fulfillment-operations/fulfillment-roles"
+} from "@/features/fulfillment-operations/lib/fulfillment-roles"
 
 // ─── backend DTO shapes ─────────────────────────────────────────────────────
 

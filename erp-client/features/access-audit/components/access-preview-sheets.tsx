@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import {
     useAuditEventQuery,
     useEffectiveAccessQuery,
-} from "@/features/access-audit/queries"
+} from "@/features/access-audit/hooks/queries"
 import { formatDateTime } from "@/lib/datetime"
 
 type AccessPreviewSheetsProps = {

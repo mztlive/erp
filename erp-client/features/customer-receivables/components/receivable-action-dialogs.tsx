@@ -13,8 +13,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import type { ReverseRequest } from "@/features/customer-receivables/customer-account-detail-preview"
-import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receivables/receivable-counterparty-search-combobox"
+import type { ReverseRequest } from "@/features/customer-receivables/components/customer-account-detail-preview"
+import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receivables/components/receivable-counterparty-search-combobox"
 import type { AllocationMode } from "@/features/customer-receivables/types"
 
 type ReceivableActionDialogsProps = Readonly<{

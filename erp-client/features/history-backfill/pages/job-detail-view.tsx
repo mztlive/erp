@@ -23,7 +23,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatHistoryBackfillDay as formatDay } from "@/features/history-backfill/components/format"
+import { formatHistoryBackfillDay as formatDay } from "@/features/history-backfill/lib/format"
 import { HistoryBackfillFact as Fact } from "@/features/history-backfill/components/history-backfill-fact"
 import {
     CostSection,
@@ -37,11 +37,11 @@ import {
     buildStageStates,
     mapJobProgressStatus,
     newRequestId,
-} from "@/features/history-backfill/presentation"
+} from "@/features/history-backfill/lib/presentation"
 import {
     useHistoryBackfillCommandMutation,
     useHistoryBackfillDetailQuery,
-} from "@/features/history-backfill/queries"
+} from "@/features/history-backfill/hooks/queries"
 import type {
     CostBasis,
     HistoryBackfillCommandResult,
@@ -56,7 +56,7 @@ import {
     REPORT_REVIEW_STATUS_LABEL,
     REPORT_REVIEW_STATUS_TONE,
 } from "@/features/history-backfill/types"
-import type { HistoryBackfillUrlState } from "@/features/history-backfill/url-state"
+import type { HistoryBackfillUrlState } from "@/features/history-backfill/lib/url-state"
 import { formatDateTime } from "@/lib/datetime"
 
 const SECTION_TABS: { id: JobSection; label: string }[] = [

@@ -8,7 +8,7 @@ import { ExternalLinkIcon } from "lucide-react"
 import { BusinessStatusBadge } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatQty } from "@/features/inventory/presentation"
+import { formatQty } from "@/features/inventory/components/presentation"
 import type {
     StockAdjustmentRow,
     StockBalanceRow,

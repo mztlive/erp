@@ -71,7 +71,7 @@ import {
     downloadSalesOrderContractPdf,
     fetchSalesOrders,
     type SalesOrdersListQuery,
-} from "@/features/sales-orders/api"
+} from "@/features/sales-orders/api/sales-orders"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
     useCreateSalesOrderExportJobMutation,

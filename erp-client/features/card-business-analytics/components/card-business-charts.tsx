@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/chart"
 import type { CardBusinessAnalyticsView, CostBasisCode } from "../types"
 import { COST_BASIS_LABEL } from "../types"
-import { formatMoneyDisplay } from "../presentation"
+import { formatMoneyDisplay } from "../lib/presentation"
 
 const consumptionChartConfig = {
     sales: { label: "销售(含税)", color: "var(--chart-1)" },

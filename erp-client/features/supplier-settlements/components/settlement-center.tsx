@@ -52,7 +52,7 @@ import {
     blockerOf,
     newKey,
     outcomeToResult,
-} from "@/features/supplier-settlements/operations"
+} from "@/features/supplier-settlements/lib/operations"
 import {
     useAppendEvidenceMutation,
     useClaimReviewMutation,
@@ -61,7 +61,7 @@ import {
     useReviewDecisionMutation,
     useSettlementDetailQuery,
     useSubmitReviewMutation,
-} from "@/features/supplier-settlements/queries"
+} from "@/features/supplier-settlements/hooks/queries"
 import type {
     DifferenceResolution,
     SettlementSection,
@@ -73,7 +73,7 @@ import {
     SECTION_LABEL,
     SECTIONS,
 } from "@/features/supplier-settlements/types"
-import type { SettlementsUrlState } from "@/features/supplier-settlements/url-state"
+import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import { getErrorMessage } from "@/lib/api/errors"
 import { formatDateTime } from "@/lib/datetime"
 import { openWorkspaceLabel } from "@/lib/ui-text"

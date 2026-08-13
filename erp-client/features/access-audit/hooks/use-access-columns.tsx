@@ -30,7 +30,7 @@ import type {
     ScopeRow,
     UserRow,
 } from "@/features/access-audit/types"
-import { riskLabel } from "@/features/access-audit/presentation"
+import { riskLabel } from "@/features/access-audit/lib/risk-labels"
 import { formatDateTime } from "@/lib/datetime"
 
 type AccountFormState = {

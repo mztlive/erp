@@ -1,4 +1,4 @@
-import type { CustomerAccountsListView } from "./types"
+import type { CustomerAccountsListView } from "../types"
 
 function csvEscape(value: string | number | null | undefined): string {
     const text = value == null ? "" : String(value)

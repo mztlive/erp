@@ -3,11 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type {
-    ColumnDef,
-    PaginationState,
-    SortingState,
-} from "@tanstack/react-table"
+import type { PaginationState, SortingState } from "@tanstack/react-table"
 import { DownloadIcon, SearchIcon, TriangleAlertIcon } from "lucide-react"
 
 import {
@@ -28,7 +24,6 @@ import {
     PageHeader,
     PageScaffold,
     QuickPreviewSheet,
-    StatusTrackSummary,
     surfacePanelClassName,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -42,13 +37,14 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
+import { useSupplierOrdersListColumns } from "@/features/supplier-orders/hooks/use-supplier-orders-list-columns"
 import {
     useQueryResultMutation,
     useSupplierOrderDetailQuery,
     useSupplierOrderExportMutation,
     useSupplierOrdersQuery,
-} from "@/features/supplier-orders/queries"
-import { SupplierOrderPreviewPanel } from "@/features/supplier-orders/supplier-order-preview-panel"
+} from "@/features/supplier-orders/hooks/queries"
+import { SupplierOrderPreviewPanel } from "@/features/supplier-orders/components/supplier-order-preview-panel"
 import type {
     CancelStatus,
     ExportCommand,
@@ -70,7 +66,7 @@ import {
 import {
     buildSupplierOrdersSearchParams,
     parseSupplierOrdersSearchParams,
-} from "@/features/supplier-orders/url-state"
+} from "@/features/supplier-orders/lib/url-state"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -334,7 +330,7 @@ export function SupplierOrdersListPage() {
         // 打开预览并在取得详情锁版本后查询
         openPreview(row.orderId)
         const { fetchSupplierOrderDetail } =
-            await import("@/features/supplier-orders/api")
+            await import("@/features/supplier-orders/api/index")
         const detail = await fetchSupplierOrderDetail({
             orderId: row.orderId,
         })
@@ -376,230 +372,14 @@ export function SupplierOrdersListPage() {
         })
     }
 
-    const columns = React.useMemo<ColumnDef<SupplierOrderListRow>[]>(
-        () => [
-            {
-                id: "identity",
-                accessorKey: "orderNo",
-                header: "供应商订单",
-                meta: { label: "供应商订单", width: "reference" },
-                cell: ({ row }) => (
-                    <div
-                        className="flex min-w-0 flex-col gap-0.5"
-                        ref={(el) => {
-                            if (el)
-                                rowRefs.current.set(row.original.orderId, el)
-                            else rowRefs.current.delete(row.original.orderId)
-                        }}
-                        tabIndex={
-                            rows[focusedIndex]?.orderId === row.original.orderId
-                                ? 0
-                                : -1
-                        }
-                        data-focused={
-                            rows[focusedIndex]?.orderId === row.original.orderId
-                                ? "true"
-                                : undefined
-                        }
-                    >
-                        <Button
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            className="num h-auto justify-start px-0"
-                            aria-label={`预览 ${row.original.orderNo}`}
-                            onClick={() => openPreview(row.original.orderId)}
-                        >
-                            {row.original.orderNo}
-                        </Button>
-                        <span className="truncate text-tiny text-muted-foreground">
-                            {row.original.supplierName}
-                        </span>
-                    </div>
-                ),
-            },
-            {
-                id: "mall",
-                accessorKey: "mallOrderNo",
-                header: "商城单号",
-                meta: { label: "商城订单", width: "reference" },
-                cell: ({ row }) => (
-                    <Link
-                        href={`/commerce/consumption-orders?q=${encodeURIComponent(row.original.mallOrderNo)}`}
-                        className="num text-sm text-primary underline-offset-2 hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {row.original.mallOrderNo}
-                    </Link>
-                ),
-            },
-            {
-                id: "tracks",
-                header: "履约 / 取消 / 退款",
-                meta: { label: "三轨状态", width: "tracks" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <StatusTrackSummary
-                        variant="inline"
-                        className="flex-nowrap gap-x-2 gap-y-0"
-                        aria-label={`${row.original.orderNo} 三轨状态`}
-                        tracks={[
-                            {
-                                id: "ff",
-                                label: "履约",
-                                status: {
-                                    label: row.original.fulfillmentLabel,
-                                    tone: row.original.fulfillmentTone,
-                                },
-                            },
-                            {
-                                id: "cancel",
-                                label: "取消",
-                                status: {
-                                    label: row.original.cancelLabel,
-                                    tone: row.original.cancelTone,
-                                },
-                            },
-                            {
-                                id: "refund",
-                                label: "退款",
-                                status: {
-                                    label: row.original.refundLabel,
-                                    tone: row.original.refundTone,
-                                },
-                            },
-                        ]}
-                    />
-                ),
-            },
-            {
-                id: "external",
-                accessorKey: "externalOrderNo",
-                header: "外部单号",
-                meta: { label: "供应商外部单号", width: "reference" },
-                cell: ({ row }) =>
-                    row.original.externalOrderNo ? (
-                        <span className="num text-xs">
-                            {row.original.externalOrderNo}
-                        </span>
-                    ) : (
-                        <span className="text-xs text-muted-foreground">
-                            尚未返回
-                        </span>
-                    ),
-            },
-            {
-                id: "updated",
-                accessorKey: "lastBusinessAt",
-                header: "更新时间",
-                meta: { label: "更新时间", width: "default" },
-                cell: ({ row }) => (
-                    <span className="num text-xs text-muted-foreground">
-                        {formatDateTime(
-                            row.original.lastBusinessAt,
-                            "monthDayIntl",
-                            "passthrough",
-                        )}
-                    </span>
-                ),
-            },
-            {
-                id: "itemCount",
-                accessorFn: (row) => row.itemCount,
-                header: "商品数",
-                meta: {
-                    label: "商品数",
-                    width: "quantity",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) => (
-                    <span className="num text-xs">
-                        {row.original.itemCount}
-                    </span>
-                ),
-            },
-            {
-                id: "actions",
-                header: "操作",
-                meta: { label: "操作", width: "default" },
-                enableSorting: false,
-                cell: ({ row }) => {
-                    const r = row.original
-                    const canQuery = r.allowedActions.includes("QUERY_RESULT")
-                    const canReplay = r.allowedActions.includes("REPLAY")
-                    const queryBlocker = r.actionBlockers.find(
-                        (b) => b.action === "QUERY_RESULT",
-                    )
-                    return (
-                        <div className="flex flex-wrap items-center gap-1">
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                onClick={() => openPreview(r.orderId)}
-                            >
-                                预览
-                            </Button>
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                render={
-                                    <Link
-                                        href={`/supplier-api/orders/${r.orderId}`}
-                                    />
-                                }
-                            >
-                                详情
-                            </Button>
-                            {r.fulfillmentStatus === "RESULT_UNKNOWN" ? (
-                                <>
-                                    <Button
-                                        type="button"
-                                        size="xs"
-                                        disabled={
-                                            !canQuery ||
-                                            queryResultMutation.isPending
-                                        }
-                                        onClick={() =>
-                                            void handleQueryFromList(r)
-                                        }
-                                    >
-                                        查询原结果
-                                    </Button>
-                                    {!canQuery && queryBlocker ? (
-                                        <span className="max-w-[14rem] text-tiny leading-tight text-muted-foreground">
-                                            {queryBlocker.message}
-                                            {queryBlocker.destinationWorkspaceId ? (
-                                                <>
-                                                    ，可
-                                                    <Link
-                                                        href="/governance/integration-errors"
-                                                        className="text-primary underline-offset-2 hover:underline"
-                                                    >
-                                                        前往接口错误中心
-                                                    </Link>
-                                                </>
-                                            ) : null}
-                                        </span>
-                                    ) : null}
-                                </>
-                            ) : null}
-                            {r.fulfillmentStatus === "RESULT_UNKNOWN" &&
-                            !canReplay ? (
-                                <span className="sr-only">
-                                    重发需先查询确认无结果且系统允许重试
-                                </span>
-                            ) : null}
-                        </div>
-                    )
-                },
-            },
-        ],
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers stable enough for list
-        [focusedIndex, openPreview, queryResultMutation.isPending, rows],
-    )
+    const columns = useSupplierOrdersListColumns({
+        rows,
+        focusedIndex,
+        rowRefs,
+        onPreview: openPreview,
+        onQueryResult: handleQueryFromList,
+        queryPending: queryResultMutation.isPending,
+    })
 
     const confirmExport = async () => {
         const requestId = `req-w26-export-${Date.now()}`

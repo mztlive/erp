@@ -36,18 +36,8 @@ import {
     type ProcurementConfirmationTask,
     type ProcurementRecommendation,
 } from "@/features/procurement-confirmation/types"
-
-const money = new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
-    minimumFractionDigits: 2,
-})
-
-function capabilityCodeForMode(mode: FulfillmentMode) {
-    if (mode === "ELECTRONIC") return "virtual"
-    if (mode === "SERVICE") return "offline_service"
-    return "physical"
-}
+import { money } from "@/features/procurement-confirmation/lib/format"
+import { capabilityCodeForMode } from "@/features/procurement-confirmation/lib/supply-cost"
 
 type SelectionOption = {
     value: string

@@ -49,16 +49,16 @@ import {
     useSavePurchaseOrderDraftMutation,
     useStartPurchaseChangeMutation,
     useSubmitPurchaseOrderMutation,
-} from "@/features/purchase-orders/queries"
+} from "@/features/purchase-orders/hooks/queries"
 import {
     EditSurface,
     LinesTable,
     ReviewSurface,
-} from "@/features/purchase-orders/purchase-order-surfaces"
+} from "@/features/purchase-orders/components/purchase-order-surfaces"
 import {
     positiveDecimal,
     taxRateValid,
-} from "@/features/purchase-orders/purchase-order-validation"
+} from "@/features/purchase-orders/lib/purchase-order-validation"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     PAYMENT_TERM_OPTIONS,

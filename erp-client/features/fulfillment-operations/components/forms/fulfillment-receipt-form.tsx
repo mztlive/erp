@@ -5,8 +5,11 @@ import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { QUALITY_RESULT_OPTIONS } from "@/lib/business-options"
-import type { FulfillmentDraft, FulfillmentTask } from "./types"
-import { withDerivedQualified } from "./validation"
+import type {
+    FulfillmentDraft,
+    FulfillmentTask,
+} from "@/features/fulfillment-operations/types"
+import { withDerivedQualified } from "@/features/fulfillment-operations/lib/validation"
 
 export function FulfillmentReceiptForm({
     task,
