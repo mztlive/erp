@@ -113,10 +113,7 @@ impl QueryFilter for SupplierOfferingFilter {
             filter.insert("sku_id", sku_id.to_string());
         }
         if let Some(sku_ids) = &self.sku_ids {
-            filter.extend(in_filter(
-                "sku_id",
-                sku_ids.iter().map(ToString::to_string),
-            ));
+            filter.extend(in_filter("sku_id", sku_ids.iter().map(ToString::to_string)));
         }
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
@@ -127,10 +124,7 @@ impl QueryFilter for SupplierOfferingFilter {
         if let Some(source_type) = self.source_type {
             filter.insert("source_type", source_type.as_str());
         }
-        match (
-            self.supplier_sku_code.as_deref(),
-            self.keyword_sku_ids.as_ref(),
-        ) {
+        match (self.supplier_sku_code.as_deref(), self.keyword_sku_ids.as_ref()) {
             (Some(code), Some(sku_ids)) => {
                 let mut code_filter = Document::new();
                 insert_literal_regex_filter(&mut code_filter, "supplier_sku_code", Some(code));
@@ -148,10 +142,7 @@ impl QueryFilter for SupplierOfferingFilter {
                 insert_literal_regex_filter(&mut filter, "supplier_sku_code", Some(code));
             }
             (None, Some(sku_ids)) => {
-                filter.extend(in_filter(
-                    "sku_id",
-                    sku_ids.iter().map(ToString::to_string),
-                ));
+                filter.extend(in_filter("sku_id", sku_ids.iter().map(ToString::to_string)));
             }
             (None, None) => {}
         }

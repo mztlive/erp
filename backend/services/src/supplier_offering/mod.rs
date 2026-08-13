@@ -232,7 +232,10 @@ impl SupplierOfferingService {
             if products.is_empty() {
                 return Ok(Some(Vec::new()));
             }
-            let product_ids = products.iter().map(|product| product.base.id.clone()).collect::<Vec<_>>();
+            let product_ids = products
+                .iter()
+                .map(|product| product.base.id.clone())
+                .collect::<Vec<_>>();
             let skus = self
                 .db
                 .skus()
@@ -244,11 +247,7 @@ impl SupplierOfferingService {
                     &mut NoTransaction,
                 )
                 .await?;
-            by_product = Some(
-                skus.into_iter()
-                    .map(|sku| SkuId::new(sku.base.id))
-                    .collect(),
-            );
+            by_product = Some(skus.into_iter().map(|sku| SkuId::new(sku.base.id)).collect());
         }
 
         if let Some(no) = sku_no {
@@ -264,21 +263,13 @@ impl SupplierOfferingService {
                     &mut NoTransaction,
                 )
                 .await?;
-            by_sku = Some(
-                skus.into_iter()
-                    .map(|sku| SkuId::new(sku.base.id))
-                    .collect(),
-            );
+            by_sku = Some(skus.into_iter().map(|sku| SkuId::new(sku.base.id)).collect());
         }
 
         match (by_product, by_sku) {
             (None, None) => Ok(None),
             (Some(ids), None) | (None, Some(ids)) => Ok(Some(ids)),
-            (Some(left), Some(right)) => Ok(Some(
-                left.into_iter()
-                    .filter(|id| right.contains(id))
-                    .collect(),
-            )),
+            (Some(left), Some(right)) => Ok(Some(left.into_iter().filter(|id| right.contains(id)).collect())),
         }
     }
 

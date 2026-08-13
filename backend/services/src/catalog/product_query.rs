@@ -264,10 +264,7 @@ impl CatalogService {
     ///
     /// # 错误
     /// 数据库查询失败时返回错误。
-    async fn current_sku_revision_names(
-        &self,
-        rows: &[database::SkuRow],
-    ) -> Result<HashMap<String, String>> {
+    async fn current_sku_revision_names(&self, rows: &[database::SkuRow]) -> Result<HashMap<String, String>> {
         let revision_ids = rows
             .iter()
             .filter_map(|row| row.current_revision_id.clone())
