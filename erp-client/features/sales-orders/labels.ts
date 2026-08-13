@@ -60,6 +60,19 @@ export const ORIGIN_LABEL: Record<SalesOrderListItem["originSystem"], string> =
         mall: "创建于商城",
     }
 
+/** 采购驳回原因码文案（后端 `ProcurementRejectReasonCode` + 历史兼容）。 */
+export const PROCUREMENT_REJECT_REASON_LABEL: Record<string, string> = {
+    CANNOT_FULFILL: "无法履约",
+    COST_INCREASE: "成本上涨",
+    DELIVERY_NOT_MET: "交期不满足",
+    QUALIFICATION_EXPIRED: "资质失效",
+    OTHER: "其他",
+    MARGIN_TOO_LOW: "预计毛利过低",
+    COST_TOO_HIGH: "采购成本过高",
+    ITEM_UNAVAILABLE: "商品/服务无法采购",
+    TERMS_UNCLEAR: "商业条件不清晰",
+}
+
 /** 卡券审批任务类型文案。 */
 export const CARD_APPROVAL_TYPE_LABEL: Record<
     CardSalesApproval["workItemType"],

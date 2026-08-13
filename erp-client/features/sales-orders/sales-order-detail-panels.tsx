@@ -27,7 +27,6 @@ import {
 import { AcceptanceWorkspace } from "@/features/sales-orders/acceptance-workspace"
 import { CardSalesApprovalPanel } from "@/features/sales-orders/card-sales-approval-panel"
 import { CloseConditionsCard } from "@/features/sales-orders/close-conditions-card"
-import { ProcurementRejectionCard } from "@/features/sales-orders/procurement-rejection-card"
 import { RevisionHistoryCard } from "@/features/sales-orders/revision-history-card"
 import { SalesOrderCollaborationCard } from "@/features/execution-projections/collaboration-card"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api"
@@ -343,11 +342,19 @@ export function OverviewPanel({
     focusTask,
     selfReturn,
     showApproval,
+    onApprovalResult,
 }: {
     order: SalesOrderDetailView
     focusTask: FocusTask | null
     selfReturn: string
     showApproval: boolean
+    onApprovalResult?: (result: {
+        status: "succeeded" | "blocked" | "rejected"
+        title: string
+        description: string
+        reference: string
+        nextResponsible?: string
+    }) => void
 }) {
     const isCard = order.nature === "card_voucher"
 
@@ -376,6 +383,7 @@ export function OverviewPanel({
                         <CardSalesApprovalPanel
                             order={order}
                             approval={order.activeCardSalesApproval}
+                            onResult={onApprovalResult}
                         />
                     </div>
                 ) : null}
@@ -503,7 +511,6 @@ function AcceptanceSummary({
 export function FulfillmentPanel({
     order,
     selfReturn,
-    showRejection,
     acceptanceExpanded,
     canAccept,
     onExpandAcceptance,
@@ -511,7 +518,6 @@ export function FulfillmentPanel({
 }: {
     order: SalesOrderDetailView
     selfReturn: string
-    showRejection: boolean
     acceptanceExpanded: boolean
     canAccept: boolean
     onExpandAcceptance: () => void
@@ -521,13 +527,6 @@ export function FulfillmentPanel({
 
     return (
         <div className="space-y-6">
-            {showRejection && order.procurementRejection ? (
-                <ProcurementRejectionCard
-                    order={order}
-                    rejection={order.procurementRejection}
-                />
-            ) : null}
-
             <DocumentSection
                 title="采购与交付"
                 action={

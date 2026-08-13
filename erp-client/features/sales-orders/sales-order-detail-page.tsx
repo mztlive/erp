@@ -3,7 +3,12 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeftIcon, FilePenLineIcon, ShieldAlertIcon } from "lucide-react"
+import {
+    ArrowLeftIcon,
+    BanIcon,
+    FilePenLineIcon,
+    ShieldAlertIcon,
+} from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -23,10 +28,18 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+    useResolveProcurementRejectionMutation,
     useSalesOrderDetailQuery,
+    useSalesOrderDraftResumeQuery,
     useStartSalesChangeOrderMutation,
 } from "@/features/sales-orders/queries"
-import { NATURE_LABEL } from "@/features/sales-orders/labels"
+import {
+    NATURE_LABEL,
+    PROCUREMENT_REJECT_REASON_LABEL,
+} from "@/features/sales-orders/labels"
+import type { SalesOrderDetailView } from "@/features/sales-orders/api"
+import { SalesOrderCreateForm } from "@/features/sales-orders/sales-order-create-page"
+import { VoidSalesOrderDialog } from "@/features/sales-orders/void-sales-order-dialog"
 import {
     CollaborationPanel,
     FulfillmentPanel,
@@ -78,7 +91,7 @@ export function SalesOrderDetailPage({
 
     const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
     const [result, setResult] = React.useState<{
-        status: "succeeded" | "blocked"
+        status: "succeeded" | "blocked" | "rejected"
         title: string
         description: string
         reference: string
@@ -103,11 +116,10 @@ export function SalesOrderDetailPage({
     const acceptanceExpanded = section === "acceptance"
     const showApproval =
         Boolean(order?.activeCardSalesApproval) && section === "approval"
-    const showRejection = Boolean(
+    const isEditable = Boolean(
         order &&
-        order.procurementRejection &&
-        (isOpenProcurementRejection(order) ||
-            section === "procurement-rejection"),
+        (order.primaryStatus.code === "draft" ||
+            isOpenProcurementRejection(order)),
     )
 
     const selectSection = React.useCallback(
@@ -223,19 +235,21 @@ export function SalesOrderDetailPage({
         >
             {actionableFocusTask.actionLabel}
         </Button>
-    ) : order.primaryStatus.code === "draft" ? (
-        <Button
-            type="button"
-            size="sm"
-            render={
-                <Link
-                    href={`/sales/orders?mode=create&salesOrderId=${order.id}`}
-                />
-            }
-        >
-            继续编辑
-        </Button>
     ) : null
+
+    if (isEditable) {
+        return (
+            <SalesOrderEditableCenter
+                order={order}
+                backHref={backHref}
+                backLabel={backLabel}
+                fromQueue={fromQueue}
+                fromWorkspace={fromWorkspace}
+                result={result}
+                onResult={setResult}
+            />
+        )
+    }
 
     return (
         <PageScaffold>
@@ -327,6 +341,32 @@ export function SalesOrderDetailPage({
                     primaryAction={primaryTaskAction}
                 />
 
+                {result ? (
+                    <div className="border-b border-border/30 px-3 py-3 md:px-4">
+                        <FormalActionResult
+                            status={result.status}
+                            title={result.title}
+                            description={result.description}
+                            reference={result.reference}
+                            facts={[
+                                {
+                                    label: "销售单",
+                                    value: order.documentNumber,
+                                },
+                                { label: "客户", value: order.customerName },
+                                ...(result.nextResponsible
+                                    ? [
+                                          {
+                                              label: "下一步",
+                                              value: result.nextResponsible,
+                                          },
+                                      ]
+                                    : []),
+                            ]}
+                        />
+                    </div>
+                ) : null}
+
                 <div className="border-b border-border/30 py-2.5">
                     <LifecycleRail order={order} />
                 </div>
@@ -413,32 +453,6 @@ export function SalesOrderDetailPage({
                     />
                 </MetricStrip>
 
-                {result ? (
-                    <div className="px-3 pb-3 md:px-4">
-                        <FormalActionResult
-                            status={result.status}
-                            title={result.title}
-                            description={result.description}
-                            reference={result.reference}
-                            facts={[
-                                {
-                                    label: "销售单",
-                                    value: order.documentNumber,
-                                },
-                                { label: "客户", value: order.customerName },
-                                ...(result.nextResponsible
-                                    ? [
-                                          {
-                                              label: "下一步",
-                                              value: result.nextResponsible,
-                                          },
-                                      ]
-                                    : []),
-                            ]}
-                        />
-                    </div>
-                ) : null}
-
                 <Tabs
                     value={navSection}
                     onValueChange={(next) => {
@@ -453,9 +467,7 @@ export function SalesOrderDetailPage({
                     >
                         {visibleNav.map((item) => {
                             const todoOnFulfillment =
-                                item.id === "fulfillment" &&
-                                (isOpenProcurementRejection(order) ||
-                                    Boolean(canAccept))
+                                item.id === "fulfillment" && Boolean(canAccept)
                             const changeOnVersions =
                                 item.id === "versions" &&
                                 Boolean(order.activeChangeOrder)
@@ -498,6 +510,7 @@ export function SalesOrderDetailPage({
                             focusTask={focusTask}
                             selfReturn={selfReturn}
                             showApproval={showApproval}
+                            onApprovalResult={setResult}
                         />
                     </TabsContent>
 
@@ -508,7 +521,6 @@ export function SalesOrderDetailPage({
                         <FulfillmentPanel
                             order={order}
                             selfReturn={selfReturn}
-                            showRejection={showRejection}
                             acceptanceExpanded={acceptanceExpanded}
                             canAccept={Boolean(canAccept)}
                             onExpandAcceptance={() =>
@@ -593,6 +605,226 @@ export function SalesOrderDetailPage({
                             description: failure.description,
                             reference: order.documentNumber,
                         })
+                    }
+                }}
+            />
+        </PageScaffold>
+    )
+}
+
+function SalesOrderEditableCenter({
+    order,
+    backHref,
+    backLabel,
+    fromQueue,
+    fromWorkspace,
+    result,
+    onResult,
+}: {
+    order: SalesOrderDetailView
+    backHref: string
+    backLabel: string
+    fromQueue: boolean
+    fromWorkspace: string | null
+    result: {
+        status: "succeeded" | "blocked" | "rejected"
+        title: string
+        description: string
+        reference: string
+        nextResponsible?: string
+    } | null
+    onResult: (next: {
+        status: "succeeded" | "blocked" | "rejected"
+        title: string
+        description: string
+        reference: string
+        nextResponsible?: string
+    }) => void
+}) {
+    const resumeQuery = useSalesOrderDraftResumeQuery(order.id)
+    const voidMutation = useResolveProcurementRejectionMutation()
+    const [voidOpen, setVoidOpen] = React.useState(false)
+    const openRejection = isOpenProcurementRejection(order)
+    const rejection = order.procurementRejection
+    const canVoid = Boolean(
+        rejection?.allowedActions.includes("VOID_AFTER_REJECTION"),
+    )
+    const reasonLabel = rejection
+        ? (PROCUREMENT_REJECT_REASON_LABEL[rejection.rejectReasonCode] ??
+          rejection.rejectReasonCode)
+        : ""
+
+    return (
+        <PageScaffold className="pb-8">
+            <PageHeader
+                variant="object-chrome"
+                breadcrumbs={[
+                    { id: "sales", label: "销售", href: "/sales/orders" },
+                    { id: "orders", label: "销售单", href: "/sales/orders" },
+                    {
+                        id: "detail",
+                        label: order.documentNumber,
+                        current: true,
+                    },
+                ]}
+                metadata={
+                    fromQueue ? (
+                        <span>
+                            {fromWorkspace === "W09"
+                                ? "从履约处理打开 · 处理完可点返回，回到列表原位"
+                                : fromWorkspace === "W08"
+                                  ? "从采购单打开 · 处理完可点返回，回到列表原位"
+                                  : "从采购确认打开 · 处理完可点返回，回到列表原位"}
+                        </span>
+                    ) : undefined
+                }
+                actions={
+                    <PageActions
+                        actions={[
+                            {
+                                actionKey: "back",
+                                label: backLabel,
+                                icon: ArrowLeftIcon,
+                                variant: "outline",
+                                render: <Link href={backHref} />,
+                            },
+                        ]}
+                    />
+                }
+            />
+
+            <DocumentHeader
+                density="compact"
+                title={order.customerName}
+                documentNumber={order.documentNumber}
+                version={order.version}
+                primaryStatus={order.primaryStatus}
+                meta={
+                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <Badge variant="secondary" className="font-normal">
+                            {NATURE_LABEL[order.nature]}
+                        </Badge>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                            负责人{" "}
+                            <span className="font-medium text-foreground">
+                                {order.ownerName}
+                            </span>
+                        </span>
+                    </span>
+                }
+                secondaryActions={
+                    openRejection && canVoid ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setVoidOpen(true)}
+                        >
+                            <BanIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            作废
+                        </Button>
+                    ) : undefined
+                }
+            />
+
+            {openRejection && rejection ? (
+                <Alert variant="warning">
+                    <ShieldAlertIcon aria-hidden="true" />
+                    <AlertTitle>采购未通过</AlertTitle>
+                    <AlertDescription>
+                        {reasonLabel}
+                        {rejection.rejectComment
+                            ? ` · ${rejection.rejectComment}`
+                            : ""}
+                        <span className="mt-1 block text-xs">
+                            {rejection.rejectedByLabel} · {rejection.rejectedAt}
+                            {" · "}第 {rejection.rejectedSubmissionNo}{" "}
+                            次报给采购。改完整单后再报，或点「作废」。
+                        </span>
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            {result ? (
+                <FormalActionResult
+                    status={result.status}
+                    title={result.title}
+                    description={result.description}
+                    reference={result.reference}
+                    facts={[
+                        { label: "销售单", value: order.documentNumber },
+                        { label: "客户", value: order.customerName },
+                        ...(result.nextResponsible
+                            ? [
+                                  {
+                                      label: "下一步",
+                                      value: result.nextResponsible,
+                                  },
+                              ]
+                            : []),
+                    ]}
+                />
+            ) : null}
+
+            {resumeQuery.isPending ? (
+                <div
+                    className={cn(surfacePanelClassName, "h-72 animate-pulse")}
+                    aria-busy="true"
+                    aria-label="正在加载可编辑内容"
+                />
+            ) : resumeQuery.isError || !resumeQuery.data ? (
+                <BusinessFailureState
+                    title="可编辑内容加载失败"
+                    error={resumeQuery.error}
+                    onRetry={() => {
+                        void resumeQuery.refetch()
+                    }}
+                />
+            ) : (
+                <SalesOrderCreateForm
+                    chrome="none"
+                    purpose={openRejection ? "resubmit" : "draft"}
+                    initialDraft={resumeQuery.data}
+                    initialNature={resumeQuery.data.nature}
+                    initialContractId={resumeQuery.data.contractId}
+                    onResult={onResult}
+                />
+            )}
+
+            <VoidSalesOrderDialog
+                open={voidOpen}
+                onOpenChange={setVoidOpen}
+                pending={voidMutation.isPending}
+                onConfirm={async (reason) => {
+                    try {
+                        const outcome = await voidMutation.mutateAsync({
+                            salesOrderId: order.id,
+                            action: "VOID_AFTER_REJECTION",
+                            idempotencyKey: `pr-void-${order.id}-${Date.now()}`,
+                            voidReason: reason,
+                        })
+                        onResult({
+                            status: "rejected",
+                            title: "本单已作废",
+                            description: outcome.detail,
+                            reference: outcome.reference,
+                        })
+                    } catch (error) {
+                        const failure = getErrorPresentation(
+                            error,
+                            "作废未完成，请刷新后重试。",
+                        )
+                        onResult({
+                            status: "blocked",
+                            title: failure.title,
+                            description: failure.description,
+                            reference: order.documentNumber,
+                        })
+                        throw error
                     }
                 }}
             />

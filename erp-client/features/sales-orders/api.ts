@@ -32,6 +32,7 @@ import {
     type BackendSalesOrderReview,
     type BackendSalesOrderView,
     type BackendWorkingCopy,
+    type BackendWorkingCopyLine,
     type PageView,
     type ProcurementResolutionOutcome,
     type SalesOrderDetailView,
@@ -675,13 +676,44 @@ export type SalesOrderDraftResumeData = {
     lineItems: SalesOrderDraftLineInput[]
 }
 
+function mapDraftLines(
+    lines: BackendWorkingCopyLine[],
+    voucherCategorySkuId?: string | null,
+): SalesOrderDraftLineInput[] {
+    return lines.map((line) => {
+        const isVoucher = line.line_type === "VOUCHER"
+        return {
+            rowKey: line.sales_order_line_id || line.id,
+            name: line.item_name_snapshot,
+            sku: isVoucher ? (voucherCategorySkuId ?? "") : (line.sku_id ?? ""),
+            skuRevisionId: isVoucher ? "" : (line.sku_revision_id ?? ""),
+            quantity: isVoucher
+                ? String(line.card_count ?? 1)
+                : (line.quantity ?? "1"),
+            unit: isVoucher
+                ? "张"
+                : (line.unit_snapshot ?? line.base_unit_code ?? ""),
+            unitPriceGross: line.unit_price_gross ?? "0.00",
+            fulfillmentMode: !isVoucher ? "公司仓发" : "",
+            dueDate: formatEpochDate(line.fulfillment_due_at),
+            faceValue: line.face_value ?? "",
+            giftRate: "",
+            cardForm: isVoucher ? mapCardFormFromBackend(line.card_form) : "",
+        }
+    })
+}
+
+function isEditableSalesOrder(detail: BackendSalesOrderDetail) {
+    return (
+        detail.commercial_status === "DRAFT" ||
+        Boolean(detail.open_procurement_rejection) ||
+        detail.stage?.code === "awaiting_sales"
+    )
+}
+
 /**
- * 取回草稿的可编辑表单值（继续编辑场景）；非草稿或没有有效工作副本时返回
- * `null`（详情页只在草稿态显示"继续编辑"，理论上不会命中，仍做防御）。
- *
- * 直接读原始详情接口而不是 `fetchSalesOrderDetail`——后者已经把明细压缩成
- * 展示用的 `SalesOrderLineItem`（丢了 `skuRevisionId`/`fulfillmentMode` 等
- * 建单表单必需的原始字段），这里需要 `working_copy` 的完整快照。
+ * 取回可编辑表单值：草稿继续编辑，或采购驳回后改整单再报。
+ * 优先工作副本；没有副本时回退到最近一次提交快照。
  */
 export async function fetchSalesOrderDraftForResume(
     salesOrderId: string,
@@ -689,62 +721,47 @@ export async function fetchSalesOrderDraftForResume(
     const detail = await apiGet<BackendSalesOrderDetail>(
         `/admin/sales-orders/${salesOrderId}`,
     )
+    if (!isEditableSalesOrder(detail)) return null
+
     const wc = detail.working_copy
-    if (detail.commercial_status !== "DRAFT" || !wc) return null
+    const submissions = [...(detail.submissions ?? [])].sort(
+        (a, b) => (b.submission_no ?? 0) - (a.submission_no ?? 0),
+    )
+    const latestSubmission = submissions[0]
+    const source = wc ?? latestSubmission
+    if (!source) return null
 
     const nature: SalesOrderNature =
         detail.business_type === "VOUCHER" ? "card_voucher" : "physical_service"
+    const projectName = wc?.project_name ?? latestSubmission?.project_name
+    const paymentTermName =
+        wc?.payment_term_name ?? latestSubmission?.payment_term_name
+    const voucherCategorySkuId =
+        wc?.voucher_category_sku_id ?? latestSubmission?.voucher_category_sku_id
+    const voucherExpiry =
+        wc?.voucher_expiry_at ?? latestSubmission?.voucher_expiry_at
+    const remark = wc?.business_remark ?? latestSubmission?.business_remark
+    const lines = source.lines ?? []
 
     const welfareScene =
-        WELFARE_SCENARIO_OPTIONS.find((o) => o.label === wc.project_name)
-            ?.value ?? ""
+        WELFARE_SCENARIO_OPTIONS.find((o) => o.label === projectName)?.value ??
+        ""
     const paymentTerms =
-        PAYMENT_TERM_OPTIONS.find((o) => o.label === wc.payment_term_name)
-            ?.value ?? "CONTRACT"
-
-    const lineItems: SalesOrderDraftLineInput[] = (wc.lines ?? []).map(
-        (line) => {
-            const isVoucher = line.line_type === "VOUCHER"
-            return {
-                rowKey: line.sales_order_line_id || line.id,
-                name: line.item_name_snapshot,
-                // 卡券类目 SKU 存在表头快照 voucher_category_sku_id，不在行内 sku_id；
-                // 卡券也不追踪精确修订（只有实物/服务需要锁定 SKU 修订）。
-                sku: isVoucher
-                    ? (wc.voucher_category_sku_id ?? "")
-                    : (line.sku_id ?? ""),
-                skuRevisionId: isVoucher ? "" : (line.sku_revision_id ?? ""),
-                quantity: isVoucher
-                    ? String(line.card_count ?? 1)
-                    : (line.quantity ?? "1"),
-                unit: isVoucher
-                    ? "张"
-                    : (line.unit_snapshot ?? line.base_unit_code ?? ""),
-                unitPriceGross: line.unit_price_gross ?? "0.00",
-                // 建单页不提供仓发/直发选择；沿用 createEmptyLine 的固定占位值。
-                fulfillmentMode: !isVoucher ? "公司仓发" : "",
-                dueDate: formatEpochDate(line.fulfillment_due_at),
-                faceValue: line.face_value ?? "",
-                giftRate: "",
-                cardForm: isVoucher
-                    ? mapCardFormFromBackend(line.card_form)
-                    : "",
-            }
-        },
-    )
+        PAYMENT_TERM_OPTIONS.find((o) => o.label === paymentTermName)?.value ??
+        "CONTRACT"
 
     return {
         salesOrderId: detail.id,
         documentNumber: detail.order_no,
-        version: wc.version,
+        version: wc?.version ?? detail.version,
         contractId: detail.contract_id ?? "",
         nature,
         welfareScene,
         paymentTerms,
-        fulfillmentDeadline: formatEpochDate(wc.voucher_expiry_at),
-        taxRatePercent: rateToPercent(wc.lines?.[0]?.sales_tax_rate),
-        remark: wc.business_remark ?? "",
-        lineItems,
+        fulfillmentDeadline: formatEpochDate(voucherExpiry),
+        taxRatePercent: rateToPercent(lines[0]?.sales_tax_rate),
+        remark: remark ?? "",
+        lineItems: mapDraftLines(lines, voucherCategorySkuId),
     }
 }
 

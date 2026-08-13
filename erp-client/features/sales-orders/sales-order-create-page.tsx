@@ -9,6 +9,7 @@ import { z } from "zod"
 import {
     DiscardConfirmDialog,
     EditableLineItemTable,
+    FormalActionConfirmDialog,
     MoneyValue,
     PageHeader,
     PageScaffold,
@@ -44,6 +45,7 @@ import {
 } from "@/features/entity-selectors"
 import {
     useCreateSalesOrderMutation,
+    useResolveProcurementRejectionMutation,
     useSalesOrderDraftResumeQuery,
     useSaveSalesOrderDraftMutation,
     useSubmitSalesOrderMutation,
@@ -69,25 +71,47 @@ import type {
     SalesOrderNature,
 } from "@/features/sales-orders/types"
 
-function SalesOrderCreateForm({
+export type SalesOrderEditorPurpose = "create" | "draft" | "resubmit"
+
+export type SalesOrderEditorResult = {
+    status: "succeeded" | "blocked"
+    title: string
+    description: string
+    reference: string
+    nextResponsible?: string
+}
+
+export function SalesOrderCreateForm({
     initialCustomerId = "",
     initialContractId = "",
     initialContractRevisionId = "",
     initialNature = "physical_service",
     initialDraft = null,
+    purpose = "create",
+    chrome = "page",
+    onResult,
+    onSubmitted,
 }: {
     initialCustomerId?: string
     initialContractId?: string
     initialContractRevisionId?: string
     initialNature?: SalesOrderNature
-    /** 继续编辑场景：已有草稿的可编辑内容；新建时为 `null`。 */
+    /** 继续编辑 / 驳回改单：已有可编辑内容；新建时为 `null`。 */
     initialDraft?: SalesOrderDraftResumeData | null
+    purpose?: SalesOrderEditorPurpose
+    /** page：独立建单页；none：嵌在对象中心内，外壳由详情页提供。 */
+    chrome?: "page" | "none"
+    onResult?: (result: SalesOrderEditorResult) => void
+    onSubmitted?: (salesOrderId: string) => void
 }) {
     const router = useRouter()
     const queryClient = useQueryClient()
     const createMutation = useCreateSalesOrderMutation()
     const saveDraftMutation = useSaveSalesOrderDraftMutation()
     const submitMutation = useSubmitSalesOrderMutation()
+    const resubmitMutation = useResolveProcurementRejectionMutation()
+    const natureLocked = purpose !== "create"
+    const [resubmitConfirmOpen, setResubmitConfirmOpen] = React.useState(false)
     const profileQuery = useAccountProfileQuery()
     const [selectedContractId, setSelectedContractId] = React.useState(
         initialDraft?.contractId || initialContractId,
@@ -202,13 +226,20 @@ function SalesOrderCreateForm({
                     })
                     return
                 }
+                if (purpose === "resubmit") {
+                    setResubmitConfirmOpen(true)
+                    return
+                }
                 await submitMutation.mutateAsync({
                     salesOrderId: draftIdentity.salesOrderId,
                     version: saved.version,
                     idempotencyKey,
                 })
                 form.reset()
-                router.push(`/sales/orders/${draftIdentity.salesOrderId}`)
+                onSubmitted?.(draftIdentity.salesOrderId)
+                if (!onSubmitted) {
+                    router.push(`/sales/orders/${draftIdentity.salesOrderId}`)
+                }
                 return
             }
 
@@ -236,7 +267,10 @@ function SalesOrderCreateForm({
                 return
             }
             form.reset()
-            router.push(`/sales/orders/${result.salesOrderId}`)
+            onSubmitted?.(result.salesOrderId)
+            if (!onSubmitted) {
+                router.push(`/sales/orders/${result.salesOrderId}`)
+            }
         },
     })
 
@@ -366,32 +400,8 @@ function SalesOrderCreateForm({
             }))
     })
 
-    return (
-        <PageScaffold className="pb-8">
-            <PageHeader
-                density="compact"
-                title={
-                    initialDraft
-                        ? `继续编辑 ${initialDraft.documentNumber}`
-                        : "新建销售单"
-                }
-                description="创建后业务性质不可修改；金额以提交后系统计算为准。"
-                breadcrumbs={[
-                    { id: "sales", label: "销售", href: "/sales/orders" },
-                    { id: "orders", label: "销售单", href: "/sales/orders" },
-                    {
-                        id: "create",
-                        label: initialDraft ? "继续编辑" : "新建",
-                        current: true,
-                    },
-                ]}
-                status={
-                    initialDraft
-                        ? { label: "草稿", tone: "neutral" }
-                        : { label: "未创建", tone: "neutral" }
-                }
-            />
-
+    const editor = (
+        <>
             {profileQuery.isError ? (
                 <Alert variant="destructive">
                     <CircleAlertIcon aria-hidden="true" />
@@ -603,12 +613,19 @@ function SalesOrderCreateForm({
                                             <field.SelectField
                                                 label="业务性质"
                                                 options={NATURE_OPTIONS}
+                                                disabled={natureLocked}
+                                                description={
+                                                    natureLocked
+                                                        ? "建单后不能改"
+                                                        : undefined
+                                                }
                                                 onValueChange={(value) => {
                                                     const nature =
                                                         value as SalesOrderNature
                                                     if (
+                                                        natureLocked ||
                                                         nature ===
-                                                        field.state.value
+                                                            field.state.value
                                                     )
                                                         return
                                                     const lines =
@@ -619,9 +636,7 @@ function SalesOrderCreateForm({
                                                             lines,
                                                         )
                                                     ) {
-                                                        setPendingNature(
-                                                            nature,
-                                                        )
+                                                        setPendingNature(nature)
                                                         return
                                                     }
                                                     applyNature(nature)
@@ -1280,9 +1295,11 @@ function SalesOrderCreateForm({
                                     values.taxRatePercent,
                                 )
                                 const flowNote =
-                                    values.nature === "card_voucher"
-                                        ? "提交后进入销售领导 → 运营两级审批，运营通过后生效并形成应收。"
-                                        : "提交后内容锁定并进入采购二次确认；生效以确认通过为准。"
+                                    purpose === "resubmit"
+                                        ? "将按当前整单内容生成新一版，再交给采购确认。商品或价格需相对被驳回版本有改动。"
+                                        : values.nature === "card_voucher"
+                                          ? "提交后进入销售领导 → 运营两级审批，运营通过后生效并形成应收。"
+                                          : "提交后内容锁定并进入采购二次确认；生效以确认通过为准。"
                                 return (
                                     <StickyTotalBar
                                         className="rounded-none border-0 border-t border-border/30 px-4 py-4 shadow-none md:px-5 md:py-4"
@@ -1336,18 +1353,32 @@ function SalesOrderCreateForm({
                                                     }}
                                                 />
                                                 <form.SubmitButton
-                                                    label="提交"
-                                                    pendingLabel="正在提交…"
+                                                    label={
+                                                        purpose === "resubmit"
+                                                            ? "再报给采购"
+                                                            : "提交"
+                                                    }
+                                                    pendingLabel={
+                                                        purpose === "resubmit"
+                                                            ? "正在准备重提…"
+                                                            : "正在提交…"
+                                                    }
                                                     onClick={() => {
                                                         submitIntentRef.current =
                                                             "SUBMIT"
                                                     }}
                                                 >
-                                                    <PlusIcon
-                                                        data-icon="inline-start"
-                                                        aria-hidden="true"
-                                                    />
-                                                    提交
+                                                    {purpose === "resubmit" ? (
+                                                        "再报给采购"
+                                                    ) : (
+                                                        <>
+                                                            <PlusIcon
+                                                                data-icon="inline-start"
+                                                                aria-hidden="true"
+                                                            />
+                                                            提交
+                                                        </>
+                                                    )}
                                                 </form.SubmitButton>
                                             </form.AppForm>
                                         }
@@ -1493,6 +1524,75 @@ function SalesOrderCreateForm({
                     setPendingNature(null)
                 }}
             />
+
+            <FormalActionConfirmDialog
+                open={resubmitConfirmOpen}
+                onOpenChange={setResubmitConfirmOpen}
+                title="再报给采购"
+                actionLabel="重提"
+                confirmLabel="确认再报"
+                fromStatus={{ label: "采购未通过", tone: "warning" }}
+                toStatus={{ label: "待二次确认", tone: "info" }}
+                lockedFields={["销售单号", "业务性质", "被驳回的那一版"]}
+                effects={[
+                    "按当前整单内容生成新一版提交",
+                    "采购会收到新的确认待办",
+                    "以前被驳回的记录仍保留",
+                ]}
+                nextDepartment="采购"
+                pending={resubmitMutation.isPending}
+                onConfirm={async () => {
+                    if (!draftIdentity) return
+                    try {
+                        const outcome = await resubmitMutation.mutateAsync({
+                            salesOrderId: draftIdentity.salesOrderId,
+                            action: "RESUBMIT_CHANGED_TERMS",
+                            idempotencyKey: `pr-${draftIdentity.salesOrderId}-${Date.now()}`,
+                        })
+                        onResult?.({
+                            status: "succeeded",
+                            title: "已改完并再报给采购",
+                            description: outcome.detail,
+                            reference: outcome.reference,
+                            nextResponsible: "采购重新确认",
+                        })
+                        onSubmitted?.(draftIdentity.salesOrderId)
+                    } catch (error) {
+                        onResult?.({
+                            status: "blocked",
+                            title: "还不能再报给采购",
+                            description: getErrorMessage(
+                                error,
+                                "请确认已改商品或价格后再试。",
+                            ),
+                            reference: draftIdentity.documentNumber,
+                        })
+                        throw error
+                    }
+                }}
+            />
+        </>
+    )
+
+    if (chrome === "none") return editor
+
+    return (
+        <PageScaffold className="pb-8">
+            <PageHeader
+                variant="object-chrome"
+                breadcrumbs={[
+                    { id: "sales", label: "销售", href: "/sales/orders" },
+                    { id: "orders", label: "销售单", href: "/sales/orders" },
+                    {
+                        id: "create",
+                        label: initialDraft
+                            ? initialDraft.documentNumber
+                            : "新建",
+                        current: true,
+                    },
+                ]}
+            />
+            {editor}
         </PageScaffold>
     )
 }
@@ -1562,6 +1662,7 @@ export function SalesOrderCreatePage({
         }
         return (
             <SalesOrderCreateForm
+                purpose="draft"
                 initialCustomerId={initialCustomerId}
                 initialContractId={initialContractId}
                 initialContractRevisionId={initialContractRevisionId}

@@ -5,7 +5,6 @@ import { z } from "zod"
 import {
     DocumentSection,
     FormalActionConfirmDialog,
-    FormalActionResult,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -44,9 +43,18 @@ const rejectSchema = z.object({
     comment: z.string().trim().min(4, "请填写驳回说明"),
 })
 
+type ApprovalResult = {
+    status: "succeeded" | "rejected" | "blocked"
+    title: string
+    description: string
+    reference: string
+    nextResponsible?: string
+}
+
 type CardSalesApprovalPanelProps = {
     order: SalesOrderListItem
     approval: CardSalesApproval
+    onResult?: (result: ApprovalResult) => void
 }
 
 /**
@@ -56,6 +64,7 @@ type CardSalesApprovalPanelProps = {
 export function CardSalesApprovalPanel({
     order,
     approval,
+    onResult,
 }: CardSalesApprovalPanelProps) {
     const claimMutation = useClaimCardSalesApprovalMutation()
     const completeMutation = useCompleteCardSalesApprovalMutation()
@@ -65,14 +74,12 @@ export function CardSalesApprovalPanel({
         workItemId: string
     } | null>(null)
 
-    const [result, setResult] = React.useState<{
-        status: "succeeded" | "rejected" | "blocked"
-        title: string
-        description: string
-        reference: string
-        /** 下一责任岗位/人；已生效（终态）不设置。 */
-        nextResponsible?: string
-    } | null>(null)
+    const publishResult = React.useCallback(
+        (next: ApprovalResult) => {
+            onResult?.(next)
+        },
+        [onResult],
+    )
     const [confirmApprove, setConfirmApprove] = React.useState(false)
     const [confirmReject, setConfirmReject] = React.useState(false)
     const [rejectPayload, setRejectPayload] = React.useState<{
@@ -122,32 +129,6 @@ export function CardSalesApprovalPanel({
             }
         >
             <div className="space-y-4">
-                {result ? (
-                    <FormalActionResult
-                        status={result.status}
-                        title={result.title}
-                        description={result.description}
-                        reference={result.reference}
-                        facts={[
-                            { label: "销售单", value: order.documentNumber },
-                            {
-                                label: "审批环节",
-                                value: CARD_APPROVAL_TYPE_LABEL[
-                                    approval.workItemType
-                                ],
-                            },
-                            ...(result.nextResponsible
-                                ? [
-                                      {
-                                          label: "下一步",
-                                          value: result.nextResponsible,
-                                      },
-                                  ]
-                                : []),
-                        ]}
-                    />
-                ) : null}
-
                 <Alert variant="info">
                     <AlertTitle>待审批内容（只读）</AlertTitle>
                     <AlertDescription>
@@ -181,7 +162,7 @@ export function CardSalesApprovalPanel({
                                 claimRef.current = {
                                     workItemId: approval.workItemId,
                                 }
-                                setResult({
+                                publishResult({
                                     status: "succeeded",
                                     title: "已领取，可以审批了",
                                     description:
@@ -277,7 +258,7 @@ export function CardSalesApprovalPanel({
                                 decision: "APPROVE",
                             })
                             claimRef.current = null
-                            setResult({
+                            publishResult({
                                 status: "succeeded",
                                 title:
                                     outcome.outcome === "MANAGER_APPROVED"
@@ -295,7 +276,7 @@ export function CardSalesApprovalPanel({
                                 error,
                                 "审批未完成，请核对当前状态后再决定是否重试。",
                             )
-                            setResult({
+                            publishResult({
                                 status: "blocked",
                                 title: failure.title,
                                 description: failure.description,
@@ -332,7 +313,7 @@ export function CardSalesApprovalPanel({
                                 comment: rejectPayload.comment,
                             })
                             claimRef.current = null
-                            setResult({
+                            publishResult({
                                 status: "rejected",
                                 title: "已驳回，请销售修改后重提",
                                 description: `${outcome.detail}${
@@ -348,7 +329,7 @@ export function CardSalesApprovalPanel({
                                 error,
                                 "驳回未完成，请核对当前状态后再决定是否重试。",
                             )
-                            setResult({
+                            publishResult({
                                 status: "blocked",
                                 title: failure.title,
                                 description: failure.description,
