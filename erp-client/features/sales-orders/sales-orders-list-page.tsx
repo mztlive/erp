@@ -39,7 +39,7 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { DatePicker } from "@/components/ui/date-picker"
+import { DateRangePicker } from "@/components/ui/date-picker"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
@@ -1170,50 +1170,37 @@ export function SalesOrdersListPage() {
                                             </Field>
                                             <Field>
                                                 <FieldLabel>
-                                                    创建日期自
+                                                    创建日期
                                                 </FieldLabel>
-                                                <DatePicker
+                                                <DateRangePicker
                                                     className="w-full"
                                                     value={
                                                         filterDraft.createdFrom ||
-                                                        undefined
+                                                        filterDraft.createdTo
+                                                            ? {
+                                                                  from:
+                                                                      filterDraft.createdFrom ||
+                                                                      undefined,
+                                                                  to:
+                                                                      filterDraft.createdTo ||
+                                                                      undefined,
+                                                              }
+                                                            : undefined
                                                     }
-                                                    onValueChange={(
-                                                        createdFrom,
-                                                    ) => {
+                                                    onValueChange={(range) => {
                                                         setFilterDraft(
                                                             (draft) => ({
                                                                 ...draft,
                                                                 createdFrom:
-                                                                    createdFrom ??
+                                                                    range?.from ??
                                                                     "",
-                                                            }),
-                                                        )
-                                                    }}
-                                                />
-                                            </Field>
-                                            <Field>
-                                                <FieldLabel>
-                                                    创建日期至
-                                                </FieldLabel>
-                                                <DatePicker
-                                                    className="w-full"
-                                                    value={
-                                                        filterDraft.createdTo ||
-                                                        undefined
-                                                    }
-                                                    onValueChange={(
-                                                        createdTo,
-                                                    ) => {
-                                                        setFilterDraft(
-                                                            (draft) => ({
-                                                                ...draft,
                                                                 createdTo:
-                                                                    createdTo ??
+                                                                    range?.to ??
                                                                     "",
                                                             }),
                                                         )
                                                     }}
+                                                    placeholder="全部日期"
                                                 />
                                             </Field>
                                         </FieldGroup>
