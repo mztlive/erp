@@ -16,12 +16,12 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/toast"
-import { masterDataCopy } from "@/features/master-data/copy"
-import { defaultImmediateEffectiveFrom } from "@/features/master-data/resource-fields"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { defaultImmediateEffectiveFrom } from "@/features/master-data/lib/resource-fields"
 import {
     useCreateMasterDataMutation,
     useCreateRevisionMutation,
-} from "@/features/master-data/queries"
+} from "@/features/master-data/hooks/queries"
 import type {
     MasterDataListItem,
     MasterDataMutationResult,

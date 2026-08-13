@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { MasterDataCenterPage } from "@/features/master-data/master-data-center-page"
+import { MasterDataCenterPage } from "@/features/master-data/components/pages/master-data-center-page"
 
 export const metadata: Metadata = {
     title: "基础资料详情",

@@ -8,12 +8,10 @@ import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { masterDataCopy } from "@/features/master-data/copy"
-import { formatEffectiveRange } from "@/features/master-data/filter"
-import {
-    DisabledActionHint,
-    productSkuPriceRange,
-} from "@/features/master-data/master-data-list-presentation"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { formatEffectiveRange } from "@/features/master-data/lib/filter"
+import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
+import { productSkuPriceRange } from "@/features/master-data/lib/list-filters"
 import type {
     MasterDataListItem,
     MasterDataResource,
@@ -334,9 +332,7 @@ function useMasterDataColumns({
                                   .map((sku) => sku.skuName.trim())
                                   .filter(Boolean)
                               const label =
-                                  names.length > 0
-                                      ? names.join("、")
-                                      : "—"
+                                  names.length > 0 ? names.join("、") : "—"
                               return (
                                   <span
                                       className="line-clamp-2 max-w-56 text-sm"

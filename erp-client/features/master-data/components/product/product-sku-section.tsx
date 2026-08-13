@@ -19,14 +19,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { masterDataCopy } from "@/features/master-data/copy"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     MoneyInput,
-    moveListItem,
     SkuMainImageField,
-} from "@/features/master-data/product-editor-media"
-import type { ProductSpecDraft } from "@/features/master-data/product-editor-model"
-import type { ProductInventoryPreviewSku } from "@/features/master-data/product-inventory-preview-sheet"
+} from "@/features/master-data/components/product/product-editor-media"
+import { moveListItem } from "@/features/master-data/lib/move-list-item"
+import type { ProductSpecDraft } from "@/features/master-data/lib/product-editor-model"
+import type { ProductInventoryPreviewSku } from "@/features/master-data/components/product/product-inventory-preview-sheet"
 import type {
     ProductFields,
     ProductKind,

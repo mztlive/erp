@@ -13,7 +13,7 @@ import {
     SUPPLIER_CAPABILITY_OPTIONS,
     SUPPLIER_QUALIFICATION_HEALTH_OPTIONS,
     SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
-} from "@/features/master-data/master-data-list-presentation"
+} from "@/features/master-data/lib/list-filters"
 import {
     PRODUCT_KIND_VALUES,
     type ProductKind,
@@ -594,4 +594,3 @@ export function useMasterDataListFilters({
         clearAllFilters,
     }
 }
-

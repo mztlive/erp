@@ -6,9 +6,9 @@ import {
     MasterDataCreateDialog,
     MasterDataDisableDialog,
     MasterDataReviseDialog,
-} from "@/features/master-data/master-data-action-dialog"
-import { ProductSupplyDialog } from "@/features/master-data/product-supply-dialog"
-import { VoucherCategoryFormDialog } from "@/features/master-data/voucher-category-form-dialog"
+} from "@/features/master-data/components/shared/master-data-action-dialog"
+import { ProductSupplyDialog } from "@/features/master-data/components/product/product-supply-dialog"
+import { VoucherCategoryFormDialog } from "@/features/master-data/components/list/voucher-category-form-dialog"
 import type {
     MasterDataListItem,
     MasterDataResource,

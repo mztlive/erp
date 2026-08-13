@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { masterDataCopy } from "@/features/master-data/copy"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function SupplierSaveReasonDialog({
     open,

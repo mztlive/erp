@@ -3,13 +3,11 @@
 import * as React from "react"
 
 import { PageHeader, PageScaffold } from "@/components/business"
-import { CategoryTreePage } from "@/features/master-data/category-tree-page"
-import { masterDataCopy } from "@/features/master-data/copy"
-import {
-    isResource,
-    ResourceNav,
-} from "@/features/master-data/master-data-list-presentation"
-import { MasterDataListWorkspace } from "@/features/master-data/master-data-list-workspace"
+import { CategoryTreePage } from "@/features/master-data/components/category/category-tree-page"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { ResourceNav } from "@/features/master-data/components/list/list-chrome"
+import { isResource } from "@/features/master-data/lib/list-filters"
+import { MasterDataListWorkspace } from "@/features/master-data/components/list/master-data-list-workspace"
 
 export function MasterDataPage({ resource }: { resource: string }) {
     const navRef = React.useRef<HTMLElement | null>(null)

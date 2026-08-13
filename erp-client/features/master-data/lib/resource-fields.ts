@@ -6,7 +6,7 @@
 
 import { z } from "zod"
 
-import { masterDataCopy } from "@/features/master-data/copy"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     MasterDataCenterView,
     MasterDataListItem,

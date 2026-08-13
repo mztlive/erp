@@ -3,56 +3,56 @@
  */
 
 import type {
-  MasterDataListItem,
-  MasterDataResource,
-} from "@/features/master-data/types";
+    MasterDataListItem,
+    MasterDataResource,
+} from "@/features/master-data/types"
 
 /** Warehouse write always fail-closed while write ownership unconfirmed. */
-export const WAREHOUSE_WRITE_CODE = "WAREHOUSE_WRITE_OWNER_UNCONFIRMED";
+export const WAREHOUSE_WRITE_CODE = "WAREHOUSE_WRITE_OWNER_UNCONFIRMED"
 export const WAREHOUSE_WRITE_MESSAGE =
-  "仓库资料暂不可维护：目前只能查看，不能新建、更新或停用。维护功能尚未开放。";
+    "仓库资料暂不可维护：目前只能查看，不能新建、更新或停用。维护功能尚未开放。"
 
 export function resourceLabel(resource: MasterDataResource): string {
-  const found = (
-    [
-      ["sellable-items", "可售商品池"],
-      ["products", "商品列表"],
-      ["categories", "商品分类"],
-      ["brands", "品牌"],
-      ["unit-of-measures", "计量单位"],
-      ["voucher-categories", "卡券类目"],
-      ["suppliers", "供应商与资质"],
-      ["warehouses", "仓库"],
-    ] as const
-  ).find(([k]) => k === resource);
-  return found?.[1] ?? resource;
+    const found = (
+        [
+            ["sellable-items", "可售商品池"],
+            ["products", "商品列表"],
+            ["categories", "商品分类"],
+            ["brands", "品牌"],
+            ["unit-of-measures", "计量单位"],
+            ["voucher-categories", "卡券类目"],
+            ["suppliers", "供应商与资质"],
+            ["warehouses", "仓库"],
+        ] as const
+    ).find(([k]) => k === resource)
+    return found?.[1] ?? resource
 }
 
 export function computeMetrics(rows: readonly MasterDataListItem[]) {
-  return [
-    {
-      key: "all",
-      label: "全部",
-      value: rows.length,
-      detail: "当前分类",
-    },
-    {
-      key: "enabled",
-      label: "当前启用",
-      value: rows.filter((r) => r.lifecycleStatus === "ENABLED").length,
-      detail: "启用状态",
-    },
-    {
-      key: "disabled",
-      label: "当前停用",
-      value: rows.filter((r) => r.lifecycleStatus === "DISABLED").length,
-      detail: "历史保留",
-    },
-    {
-      key: "pending",
-      label: "待生效更新",
-      value: rows.filter((r) => r.revisionTiming === "FUTURE").length,
-      detail: "版本状态 · 不是启用状态",
-    },
-  ] as const;
+    return [
+        {
+            key: "all",
+            label: "全部",
+            value: rows.length,
+            detail: "当前分类",
+        },
+        {
+            key: "enabled",
+            label: "当前启用",
+            value: rows.filter((r) => r.lifecycleStatus === "ENABLED").length,
+            detail: "启用状态",
+        },
+        {
+            key: "disabled",
+            label: "当前停用",
+            value: rows.filter((r) => r.lifecycleStatus === "DISABLED").length,
+            detail: "历史保留",
+        },
+        {
+            key: "pending",
+            label: "待生效更新",
+            value: rows.filter((r) => r.revisionTiming === "FUTURE").length,
+            detail: "版本状态 · 不是启用状态",
+        },
+    ] as const
 }

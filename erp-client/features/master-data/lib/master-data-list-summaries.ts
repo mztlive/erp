@@ -2,8 +2,8 @@ import {
     masterDataCopy,
     lifecycleFilterLabel,
     revisionTimingFilterLabel,
-} from "@/features/master-data/copy"
-import { resourceLabel } from "@/features/master-data/data"
+} from "@/features/master-data/lib/copy"
+import { resourceLabel } from "@/features/master-data/lib/data"
 import {
     PRODUCT_COVERAGE_FILTER_OPTIONS,
     PRODUCT_LISTING_FILTER_OPTIONS,
@@ -11,7 +11,7 @@ import {
     selectedSupplierOptionLabels,
     SUPPLIER_CAPABILITY_OPTIONS,
     SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
-} from "@/features/master-data/master-data-list-presentation"
+} from "@/features/master-data/lib/list-filters"
 import {
     PRODUCT_KIND_LABELS,
     type MasterDataListItem,
@@ -124,13 +124,9 @@ export function buildFilterSnapshotLabel(input: FilterSnapshotInput): string {
         ...(productKind
             ? [`商品类型=${PRODUCT_KIND_LABELS[productKind]}`]
             : []),
-        ...(selectedCategoryLabel
-            ? [`商品分类=${selectedCategoryLabel}`]
-            : []),
+        ...(selectedCategoryLabel ? [`商品分类=${selectedCategoryLabel}`] : []),
         ...(selectedBrandLabel ? [`品牌=${selectedBrandLabel}`] : []),
-        ...(selectedSupplierLabel
-            ? [`供应商=${selectedSupplierLabel}`]
-            : []),
+        ...(selectedSupplierLabel ? [`供应商=${selectedSupplierLabel}`] : []),
         ...(productListingStatus
             ? [
                   `上架状态=${PRODUCT_LISTING_FILTER_OPTIONS.find((option) => option.value === productListingStatus)?.label}`,
@@ -199,9 +195,7 @@ export function buildListTableDescription(input: {
     const active: string[] = []
     if (input.q.trim()) active.push(`搜索「${input.q.trim()}」`)
     if (input.lifecycleStatus !== "all") {
-        active.push(
-            `启用状态 ${lifecycleFilterLabel(input.lifecycleStatus)}`,
-        )
+        active.push(`启用状态 ${lifecycleFilterLabel(input.lifecycleStatus)}`)
     }
     if (input.revisionTiming !== "all") {
         active.push(

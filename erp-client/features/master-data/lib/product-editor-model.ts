@@ -1,9 +1,9 @@
-import { defaultImmediateEffectiveFrom } from "@/features/master-data/resource-fields"
+import { defaultImmediateEffectiveFrom } from "@/features/master-data/lib/resource-fields"
 import {
     emptyProductFields,
     rebuildSkusFromSpecs,
     validateProductFields,
-} from "@/features/master-data/product-model"
+} from "@/features/master-data/lib/product-model"
 import type {
     MasterDataCenterView,
     ProductDetailView,

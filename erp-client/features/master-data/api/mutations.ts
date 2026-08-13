@@ -3,7 +3,7 @@ import {
     WAREHOUSE_WRITE_CODE,
     WAREHOUSE_WRITE_MESSAGE,
     resourceLabel,
-} from "@/features/master-data/data"
+} from "@/features/master-data/lib/data"
 import type {
     BrandFields,
     CategoryFields,
@@ -43,7 +43,7 @@ import {
     todayDateOnly,
     tsToIso,
 } from "@/features/master-data/api/presentation"
-import { parseMediaList } from "@/features/master-data/resource-fields"
+import { parseMediaList } from "@/features/master-data/lib/resource-fields"
 
 function blockedWarehouse(): MasterDataMutationResult {
     return {

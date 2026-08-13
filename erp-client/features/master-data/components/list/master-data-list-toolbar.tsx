@@ -21,8 +21,8 @@ import {
 import {
     masterDataCopy,
     masterDataSearchPlaceholder,
-} from "@/features/master-data/copy"
-import { resourceLabel } from "@/features/master-data/data"
+} from "@/features/master-data/lib/copy"
+import { resourceLabel } from "@/features/master-data/lib/data"
 import {
     LIFECYCLE_RADIO_FILTER_OPTIONS,
     PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS,
@@ -32,8 +32,8 @@ import {
     SUPPLIER_CAPABILITY_OPTIONS,
     SUPPLIER_QUALIFICATION_HEALTH_OPTIONS,
     SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
-} from "@/features/master-data/master-data-list-presentation"
-import type { useProductFilterOptionsQuery } from "@/features/master-data/queries"
+} from "@/features/master-data/lib/list-filters"
+import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import type {
     MasterDataResource,
     ProductKind,

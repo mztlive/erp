@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { MasterDataPage } from "@/features/master-data/master-data-page"
+import { MasterDataPage } from "@/features/master-data/components/pages/master-data-page"
 
 export const metadata: Metadata = {
     title: "基础资料",

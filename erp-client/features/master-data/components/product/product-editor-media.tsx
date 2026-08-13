@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { masterDataCopy } from "@/features/master-data/copy"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { moveListItem } from "@/features/master-data/lib/move-list-item"
 import { cn } from "@/lib/utils"
 
 function MoneyInput({
@@ -54,20 +55,6 @@ function MoneyInput({
             />
         </div>
     )
-}
-
-function moveListItem<T>(
-    items: readonly T[],
-    fromIndex: number,
-    toIndex: number,
-): T[] {
-    if (toIndex < 0 || toIndex >= items.length || fromIndex === toIndex) {
-        return [...items]
-    }
-    const next = [...items]
-    const [item] = next.splice(fromIndex, 1)
-    if (item !== undefined) next.splice(toIndex, 0, item)
-    return next
 }
 
 function MediaListEditor({
@@ -399,4 +386,4 @@ function SkuMainImageField({
     )
 }
 
-export { MediaListEditor, MoneyInput, moveListItem, SkuMainImageField }
+export { MediaListEditor, MoneyInput, SkuMainImageField }

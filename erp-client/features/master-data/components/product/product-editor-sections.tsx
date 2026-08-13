@@ -14,9 +14,9 @@ import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { masterDataCopy } from "@/features/master-data/copy"
-import { formatEffectiveRange } from "@/features/master-data/filter"
-import { MediaListEditor } from "@/features/master-data/product-editor-media"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { formatEffectiveRange } from "@/features/master-data/lib/filter"
+import { MediaListEditor } from "@/features/master-data/components/product/product-editor-media"
 import type {
     MasterDataCenterView,
     ProductFields,

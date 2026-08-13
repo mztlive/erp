@@ -24,14 +24,14 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     MasterDataDisableDialog,
     MasterDataReviseDialog,
-} from "@/features/master-data/master-data-action-dialog"
-import { ProductDetailPage } from "@/features/master-data/product-detail-page"
-import { SupplierDetailPage } from "@/features/master-data/supplier-detail-page"
-import { revealMasterDataSensitive } from "@/features/master-data/queries"
-import { masterDataCopy } from "@/features/master-data/copy"
-import { resourceLabel } from "@/features/master-data/data"
-import { formatEffectiveRange } from "@/features/master-data/filter"
-import { useMasterDataCenterQuery } from "@/features/master-data/queries"
+} from "@/features/master-data/components/shared/master-data-action-dialog"
+import { ProductDetailPage } from "@/features/master-data/components/product/product-detail-page"
+import { SupplierDetailPage } from "@/features/master-data/components/supplier/supplier-detail-page"
+import { revealMasterDataSensitive } from "@/features/master-data/api"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { resourceLabel } from "@/features/master-data/lib/data"
+import { formatEffectiveRange } from "@/features/master-data/lib/filter"
+import { useMasterDataCenterQuery } from "@/features/master-data/hooks/queries"
 import {
     MASTER_DATA_RESOURCES,
     type MasterDataResource,

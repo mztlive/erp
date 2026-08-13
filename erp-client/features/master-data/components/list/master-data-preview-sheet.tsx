@@ -6,12 +6,12 @@ import { ArrowUpRightIcon } from "lucide-react"
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { masterDataCopy } from "@/features/master-data/copy"
-import { DisabledActionHint } from "@/features/master-data/master-data-list-presentation"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import {
     MasterDataPreviewPanel,
     SellableItemPreviewPanel,
-} from "@/features/master-data/master-data-preview"
+} from "@/features/master-data/components/list/master-data-preview"
 import type {
     MasterDataCenterView,
     MasterDataListItem,

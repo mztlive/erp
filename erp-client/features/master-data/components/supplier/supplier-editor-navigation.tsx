@@ -2,7 +2,7 @@
 
 import { surfaceInsetClassName } from "@/components/business"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { SUPPLIER_SECTIONS } from "@/features/master-data/supplier-editor-fields"
+import { SUPPLIER_SECTIONS } from "@/features/master-data/components/supplier/supplier-editor-fields"
 import { cn } from "@/lib/utils"
 
 export function SupplierSummaryStrip({

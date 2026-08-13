@@ -1,7 +1,7 @@
 import {
     WAREHOUSE_WRITE_CODE,
     WAREHOUSE_WRITE_MESSAGE,
-} from "@/features/master-data/data"
+} from "@/features/master-data/lib/data"
 import type { EnableStatus } from "@/features/master-data/api/contracts"
 import type {
     LifecycleStatus,

@@ -1,4 +1,4 @@
-import { currentResourceFieldValues } from "@/features/master-data/resource-fields"
+import { currentResourceFieldValues } from "@/features/master-data/lib/resource-fields"
 import type { MasterDataCenterView } from "@/features/master-data/types"
 
 export type SupplierEditorFormValues = Readonly<{

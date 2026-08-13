@@ -21,9 +21,9 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     masterDataActionLabel,
     masterDataCopy,
-} from "@/features/master-data/copy"
-import { formatEffectiveRange } from "@/features/master-data/filter"
-import { revealMasterDataSensitive } from "@/features/master-data/queries"
+} from "@/features/master-data/lib/copy"
+import { formatEffectiveRange } from "@/features/master-data/lib/filter"
+import { revealMasterDataSensitive } from "@/features/master-data/api"
 import type {
     MasterDataCenterView,
     MasterDataListItem,

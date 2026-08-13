@@ -185,7 +185,8 @@ export function validateProductFields(fields: ProductFields): string | null {
     const skuNos = new Set<string>()
     for (const sku of fields.skus) {
         if (!sku.skuNo.trim()) return "SKU 编号不能为空"
-        if (!sku.name.trim()) return `SKU「${sku.skuNo.trim() || "未编号"}」名称不能为空`
+        if (!sku.name.trim())
+            return `SKU「${sku.skuNo.trim() || "未编号"}」名称不能为空`
         if (skuNos.has(sku.skuNo.trim()))
             return `SKU 编号「${sku.skuNo.trim()}」重复`
         skuNos.add(sku.skuNo.trim())

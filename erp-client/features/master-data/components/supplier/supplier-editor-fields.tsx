@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { SUPPLIER_CAPABILITY_OPTIONS } from "@/features/master-data/resource-fields"
-import { revealMasterDataSensitive } from "@/features/master-data/queries"
+import { SUPPLIER_CAPABILITY_OPTIONS } from "@/features/master-data/lib/resource-fields"
+import { revealMasterDataSensitive } from "@/features/master-data/api"
 import { getErrorMessage } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
 
@@ -57,7 +57,9 @@ export function SensitiveEditableField({
     placeholder?: string
 }) {
     const [revealed, setRevealed] = React.useState(false)
-    const [revealedValue, setRevealedValue] = React.useState<string | null>(null)
+    const [revealedValue, setRevealedValue] = React.useState<string | null>(
+        null,
+    )
     const [revealError, setRevealError] = React.useState<string | null>(null)
 
     React.useEffect(() => {

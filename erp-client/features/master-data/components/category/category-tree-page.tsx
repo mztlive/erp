@@ -42,18 +42,18 @@ import {
     buildCategoryForest,
     flattenCategoryForest,
     type CategoryTreeNode,
-} from "@/features/master-data/category-tree-model"
-import { masterDataCopy } from "@/features/master-data/copy"
+} from "@/features/master-data/lib/category-tree-model"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     MasterDataCreateDialog,
     MasterDataDisableDialog,
     MasterDataReviseDialog,
-} from "@/features/master-data/master-data-action-dialog"
+} from "@/features/master-data/components/shared/master-data-action-dialog"
+import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import {
     buildMasterDataExportCsv,
     downloadCsv,
-    useMasterDataListQuery,
-} from "@/features/master-data/queries"
+} from "@/features/master-data/lib/export-csv"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 function TreeRow({
