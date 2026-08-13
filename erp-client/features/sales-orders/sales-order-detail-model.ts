@@ -68,6 +68,47 @@ export function isOpenProcurementRejection(order: SalesOrderListItem) {
     )
 }
 
+/** 普通草稿：还没有正式提交，也不是采购驳回后的待处理单。 */
+export function isSalesOrderDraft(order: SalesOrderListItem) {
+    return (
+        order.primaryStatus.code === "draft" &&
+        !isOpenProcurementRejection(order)
+    )
+}
+
+/** 服务端已允许「改完再报」时，才可以进入整单编辑。 */
+export function rejectionAllowsResubmit(order: SalesOrderListItem) {
+    return Boolean(
+        isOpenProcurementRejection(order) &&
+        order.procurementRejection?.allowedActions.includes(
+            "RESUBMIT_CHANGED_TERMS",
+        ),
+    )
+}
+
+/** 服务端已允许「驳回后作废」时，才展示作废入口。 */
+export function rejectionAllowsVoid(order: SalesOrderListItem) {
+    return Boolean(
+        isOpenProcurementRejection(order) &&
+        order.procurementRejection?.allowedActions.includes(
+            "VOID_AFTER_REJECTION",
+        ),
+    )
+}
+
+/**
+ * 是否用建单表单替换对象中心。
+ * 草稿直接进入编辑；采购驳回必须先看详情，再显式带 `mode=edit`。
+ */
+export function shouldOpenSalesOrderEditor(options: {
+    order: SalesOrderListItem
+    mode?: string | null
+    canResubmit: boolean
+}) {
+    if (isSalesOrderDraft(options.order)) return true
+    return options.mode === "edit" && options.canResubmit
+}
+
 export function isWorkSection(section?: string): section is WorkSectionId {
     return (
         section === "procurement-rejection" ||
@@ -87,9 +128,10 @@ export function resolveNavSection(
 
     switch (section) {
         case "fulfillment":
-        case "procurement-rejection":
         case "acceptance":
             return "fulfillment"
+        case "procurement-rejection":
+            return "overview"
         case "receivable":
             return "receivable"
         case "collaboration":

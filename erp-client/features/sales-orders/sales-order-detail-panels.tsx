@@ -27,12 +27,14 @@ import {
 import { AcceptanceWorkspace } from "@/features/sales-orders/acceptance-workspace"
 import { CardSalesApprovalPanel } from "@/features/sales-orders/card-sales-approval-panel"
 import { CloseConditionsCard } from "@/features/sales-orders/close-conditions-card"
+import { ProcurementRejectionCard } from "@/features/sales-orders/procurement-rejection-card"
 import { RevisionHistoryCard } from "@/features/sales-orders/revision-history-card"
 import { SalesOrderCollaborationCard } from "@/features/execution-projections/collaboration-card"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api"
 import { stageDueDisplay } from "@/features/sales-orders/labels"
 import {
     fulfillmentWorkspaceHref,
+    isOpenProcurementRejection,
     lifecycleSteps,
     nextStepOwner,
     purchaseOrdersWorkspaceHref,
@@ -343,6 +345,8 @@ export function OverviewPanel({
     selfReturn,
     showApproval,
     onApprovalResult,
+    onEnterRejectionEdit,
+    onVoidAfterRejection,
 }: {
     order: SalesOrderDetailView
     focusTask: FocusTask | null
@@ -355,88 +359,105 @@ export function OverviewPanel({
         reference: string
         nextResponsible?: string
     }) => void
+    onEnterRejectionEdit?: () => void
+    onVoidAfterRejection?: () => void
 }) {
     const isCard = order.nature === "card_voucher"
+    const openRejection =
+        isOpenProcurementRejection(order) && order.procurementRejection
 
     return (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
-            <aside className="order-first space-y-4 xl:order-last xl:sticky xl:top-14 xl:self-start">
-                <NextStepCard order={order} focusTask={focusTask} />
-                <CloseConditionsCard order={order} />
-                <div>
-                    <h3 className="mb-1 text-sm font-medium">相关业务</h3>
-                    <RelatedLanes
-                        order={order}
-                        selfReturn={selfReturn}
-                        lanes={
-                            isCard
-                                ? ["receipt", "invoice"]
-                                : ["purchase", "fulfillment", "receipt"]
-                        }
-                    />
-                </div>
-            </aside>
+        <div className="space-y-6">
+            {openRejection ? (
+                <ProcurementRejectionCard
+                    order={order}
+                    rejection={openRejection}
+                    onEnterEdit={onEnterRejectionEdit}
+                    onVoid={onVoidAfterRejection}
+                />
+            ) : null}
 
-            <div className="min-w-0">
-                {showApproval && order.activeCardSalesApproval ? (
-                    <div className="mb-6">
-                        <CardSalesApprovalPanel
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
+                <aside className="order-first space-y-4 xl:order-last xl:sticky xl:top-14 xl:self-start">
+                    <NextStepCard order={order} focusTask={focusTask} />
+                    <CloseConditionsCard order={order} />
+                    <div>
+                        <h3 className="mb-1 text-sm font-medium">相关业务</h3>
+                        <RelatedLanes
                             order={order}
-                            approval={order.activeCardSalesApproval}
-                            onResult={onApprovalResult}
+                            selfReturn={selfReturn}
+                            lanes={
+                                isCard
+                                    ? ["receipt", "invoice"]
+                                    : ["purchase", "fulfillment", "receipt"]
+                            }
                         />
                     </div>
-                ) : null}
+                </aside>
 
-                <DocumentSection title="订单信息">
-                    <DocumentSummary
-                        columns="three"
-                        className="rounded-none border-0 bg-transparent p-0 shadow-none"
-                        items={[
-                            {
-                                id: "contract",
-                                label: "关联合同",
-                                value: order.contractRevisionLabel || "—",
-                            },
-                            {
-                                id: "scene",
-                                label: "福利场景",
-                                value: welfareScenarioLabel(order.welfareScene),
-                            },
-                            {
-                                id: "payment",
-                                label: "付款条件",
-                                value: order.paymentTerms || "—",
-                            },
-                            {
-                                id: "deadline",
-                                label: isCard
-                                    ? "履约期限（到期交付）"
-                                    : "履约期限",
-                                value: order.fulfillmentDeadline || "—",
-                                numeric: true,
-                            },
-                            {
-                                id: "contact",
-                                label: "客户联系人",
-                                value: order.customerContact ?? "—",
-                            },
-                            {
-                                id: "version",
-                                label: "当前版本",
-                                value: `v${order.version}`,
-                                numeric: true,
-                            },
-                        ]}
-                    />
-                </DocumentSection>
+                <div className="min-w-0">
+                    {showApproval && order.activeCardSalesApproval ? (
+                        <div className="mb-6">
+                            <CardSalesApprovalPanel
+                                order={order}
+                                approval={order.activeCardSalesApproval}
+                                onResult={onApprovalResult}
+                            />
+                        </div>
+                    ) : null}
 
-                <DocumentSection
-                    title={isCard ? "卡券明细" : "销售明细"}
-                    description={`${order.lineItems.length} 行`}
-                >
-                    <LineItemsTable order={order} />
-                </DocumentSection>
+                    <DocumentSection title="订单信息">
+                        <DocumentSummary
+                            columns="three"
+                            className="rounded-none border-0 bg-transparent p-0 shadow-none"
+                            items={[
+                                {
+                                    id: "contract",
+                                    label: "关联合同",
+                                    value: order.contractRevisionLabel || "—",
+                                },
+                                {
+                                    id: "scene",
+                                    label: "福利场景",
+                                    value: welfareScenarioLabel(
+                                        order.welfareScene,
+                                    ),
+                                },
+                                {
+                                    id: "payment",
+                                    label: "付款条件",
+                                    value: order.paymentTerms || "—",
+                                },
+                                {
+                                    id: "deadline",
+                                    label: isCard
+                                        ? "履约期限（到期交付）"
+                                        : "履约期限",
+                                    value: order.fulfillmentDeadline || "—",
+                                    numeric: true,
+                                },
+                                {
+                                    id: "contact",
+                                    label: "客户联系人",
+                                    value: order.customerContact ?? "—",
+                                },
+                                {
+                                    id: "version",
+                                    label: "当前版本",
+                                    value: `v${order.version}`,
+                                    numeric: true,
+                                },
+                            ]}
+                        />
+                    </DocumentSection>
+
+                    <DocumentSection
+                        title={isCard ? "卡券明细" : "销售明细"}
+                        description={`${order.lineItems.length} 行`}
+                    >
+                        <LineItemsTable order={order} />
+                    </DocumentSection>
+                </div>
             </div>
         </div>
     )

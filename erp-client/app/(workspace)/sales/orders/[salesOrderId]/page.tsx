@@ -12,7 +12,7 @@ export default async function Page({
     searchParams,
 }: {
     params: Promise<{ salesOrderId: string }>
-    searchParams: Promise<{ section?: string }>
+    searchParams: Promise<{ section?: string; mode?: string }>
 }) {
     const { salesOrderId } = await params
     const { section } = await searchParams

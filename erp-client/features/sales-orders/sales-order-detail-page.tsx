@@ -27,6 +27,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     useResolveProcurementRejectionMutation,
     useSalesOrderDetailQuery,
@@ -53,14 +54,19 @@ import {
     buildSelfHref,
     isActionableFocusTask,
     isOpenProcurementRejection,
+    isSalesOrderDraft,
     isWorkSection,
+    rejectionAllowsResubmit,
+    rejectionAllowsVoid,
     resolveFocusTask,
     resolveNavSection,
+    shouldOpenSalesOrderEditor,
     type NavSectionId,
     type WorkSectionId,
 } from "@/features/sales-orders/sales-order-detail-model"
 import { sumFixed } from "@/lib/fixed-decimal"
 import { getErrorPresentation } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 function remainingReceivable(gross: string, received: string) {
@@ -86,8 +92,12 @@ export function SalesOrderDetailPage({
     const searchParams = useSearchParams()
     const returnTo = searchParams.get("returnTo")
     const fromWorkspace = searchParams.get("from")
+    const pageMode = searchParams.get("mode")
     const query = useSalesOrderDetailQuery(salesOrderId)
+    const profileQuery = useAccountProfileQuery()
     const changeMutation = useStartSalesChangeOrderMutation()
+    const voidMutation = useResolveProcurementRejectionMutation()
+    const [voidOpen, setVoidOpen] = React.useState(false)
 
     const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
     const [result, setResult] = React.useState<{
@@ -116,10 +126,47 @@ export function SalesOrderDetailPage({
     const acceptanceExpanded = section === "acceptance"
     const showApproval =
         Boolean(order?.activeCardSalesApproval) && section === "approval"
-    const isEditable = Boolean(
+    const granted = profileQuery.data?.permissions
+    const permissionKnown = !profileQuery.isPending
+    const canResubmit = Boolean(
         order &&
-        (order.primaryStatus.code === "draft" ||
-            isOpenProcurementRejection(order)),
+        rejectionAllowsResubmit(order) &&
+        permissionKnown &&
+        hasPermission(granted, "sales_order:update"),
+    )
+    const canVoid = Boolean(
+        order &&
+        rejectionAllowsVoid(order) &&
+        permissionKnown &&
+        hasPermission(granted, "sales_order:delete"),
+    )
+    const showEditor = Boolean(
+        order &&
+        shouldOpenSalesOrderEditor({
+            order,
+            mode: pageMode,
+            canResubmit:
+                rejectionAllowsResubmit(order) &&
+                (!permissionKnown ||
+                    hasPermission(granted, "sales_order:update")),
+        }),
+    )
+
+    const replaceOrderHref = React.useCallback(
+        (patch: { section?: string; mode?: string | null }) => {
+            const params = new URLSearchParams(searchParams.toString())
+            if (patch.section) params.set("section", patch.section)
+            if (patch.mode) params.set("mode", patch.mode)
+            else if (patch.mode === null) params.delete("mode")
+            const qs = params.toString()
+            router.replace(
+                qs
+                    ? `/sales/orders/${salesOrderId}?${qs}`
+                    : `/sales/orders/${salesOrderId}`,
+                { scroll: false },
+            )
+        },
+        [router, salesOrderId, searchParams],
     )
 
     const selectSection = React.useCallback(
@@ -149,6 +196,27 @@ export function SalesOrderDetailPage({
         },
         [fromWorkspace, returnTo, router, salesOrderId, searchParams],
     )
+
+    const enterRejectionEdit = React.useCallback(() => {
+        replaceOrderHref({
+            section: "procurement-rejection",
+            mode: "edit",
+        })
+    }, [replaceOrderHref])
+
+    const leaveRejectionEdit = React.useCallback(() => {
+        replaceOrderHref({
+            section: "procurement-rejection",
+            mode: null,
+        })
+    }, [replaceOrderHref])
+
+    React.useEffect(() => {
+        if (!order || profileQuery.isPending) return
+        if (pageMode !== "edit") return
+        if (canResubmit || isSalesOrderDraft(order)) return
+        replaceOrderHref({ mode: null })
+    }, [canResubmit, order, pageMode, profileQuery.isPending, replaceOrderHref])
 
     if (query.isPending) {
         return (
@@ -227,17 +295,53 @@ export function SalesOrderDetailPage({
     )
     const visibleNav = navItemsFor(order).filter((item) => item.show)
 
-    const primaryTaskAction = actionableFocusTask ? (
-        <Button
-            type="button"
-            size="sm"
-            onClick={() => selectSection(actionableFocusTask.id)}
-        >
-            {actionableFocusTask.actionLabel}
-        </Button>
-    ) : null
+    const openRejection = isOpenProcurementRejection(order)
+    const primaryTaskAction =
+        openRejection && canResubmit ? (
+            <Button type="button" size="sm" onClick={enterRejectionEdit}>
+                改完再报
+            </Button>
+        ) : actionableFocusTask &&
+          !(openRejection && navSection === "overview") ? (
+            <Button
+                type="button"
+                size="sm"
+                onClick={() => selectSection(actionableFocusTask.id)}
+            >
+                {actionableFocusTask.actionLabel}
+            </Button>
+        ) : null
 
-    if (isEditable) {
+    const handleVoidAfterRejection = async (reason: string) => {
+        try {
+            const outcome = await voidMutation.mutateAsync({
+                salesOrderId: order.id,
+                action: "VOID_AFTER_REJECTION",
+                idempotencyKey: `pr-void-${order.id}-${Date.now()}`,
+                voidReason: reason,
+            })
+            setResult({
+                status: "rejected",
+                title: "本单已作废",
+                description: outcome.detail,
+                reference: outcome.reference,
+            })
+        } catch (error) {
+            const failure = getErrorPresentation(
+                error,
+                "作废未完成，请刷新后重试。",
+            )
+            setResult({
+                status: "blocked",
+                title: failure.title,
+                description: failure.description,
+                reference: order.documentNumber,
+            })
+            throw error
+        }
+    }
+
+    if (showEditor) {
         return (
             <SalesOrderEditableCenter
                 order={order}
@@ -247,6 +351,9 @@ export function SalesOrderDetailPage({
                 fromWorkspace={fromWorkspace}
                 result={result}
                 onResult={setResult}
+                showBackToDetail={openRejection}
+                onBackToDetail={leaveRejectionEdit}
+                canVoidAfterRejection={canVoid}
             />
         )
     }
@@ -315,28 +422,47 @@ export function SalesOrderDetailPage({
                         </span>
                     }
                     secondaryActions={
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={
-                                !canStartChange || changeMutation.isPending
-                            }
-                            title={
-                                !canStartChange
-                                    ? (changeBlocker?.reason ??
-                                      order.commercialReadOnlyReason ??
-                                      "当前不能改单")
-                                    : undefined
-                            }
-                            onClick={() => setChangeConfirmOpen(true)}
-                        >
-                            <FilePenLineIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            发起改单
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {openRejection && canVoid ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setVoidOpen(true)}
+                                >
+                                    <BanIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    作废
+                                </Button>
+                            ) : null}
+                            {!openRejection ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={
+                                        !canStartChange ||
+                                        changeMutation.isPending
+                                    }
+                                    title={
+                                        !canStartChange
+                                            ? (changeBlocker?.reason ??
+                                              order.commercialReadOnlyReason ??
+                                              "当前不能改单")
+                                            : undefined
+                                    }
+                                    onClick={() => setChangeConfirmOpen(true)}
+                                >
+                                    <FilePenLineIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    发起改单
+                                </Button>
+                            ) : null}
+                        </div>
                     }
                     primaryAction={primaryTaskAction}
                 />
@@ -371,18 +497,34 @@ export function SalesOrderDetailPage({
                     <LifecycleRail order={order} />
                 </div>
 
-                {focusTask && focusTask.id === "versions" ? (
+                {focusTask &&
+                (focusTask.id === "versions" ||
+                    (focusTask.id === "procurement-rejection" &&
+                        navSection !== "overview")) ? (
                     <Alert variant="warning" className="mx-3 mt-3 md:mx-4">
                         <ShieldAlertIcon aria-hidden="true" />
                         <AlertTitle>{focusTask.title}</AlertTitle>
                         <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <span>{focusTask.description}</span>
-                            {navSection !== "versions" ? (
+                            {focusTask.id === "versions" &&
+                            navSection !== "versions" ? (
                                 <Button
                                     type="button"
                                     size="sm"
                                     className="shrink-0 self-start"
                                     onClick={() => selectSection("versions")}
+                                >
+                                    {focusTask.actionLabel}
+                                </Button>
+                            ) : null}
+                            {focusTask.id === "procurement-rejection" ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    className="shrink-0 self-start"
+                                    onClick={() =>
+                                        selectSection("procurement-rejection")
+                                    }
                                 >
                                     {focusTask.actionLabel}
                                 </Button>
@@ -471,6 +613,8 @@ export function SalesOrderDetailPage({
                             const changeOnVersions =
                                 item.id === "versions" &&
                                 Boolean(order.activeChangeOrder)
+                            const rejectionOnOverview =
+                                item.id === "overview" && openRejection
                             return (
                                 <TabsTrigger
                                     key={item.id}
@@ -478,16 +622,15 @@ export function SalesOrderDetailPage({
                                     className="flex-none"
                                 >
                                     {item.label}
-                                    {todoOnFulfillment || changeOnVersions ? (
+                                    {todoOnFulfillment ||
+                                    changeOnVersions ||
+                                    rejectionOnOverview ? (
                                         <Badge
                                             variant={
-                                                isOpenProcurementRejection(
-                                                    order,
-                                                ) && item.id === "fulfillment"
+                                                rejectionOnOverview ||
+                                                changeOnVersions
                                                     ? "warning"
-                                                    : changeOnVersions
-                                                      ? "warning"
-                                                      : "info"
+                                                    : "info"
                                             }
                                             className="ml-1 h-5 px-1.5 text-2xs font-normal"
                                         >
@@ -511,6 +654,12 @@ export function SalesOrderDetailPage({
                             selfReturn={selfReturn}
                             showApproval={showApproval}
                             onApprovalResult={setResult}
+                            onEnterRejectionEdit={
+                                canResubmit ? enterRejectionEdit : undefined
+                            }
+                            onVoidAfterRejection={
+                                canVoid ? () => setVoidOpen(true) : undefined
+                            }
                         />
                     </TabsContent>
 
@@ -557,6 +706,13 @@ export function SalesOrderDetailPage({
                     </TabsContent>
                 </Tabs>
             </div>
+
+            <VoidSalesOrderDialog
+                open={voidOpen}
+                onOpenChange={setVoidOpen}
+                pending={voidMutation.isPending}
+                onConfirm={handleVoidAfterRejection}
+            />
 
             <FormalActionConfirmDialog
                 open={changeConfirmOpen}
@@ -620,6 +776,9 @@ function SalesOrderEditableCenter({
     fromWorkspace,
     result,
     onResult,
+    showBackToDetail = false,
+    onBackToDetail,
+    canVoidAfterRejection = false,
 }: {
     order: SalesOrderDetailView
     backHref: string
@@ -640,15 +799,16 @@ function SalesOrderEditableCenter({
         reference: string
         nextResponsible?: string
     }) => void
+    showBackToDetail?: boolean
+    onBackToDetail?: () => void
+    canVoidAfterRejection?: boolean
 }) {
     const resumeQuery = useSalesOrderDraftResumeQuery(order.id)
     const voidMutation = useResolveProcurementRejectionMutation()
     const [voidOpen, setVoidOpen] = React.useState(false)
     const openRejection = isOpenProcurementRejection(order)
     const rejection = order.procurementRejection
-    const canVoid = Boolean(
-        rejection?.allowedActions.includes("VOID_AFTER_REJECTION"),
-    )
+    const canVoid = canVoidAfterRejection
     const reasonLabel = rejection
         ? (PROCUREMENT_REJECT_REASON_LABEL[rejection.rejectReasonCode] ??
           rejection.rejectReasonCode)
@@ -688,6 +848,16 @@ function SalesOrderEditableCenter({
                                 variant: "outline",
                                 render: <Link href={backHref} />,
                             },
+                            ...(showBackToDetail && onBackToDetail
+                                ? [
+                                      {
+                                          actionKey: "detail",
+                                          label: "返回详情",
+                                          variant: "outline" as const,
+                                          onClick: onBackToDetail,
+                                      },
+                                  ]
+                                : []),
                         ]}
                     />
                 }
@@ -743,7 +913,7 @@ function SalesOrderEditableCenter({
                         <span className="mt-1 block text-xs">
                             {rejection.rejectedByLabel} · {rejection.rejectedAt}
                             {" · "}第 {rejection.rejectedSubmissionNo}{" "}
-                            次报给采购。改完整单后再报，或点「作废」。
+                            次报给采购。改完整单后再报，或点「作废」。也可返回详情。
                         </span>
                     </AlertDescription>
                 </Alert>

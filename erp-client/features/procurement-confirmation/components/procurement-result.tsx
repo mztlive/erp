@@ -22,11 +22,16 @@ import {
     type FormalOutcome,
 } from "@/features/procurement-confirmation/types"
 
-function salesOrderHref(salesOrderId: string, returnTo: string) {
+function salesOrderHref(
+    salesOrderId: string,
+    returnTo: string,
+    section?: string,
+) {
     const params = new URLSearchParams({
         from: "W07",
         returnTo,
     })
+    if (section) params.set("section", section)
     return `/sales/orders/${salesOrderId}?${params.toString()}`
 }
 
@@ -303,7 +308,13 @@ export function ProcurementRejectionNextSteps({
                 </ol>
                 <Button
                     render={
-                        <Link href={salesOrderHref(salesOrderId, returnTo)} />
+                        <Link
+                            href={salesOrderHref(
+                                salesOrderId,
+                                returnTo,
+                                "procurement-rejection",
+                            )}
+                        />
                     }
                 >
                     打开销售单驳回处理
