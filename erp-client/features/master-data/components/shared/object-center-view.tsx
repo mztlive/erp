@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { ArrowLeftIcon, BanIcon, HistoryIcon } from "lucide-react"
 
 import {
@@ -17,30 +16,21 @@ import {
     surfaceInsetClassName,
     surfacePanelClassName,
 } from "@/components/business"
-import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import {
-    MasterDataDisableDialog,
-    MasterDataReviseDialog,
-} from "@/features/master-data/components/shared/master-data-action-dialog"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import { resourceLabel } from "@/features/master-data/lib/data"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
-import { useMasterDataCenterQuery } from "@/features/master-data/hooks/queries"
 import type {
-    MasterDataResource,
+    MasterDataCenterView,
     MasterDataSectionId,
 } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
 import { hasPermission } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 
-const SECTION_NAV: readonly {
-    id: MasterDataSectionId
-    label: string
-}[] = [
+const SECTION_NAV: readonly { id: MasterDataSectionId; label: string }[] = [
     { id: "overview", label: masterDataCopy.centerOverview },
     { id: "versions", label: masterDataCopy.centerVersions },
     { id: "relations", label: masterDataCopy.centerRelations },
@@ -48,88 +38,32 @@ const SECTION_NAV: readonly {
 ]
 
 function resolveSection(section?: string | null): MasterDataSectionId {
-    const found = SECTION_NAV.find((s) => s.id === section)
-    return found?.id ?? "overview"
+    return SECTION_NAV.find((item) => item.id === section)?.id ?? "overview"
 }
 
-export function MasterDataObjectPage({
-    resource,
-    stableId,
+export function ObjectCenterView({
+    data,
+    listHref,
+    listLabel,
+    baseHref,
     section,
+    onBack,
+    onRevise,
+    onDisable,
+    dialogs,
 }: {
-    resource: MasterDataResource
-    stableId: string
+    data: MasterDataCenterView
+    listHref: string
+    listLabel: string
+    baseHref: string
     section?: string
+    onBack: () => void
+    onRevise: () => void
+    onDisable: () => void
+    dialogs: React.ReactNode
 }) {
-    const router = useRouter()
-    const query = useMasterDataCenterQuery(resource, stableId)
     const accountQuery = useAccountProfileQuery()
     const activeSection = resolveSection(section)
-    const [reviseOpen, setReviseOpen] = React.useState(false)
-    const [disableOpen, setDisableOpen] = React.useState(false)
-
-    const data = query.data
-
-    React.useEffect(() => {
-        if (!data) return
-        const el = document.getElementById(`md-section-${activeSection}`)
-        if (el) el.scrollIntoView({ block: "start", behavior: "smooth" })
-    }, [activeSection, data])
-
-    if (query.isPending) {
-        return (
-            <PageScaffold>
-                <PageHeader
-                    title="基础资料详情"
-                    description={masterDataCopy.centerLoading}
-                />
-                <div
-                    className="h-40 animate-pulse rounded-lg bg-muted"
-                    aria-busy
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (query.isError) {
-        return (
-            <PageScaffold>
-                <PageHeader title="基础资料详情" />
-                <BusinessFailureState
-                    error={query.error}
-                    action={
-                        <Button
-                            type="button"
-                            onClick={() => void query.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (!data) {
-        return (
-            <PageScaffold>
-                <PageHeader
-                    title={masterDataCopy.centerMissingTitle}
-                    description={masterDataCopy.centerMissingDesc}
-                    actions={
-                        <Button
-                            render={<Link href={`/master-data/${resource}`} />}
-                        >
-                            {masterDataCopy.actionBackList}
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
-    const listHref = `/master-data/${resource}`
-    const baseHref = `/master-data/${resource}/${data.stableId}`
     const canRevise = data.allowedActions.includes("CREATE_REVISION")
     const canDisable = data.allowedActions.includes("DISABLE")
     const canRevealSensitive = hasPermission(
@@ -137,11 +71,16 @@ export function MasterDataObjectPage({
         "supplier_sensitive:reveal",
     )
     const reviseBlocker = data.actionBlockers.find(
-        (b) => b.action === "CREATE_REVISION",
+        (blocker) => blocker.action === "CREATE_REVISION",
     )
     const disableBlocker = data.actionBlockers.find(
-        (b) => b.action === "DISABLE",
+        (blocker) => blocker.action === "DISABLE",
     )
+
+    React.useEffect(() => {
+        const el = document.getElementById(`md-section-${activeSection}`)
+        if (el) el.scrollIntoView({ block: "start", behavior: "smooth" })
+    }, [activeSection, data])
 
     return (
         <PageScaffold>
@@ -149,11 +88,7 @@ export function MasterDataObjectPage({
                 variant="object-chrome"
                 breadcrumbs={[
                     { id: "md", label: "基础资料", href: "/master-data" },
-                    {
-                        id: "resource",
-                        label: resourceLabel(resource),
-                        href: listHref,
-                    },
+                    { id: "resource", label: listLabel, href: listHref },
                     { id: "object", label: data.name, current: true },
                 ]}
                 actions={
@@ -164,10 +99,7 @@ export function MasterDataObjectPage({
                                 label: masterDataCopy.actionBackList,
                                 icon: ArrowLeftIcon,
                                 variant: "ghost",
-                                onClick: () => {
-                                    // SPA 内导航：保留列表滚动与筛选状态
-                                    router.push(listHref)
-                                },
+                                onClick: onBack,
                             },
                         ]}
                     />
@@ -225,7 +157,7 @@ export function MasterDataObjectPage({
                             type="button"
                             size="sm"
                             disabled={!canRevise}
-                            onClick={() => setReviseOpen(true)}
+                            onClick={onRevise}
                         >
                             <HistoryIcon
                                 data-icon="inline-start"
@@ -247,7 +179,7 @@ export function MasterDataObjectPage({
                             size="sm"
                             variant="outline"
                             disabled={!canDisable}
-                            onClick={() => setDisableOpen(true)}
+                            onClick={onDisable}
                         >
                             <BanIcon
                                 data-icon="inline-start"
@@ -334,25 +266,26 @@ export function MasterDataObjectPage({
                         </div>
                         {data.currentRevision.fields
                             .filter(
-                                (f) =>
+                                (field) =>
                                     !data.sensitiveFields.some(
-                                        (s) => s.label === f.label,
+                                        (sensitive) =>
+                                            sensitive.label === field.label,
                                     ),
                             )
-                            .map((f) => (
-                                <div key={f.label}>
+                            .map((field) => (
+                                <div key={field.label}>
                                     <dt className="text-xs text-muted-foreground">
-                                        {f.label}
+                                        {field.label}
                                     </dt>
-                                    <dd>{f.value}</dd>
+                                    <dd>{field.value}</dd>
                                 </div>
                             ))}
-                        {data.resourceFacts.map((f) => (
-                            <div key={f.label}>
+                        {data.resourceFacts.map((field) => (
+                            <div key={field.label}>
                                 <dt className="text-xs text-muted-foreground">
-                                    {f.label}
+                                    {field.label}
                                 </dt>
-                                <dd>{f.value}</dd>
+                                <dd>{field.value}</dd>
                             </div>
                         ))}
                     </dl>
@@ -483,24 +416,26 @@ export function MasterDataObjectPage({
                         {data.usageSummary.note}
                     </p>
                     <ul className="mt-3 space-y-2">
-                        {data.selectorEligibility.map((s) => (
+                        {data.selectorEligibility.map((item) => (
                             <li
-                                key={s.context}
+                                key={item.context}
                                 className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm"
                             >
-                                <span>{s.contextLabel}</span>
+                                <span>{item.contextLabel}</span>
                                 <Badge
                                     variant={
-                                        s.eligible ? "success" : "destructive"
+                                        item.eligible
+                                            ? "success"
+                                            : "destructive"
                                     }
                                 >
-                                    {s.eligible
+                                    {item.eligible
                                         ? masterDataCopy.eligible
                                         : masterDataCopy.ineligible}
                                 </Badge>
-                                {s.reason ? (
+                                {item.reason ? (
                                     <span className="text-xs text-muted-foreground">
-                                        {s.reason}
+                                        {item.reason}
                                     </span>
                                 ) : null}
                             </li>
@@ -519,9 +454,9 @@ export function MasterDataObjectPage({
                         </p>
                     ) : (
                         <ul className="space-y-2 text-sm">
-                            {data.auditEvents.map((ev) => (
+                            {data.auditEvents.map((event) => (
                                 <li
-                                    key={ev.id}
+                                    key={event.id}
                                     className={cn(
                                         surfaceInsetClassName,
                                         "px-3 py-2",
@@ -530,18 +465,18 @@ export function MasterDataObjectPage({
                                     <div className="flex flex-wrap gap-2">
                                         <span className="num text-xs text-muted-foreground">
                                             {formatDateTime(
-                                                ev.at,
+                                                event.at,
                                                 "full",
                                                 "passthrough",
                                             )}
                                         </span>
-                                        <span>{ev.actor}</span>
+                                        <span>{event.actor}</span>
                                         <Badge variant="outline">
-                                            {ev.action}
+                                            {event.action}
                                         </Badge>
                                     </div>
                                     <div className="mt-1 text-muted-foreground">
-                                        {ev.detail}
+                                        {event.detail}
                                     </div>
                                 </li>
                             ))}
@@ -549,19 +484,71 @@ export function MasterDataObjectPage({
                     )}
                 </DocumentSection>
             </div>
-
-            <MasterDataReviseDialog
-                open={reviseOpen}
-                onOpenChange={setReviseOpen}
-                resource={resource}
-                target={data}
-            />
-            <MasterDataDisableDialog
-                open={disableOpen}
-                onOpenChange={setDisableOpen}
-                resource={resource}
-                target={data}
-            />
+            {dialogs}
         </PageScaffold>
     )
+}
+
+export function ObjectCenterQueryState({
+    title,
+    listHref,
+    isPending,
+    isError,
+    error,
+    onRetry,
+    missing,
+}: {
+    title: string
+    listHref: string
+    isPending: boolean
+    isError: boolean
+    error: unknown
+    onRetry: () => void
+    missing: boolean
+}) {
+    if (isPending) {
+        return (
+            <PageScaffold>
+                <PageHeader
+                    title={title}
+                    description={masterDataCopy.centerLoading}
+                />
+                <div
+                    className="h-40 animate-pulse rounded-lg bg-muted"
+                    aria-busy
+                />
+            </PageScaffold>
+        )
+    }
+    if (isError) {
+        return (
+            <PageScaffold>
+                <PageHeader title={title} />
+                <BusinessFailureState
+                    error={error}
+                    action={
+                        <Button type="button" onClick={onRetry}>
+                            重试
+                        </Button>
+                    }
+                />
+            </PageScaffold>
+        )
+    }
+    if (missing) {
+        return (
+            <PageScaffold>
+                <PageHeader
+                    title={masterDataCopy.centerMissingTitle}
+                    description={masterDataCopy.centerMissingDesc}
+                    actions={
+                        <Button render={<Link href={listHref} />}>
+                            {masterDataCopy.actionBackList}
+                        </Button>
+                    }
+                />
+            </PageScaffold>
+        )
+    }
+    return null
 }

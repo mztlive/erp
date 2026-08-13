@@ -14,7 +14,7 @@ import { LifecycleMetricStrip } from "@/features/master-data/components/list/lif
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { ProductListToolbar } from "@/features/master-data/components/list/product-list-toolbar"
 import { ProductSupplyDialog } from "@/features/master-data/components/product/product-supply-dialog"
-import { MasterDataDisableDialog } from "@/features/master-data/components/shared/master-data-action-dialog"
+import { ProductDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useProductListColumns } from "@/features/master-data/hooks/use-product-list-columns"
 import { useProductListState } from "@/features/master-data/hooks/use-product-list-state"
@@ -288,12 +288,11 @@ export function ProductsListPage() {
                     }}
                 />
             ) : null}
-            <MasterDataDisableDialog
+            <ProductDisableDialog
                 open={state.disableTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setDisableTarget(null)
                 }}
-                resource="products"
                 target={state.disableTarget}
             />
         </ListPageFrame>

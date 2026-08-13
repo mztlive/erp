@@ -698,11 +698,3 @@ export function joinMediaList(names: readonly string[]): string {
     return names.filter(Boolean).join(", ")
 }
 
-/**
- * 商品已改为详情页维护，不再使用宽对话框。
- * 保留函数以免调用方断裂，恒为 false。
- */
-export function usesWideDialog(resource: MasterDataResource): boolean {
-    void resource
-    return false
-}

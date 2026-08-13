@@ -45,10 +45,10 @@ import {
 } from "@/features/master-data/lib/category-tree-model"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
-    MasterDataCreateDialog,
-    MasterDataDisableDialog,
-    MasterDataReviseDialog,
-} from "@/features/master-data/components/shared/master-data-action-dialog"
+    CategoryCreateDialog,
+    CategoryReviseDialog,
+} from "@/features/master-data/components/category/category-form-dialogs"
+import { CategoryDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import {
     buildMasterDataExportCsv,
@@ -760,52 +760,25 @@ export function CategoryTreePage() {
             </div>
 
             <CategoryCreateDialog
+                key={`cat-create-${createParentId ?? "root"}-${createOpen}`}
                 open={createOpen}
                 onOpenChange={setCreateOpen}
                 defaultParentId={createParentId}
             />
-            <MasterDataReviseDialog
+            <CategoryReviseDialog
                 open={reviseTarget != null}
                 onOpenChange={(open) => {
                     if (!open) setReviseTarget(null)
                 }}
-                resource="categories"
                 target={reviseTarget}
             />
-            <MasterDataDisableDialog
+            <CategoryDisableDialog
                 open={disableTarget != null}
                 onOpenChange={(open) => {
                     if (!open) setDisableTarget(null)
                 }}
-                resource="categories"
                 target={disableTarget}
             />
         </PageScaffold>
-    )
-}
-
-/**
- * 包装新建对话框：支持默认上级（子分类）。
- * 通过 key 强制在 parent 变化时重置表单默认值。
- */
-function CategoryCreateDialog({
-    open,
-    onOpenChange,
-    defaultParentId,
-}: {
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    defaultParentId?: string
-}) {
-    return (
-        <MasterDataCreateDialog
-            key={`cat-create-${defaultParentId ?? "root"}-${open}`}
-            open={open}
-            onOpenChange={onOpenChange}
-            resource="categories"
-            defaultFieldValues={
-                defaultParentId ? { parentId: defaultParentId } : undefined
-            }
-        />
     )
 }

@@ -28,7 +28,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { MasterDataDisableDialog } from "@/features/master-data/components/shared/master-data-action-dialog"
+import { ProductDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import {
     applySpecsFromDrafts,
     PRODUCT_EDITOR_SECTIONS,
@@ -719,10 +719,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         </form>
 
                         {!isCreate && data ? (
-                            <MasterDataDisableDialog
+                            <ProductDisableDialog
                                 open={disableOpen}
                                 onOpenChange={setDisableOpen}
-                                resource="products"
                                 target={data}
                             />
                         ) : null}

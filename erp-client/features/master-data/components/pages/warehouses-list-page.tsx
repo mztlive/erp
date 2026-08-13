@@ -16,9 +16,9 @@ import { LifecycleMetricStrip } from "@/features/master-data/components/list/lif
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { WarehousePreviewSheet } from "@/features/master-data/components/list/warehouse-preview-sheet"
 import {
-    MasterDataDisableDialog,
-    MasterDataReviseDialog,
-} from "@/features/master-data/components/shared/master-data-action-dialog"
+    WarehouseDisableDialog,
+    WarehouseReviseDialog,
+} from "@/features/master-data/components/warehouse/warehouse-action-dialogs"
 import { useWarehouseListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
@@ -219,20 +219,18 @@ export function WarehousesListPage() {
                 onRevise={state.setReviseTarget}
                 onDisable={state.setDisableTarget}
             />
-            <MasterDataReviseDialog
+            <WarehouseReviseDialog
                 open={state.reviseTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setReviseTarget(null)
                 }}
-                resource="warehouses"
                 target={state.reviseTarget}
             />
-            <MasterDataDisableDialog
+            <WarehouseDisableDialog
                 open={state.disableTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setDisableTarget(null)
                 }}
-                resource="warehouses"
                 target={state.disableTarget}
             />
         </ListPageFrame>

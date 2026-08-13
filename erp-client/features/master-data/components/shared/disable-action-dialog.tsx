@@ -3,17 +3,10 @@
 import * as React from "react"
 import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
-import { z } from "zod"
 
-import {
-    CategoryCombobox,
-    DiscardConfirmDialog,
-    FormalActionResult,
-} from "@/components/business"
+import { DiscardConfirmDialog, FormalActionResult } from "@/components/business"
 import { useAppForm } from "@/components/form"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { DatePicker } from "@/components/ui/date-picker"
 import {
     Dialog,
     DialogClose,
@@ -23,66 +16,48 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { toast } from "@/components/ui/toast"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import {
-    WAREHOUSE_WRITE_MESSAGE,
-    resourceLabel,
-} from "@/features/master-data/lib/data"
-import {
-    RESOURCE_FIELDS,
-    buildResourceFields,
-    buildResourceSchema,
-    currentResourceFieldValues,
-    defaultImmediateEffectiveFrom,
-    emptyResourceFieldValues,
-    usesEffectivePeriod,
-    usesWideDialog,
-    type ResourceFormValues,
-} from "@/features/master-data/lib/resource-fields"
-import {
-    collectDescendantIds,
-    buildCategoryForest,
-} from "@/features/master-data/lib/category-tree-model"
-import {
-    masterDataKeys,
-    useCreateMasterDataMutation,
-    useCreateRevisionMutation,
-    useDisableMasterDataMutation,
-    useMasterDataListQuery,
-} from "@/features/master-data/hooks/queries"
-import type {
-    MasterDataCenterView,
-    MasterDataListItem,
-    MasterDataMutationResult,
-    MasterDataResource,
-} from "@/features/master-data/types"
-import type { BrandFields } from "@/features/master-data/types"
-import { getErrorMessage } from "@/lib/api/errors"
 import {
     DateField,
     DialogScrollBody,
-    ResourceFieldsSection,
-    dialogContentClass,
     disableSchema,
     newIdempotencyKey,
     notifySuccess,
-    resolveBrandLogoFields,
 } from "@/features/master-data/components/shared/action-dialog-shared"
+import {
+    masterDataKeys,
+    useDisableMasterDataMutation,
+} from "@/features/master-data/hooks/queries"
+import { defaultImmediateEffectiveFrom } from "@/features/master-data/lib/resource-fields"
+import {
+    revisionTargetIds,
+    type RevisionTarget,
+} from "@/features/master-data/lib/revision-target"
+import type {
+    DisableMasterDataInput,
+    MasterDataMutationResult,
+    MasterDataResource,
+} from "@/features/master-data/types"
 
-export function MasterDataDisableDialog({
+export function DisableActionDialog({
     open,
     onOpenChange,
-    resource,
     target,
+    submit,
+    blockedBanner,
+    submitDisabled,
+    submitLabel = masterDataCopy.disableSubmit,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    resource: MasterDataResource
-    target: MasterDataListItem | MasterDataCenterView | null
+    target: RevisionTarget | null
+    submit: (
+        input: Omit<DisableMasterDataInput, "resource">,
+    ) => Promise<MasterDataMutationResult>
+    blockedBanner?: React.ReactNode
+    submitDisabled?: boolean
+    submitLabel?: string
 }) {
-    const mutation = useDisableMasterDataMutation()
     const queryClient = useQueryClient()
     const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
         newIdempotencyKey("disable"),
@@ -91,16 +66,7 @@ export function MasterDataDisableDialog({
         null,
     )
     const [discardOpen, setDiscardOpen] = React.useState(false)
-
-    const isWarehouse = resource === "warehouses"
-    const stableId = target?.stableId ?? ""
-    const baseRevisionId =
-        target && "currentRevisionId" in target
-            ? target.currentRevisionId
-            : target && "currentRevision" in target
-              ? target.currentRevision.revisionId
-              : ""
-    const lockVersion = target?.lockVersion ?? 0
+    const ids = revisionTargetIds(target)
 
     const form = useAppForm({
         defaultValues: {
@@ -109,12 +75,11 @@ export function MasterDataDisableDialog({
         },
         validators: { onChange: disableSchema },
         onSubmit: async ({ value }) => {
-            if (!stableId || !baseRevisionId) return
-            const response = await mutation.mutateAsync({
-                resource,
-                stableId,
-                baseRevisionId,
-                expectedLockVersion: lockVersion,
+            if (!ids.stableId || !ids.baseRevisionId) return
+            const response = await submit({
+                stableId: ids.stableId,
+                baseRevisionId: ids.baseRevisionId,
+                expectedLockVersion: ids.lockVersion,
                 changeReason: value.changeReason.trim(),
                 effectiveFrom: value.effectiveFrom,
                 idempotencyKey,
@@ -135,13 +100,7 @@ export function MasterDataDisableDialog({
             form.reset()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, stableId])
-
-    const reloadLatest = React.useCallback(() => {
-        void queryClient.invalidateQueries({ queryKey: masterDataKeys.all })
-        setResult(null)
-        setIdempotencyKey(newIdempotencyKey("disable"))
-    }, [queryClient])
+    }, [open, ids.stableId])
 
     const requestClose = (next: boolean) => {
         if (next) {
@@ -161,7 +120,7 @@ export function MasterDataDisableDialog({
 
     return (
         <Dialog open={open} onOpenChange={requestClose}>
-            <DialogContent className={dialogContentClass(resource)}>
+            <DialogContent className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle>{masterDataCopy.disableTitle}</DialogTitle>
                     <DialogDescription>
@@ -176,23 +135,8 @@ export function MasterDataDisableDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <DialogScrollBody wide={false}>
-                    {isWarehouse ? (
-                        <Alert variant="destructive">
-                            <AlertTitle>
-                                {masterDataCopy.warehouseWriteTitle}
-                            </AlertTitle>
-                            <AlertDescription>
-                                {WAREHOUSE_WRITE_MESSAGE}
-                                {target &&
-                                "warehouseStockSummary" in target &&
-                                target.warehouseStockSummary?.hasBlockingStock
-                                    ? ` 另：在库 ${target.warehouseStockSummary.onHandQty} / 预占 ${target.warehouseStockSummary.reservedQty} 时也不可停用。`
-                                    : null}
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-
+                <DialogScrollBody>
+                    {blockedBanner}
                     {result?.outcome === "blocked" ? (
                         <FormalActionResult
                             status="blocked"
@@ -220,7 +164,6 @@ export function MasterDataDisableDialog({
                             ]}
                         />
                     ) : null}
-
                     {result?.outcome === "conflict" ? (
                         <FormalActionResult
                             status="blocked"
@@ -240,7 +183,15 @@ export function MasterDataDisableDialog({
                                     type="button"
                                     size="sm"
                                     variant="outline"
-                                    onClick={reloadLatest}
+                                    onClick={() => {
+                                        void queryClient.invalidateQueries({
+                                            queryKey: masterDataKeys.all,
+                                        })
+                                        setResult(null)
+                                        setIdempotencyKey(
+                                            newIdempotencyKey("disable"),
+                                        )
+                                    }}
                                 >
                                     {masterDataCopy.reloadAction}
                                 </Button>
@@ -251,8 +202,8 @@ export function MasterDataDisableDialog({
                     {result?.outcome !== "succeeded" ? (
                         <form
                             className="grid gap-3"
-                            onSubmit={(e) => {
-                                e.preventDefault()
+                            onSubmit={(event) => {
+                                event.preventDefault()
                                 void form.handleSubmit()
                             }}
                         >
@@ -289,11 +240,12 @@ export function MasterDataDisableDialog({
                                 </DialogClose>
                                 <Button
                                     type="submit"
-                                    disabled={mutation.isPending || !target}
+                                    disabled={
+                                        submitDisabled ||
+                                        !target
+                                    }
                                 >
-                                    {isWarehouse
-                                        ? masterDataCopy.createSubmitRejected
-                                        : masterDataCopy.disableSubmit}
+                                    {submitLabel}
                                 </Button>
                             </DialogFooter>
                         </form>
@@ -315,4 +267,87 @@ export function MasterDataDisableDialog({
             />
         </Dialog>
     )
+}
+
+export function FixedResourceDisableDialog({
+    resource,
+    open,
+    onOpenChange,
+    target,
+    blockedBanner,
+    submitDisabled,
+    submitLabel,
+}: {
+    resource: MasterDataResource
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    target: RevisionTarget | null
+    blockedBanner?: React.ReactNode
+    submitDisabled?: boolean
+    submitLabel?: string
+}) {
+    const mutation = useDisableMasterDataMutation()
+    const submit = React.useCallback(
+        (input: Omit<DisableMasterDataInput, "resource">) =>
+            mutation.mutateAsync({ resource, ...input }),
+        [mutation, resource],
+    )
+    return (
+        <DisableActionDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            target={target}
+            submit={submit}
+            blockedBanner={blockedBanner}
+            submitDisabled={submitDisabled || mutation.isPending}
+            submitLabel={submitLabel}
+        />
+    )
+}
+
+export function BrandDisableDialog(
+    props: Omit<
+        React.ComponentProps<typeof FixedResourceDisableDialog>,
+        "resource"
+    >,
+) {
+    return <FixedResourceDisableDialog resource="brands" {...props} />
+}
+
+export function UnitOfMeasureDisableDialog(
+    props: Omit<
+        React.ComponentProps<typeof FixedResourceDisableDialog>,
+        "resource"
+    >,
+) {
+    return (
+        <FixedResourceDisableDialog resource="unit-of-measures" {...props} />
+    )
+}
+
+export function CategoryDisableDialog(
+    props: Omit<
+        React.ComponentProps<typeof FixedResourceDisableDialog>,
+        "resource"
+    >,
+) {
+    return <FixedResourceDisableDialog resource="categories" {...props} />
+}
+
+export function ProductDisableDialog(
+    props: Omit<
+        React.ComponentProps<typeof FixedResourceDisableDialog>,
+        "resource"
+    >,
+) {
+    return <FixedResourceDisableDialog resource="products" {...props} />
+}
+
+export function SupplierDisableDialog(
+    props: Omit<
+        React.ComponentProps<typeof FixedResourceDisableDialog>,
+        "resource"
+    >,
+) {
+    return <FixedResourceDisableDialog resource="suppliers" {...props} />
 }

@@ -28,7 +28,7 @@ import {
     InputGroupText,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { MasterDataDisableDialog } from "@/features/master-data/components/shared/master-data-action-dialog"
+import { SupplierDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { MediaListField } from "@/features/master-data/components/shared/media-list-field"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
@@ -1545,10 +1545,9 @@ export function SupplierEditorForm({ editor }: { editor: SupplierEditor }) {
                             </form>
 
                             {!isCreate && data ? (
-                                <MasterDataDisableDialog
+                                <SupplierDisableDialog
                                     open={disableOpen}
                                     onOpenChange={setDisableOpen}
-                                    resource="suppliers"
                                     target={data}
                                 />
                             ) : null}

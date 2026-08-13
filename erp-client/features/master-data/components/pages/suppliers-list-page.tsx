@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { SupplierListToolbar } from "@/features/master-data/components/list/supplier-list-toolbar"
-import { MasterDataDisableDialog } from "@/features/master-data/components/shared/master-data-action-dialog"
+import { SupplierDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSupplierListColumns } from "@/features/master-data/hooks/use-supplier-list-columns"
 import { useSupplierListState } from "@/features/master-data/hooks/use-supplier-list-state"
@@ -200,12 +200,11 @@ export function SuppliersListPage() {
                     />
                 }
             />
-            <MasterDataDisableDialog
+            <SupplierDisableDialog
                 open={state.disableTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setDisableTarget(null)
                 }}
-                resource="suppliers"
                 target={state.disableTarget}
             />
         </ListPageFrame>

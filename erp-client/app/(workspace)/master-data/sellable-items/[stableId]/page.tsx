@@ -1,35 +1,16 @@
 import type { Metadata } from "next"
-import { Suspense } from "react"
 
-import { MasterDataObjectPage } from "@/features/master-data/components/pages/master-data-center-page"
+import { ListRouteRedirect } from "@/features/master-data/components/pages/list-route-redirect"
 
 export const metadata: Metadata = {
-    title: "公司商品池详情",
+    title: "公司商品池",
 }
 
-export default async function Page({
-    params,
-    searchParams,
-}: {
-    params: Promise<{ stableId: string }>
-    searchParams: Promise<{ section?: string }>
-}) {
-    const { stableId } = await params
-    const { section } = await searchParams
+export default function Page() {
     return (
-        <Suspense
-            fallback={
-                <div className="p-5 text-sm text-muted-foreground">
-                    正在加载基础资料对象…
-                </div>
-            }
-        >
-            <MasterDataObjectPage
-                key={`${stableId}-${section ?? "overview"}`}
-                resource="sellable-items"
-                stableId={stableId}
-                section={section}
-            />
-        </Suspense>
+        <ListRouteRedirect
+            href="/master-data/sellable-items"
+            label="公司商品池"
+        />
     )
 }

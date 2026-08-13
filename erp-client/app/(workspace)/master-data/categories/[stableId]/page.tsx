@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { MasterDataObjectPage } from "@/features/master-data/components/pages/master-data-center-page"
+import { CategoryObjectPage } from "@/features/master-data/components/category/category-object-page"
 
 export const metadata: Metadata = {
     title: "商品分类详情",
@@ -20,13 +20,12 @@ export default async function Page({
         <Suspense
             fallback={
                 <div className="p-5 text-sm text-muted-foreground">
-                    正在加载基础资料对象…
+                    正在加载商品分类…
                 </div>
             }
         >
-            <MasterDataObjectPage
+            <CategoryObjectPage
                 key={`${stableId}-${section ?? "overview"}`}
-                resource="categories"
                 stableId={stableId}
                 section={section}
             />

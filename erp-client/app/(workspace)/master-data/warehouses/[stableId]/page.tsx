@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { MasterDataObjectPage } from "@/features/master-data/components/pages/master-data-center-page"
+import { WarehouseObjectPage } from "@/features/master-data/components/warehouse/warehouse-object-page"
 
 export const metadata: Metadata = {
     title: "仓库详情",
@@ -20,13 +20,12 @@ export default async function Page({
         <Suspense
             fallback={
                 <div className="p-5 text-sm text-muted-foreground">
-                    正在加载基础资料对象…
+                    正在加载仓库资料…
                 </div>
             }
         >
-            <MasterDataObjectPage
+            <WarehouseObjectPage
                 key={`${stableId}-${section ?? "overview"}`}
-                resource="warehouses"
                 stableId={stableId}
                 section={section}
             />

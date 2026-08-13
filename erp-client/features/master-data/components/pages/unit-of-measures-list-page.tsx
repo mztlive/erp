@@ -13,10 +13,10 @@ import { DictionaryListToolbar } from "@/features/master-data/components/list/di
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import {
-    MasterDataCreateDialog,
-    MasterDataDisableDialog,
-    MasterDataReviseDialog,
-} from "@/features/master-data/components/shared/master-data-action-dialog"
+    UnitOfMeasureCreateDialog,
+    UnitOfMeasureReviseDialog,
+} from "@/features/master-data/components/unit-of-measure/unit-of-measure-form-dialogs"
+import { UnitOfMeasureDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useUnitOfMeasureListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
@@ -193,25 +193,22 @@ export function UnitOfMeasuresListPage() {
                     />
                 }
             />
-            <MasterDataCreateDialog
+            <UnitOfMeasureCreateDialog
                 open={state.createOpen}
                 onOpenChange={state.setCreateOpen}
-                resource="unit-of-measures"
             />
-            <MasterDataReviseDialog
+            <UnitOfMeasureReviseDialog
                 open={state.reviseTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setReviseTarget(null)
                 }}
-                resource="unit-of-measures"
                 target={state.reviseTarget}
             />
-            <MasterDataDisableDialog
+            <UnitOfMeasureDisableDialog
                 open={state.disableTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setDisableTarget(null)
                 }}
-                resource="unit-of-measures"
                 target={state.disableTarget}
             />
         </ListPageFrame>

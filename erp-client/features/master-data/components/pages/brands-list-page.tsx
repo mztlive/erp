@@ -13,10 +13,10 @@ import { DictionaryListToolbar } from "@/features/master-data/components/list/di
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import {
-    MasterDataCreateDialog,
-    MasterDataDisableDialog,
-    MasterDataReviseDialog,
-} from "@/features/master-data/components/shared/master-data-action-dialog"
+    BrandCreateDialog,
+    BrandReviseDialog,
+} from "@/features/master-data/components/brand/brand-form-dialogs"
+import { BrandDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useBrandListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
@@ -193,25 +193,22 @@ export function BrandsListPage() {
                     />
                 }
             />
-            <MasterDataCreateDialog
+            <BrandCreateDialog
                 open={state.createOpen}
                 onOpenChange={state.setCreateOpen}
-                resource="brands"
             />
-            <MasterDataReviseDialog
+            <BrandReviseDialog
                 open={state.reviseTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setReviseTarget(null)
                 }}
-                resource="brands"
                 target={state.reviseTarget}
             />
-            <MasterDataDisableDialog
+            <BrandDisableDialog
                 open={state.disableTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setDisableTarget(null)
                 }}
-                resource="brands"
                 target={state.disableTarget}
             />
         </ListPageFrame>
