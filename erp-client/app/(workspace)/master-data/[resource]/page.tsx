@@ -1,16 +1,11 @@
 import type { Metadata } from "next"
 
-import { MasterDataPage } from "@/features/master-data/components/pages/master-data-page"
+import { UnknownMasterDataPage } from "@/features/master-data/components/pages/unknown-master-data-page"
 
 export const metadata: Metadata = {
     title: "基础资料",
 }
 
-export default async function Page({
-    params,
-}: {
-    params: Promise<{ resource: string }>
-}) {
-    const { resource } = await params
-    return <MasterDataPage resource={resource} />
+export default function Page() {
+    return <UnknownMasterDataPage />
 }

@@ -25,17 +25,14 @@ import {
     MasterDataDisableDialog,
     MasterDataReviseDialog,
 } from "@/features/master-data/components/shared/master-data-action-dialog"
-import { ProductDetailPage } from "@/features/master-data/components/product/product-detail-page"
-import { SupplierDetailPage } from "@/features/master-data/components/supplier/supplier-detail-page"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { resourceLabel } from "@/features/master-data/lib/data"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import { useMasterDataCenterQuery } from "@/features/master-data/hooks/queries"
-import {
-    MASTER_DATA_RESOURCES,
-    type MasterDataResource,
-    type MasterDataSectionId,
+import type {
+    MasterDataResource,
+    MasterDataSectionId,
 } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
 import { hasPermission } from "@/lib/permissions"
@@ -55,87 +52,7 @@ function resolveSection(section?: string | null): MasterDataSectionId {
     return found?.id ?? "overview"
 }
 
-function isResource(value: string): value is MasterDataResource {
-    return MASTER_DATA_RESOURCES.some((r) => r.key === value)
-}
-
-export function MasterDataCenterPage({
-    resource,
-    stableId,
-    section,
-}: {
-    resource: string
-    stableId: string
-    section?: string
-}) {
-    if (!isResource(resource)) {
-        return (
-            <PageScaffold>
-                <PageHeader
-                    title={masterDataCopy.unknownResourceTitle}
-                    description={masterDataCopy.unknownResourceDesc()}
-                    actions={
-                        <Button render={<Link href="/master-data" />}>
-                            返回基础资料
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
-    // 商品 / 供应商详情页即查看也是编辑（含新建 /new），不使用侧边 sheet / 对话框
-    if (resource === "products") {
-        return <ProductDetailPage stableId={stableId} />
-    }
-    if (resource === "suppliers") {
-        return <SupplierDetailPage stableId={stableId} />
-    }
-    // 兼容旧书签 `/voucher-categories/new`：新建已改列表 Dialog，重定向回列表。
-    if (resource === "voucher-categories" && stableId === "new") {
-        return <VoucherCategoryNewRedirect />
-    }
-    // 品牌无详情页：查看 / 更新 / 停用均由列表 Dialog 承担，重定向回列表。
-    if (resource === "brands") {
-        return <BrandListRedirect />
-    }
-
-    return (
-        <MasterDataCenterBody
-            resource={resource}
-            stableId={stableId}
-            section={section}
-        />
-    )
-}
-
-/** 卡券类目新建路由兼容：跳回列表，由列表 Dialog 承担创建。 */
-function VoucherCategoryNewRedirect() {
-    const router = useRouter()
-    React.useEffect(() => {
-        router.replace("/master-data/voucher-categories")
-    }, [router])
-    return (
-        <div className="flex min-h-[12rem] items-center justify-center text-sm text-muted-foreground">
-            正在打开卡券类目列表…
-        </div>
-    )
-}
-
-/** 品牌详情地址兼容：跳回品牌列表，由列表 Dialog 承担查看 / 更新 / 停用。 */
-function BrandListRedirect() {
-    const router = useRouter()
-    React.useEffect(() => {
-        router.replace("/master-data/brands")
-    }, [router])
-    return (
-        <div className="flex min-h-[12rem] items-center justify-center text-sm text-muted-foreground">
-            正在打开品牌列表…
-        </div>
-    )
-}
-
-function MasterDataCenterBody({
+export function MasterDataObjectPage({
     resource,
     stableId,
     section,

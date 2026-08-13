@@ -390,7 +390,7 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         id: "W14",
         name: "公司商品池、商品、类目、供应商与仓库",
         mode: "M2+M4",
-        mainRoute: "/master-data/:resource",
+        mainRoute: "/master-data/sellable-items",
         navHref: "/master-data/sellable-items",
     },
     {

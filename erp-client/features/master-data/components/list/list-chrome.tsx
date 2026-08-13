@@ -12,7 +12,7 @@ function ResourceNav({
     navRef,
 }: {
     resource: string
-    navRef: React.RefObject<HTMLElement | null>
+    navRef?: React.RefObject<HTMLElement | null>
 }) {
     return (
         <nav

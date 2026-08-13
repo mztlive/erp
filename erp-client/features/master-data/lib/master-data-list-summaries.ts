@@ -15,7 +15,6 @@ import {
 import {
     PRODUCT_KIND_LABELS,
     type MasterDataListItem,
-    type MasterDataResource,
     type ProductKind,
     type ProductListingFilter,
     type ProductSkuCoverageFilter,
@@ -29,11 +28,56 @@ type ListMetric = {
     detail?: string
 }
 
-type FilterSnapshotInput = {
-    resource: MasterDataResource
+export function buildDictionaryFilterSnapshotLabel(input: {
+    categoryLabel: string
     q: string
-    isSellableResource: boolean
-    isSupplierResource: boolean
+    lifecycleStatus: "enabled" | "disabled" | "all"
+    revisionTiming: "current" | "future" | "all"
+}): string {
+    return [
+        `分类=${input.categoryLabel}`,
+        `启用状态=${lifecycleFilterLabel(input.lifecycleStatus)}`,
+        `版本状态=${revisionTimingFilterLabel(input.revisionTiming)}`,
+        input.q.trim() ? `搜索=${input.q.trim()}` : "搜索=空",
+    ].join(" · ")
+}
+
+export function buildSellableFilterSnapshotLabel(input: {
+    q: string
+    productKind?: ProductKind
+    productSalesPriceMin?: string
+    productSalesPriceMax?: string
+    supplyRegion?: string
+    selectedCategoryLabel?: string
+    selectedBrandLabel?: string
+    selectedSupplierLabel?: string
+}): string {
+    return [
+        `分类=${resourceLabel("sellable-items")}`,
+        ...(input.productKind
+            ? [`商品类型=${PRODUCT_KIND_LABELS[input.productKind]}`]
+            : []),
+        ...(input.selectedCategoryLabel
+            ? [`商品分类=${input.selectedCategoryLabel}`]
+            : []),
+        ...(input.selectedBrandLabel
+            ? [`品牌=${input.selectedBrandLabel}`]
+            : []),
+        ...(input.selectedSupplierLabel
+            ? [`供应商=${input.selectedSupplierLabel}`]
+            : []),
+        ...(input.supplyRegion ? [`可供区域=${input.supplyRegion}`] : []),
+        ...(input.productSalesPriceMin || input.productSalesPriceMax
+            ? [
+                  `销售价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+              ]
+            : []),
+        input.q.trim() ? `搜索=${input.q.trim()}` : "搜索=空",
+    ].join(" · ")
+}
+
+export function buildProductFilterSnapshotLabel(input: {
+    q: string
     lifecycleStatus: "enabled" | "disabled" | "all"
     revisionTiming: "current" | "future" | "all"
     productKind?: ProductKind
@@ -41,110 +85,74 @@ type FilterSnapshotInput = {
     productSupplyCoverage?: ProductSkuCoverageFilter
     productSalesPriceMin?: string
     productSalesPriceMax?: string
-    supplyRegion?: string
-    supplierCapabilityCodes: readonly string[]
-    supplierQualificationTypes: readonly string[]
-    supplierQualificationHealth?: SupplierQualificationHealth
     selectedCategoryLabel?: string
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
+}): string {
+    return [
+        `分类=${resourceLabel("products")}`,
+        `启用状态=${lifecycleFilterLabel(input.lifecycleStatus)}`,
+        `版本状态=${revisionTimingFilterLabel(input.revisionTiming)}`,
+        ...(input.productKind
+            ? [`商品类型=${PRODUCT_KIND_LABELS[input.productKind]}`]
+            : []),
+        ...(input.selectedCategoryLabel
+            ? [`商品分类=${input.selectedCategoryLabel}`]
+            : []),
+        ...(input.selectedBrandLabel
+            ? [`品牌=${input.selectedBrandLabel}`]
+            : []),
+        ...(input.selectedSupplierLabel
+            ? [`供应商=${input.selectedSupplierLabel}`]
+            : []),
+        ...(input.productListingStatus
+            ? [
+                  `上架状态=${PRODUCT_LISTING_FILTER_OPTIONS.find((option) => option.value === input.productListingStatus)?.label}`,
+              ]
+            : []),
+        ...(input.productSupplyCoverage
+            ? [
+                  `供给覆盖=${PRODUCT_COVERAGE_FILTER_OPTIONS.find((option) => option.value === input.productSupplyCoverage)?.label}`,
+              ]
+            : []),
+        ...(input.productSalesPriceMin || input.productSalesPriceMax
+            ? [
+                  `销售价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+              ]
+            : []),
+        input.q.trim() ? `搜索=${input.q.trim()}` : "搜索=空",
+    ].join(" · ")
 }
 
-/** 导出 CSV 头部筛选快照（人读摘要）。 */
-export function buildFilterSnapshotLabel(input: FilterSnapshotInput): string {
-    const {
-        resource,
-        q,
-        isSellableResource,
-        isSupplierResource,
-        lifecycleStatus,
-        revisionTiming,
-        productKind,
-        productListingStatus,
-        productSupplyCoverage,
-        productSalesPriceMin,
-        productSalesPriceMax,
-        supplyRegion,
-        supplierCapabilityCodes,
-        supplierQualificationTypes,
-        supplierQualificationHealth,
-        selectedCategoryLabel,
-        selectedBrandLabel,
-        selectedSupplierLabel,
-    } = input
-
-    if (isSellableResource) {
-        const parts = [
-            `分类=${resourceLabel(resource)}`,
-            ...(productKind
-                ? [`商品类型=${PRODUCT_KIND_LABELS[productKind]}`]
-                : []),
-            ...(selectedCategoryLabel
-                ? [`商品分类=${selectedCategoryLabel}`]
-                : []),
-            ...(selectedBrandLabel ? [`品牌=${selectedBrandLabel}`] : []),
-            ...(selectedSupplierLabel
-                ? [`供应商=${selectedSupplierLabel}`]
-                : []),
-            ...(supplyRegion ? [`可供区域=${supplyRegion}`] : []),
-            ...(productSalesPriceMin || productSalesPriceMax
-                ? [
-                      `销售价=${productSalesPriceMin ? `¥${productSalesPriceMin}` : "不限"}–${productSalesPriceMax ? `¥${productSalesPriceMax}` : "不限"}`,
-                  ]
-                : []),
-            q.trim() ? `搜索=${q.trim()}` : "搜索=空",
-        ]
-        return parts.join(" · ")
-    }
-
-    const parts = [
-        `分类=${resourceLabel(resource)}`,
-        `启用状态=${lifecycleFilterLabel(lifecycleStatus)}`,
-        ...(isSupplierResource
-            ? [
-                  `资质状态=${qualificationHealthLabel(supplierQualificationHealth)}`,
-              ]
-            : [`版本状态=${revisionTimingFilterLabel(revisionTiming)}`]),
-        ...(supplierCapabilityCodes.length > 0
+export function buildSupplierFilterSnapshotLabel(input: {
+    q: string
+    lifecycleStatus: "enabled" | "disabled" | "all"
+    supplierCapabilityCodes: readonly string[]
+    supplierQualificationTypes: readonly string[]
+    supplierQualificationHealth?: SupplierQualificationHealth
+}): string {
+    return [
+        `分类=${resourceLabel("suppliers")}`,
+        `启用状态=${lifecycleFilterLabel(input.lifecycleStatus)}`,
+        `资质状态=${qualificationHealthLabel(input.supplierQualificationHealth)}`,
+        ...(input.supplierCapabilityCodes.length > 0
             ? [
                   `供应能力=${selectedSupplierOptionLabels(
-                      supplierCapabilityCodes,
+                      input.supplierCapabilityCodes,
                       SUPPLIER_CAPABILITY_OPTIONS,
                   ).join("、")}`,
               ]
             : []),
-        ...(supplierQualificationTypes.length > 0
+        ...(input.supplierQualificationTypes.length > 0
             ? [
                   `资质类型=${selectedSupplierOptionLabels(
-                      supplierQualificationTypes,
+                      input.supplierQualificationTypes,
                       SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
                   ).join("、")}`,
               ]
             : []),
-        ...(productKind
-            ? [`商品类型=${PRODUCT_KIND_LABELS[productKind]}`]
-            : []),
-        ...(selectedCategoryLabel ? [`商品分类=${selectedCategoryLabel}`] : []),
-        ...(selectedBrandLabel ? [`品牌=${selectedBrandLabel}`] : []),
-        ...(selectedSupplierLabel ? [`供应商=${selectedSupplierLabel}`] : []),
-        ...(productListingStatus
-            ? [
-                  `上架状态=${PRODUCT_LISTING_FILTER_OPTIONS.find((option) => option.value === productListingStatus)?.label}`,
-              ]
-            : []),
-        ...(productSupplyCoverage
-            ? [
-                  `供给覆盖=${PRODUCT_COVERAGE_FILTER_OPTIONS.find((option) => option.value === productSupplyCoverage)?.label}`,
-              ]
-            : []),
-        ...(productSalesPriceMin || productSalesPriceMax
-            ? [
-                  `销售价=${productSalesPriceMin ? `¥${productSalesPriceMin}` : "不限"}–${productSalesPriceMax ? `¥${productSalesPriceMax}` : "不限"}`,
-              ]
-            : []),
-        q.trim() ? `搜索=${q.trim()}` : "搜索=空",
-    ]
-    return parts.join(" · ")
+        input.q.trim() ? `搜索=${input.q.trim()}` : "搜索=空",
+    ].join(" · ")
 }
 
 /** 公司商品池表头说明：有筛选时写人读摘要，否则默认操作说明。 */

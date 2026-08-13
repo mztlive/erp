@@ -1,14 +1,10 @@
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
-    MASTER_DATA_RESOURCES,
     PRODUCT_KIND_LABELS,
     PRODUCT_KIND_VALUES,
-    type MasterDataResource,
     type ProductListSkuSummary,
     type SupplierQualificationHealth,
 } from "@/features/master-data/types"
-
-const VALID = new Set(MASTER_DATA_RESOURCES.map((item) => item.key))
 
 const CNY_FORMATTER = new Intl.NumberFormat("zh-CN", {
     style: "currency",
@@ -185,26 +181,22 @@ function productSkuPriceRange(skus: readonly ProductListSkuSummary[]): string {
         : `${minimum}–${maximum}`
 }
 
-const CREATE_PERMISSION_BY_RESOURCE: Partial<
-    Record<MasterDataResource, string>
-> = {
-    products: "product:create",
-    categories: "product_category:create",
-    brands: "product_brand:create",
-    "unit-of-measures": "unit_of_measure:create",
-    "voucher-categories": "voucher_category_profile:create",
-    suppliers: "supplier:create",
-    warehouses: "warehouse:create",
+function parseLifecycleStatus(
+    value: string | null,
+): "enabled" | "disabled" | "all" {
+    return value === "enabled" || value === "disabled" ? value : "all"
 }
 
-function isResource(value: string): value is MasterDataResource {
-    return VALID.has(value as MasterDataResource)
+function parseRevisionTiming(
+    value: string | null,
+): "current" | "future" | "all" {
+    return value === "current" || value === "future" ? value : "all"
 }
 
 export {
-    CREATE_PERMISSION_BY_RESOURCE,
     csvFilterValue,
-    isResource,
+    parseLifecycleStatus,
+    parseRevisionTiming,
     LIFECYCLE_RADIO_FILTER_OPTIONS,
     productSalesPriceRangeError,
     productSkuPriceRange,
