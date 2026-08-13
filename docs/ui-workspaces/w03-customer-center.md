@@ -123,7 +123,7 @@
 | 客户头 | `status` | 启用 / 停用 | `customer_account.status` | 文字 + tone | 停用原因按操作权限可见 |
 | 主体 | `legalName` | 法定名称 | 当前 `party_revision` | 不用历史单据快照覆盖 | 可见客户均可见 |
 | 主体 | `shortName` | 客户简称 | 当前 `party_revision` | 空时回退法定名称 | 同上 |
-| 主体 | `unifiedCreditCode` | 统一社会信用代码 | `party.unified_credit_code` | 历史数据允许空；不单独作自动合并依据 | 按基础资料字段权限 |
+| 主体 | `unifiedCreditCode` | 统一社会信用代码 | `party.unified_credit_code` | 新建/修订必填，18 位字母或数字；不单独作自动合并依据 | 按基础资料字段权限 |
 | 结算 | `defaultPaymentTerm` | 默认付款条件 | `customer_account.default_payment_term_id` 解析 | 仅录单提示，正式销售以合同/销售快照为准 | 销售和财务可见 |
 | 归属 | `owner` | 负责销售 | 当前有效 `customer_assignment(OWNER)` | 同一时点恰好一人 | 客户可见者可见 |
 | 归属 | `collaborators` | 协作销售 | 当前有效 `COLLABORATOR` | 显示有效期 | 客户可见者可见 |
@@ -174,7 +174,7 @@
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 新建客户 | 选择页主动作 | `CREATE_CUSTOMER`；必填主体身份与负责销售 | 展示重复候选但不自动合并 | 同事务建立 `party`、首版修订、客户角色和当前 OWNER；可选同时建立首版联系人、地址与银行账户；打开客户中心 | 保留输入；重复冲突引导选既有主体或提交人工确认 |
+| 新建客户 | 选择页主动作 | `CREATE_CUSTOMER`；必填法定名称与统一社会信用代码；负责销售固定为创建人 | 展示重复候选但不自动合并 | 同事务建立 `party`、首版修订、客户角色和当前 OWNER（创建人）；可选同时建立首版联系人、地址与银行账户；打开客户中心 | 保留输入；重复冲突引导选既有主体或提交人工确认 |
 | 修订客户资料 | 概览页签“编辑资料”；主体身份、联系人、地址与银行账户均原地编辑 | 客户启用、持有当前 `lockVersion`；主体名称与信用代码仅 `EDIT_CUSTOMER` 且负责销售/销售主管；联系人/地址协作销售默认可维护；银行账户新增/修改仅财务 | 保存时统一确认，展示变更字段和原因 | 生成新 `party_revision`，联系人/地址/银行账户按有效期事实追加，旧单据快照不变 | 版本冲突显示 diff，禁止静默覆盖；无字段权限时对应控件禁用且不得提交 |
 | 新增/停用联系人或地址 | 概览页签编辑态 | 对应字段维护权；协作销售默认可维护 | 停用需显示当前默认引用影响 | 追加有效期事实并刷新 | 保留表单；被草稿引用时提示重新选择 |
 | 新增/修改银行账户 | 概览页签编辑态 | 仅财务字段维护权；客户启用、持有当前 `lockVersion` | 展示变更摘要；完整账号仅授权揭示时可见 | 按有效期事实追加/结束银行账户记录并刷新；操作留审计 | 无财务权时禁止入口；失败保留表单 |
@@ -242,7 +242,7 @@ type SaveCustomerRevisionCommand = {
   baseRevisionId: string
   legalName: string
   shortName?: string
-  unifiedCreditCode?: string
+  unifiedCreditCode: string
   changeReason: string
   idempotencyKey: string
 }

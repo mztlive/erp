@@ -70,8 +70,17 @@ impl CustomerProfileService {
 
     /// 原子创建 Party、客户角色、首条 OWNER 与首批资料事实。
     ///
-    /// # Errors
-    /// 输入非法、负责人不存在、身份重复、敏感值加密失败或事务失败时返回错误。
+    /// 首条 OWNER 固定为当前创建人；请求体中的 `owner_user_id` 即使提交也会被忽略。
+    ///
+    /// # 参数
+    /// * `req` - 创建客户资料命令
+    /// * `actor` - 已通过鉴权的审计操作人；其账号 ID 写入首条 OWNER 归属
+    ///
+    /// # 返回
+    /// 返回创建命令的稳定结果视图。
+    ///
+    /// # 错误
+    /// 输入非法、创建人账号不存在或已停用、身份重复、敏感值加密失败或事务失败时返回错误。
     pub async fn create(
         &self,
         req: SaveCustomerProfileRequest,
@@ -82,7 +91,7 @@ impl CustomerProfileService {
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
             return replay_command(command, "create", None, actor.id(), &fingerprint);
         }
-        let owner_user_id = required_text(req.owner_user_id.as_deref(), "负责销售")?;
+        let owner_user_id = actor.id().to_string();
         self.ensure_user_exists(&owner_user_id).await?;
         let prepared = self.prepare_create(req, owner_user_id, fingerprint.clone(), actor)?;
         let intended = prepared.result.clone();
@@ -1580,9 +1589,21 @@ fn required_text(value: Option<&str>, label: &str) -> Result<String> {
 }
 
 /// 校验创建/修订专属字段。
+///
+/// # 参数
+/// * `req` - 客户资料根命令
+/// * `create` - `true` 表示创建，`false` 表示修订
+///
+/// # 返回
+/// 形状合法时返回 `Ok(())`。
+///
+/// # 错误
+/// 创建时携带既有版本，或修订时提交负责人 / 缺少乐观锁版本时返回校验错误。
+///
+/// # 约束
+/// 创建时负责人由服务端按创建人写入，不要求也不使用请求体中的 `owner_user_id`。
 fn validate_create_or_update_shape(req: &SaveCustomerProfileRequest, create: bool) -> Result<()> {
     if create {
-        required_text(req.owner_user_id.as_deref(), "负责销售")?;
         if req.expected_party_version.is_some() || req.expected_customer_version.is_some() {
             return Err(Error::ValidationError("创建客户时不能提交既有版本".to_string()));
         }
@@ -1761,7 +1782,33 @@ mod tests {
         customer::{CustomerProfileCommand, CustomerProfileCommandData},
     };
 
-    use super::{customer_status_blockers, replay_command, validate_default_count, CustomerAccountStatus};
+    use super::{
+        customer_status_blockers, replay_command, validate_create_or_update_shape, validate_default_count,
+        CustomerAccountStatus, SaveCustomerProfileRequest,
+    };
+
+    /// 构造最小合法的客户资料请求，供创建/修订形状校验用例复用。
+    ///
+    /// # 返回
+    /// 返回不含负责销售与乐观锁版本的创建形态请求。
+    fn sample_profile_request() -> SaveCustomerProfileRequest {
+        SaveCustomerProfileRequest {
+            idempotency_key: "key-1".to_string(),
+            expected_party_version: None,
+            expected_customer_version: None,
+            legal_name: "主太帅".to_string(),
+            short_name: None,
+            unified_credit_code: None,
+            default_payment_term_id: None,
+            status: None,
+            owner_user_id: None,
+            contacts: None,
+            addresses: None,
+            bank_accounts: None,
+            effective_from: BusinessDate::from_ymd(2026, 8, 8).unwrap(),
+            change_reason: "首版建档".to_string(),
+        }
+    }
 
     #[test]
     fn default_fact_validation_accepts_zero_or_one_and_rejects_multiple() {
@@ -1807,5 +1854,24 @@ mod tests {
         )
         .is_ok());
         assert!(replay_command(command, "update", Some("customer-2"), "admin-1", "fingerprint-1").is_err());
+    }
+
+    #[test]
+    fn create_shape_does_not_require_client_owner() {
+        let request = sample_profile_request();
+        assert!(validate_create_or_update_shape(&request, true).is_ok());
+
+        let mut with_legacy_owner = sample_profile_request();
+        with_legacy_owner.owner_user_id = Some("legacy-owner".to_string());
+        assert!(validate_create_or_update_shape(&with_legacy_owner, true).is_ok());
+    }
+
+    #[test]
+    fn update_shape_still_rejects_owner_field() {
+        let mut request = sample_profile_request();
+        request.expected_party_version = Some(1);
+        request.expected_customer_version = Some(1);
+        request.owner_user_id = Some("someone-else".to_string());
+        assert!(validate_create_or_update_shape(&request, false).is_err());
     }
 }

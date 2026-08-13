@@ -8,14 +8,12 @@ import {
     DiscardConfirmDialog,
     DocumentSection,
     FormalActionResult,
-    OwnerCombobox,
 } from "@/components/business"
-import { toFieldErrors, useAppForm } from "@/components/form"
+import { useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import {
     useCreateCustomerMutation,
     useQueryCustomerIdempotencyMutation,
@@ -26,7 +24,6 @@ import type {
     CustomerCenterView,
     CustomerMutationResult,
 } from "@/features/customers/types"
-import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import { hasPermission } from "@/lib/permissions"
 import {
     createSchema,
@@ -64,7 +61,6 @@ type FormValues = {
     legalName: string
     shortName: string
     unifiedCreditCode: string
-    ownerUserId: string
     defaultPaymentTerm: string
     status: "active" | "disabled"
     changeReason: string
@@ -102,7 +98,6 @@ function buildDefaults(
             legalName: "",
             shortName: "",
             unifiedCreditCode: "",
-            ownerUserId: "",
             defaultPaymentTerm: "POSTPAY_NET30",
             status: "active",
             changeReason: "",
@@ -115,7 +110,6 @@ function buildDefaults(
         legalName: customer!.currentRevision.legalName,
         shortName: customer!.currentRevision.shortName ?? "",
         unifiedCreditCode: customer!.currentRevision.unifiedCreditCode ?? "",
-        ownerUserId: "",
         defaultPaymentTerm: customer!.currentRevision.defaultPaymentTerm ?? "",
         status: customer!.status,
         changeReason: "",
@@ -216,7 +210,6 @@ export function CustomerForm({
     const createMutation = useCreateCustomerMutation()
     const saveMutation = useSaveCustomerDetailsMutation()
     const queryIdempotency = useQueryCustomerIdempotencyMutation()
-    const { data: ownerOptions } = useOwnerOptionsQuery()
     const accountProfile = useAccountProfileQuery()
     const canWriteContacts =
         hasPermission(
@@ -305,16 +298,10 @@ export function CustomerForm({
                     ? await createMutation.mutateAsync({
                           legalName: value.legalName.trim(),
                           shortName: value.shortName.trim() || undefined,
-                          unifiedCreditCode:
-                              value.unifiedCreditCode.trim() || undefined,
+                          unifiedCreditCode: value.unifiedCreditCode.trim(),
                           defaultPaymentTerm:
                               value.defaultPaymentTerm.trim() || undefined,
                           status: value.status,
-                          ownerUserId: value.ownerUserId,
-                          ownerName:
-                              ownerOptions?.find(
-                                  (o) => o.userId === value.ownerUserId,
-                              )?.displayName ?? value.ownerUserId,
                           contacts: canWriteContacts ? contacts : undefined,
                           addresses: canWriteAddresses ? addresses : undefined,
                           bankAccounts: canWriteBanks
@@ -421,7 +408,10 @@ export function CustomerForm({
                         <form.AppField
                             name="unifiedCreditCode"
                             children={(field) => (
-                                <field.TextField label="统一社会信用代码" />
+                                <field.TextField
+                                    label="统一社会信用代码"
+                                    placeholder="18 位字母或数字"
+                                />
                             )}
                         />
                         <form.AppField
@@ -471,35 +461,6 @@ export function CustomerForm({
                         )}
                     />
                     <form.AppField
-                        name="ownerUserId"
-                        children={(field) => {
-                            const isInvalid =
-                                field.state.meta.isTouched &&
-                                !field.state.meta.isValid
-                            const errors = toFieldErrors(
-                                field.state.meta.errors,
-                            )
-                            return (
-                                <Field data-invalid={isInvalid || undefined}>
-                                    <FieldLabel htmlFor="customer-form-owner">
-                                        负责销售
-                                    </FieldLabel>
-                                    <OwnerCombobox
-                                        value={field.state.value || undefined}
-                                        onValueChange={(id) =>
-                                            field.handleChange(id ?? "")
-                                        }
-                                        owners={ownerOptions ?? []}
-                                        placeholder="搜索负责人"
-                                    />
-                                    {isInvalid ? (
-                                        <FieldError errors={errors} />
-                                    ) : null}
-                                </Field>
-                            )
-                        }}
-                    />
-                    <form.AppField
                         name="shortName"
                         children={(field) => (
                             <field.TextField
@@ -513,7 +474,7 @@ export function CustomerForm({
                         children={(field) => (
                             <field.TextField
                                 label="统一社会信用代码"
-                                placeholder="可选；不作自动合并依据"
+                                placeholder="18 位字母或数字"
                             />
                         )}
                     />

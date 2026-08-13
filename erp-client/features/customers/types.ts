@@ -273,9 +273,7 @@ export type CreateCustomerBankAccountInput = Readonly<{
 export type CreateCustomerInput = Readonly<{
     legalName: string
     shortName?: string
-    unifiedCreditCode?: string
-    ownerUserId: string
-    ownerName: string
+    unifiedCreditCode: string
     defaultPaymentTerm?: string
     status?: CustomerStatus
     contacts?: readonly CreateCustomerContactInput[]

@@ -133,9 +133,9 @@ fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError>
     Ok(())
 }
 
-/// 客户角色创建请求（HTTP 契约：`{ party_id, customer_no, owner_user_id, ... }`）。
+/// 客户角色创建请求（HTTP 契约：`{ party_id, customer_no, ... }`）。
 ///
-/// 同事务建立 `customer_account` + 首条 `OWNER` 归属（W03：新建客户必带负责销售）；
+/// 同事务建立 `customer_account` + 首条 `OWNER` 归属；负责销售固定为创建人。
 /// `party` 必须已存在（D07 跨域读校验）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateCustomerRequest {
@@ -146,9 +146,8 @@ pub struct CreateCustomerRequest {
     pub customer_no: String,
     /// 默认客户付款条件引用（受控码表字典）。
     pub default_payment_term_id: Option<String>,
-    /// 当前负责销售（账号或系统身份；D06 账号存在性校验）。
-    #[validate(custom(function = "non_blank", message = "负责销售不能为空"))]
-    pub owner_user_id: String,
+    /// 兼容旧客户端的负责销售字段；服务端忽略该值，首条 OWNER 固定为创建人。
+    pub owner_user_id: Option<String>,
     /// 归属生效开始日期。
     pub valid_from: BusinessDate,
     /// 归属生效结束日期；`None` 表示长期有效。
@@ -373,7 +372,7 @@ pub struct SaveCustomerProfileRequest {
     pub default_payment_term_id: Option<String>,
     /// 客户状态；修订时缺省表示保留。
     pub status: Option<CustomerAccountStatus>,
-    /// 创建时必填的负责销售；修订时缺省表示保留现有归属。
+    /// 兼容旧客户端的负责销售字段；创建时忽略并由创建人写入 OWNER，修订时不得提交。
     pub owner_user_id: Option<String>,
     /// 联系人当前集合；缺省表示修订时保留。
     pub contacts: Option<Vec<CustomerProfileContactInput>>,
@@ -640,7 +639,20 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(request.customer_no, "C-2026-001");
+        assert_eq!(request.owner_user_id.as_deref(), Some("admin-1"));
         assert!(request.status.is_none(), "status 缺省由 Service 按启用处理");
+    }
+
+    #[test]
+    fn create_customer_request_accepts_missing_owner() {
+        let request: super::CreateCustomerRequest = serde_json::from_value(json!({
+            "party_id": "party-1",
+            "customer_no": "C-2026-002",
+            "valid_from": "2026-01-01",
+            "change_reason": "首次建档",
+        }))
+        .unwrap();
+        assert!(request.owner_user_id.is_none());
     }
 
     #[test]

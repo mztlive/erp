@@ -67,19 +67,19 @@ impl CustomerService {
 
     /// 创建客户（跨集合事务：customer_account + 首条 OWNER 归属 + 审计原子写入）。
     ///
-    /// 前置校验：主体必须存在（D07 仓储读）、负责销售账号必须存在（D06 仓储读）、
+    /// 前置校验：主体必须存在（D07 仓储读）、创建人账号必须存在且启用（D06 仓储读）、
     /// 该主体不得已有客户角色（§6.2：一个 party 最多一个有效客户角色，唯一
-    /// 索引兜底）。同一事务建立首条 `OWNER` 归属（W03：新建客户必带负责销售）。
+    /// 索引兜底）。同一事务建立首条 `OWNER` 归属，负责销售固定为创建人。
     ///
     /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// * `req` - 创建请求；`owner_user_id` 即使提交也会被忽略
+    /// * `actor` - 已通过鉴权的审计操作人；其账号 ID 写入首条 OWNER 归属
     ///
     /// # 返回
     /// 返回新建客户角色的响应视图。
     ///
     /// # 错误
-    /// * `NotFound` - 主体或负责销售账号不存在
+    /// * `NotFound` - 主体或创建人账号不存在
     /// * `ConflictError` - 客户编号重复或该主体已有客户角色（唯一索引透出）
     /// * `ValidationError` - 请求体校验失败
     pub async fn create_customer(
@@ -89,7 +89,8 @@ impl CustomerService {
     ) -> Result<CustomerView> {
         req.validate()?;
         self.ensure_party_exists(&req.party_id).await?;
-        self.ensure_user_exists(&req.owner_user_id).await?;
+        let owner_user_id = actor.id().to_string();
+        self.ensure_user_exists(&owner_user_id).await?;
 
         let account = CustomerAccount::new(
             CustomerAccountId::new(next_id()),
@@ -105,7 +106,7 @@ impl CustomerService {
             CustomerAssignmentId::new(next_id()),
             CustomerAssignmentData {
                 customer_id: CustomerAccountId::new(account.base.id.clone()),
-                user_id: req.owner_user_id,
+                user_id: owner_user_id,
                 assignment_role: AssignmentRole::Owner,
                 valid_from: req.valid_from,
                 valid_to: req.valid_to,
