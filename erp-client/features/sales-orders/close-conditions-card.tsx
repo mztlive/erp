@@ -4,16 +4,9 @@ import * as React from "react"
 
 import { CheckIcon, CircleDashedIcon, LockIcon, XIcon } from "lucide-react"
 
-import { MoneyValue } from "@/components/business"
+import { DocumentSection, MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
 type CloseConditionsCardProps = {
@@ -28,30 +21,26 @@ export function CloseConditionsCard({ order }: CloseConditionsCardProps) {
     const isCard = nature === "card_voucher"
 
     return (
-        <Card size="sm">
-            <CardHeader className="border-b">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle>何时结案</CardTitle>
-                    <Badge
-                        variant={
-                            close.eligibleToClose ? "success" : "secondary"
-                        }
-                    >
-                        {order.primaryStatus.label === "已关闭"
-                            ? "已结案"
-                            : close.eligibleToClose
-                              ? "可以结案 · 系统自动处理"
-                              : "还差条件"}
-                    </Badge>
-                </div>
-                <CardDescription>
-                    {isCard
-                        ? "卡券：到了履约期限就算交付完成。"
-                        : "实物/服务：客户验收完成才算交付完成。"}{" "}
-                    发票开没开完都不影响结案；这里不能手动点「关闭」。
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+        <DocumentSection
+            title="何时结案"
+            description={
+                isCard
+                    ? "卡券：到了履约期限就算交付完成。发票开没开完都不影响结案；这里不能手动点「关闭」。"
+                    : "实物/服务：客户验收完成才算交付完成。发票开没开完都不影响结案；这里不能手动点「关闭」。"
+            }
+            action={
+                <Badge
+                    variant={close.eligibleToClose ? "success" : "secondary"}
+                >
+                    {order.primaryStatus.label === "已关闭"
+                        ? "已结案"
+                        : close.eligibleToClose
+                          ? "可以结案 · 系统自动处理"
+                          : "还差条件"}
+                </Badge>
+            }
+        >
+            <div className="space-y-3">
                 <ul className="space-y-2 text-sm" role="list">
                     <ConditionRow
                         ok={close.fulfillmentComplete}
@@ -103,8 +92,8 @@ export function CloseConditionsCard({ order }: CloseConditionsCardProps) {
                         还差：{close.blockers.join("；")}
                     </p>
                 ) : null}
-            </CardContent>
-        </Card>
+            </div>
+        </DocumentSection>
     )
 }
 

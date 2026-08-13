@@ -252,6 +252,7 @@ export type BackendContractDetail = {
     revisions: Array<{
         id: string
         revision_no: number
+        contract_pdf_file_id?: string | null
         customer_name: string
         settlement_party_name: string
         payment_term_code: string

@@ -230,11 +230,11 @@ export function SalesOrderDetailPage({
         return (
             <PageScaffold>
                 <PageHeader title="销售单" description="正在加载详情…" />
-                <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-24 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                </div>
+                <div
+                    className={cn(surfacePanelClassName, "h-72 animate-pulse")}
+                    aria-busy="true"
+                    aria-label="加载中"
+                />
             </PageScaffold>
         )
     }
@@ -457,252 +457,274 @@ export function SalesOrderDetailPage({
                 }
             />
 
-            <DocumentHeader
-                density="compact"
-                title={order.customerName}
-                documentNumber={order.documentNumber}
-                version={order.version}
-                primaryStatus={order.primaryStatus}
-                meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <Badge variant="secondary" className="font-normal">
-                            {NATURE_LABEL[order.nature]}
-                        </Badge>
-                        <span aria-hidden="true">·</span>
-                        <span>
-                            负责人{" "}
-                            <span className="font-medium text-foreground">
-                                {order.ownerName}
+            <div
+                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            >
+                <DocumentHeader
+                    density="compact"
+                    className="rounded-none border-0 border-b border-border/30 shadow-none"
+                    title={order.customerName}
+                    documentNumber={order.documentNumber}
+                    version={order.version}
+                    primaryStatus={order.primaryStatus}
+                    meta={
+                        <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                            <Badge variant="secondary" className="font-normal">
+                                {NATURE_LABEL[order.nature]}
+                            </Badge>
+                            <span aria-hidden="true">·</span>
+                            <span>
+                                负责人{" "}
+                                <span className="font-medium text-foreground">
+                                    {order.ownerName}
+                                </span>
                             </span>
+                            {isCard ? (
+                                <>
+                                    <span aria-hidden="true">·</span>
+                                    <span>到期算交付完成</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span aria-hidden="true">·</span>
+                                    <span>客户验收后算交付完成</span>
+                                </>
+                            )}
                         </span>
-                        {isCard ? (
-                            <>
-                                <span aria-hidden="true">·</span>
-                                <span>到期算交付完成</span>
-                            </>
-                        ) : (
-                            <>
-                                <span aria-hidden="true">·</span>
-                                <span>客户验收后算交付完成</span>
-                            </>
-                        )}
-                    </span>
-                }
-                statuses={[
-                    {
-                        id: "fulfillment",
-                        label: "交付",
-                        status: order.fulfillment,
-                    },
-                    {
-                        id: "collection",
-                        label: "回款",
-                        status: order.collection,
-                    },
-                    { id: "invoicing", label: "开票", status: order.invoicing },
-                ]}
-                secondaryActions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={
-                                <Link
-                                    href={`/finance/customer-accounts?view=receivable&salesOrderId=${encodeURIComponent(order.id)}&q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${selfReturn}`}
-                                />
-                            }
-                        >
-                            <WalletIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            记一笔回款
-                        </Button>
-                        {!isCard ? (
+                    }
+                    statuses={[
+                        {
+                            id: "fulfillment",
+                            label: "交付",
+                            status: order.fulfillment,
+                        },
+                        {
+                            id: "collection",
+                            label: "回款",
+                            status: order.collection,
+                        },
+                        {
+                            id: "invoicing",
+                            label: "开票",
+                            status: order.invoicing,
+                        },
+                    ]}
+                    secondaryActions={
+                        <div className="flex flex-wrap items-center gap-2">
                             <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
                                 render={
                                     <Link
-                                        href={`/fulfillment?scope=mine&salesOrderId=${order.id}&from=W05&returnTo=${selfReturn}`}
+                                        href={`/finance/customer-accounts?view=receivable&salesOrderId=${encodeURIComponent(order.id)}&q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${selfReturn}`}
                                     />
                                 }
                             >
-                                <PackageIcon
+                                <WalletIcon
                                     data-icon="inline-start"
                                     aria-hidden="true"
                                 />
-                                去发货/交付
+                                记一笔回款
                             </Button>
-                        ) : null}
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={
-                                !canStartChange || changeMutation.isPending
-                            }
-                            title={
-                                !canStartChange
-                                    ? (changeBlocker?.reason ?? "当前不能改单")
-                                    : undefined
-                            }
-                            onClick={() => setChangeConfirmOpen(true)}
-                        >
-                            <FilePenLineIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            发起改单
-                        </Button>
-                    </div>
-                }
-                primaryAction={primaryTaskAction}
-            />
-
-            {/* 改单进行中是独立轨道，不并入"当前要办"（不是新增/驳回类待办） */}
-            {focusTask && focusTask.id === "versions" ? (
-                <Alert variant="warning">
-                    <ShieldAlertIcon aria-hidden="true" />
-                    <AlertTitle>{focusTask.title}</AlertTitle>
-                    <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <span>{focusTask.description}</span>
-                        {activeSection !== focusTask.id ? (
+                            {!isCard ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    render={
+                                        <Link
+                                            href={`/fulfillment?scope=mine&salesOrderId=${order.id}&from=W05&returnTo=${selfReturn}`}
+                                        />
+                                    }
+                                >
+                                    <PackageIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    去发货/交付
+                                </Button>
+                            ) : null}
                             <Button
                                 type="button"
                                 size="sm"
-                                className="shrink-0 self-start"
-                                onClick={() => selectSection(focusTask.id)}
+                                variant="outline"
+                                disabled={
+                                    !canStartChange || changeMutation.isPending
+                                }
+                                title={
+                                    !canStartChange
+                                        ? (changeBlocker?.reason ??
+                                          "当前不能改单")
+                                        : undefined
+                                }
+                                onClick={() => setChangeConfirmOpen(true)}
                             >
-                                {focusTask.actionLabel}
+                                <FilePenLineIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                发起改单
                             </Button>
-                        ) : null}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {/* 当前要办：阶段+责任人+时限+说明+主动作；非责任人只读展示 */}
-            {isPendingReviewStage(order.primaryStatus.code) ? (
-                <ResponsibilityPanel
-                    title="当前要办"
-                    tracks={[currentTaskTrack]}
+                        </div>
+                    }
+                    primaryAction={primaryTaskAction}
                 />
-            ) : null}
 
-            {order.commercialReadOnly ? (
-                <Collapsible className={`${surfaceInsetClassName} px-3 py-2`}>
-                    <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left text-sm text-muted-foreground hover:text-foreground">
-                        <span>金额和明细不能直接改</span>
-                        <ChevronDownIcon
-                            aria-hidden="true"
-                            className="size-4 shrink-0 transition-transform group-aria-expanded:rotate-180"
-                        />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="pt-2 text-sm text-muted-foreground">
-                        <p>
-                            {order.commercialReadOnlyReason ??
-                                "已生效的销售单不能在这里直接改价或改明细；需要改请点「发起改单」。"}
-                        </p>
-                        <p className="mt-1 text-xs">
-                            {ORIGIN_LABEL[order.originSystem]}
-                            {" · "}
-                            订单类型建单后不能改
-                        </p>
-                        {!canStartChange && changeBlocker ? (
-                            <p className="mt-1 text-xs">
-                                暂时不能改单：{changeBlocker.reason}
+                {/* 改单进行中是独立轨道，不并入"当前要办"（不是新增/驳回类待办） */}
+                {focusTask && focusTask.id === "versions" ? (
+                    <Alert variant="warning" className="mx-3 md:mx-4">
+                        <ShieldAlertIcon aria-hidden="true" />
+                        <AlertTitle>{focusTask.title}</AlertTitle>
+                        <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{focusTask.description}</span>
+                            {activeSection !== focusTask.id ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    className="shrink-0 self-start"
+                                    onClick={() => selectSection(focusTask.id)}
+                                >
+                                    {focusTask.actionLabel}
+                                </Button>
+                            ) : null}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+
+                {/* 当前要办：阶段+责任人+时限+说明+主动作；非责任人只读展示 */}
+                {isPendingReviewStage(order.primaryStatus.code) ? (
+                    <ResponsibilityPanel
+                        title="当前要办"
+                        className="rounded-none border-x-0 border-b-0 shadow-none"
+                        tracks={[currentTaskTrack]}
+                    />
+                ) : null}
+
+                {order.commercialReadOnly ? (
+                    <Collapsible
+                        className={`${surfaceInsetClassName} mx-3 px-3 py-2 md:mx-4`}
+                    >
+                        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left text-sm text-muted-foreground hover:text-foreground">
+                            <span>金额和明细不能直接改</span>
+                            <ChevronDownIcon
+                                aria-hidden="true"
+                                className="size-4 shrink-0 transition-transform group-aria-expanded:rotate-180"
+                            />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-2 text-sm text-muted-foreground">
+                            <p>
+                                {order.commercialReadOnlyReason ??
+                                    "已生效的销售单不能在这里直接改价或改明细；需要改请点「发起改单」。"}
                             </p>
-                        ) : null}
-                    </CollapsibleContent>
-                </Collapsible>
-            ) : !canStartChange && changeBlocker ? (
-                <p className="text-xs text-muted-foreground">
-                    暂时不能改单：{changeBlocker.reason}
-                </p>
-            ) : null}
+                            <p className="mt-1 text-xs">
+                                {ORIGIN_LABEL[order.originSystem]}
+                                {" · "}
+                                订单类型建单后不能改
+                            </p>
+                            {!canStartChange && changeBlocker ? (
+                                <p className="mt-1 text-xs">
+                                    暂时不能改单：{changeBlocker.reason}
+                                </p>
+                            ) : null}
+                        </CollapsibleContent>
+                    </Collapsible>
+                ) : !canStartChange && changeBlocker ? (
+                    <p className="px-3 text-xs text-muted-foreground md:px-4">
+                        暂时不能改单：{changeBlocker.reason}
+                    </p>
+                ) : null}
 
-            <MetricStrip
-                columns={4}
-                density="compact"
-                aria-label="销售单金额摘要"
-            >
-                <MetricItem
+                <MetricStrip
+                    columns={4}
                     density="compact"
-                    label="成交金额（含税）"
-                    value={
-                        <MoneyValue
-                            value={order.amountGross}
-                            taxBasis="gross"
-                        />
-                    }
-                    detail={NATURE_LABEL[order.nature]}
-                    detailMode="tooltip"
-                />
-                <MetricItem
-                    density="compact"
-                    label="已回款"
-                    value={
-                        <MoneyValue
-                            value={order.receivedAmount}
-                            taxBasis="gross"
-                        />
-                    }
-                    detail={order.collection.label}
-                    detailMode="inline"
-                />
-                <MetricItem
-                    density="compact"
-                    label="待回款"
-                    value={
-                        <MoneyValue value={receivableLeft} taxBasis="gross" />
-                    }
-                    detail={
-                        order.closeEligibility.receivableSettled
-                            ? "已收齐"
-                            : undefined
-                    }
-                    detailMode="inline"
-                />
-                <MetricItem
-                    density="compact"
-                    label="已开票"
-                    value={
-                        <MoneyValue
-                            value={order.invoicedAmount}
-                            taxBasis="gross"
-                        />
-                    }
-                    detail="开票不挡结案"
-                    detailMode="tooltip"
-                />
-            </MetricStrip>
+                    className="px-3 pb-3 md:px-4"
+                    aria-label="销售单金额摘要"
+                >
+                    <MetricItem
+                        density="compact"
+                        className="border-0 bg-muted/40"
+                        label="成交金额（含税）"
+                        value={
+                            <MoneyValue
+                                value={order.amountGross}
+                                taxBasis="gross"
+                            />
+                        }
+                        detail={NATURE_LABEL[order.nature]}
+                        detailMode="tooltip"
+                    />
+                    <MetricItem
+                        density="compact"
+                        className="border-0 bg-muted/40"
+                        label="已回款"
+                        value={
+                            <MoneyValue
+                                value={order.receivedAmount}
+                                taxBasis="gross"
+                            />
+                        }
+                        detail={order.collection.label}
+                        detailMode="inline"
+                    />
+                    <MetricItem
+                        density="compact"
+                        className="border-0 bg-muted/40"
+                        label="待回款"
+                        value={
+                            <MoneyValue
+                                value={receivableLeft}
+                                taxBasis="gross"
+                            />
+                        }
+                        detail={
+                            order.closeEligibility.receivableSettled
+                                ? "已收齐"
+                                : undefined
+                        }
+                        detailMode="inline"
+                    />
+                    <MetricItem
+                        density="compact"
+                        className="border-0 bg-muted/40"
+                        label="已开票"
+                        value={
+                            <MoneyValue
+                                value={order.invoicedAmount}
+                                taxBasis="gross"
+                            />
+                        }
+                        detail="开票不挡结案"
+                        detailMode="tooltip"
+                    />
+                </MetricStrip>
 
-            {result ? (
-                <FormalActionResult
-                    status={result.status}
-                    title={result.title}
-                    description={result.description}
-                    reference={result.reference}
-                    facts={[
-                        { label: "销售单", value: order.documentNumber },
-                        { label: "客户", value: order.customerName },
-                        ...(result.nextResponsible
-                            ? [
-                                  {
-                                      label: "下一步",
-                                      value: result.nextResponsible,
-                                  },
-                              ]
-                            : []),
-                    ]}
-                />
-            ) : null}
+                {result ? (
+                    <div className="px-3 pb-3 md:px-4">
+                        <FormalActionResult
+                            status={result.status}
+                            title={result.title}
+                            description={result.description}
+                            reference={result.reference}
+                            facts={[
+                                {
+                                    label: "销售单",
+                                    value: order.documentNumber,
+                                },
+                                { label: "客户", value: order.customerName },
+                                ...(result.nextResponsible
+                                    ? [
+                                          {
+                                              label: "下一步",
+                                              value: result.nextResponsible,
+                                          },
+                                      ]
+                                    : []),
+                            ]}
+                        />
+                    </div>
+                ) : null}
 
-            <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
-            >
                 <Tabs
                     value={activeSection}
                     onValueChange={(next) => {
@@ -712,7 +734,7 @@ export function SalesOrderDetailPage({
                 >
                     <TabsList
                         variant="line"
-                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
+                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-t border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
                     >
                         {visibleNav.map((item) => {
                             const Icon = item.icon
@@ -762,7 +784,7 @@ export function SalesOrderDetailPage({
 
                     <TabsContent
                         value="overview"
-                        className="space-y-4 px-3 pt-4 pb-4 md:px-4"
+                        className="px-3 pt-4 pb-4 md:px-4"
                     >
                         <DocumentSection
                             title="订单信息"
@@ -774,6 +796,7 @@ export function SalesOrderDetailPage({
                         >
                             <DocumentSummary
                                 columns="three"
+                                className="rounded-none border-0 bg-transparent p-0 shadow-none"
                                 items={[
                                     {
                                         id: "contract",
@@ -823,7 +846,7 @@ export function SalesOrderDetailPage({
                                     : `共 ${order.lineItems.length} 行`
                             }
                         >
-                            <div className="overflow-hidden rounded-lg ring-1 ring-foreground/[0.04]">
+                            <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
                                     <thead className="bg-muted/50 text-left">
                                         <tr>
@@ -999,7 +1022,7 @@ export function SalesOrderDetailPage({
 
                     <TabsContent
                         value="close"
-                        className="space-y-4 px-3 pt-4 pb-4 md:px-4"
+                        className="px-3 pt-4 pb-4 md:px-4"
                     >
                         <DocumentSection title="当前进度">
                             <StatusTrackSummary

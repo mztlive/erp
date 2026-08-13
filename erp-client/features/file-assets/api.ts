@@ -195,3 +195,24 @@ export async function fetchFileAssetPreviewBlob(
     }
     return response.blob()
 }
+
+/**
+ * 通过受控预览接口拉取文件并触发浏览器下载。
+ *
+ * @param assetId 文件资产 ID
+ * @param fileName 下载时使用的文件名
+ */
+export async function downloadFileAsset(
+    assetId: string,
+    fileName: string,
+): Promise<void> {
+    const blob = await fetchFileAssetPreviewBlob(assetId)
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = fileName
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+}

@@ -2,9 +2,8 @@
 
 import * as React from "react"
 import { z } from "zod"
-import { ShieldCheckIcon } from "lucide-react"
-
 import {
+    DocumentSection,
     FormalActionConfirmDialog,
     FormalActionResult,
 } from "@/components/business"
@@ -12,13 +11,6 @@ import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { CARD_APPROVAL_TYPE_LABEL } from "@/features/sales-orders/labels"
 import {
     useClaimCardSalesApprovalMutation,
@@ -117,24 +109,19 @@ export function CardSalesApprovalPanel({
     const isManager = approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
 
     return (
-        <Card size="sm" className="border-info/40">
-            <CardHeader className="border-b">
+        <DocumentSection
+            title="卡券销售审批"
+            description="请先领取再决定通过或驳回。审批未完成前，卡券单不会生效。"
+            action={
                 <div className="flex flex-wrap items-center gap-2">
-                    <ShieldCheckIcon
-                        className="size-4 text-info"
-                        aria-hidden="true"
-                    />
-                    <CardTitle>卡券销售审批</CardTitle>
                     <Badge variant="info">
                         {CARD_APPROVAL_TYPE_LABEL[approval.workItemType]}
                     </Badge>
                     <Badge variant="secondary">{statusLabel}</Badge>
                 </div>
-                <CardDescription>
-                    请先领取再决定通过或驳回。审批未完成前，卡券单不会生效。
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            }
+        >
+            <div className="space-y-4">
                 {result ? (
                     <FormalActionResult
                         status={result.status}
@@ -370,7 +357,7 @@ export function CardSalesApprovalPanel({
                         }
                     }}
                 />
-            </CardContent>
-        </Card>
+            </div>
+        </DocumentSection>
     )
 }

@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { z } from "zod"
-import { BanIcon, RefreshCwIcon, ShieldAlertIcon } from "lucide-react"
+import { BanIcon, RefreshCwIcon } from "lucide-react"
 
 import {
+    DocumentSection,
     DraftSaveIndicator,
     FormalActionConfirmDialog,
     FormalActionResult,
@@ -14,13 +15,6 @@ import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import {
     useAdjustProcurementRejectionDraftMutation,
@@ -158,27 +152,20 @@ export function ProcurementRejectionCard({
         : null
 
     return (
-        <Card size="sm" className="border-warning/40">
-            <CardHeader className="border-b">
-                <div className="flex flex-wrap items-center gap-2">
-                    <ShieldAlertIcon
-                        className="size-4 text-warning"
-                        aria-hidden="true"
-                    />
-                    <CardTitle>采购未通过，请销售处理</CardTitle>
-                    <Badge variant="warning">
-                        {rejection.reviewStatus === "VOIDED"
-                            ? "已作废"
-                            : rejection.reviewStatus === "RESOLVED"
-                              ? "已处理"
-                              : "待你处理"}
-                    </Badge>
-                </div>
-                <CardDescription>
-                    任选一种：改商品/改价后再报采购，或作废本单。
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        <DocumentSection
+            title="采购未通过，请销售处理"
+            description="任选一种：改商品/改价后再报采购，或作废本单。"
+            action={
+                <Badge variant="warning">
+                    {rejection.reviewStatus === "VOIDED"
+                        ? "已作废"
+                        : rejection.reviewStatus === "RESOLVED"
+                          ? "已处理"
+                          : "待你处理"}
+                </Badge>
+            }
+        >
+            <div className="space-y-4">
                 {result ? (
                     <FormalActionResult
                         status={result.status}
@@ -477,8 +464,8 @@ export function ProcurementRejectionCard({
                         }
                     }}
                 />
-            </CardContent>
-        </Card>
+            </div>
+        </DocumentSection>
     )
 }
 

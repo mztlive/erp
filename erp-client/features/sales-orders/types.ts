@@ -201,7 +201,11 @@ export type SalesOrderListItem = {
     id: string
     documentNumber: string
     customerName: string
+    /** 合同稳定身份；无合同时为空。 */
+    contractId: string
     contractNumber: string
+    /** 合同上的公司名称（修订快照中的客户法定名称）。 */
+    contractCompanyName: string
     /** 合同精确修订（快照），创建后随版本固定 */
     contractRevisionLabel: string
     nature: SalesOrderNature

@@ -8,6 +8,7 @@
 
 import { apiGet, apiPost, apiPut } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
+import { downloadFileAsset } from "@/features/file-assets/api"
 import {
     PAYMENT_TERM_OPTIONS,
     WELFARE_SCENARIO_OPTIONS,
@@ -140,7 +141,21 @@ export async function fetchSalesOrders(
         },
     )
 
-    const items = page.items.map((row) => mapListItemFromBackend(row))
+    const contractDisplays = await loadContractDisplays(
+        page.items
+            .map((row) => row.contract_id)
+            .filter((id): id is string => Boolean(id)),
+    )
+    const items = page.items.map((row) => {
+        const display = row.contract_id
+            ? contractDisplays.get(row.contract_id)
+            : undefined
+        return mapListItemFromBackend(row, {
+            contractNumber: display?.contractNumber,
+            contractCompanyName: display?.companyName,
+            customerName: display?.companyName || undefined,
+        })
+    })
 
     return {
         items,
@@ -149,6 +164,82 @@ export async function fetchSalesOrders(
         pageSize: page.page_size,
         queriedAt: formatIsoNow(),
     }
+}
+
+type ContractDisplay = {
+    contractNumber: string
+    companyName: string
+}
+
+/**
+ * 按合同 ID 批量补齐编号与公司名称；当前页去重后分批拉取，单份失败不拖垮整表。
+ */
+async function loadContractDisplays(
+    contractIds: string[],
+): Promise<Map<string, ContractDisplay>> {
+    const unique = [
+        ...new Set(contractIds.map((id) => id.trim()).filter(Boolean)),
+    ]
+    const displays = new Map<string, ContractDisplay>()
+    const chunkSize = 8
+    for (let index = 0; index < unique.length; index += chunkSize) {
+        const chunk = unique.slice(index, index + chunkSize)
+        const loaded = await Promise.all(
+            chunk.map(async (contractId) => {
+                try {
+                    const contract = await apiGet<BackendContractDetail>(
+                        `/admin/contracts/${contractId}`,
+                    )
+                    const revision =
+                        contract.revisions.find(
+                            (item) => item.id === contract.current_revision_id,
+                        ) ?? contract.revisions[0]
+                    return [
+                        contractId,
+                        {
+                            contractNumber: contract.contract_no,
+                            companyName: revision?.customer_name ?? "",
+                        },
+                    ] as const
+                } catch {
+                    return [
+                        contractId,
+                        { contractNumber: "", companyName: "" },
+                    ] as const
+                }
+            }),
+        )
+        for (const [contractId, display] of loaded) {
+            displays.set(contractId, display)
+        }
+    }
+    return displays
+}
+
+/**
+ * 下载销售单关联合同的当前修订 PDF。
+ *
+ * @param contractId 合同稳定身份
+ */
+export async function downloadSalesOrderContractPdf(
+    contractId: string,
+): Promise<void> {
+    const id = contractId.trim()
+    if (!id) {
+        throwValidation("该销售单没有关联合同")
+    }
+    const contract = await apiGet<BackendContractDetail>(
+        `/admin/contracts/${id}`,
+    )
+    const revision =
+        contract.revisions.find(
+            (item) => item.id === contract.current_revision_id,
+        ) ?? contract.revisions[0]
+    const fileId = revision?.contract_pdf_file_id?.trim()
+    if (!fileId) {
+        throwValidation("合同尚未归档 PDF，无法下载")
+    }
+    await downloadFileAsset(fileId, `${contract.contract_no}.pdf`)
 }
 
 /**

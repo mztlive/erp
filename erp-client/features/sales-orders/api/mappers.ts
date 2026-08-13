@@ -236,6 +236,7 @@ export function mapListItemFromBackend(
     extras?: {
         customerName?: string
         contractNumber?: string
+        contractCompanyName?: string
         amountGross?: string
         amountNet?: string
         taxAmount?: string
@@ -289,7 +290,10 @@ export function mapListItemFromBackend(
         id: row.id,
         documentNumber: row.order_no,
         customerName: extras?.customerName ?? row.customer_id,
-        contractNumber: extras?.contractNumber ?? row.contract_id ?? "",
+        contractId: row.contract_id ?? "",
+        contractNumber: extras?.contractNumber ?? "",
+        contractCompanyName:
+            extras?.contractCompanyName ?? extras?.customerName ?? "",
         contractRevisionLabel: extras?.contractNumber
             ? `${extras.contractNumber}`
             : "",
@@ -480,6 +484,8 @@ export function mapDetailToListItem(
                 detail.customer_id,
             contractNumber:
                 extras?.contractNumber || commercial.contractNo || "",
+            contractCompanyName:
+                extras?.customerName || commercial.customerName || "",
             amountGross: commercial.amountGross,
             amountNet: commercial.amountNet,
             taxAmount: commercial.taxAmount,

@@ -7,6 +7,7 @@ import {
     ChevronDownIcon,
     DownloadIcon,
     FilterIcon,
+    Loader2Icon,
     PlusIcon,
     SearchIcon,
 } from "lucide-react"
@@ -34,6 +35,7 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import {
     InputGroup,
     InputGroupAddon,
@@ -66,9 +68,11 @@ import {
     SALES_ORDER_REVIEW_STATUS_OPTIONS,
 } from "@/features/sales-orders/filter-orders"
 import {
+    downloadSalesOrderContractPdf,
     fetchSalesOrders,
     type SalesOrdersListQuery,
 } from "@/features/sales-orders/api"
+import { getErrorMessage } from "@/lib/api/errors"
 import {
     useCreateSalesOrderExportJobMutation,
     useSalesOrdersQuery,
@@ -236,11 +240,35 @@ export function SalesOrdersListPage() {
         fileName: string
     } | null>(null)
     const [focusedIndex, setFocusedIndex] = React.useState(0)
+    const [downloadingContractId, setDownloadingContractId] = React.useState<
+        string | null
+    >(null)
     const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
 
     const openPaperPreview = React.useCallback((id: string) => {
         setPaperId(id)
     }, [])
+
+    const downloadContract = React.useCallback(
+        async (order: SalesOrderListItem) => {
+            const contractId = order.contractId.trim()
+            if (!contractId || downloadingContractId) return
+            setDownloadingContractId(contractId)
+            try {
+                await downloadSalesOrderContractPdf(contractId)
+            } catch (error) {
+                toast.add({
+                    title: "合同下载失败",
+                    description: getErrorMessage(error, "请稍后重试"),
+                    type: "error",
+                    timeout: 4000,
+                })
+            } finally {
+                setDownloadingContractId(null)
+            }
+        },
+        [downloadingContractId],
+    )
 
     const hasStructuredFilters = Boolean(
         url.customerId ||
@@ -560,7 +588,7 @@ export function SalesOrdersListPage() {
                                 : undefined
                         }
                     >
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1 space-y-1">
                             <div className="flex items-center gap-2">
                                 <Button
                                     type="button"
@@ -602,12 +630,58 @@ export function SalesOrdersListPage() {
                 id: "contract",
                 accessorKey: "contractNumber",
                 header: "合同",
-                meta: { label: "合同", width: "default" },
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {row.original.contractNumber}
-                    </span>
-                ),
+                meta: { label: "合同", width: "reference" },
+                cell: ({ row }) => {
+                    const order = row.original
+                    const contractNo = order.contractNumber.trim()
+                    const companyName = order.contractCompanyName.trim()
+                    if (!order.contractId && !contractNo) {
+                        return (
+                            <span className="text-sm text-muted-foreground">
+                                —
+                            </span>
+                        )
+                    }
+                    const downloading =
+                        downloadingContractId === order.contractId
+                    return (
+                        <div className="min-w-0 space-y-1">
+                            {order.contractId ? (
+                                <Button
+                                    type="button"
+                                    variant="link"
+                                    size="xs"
+                                    className="num px-0"
+                                    disabled={downloading}
+                                    aria-label={`下载合同 ${contractNo || order.contractId}`}
+                                    onClick={() => {
+                                        void downloadContract(order)
+                                    }}
+                                >
+                                    {downloading ? (
+                                        <>
+                                            <Loader2Icon
+                                                data-icon="inline-start"
+                                                className="animate-spin"
+                                                aria-hidden="true"
+                                            />
+                                            下载中
+                                        </>
+                                    ) : (
+                                        contractNo || "下载合同"
+                                    )}
+                                </Button>
+                            ) : (
+                                <span className="num text-sm">
+                                    {contractNo || "—"}
+                                </span>
+                            )}
+                            <div className="truncate text-xs text-muted-foreground">
+                                {companyName || "—"}
+                            </div>
+                        </div>
+                    )
+                },
             },
             {
                 id: "tracks",
@@ -726,7 +800,13 @@ export function SalesOrdersListPage() {
                 ),
             },
         ],
-        [focusedIndex, items, openPaperPreview],
+        [
+            downloadingContractId,
+            downloadContract,
+            focusedIndex,
+            items,
+            openPaperPreview,
+        ],
     )
 
     return (
@@ -1303,7 +1383,8 @@ export function SalesOrdersListPage() {
                             onPaginationChange={handlePaginationChange}
                             loading={ordersQuery.isPending}
                             layout="flush"
-                            density="compact"
+                            density="comfortable"
+                            className="[&_[data-slot=table-cell]]:h-auto [&_[data-slot=table-cell]]:min-h-(--table-row-height) [&_[data-slot=table-cell]]:py-2.5 [&_[data-slot=table-head]]:h-auto [&_[data-slot=table-head]]:min-h-(--table-row-height) [&_[data-slot=table-head]]:py-2.5"
                             defaultColumnPinning={{
                                 left: ["document"],
                                 right: ["actions"],

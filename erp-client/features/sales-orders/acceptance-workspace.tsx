@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
-import { HistoryIcon, PackageIcon, RotateCcwIcon } from "lucide-react"
+import { RotateCcwIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -13,6 +13,7 @@ import {
     BusinessStatusBadge,
     DataFreshness,
     DiscardConfirmDialog,
+    DocumentSection,
     FormalActionConfirmDialog,
     FormalActionResult,
     MetricItem,
@@ -23,13 +24,6 @@ import {
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -661,14 +655,8 @@ export function AcceptanceWorkspace({
                 aria-busy="true"
                 aria-label="正在加载客户验收工作区"
             >
-                <Card
-                    size="sm"
-                    className="min-h-64 animate-pulse bg-muted/40"
-                />
-                <Card
-                    size="sm"
-                    className="min-h-64 animate-pulse bg-muted/40"
-                />
+                <div className="min-h-64 animate-pulse rounded-md bg-muted/40" />
+                <div className="min-h-64 animate-pulse rounded-md bg-muted/40" />
             </div>
         )
     }
@@ -789,21 +777,25 @@ export function AcceptanceWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <MetricStrip columns={4} aria-label="待验收摘要">
                     <MetricItem
+                        className="border-0 bg-muted/40"
                         label="待验收批次"
                         value={String(view.metrics.eligibleFulfillmentCount)}
                         detail="还可验收的交付记录"
                     />
                     <MetricItem
+                        className="border-0 bg-muted/40"
                         label="待验收数量"
                         value={eligibleLabel}
                         detail="按单位分别统计"
                     />
                     <MetricItem
+                        className="border-0 bg-muted/40"
                         label="交付进度"
                         value={view.salesOrder.fulfillmentProgress}
                         detail="本单交付情况"
                     />
                     <MetricItem
+                        className="border-0 bg-muted/40"
                         label={freshnessText.dataUpdatedAt}
                         value={
                             <DataFreshness
@@ -878,24 +870,13 @@ export function AcceptanceWorkspace({
                 <>
                     {/* 1440：约 62/38；1024 以下单列 */}
                     <div className="grid min-w-0 gap-4 lg:grid-cols-1 xl:grid-cols-[minmax(0,62fr)_minmax(20rem,38fr)]">
-                        <Card
-                            size="sm"
-                            className="min-w-0"
+                        <DocumentSection
                             id="acceptance-fact-pool"
+                            className="min-w-0 py-0"
+                            title="可验收的交付记录"
+                            description="可选一条或多条交付批次验收；同一批次也可以分多次验收。"
                         >
-                            <CardHeader className="border-b">
-                                <CardTitle className="flex items-center gap-2">
-                                    <PackageIcon
-                                        className="size-4"
-                                        aria-hidden="true"
-                                    />
-                                    可验收的交付记录
-                                </CardTitle>
-                                <CardDescription>
-                                    可选一条或多条交付批次验收；同一批次也可以分多次验收。
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="max-h-[min(32rem,70vh)] space-y-4 overflow-y-auto pt-4">
+                            <div className="max-h-[min(32rem,70vh)] space-y-4 overflow-y-auto">
                                 {view.salesLines.length === 0 ? (
                                     <p className="text-sm text-muted-foreground">
                                         筛选条件下无履约记录。可切换「全部历史记录」或去作业队列查看。
@@ -1091,22 +1072,24 @@ export function AcceptanceWorkspace({
                                         </section>
                                     ))
                                 )}
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </DocumentSection>
 
                         <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-                            <Card size="sm">
-                                <CardHeader className="border-b">
-                                    <CardTitle>本次验收</CardTitle>
-                                    <CardDescription>
+                            <DocumentSection
+                                className="py-0"
+                                title="本次验收"
+                                description={
+                                    <>
                                         销售单 {view.salesOrder.salesOrderNo} ·{" "}
                                         {view.salesOrder.customerLabel}
                                         <span className="ms-2 text-2xs uppercase tracking-wide opacity-70">
                                             当前销售数据
                                         </span>
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4 pt-4">
+                                    </>
+                                }
+                            >
+                                <div className="space-y-4">
                                     <form
                                         id="acceptance-form"
                                         className="space-y-4"
@@ -1396,23 +1379,15 @@ export function AcceptanceWorkspace({
                                                 : null}
                                         </p>
                                     ) : null}
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </DocumentSection>
 
-                            <Card size="sm">
-                                <CardHeader className="border-b">
-                                    <CardTitle className="flex items-center gap-2 text-base">
-                                        <HistoryIcon
-                                            className="size-4"
-                                            aria-hidden="true"
-                                        />
-                                        验收历史
-                                    </CardTitle>
-                                    <CardDescription>
-                                        已确认不可编辑；误录通过新的反向记录分配纠正。
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-3 pt-4">
+                            <DocumentSection
+                                className="py-0"
+                                title="验收历史"
+                                description="已确认不可编辑；误录通过新的反向记录分配纠正。"
+                            >
+                                <div className="space-y-3">
                                     {view.history.length === 0 ? (
                                         <p className="text-sm text-muted-foreground">
                                             暂无历史记录。
@@ -1512,13 +1487,13 @@ export function AcceptanceWorkspace({
                                             ))}
                                         </ul>
                                     )}
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </DocumentSection>
                         </div>
                     </div>
 
                     {/* 底栏：校验与主动作（桌面同屏） */}
-                    <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur supports-backdrop-filter:bg-card/80">
+                    <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-border/30 bg-card/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-card/80">
                         <p className="text-sm text-muted-foreground">
                             {view.salesOrder.salesOrderNo} · 已选{" "}
                             {selected.size} 个来源 · 结果{" "}

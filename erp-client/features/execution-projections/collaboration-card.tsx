@@ -8,17 +8,11 @@ import {
     DocumentSection,
     MoneyValue,
     StatusTrackSummary,
+    surfaceInsetClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { useSalesOrderCollaborationQuery } from "@/features/execution-projections/queries"
 import { useSalesOrderConsumptionSummaryQuery } from "@/features/mall-consumption-orders/queries"
 import {
@@ -187,10 +181,10 @@ export function SalesOrderCollaborationCard({
             ) : null}
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <Card size="sm">
-                    <CardHeader className="border-b">
-                        <CardTitle className="text-sm">当前推送</CardTitle>
-                        <CardDescription>
+                <section className={`${surfaceInsetClassName} space-y-2 p-3`}>
+                    <div>
+                        <h3 className="text-sm font-medium">当前推送</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
                             {data.projectionNo}
                             {data.projectionRevisionNo != null
                                 ? ` · 推送 v${data.projectionRevisionNo}`
@@ -198,9 +192,9 @@ export function SalesOrderCollaborationCard({
                             {data.salesOrderRevisionNo != null
                                 ? ` · 对应销售 v${data.salesOrderRevisionNo}`
                                 : ""}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
+                        </p>
+                    </div>
+                    <div className="space-y-2 text-sm">
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="text-muted-foreground">
                                 目标商城
@@ -250,168 +244,161 @@ export function SalesOrderCollaborationCard({
                             共 {data.historyCount}{" "}
                             次推送记录；历史会写明对应哪一版销售单。
                         </p>
-                    </CardContent>
-                </Card>
+                    </div>
+                </section>
 
-                <Card size="sm">
-                    <CardHeader className="border-b">
-                        <CardTitle className="text-sm">
-                            推给商城的内容
-                        </CardTitle>
-                        <CardDescription>
+                <section className={`${surfaceInsetClassName} space-y-2 p-3`}>
+                    <div>
+                        <h3 className="text-sm font-medium">推给商城的内容</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
                             只含卡券基础信息，不含金额、税率、开票和玩法。
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {preview ? (
-                            <dl className="grid grid-cols-2 gap-2 text-sm">
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        卡券类目
-                                    </dt>
-                                    <dd>{preview.voucherCategoryErpName}</dd>
-                                </div>
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        面额
-                                    </dt>
-                                    <dd className="num">{preview.faceValue}</dd>
-                                </div>
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        数量
-                                    </dt>
-                                    <dd className="num">{preview.cardCount}</dd>
-                                </div>
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        卡形态
-                                    </dt>
-                                    <dd>{preview.cardForm}</dd>
-                                </div>
-                                <div className="col-span-2">
-                                    <dt className="text-xs text-muted-foreground">
-                                        履约期限
-                                    </dt>
-                                    <dd className="num">
-                                        {preview.voucherExpiryAt}
-                                    </dd>
-                                </div>
-                            </dl>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                暂无摘要
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
+                        </p>
+                    </div>
+                    {preview ? (
+                        <dl className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                                <dt className="text-xs text-muted-foreground">
+                                    卡券类目
+                                </dt>
+                                <dd>{preview.voucherCategoryErpName}</dd>
+                            </div>
+                            <div>
+                                <dt className="text-xs text-muted-foreground">
+                                    面额
+                                </dt>
+                                <dd className="num">{preview.faceValue}</dd>
+                            </div>
+                            <div>
+                                <dt className="text-xs text-muted-foreground">
+                                    数量
+                                </dt>
+                                <dd className="num">{preview.cardCount}</dd>
+                            </div>
+                            <div>
+                                <dt className="text-xs text-muted-foreground">
+                                    卡形态
+                                </dt>
+                                <dd>{preview.cardForm}</dd>
+                            </div>
+                            <div className="col-span-2">
+                                <dt className="text-xs text-muted-foreground">
+                                    履约期限
+                                </dt>
+                                <dd className="num">
+                                    {preview.voucherExpiryAt}
+                                </dd>
+                            </div>
+                        </dl>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            暂无摘要
+                        </p>
+                    )}
+                </section>
 
-                <Card size="sm" className="sm:col-span-2">
-                    <CardHeader className="border-b">
-                        <CardTitle className="text-sm">
-                            商城侧消费情况
-                        </CardTitle>
-                        <CardDescription>
+                <section
+                    className={`${surfaceInsetClassName} space-y-3 p-3 sm:col-span-2`}
+                >
+                    <div>
+                        <h3 className="text-sm font-medium">商城侧消费情况</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
                             仅供查阅；持卡人消费多少都不决定本单是否结案。
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        {consumptionQuery.isPending ? (
-                            <div className="h-12 animate-pulse rounded-lg bg-muted" />
-                        ) : consumptionQuery.isError ? (
-                            <Alert
-                                variant="destructive"
-                                role="alert"
-                                className="py-2"
-                            >
-                                <AlertTitle className="text-sm">
-                                    消费情况加载失败
-                                </AlertTitle>
-                                <AlertDescription className="text-xs">
-                                    {getErrorMessage(
-                                        consumptionQuery.error,
-                                        "无法读取商城消费订单汇总，请刷新后重试。",
-                                    )}
-                                </AlertDescription>
-                            </Alert>
-                        ) : (
-                            <dl className="grid gap-3 text-sm sm:grid-cols-4">
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        消费订单
-                                    </dt>
-                                    <dd className="num font-medium">
-                                        {consumptionQuery.data?.orderCount ?? 0}{" "}
-                                        单
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        支付成功
-                                    </dt>
-                                    <dd>
-                                        <MoneyValue
-                                            value={
-                                                consumptionQuery.data
-                                                    ?.paidAmount ?? "0.00"
-                                            }
-                                        />
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        商城退款
-                                    </dt>
-                                    <dd>
-                                        <MoneyValue
-                                            value={
-                                                consumptionQuery.data
-                                                    ?.refundedAmount ?? "0.00"
-                                            }
-                                        />
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        余额恢复
-                                    </dt>
-                                    <dd>
-                                        <MoneyValue
-                                            value={
-                                                consumptionQuery.data
-                                                    ?.restoredBalanceAmount ??
-                                                "0.00"
-                                            }
-                                        />
-                                    </dd>
-                                </div>
-                            </dl>
-                        )}
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs text-muted-foreground">
-                                最近记录{" "}
-                                {consumptionQuery.data?.latestFactAt ?? "暂无"}
-                                ；本单结案仍看交付与回款是否完成。
-                            </p>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                render={
-                                    <Link
-                                        href={`/commerce/consumption-orders?from=W05&salesOrderId=${encodeURIComponent(salesOrderId)}&q=${encodeURIComponent(salesOrderNo)}`}
+                        </p>
+                    </div>
+                    {consumptionQuery.isPending ? (
+                        <div className="h-12 animate-pulse rounded-lg bg-muted" />
+                    ) : consumptionQuery.isError ? (
+                        <Alert
+                            variant="destructive"
+                            role="alert"
+                            className="py-2"
+                        >
+                            <AlertTitle className="text-sm">
+                                消费情况加载失败
+                            </AlertTitle>
+                            <AlertDescription className="text-xs">
+                                {getErrorMessage(
+                                    consumptionQuery.error,
+                                    "无法读取商城消费订单汇总，请刷新后重试。",
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <dl className="grid gap-3 text-sm sm:grid-cols-4">
+                            <div>
+                                <dt className="text-xs text-muted-foreground">
+                                    消费订单
+                                </dt>
+                                <dd className="num font-medium">
+                                    {consumptionQuery.data?.orderCount ?? 0} 单
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-xs text-muted-foreground">
+                                    支付成功
+                                </dt>
+                                <dd>
+                                    <MoneyValue
+                                        value={
+                                            consumptionQuery.data?.paidAmount ??
+                                            "0.00"
+                                        }
                                     />
-                                }
-                            >
-                                <ExternalLinkIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-xs text-muted-foreground">
+                                    商城退款
+                                </dt>
+                                <dd>
+                                    <MoneyValue
+                                        value={
+                                            consumptionQuery.data
+                                                ?.refundedAmount ?? "0.00"
+                                        }
+                                    />
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-xs text-muted-foreground">
+                                    余额恢复
+                                </dt>
+                                <dd>
+                                    <MoneyValue
+                                        value={
+                                            consumptionQuery.data
+                                                ?.restoredBalanceAmount ??
+                                            "0.00"
+                                        }
+                                    />
+                                </dd>
+                            </div>
+                        </dl>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                            最近记录{" "}
+                            {consumptionQuery.data?.latestFactAt ?? "暂无"}
+                            ；本单结案仍看交付与回款是否完成。
+                        </p>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            render={
+                                <Link
+                                    href={`/commerce/consumption-orders?from=W05&salesOrderId=${encodeURIComponent(salesOrderId)}&q=${encodeURIComponent(salesOrderNo)}`}
                                 />
-                                查看商城消费订单
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                            }
+                        >
+                            <ExternalLinkIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            查看商城消费订单
+                        </Button>
+                    </div>
+                </section>
             </div>
         </DocumentSection>
     )
