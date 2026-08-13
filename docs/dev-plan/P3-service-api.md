@@ -36,7 +36,9 @@ Handler 与 Service 合并在同一阶段，因为 Handler 按 `AGENTS.md` 只�
 > **跨域写入调用对方域的 Repository，禁止 Service 依赖 Service。**
 
 例如「销售单采购确认通过」（数据模型 §8.1.1）需要在一个事务内同时写销售版本、
-销售状态、应收原始分录、待办和审计。实现方式：
+销售状态、应收原始分录、当前待办结果和审计。领域动作只写本次业务事实；
+任务责任和审批推进统一由 D03 的运行时编排，不允许业务 Service 自行选择下一步骤。
+普通跨域事务仍按下列方式直接使用 Repository：
 
 ```rust
 // services/src/sales_review/mod.rs
@@ -46,8 +48,7 @@ db.client().with_transaction(|session| Box::pin(async move {
     tx_db.sales_orders().update(&order, session).await?;
     // 跨域：直接用 D18 的 Repository，不经过 D18 的 Service
     tx_db.receivable_entries().create(&entry, session).await?;
-    // 跨域：D03 待办、D02 审计
-    tx_db.work_items().create(&work_item, session).await?;
+    // 跨域：D02 审计；D03 待办由运行时在同一外层事务完成，不在这里自行路由
     tx_db.audit_events().create(&audit, session).await?;
     Ok::<(), database::Error>(())
 })).await?;
@@ -60,6 +61,25 @@ db.client().with_transaction(|session| Box::pin(async move {
 - 跨域**读取**同样走对方 Repository。
 - 若两个域互相需要对方的编排（真正的双向依赖），说明域边界划错了，
   在 PR 中提出并调整 `domains.md`，不要用 service→service 绕过。
+
+### 2.1 审批运行时的唯一编排端口
+
+D03 必须提供 `ApprovalRuntimePort`，只暴露 `start_approval`、`submit_decision`、
+`cancel_approval` 和管理员专用 `recover_approval`。业务 Handler 依赖该端口，不依赖 `InternalApprovalRuntime` 或未来
+`BpmApprovalRuntime` 的具体实现。
+
+该端口是应用层流程编排边界，不是允许任意 Service 互调的例外。`INTERNAL` 实现必须：
+
+1. 打开唯一外层事务并锁定审批实例、活动步骤、开放待办和业务对象；
+2. 调用编译期注册的强类型领域动作；领域动作只通过所属域及依赖域 Repository 写业务事实；
+3. 在同一事务写步骤决定、完成当前待办、激活下一步骤及创建下一待办，或结束实例；
+4. 不接受脚本、动态 URL、客户端传入的下一步骤或客户端选择的完成动作。
+
+`recover_approval` 只能重试原 `BLOCKED` 步骤。它必须使用实例、步骤和可选任务的期望版本，
+在阻塞原因已消除时创建或校正原步骤唯一待办并恢复 `ACTIVE/RUNNING`；不得接受决定、下一步骤或指定处理人。
+
+非审批独立任务同样必须使用注册的强类型命令完成。不得为复用页面而恢复公共
+`complete_work_item`。完整规则以 `docs/approval-workflow-contract.md` 为准。
 
 违反本节会把 12 个并行单元退化成一条串行链，评审时按"打回"处理。
 
@@ -172,4 +192,6 @@ conventions §7.3 模板（集成测试一栏写「延期至 P6 / I-Gx」）+ �
   可并行开发，但不单独上线。
 - 外部 HTTP 调用统一设置超时、重试上限与错误分类；失败降级为可观测错误并
   记录 `account`/`request_id` 上下文（`AGENTS.md` 外部依赖容错）。
-- 禁止实现 outbox、消息中间件或投递状态机；集成表是普通表组（数据模型 §5.4）。
+- 当前两期商城与供应商接口禁止顺带实现通用 outbox、消息中间件或投递状态机；
+  集成表仍是普通表组（数据模型 §5.4）。未来 `BPM` 运行时必须先完成
+  `approval-workflow-contract.md` 要求的基础设施修订，不得复用现有 `inbox_message`。

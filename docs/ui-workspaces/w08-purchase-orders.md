@@ -63,7 +63,7 @@
 ### 2.3 编辑权、审核处理权与岗位分离
 
 - 采购草稿编辑使用采购对象专属的 `draftEditToken`、草稿责任人与 `lock_version`；TaskTabs 打开也不等于取得编辑权。
-- 财务审核从 `PURCHASE_ORDER_REVIEW` 正式任务进入，使用 `work_item` 原子领取和完成协议。
+- 财务审核从 `PURCHASE_ORDER_REVIEW` 任务进入；`DIRECT` 任务直接处理，`POOL` 任务按 W02 原子“开始处理”，审核结论使用采购审核强类型命令。
 - 编辑权与审核处理权不能复用；采购提交形成不可变 `purchase_order_submission` 后，采购编辑结束，财务任务引用该提交。
 - 服务端在审核事务内重验审核人不是该采购提交经办人，并执行配置化岗位分离规则。
 - 草稿编辑权不进入 URL、日志、长期缓存或埋点；其用途和服务端校验域严格隔离。
@@ -164,7 +164,7 @@ detail 必须能读完当前版本主事实；不得只展示三五个摘要字�
 - 采购提交头、行、销售分配全部只读。
 - 左/上区域显示供应商、采购类型、含税/不含税金额、税额和与 W07 确认差异。
 - 右/下区域显示付款条件、先款门禁、费用行、应付影响和校验摘要。
-- 审核人只有“通过”“驳回”“暂挂/下一项”和“打开中心”能力，没有字段编辑器。
+- 审核人只有“通过”“驳回”“退回团队/下一项”和“打开中心”能力，没有字段编辑器。
 - 成功先展示固定结果，再由 W02 队列进入下一项；结果不确定时停留当前对象。
 
 ## 5. 展示内容与字段
@@ -267,12 +267,12 @@ detail 必须能读完当前版本主事实；不得只展示三五个摘要字�
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
 | 新建采购单 | 页头 / W07 结果 / W05 | `CREATE_PURCHASE_ORDER`；存在有效采购创建依据及已通过且未被有效采购覆盖的确认分行；不要求采购建单 `work_item` | 创建前确认服务端拆单建议 | 幂等消费创建依据，创建稳定采购对象与草稿并进入同一对象页签 | 部分不可用分行留在建议中说明，不静默丢弃 |
-| 分派采购草稿责任 | 列表 / 对象头 | 采购负责人；草稿或被驳回待修改；目标经办人在责任域内 | 展示当前/目标经办人和未完成草稿影响 | 对象级更新草稿责任人与审计；不创建、领取、完成或转交 `work_item` | 失败保持原责任人，刷新对象版本后按同一幂等键恢复 |
+| 分派采购草稿责任 | 列表 / 对象头 | 采购负责人；草稿或被驳回待修改；目标经办人在责任域内 | 展示当前/目标经办人和未完成草稿影响 | 对象级更新草稿责任人与审计；不创建、开始处理、完成或转交 `work_item` | 失败保持原责任人，刷新对象版本后按同一幂等键恢复 |
 | 保存草稿 | 编辑区自动保存 / `⌘S` | 编辑权有效、`lockVersion` 匹配 | 无 | 返回新版本、规范化金额和校验摘要 | 输入保留；冲突时显示差异 |
 | 提交财务审核 | 编辑区主动作 | 草稿完整；分行来源、数量分配、资质、金额、付款条件通过校验 | 展示供应商、含税/不含税/税额、费用和付款门禁 | 形成不可变采购提交和审核待办；首次提交成功时分配不可复用正式 `purchaseNo`；中心转等待态 | 失败保留草稿；不确定时查询提交结果 |
-| 财务通过 | W02 审核上下文中的 W08 视图 | `APPROVE_REVIEW`；当前领取人为本人、岗位分离、提交版本有效 | 展示应付形成金额、付款条件与履约门禁 | 原子形成采购版本、应付和审核动作；固定结果后下一项 | 不确定时停留当前项，不本地生效 |
+| 财务通过 | W02 审核上下文中的 W08 视图 | `APPROVE_REVIEW`；当前责任人为本人、岗位分离、提交版本有效 | 展示应付形成金额、付款条件与履约门禁 | 原子形成采购版本、应付、审核动作及任务完成；固定结果后下一项 | 不确定时停留当前项，不本地生效 |
 | 财务驳回 | 审核视图 | `REJECT_REVIEW`；必须选择结构化 `reasonCode` 且说明完整；`reasonCode` 至少区分成本/税率、费用、付款条件、供应商资料、分配错误与其它 | 确认退回采购修改 | 形成该次审核正式 `REJECTED` 结论并完成当前任务，采购回可编辑状态；修改后重新提交时才创建新审核任务 | 失败保留原因；不确定时查询 |
-| 暂挂财务审核 | 审核视图 / 连续处理条 | `DEFER` 可用；当前领取人为本人；当前决定表单无未保存内容 | 原因按服务端规则填写 | 使用 W02 非终结动作记录原因，任务回到待领取状态，并在同一 `queueContextId` 打开下一项 | 失败或结果未知时停留当前项，保留队列位置并查询最终结果 |
+| 退回团队 | 审核视图 / 连续处理条 | `RELEASE_TO_TEAM` 可用；当前责任人为本人；当前决定表单无未保存内容 | 原因按服务端规则填写 | 清空原开放任务个人责任并记录原因，任务仍为 `OPEN`，在同一 `queueContextId` 打开下一项 | 失败或结果未知时停留当前项，保留队列位置并查询原结果 |
 | 作废草稿 | 对象中心“更多” | 草稿、无下游正式事实且 `VOID` 可用 | 强确认并说明影响 | 状态转已作废并留审计 | 失败保持草稿，不从列表本地删除 |
 | 打印预览 | detail / 对象头 | 有打印字段权限 | 无 | 宽层 `PaperDocument` 展示服务端正式投影 | 失败提示重试，不用旧版本冒充当前 |
 | 去登记付款/发票 | 应付与票款子区 / `PrepaymentGate` | W12 权限且采购已生效 | 无 | 打开 W12 供应商会话，预选当前应付 | 返回 W08 时刷新付款/票据进度 |
@@ -393,6 +393,14 @@ type PurchaseOrderCenterView = {
   fulfillmentSummary: FulfillmentSummaryView
   changes: RelatedChangeView[]
   workflow: WorkflowActionView[]
+  reviewWorkItem?: {
+    workItemId: string
+    taskVersion: string
+    workItemType: "PURCHASE_ORDER_REVIEW"
+    subjectVersion: string
+    assignmentMode: "DIRECT" | "POOL"
+    ownerUser?: ActorView
+  }
   allowedActions: string[]
   actionBlockers: Array<{ action: string; code: string; message: string }>
   fieldVisibility: Record<string, "full" | "masked" | "hidden">
@@ -442,7 +450,7 @@ type SubmitPurchaseOrderForReviewCommand = {
 }
 ```
 
-`AssignPurchaseOrderDraftOwnerCommand` 是对象级草稿责任分派：只更新草稿责任人与审计，校验对象版本、负责人范围和幂等键；不创建、领取、完成或转交 `work_item`。`SavePurchaseOrderDraftCommand` 只保存采购对象草稿；`draftEditToken` 只证明采购草稿编辑权，不形成第二套任务处理协议。保存返回新 `lockVersion`、规范化头行、服务端金额和校验摘要；草稿阶段禁止返回正式 `purchaseNo`。提交同样是采购对象命令：它冻结提交并创建审核任务，但不完成当前 `work_item`；成功返回稳定 `submissionId`、`submissionNo` 与审核任务身份；首次提交成功时必须一并返回不可复用正式 `purchaseNo`。新建和保存时服务端按 §7.1 固定拆单键重验，禁止跨销售提交/版本拼单。
+`AssignPurchaseOrderDraftOwnerCommand` 是对象级草稿责任分派：只更新草稿责任人与审计，校验对象版本、负责人范围和幂等键；不创建、开始处理、完成或转交 `work_item`。`SavePurchaseOrderDraftCommand` 只保存采购对象草稿；`draftEditToken` 只证明采购草稿编辑权，不形成第二套任务责任协议。保存返回新 `lockVersion`、规范化头行、服务端金额和校验摘要；草稿阶段禁止返回正式 `purchaseNo`。提交同样是采购对象命令：它冻结提交并创建审核任务，但不完成当前 `work_item`；成功返回稳定 `submissionId`、`submissionNo` 与审核任务身份；首次提交成功时必须一并返回不可复用正式 `purchaseNo`。新建和保存时服务端按 §7.1 固定拆单键重验，禁止跨销售提交/版本拼单。
 
 ### 8.4 财务审核
 
@@ -464,37 +472,24 @@ type PurchaseOrderReviewDecision = PurchaseOrderReviewDecisionBase &
       }
   )
 
-type ReviewPurchaseOrderCommand =
-  WorkItemActionCommand<PurchaseOrderReviewDecision>
-
-type DeferPurchaseOrderReviewAction = {
-  type: "DEFER"
-  purchaseOrderId: string
-  submissionId: string
-  queueContextId: string
-  reasonCode?: string
-  comment?: string
+type ReviewPurchaseOrderCommand = {
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  decision: PurchaseOrderReviewDecision
+  idempotencyKey: string
 }
-
-type DeferPurchaseOrderReviewCommand =
-  WorkItemActionCommand<DeferPurchaseOrderReviewAction>
-
-type DeferPurchaseOrderReviewResult =
-  WorkItemActionResult<{
-    queueContextId: string
-    nextWorkItemId?: string
-  }>
 ```
 
-`ReviewPurchaseOrderCommand` 直接复用 W02 `WorkItemActionCommand`，携带 `workItemId`、`expectedSubjectVersion` 和 `decision`。W08 要求 `expectedSubjectVersion` 对应不可变采购提交版本；`expectedPurchaseOrderLockVersion` 保护采购聚合当前状态，正式审核结论只放在 `decision.reviewResult`，不得另传一套顶层审核动作或任务字段。
+`ReviewPurchaseOrderCommand` 是 `PURCHASE_ORDER_REVIEW` 注册的唯一强类型审核命令。W08 要求 `expectedTaskVersion` 对应当前任务版本，`expectedSubjectVersion` 对应不可变采购提交版本；`expectedPurchaseOrderLockVersion` 保护采购聚合当前状态，审核结论只放在 `decision.reviewResult`，不得另传一套顶层审核动作或任务字段。
 
-`DeferPurchaseOrderReviewCommand` 直接复用 W02 非终结动作，只追加结构化暂挂证据，不写采购审核结论、不改变采购对象或完成/转交任务。成功结果的任务回到待领取（`UNCLAIMED`）状态，下一项只采用 `DeferPurchaseOrderReviewResult` 返回的 `nextWorkItemId`。
+退回团队直接使用 W02 `WorkItemResponsibilityCommand` 的 `RELEASE_TO_TEAM` 分支，不定义 W08 私有命令。该动作只追加结构化原因，不写采购审核结论、不改变采购对象或完成任务。成功结果清空原任务个人责任并保持 `OPEN`，下一项只采用服务端结果返回的 `nextWorkItemId`。
 
-服务端在当前事务重验权限、岗位分离、当前领取人、提交版本、采购对象版本、采购确认来源、金额与销售分配。通过时原子形成采购正式版本和应付、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`；驳回时必须写入结构化 `reasonCode`（至少覆盖成本/税率、费用、付款条件、供应商资料、分配错误、其它），原子记录该次审核正式 `REJECTED` 事实、恢复采购可编辑状态、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`。采购修改并重新提交时才创建新的审核任务。任一业务写入、工作流动作或任务完成失败均整体回滚，前端不得补发独立“标记完成”。成功响应同时返回正式业务结果与任务完成结果。
+服务端在当前事务重验权限、岗位分离、当前责任人、提交版本、采购对象版本、采购确认来源、金额与销售分配。通过时原子形成采购正式版本和应付、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`；驳回时必须写入结构化 `reasonCode`（至少覆盖成本/税率、费用、付款条件、供应商资料、分配错误、其它），原子记录该次审核正式 `REJECTED` 事实、恢复采购可编辑状态、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`。采购修改并重新提交时才创建新的审核任务。任一业务写入、工作流动作或任务完成失败均整体回滚，前端不得补发独立“标记完成”。成功响应同时返回正式业务结果与任务完成结果。
 
 ### 8.5 幂等与结果不确定
 
-- 新建采购对象、提交审核、作废和采购变更创建分别使用独立幂等键，不能跨动作复用；财务决定与暂挂审核由服务端唯一约束兜底。
+- 新建采购对象、提交审核、作废和采购变更创建分别使用独立幂等键，不能跨动作复用；财务决定与退回团队由服务端唯一约束兜底。
 - 同一动作同一幂等键重复请求返回同一业务对象和结果。
 - 超时后按幂等键查询，不依据旧列表状态猜测成功。
 - 结果未知时固定保留当前提交/草稿与任务上下文，提供查询最终结果；不得自动进入 W09 或 W12。
@@ -523,11 +518,11 @@ type DeferPurchaseOrderReviewResult =
 | 编辑权丢失 | 本地输入只读保留 | 复制输入 | 重取草稿与版本 |
 | 提交结果不确定 | 不切等待审核态 | 查询最终结果 | 确认提交或明确失败 |
 | 待财务审核 | 中心显示不可变提交和处理人状态 | 查看、打开审核任务（有权） | 审核动作完成 |
-| 任务已被他人领取 | 审核只读，显示领取人 | 查看、去下一项 | 转交/暂挂或任务完成后重查 |
+| 任务已由他人负责 | 审核只读，显示当前处理人 | 查看、去下一项 | 有权转交、退回团队或任务完成后重查 |
 | 审核版本冲突 | 决策禁用，显示旧提交已失效 | 打开当前提交、下一项 | 新任务形成 |
 | 财务通过成功 | 固定结果显示版本、应付、付款门禁与下一步 | 去 W09/W12、下一审核项 | 用户继续 |
 | 财务驳回成功 | 固定结果显示原因和采购修改责任人 | 下一项、查看中心 | 采购重新提交 |
-| 暂挂审核成功 | 显示动作记录，任务回到待领取，可返回当前审核或继续同一队列上下文 | 返回当前审核或继续同一队列上下文 | 不产生审核结论；不得渲染完成态 |
+| 退回团队成功 | 显示责任调整记录，任务回到“团队待处理”，可继续同一队列上下文 | 返回团队任务或继续下一项 | 不产生审核结论；不得渲染完成态 |
 | 正式动作结果不确定 | 停留当前对象/任务，不宣告结果 | 查询最终结果 | 确定结果 |
 | 后台导出 | `BackgroundJobProgress` 显示筛选快照、进度和逐项结果 | 查看任务、取消未开始项 | 完成后下载或按原任务重试 |
 | 先款门禁阻塞 | `PrepaymentGate` 展示有效已付与缺口 | 去 W12；履约动作禁用 | 有效付款核销后重查 |
@@ -587,8 +582,8 @@ type DeferPurchaseOrderReviewResult =
 - [ ] 首次商品/服务行逐行引用已通过 W07 确认分行；物流费用行来源与计税边界正确。
 - [x] W07/W05 建单入口只消费采购创建依据，不要求未注册的采购建单 `work_item`；其缺失不得阻断 W07 销售通过。
 - [x] 含税、不含税、税额按服务端舍入结果展示，销售/仓储无权时不泄露成本。
-- [ ] 财务审核引用不可变提交，审批人没有编辑器且满足岗位分离；正式决策完整使用 W02 统一动作命令。
-- [ ] 暂挂财务审核完整使用 W02 非终结动作；任务回到待领取，同一 `queueContextId` 的下一项仅按服务端结果更新，不形成审核事实。
+- [ ] 财务审核引用不可变提交，审批人没有编辑器且满足岗位分离；正式决策只使用注册的 `ReviewPurchaseOrderCommand`。
+- [ ] 退回团队使用 W02 `RELEASE_TO_TEAM`；原任务保持 `OPEN` 且个人责任清空，同一 `queueContextId` 的下一项仅按服务端结果更新，不形成审核事实。
 - [ ] 审核通过或驳回在同一事务写正式业务结论、`workflow_action` 和当前 `work_item` 完成结果；驳回不创建替代任务，采购修改后重新提交时才创建新审核任务；实际付款独立。
 - [x] 生效后变化只走采购变更，不覆盖已发生付款、发票或履约事实。
 

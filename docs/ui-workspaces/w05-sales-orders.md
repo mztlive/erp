@@ -14,7 +14,7 @@
 - 经办人在对象中心一屏判断当前商业版本、创建来源、履约、回款和开票三轨进度，以及下一责任方。
 - 协同角色从待办、客户、合同、采购、履约、票款或分析下钻后，直接落到同一张销售单的对应子区。
 - 创建者在一个 M5 会话内选择已有有效合同（无合同时可旁加号复用上传 Dialog 原地归档并刷新列表），再完成销售内容、金额、证据和提交，不依靠多个孤立页面拼单。
-- 销售领导与运营可在销售单对象中心嵌入处理固定的卡券销售审批任务；即使不返回 W02，也沿用同一任务、领取和完成动作契约。
+- 销售领导与运营可在销售单对象中心嵌入处理固定的卡券销售审批任务；即使不返回 W02，也沿用同一审批实例、步骤、待办责任和强类型决定合同。
 - 采购二次确认驳回后，销售在对象中心只看到三条固定出路：改品/改价后重提、照原条件申请低毛利承接、确认不做并作废。
 
 ### 1.2 业务目标
@@ -39,8 +39,8 @@
 | 角色 | 默认入口 | 可见范围 | 主要动作 |
 | --- | --- | --- | --- |
 | 销售经办 | W01 / W05 | 本人负责、协作或历史参与的客户销售单 | 新建、编辑草稿、提交；采购驳回后从三条固定出路中处理；发起销售变更单、登记验收 |
-| 销售经理 | W02 / W05 | 授权团队销售单，以及分配给本人或有权领取的 `CARD_SALES_MANAGER_APPROVAL`、`LOW_MARGIN_MANAGER_CONFIRMATION` | 查看、在共享任务处理器中通过/驳回低毛利或卡券审批、风险协同、查看销售变更影响 |
-| 运营 | W02 / W05 | 授权卡券单、分配给本人或有权领取的 `CARD_SALES_OPERATION_APPROVAL` 及商城协同对象 | 在共享任务处理器中通过/驳回、查看发布/投影、处理业务映射 |
+| 销售经理 | W02 / W05 | 授权团队销售单，以及直接指派给本人或本人有资格开始处理的 `CARD_SALES_MANAGER_APPROVAL`、`LOW_MARGIN_MANAGER_CONFIRMATION` | 查看、在共享任务处理器中通过/驳回低毛利或卡券审批、风险协同、查看销售变更影响 |
+| 运营 | W02 / W05 | 授权卡券单、本人负责或团队待处理的 `CARD_SALES_OPERATION_APPROVAL` 及商城协同对象 | 开始处理运营任务、通过/驳回、查看发布/投影、处理业务映射 |
 | 财务 | W05 / W11 / W13 | 授权公司的票款及税务相关销售单 | 查看商业快照、进入客户往来或票款复核 |
 | 采购 | W07 / W08 链入 | 需要确认或采购的非卡券销售单 | 只读商业依据、处理二次确认、创建采购单 |
 | 仓储 | W09 链入 | 与授权仓库作业相关的销售内容 | 只读履约上下文，不编辑销售商业字段 |
@@ -126,7 +126,7 @@ W05 列表**不使用** `QuickPreviewSheet` 半屏 detail，也**不提供**「�
 ├──────────────────────────────────────────────────────────────────────┤
 │ 左：当前正式商业快照、明细、金额、证据                                │
 │ 右：下一步、阻断原因、履约/回款/开票摘要、责任人                      │
-│ 审批任务存在时：只读冻结提交 + 任务身份/领取人 + [通过] [驳回]           │
+│ 审批任务存在时：只读冻结提交 + 当前审批步骤/处理人 + [通过] [驳回]     │
 │ 采购驳回时：原提交/版本 + 原因 + [改品改价重提][低毛利承接][作废]      │
 │ 下：关联采购/作业/验收/票款/投影 + 版本 diff + 审计时间线              │
 └──────────────────────────────────────────────────────────────────────┘
@@ -182,7 +182,7 @@ W05 列表**不使用** `QuickPreviewSheet` 半屏 detail，也**不提供**「�
 | 对象头/进度 | 判断“这是什么、到哪了、谁负责” | `DocumentHeader` `ProgressRail` | 履约、回款、开票分轨显示 |
 | 商业内容 | 当前正式版本与版本快照 | `DocumentSummary` `LineItemsTable` | 历史版本不可覆盖 |
 | 关联作业 | 串采购、履约、验收和票款 | `RelatedDocumentList` | 只展示摘要，正式动作进入对应 W |
-| 卡券销售审批 | 在对象上下文内高效处理领导/运营任务 | W02 `handlerKey` 对应的 `ApprovalDecisionPanel` | 只读冻结提交；必须显示任务类型、领取人、前置与正式结果；不能退化为对象状态按钮 |
+| 卡券销售审批 | 在对象上下文内高效处理领导/运营任务 | W02 `handlerKey` 对应的 `ApprovalDecisionPanel` | 只读冻结提交；必须显示审批实例、当前步骤、处理人、前置与正式结果；不能退化为对象状态按钮 |
 | 采购驳回处理 | 给销售固定且穷尽的三条出路，并承载低毛利上级任务 | `ProcurementRejectionResolutionCard` + W02 `LOW_MARGIN_MANAGER_CONFIRMATION` 处理器 | 原驳回提交只读；每次重提生成新提交/新版本；旧 W07 任务只作历史引用 |
 | 协同 | 商城同步与执行投影 | `SyncStatus` `ProjectionStatus` | 不提供第二销售单编辑入口 |
 | 编辑区 | 新建草稿或销售变更工作副本 | TanStack Form + `StickyTotalBar` | 正式版本不可直接编辑；服务端算金额与资格 |
@@ -222,7 +222,7 @@ W05 列表**不使用** `QuickPreviewSheet` 半屏 detail，也**不提供**「�
 
 | 分区 | 展示字段 | 数据来源 | 关键解释 |
 | --- | --- | --- | --- |
-| 生效链 | 当前节点、责任人、提交版本、决定与原因 | W07 二次确认或固定 `CARD_SALES_MANAGER_APPROVAL` / `CARD_SALES_OPERATION_APPROVAL` + `sales_order_review` / `workflow_action` | 待办负责领取与路由；审批事实及销售生效事务决定正式状态 |
+| 生效链 | 当前节点、责任人、提交版本、决定与原因 | W07 二次确认，或 `CARD_SALES_APPROVAL` 审批实例/步骤 + `sales_order_review` / `workflow_action` | 审批实例负责步骤路由，待办只表达当前责任；领域决定及销售生效事务决定正式状态 |
 | 履约 | 采购、作业、验收/到期、异常与完成时间 | W08/W09/W06 正式事实；卡券用履约期限 | 非卡券验收完成；卡券不因消费完提前完成 |
 | 票款 | 应收、已核销回款、开放余额、开票进度 | W11 正式事实 | 应收结清是关闭条件；开票未完成不阻塞关闭 |
 | 来源 | 创建入口（MALL/ERP），恒不变 | `sales_order.origin_system` 事实 | T 起商城停止建单、全部 B2B 销售单由 ERP 服务；正式商业变更一律走销售变更单 |
@@ -271,17 +271,17 @@ W05 列表**不使用** `QuickPreviewSheet` 半屏 detail，也**不提供**「�
 | 提交非卡券确认 | M5 | ERP 开单、非卡券、全量校验通过 | 展示客户、合同、金额、履约摘要 | 冻结提交版本并形成 W07 任务 | 不乐观生效；查询原结果 |
 | 改品/改价后重提 | 采购驳回处理卡 | 当前为采购驳回后的销售处理态；无有效后继任务；草稿相对被驳回提交至少有商品/服务或销售价格变化；客户已重新确认 | 展示旧/新结构化 diff、原驳回原因和“将创建全新采购确认任务” | `ResolveProcurementRejectionCommand` 原子冻结新提交并创建唯一新 `PROCUREMENT_CONFIRMATION`；旧提交、确认和任务不变 | 冲突时刷新旧/新 diff；结果未知按原操作查询，不重复生成提交或任务 |
 | 申请照原条件低毛利承接 | 采购驳回处理卡 | 当前为采购驳回后的销售处理态；无有效后继任务；服务端确认商业条件与被驳回提交一致；承接理由完整 | 展示服务端返回的毛利风险等级/是否低于阈值、承接理由和“须由销售上级确认，尚不会回采购”；不展示原始采购成本或可反推成本的精确毛利值 | 原子冻结新提交并创建唯一 `LOW_MARGIN_MANAGER_CONFIRMATION`；不创建 `PROCUREMENT_CONFIRMATION` | 内容变化时引导改品/改价路径；结果未知查询原操作，不允许直接进入 W07 |
-| 领取低毛利上级确认 | W02 或驳回处理卡 | 固定任务 `LOW_MARGIN_MANAGER_CONFIRMATION`；当前用户在销售上级责任池 | 无 | W02 条件更新原子领取 | 他人领取时只读展示；重新领取并重查新提交/版本 |
-| 上级通过低毛利承接 | W02 或驳回处理卡 | 当前领取人为本人；新提交、订单版本与原驳回链一致 | 展示低毛利理由、受控风险结论及“通过后仍须采购再次确认”；采购成本继续保密 | 同事务写上级通过事实、完成低毛利任务并为该新提交创建唯一新 `PROCUREMENT_CONFIRMATION`；销售单不生效 | 结果未知不本地进入 W07；查询最终结果，禁止手工补建采购任务 |
-| 上级驳回低毛利承接 | W02 或驳回处理卡 | 当前领取人为本人；结构化驳回原因完整 | 展示将退回销售继续选择固定出路 | 同事务写驳回事实并完成低毛利任务；不创建采购确认任务，返回销售处理态 | 结果未知保留当前任务；确定结果后销售重新选择，不能复用已完成低毛利任务 |
+| 开始处理低毛利上级确认 | W02 或驳回处理卡 | 固定 `POOL` 任务 `LOW_MARGIN_MANAGER_CONFIRMATION`；当前用户在销售上级责任池 | 无 | W02 原子写入当前用户责任，任务保持 `OPEN` | 他人已处理时只读展示当前处理人并刷新任务 |
+| 上级通过低毛利承接 | W02 或驳回处理卡 | 当前责任人为本人；新提交、订单版本与原驳回链一致 | 展示低毛利理由、受控风险结论及“通过后仍须采购再次确认”；采购成本继续保密 | 同事务写上级通过事实、完成低毛利任务并为该新提交创建唯一新 `PROCUREMENT_CONFIRMATION`；销售单不生效 | 结果未知不本地进入 W07；查询原结果，禁止手工补建采购任务 |
+| 上级驳回低毛利承接 | W02 或驳回处理卡 | 当前责任人为本人；结构化驳回原因完整 | 展示将退回销售继续选择固定出路 | 同事务写驳回事实并完成低毛利任务；不创建采购确认任务，返回销售处理态 | 结果未知保留当前任务；确定结果后销售重新选择，不能复用已完成低毛利任务 |
 | 不做并作废 | 采购驳回处理卡 | 当前为采购驳回后的销售处理态；无有效低毛利/采购后继任务；销售单尚未生效 | 展示不可恢复作废影响和历史保留说明 | 原子追加作废审计并将销售单置为作废，不创建后继任务 | 版本冲突重查；结果未知按原操作恢复，不重复写作废事实 |
-| 提交卡券审批 | M5 | 二期能力启用、ERP 开单、卡券 | 展示版本与审批链 | 冻结版本，进入销售领导/运营审批 | 不生成第二销售单；失败保留草稿 |
-| 领取卡券销售审批 | W02 或 W05 审批子区 | 固定任务为 `CARD_SALES_MANAGER_APPROVAL` 或 `CARD_SALES_OPERATION_APPROVAL`；当前用户在责任池 | 无 | W02 条件更新原子领取并返回当前版本 | 被他人领取时保留对象只读；可回队列或重新领取 |
-| 销售领导通过 | W05 嵌入处理器 | `CARD_SALES_MANAGER_APPROVAL`；有效领取；销售单为 `PENDING_SALES_LEAD`；冻结提交版本一致 | 展示客户、合同、卡券内容、金额及“将进入运营审批” | 同事务追加领导 `sales_order_review` 和 `workflow_action`、完成当前任务、把销售单转为 `PENDING_OPERATIONS` 并创建唯一运营任务 | 冲突后刷新冻结提交；结果未知固定显示操作追踪，不本地进入运营节点 |
-| 运营通过 | W05 嵌入处理器 | `CARD_SALES_OPERATION_APPROVAL`；有效领取；领导审批已通过；销售单为 `PENDING_OPERATIONS`；冻结提交版本一致 | 展示商城执行条件及“通过后销售单立即生效” | 同事务追加运营 `sales_order_review` 和 `workflow_action`、完成任务、形成首个正式销售版本和应收、置为 `EFFECTIVE` 并写执行投影修订 | 结果未知不本地生效；查询最终结果，商城接收失败另进投影异常且不回退销售事实 |
+| 提交卡券审批 | M5 | 二期能力启用、ERP 开单、卡券 | 展示版本与审批链 | 冻结提交并启动 `CARD_SALES_APPROVAL` 实例；激活领导步骤，`DIRECT` 任务直接进入唯一销售领导“我的待办” | 无法解析唯一领导时实例 `BLOCKED`；失败保留草稿 |
+| 开始处理运营审批 | W02 或 W05 审批子区 | 当前活动步骤为 `OPERATIONS_APPROVAL`；开放 `POOL` 任务尚无个人责任人；当前用户符合运营责任范围 | 无 | W02 原子写入当前用户责任，任务保持 `OPEN` | 他人已处理时对象只读并显示当前处理人 |
+| 销售领导通过 | W05 嵌入处理器 | `CARD_SALES_APPROVAL` 当前步骤为 `SALES_MANAGER_APPROVAL`；当前责任人为解析出的领导；冻结提交版本一致 | 展示客户、合同、卡券内容、金额及“将进入运营审批” | `submit_decision` 同事务追加领导 `sales_order_review` 和 `workflow_action`、完成当前任务、激活运营步骤并创建唯一运营 `POOL` 任务 | 冲突后刷新冻结提交；结果未知查询原操作，不本地进入运营步骤 |
+| 运营通过 | W05 嵌入处理器 | 当前步骤为 `OPERATIONS_APPROVAL`；当前责任人为本人；领导步骤已通过；冻结提交版本一致 | 展示商城执行条件及“通过后销售单立即生效” | `submit_decision` 同事务追加运营 `sales_order_review` 和 `workflow_action`、完成任务、形成首个销售版本和应收、置为 `EFFECTIVE`、写执行投影修订并结束实例 | 结果未知不本地生效；查询原结果，商城接收失败另进投影异常且不回退销售事实 |
 | 驳回卡券销售审批 | W05 嵌入处理器 | 当前固定审批任务有效；`REJECT` 可见；结构化原因必填 | 展示冻结提交和“退回销售处理；修改后从领导审批重启” | 同事务追加对应阶段的驳回 `sales_order_review` 和 `workflow_action`、完成当前任务并使提交/销售单进入服务端返回的退回销售状态；不创建下阶段任务 | 结果未知停留当前任务；不得创建工作副本或重复驳回记录 |
 | 发起销售变更单 | 对象头 | 正式单由 ERP 服务；负责销售；同一基准版本无进行中变更 | 必须说明历史版本与既有履约/票款不被覆盖；非卡券影响预览的完整影响必须由服务端计算，首屏仅展示服务端返回的影响摘要 | 创建 `sales_change_order` 与工作副本；非卡券进入采购影响确认，卡券进入运营执行影响确认，之后均经财务复核；生效后只追加版本与差额事实，禁止回退已发生履约或票款 | 原正式版本继续有效；创建结果未知时查询原请求 |
-| 撤回二次确认或二期审批 | 对象中心 / 任务区 | 仅当对应 `work_item` 未领取且未产生正式决定，且服务端在 `allowedActions` 返回撤回能力 | 展示将关闭待办、恢复可编辑提交/草稿边界 | 服务端关闭未领取任务并恢复销售处理态；不得伪造本地撤回 | 任务已领取或已有正式决定时禁止撤回；结果未知时查询原操作，不重复关闭任务 |
+| 撤回二次确认或二期审批 | 对象中心 / 任务区 | 业务规则允许撤回、尚未形成不可逆决定，且服务端在 `allowedActions` 返回撤回能力 | 展示将取消审批实例、关闭当前待办并恢复可编辑边界 | 调用 `cancel_approval`；同事务取消实例和未执行步骤、关闭当前开放待办并恢复销售处理态 | 已有不可逆决定时禁止撤回；结果未知时查询原操作，不重复取消 |
 | 登记验收 | 履约子区 | 非卡券、W06 动作允许 | 按验收契约 | 追加验收事实并刷新履约 | 结果未知不本地完成 |
 | 登记回款/开票 | 票款子区 | 有 W11 权限和往来主体 | 在 W11 正式确认 | 形成票款事实并回 W05 重查 | W05 不缓存拟核销结果 |
 | 查看关闭条件 | 对象头 / 进度轨 | 对象可见 | 无 | 展示全部明细履约与应收结清两项证据；两项满足后由服务端自动进入已关闭，开票可继续 | 查询失败保留上次结论并标陈旧，不提供人工“关闭”按钮 |
@@ -290,7 +290,7 @@ W05 列表**不使用** `QuickPreviewSheet` 半屏 detail，也**不提供**「�
 | 下载原始合同 PDF | 列表合同号 | 合同可见且 PDF 安全检查 `done` | 无 | 下载归档原始 PDF（文件名取可下载附件；演示 blob） | 扫描中/隔离不可下；失败不伪造文件 |
 | 导出 | 列表 | `EXPORT`、有结果范围 | 大范围确认行数与口径 | 后台生成 7 天有效授权文件 | 任务失败可重试，不在浏览器拼全量 |
 
-普通对象正式动作携带稳定对象 ID、期望版本、操作 ID 和幂等键。采购驳回的三条出路必须使用下述强类型命令；低毛利上级决定与卡券销售审批一样，无论承载在 W02 还是 W05，都必须使用 W02 共享的统一动作命令，不能改用 `SalesOrderFormalCommand`、通用对象状态命令或单独“完成任务”请求。超时或断网后先查询原结果；结果未知期间不切换主状态、不跳下一步、不重复提交。
+普通对象正式动作携带稳定对象 ID、期望版本、操作 ID 和幂等键。采购驳回的三条出路必须使用下述强类型命令；低毛利上级决定固定使用 `CompleteLowMarginManagerConfirmationCommand`，卡券销售审批固定使用 `SubmitCardSalesApprovalDecisionCommand` 并调用 `submit_decision`。无论处理器承载在 W02 还是 W05，都不得改用 `SalesOrderFormalCommand`、通用对象状态命令或单独“完成任务”请求。超时或断网后先查询原结果；结果未知期间不切换主状态、不跳下一步、不重复提交。
 
 ## 8. 数据契约
 
@@ -350,14 +350,20 @@ type SalesOrderCenterView = {
   acceptance?: AcceptanceSummary
   receivable: ReceivableSummary
   activeCardSalesApproval?: {
+    approvalInstanceId: string
+    instanceVersion: string
+    approvalStepInstanceId: string
+    stepVersion: string
     workItemId: string
+    taskVersion: string
     workItemType: "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL"
-    completionAction: string
     subjectVersion: string
     workItemStatus: WorkItemStatus
-    claimedBy?: UserSummary
+    processingState: "READY" | "APPROVAL_BLOCKED"
+    assignmentMode: "DIRECT" | "POOL"
+    ownerUser?: UserSummary
     frozenSubmission: SalesOrderSubmissionView
-    allowedActions: Array<"CLAIM" | "APPROVE" | "REJECT">
+    allowedActions: Array<"START_PROCESSING" | "APPROVE" | "REJECT">
     actionBlockers: ActionBlocker[]
   }
   collaboration?: ExecutionProjectionSummary
@@ -403,12 +409,13 @@ type ProcurementRejectionResolutionView = {
   }
   activeLowMarginManagerTask?: {
     workItemId: string
+    taskVersion: string
     workItemType: "LOW_MARGIN_MANAGER_CONFIRMATION"
-    completionAction: "DECIDE_LOW_MARGIN_ACCEPTANCE"
     subjectVersion: string
     workItemStatus: WorkItemStatus
-    claimedBy?: UserSummary
-    allowedActions: Array<"CLAIM" | "APPROVE" | "REJECT">
+    assignmentMode: "POOL"
+    ownerUser?: UserSummary
+    allowedActions: Array<"START_PROCESSING" | "APPROVE" | "REJECT">
     actionBlockers: ActionBlocker[]
   }
   allowedActions: Array<
@@ -499,7 +506,7 @@ type ProcurementRejectionResolutionBusinessResult =
       workflowActionId: string
       salesOrderReviewStatus: "PENDING_PROCUREMENT_CONFIRMATION"
       newProcurementWorkItemId: string
-      newProcurementWorkItemStatus: "UNCLAIMED"
+      newProcurementWorkItemStatus: "OPEN"
     }
   | {
       outcome: "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
@@ -509,7 +516,7 @@ type ProcurementRejectionResolutionBusinessResult =
       workflowActionId: string
       salesOrderReviewStatus: "PENDING_LOW_MARGIN_MANAGER"
       lowMarginManagerWorkItemId: string
-      lowMarginManagerWorkItemStatus: "UNCLAIMED"
+      lowMarginManagerWorkItemStatus: "OPEN"
     }
   | {
       outcome: "VOIDED_AFTER_PROCUREMENT_REJECTION"
@@ -553,8 +560,13 @@ type LowMarginManagerConfirmationDecision =
       }
   )
 
-type CompleteLowMarginManagerConfirmationCommand =
-  WorkItemActionCommand<LowMarginManagerConfirmationDecision>
+type CompleteLowMarginManagerConfirmationCommand = {
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  decision: LowMarginManagerConfirmationDecision
+  idempotencyKey: string
+}
 
 type LowMarginManagerConfirmationBusinessResult =
   | {
@@ -564,7 +576,7 @@ type LowMarginManagerConfirmationBusinessResult =
       workflowActionId: string
       salesOrderReviewStatus: "PENDING_PROCUREMENT_CONFIRMATION"
       newProcurementWorkItemId: string
-      newProcurementWorkItemStatus: "UNCLAIMED"
+      newProcurementWorkItemStatus: "OPEN"
     }
   | {
       outcome: "LOW_MARGIN_REJECTED_TO_SALES"
@@ -574,8 +586,11 @@ type LowMarginManagerConfirmationBusinessResult =
       salesOrderReviewStatus: "REJECTED"
     }
 
-type CompleteLowMarginManagerConfirmationResult =
-  WorkItemActionResult<LowMarginManagerConfirmationBusinessResult>
+type CompleteLowMarginManagerConfirmationResult = {
+  workItemId: string
+  workItemStatus: "COMPLETED"
+  businessResult: LowMarginManagerConfirmationBusinessResult
+}
 
 type SalesChangeFormalCommand = {
   salesChangeOrderId: string
@@ -623,8 +638,17 @@ type CardSalesApprovalDecision = CardSalesApprovalDecisionBase &
       }
   )
 
-type CompleteCardSalesApprovalCommand =
-  WorkItemActionCommand<CardSalesApprovalDecision>
+type SubmitCardSalesApprovalDecisionCommand = {
+  approvalInstanceId: string
+  expectedInstanceVersion: string
+  approvalStepInstanceId: string
+  expectedStepVersion: string
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  decision: CardSalesApprovalDecision
+  idempotencyKey: string
+}
 
 type CardSalesApprovalBusinessResult =
   | {
@@ -634,7 +658,7 @@ type CardSalesApprovalBusinessResult =
       workflowActionId: string
       salesOrderCommercialStatus: "PENDING_OPERATIONS"
       nextWorkItemId: string
-      nextWorkItemStatus: "UNCLAIMED"
+      nextWorkItemStatus: "OPEN"
     }
   | {
       outcome: "OPERATIONS_APPROVED_AND_EFFECTIVE"
@@ -654,15 +678,19 @@ type CardSalesApprovalBusinessResult =
       salesOrderCommercialStatus: string
     }
 
-type CompleteCardSalesApprovalResult =
-  WorkItemActionResult<CardSalesApprovalBusinessResult>
+type SubmitCardSalesApprovalDecisionResult = {
+  approvalInstanceStatus: "RUNNING" | "APPROVED" | "REJECTED"
+  workItemId: string
+  workItemStatus: "COMPLETED"
+  businessResult: CardSalesApprovalBusinessResult
+}
 ```
 
 `CreateSalesOrderCommand.contract` 仅包含已有合同身份：`contractId` + `requestedContractRevisionId`。服务端重验合同当前可选资格与精确当前修订。新合同不在建单命令内嵌上传；须先调用 W04 `UploadContractPdf`（UI 为共用 `ContractUploadDialog`），归档成功后再引用。
 
-初始提交响应固定返回操作号、销售单号、冻结提交、当前状态、形成的待办以及下一步。销售变更必须保存 `sales_change_order`、不可变提交和基准版本；实物与服务由采购确认履约影响，卡券由运营确认商城执行影响，之后均由财务复核，生效事务才形成新销售版本和应收差额。非卡券销售变更的完整影响（含采购分配、库存预占、应收差额等）必须由服务端计算并返回；前端首屏仅展示服务端影响摘要，禁止本地推算或拼装影响事实。生效后只追加新版本与差额事实，禁止回退已发生履约或票款。`SalesChangeFormalCommand` 只处理销售变更单，不得用于初始卡券销售审批。
+初始提交响应固定返回操作号、销售单号、冻结提交、当前状态、审批实例或独立待办以及下一步。销售变更必须保存 `sales_change_order`、不可变提交和基准版本；实物与服务由采购确认履约影响，卡券由运营确认商城执行影响，之后均由财务复核，生效事务才形成新销售版本和应收差额。非卡券销售变更的完整影响（含采购分配、库存预占、应收差额等）必须由服务端计算并返回；前端首屏仅展示服务端影响摘要，禁止本地推算或拼装影响事实。生效后只追加新版本与差额事实，禁止回退已发生履约或票款。`SalesChangeFormalCommand` 只处理销售变更单，不得用于初始卡券销售审批。
 
-销售提交后的撤回二次确认或二期审批：仅当对应任务未领取且未产生正式决定时，服务端才得在 `allowedActions` 返回撤回能力；否则禁止撤回。前端不得在服务端未返回该动作时展示或提交撤回。
+销售提交后的撤回二次确认或二期审批：仅当业务规则允许撤回、尚未形成不可逆决定且当前步骤策略允许时，服务端才得在 `allowedActions` 返回撤回能力。卡券审批必须调用 `cancel_approval`，同时取消实例和未执行步骤并关闭当前开放待办；前端不得自行关闭任务或根据是否已有个人责任判断可撤回性。
 
 `ResolveProcurementRejectionCommand` 的三个分支必须以服务端当前驳回事实强判别，并各自在一个事务内完成：
 
@@ -671,13 +699,13 @@ type CompleteCardSalesApprovalResult =
 3. `REQUEST_LOW_MARGIN_ACCEPTANCE` 必须确认当前商业条件与旧提交完全一致，再把本次承接理由和提交身份纳入新的审批对象，冻结新提交并形成不复用旧值的提交版本，追加动作并创建唯一 `LOW_MARGIN_MANAGER_CONFIRMATION`；此事务绝不创建采购确认任务；
 4. `VOID_AFTER_REJECTION` 必须确认无有效低毛利/采购后继任务，再追加作废动作并把生效前销售单置为作废；历史提交、确认、任务和理由保留不变。
 
-`CompleteLowMarginManagerConfirmationCommand` 完全复用 W02 统一动作命令。服务端必须在同一事务校验当前领取人、低毛利任务类型与唯一 `completionAction`、对象版本、新提交、原驳回链、销售单版本、商业条件未变及岗位分离。上级通过时写确认事实和 `workflow_action`、完成当前低毛利任务，并为同一 `lowMarginSubmissionId` / 新提交版本创建唯一 `PROCUREMENT_CONFIRMATION`；上级驳回时写驳回事实并完成低毛利任务，但不创建采购任务。两个分支都不使销售单生效，也不形成应收或采购创建依据。
+`CompleteLowMarginManagerConfirmationCommand` 是 `LOW_MARGIN_MANAGER_CONFIRMATION` 注册的唯一强类型领域命令。服务端必须在同一事务校验当前责任人、任务类型、对象版本、新提交、原驳回链、销售单版本、商业条件未变及岗位分离。上级通过时写确认事实和 `workflow_action`、完成当前低毛利任务，并为同一 `lowMarginSubmissionId` / 新提交版本创建唯一 `PROCUREMENT_CONFIRMATION`；上级驳回时写驳回事实并完成低毛利任务，但不创建采购任务。两个分支都不使销售单生效，也不形成应收或采购创建依据。
 
 旧的 `PROCUREMENT_CONFIRMATION` 和 `LOW_MARGIN_MANAGER_CONFIRMATION` 一旦完成便永久留痕，任何路径都不能重新开启、改绑新提交或复用其 `workItemId`。服务端对“提交 + 固定任务类型”的有效关系做唯一约束，重复请求只返回同一结果。超时或断网只查询原操作结果；`RESULT_UNKNOWN` 期间不得新增提交、生成第二个上级任务或手工补建采购任务。
 
-`CompleteCardSalesApprovalCommand` 完全复用 W02 统一动作命令：`workItemId`、`expectedSubjectVersion` 位于命令外层，销售单、冻结提交、领域版本和审批结论位于 `decision`。服务端必须校验固定任务类型、注册处理器及唯一 `completionAction`；W05 不根据对象状态自行构造可见动作。
+`SubmitCardSalesApprovalDecisionCommand` 调用审批运行时 `submit_decision`：审批实例、步骤和任务身份及其三个期望版本、`expectedSubjectVersion` 位于命令外层，销售单、冻结提交、领域版本和审批结论位于强类型 `decision`。服务端必须校验审批实例、活动步骤、固定任务类型和注册处理器；W05 不根据对象状态自行构造可见动作或下一步骤。
 
-领导或运营作出决定时，领取校验、`sales_order_review`、`workflow_action`、任务完成和销售状态迁移必须在同一事务中完成。领导通过还要原子创建唯一 `CARD_SALES_OPERATION_APPROVAL`；运营通过还要原子形成首个不可变销售版本、应收和执行投影修订。驳回不创建下一审批节点，后续销售修改和重新提交必须从领导审批重新开始。前端不得只根据 HTTP 成功自行推进流程。
+领导或运营作出决定时，当前责任校验、步骤决定、`sales_order_review`、`workflow_action`、任务完成和销售状态迁移必须在同一事务中完成。领导通过由审批运行时激活唯一运营步骤并创建 `POOL` 待办；运营通过还要原子形成首个不可变销售版本、应收和执行投影修订并结束审批实例。驳回结束当前实例且不激活下一步骤；后续销售修改和重新提交必须创建新实例并从领导步骤开始。前端不得只根据 HTTP 成功自行推进流程。
 
 ### 8.4 缓存、新鲜度与前端边界
 
@@ -703,18 +731,19 @@ type CompleteCardSalesApprovalResult =
 | 编辑权丢失 | 本地输入只读保留 | 复制安全内容 | 刷新并重验版本 |
 | 采购确认已驳回、待销售处理 | 固定展示旧提交、驳回原因、草稿差异和三条互斥出路 | 改品/改价重提、申请照原条件低毛利承接、不做并作废 | 任一正式动作确定提交后刷新处理链 |
 | 改品/改价重提成功 | 固定展示新提交号、旧驳回链和新 `PROCUREMENT_CONFIRMATION` 身份 | 打开 W07 新任务、留在销售单 | W07 只处理新任务；旧任务继续显示已完成驳回 |
-| 低毛利上级确认待处理 | 新提交只读，展示新提交版本、承接理由、成本/毛利证据和正式任务状态 | 有权上级领取并通过/驳回；销售只读等待 | 通过后创建新采购确认，驳回后回销售三条出路 |
+| 低毛利上级确认待处理 | 新提交只读，展示新提交版本、承接理由、成本/毛利证据和任务责任 | 有权上级开始处理并通过/驳回；销售只读等待 | 通过后创建新采购确认，驳回后回销售三条出路 |
 | 低毛利上级通过 | 固定展示上级确认事实、已完成低毛利任务和新 `PROCUREMENT_CONFIRMATION` | 打开 W07 新任务 | 采购基于新提交独立确认，不继承旧驳回任务决定 |
 | 低毛利上级驳回 | 固定展示驳回事实；无采购确认后继任务 | 销售重新选择固定三条出路 | 新动作必须生成新提交/新任务或作废，不复用已完成低毛利任务 |
 | 低毛利上级决定 `RESULT_UNKNOWN` | 保留新提交、意见和原任务位置，不显示已完成或新采购任务 | 查询同一决定结果 | 明确通过/驳回后再刷新；未知期间不得补建任务或改走其它出路 |
 | 采购驳回处理结果不确定 | 保留旧提交、草稿和原操作身份，不渲染新提交/任务/作废 | 查询原结果、重试 | 得到 `COMMITTED` / `NOT_COMMITTED` 后再刷新 |
 | 采购驳回后已作废 | 页头和处理卡固定显示作废原因、旧提交与驳回历史 | 只读查看与审计 | 不恢复草稿或创建后继任务 |
-| 卡券审批任务待领取/他人领取 | 冻结提交只读；显示任务类型和领取人 | 有权时领取；否则返回队列/查看对象 | W02 原子领取成功后才显示正式决定动作 |
-| 卡券审批处理权丢失 | 保留只读提交与未提交意见，隐藏/禁用通过和驳回 | 重新领取并重查任务与销售单版本 | 版本一致后恢复 |
+| 卡券领导任务已直接指派 | 冻结提交只读；显示领导步骤和当前处理人 | 被指派领导可直接决定；其他用户只读 | 服务端责任与版本有效时显示决定动作 |
+| 卡券运营任务团队待处理 / 已由他人负责 | 冻结提交只读；显示运营步骤和当前处理人 | 无责任人时可开始处理；已由他人负责时返回队列/查看对象 | 原子开始处理成功后才显示决定动作 |
+| 卡券审批处理权变化 | 保留只读提交与未提交意见，隐藏/禁用通过和驳回 | 刷新任务与销售单版本 | 重新取得责任且版本一致后恢复 |
 | 版本冲突 | 结构化展示基线与当前事实 diff | 刷新、重做或放弃 | 基于新版本确认 |
-| 待确认/审批 | 当前冻结版本只读，进度显示责任节点；卡券领导/运营任务可在对象中心嵌入同一 W02 处理器 | 查看任务；仅任务返回的动作可执行；撤回仅当服务端返回且任务未领取、未产生正式决定 | 共享完成信封返回正式决定事务；无撤回能力时禁止本地撤回 |
+| 待确认/审批 | 当前冻结版本只读，进度显示审批实例和活动步骤；卡券领导/运营任务可在对象中心嵌入同一 W02 处理器 | 查看任务；仅服务端返回的动作可执行；撤回仅当 `cancel_approval` 可用 | 强类型决定返回审批、任务和业务结果；无撤回能力时禁止本地撤回 |
 | 卡券审批成功 | 固定显示审批阶段、决定、审批记录、销售新状态和下一任务/生效对象 | 打开下一任务、销售版本或执行投影 | 用户确认结果后继续；不只显示 toast |
-| 卡券审批 `RESULT_UNKNOWN` | 固定显示原操作的追踪号；销售状态和任务位置均不乐观推进 | 查询原操作最终结果、联系支持 | 取得 `WorkItemActionResult` 后才刷新/离开 |
+| 卡券审批 `RESULT_UNKNOWN` | 固定显示原操作的追踪号；销售状态和任务位置均不乐观推进 | 查询原操作最终结果、联系支持 | 取得 `SubmitCardSalesApprovalDecisionResult` 后才刷新/离开 |
 | 正式动作成功 | `FormalActionResult` 固定展示对象、版本、时间与下一步 | 打开关联对象、继续处理 | 用户明确关闭结果 |
 | 正式结果不确定 | 不乐观推进状态，固定显示操作号 | 查询原结果、重试 | 得到可验证终态 |
 | 履约阻断 | 履约分区显示原因、影响明细与责任方 | 进入 W08/W09/W06 | 正式事实修复后重查 |
@@ -761,7 +790,7 @@ type CompleteCardSalesApprovalResult =
 
 实物/服务主链为 W03/W04 → W05 → W07 → W08 建单与财务审核 → W09 → W06；W07 驳回则回到 W05 固定三路：改品/改价后以新提交直接进入新 W07 任务，照原条件承接先进入 W02/W05 的 `LOW_MARGIN_MANAGER_CONFIRMATION` 且仅上级通过后进入新 W07 任务，不做则作废。任何回路都不复用旧 W07 任务或旧提交。W11 从销售单生效后即可并行处理票款，最终与履约事实共同驱动服务端自动关闭。一期卡券为商城 → W17 → W05 → W13/W11；二期 ERP 卡券为 W05 → W02 审批 → W23。跨工作面只传稳定身份和返回上下文。
 
-二期初始卡券审批与低毛利上级确认都在 W02 队列和 W05 对象中心共用各自注册的 `handlerKey`、`workItemId`、统一领取与动作命令及最终结果查询；在 W05 嵌入并不把任务完成权转移给销售单对象接口。低毛利处理跨 W 只传销售单、驳回确认、新提交和任务稳定身份，目标工作面重新查询版本、成本/毛利证据与权限。
+二期初始卡券审批与低毛利上级确认都在 W02 队列和 W05 对象中心共用各自注册的 `handlerKey`、`workItemId`、责任命令、强类型领域决定和最终结果查询；卡券审批还必须共用同一 `approvalInstanceId` 和活动步骤。在 W05 嵌入并不把审批推进或任务完成权转移给销售单对象接口。低毛利处理跨 W 只传销售单、驳回确认、新提交和任务稳定身份，目标工作面重新查询版本、成本/毛利证据与权限。
 
 ## 12. 验收清单
 
@@ -775,7 +804,7 @@ type CompleteCardSalesApprovalResult =
 - [x] 履约完成且应收结清才能关闭；开票未完成不阻塞关闭。
 - [x] 二期卡券单协同子区展示消费汇总与 W25 入口，但消费、退款或余额恢复不增加第三个关闭条件；退款/余额恢复等异常仅作协同提示，关闭判定不得新增第三个条件。
 - [x] 非卡券销售变更影响预览的完整影响由服务端计算；生效后只追加版本与差额事实，禁止回退已发生履约或票款。
-- [x] 撤回二次确认或二期审批仅当任务未领取且未产生正式决定、且服务端返回撤回能力时允许；否则禁止。
+- [x] 撤回二次确认或二期审批仅当业务规则允许、尚未形成不可逆决定且服务端返回撤回能力时允许；卡券审批统一调用 `cancel_approval`。
 - [x] 375 视口默认只读；禁止复杂建单、销售变更与正式审批，正式动作必须在桌面完成。
 - [x] 新建销售单仅选择已有有效合同；选择框旁加号复用 `ContractUploadDialog`，无已有合同时不阻断进入 M5。
 - [x] 上传 Dialog 归档成功后刷新可选合同列表并可自动选中；销售单创建与合同上传幂等分离。
@@ -800,7 +829,7 @@ type CompleteCardSalesApprovalResult =
 - [x] 同一销售单从任意来源重复打开只聚焦一个 TaskTab；关闭后恢复来源焦点。
 - [ ] 所有操作有权限、前置、确认、成功结果和失败恢复；正式成功不只靠 toast。
 - [ ] 处理权丢失、版本冲突、结果未知、权限收回和分区失败均不丢安全输入或伪造状态。
-- [ ] 卡券审批领取权由服务端条件更新校验，`RESULT_UNKNOWN` 时不移动任务、不切换销售状态，查询原结果恢复。
+- [ ] 卡券领导任务 `DIRECT` 指派且无需开始处理；运营 `POOL` 任务由服务端原子开始处理；`RESULT_UNKNOWN` 时不移动任务、不切换销售状态，查询原结果恢复。
 - [ ] 采购驳回三路及低毛利决定的重复点击、超时恢复和结果查询使用原操作身份，不重复创建提交或任务。
 - [ ] 查询、对象、导出均受权限/数据范围版本约束，目标页重新查询金额和状态。
 - [ ] 1440、1280、1024、768、375 五档视口与键盘焦点恢复通过验证。

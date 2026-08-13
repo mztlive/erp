@@ -1,7 +1,8 @@
 # 员工福利 ERP 两期统一数据模型
 
-本文定义第一期与第二期共用的关系数据模型。模型以 `erp-phase-1.md` 和
-`erp-phase-2.md` 的业务规则为依据，是物理表、接口、页面和测试设计的唯一数据模型依据。
+本文定义第一期与第二期共用的关系数据模型。模型以 `erp-phase-1.md`、
+`erp-phase-2.md` 和 `approval-workflow-contract.md` 的业务规则为依据，
+是物理表、接口、页面和测试设计的唯一数据模型依据。
 
 本文不绑定具体数据库产品，不包含特定数据库方言 DDL。
 
@@ -34,6 +35,8 @@
 11. 当前两期均为单公司、单账套、人民币。旧商城表中的 `tenant_id` 不构成 ERP
     多租户依据；金额字段固定表达人民币，不增加无业务含义的公司或币种维度。
 12. 统计查询直连正式表；确需缓存时定时刷新可重建投影，不得反向改写正式事实。
+13. 审批定义与运行实例负责步骤推进，`work_item` 只表达当前人工责任。
+    任务状态与个人分派分离；正式业务事实只能由对应强类型领域命令形成。
 
 ---
 
@@ -47,6 +50,7 @@
 | 供应商资质 | `supplier_qualification` | 资质修订、附件、适用能力 | 供应商能力 |
 | 商品 | `product` / `sku` | 商品修订、SKU 修订（含销售可见价/市场价）、卡券类目扩展 | 公司商品池查询视图、供应商供给、发布版本 |
 | 合同 | `contract` | 合同版本、附件、结算快照 | 客户、销售单 |
+| 审批运行 | `approval_instance` | 冻结定义版本、步骤实例、当前步骤和运行结果 | 业务提交版本、待办、领域决定记录 |
 | 销售单 | `sales_order` | 生效版本、稳定明细、版本明细、审批、参与人 | 客户、合同、采购、应收 |
 | 采购二次确认 | `procurement_confirmation` | 分行供货确认 | 销售单提交快照、供应商 |
 | 销售变更 | `sales_change_order` | 变更内容、运营/采购影响确认、财务复核 | 原销售单版本 |
@@ -86,6 +90,10 @@ erDiagram
     SALES_ORDER_REVISION ||--|{ SALES_ORDER_REVISION_LINE : "冻结明细"
     SALES_ORDER_LINE ||--o{ SALES_ORDER_REVISION_LINE : "跨版本继承"
     SALES_ORDER ||--o{ PROCUREMENT_CONFIRMATION : "提交确认"
+    APPROVAL_DEFINITION ||--|{ APPROVAL_STEP_DEFINITION : "定义步骤"
+    APPROVAL_DEFINITION ||--o{ APPROVAL_INSTANCE : "启动实例"
+    APPROVAL_INSTANCE ||--|{ APPROVAL_STEP_INSTANCE : "运行步骤"
+    APPROVAL_STEP_INSTANCE ||--o| WORK_ITEM : "当前人工责任"
     SALES_ORDER ||--o{ PURCHASE_ORDER : "产生"
     PURCHASE_ORDER ||--o{ PURCHASE_ORDER_REVISION : "形成版本"
     PURCHASE_ORDER_REVISION ||--|{ PURCHASE_ORDER_REVISION_LINE : "包含"
@@ -230,8 +238,10 @@ erDiagram
 ### 4.6 固定状态与配置化权限
 
 - 单据状态机、关键事实类型和纠错类型是固定业务代码，不由管理员配置状态流转。
-- 角色、用户、团队、权限和数据范围配置化。流程步骤可以绑定“销售领导”“运营”
-  等责任角色，但不能把具体用户硬编码在业务表。
+- 审批定义按 `approval-workflow-contract.md` 注册并显式版本化。当前只允许代码注册的
+  串行步骤、固定处理人解析器和强类型结果；不提供任意流程配置。
+- 角色、用户、团队、权限和数据范围配置化。流程步骤绑定“销售领导”“运营”等责任角色，
+  激活时由服务端解析直接责任人或责任池；具体用户不得硬编码在业务表。
 - 客户历史参与者查看权写入 `document_participant`，不依赖当前客户负责人反推。
 
 ---
@@ -248,7 +258,9 @@ erDiagram
 | `document_relation` | 一期 | 原单与变更、退货、退款、冲正、红票的关系 |
 | `document_participant` | 一期 | 单据历史参与人及查看依据 |
 | `workflow_action` | 一期 | 提交、审批、驳回、确认、完成等追加式动作 |
-| `work_item` | 一期 | 正式待办及处理结果 |
+| `approval_definition` / `approval_step_definition` | 一期 | 版本化审批定义及串行步骤 |
+| `approval_instance` / `approval_step_instance` | 一期 | 冻结审批运行及步骤决定 |
+| `work_item` | 一期 | 当前人工责任及处理结果，不负责流程路由 |
 | `bulk_selection_snapshot` / `bulk_selection_item` | 一期 | 批量预览时冻结目标、截止水位和逐项版本 |
 | `background_job` / `background_job_item` | 一期 | 导入、导出、批量、同步等后台执行注册与逐项结果 |
 | `audit_event` | 一期 | 安全审计和变更留痕 |
@@ -319,9 +331,11 @@ erDiagram
 | 供应商结算 | `supplier_settlement_statement`、`supplier_settlement_item`、`supplier_settlement_difference` |
 | 集成治理（普通表组） | `inbox_message`、`integration_error_task`、`reconciliation_difference`、`reconciliation_difference_resolution` |
 
-集成表均为普通表组，不构成顶级聚合或消息中间件：`inbox_message` 记录已接收的外部
+当前两期的商城与供应商集成表均为普通表组，不构成顶级聚合或消息中间件：`inbox_message` 记录已接收的外部
 消息，`integration_error_task` 记录投递或处理失败及人工处理，`reconciliation_*` 记录
 对账差异。商城主动轮询仍使用 `mall_sales_sync_*` / `mall_sales_reconciliation_*` 专用表。
+未来 BPM 运行时所需 outbox/inbox 不属于本表组，必须先按
+`approval-workflow-contract.md` 修订基础设施合同再新增。
 
 ---
 
@@ -426,6 +440,78 @@ erDiagram
 - `document_id + recorded_at` 历史索引；
 - `actor_id + recorded_at` 审计索引；
 
+#### `approval_definition` 与 `approval_step_definition`
+
+`approval_definition`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `definition_key` / `version` | 稳定定义编码和单调递增版本 |
+| `name` | 管理与审计名称 |
+| `runtime_kind` | `INTERNAL` / `BPM` |
+| `status` | `DRAFT` / `PUBLISHED` / `RETIRED` |
+| `external_definition_id` | BPM 外部定义身份；内部运行时为空 |
+| `published_at` / `published_by` | 发布审计 |
+
+`approval_step_definition`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `approval_definition_id` | 所属定义版本；步骤写入时父定义必须为 `DRAFT` |
+| `step_key` / `sequence_no` | 版本内稳定步骤编码及串行顺序 |
+| `work_item_type` / `handler_key` | 固定任务类型及页面处理器 |
+| `assignment_mode` | `DIRECT` / `POOL` |
+| `assignee_resolver_key` | 服务端注册的处理人解析规则 |
+| `allowed_decisions` | 当前步骤允许的固定决定集合 |
+
+必需约束与索引：
+
+- `(definition_key, version)` 唯一；同一 `definition_key` 同时最多一个 `PUBLISHED` 版本；
+- `(approval_definition_id, step_key)`、`(approval_definition_id, sequence_no)` 分别唯一；
+- 步骤只允许在父定义为 `DRAFT` 时增删改；发布操作校验后同时冻结定义和步骤；
+- 已发布定义和步骤不可修改，只能创建并发布新版本；审批启动只选择 `PUBLISHED`；
+- 当前只允许连续序号的串行步骤；处理人解析器不得保存脚本、任意表达式或回调 URL；
+- 发布前必须证明任务类型、处理器、解析器、决定、下一步骤和最终强类型领域动作均已注册。
+
+#### `approval_instance` 与 `approval_step_instance`
+
+`approval_instance`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `definition_key` / `definition_version` | 启动时冻结的定义版本 |
+| `runtime_kind` | `INTERNAL` / `BPM`；启动后不可切换 |
+| `business_object_type` / `business_object_id` | 被审批的稳定业务对象 |
+| `subject_version` | 被审批的不可变提交或业务版本 |
+| `lock_version` | 实例乐观锁版本；API 固定命名为 `instance_version` |
+| `status` | `RUNNING` / `APPROVED` / `REJECTED` / `TERMINATED` / `CANCELLED` / `BLOCKED` |
+| `current_step_instance_id` | `RUNNING` 或 `BLOCKED` 时指向当前步骤；终态必须为空 |
+| `external_instance_id` | BPM 流程实例身份；内部运行时为空 |
+| `blocker_code` / `blocked_at` | 当前结构化阻塞原因与进入时间；非阻塞时为空 |
+| `started_by` / `started_at` / `ended_at` | 运行审计 |
+
+`approval_step_instance`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `approval_instance_id` / `step_key` / `sequence_no` | 所属实例及冻结步骤身份 |
+| `lock_version` | 步骤乐观锁版本；API 固定命名为 `step_version` |
+| `status` | `WAITING` / `ACTIVE` / `APPROVED` / `REJECTED` / `TERMINATED` / `CANCELLED` / `BLOCKED` |
+| `decision` / `decision_reason` | 正式决定和原因 |
+| `decided_by` / `decided_at` | 决定审计 |
+| `external_activity_id` | BPM 活动实例身份；内部运行时为空 |
+| `blocker_code` / `blocked_at` | 当前结构化阻塞原因与进入时间；非阻塞时为空 |
+
+必需约束与索引：
+
+- 同一业务对象、`subject_version` 和定义同时最多一个 `RUNNING` 或 `BLOCKED` 实例；
+- `(approval_instance_id, step_key)` 唯一；同一实例同时最多一个 `ACTIVE` 或 `BLOCKED` 当前步骤；
+- 实例和步骤的每次写入均以各自 `lock_version` 为条件并递增；阻塞查询必须返回对应 API 版本；
+- `ACTIVE` 步骤必须存在一个开放 `work_item`；`BLOCKED` 步骤允许保留阻塞前的一个开放待办，
+  也允许因处理人尚未解析而没有待办；`WAITING` 步骤不得提前创建待办；
+- 定义版本、业务对象和 `subject_version` 启动后不可修改；修改后重新提交必须创建新实例；
+- 实例历史是流程状态源，`workflow_action` 和领域决定表不得反推或替代实例状态。
+
 #### `work_item`
 
 当前两期固定 `work_item_type` 至少包括：
@@ -442,36 +528,54 @@ erDiagram
 
 一期正常导入确认的固定注册如下；不得按销售、采购、运营、仓储、财务拆成五个同义任务类型：
 
-| `work_item_type` | `business_object_type` | `handler_key` | 目标工作面 | 唯一 `completion_action` |
+| `work_item_type` | `business_object_type` | `handler_key` | 目标工作面 | 唯一领域命令 |
 | --- | --- | --- | --- | --- |
-| `IMPORT_BUSINESS_CONFIRMATION` | `LEGACY_IMPORT_BATCH` | `import_business_confirmation` | `W18` | `COMPLETE_IMPORT_BUSINESS_CONFIRMATION` |
+| `IMPORT_BUSINESS_CONFIRMATION` | `LEGACY_IMPORT_BATCH` | `import_business_confirmation` | `W18` | `CompleteImportBusinessConfirmation` |
 
-该完成动作的领域 decision 仅允许 `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`。每个“批次 ×
+该领域命令的 decision 仅允许 `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`。每个“批次 ×
 `confirmation_scope` × `trial_version`”创建一个任务；责任差异由
-`confirmation_scope + owner_role` 表达，不改变任务类型、handler 或完成动作。
+`confirmation_scope + owner_role` 表达，不改变任务类型、handler 或领域命令。
 
 | 字段 | 说明 |
 | --- | --- |
 | `work_item_type` | 采购确认、低毛利上级确认、审批、复核、异常等固定类型 |
+| `approval_step_instance_id` | 审批步骤任务必填；独立任务为空 |
 | `business_object_type` / `business_object_id` | 任务对应的稳定业务对象 |
 | `subject_version` | 任务针对的对象版本 |
-| `status` | `UNCLAIMED` / `IN_PROGRESS` / `COMPLETED` / `CLOSED` |
-| `owner_role` / `owner_user_id` | 责任角色和当前责任人 |
+| `lock_version` | 任务自身乐观锁版本；API 固定命名为 `task_version` |
+| `status` | `OPEN` / `COMPLETED` / `CLOSED` |
+| `assignment_mode` | `DIRECT` / `POOL` |
+| `owner_role` / `owner_organization_id` | 责任角色和责任组织 |
+| `owner_user_id` | 可空的当前个人责任人 |
+| `assignment_source` | `STEP_RESOLVER`、`SYSTEM_RULE`、`SELF_START`、`ADMIN_REASSIGN` 等已注册来源 |
+| `assigned_at` / `started_at` | 首次形成个人责任和首次进入处理的时间；形成后不得覆盖 |
+| `current_assignment_at` / `last_activity_at` | 当前个人责任生效时间和最近活动时间；无人负责时前者为空 |
 | `priority` / `due_at` | 优先级和时限 |
 | `reason_code` / `impact_summary` | 产生原因和业务影响 |
-| `completion_action` | 该任务唯一允许的完成动作 |
 | `completed_at` / `completed_by` | 正式完成审计 |
+| `closed_at` / `closed_by` / `close_reason` | 受控关闭审计 |
 
 必需约束与索引：
 
-- 同一业务对象、任务类型同时最多一个有效任务；
-- `owner_role + owner_user_id + status + due_at` 工作队列索引；
-- 领取 = 条件更新（行锁）原子完成：仅当状态为 `UNCLAIMED` 时更新为 `IN_PROGRESS` 并
-  写入领取人，同一时刻只能被一个用户处理，无需租约或令牌；
-- 正式处理同时校验当前领取人、对象版本和岗位分离；
+- 同一业务对象、任务类型同时最多一个 `OPEN` 任务；每个 `ACTIVE` 审批步骤恰有一个 `OPEN` 任务，
+  `BLOCKED` 当前步骤允许零或一个原有 `OPEN` 任务；
+- `status + owner_user_id + due_at` 是“我的待办”索引；
+  `status + assignment_mode + owner_role + due_at` 是“团队待处理”索引；
+- `status + owner_organization_id + owner_user_id + due_at` 是授权主管“团队任务”索引；
+  `status + completed_by + completed_at` 是个人处理历史索引，历史责任参与者通过不可变责任审计补充查询；
+- `OPEN + owner_user_id IS NULL` 只允许用于 `POOL`；`DIRECT` 创建时必须写入唯一有效用户；
+- 责任池“开始处理”使用条件更新原子写入当前用户；同一用户重试幂等成功，其他用户收到冲突；
+- 开始处理、退回团队、转交和关闭均以 `lock_version` 条件更新并递增；API 和所有嵌入任务投影
+  必须返回 `task_version`，不得用业务对象 `subject_version` 代替；
+- 再次开始处理与转交保留 `assigned_at`、`started_at`，只更新 `current_assignment_at`；
+  退回团队清空 `current_assignment_at`；每次责任变化另写不可变审计；
+- 不使用租约、到期释放、续租、领取令牌或客户端会话判断责任；
+- 退回责任池或转交只更新原 `OPEN` 任务责任并写审计，不创建同义后继任务；
+- 正式处理同时校验当前责任人、对象版本、权限、数据范围和岗位分离；
 - 审批、确认、结果未知和未完成补偿任务不得人工关闭；
 - 只有重复、误派或已有替代正式任务时允许关闭，必须记录关闭原因；
-- 完成或关闭任务本身不修改正式业务事实；业务状态变化由对应强类型事务完成。
+- 不提供通用完成接口。业务状态变化和任务完成由对应强类型事务原子形成；
+- 完整分派、推进和页面规则以 `approval-workflow-contract.md` 为准。
 
 #### `bulk_selection_snapshot` 与 `bulk_selection_item`
 
@@ -1192,15 +1296,15 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `sales_order_id` | 销售单 |
 | `submission_id` | 被审批的不可变提交快照 |
 | `review_stage` | 销售领导审批、运营审批、低毛利上级确认 |
-| `status` | 待处理、通过、驳回、因内容变化失效 |
+| `status` | `APPROVED` / `REJECTED`；待处理状态只存在于审批步骤实例 |
 | `reviewer_id` / `reviewed_at` | 审批人和时间 |
 | `decision_reason` | 意见或驳回原因 |
 
 必需约束与索引：
 
 - `(submission_id, review_stage)` 唯一；
-- 待处理状态按责任角色、创建时间索引；
-- 销售修改被驳回内容后，旧审批记录改为“因内容变化失效”，新提交从第一步开始；
+- 只有正式决定形成时才创建记录；审批等待与当前步骤不得从本表反推；
+- 销售修改被驳回内容后，旧审批记录保持不可变；新提交、新审批实例和新决定记录从第一步开始；
 - 审批人不得在审批动作中修改销售单内容。
 
 采购二次确认的唯一状态源是下述 `procurement_confirmation`。它不再重复写成
@@ -1266,8 +1370,8 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - 同一销售单同一 `base_revision_id` 同时只能有一个进行中变更；
 - `(sales_change_order_id, submission_no)` 唯一，提交头行形成后不可更新；
 - 生效前校验 `base_revision_id` 仍是当前版本，防止并发覆盖；
-- 每次修改拟变更内容都形成新的变更提交并使旧复核失效；所有复核必须引用同一个
-  `sales_change_submission_id`；
+- 每次修改拟变更内容都形成新的变更提交；旧复核记录保持不可变且不得用于新提交，
+  新一轮全部复核必须引用同一个新 `sales_change_submission_id`；
 - 实物及服务变更走采购影响确认；卡券变更走运营人工确认商城可执行性；
 - 卡券变更完成运营确认后再做财务影响复核；
 - 变更生效事务把通过复核的结构化目标提交原样复制成新
@@ -1405,7 +1509,8 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 必需约束与索引：
 
 - 只允许基于当前采购版本生效；
-- `(purchase_change_order_id, submission_no)` 唯一；修改内容必须新建提交并使旧复核失效；
+- `(purchase_change_order_id, submission_no)` 唯一；修改内容必须新建提交；旧复核记录保持不可变
+  且不得用于新提交；
 - 生效事务把已通过复核的目标提交原样复制为新采购版本、版本行和销售分配，并追加
   应付及成本差额；
 - 已入库、已付款和已形成发票的事实不回退；
@@ -2128,13 +2233,13 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 - `(batch_id, confirmation_scope, trial_version)` 唯一，`work_item_id` 唯一；
 - 每个批次按版本化确认矩阵为必要范围各创建一个任务，系统管理员不得替代责任角色确认；
-- `CONFIRM_SCOPE` 与 `RETURN_FOR_FIX` 都通过 W02 统一动作命令调用
-  `COMPLETE_IMPORT_BUSINESS_CONFIRMATION`；同一事务写确认事实、`workflow_action`、批次新版本
+- `CONFIRM_SCOPE` 与 `RETURN_FOR_FIX` 都通过唯一强类型命令
+  `CompleteImportBusinessConfirmation`；同一事务写确认事实、`workflow_action`、批次新版本
   和当前任务 `COMPLETED`，不得随后再调用通用“标记完成”；
 - `RETURN_FOR_FIX` 形成 `REJECTED` 业务结论，不转交、不创建后继任务；修复并产生新
   `trial_version` 后才创建新的确认事实和任务；
 - 已完成的 `CONFIRMED` / `REJECTED` 永久保留；尚未完成但已被新试算取代的任务由系统
-  关闭（`CLOSED`），不能继续领取或完成；
+  关闭（`CLOSED`），不能继续处理或完成；
 - 只有当前版本全部必要范围均 `CONFIRMED`，生产应用 guard 才能通过；批次上的确认状态仅为
   这些事实的派生摘要。
 
@@ -3214,10 +3319,10 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 
 ### 6.21 集成治理（普通表组）
 
-双向集成不建消息中间件、outbox 或投递状态机，以下均为普通表：`inbox_message` 记录
+当前两期的商城与供应商双向集成不建通用消息中间件、outbox 或投递状态机，以下均为普通表：`inbox_message` 记录
 已接收的外部消息，`integration_error_task` 记录投递或处理失败及人工处理，
 `reconciliation_*` 记录对账差异。商城主动轮询继续使用专用 `mall_sales_sync_*` /
-`mall_sales_reconciliation_*` 表。
+`mall_sales_reconciliation_*` 表。本节 `inbox_message` 不得复用为未来 BPM 收件箱。
 
 #### `inbox_message`
 
@@ -3284,12 +3389,13 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | `left_fact_reference` / `right_fact_reference` | 两侧不可变证据引用 |
 | `created_at` | 差异发现时间 |
 
-`reconciliation_difference_resolution` 保存每次领取、补偿、确认或关闭动作：
+`reconciliation_difference_resolution` 保存每次证据追加、重放、补偿、确认或关闭动作；
+待办的开始处理、退回团队和转交只进入 `work_item` 责任审计，不在本表重复：
 
 | 字段 | 说明 |
 | --- | --- |
 | `reconciliation_difference_id` / `resolution_no` | 差异和递增处理序号 |
-| `resolution_action` | 领取、处理中、创建纠错、已解决、确认无误或关闭重复 |
+| `resolution_action` | 查询原结果、重放、追加证据、创建纠错、已解决、确认无误或关闭重复 |
 | `resulting_status` | 动作后的派生状态 |
 | `evidence_reference` / `replacement_task_id` | 终态证据或替代任务 |
 | `handled_by` / `handled_at` | 处理人和时间 |
@@ -3478,6 +3584,22 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 
 以下动作必须是单个业务事务，或使用可证明等价的一致性机制。
 
+### 8.0 审批运行与待办
+
+1. 启动审批必须锁定业务对象和提交版本，并在同一事务创建审批实例、全部步骤实例、
+   激活第一步骤及创建第一条开放待办；重复启动按业务幂等键返回原实例。
+2. 通过非最终步骤必须在同一事务写入步骤决定和领域决定记录、完成当前待办、激活唯一下一步骤
+   并创建下一条开放待办。任一步失败必须整体回滚。
+3. 通过最终步骤必须在同一事务写入步骤决定和领域决定记录、执行强类型领域生效动作、
+   完成当前待办并结束审批实例。
+4. 驳回或终止必须完成当前待办并结束审批实例，不得激活下一步骤。修改后重新提交创建新实例。
+5. `work_item` 的开始处理、退回团队和转交只改变开放任务责任，不推进审批或业务状态。
+6. 阻塞恢复必须锁定实例、当前步骤、可选开放待办和业务对象。阻塞原因未消除时不写任何结果；
+   原因消除后只恢复原步骤，按冻结分派规则创建或校正同一开放待办并写恢复审计，不得跳步骤或形成决定。
+7. 不提供通用任务完成事务；所有完成入口必须先执行对应领域命令或审批决定。
+8. `INTERNAL` 运行时执行上述本地写入；未来 `BPM` 运行时必须按
+   `approval-workflow-contract.md` 使用 outbox/inbox 和幂等关联，不得直接写 ERP 领域表。
+
 ### 8.1 销售与采购
 
 1. 实物及服务销售单采购确认通过：
@@ -3489,11 +3611,12 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
    - 生成后续采购待办或采购草稿依据；
    - 写审计。
 2. 第二期卡券运营审批通过：
-   - 锁定审批提交；
-   - 校验销售领导审批仍有效；
+   - 锁定审批实例、当前运营步骤和审批提交；
+   - 校验销售领导步骤已通过、运营步骤仍活动且当前用户是任务责任人；
    - 形成销售版本和应收；
    - 更新销售状态；
-   - 形成执行投影修订。
+   - 形成执行投影修订；
+   - 写运营决定、完成当前待办并将审批实例置为 `APPROVED`。
 3. 销售或采购变更生效：
    - 校验基准版本仍为当前版本；
    - 写新版本；
@@ -3696,7 +3819,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | 自动供应商订单 | 不启用 | 仅 `T` 后支付启用 | `T` 前订单保持原人工履约链 |
 | 供应商取消、退款、余额恢复闭环 | 不启用 | 与自动下单同批启用 | 未就绪不得开放 `T` 后自动履约 |
 | 供应商周期结算 | 不启用 | 启用 | 确认后进入一期应付 |
-| 集成治理 | `inbox_message`、`integration_error_task`、`reconciliation_difference` 等普通表组 | 复用 | 不建 outbox、消息中间件或投递状态机；商城主动拉取与核对使用专用表 |
+| 集成治理 | `inbox_message`、`integration_error_task`、`reconciliation_difference` 等普通表组 | 复用 | 当前商城/供应商集成不建通用 outbox、消息中间件或投递状态机；未来 BPM 另行修订基础设施合同 |
 | 经营分析 | 非卡券实际盈亏；卡券标记成本未覆盖 | 增加卡券消费、成本、余额和覆盖率 | 查询投影可重建 |
 
 第二期 P0 与 P1 必须同批具备生产能力。商品发布、销售投影、支付回流、

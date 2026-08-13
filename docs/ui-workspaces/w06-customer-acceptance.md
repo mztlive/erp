@@ -59,10 +59,10 @@
 
 - 普通客户验收必须固定注册一种 `work_item_type`，任务按销售单聚合；进入后按销售明细与履约事实分配。在该类型与粒度写入 `erp-data-model.md` 注册表且 API 契约同步前，W01/W02 验收入口、`workItemId` 路由和 `WORK_ITEM` 正式提交必须 fail-closed，只允许从 W05 直接对象过账。
 - 不得用 `BUSINESS_EXCEPTION` 或页面私有码伪装普通验收任务。仅当固定类型与粒度写入 `erp-data-model.md` 注册表且 API 契约同步后，才可启用 W01/W02。
-- 启用后，页面必须携带 `workItemId`，按 W02 的 `work_item` 协议原子领取并提交校验；正式提交必须完整使用 W02 统一动作命令，不得在验收过账后再单独调用“完成待办”。
+- 启用后，页面必须携带 `workItemId`；`DIRECT` 任务直接处理，`POOL` 任务按 W02 执行“开始处理”。正式提交必须使用验收强类型命令，不得在验收过账后再单独调用“完成待办”。
 - 从 W05 直接进入且没有待办时，验收草稿必须使用对象编辑权（草稿责任人约束）；不得用 TaskTabs 的“当前打开”冒充业务锁。
 - 处理权只保护当前编辑，不得改变履约或验收业务状态。
-- 处理权丢失时必须保留本地未保存输入供复制，禁止继续正式过账；重新领取成功后必须重取事实和版本再校验。
+- 处理权变化时必须保留未保存输入供复制，禁止继续过账；重新取得责任后必须重取事实和版本再校验。
 
 ## 3. 入口、路由与任务页签
 
@@ -263,9 +263,10 @@ type CustomerAcceptanceWorkspaceView = {
   }
   workItem?: {
     workItemId: string
+    taskVersion: string
     workItemType: string
     subjectVersion?: string
-    claimedByLabel?: string
+    ownerUserLabel?: string
   }
 }
 ```
@@ -313,13 +314,13 @@ type DirectPostCustomerAcceptanceCommand = {
   idempotencyKey: string
 }
 
-// 完整复用 W02 §8.2；字段不得裁减或另起同义名。
 type WorkItemPostCustomerAcceptanceCommand = {
   submissionMode: "WORK_ITEM"
-  completion: WorkItemActionCommand<PostCustomerAcceptanceDecision>
-  // completion 内含：
-  // workItemId, expectedSubjectVersion,
-  // decision
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  decision: PostCustomerAcceptanceDecision
+  idempotencyKey: string
 }
 
 type PostCustomerAcceptanceCommand =
@@ -335,7 +336,7 @@ type ReverseCustomerAcceptanceCommand = {
 }
 ```
 
-当前只启用从 W05 直接登记的 `DIRECT_OBJECT` 分支。仅当固定 `work_item_type` 与按销售单聚合粒度已写入 `erp-data-model.md` 注册表且 API 契约同步后，才允许启用 `WorkItemPostCustomerAcceptanceCommand`。注册前服务端必须拒绝 `WORK_ITEM` 分支，前端不得显示 W01/W02 验收入口，也不得把失败请求降级成直接过账。启用后，从 W01/W02 正式待办进入只允许 `WORK_ITEM` 分支，服务端必须校验 `workItemId`、任务针对的 `expectedSubjectVersion` 以及验收自身版本，不得降级成仅传任务 ID 的命令。
+当前只启用从 W05 直接登记的 `DIRECT_OBJECT` 分支。仅当固定 `work_item_type` 与按销售单聚合粒度已写入 `erp-data-model.md` 注册表且 API 契约同步后，才允许启用 `WorkItemPostCustomerAcceptanceCommand`。注册前服务端必须拒绝 `WORK_ITEM` 分支，前端不得显示 W01/W02 验收入口，也不得把失败请求降级成直接过账。启用后，从 W01/W02 正式待办进入只允许 `WORK_ITEM` 分支，服务端必须校验 `workItemId`、查询返回的 `expectedTaskVersion`、任务针对的 `expectedSubjectVersion` 以及验收自身版本，不得降级成仅传任务 ID 的命令。
 
 过账事务必须重新校验当前有效履约事实、净验收上限、销售明细归属、对象版本和权限。`WORK_ITEM` 分支在同一事务中原子写验收头行、`APPLY` 分配、工作流审计、销售履约投影并完成该 `work_item`；任一部分失败则全部不提交，前端不得补调“完成待办”。`DIRECT_OBJECT` 分支不创建或完成虚构待办。冲正写新反向事实与 `REVERSE` 分配，不能更新原行。
 
@@ -366,7 +367,7 @@ type ReverseCustomerAcceptanceCommand = {
 | 保存失败 | 输入不丢，错误靠近保存区 | 重试、复制输入 | 重试成功 |
 | 校验失败 | 顶部摘要 + 行内错误，焦点到首错 | 修正、保存草稿 | 校验通过 |
 | 版本冲突 | 显示变更行 diff，不覆盖任何一方 | 刷新并重做分配、放弃本地变更 | 基于新版本保存 |
-| 处理权丢失 | 保留本地输入只读，提交禁用 | 重新领取、复制输入 | 重取事实和版本 |
+| 处理权变化 | 保留输入只读，提交禁用 | 刷新任务、复制输入 | 重新取得责任后重取事实和版本 |
 | 正式动作成功 | `FormalActionResult` 固定显示验收单号、数量、剩余量和下一步 | 查看结果、创建异常处理、返回履约区 | 用户明确继续 |
 | 正式结果不确定 | 停留当前草稿，不显示成功进度 | 查询最终结果 | 查到同一结果或明确失败 |
 | 字段级隐藏 | 标签保留、值掩码；守恒仍由服务端完成 | 其余授权动作 | 权限更新后重查 |
@@ -425,9 +426,9 @@ type ReverseCustomerAcceptanceCommand = {
 - [x] 拒收与服务不通过默认必须上传客户签收单、邮件或服务确认附件；过账前按业务类型执行证据规则，否则禁止过账。
 - [x] 高影响冲正必须进入复核队列；普通经办不得单人完成高影响冲正。
 - [x] 375px 仅当单一来源、无差异且证据规则已满足时允许简单整批通过；多来源分配、短少/拒收复杂登记与冲正禁止在手机完成。
-- [ ] 注册后，从 W01/W02 进入的验收过账完整使用 W02 统一动作命令，逐行校验同销售明细、净数量上限、任务对象版本、权限和当前领取人。
+- [ ] 注册后，从 W01/W02 进入的验收过账使用强类型命令，逐行校验同销售明细、净数量上限、任务对象版本、权限和当前责任人。
 - [ ] 注册后的验收事实、`APPLY` 分配与正式待办完成同事务；从 W05 直接登记不得创建或完成虚构待办。
-- [ ] 查询 View 只返回领取人等业务可读处理信息和对象版本；领取权由服务端在动作提交时按条件更新校验。
+- [ ] 查询 View 只返回当前处理人等业务可读信息和对象版本；责任与权限由服务端在动作提交时重新校验。
 - [x] 已过账验收不可编辑，误录通过新反向事实与 `REVERSE` 分配纠正。
 - [ ] 任务处理权与对象编辑权边界清晰，不新增业务状态。
 - [ ] 权限收回后客户、地址、附件和本地敏感快照被清理。

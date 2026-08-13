@@ -63,10 +63,10 @@
 
 ### 2.2 安全暂停责任边界
 
-- 安全暂停由供给领域事件触发，不是运营页面按钮，也不等待运营、采购或管理员领取任务。触发范围固定为：供给关系 `STOPPED`、可供数量为零、明确不可供、可供数据超过服务端新鲜度阈值，以及供货价、进项税率、费用、MOQ、区域或商品能力变化尚未确认。
+- 安全暂停由供给领域事件触发，不是运营页面按钮，也不等待运营、采购或管理员开始处理任务。触发范围固定为：供给关系 `STOPPED`、可供数量为零、明确不可供、可供数据超过服务端新鲜度阈值，以及供货价、进项税率、费用、MOQ、区域或商品能力变化尚未确认。
 - 安全暂停以“来源对象 + 暂停原因 + 来源版本”作为事件级幂等身份，先冻结全部受影响在售发布集合；同一领域事务为每个发布写本地暂停、不可变暂停修订/动作和 `product_publication_delivery`。若触发原因为 `SUPPLIER_STOPPED`，整个来源事件再只创建一个正式后续 `work_item`，各发布子结果引用同一任务；其它原因只固定记录与 cause 匹配的 follow-up blocker 与证据，不伪造任务。重复事件返回原操作和原子结果，如有任务则返回原任务。
 - 仅 `SUPPLIER_STOPPED` 后续任务复用已注册 `work_item_type=BUSINESS_EXCEPTION`，业务对象是触发暂停的 `SUPPLIER_EXTERNAL_PRODUCT` 或 `SUPPLIER_OFFERING`，并由服务端固定 handler 路由 W21。零库存、不可供、过期、成本/关键供给变化等正常核对在权威注册表增加固定类型前保持 W21 实施 blocker，不得借用 `BUSINESS_EXCEPTION`。商城投递结果未知则另由已注册 `INTEGRATION_RESULT_UNKNOWN` 进入 W29。
-- 已注册人工任务仅用于核对来源、固定影响和准备替代候选证据，禁止选定替代供给或发起恢复发布。任务无人领取、处理失败或被转交，以及其它原因尚无注册任务，均不得把商品恢复为可下单。
+- 已注册人工任务仅用于核对来源、固定影响和准备替代候选证据，禁止选定替代供给或发起恢复发布。任务尚无个人责任人、处理失败或被转交，以及其它原因尚无注册任务，均不得把商品恢复为可下单。
 - 只允许系统安全暂停和人工暂停；禁止任何从安全暂停转为 `ON_SALE` 的提交，服务端必须返回 `RECOVERY_RESPONSIBILITY_UNCONFIRMED`。不得把“采购确认 → 运营发布”当作固定交接链路。库存重新出现、来源恢复可用或候选供给已就绪均不得自动解除暂停。
 
 ## 3. 入口、路由与任务页签
@@ -251,6 +251,7 @@ type SafetyPauseCause =
 
 type SafetyPauseFollowUpWorkItemRef = {
   workItemId: string
+  taskVersion: string
   workItemType: "BUSINESS_EXCEPTION"
   businessObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
   businessObjectId: string
@@ -647,7 +648,7 @@ type SystemSafetyPauseTrigger = {
 - [x] 提交发布形成不可变修订，正式结果固定显示版本号与投递编号。
 - [x] 系统安全暂停按“来源对象 + 原因 + 来源版本”冻结全部受影响发布；mock API 原子提交所有暂停子结果/投递。`STOPPED` 再与唯一 `BUSINESS_EXCEPTION` 任务同事务，其它原因只返回 blocker/证据，不伪造任务。
 - [x] `SystemSafetyPauseOperationView` 是列表/对象/操作结果的唯一结构：`SUPPLIER_STOPPED + COMMITTED/ALREADY_SAFE` 强制唯一 `followUpWorkItem`，其它已落库原因强制唯一 `followUpBlocker`，`UNKNOWN` 二者均禁止且保持 fail-closed。
-- [ ] 已注册安全暂停任务只用于核对来源/影响和准备候选证据，不阻塞首次暂停，也不能选定替代供给或发起恢复；任务失败、无人领取或尚无注册正常复核类型时，本地仍保持不可下单。
+- [ ] 已注册安全暂停任务只用于核对来源/影响和准备候选证据，不阻塞首次暂停，也不能选定替代供给或发起恢复；任务失败、尚无个人责任人或尚无注册正常复核类型时，系统仍保持不可下单。
 - [x] 销售价/销项税率变化且复核政策未配置时，`PUBLISH` 固定被 `REVIEW_POLICY_UNCONFIGURED` 阻断；无变化也只使用服务端 `publishGate` 结论。
 - [x] 任何安全暂停到 `ON_SALE` 的提交都被 `RECOVERY_RESPONSIBILITY_UNCONFIRMED` 阻断；只允许安全暂停或人工暂停；不得把“采购确认 → 运营发布”当作固定链路。
 - [x] 商城成功确认前不显示为“商城已生效”。

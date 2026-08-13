@@ -13,7 +13,7 @@
 - 财务连续处理卡券销售单期初票款任务，在一屏内核对同步成交额、当前应收、净已收、净已开票、证据和复核结论。
 - 若存在历史回款或发票，直接在当前队列上下文登记正式事实并完成多对多核销；若确认没有历史票款，明确“从 0 起”并留下正式证据。
 - 后续商城同步金额或票款分配变化时，处理新的差额复核，清楚比较上一有效复核与当前事实，不沿用旧结论。
-- 正式完成或驳回得到可验证终态后可自动进入下一项；暂挂后任务回到待领取状态，只提供手动继续浏览，不把导航冒充任务完成。
+- 完成或驳回得到可验证结果后可自动进入下一项；退回团队后原任务保持开放并清空个人责任，只提供手动继续浏览，不把导航冒充任务完成。
 
 ### 1.2 业务目标
 
@@ -35,7 +35,7 @@
 
 | 角色 | 默认入口 | 可见范围 | 主要动作 |
 | --- | --- | --- | --- |
-| 财务复核人 | W13 | 分配给本人或有权领取的卡券票款任务 | 领取、登记票款、确认从 0 起、通过、驳回、暂挂 |
+| 财务复核人 | W13 | 已由本人负责或本人有资格开始处理的卡券票款任务 | 开始处理、登记票款、确认从 0 起、通过、驳回、退回团队 |
 | 财务经办 | W11/W13（按配置） | 有权登记历史回款和发票的往来主体 | 登记与核销；是否可同时完成复核由岗位分离策略决定 |
 | 财务负责人 | W02/W13 | 授权范围内全部复核任务和进度 | 转交/查看；正式动作仍按任务权限 |
 | 销售 | W05 | 本人销售单的复核状态摘要 | 只读，不进入 W13 财务队列 |
@@ -45,9 +45,9 @@
 
 - 无 W13 模块权限时隐藏导航；直接访问显示无权限页。
 - 队列服务端按角色、组织和往来范围返回任务；前端不得获取全部任务后过滤。
-- 任务领取复用 W02 数据库条件更新原子完成；不存在租约到期、续租或领取令牌。
-- 已被他人有效领取时显示领取人，处理动作禁用，允许按权限只读查看。
-- 正式结论使用 W02 统一动作命令提交，服务端同时校验当前领取人、任务对象版本和岗位分离。
+- `POOL` 任务“开始处理”复用 W02 数据库条件更新原子完成；同一用户重试幂等，不存在租约到期、续租或领取令牌。
+- 已由他人负责时显示当前处理人，处理动作禁用，允许按权限只读查看。
+- 正式结论使用 `CompleteCardFundsReviewCommand` 提交，服务端同时校验当前责任人、任务对象版本和岗位分离。
 - 登记回款/发票与复核是否允许同一人完成由服务端 `allowedActions/actionBlockers` 返回；前端不按角色名自行判断。
 - 银行、发票和证据字段按 W11 敏感字段规则处理；权限收回或处理权丢失时立即清除揭示值并禁止提交。
 - 有队列权限但当前没有可处理数据时显示已完成空态；无数据范围与“任务已处理完”必须区分。
@@ -61,7 +61,7 @@
 | 打开销售单 | 当前对象摘要 | 新开/聚焦 W05 稳定销售单页签；W13 处理权保持不变 | 回 W13 恢复当前项和滚动位置 |
 | 登记历史回款/发票 | 当前复核项 | 在 W13 内容区展开同一 Allocation 组件；复杂深挖可聚焦 W11 会话，队列页签保留 | 完成后回当前项并重新查询版本 |
 | 完成并自动下一项 | 决策区 | URL 更新 `currentWorkItemId`，保留类型、范围、排序和自动下一项偏好 | 队列末尾进入完成空态 |
-| 刷新/浏览器后退 | 任意任务 | 恢复队列筛选、位置和当前任务；服务端重新校验领取状态和版本 | 不恢复敏感揭示状态 |
+| 刷新/浏览器后退 | 任意任务 | 恢复队列筛选、位置和当前任务；服务端重新校验责任状态和版本 | 不恢复敏感揭示状态 |
 
 TaskTab 身份为 `queue:card-funds-review:{queueContextId}`，标题为 `卡券票款复核`。同一队列上下文只保留一个页签；当前项变化不改变页签身份。URL 至少保存任务类型、范围、排序、当前项和自动下一项偏好，但不保存金额、证据或权限结论。
 
@@ -79,7 +79,7 @@ TaskTab 身份为 `queue:card-funds-review:{queueContextId}`，标题为 `卡券
 │ 正式回款与发票明细                       │ 同步版本、任务原因、审计时间线         │
 │ [登记历史回款] [登记历史发票]             │ [打开销售单] [打开客户往来]            │
 ├─────────────────────────────────────────┴────────────────────────────────────┤
-│ 结论区：证据/备注 · [无历史票款，从0起] [复核通过] [驳回] [暂挂]                │
+│ 结论区：证据/备注 · [无历史票款，从0起] [复核通过] [驳回] [退回团队]          │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -93,7 +93,7 @@ TaskTab 身份为 `queue:card-funds-review:{queueContextId}`，标题为 `卡券
 | 差异区 | 解释为何产生差额复核 | `BusinessDiffPanel` | 仅 `SYNC_DELTA` 展示；左右均为受控事实投影 |
 | 登记区 | 复用 W11 表单和多对多核销 | `AllocationWorkspace` | 保持队列条和对象身份可见；不得变成另一个无上下文菜单 |
 | 证据与历史 | 支撑当前结论并追溯复核链 | 附件、`AuditTimeline` | 当前证据与历史证据分开，不覆盖旧记录 |
-| 决策区 | 完成、驳回或暂挂 | `FormalActionConfirmDialog` / `FormalActionResult` | 底部 sticky；先固定显示结果再切下一项 |
+| 决策区 | 完成、驳回或退回团队 | `FormalActionConfirmDialog` / `FormalActionResult` | 底部 sticky；先固定显示结果再切下一项 |
 
 ### 4.3 两类任务
 
@@ -128,7 +128,7 @@ TaskTab 身份为 `queue:card-funds-review:{queueContextId}`，标题为 `卡券
 | 发票摘要 | 发票号码、蓝/红、日期、含税/不含税/税额、净分配到当前子账、红冲状态 | W11 `invoice` + `sales_invoice_allocation` |
 | 当前证据 | 正式文档、受控证据引用、备注、提供人和时间 | 完成复核时证据不能为空；敏感值受控揭示 |
 | 复核历史 | 复核号、类型、结果、复核人/时间、当时版本、前驱/被替代关系 | `receivable_funds_review` 追加式链；历史不可编辑删除 |
-| 任务信息 | 原因、业务影响、优先级、到期、领取人 | `work_item`；内部代码映射为业务文案 |
+| 任务信息 | 原因、业务影响、优先级、到期、当前处理人 | `work_item`；内部代码映射为业务文案 |
 
 ### 5.3 差额复核对比
 
@@ -147,37 +147,36 @@ TaskTab 身份为 `queue:card-funds-review:{queueContextId}`，标题为 `卡券
 | 能力 | 默认值 | URL 状态 | 行为 |
 | --- | --- | --- | --- |
 | 任务类型 | 全部有效任务 | `type=all|opening|delta` | 切换后重新建立队列上下文；清除筛选时直接移除 `type`，不残留 `type=all` 默认值 |
-| 责任范围 | 我的任务 | `scope=mine|role_pool` | 角色池任务需先原子领取 |
 | 客户/单号搜索 | 空 | `q` | 服务端搜索销售单号、客户和往来主体；筛选条提供搜索框（防抖 300ms，已修复输入过快时旧响应覆盖新输入的竞态），Enter 兜底，`/` 聚焦；清空后移除参数 |
 | 时限 | 全部有效 | `due=all|today|overdue` | 到期判断使用已确认业务时区；筛选条提供「全部时限/今日到期/已超期」切换 |
-| 责任范围 | 我的任务 | `scope=mine|role_pool` | 筛选条提供分段切换，文案「我的待办/团队待认领」；切换时重建队列上下文 |
+| 责任范围 | 我的任务 | `scope=mine|team` | 筛选条提供分段切换，文案「我的待办/团队待处理」；团队待处理中的任务需先原子“开始处理”；切换时重建队列上下文 |
 | 复核状态 | 待处理 | `status` | 正常队列不混入已完成历史；历史另行查询 |
 | 排序 | 服务端队列顺序 | `sort` | 优先级、到期和业务排序规则由服务端固定返回 |
-| 自动下一项 | 开启 | `autoNext` + 本地偏好 | 只控制正式完成/驳回得到终态后的导航；暂挂、转交和结果未知不自动移动 |
+| 自动下一项 | 开启 | `autoNext` + 本地偏好 | 只控制完成/驳回得到确定结果后的导航；退回团队、转交和结果未知不自动移动 |
 
 - 队列总数和当前位置由服务端 `queueContextId` 快照/稳定游标返回，不能用当前页数组下标冒充。
 - 默认排序必须沿用统一待办的优先级 + 到期顺序；前端禁止按客户聚合或应收账龄本地重排。
-- 暂挂后任务回到待领取；当前位置、手动下一项和恢复入口必须明确展示，不触发完成成功语义。
+- 退回团队后原任务保持 `OPEN` 且个人责任清空；当前位置、手动下一项和恢复入口必须明确展示，不触发完成成功语义。
 - 「已完成」视图空态提供「清除筛选」回退到有效队列；清除筛选保留 `scope`/`queueContextId` 等保留项。
 
 ## 7. 操作契约
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 领取任务 | 队列条 | 任务待领取、当前用户有责任角色 | 无 | W02 条件更新原子领取并显示处理人 | 被他人领取时转只读并可跳下一项 |
+| 开始处理 | 队列条 | 开放 `POOL` 任务尚无个人责任人，当前用户有责任角色 | 无 | W02 条件更新原子写入当前用户并显示处理人 | 已由他人处理时转只读并可跳下一项 |
 | 登记历史回款 | 票款事实区 | 有 W11 回款登记权；往来主体明确 | 按 W11 正式提交确认 | 形成回款及分配；返回后由服务端重查金额、版本和当前有效任务 | 保留 W11 草稿；结果未知不完成复核 |
 | 登记历史发票 | 票款事实区 | 有 W11 发票登记权；号码和主体校验通过 | 按 W11 正式提交确认 | 形成发票及分配；返回后由服务端重查版本和当前有效任务 | 重复票号定位已有事实；不创建副本 |
-| 无历史票款，确认从 0 起 | `OPENING` 决策区 | 当前净已收/净已开均为 0；用户已核对；服务端允许；证据完整 | 强确认销售单、应收与“未发现历史票款” | 用 W02 动作命令提交；不创建虚假回款/发票，同事务形成通过复核链尾、`workflow_action` 并完成任务 | 版本变化时阻断；保留证据，刷新事实后重审 |
-| 复核通过 | 决策区 | 领取有效；证据完整；当前对象版本、账户版本、票款事实版本与任务一致；登记事实已确认入账 | `FormalActionConfirmDialog` | 用 W02 动作命令追加新复核链尾、`workflow_action`、更新可重建缓存并完成任务，固定展示复核号后可自动下一项 | 失败保留当前项；结果未知查询原操作，不跳下一项 |
-| 驳回复核 | 决策区 | 固定 `completionAction` 允许；领取有效；原因和证据必填 | 确认驳回影响 | 用 W02 动作命令追加本次 `REJECTED` 复核链尾和 `workflow_action` 并完成当前任务；不创建、不转交驳回后继任务。结果区显示“后继流程未配置” blocker 和人工协作说明 | 结果未知停留当前项；不得猜测任务类型、责任池或 handler 并补建驳回后继任务 |
-| 暂挂 | 决策区 | 当前任务允许；原因按规则填写 | 轻确认 | 使用 W02 `DEFER` 动作记录原因，任务回到待领取状态，不形成复核事实、不自动下一项；结果面板固定显示「当前项已跳过 · 仍在待处理列表」，用户按「下一项」或 j/k 手动继续 | 失败停留；显示任务归属；可手动浏览下一项 |
-| 转交 | 任务更多菜单 | 有转交权限；未作出复核结论；目标责任范围有效 | 展示责任变化和原因 | 使用 W02 `TRANSFER` 动作直接更新责任人并记录审计，任务状态不变；不形成 `receivable_funds_review` | 结果未知不改变当前归属；查询原操作 |
+| 无历史票款，确认从 0 起 | `OPENING` 决策区 | 当前净已收/净已开均为 0；用户已核对；服务端允许；证据完整 | 强确认销售单、应收与“未发现历史票款” | 用 `CompleteCardFundsReviewCommand` 提交；不创建虚假回款/发票，同事务形成通过复核链尾、`workflow_action` 并完成任务 | 版本变化时阻断；保留证据，刷新事实后重审 |
+| 复核通过 | 决策区 | 当前责任人为本人；证据完整；当前对象版本、账户版本、票款事实版本与任务一致；登记事实已确认入账 | `FormalActionConfirmDialog` | 用 `CompleteCardFundsReviewCommand` 追加新复核链尾、`workflow_action`、更新可重建缓存并完成任务，固定展示复核号后可自动下一项 | 失败保留当前项；结果未知查询原操作，不跳下一项 |
+| 驳回复核 | 决策区 | 当前责任人为本人；原因和证据必填 | 确认驳回影响 | 用 `CompleteCardFundsReviewCommand` 追加本次 `REJECTED` 复核链尾和 `workflow_action` 并完成当前任务；不创建、不转交驳回后继任务。结果区显示“后继流程未配置” blocker 和人工协作说明 | 结果未知停留当前项；不得猜测任务类型、责任池或 handler 并补建驳回后继任务 |
+| 退回团队 | 决策区 | `RELEASE_TO_TEAM` 可用；原因按规则填写 | 轻确认 | 清空原开放任务个人责任并记录原因，任务保持 `OPEN`，不形成复核事实、不自动下一项 | 失败停留；显示服务端任务责任；可手动浏览下一项 |
+| 转交 | 任务更多菜单 | 有转交权限；未作出复核结论；目标责任范围有效 | 展示责任变化和原因 | 使用 W02 `REASSIGN` 更新原开放任务责任并记录审计；不形成 `receivable_funds_review`，不创建同义后继任务 | 结果未知不改变当前归属；查询原操作 |
 | 打开销售单/客户往来 | 右栏 | 有目标模块权限 | 无 | 聚焦目标页签，W13 保留 | 权限不足时留在 W13 并说明 |
 | 查询最终结果 | 结果不确定区 | 已有操作号 | 无 | 得到正式终态后更新结果/移动下一项 | 仍未知时保留联系支持和追踪号 |
 
 任何正式复核都不能只更新 `work_item`，也不能先写复核事实再单独“标记完成”。同一事务必须追加 `receivable_funds_review`、`workflow_action`，更新可重建查询缓存，并完成当前任务。`REJECTED` 必须只终结本次复核：禁止创建、转交或猜测任何驳回后继任务（后继任务生成不在范围内）；结果区必须仅返回 `REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED` blocker 与人工协作说明。纯转交不代表已复核，按 W02 转交动作处理且不得写复核事实。
 
-复核通过/从 0 起在打开确认框前必须前置校验证据：结论区「凭证编号 / 证据说明」至少一项非空并保存，否则主按钮禁用并就地标红提示（拒绝/暂挂路径不要求证据）。证据不得为空；可接受证据类型白名单必须由服务端规则返回，前端禁止自建白名单或放宽。登记历史回款/发票的经办人与最终复核人是否允许同一人，必须仅由服务端岗位分离策略经 `allowedActions`/`actionBlockers` 判定，UI 禁止自行放宽。登记历史回款/发票成功后客户端必须按最新数据版本重新领取，避免「登记 → 通过」被版本校验阻断；「演示选项」必须折叠在页面底部，不得占决策区；决策区按钮在提交期间必须统一禁用（含顶栏处理条）。
+复核通过/从 0 起在打开确认框前必须前置校验证据：结论区「凭证编号 / 证据说明」至少一项非空并保存，否则主按钮禁用并就地标红提示（拒绝/退回团队路径不要求证据）。证据不得为空；可接受证据类型白名单必须由服务端规则返回，前端禁止自建白名单或放宽。登记历史回款/发票的经办人与最终复核人是否允许同一人，必须仅由服务端岗位分离策略经 `allowedActions`/`actionBlockers` 判定，UI 禁止自行放宽。登记历史回款/发票成功后必须按最新数据版本刷新任务责任和事实，避免旧版本继续提交；「演示选项」必须折叠在页面底部，不得占决策区；决策区按钮在提交期间必须统一禁用（含顶栏处理条）。
 
 ## 8. 数据契约
 
@@ -188,24 +187,25 @@ type CardFundsReviewQueueQuery = {
   queueContextId?: string
   currentWorkItemId?: string
   type: "all" | "opening" | "delta"
-  scope: "mine" | "role_pool"
+  scope: "mine" | "team" | "history"
   q?: string
   due?: "all" | "today" | "overdue"
-  status?: "pending" | "completed"
+  status?: "OPEN" | "COMPLETED" | "CLOSED"
   sort?: string
 }
 
 type CardFundsReviewItemView = {
   workItem: {
     workItemId: string
+    taskVersion: string
     workItemType: "CARD_FUNDS_REVIEW" | "CARD_FUNDS_DELTA_REVIEW"
-    completionAction: string
     subjectVersion: string
     workItemStatus: WorkItemStatus
+    assignmentMode: "DIRECT" | "POOL"
     dueAt?: string
-    claimedBy?: UserSummary
+    ownerUser?: UserSummary
     allowedActions: Array<
-      "CLAIM" | "CONFIRM_ZERO" | "APPROVE" | "REJECT" | "HOLD" | "TRANSFER"
+      "START_PROCESSING" | "CONFIRM_ZERO" | "APPROVE" | "REJECT" | "RELEASE_TO_TEAM" | "REASSIGN"
     >
     actionBlockers: Array<{ action: string; code: string; message: string }>
   }
@@ -237,7 +237,7 @@ type CardFundsReviewItemView = {
 }
 ```
 
-金额使用定点十进制字符串或等价安全类型，不使用 JavaScript 浮点数。`workItemStatus` 直接复用 W02 `WorkItemStatus`，不接受本地字符串或同义枚举；`domainVersion`、`chainVersion`、`fundsFactVersion` 和任务 `subjectVersion` 都是服务端不透明版本标识，前端不得递增或互相替代。Query Key 包含用户、角色、权限/范围版本、队列上下文、任务 ID 和 `subjectVersion`。当前项、邻接项和队列计数由服务端返回；领取权由服务端在动作提交时按条件更新校验。
+金额使用定点十进制字符串或等价安全类型，不使用 JavaScript 浮点数。`workItemStatus` 直接复用 W02 `WorkItemStatus`，不接受本地字符串或同义枚举。`mine/team` 只允许 `OPEN`，`history` 只允许 `COMPLETED/CLOSED` 且全部只读；不兼容组合返回 400。`taskVersion`、`domainVersion`、`chainVersion`、`fundsFactVersion` 和任务 `subjectVersion` 都是服务端不透明且彼此独立的版本标识，前端不得递增或互相替代。Query Key 包含用户、角色、权限/范围版本、队列上下文、任务 ID、`taskVersion` 和 `subjectVersion`。当前项、邻接项和队列计数由服务端返回；当前责任和处理资格由服务端在每次动作提交时重新校验。
 
 ### 8.2 正式复核提交
 
@@ -270,8 +270,13 @@ type CardFundsReviewDecision = CardFundsReviewDecisionBase &
       }
   )
 
-type CompleteCardFundsReviewCommand =
-  WorkItemActionCommand<CardFundsReviewDecision>
+type CompleteCardFundsReviewCommand = {
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  decision: CardFundsReviewDecision
+  idempotencyKey: string
+}
 
 type CardFundsReviewBusinessResultBase = {
   receivableFundsReviewId: string
@@ -301,50 +306,31 @@ type CardFundsReviewBusinessResult = CardFundsReviewBusinessResultBase &
       }
   )
 
-type CompleteCardFundsReviewResult =
-  WorkItemActionResult<CardFundsReviewBusinessResult>
-
-type CardFundsReviewHoldAction = {
-  kind: "HOLD"
-  reasonCode: string
-  note?: string
+type CompleteCardFundsReviewResult = {
+  workItemId: string
+  workItemStatus: "COMPLETED"
+  businessResult: CardFundsReviewBusinessResult
 }
-
-type HoldCardFundsReviewCommand =
-  WorkItemActionCommand<CardFundsReviewHoldAction>
-
-type HoldCardFundsReviewResult =
-  WorkItemActionResult<{ heldAt: string; resumeHint?: string }>
-
-type CardFundsReviewTransfer = {
-  targetOwnerRole: string
-  targetOwnerUserId?: string
-  reasonCode: string
-  note?: string
-}
-
-type TransferCardFundsReviewCommand =
-  WorkItemActionCommand<CardFundsReviewTransfer>
 ```
 
-正式结论固定使用 `CompleteCardFundsReviewCommand`，直接复用 W02 `WorkItemActionCommand`。命令携带 `workItemId`、`expectedSubjectVersion` 和 `decision`；应收账户、当前复核链尾、复核类型与结论、证据及全部领域版本都放在 `decision`。W13 不定义领取令牌别名，也不把对象字段提升成另一套命令外层。
+正式结论固定使用 `CompleteCardFundsReviewCommand`，不得复用公共任务完成动作。命令携带 `workItemId`、`expectedTaskVersion`、`expectedSubjectVersion` 和 `decision`；应收账户、当前复核链尾、复核类型与结论、证据及全部领域版本都放在 `decision`。W13 不定义责任令牌别名，也不把对象字段提升成另一套命令外层。
 
 服务端在同一个正式事务中：
 
-1. 锁定并校验固定任务类型、`completionAction`、当前领取人、任务状态和任务对象版本；
+1. 锁定并校验固定任务类型、当前责任人、任务状态和任务对象版本；
 2. 锁定应收账户及当前复核链尾，核对 `decision` 中的账户身份、账户/链版本和预计下一复核号；
 3. 重新取得当前销售版本、应收分录、净回款分配和净发票分配，核对全部领域版本；
 4. 校验当前复核对象版本与 `decision` 一致；
 5. 校验证据非空、岗位分离、结论组合和复核号连续；`NO_HISTORY_FROM_ZERO` 只允许 `OPENING + APPROVED` 且净已收/净已开均为 0；
 6. 以 `review_no + 1` 追加 `receivable_funds_review`，并在适用时唯一引用 `supersedes_review_id`；
 7. 追加同一决定的 `workflow_action`，更新 `receivable_account.review_status` 等可重建同步缓存，并完成当前正式任务；`REJECTED` 分支不得创建或转交后继任务；
-8. 返回共享 `WorkItemActionResult`，其中业务结果固定包含复核事实、`workflowActionId`、操作号和完成时间；`REJECTED` 还返回固定配置 blocker 与人工协作说明。
+8. 返回 `CompleteCardFundsReviewResult`，其中业务结果固定包含复核事实、`workflowActionId`、操作号和完成时间；`REJECTED` 还返回固定配置 blocker 与人工协作说明。
 
 复核事实、`workflow_action`、查询缓存和当前任务完成不得分成多次提交。`REJECTED` 事务禁止创建或转交后继任务；服务端禁止从自由文本、当前角色或前端参数推导后继 `work_item_type`、责任池或 `handlerKey`。驳回后继任务生成不在本工作面范围内。重复点击和超时重试不得重复推进状态；若网络中断，UI 必须停留当前项并查询操作号；没有正式终态前不得本地标为已复核、不得自动下一项。
 
-暂挂如需写入任务动作，固定使用 `HoldCardFundsReviewCommand`。成功只返回 `WorkItemActionResult`，任务回到待领取状态，但不写 `receivable_funds_review`、不产生正式复核 `workflow_action`、不自动下一项。纯转交使用 W02 `TRANSFER` 动作直接更新责任人并记录审计，任务状态不变；它不代表票款已经复核，也不得生成复核链记录。
+退回团队固定使用 W02 `RELEASE_TO_TEAM`，只清空原开放任务个人责任并记录原因，任务保持 `OPEN`；不写 `receivable_funds_review`、不产生复核 `workflow_action`、不自动下一项。转交使用 W02 `REASSIGN` 更新原开放任务责任并记录审计，不创建同义后继任务；它不代表票款已经复核，也不得生成复核链记录。
 
-在复核完成前登记回款、分配或发票会改变当前复核对象版本。W13 返回后必须向服务端查询“当前有效复核任务”：若原任务仍有效，则采用服务端返回的新上下文；若系统已用正式后继任务替代原任务，则按 `replacementWorkItemId` 定位并重新领取。前端不得直接改写原任务版本，也不得继续拿旧版本完成新版本的复核。
+在复核完成前登记回款、分配或发票会改变当前复核对象版本。W13 返回后必须向服务端查询“当前有效复核任务”：若原任务仍有效，则采用服务端返回的新上下文；若系统因新的业务版本创建了替代任务，则按 `replacementWorkItemId` 定位，并按其 `DIRECT` / `POOL` 分派事实处理。前端不得直接改写原任务版本，也不得继续拿旧版本完成新版本的复核。
 
 ### 8.3 前端边界
 
@@ -363,18 +349,18 @@ type TransferCardFundsReviewCommand =
 | 队列已完成 | “当前筛选项已处理完”及处理数量 | 返回工作台、切换筛选 | 新任务到达或手动刷新 |
 | 筛选无结果 | 显示筛选摘要 | 清除筛选 | 返回有效队列 |
 | 无数据范围 | 不显示“已处理完” | 查看角色/申请范围 | 范围更新后重查 |
-| 已被他人领取 | 对象可按权限只读，动作禁用并显示处理人 | 跳下一项 | 转交/暂挂后重新领取 |
-| 处理权丢失（版本冲突或已转交） | 明确失效提示；保留安全输入 | 丢失后禁止提交 | 重新领取并重校验版本 |
+| 已由他人负责 | 对象可按权限只读，动作禁用并显示处理人 | 跳下一项 | 有权转交、退回团队或任务完成后重查 |
+| 处理权变化（版本冲突或已转交） | 明确失效提示；保留安全输入 | 禁止提交 | 重新取得责任并重校验版本 |
 | 查询失败且无缓存 | `BusinessFailureState`，保留队列身份但不显示金额结论 | 重试、返回 W02 | 查询恢复 |
 | 查询失败有缓存 | 保留旧对象并标陈旧 | 只读；正式提交禁用 | 重试成功 |
 | 票款登记保存失败 | W11 区域保留输入和分配 | 修正/重试 | 正式结果确认后刷新当前项 |
 | 版本冲突 | 展示“复核对象已变化”和结构化 diff | 刷新当前任务 | 重新核对最新事实 |
-| 正式动作失败 | 固定错误区说明当前项仍在队列 | 修正、按原操作重试 | 成功或暂挂 |
-| 暂挂成功 | 显示动作记录，任务回到待领取，不使用完成态视觉 | 恢复处理、手动浏览下一项 | 重新定位并领取该任务 |
+| 正式动作失败 | 固定错误区说明当前项仍在队列 | 修正、按原操作重试 | 成功或退回团队 |
+| 退回团队成功 | 显示责任调整记录，原任务保持 `OPEN` 且无个人责任人，不使用完成态视觉 | 手动浏览下一项 | 重新定位并开始处理该任务 |
 | 转交成功 | 显示新责任人和转交记录，任务状态不变 | 返回工作台、查看任务 | 不显示复核号或复核结论 |
 | 正式动作成功 | `FormalActionResult` 固定展示复核号、结论、`workflowActionId`、证据时间和下一项 | 打开销售单/往来、下一项 | 当前任务由票款复核事务完成 |
 | 驳回完成（后继不在范围内） | 必须固定展示本次 `REJECTED` 复核号、当前任务已完成，以及 `REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED` blocker 和人工协作说明 | 复制协作摘要、继续下一项 | 禁止创建/转交驳回后继任务 |
-| 正式结果不确定 | 固定结果区显示原操作号；任务、链尾和账户复核状态都不乐观改变 | 查询最终结果、联系支持 | 得到可验证 `WorkItemActionResult` 后才移动 |
+| 正式结果不确定 | 固定结果区显示原操作号；任务、链尾和账户复核状态都不乐观改变 | 查询最终结果、联系支持 | 得到可验证 `CompleteCardFundsReviewResult` 后才移动 |
 | 字段级隐藏/权限收回 | 敏感值掩码或清除；必要字段缺失时动作禁用 | 返回有权页面 | 权限恢复后重查 |
 
 ## 10. 响应式与键盘
@@ -402,7 +388,9 @@ type TransferCardFundsReviewCommand =
 
 跨工作面只传稳定身份与队列上下文。销售版本、票款金额、版本、权限和复核有效性必须在目标页重新查询。
 
-W13 复用 W02 的领取与统一动作命令（`WorkItemActionCommand`，`kind` 区分领取、暂挂、转交和任务内动作）；只在 `CardFundsReviewDecision` 中定义本领域账户、链尾、结论、证据和并发版本，不复制任务命令或任务状态机。
+W13 只复用 W02 的“开始处理、退回团队、转交”责任命令；票款复核结论固定使用
+`CompleteCardFundsReviewCommand`。本领域账户、链尾、结论、证据和并发版本全部位于
+`CardFundsReviewDecision`，不得复制任务责任状态机或恢复公共完成命令。
 
 ## 12. 验收清单
 
@@ -412,11 +400,11 @@ W13 复用 W02 的领取与统一动作命令（`WorkItemActionCommand`，`kind`
 - [x] “从 0 起”不会创建 0 元回款/发票，且必须有明确证据和强确认。
 - [x] 完成时校验复核对象版本一致；变化时阻断而非静默通过。
 - [x] 复核链递增、单根不分叉，旧记录不可编辑删除，当前缓存可从链重建。
-- [x] 所有正式结论使用 W02 `WorkItemActionCommand` 提交；账户、链尾、结论和领域版本全部位于 `decision`，领取权由服务端条件更新校验。
+- [x] 所有正式结论使用 `CompleteCardFundsReviewCommand` 提交；账户、链尾、结论和领域版本全部位于 `decision`，当前责任由服务端重新校验。
 - [ ] `receivable_funds_review`、`workflow_action`、查询缓存和当前任务完成在同一事务形成，不存在独立“标记完成”。
 - [x] `REJECTED` 只形成驳回复核事实并完成当前任务；结果固定显示配置 blocker/协作说明；前后端均禁止猜测、创建或转交驳回后继任务（后继任务生成不在范围内）。
 - [x] 处理成功先展示固定复核号/结果再自动下一项；结果不确定时不移动。
-- [ ] 领取、他人占用、暂挂、转交、驳回和从 W05/W11 返回均不丢队列上下文；暂挂后任务回到待领取。
+- [ ] 开始处理、他人占用、退回团队、转交、驳回和从 W05/W11 返回均不丢队列上下文；退回团队后原任务保持 `OPEN` 且无个人责任人。
 - [x] 复核未完成时 W11/W15 能识别指标不可靠，不以 0 值冒充已核实。
 - [ ] 五档视口、键盘、焦点恢复和读屏队列位置播报通过验收。
 - [x] 默认排序沿用统一待办优先级 + 到期顺序；前端禁止本地重排。
@@ -427,7 +415,7 @@ W13 复用 W02 的领取与统一动作命令（`WorkItemActionCommand`，`kind`
 ## 13. 业务依据
 
 - `erp-phase-1.md` §5.3、§8.7、§9.1、§9.4、§11：期初票款置 0 后逐单复核、统一票款内核和分析可靠性提示。
-- `erp-data-model.md` §6.1 `work_item`、§6.8 `receivable_funds_review`：固定任务类型、领取、对象版本、复核链和证据不变量。
+- `erp-data-model.md` §6.1 `work_item`、§6.8 `receivable_funds_review`：固定任务类型、分派、对象版本、复核链和证据不变量。
 - `erp-data-model.md` §7.5、§8.3、§9.3、§12：资金状态、票款事务、独立事实和同步/异步投影边界。
 - `erp-ui-design.md` §4.4 M3、§4.6.2 M5、§5.5、§11：连续处理、同屏核销、正式结果和结果不确定。
 - `erp-ui-flows.md` §3、§5、§6：卡券同步到应收、W11 同一核销会话和 W13 单屏连续复核。

@@ -241,3 +241,98 @@ GET /admin/audit-logs?page=1&page_size=50&actor_account=admin01&action=customer.
 > 核对依据：`features/sales-orders/api.ts`（`SalesOrderListView = { items, total, page, pageSize, metrics, queriedAt }`）、
 > `features/mall-consumption-orders/types.ts`（`pageInfo: { page, pageSize, total }`）、
 > `features/mall-sync/api.ts`（全部 ISO 时间字符串）、`features/card-business-analytics/types.ts`（`ratePercent: number`）。
+
+---
+
+## 8. 审批运行与待办接口合同
+
+本节与 `docs/approval-workflow-contract.md` 共同生效。P3、P4 不得继续沿用旧
+`claim / complete / UNCLAIMED / IN_PROGRESS` 形态。
+
+### 8.1 队列查询
+
+```text
+GET /admin/work-items?scope=mine|team|managed|history&...
+```
+
+- `scope=mine`：只返回 `status=OPEN` 且 `owner_user_id=当前用户` 的任务；
+- `scope=team`：只返回当前用户有资格处理、`status=OPEN`、`assignment_mode=POOL` 且
+  `owner_user_id` 为空的任务；
+- `scope=managed`：只向具备任务责任管理权限的主管返回其授权组织和数据范围内全部开放任务，
+  包括未分派责任池任务和已由下属负责的任务；不得接受任意组织或用户扩大范围；
+- `scope=history`：只返回当前用户曾负责、曾完成、曾关闭，或当前具有组织级历史查看权的
+  `COMPLETED/CLOSED` 任务；历史任务只读；
+- `mine/team/managed` 只允许 `status=OPEN`，`history` 只允许
+  `status=COMPLETED|CLOSED`；不兼容组合返回 400；
+- 查询范围由服务端根据 JWT 用户、角色、组织、数据范围和对象参与权形成；
+  接口不得接受任意 `owner_user_id` 代替权限过滤；
+- 响应使用 `status: OPEN | COMPLETED | CLOSED`、
+  `assignment_mode: DIRECT | POOL`、责任组织、可空 `owner_user_id` 和必填 `task_version`，不得返回客户端租约或领取令牌；
+- `task_version` 是 `work_item` 自身持久化乐观锁版本的 API 名称。任何队列、对象详情或业务工作面
+  只要嵌入可操作任务摘要，都必须返回同一字段；不得用业务对象 `subject_version` 代替。
+- 阻塞步骤保留的开放待办必须返回 `processing_state=APPROVAL_BLOCKED`、权限安全的结构化阻塞摘要和空
+  `allowed_actions`；其它可处理任务返回 `processing_state=READY`。
+
+### 8.2 建立和调整责任
+
+| 方法与路径 | 用途 | 关键约束 |
+| --- | --- | --- |
+| `POST /admin/work-items/{id}/start-processing` | 从“团队待处理”建立本人责任 | 只适用于开放 `POOL` 任务；同一用户重复请求幂等 |
+| `POST /admin/work-items/{id}/release-to-team` | 退回团队 | 只清空原开放任务责任；原因必填；不创建后继任务 |
+| `POST /admin/work-items/{id}/reassign` | 受控转交 | 目标用户、权限、数据范围和岗位分离由服务端重验 |
+| `POST /admin/work-items/{id}/close` | 关闭重复、误派或已有替代的任务 | 专门权限和原因必填；不得关闭未完成审批、确认或补偿任务 |
+
+所有写接口必须接收统一幂等键和预期任务版本；冲突返回 409 及新的服务端任务摘要。
+请求中的 `expected_task_version` 必须来自最近一次查询的 `task_version`；客户端不得生成或递增。
+客户端不得提交 `assignment_mode`、`owner_role`、下一步骤或任意动作代码改变服务端路由。
+
+### 8.3 审批和正式任务动作
+
+`start_approval`、`submit_decision`、`cancel_approval`、`recover_approval` 是服务端应用端口，不是允许客户端
+任意启动定义或选择完成动作的公共 HTTP 接口。每个业务工作面必须使用已注册的强类型接口，
+由 Handler 根据任务类型构造对应命令并调用运行时端口。
+
+每个决定命令至少携带：
+
+```text
+work_item_id
+approval_instance_id
+expected_task_version
+expected_instance_version
+expected_step_version
+expected_subject_version
+decision
+reason
+idempotency_key
+```
+
+服务端必须重验活动步骤、当前责任人、对象版本、权限、数据范围和岗位分离。
+响应必须同时返回审批实例结果、当前任务结果、业务对象最新状态，以及存在时的下一开放任务摘要。
+
+不得提供以下接口或等价能力：
+
+```text
+POST /admin/work-items/{id}/claim
+POST /admin/work-items/{id}/complete
+```
+
+非审批任务同样由任务类型绑定的强类型领域命令完成。客户端不得提交
+`completion_action`，也不得仅凭 HTTP 2xx 本地推进下一步骤或业务状态。
+
+### 8.4 阻塞审批管理
+
+| 方法与路径 | 用途 | 关键约束 |
+| --- | --- | --- |
+| `GET /admin/approval-instances?status=BLOCKED` | 查询授权范围内受阻审批 | 专门诊断权限；返回实例、当前步骤、阻塞码和各自版本，以及可选当前任务摘要 |
+| `POST /admin/approval-instances/{id}/recover` | 重试当前步骤 | 专门恢复权限；只允许 `recovery_action=RETRY_CURRENT_STEP` |
+
+恢复请求必须包含 `current_step_instance_id`、`expected_instance_version`、
+`expected_step_version`、存在开放待办时的 `expected_task_version`、结构化原因和幂等键。
+请求不得包含审批决定、目标步骤、目标用户或业务字段。服务端只有在阻塞原因已被证明消除后，
+才能恢复原步骤并创建或校正唯一开放待办；否则保持 `BLOCKED`。冲突返回 409 和最新阻塞摘要。
+
+### 8.5 BPM 关联
+
+业务 HTTP 契约不因 `runtime_kind=INTERNAL|BPM` 改变。`external_instance_id`、
+`external_activity_id` 和消息关联键只向具备诊断权限的管理接口展示，不进入普通工作面动作参数。
+接入 BPM 前必须先完成 outbox/inbox、幂等消费、结果查询和人工恢复的独立基础设施修订。

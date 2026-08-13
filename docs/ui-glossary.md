@@ -1,7 +1,7 @@
 # UI 文案术语表
 
-> **状态**：基线 v1.3
-> **依据**：`erp-client` 全量扫描（2026-08-03）+ W21 供应商供给模型（2026-08-08）；`erp-ui-design.md` 的语言原则
+> **状态**：基线 v1.4
+> **依据**：`erp-client` 全量扫描（2026-08-03）+ W21 供应商供给模型（2026-08-08）+ `approval-workflow-contract.md`（2026-08-13）；`erp-ui-design.md` 的语言原则
 > **适用范围**：所有用户可见文案——按钮、状态条、提示、Alert、描述、列名、空态、toast、错误恢复指引
 > **不适用**：代码注释、数据模型字段名、内部错误对象 key、文档中的架构描述
 > **验收挂钩**：W 系列工作面文档 §12「页面文案不出现实现术语」
@@ -10,7 +10,7 @@
 
 ### 1.1 目的
 
-本系统围绕内部工作流架构构建（work item、领取与动作命令、事实、对象版本）。这些概念**只允许**出现在代码与文档中；用户界面**必须**翻译成业务语言。
+本系统围绕内部工作流架构构建（work item、任务责任、审批步骤、动作命令、事实、对象版本）。这些概念**只允许**出现在代码与文档中；用户界面**必须**翻译成业务语言。
 
 ### 1.2 判断原则
 
@@ -26,7 +26,7 @@
 2. **状态说结果，禁止说锁**：状态文案**必须**是处理结果（如「正在处理中」），**禁止**「租约 v1 有效」等锁/租约说法。
 3. **错误说下一步，禁止说原理**：错误文案**必须**给出可执行下一步（如「请刷新后重新处理」），**禁止**「幂等键冲突」等原理词。
 4. **「正式」默认删除**：仅当与「草稿/预览」形成必要对比时方可保留对比语义；否则「正式提交」**必须**写为「提交」，「正式」字样**必须**删除。
-5. **内部词禁止上屏**：work_item、领取/动作命令、对象版本、幂等键、水位等实现词**禁止**进入任何用户可见字符串；租约、令牌、信封、指纹等分布式协议概念**禁止**出现在用户界面。
+5. **内部词禁止上屏**：work_item、领取/重新领取、动作命令、审批步骤实例、对象版本、幂等键、水位等实现词**禁止**进入任何用户可见字符串；租约、令牌、信封、指纹等分布式协议概念**禁止**出现在用户界面。
 6. **禁止把工作面编号当导航**：用户提示**必须**写页面中文名（如「客户往来」「接口错误中心」），**禁止**写「W11」「W29」。
 7. **禁止把命令名/字段名当文案**：**禁止** `Complete*Command`、`subject_hash`、`mappingTaskStatus`、`fail-closed` 等进入界面。
 
@@ -45,25 +45,25 @@
 | 提交正式动作 | `procurement-rejection-card.tsx:537` | 提交处理结果 |
 | Complete*Command / *Envelope（用户可见） | 确认对话框 description | 将提交「…」结论（业务说法） |
 | work_item / work_item_type（用户可见） | 结算、权限审计、导入阻断 | 任务 / （类型码不出现） |
-| 任务信封 | 结算确认文案 | （不出现）→ 领取任务后提交 |
+| 任务信封 | 结算确认文案 | （不出现）→ 提交处理结果 |
 
 ### P1 · 状态与提示条
 
 | 禁用词 | 出现位置 | 替换为 |
 | --- | --- | --- |
-| 处理租约有效 · v1 | `workflow.tsx:355`、`queue-workspace-page.tsx:330`、`unified-task-queue-page.tsx:1167` | 正在处理中 · 请勿重复打开 |
-| 处理租约续期中 | `workflow.tsx:360` | 处理权限已延期 |
-| 处理租约已丢失 | `workflow.tsx:365`、`unified-task-queue-page.tsx:1171` | 操作已失效，请刷新后重新处理 |
-| 处理租约已释放 | `workflow.tsx:370` | 本次处理已结束 |
-| 租约令牌已清除 / 令牌已清除 | `unified-task-queue-page.tsx:373/982/1165`、`session-state.ts:455` | 临时信息已清除 |
-| 租约令牌仅存于当前会话内存 | `unified-task-queue-page.tsx:1211` | 处理进度仅保存在当前页面 |
-| 领取后取得租约方可正式处理 | `unified-task-queue-page.tsx:1252` | 领取任务后即可开始处理 |
-| 角色池任务待领取 | `unified-task-queue-page.tsx:1250` | 团队任务待认领 |
-| 角色池待领取 | `fulfillment-operations/api.ts:123`、`card-funds-review/api.ts:194`、`procurement-confirmation/api.ts:176`、`mock/workspace.ts:592` | 团队待认领 |
+| 处理租约有效 · v1 | `workflow.tsx:355`、`queue-workspace-page.tsx:330`、`unified-task-queue-page.tsx:1167` | 你正在处理这一条 |
+| 处理租约续期中 | `workflow.tsx:360` | （删除该提示） |
+| 处理租约已丢失 | `workflow.tsx:365`、`unified-task-queue-page.tsx:1171` | 处理权已变化，请刷新 |
+| 处理租约已释放 | `workflow.tsx:370` | 已退回团队 |
+| 租约令牌已清除 / 令牌已清除 | `unified-task-queue-page.tsx:373/982/1165`、`session-state.ts:455` | （删除该提示） |
+| 租约令牌仅存于当前会话内存 | `unified-task-queue-page.tsx:1211` | （删除该提示） |
+| 领取后取得租约方可正式处理 | `unified-task-queue-page.tsx:1252` | 开始处理后即可提交 |
+| 角色池任务待领取 | `unified-task-queue-page.tsx:1250` | 团队待处理 |
+| 角色池待领取 | `fulfillment-operations/api.ts:123`、`card-funds-review/api.ts:194`、`procurement-confirmation/api.ts:176`、`mock/workspace.ts:592` | 团队待处理 |
 | 无法取得编辑租约 / 正在领取编辑租约 | `purchase-order-detail-page.tsx:198/1391` | 无法进入编辑 / 正在进入编辑 |
 | 编辑租约有效 · lockVersion | `purchase-order-detail-page.tsx:1398` | 正在编辑中 |
 | 任务仍在有效队列（PENDING） | `integration-errors/api.ts:799` | 任务仍在待处理列表，可稍后继续 |
-| 租约无效，请重新领取 | `fulfillment-operations/api.ts:944`、`procurement-confirmation/api.ts:322` | 操作已失效，请重新领取 |
+| 租约无效，请重新领取 | `fulfillment-operations/api.ts:944`、`procurement-confirmation/api.ts:322` | 处理权已变化，请刷新 |
 | fail-closed（用户可见） | 商品发布、权限审计等 | 结果未确认前禁止… / 按保守策略拒绝 |
 | subject_hash / 当前 subject_hash（UI 标签） | 卡券复核 | 数据版本 |
 | supplier_offering_availability / expected_revision_no（用户可见） | 供应商供给 | 当前可供情况 / 当前条款版本 |
@@ -118,7 +118,7 @@
 | scopeHash / 当前 scopeHash（UI 标签） | `ownership-migration-page.tsx` | 数据版本 / 当前数据版本 |
 | subjectHash（UI 标签） | `ownership-migration-page.tsx`（复核卡） | 数据版本 |
 | cutoverId / rangeStart / T / rangeEnd（UI 标签） | `history-backfill-page.tsx`（任务身份与范围卡） | 切换编号 / 范围起点 / 截止时点 |
-| IN_PROGRESS / PENDING / COMPLETED（事实值） | `integration-errors/api.ts`（任务状态事实） | 处理中 / 待处理 / 已完成 |
+| OPEN / COMPLETED / CLOSED（任务枚举原值） | 待办页面和任务提示 | 待处理 / 已完成 / 已关闭 |
 | REPLAY_ACCEPTED · 任务仍非终态 | `integration-errors/api.ts` | 已受理重新提交 · 任务尚未完成 |
 | RECOVERY_RESPONSIBILITY_UNCONFIRMED /（Q3） | 错误消息 | 恢复责任尚未确认 |
 | SKU 修订 ID / 商城类目 ID / 唯一固定供给修订 ID | `publication-center-page.tsx` | …编号 |
@@ -215,18 +215,20 @@
 | 无跳转页，仅当前项 | 完成当前项 |
 | 无跳转页，可连下一条 | 完成并处理下一条 |
 | 提交中 | 正在提交… |
-| 任务待领取 | 任务待认领 |
-| 首次领取按钮（从未领取过） | 领取任务（`SequentialProcessBar` 按 `unclaimed` 默认） |
-| 重新领取按钮（处理权已失效） | 重新领取（`SequentialProcessBar` 按 `lost` 默认） |
+| 团队任务尚无个人责任人 | 团队待处理 |
+| 从团队任务建立本人责任 | 开始处理 |
+| 主管查看授权范围内全部开放任务 | 团队任务 |
+| 查看已完成或已关闭任务 | 处理历史 |
+| 处理权已由他人取得或发生变化 | 刷新任务 |
 
-### 3.3 并发编辑与领取冲突提示
+### 3.3 并发编辑与责任冲突提示
 
 | 场景 | 标准文案 |
 | --- | --- |
 | 数据已被他人更新 | 数据已更新，请刷新后重新校验版本 |
-| 处理权丢失 | 操作已失效，请刷新后重新处理 |
-| 与别人冲突 | 此任务已被其他人领取，请稍后再试 |
-| 领取提示 | 领取任务后即可开始处理 |
+| 处理权变化 | 处理权已变化，请刷新 |
+| 与别人冲突 | 此任务已由其他人处理 |
+| 开始处理提示 | 开始处理后即可提交 |
 
 ### 3.4 结果反馈
 
@@ -306,6 +308,7 @@
 | 内部词 | 代码位置（示意） | 用户界面替代 |
 | --- | --- | --- |
 | claimToken / 令牌 | `features/*/session.ts` | （不出现） |
+| claim / 领取 / 重新领取 | `features/*/api.ts`、任务组件状态 | 开始处理 / 刷新任务 |
 | projection / 投影 | `features/execution-projections/`、`features/workspace/freshness.ts` | 汇总 / 数据 / 摘要 |
 | fact / 事实 | `features/*/types.ts`、`mock/*` | 记录 / 凭证 |
 | idempotency key / 幂等键 / 幂等 | `features/*/api.ts` | 原任务号 / 防重复 / 已处理跳过 |
@@ -334,7 +337,7 @@
 | 优先级 | 范围 | 成功标准 |
 | --- | --- | --- |
 | P0 | 按钮文案与兜底逻辑 | 界面**禁止**出现「打开专用处理器」「正式处理」 |
-| P1 | 状态条与提示（租约/令牌/角色池） | 界面**禁止**出现「租约」「令牌」「角色池」 |
+| P1 | 状态条与提示（领取/租约/令牌/角色池） | 界面**禁止**出现「领取」「重新领取」「团队待认领」「租约」「令牌」「角色池」 |
 | P2 | 长尾（正式/投影/幂等键/快照/事实） | 导航与主路径**禁止**出现「投影」「正式结果」 |
 | 扩展清零 A | 幂等/指纹/水位/work_item/fail-closed/W 编号/正式操作* | 用户可见串**必须**清零 |
 | 扩展清零 B | 架构词（服务端/客户端/前端/本地/浏览器）、重放/投递、版本冲突/锁版本/重载、字段名与枚举原值上屏（scopeHash/subjectHash/cutoverId/IN_PROGRESS 等）、Q 代号、接口术语（限流/回调/退避/报文）、散词（终态/轮询/批处理/缓存/会话/工作面/掩码/固化/事务/异步/基线过期） | 用户可见串**必须**清零 |
@@ -344,7 +347,7 @@
 交付前**必须**执行全局扫描并确认用户可见串清零：
 
 ```bash
-rg -n "专用处理器|租约|令牌|角色池|幂等|投影|正式结果|正式提交|正式操作|正式待办|正式终态|正式水位|内容指纹|对象指纹|事实复核|快照|work_item|任务信封|fail-closed|subject_hash|水位|对象版本" \
+rg -n "专用处理器|领取|重新领取|团队待认领|租约|令牌|角色池|幂等|投影|正式结果|正式提交|正式操作|正式待办|正式终态|正式水位|内容指纹|对象指纹|事实复核|快照|work_item|任务信封|fail-closed|subject_hash|水位|对象版本" \
   erp-client --glob '*.{tsx,ts}' \
   -g '!**/node_modules/**' -g '!**/.next/**'
 ```
@@ -362,7 +365,7 @@ rg -n "服务端|客户端|前端|浏览器|本地|重放|投递|对象级|并�
 ### 5.3 新增文案守则
 
 - 新写用户可见文案前**必须**查本表；命中禁用词**必须**改写。
-- **跨页复用文案必须**从 `erp-client/lib/ui-text.ts` 引用（`leaseText` / `sequentialText` / `resultText` / `versionText` / `freshnessText` / `workspaceLabel` / `actionLabelForWorkItemType`），**禁止**各页手写「正在处理中 · 请勿重复打开」等同义变体。
+- **跨页复用文案必须**从 `erp-client/lib/ui-text.ts` 引用（目标注册为 `responsibilityText` / `sequentialText` / `resultText` / `versionText` / `freshnessText` / `workspaceLabel` / `actionLabelForWorkItemType`）。旧 `leaseText` 必须删除，禁止各页手写责任提示同义变体。
 - 页面专属业务说明**仅当**只在一处使用时方可写在组件内；一旦第二处复用，**必须**抽到 `ui-text.ts`。
 - W 系列工作面文档 §12 验收清单**必须**逐页核对通过，否则验收失败。
 - 内部概念如需在界面表达，**必须**先找业务等价词；找不到则**禁止**在界面表达。
@@ -371,7 +374,7 @@ rg -n "服务端|客户端|前端|浏览器|本地|重放|投递|对象级|并�
 
 | 导出 | 用途 |
 | --- | --- |
-| `leaseText` | 处理权状态条、领取/失效提示 |
+| `responsibilityText` | 当前责任、开始处理、退回团队与处理权变化提示 |
 | `sequentialText` | 连续处理条按钮与提交中 |
 | `resultText` | 操作结果 / 结果未知 / 按原任务号查询 |
 | `versionText` | 数据版本标签与变更提示 |
@@ -397,7 +400,7 @@ W09 面向一线仓储/采购经办，文案**必须**全面口语化，并**必
 | 门禁阻塞 / 门禁已满足 | 先款未到，暂时不能收货 / 货款已到，可以收货 | |
 | 预占 | 已为这单留的货 / 留货 | |
 | 预占 ID `rsv_*`、采购销售分配 `pla_*`、来源版本 `sv_*` | 品名 + 数量 + 销售单号 | 内部 ID **禁止**进入界面 |
-| 领取 / 处理权 | 接手 / 你正在处理这一条 | 与既有「禁止说租约」一致 |
+| 领取 / 处理权 | 开始处理 / 你正在处理这一条 | 与审批待办责任合同一致 |
 | 作业队列 / 作业类型 | 待办 / 任务类型 | |
 | 乐观修改 | （删除）没确认成功之前，库存和留货都不会动 | |
 

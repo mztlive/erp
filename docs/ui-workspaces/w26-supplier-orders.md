@@ -159,18 +159,18 @@
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 查询原结果 | 结果未知提示 / 主动作 | `QUERY_RESULT` 可用，供应商具备查询能力 | 无破坏性确认 | 追加查询证据；任务入口同时追加任务处理记录，并保持当前任务为 `IN_PROGRESS` 非终结状态；固定展示已受理、已拒绝、明确无结果或仍未知 | 停留当前订单；保留查询编号、当前任务和重试入口 |
-| 安全重发 | 查询结果后的动作 | 查询已明确“无结果”且服务端确认可安全重试 | `FormalActionConfirmDialog` 展示原订单、供应商及影响；确认重发 | 使用原 `fulfillmentOrderNo` 对应的供应商幂等键重发并追加结果证据；任务入口同时追加任务处理记录，并保持当前任务为 `IN_PROGRESS` 非终结状态 | 结果未知不判成功、不跳转；继续“查询原结果” |
-| 先跳过本轮 | 正式任务处理器 | 当前领取人为本人；选择结构化原因 | `AlertDialog` 语义完整（焦点陷阱、Esc 关闭）；本轮跳过 | 使用 W02 非终结动作记录原因，任务回到待领取状态并移动本轮队列游标；按钮转为「本轮已跳过」禁用态 | 失败时停留当前任务，保留原因；刷新任务与队列快照后重试 |
+| 查询原结果 | 结果未知提示 / 主动作 | `QUERY_RESULT` 可用，供应商具备查询能力 | 无破坏性确认 | 追加查询证据；任务入口同时追加任务处理记录，并保持当前任务为 `OPEN` 非终结状态；固定展示已受理、已拒绝、明确无结果或仍未知 | 停留当前订单；保留查询编号、当前任务和重试入口 |
+| 安全重发 | 查询结果后的动作 | 查询已明确“无结果”且服务端确认可安全重试 | `FormalActionConfirmDialog` 展示原订单、供应商及影响；确认重发 | 使用原 `fulfillmentOrderNo` 对应的供应商幂等键重发并追加结果证据；任务入口同时追加任务处理记录，并保持当前任务为 `OPEN` 非终结状态 | 结果未知不判成功、不跳转；继续“查询原结果” |
+| 退回团队并跳过本轮 | 任务处理器 | 当前责任人为本人；选择结构化原因 | `AlertDialog` 语义完整（焦点陷阱、Esc 关闭） | 使用 W02 `RELEASE_TO_TEAM` 清空原任务个人责任并保持 `OPEN`，再移动本轮队列游标 | 失败时停留当前任务，保留原因；刷新任务与队列快照后重试 |
 | 提交取消 / 退款（领域动作） | 售后子区 | 存在有效商城售后请求、商品能力支持且动作未重复 | `FormalActionConfirmDialog` 展示请求范围和已发生支付事实，确认后向供应商发起 | 以服务端固定幂等键提交并追加领域动作 / 结果；无论是否存在同对象任务，都不顺带完成任务 | 超时转结果未知；不得新建另一请求、更换幂等键或把任务标为完成 |
-| 确认可验证终态并完成任务 | 正式任务处理器 | 已取得可验证的下单、取消或退款终态；完成动作与任务处理器登记值一致 | 展示终态证据、对象版本和任务影响 | 同一事务重验终态证据并完成任务，固定展示业务结果和任务结果 | 证据仍未知或版本变化时保持同一任务为 `IN_PROGRESS`，刷新证据后重提 |
+| 确认可验证终态并完成任务 | 任务处理器 | 已取得可验证的下单、取消或退款终态；使用已注册强类型命令 | 展示终态证据、对象版本和任务影响 | 同一事务重验终态证据并完成任务，固定展示业务结果和任务结果 | 证据仍未知或版本变化时保持同一任务为 `OPEN`，刷新证据后重提 |
 | 转人工 | 异常提示 | 自动路径不可用且任务允许显式转交；默认责任人必须按异常类型：接单/履约→采购，员工售后沟通→客服，系统/接口→管理员 | 说明目标责任、原因与业务影响 | 直接更新责任人与转交审计，任务状态不变；订单事实不变 | 任务保持服务端当前状态，保留输入并允许重试 |
-| 无查询能力下的人工确认 | 结果未知且供应商不具备查询能力 / W29 协同入口 | 自动查询路径不可用；必须提交最低证据：外部工单或书面回复、核对时间、经办人、外部单号（四项齐备，缺一禁止确认） | `FormalActionConfirmDialog` 展示证据清单与影响 | 追加人工确认证据与审计；不得在无齐备证据时改写履约终态 | 证据不全时拒绝确认并保持 `RESULT_UNKNOWN` / 原任务 `IN_PROGRESS` |
+| 无查询能力下的人工确认 | 结果未知且供应商不具备查询能力 / W29 协同入口 | 自动查询路径不可用；必须提交最低证据：外部工单或书面回复、核对时间、经办人、外部单号（四项齐备，缺一禁止确认） | `FormalActionConfirmDialog` 展示证据清单与影响 | 追加人工确认证据与审计；不得在无齐备证据时改写履约终态 | 证据不全时拒绝确认并保持 `RESULT_UNKNOWN` / 原任务 `OPEN` |
 | 记录协同说明 | 对象中心 | 有协同权限，订单版本未变化 | 无 | 追加审计说明，不改变状态 | 保留输入并提示版本冲突 |
 | 揭示敏感地址 | 履约区 | 有敏感字段权限且当前处理确需 | 短时揭示确认（有效时长 5 分钟） | 限时显示并记录审计；满 5 分钟、离开对象页或权限变化必须立即清除 | 权限变化或超时立即隐藏 |
 | 导出 | 列表页头 | 有导出权限和当前数据范围 | `BatchImpactPreview` 展示范围、字段和过期时间 | 创建后台任务，结果 7 天内下载 | 部分失败报告逐项原因，不扩大范围 |
 
-任何动作都不得把 `RESULT_UNKNOWN` 直接改成成功。明确业务拒绝不自动重试；供应商无查询能力时必须进入 W29 人工异常，且仅当外部工单或书面回复、核对时间、经办人、外部单号四项证据齐备时，才允许人工确认可验证结果。订单或售后已产生正式结果时，重复操作返回原结果而不是再次推进状态。查询 / 重放的接口成功只表示证据和处理记录已追加，不表示任务完成；只有另行确认可验证终态，或通过显式转交 / 替换动作原子创建合规的 `UNCLAIMED` 后继任务，当前任务才可完成、转交或替换。
+任何动作都不得把 `RESULT_UNKNOWN` 直接改成成功。明确业务拒绝不自动重试；供应商无查询能力时必须进入 W29 人工异常，且仅当外部工单或书面回复、核对时间、经办人、外部单号四项证据齐备时，才允许人工确认可验证结果。订单或售后已产生正式结果时，重复操作返回原结果而不是再次推进状态。查询 / 重放成功只表示证据和处理记录已追加，不表示任务完成；只有强类型终态确认才能完成任务。转交只更新原开放任务责任；因业务版本变化确需替代任务时，必须关闭旧任务并由领域命令创建新的 `OPEN` 任务。
 
 ## 8. 数据契约
 
@@ -253,13 +253,14 @@ type SupplierOrderDetailView = {
   actions: SupplierActionView[]
   workItem?: {
     workItemId: string
+    taskVersion: string
     workItemType: "INTEGRATION_RESULT_UNKNOWN" | "BUSINESS_EXCEPTION"
     businessObjectType: "SUPPLIER_FULFILLMENT_ORDER"
     businessObjectId: string
     subjectVersion?: string
-    completionAction: string
+    assignmentMode: "DIRECT" | "POOL"
     allowedTaskActions: string[]
-    claimedBy?: ActorView
+    ownerUser?: ActorView
   }
   allowedActions: string[]
   actionBlockers: Array<{ action: string; code: string; message: string }>
@@ -281,14 +282,19 @@ type SupplierOrderObjectInvestigationCommand = {
   idempotencyKey: string
 }
 
-type SupplierOrderTaskInvestigationCommand =
-  WorkItemActionCommand<{
+type SupplierOrderTaskInvestigationCommand = {
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  action: {
     type: "QUERY_RESULT" | "REPLAY"
     orderId: string
     expectedOrderLockVersion: number
     targetSupplierActionId: string
     operationId: string
-  }> & { expectedSubjectVersion: string }
+  }
+  idempotencyKey: string
+}
 
 type SupplierOrderInvestigationEvidence = {
   evidenceId: string
@@ -297,26 +303,12 @@ type SupplierOrderInvestigationEvidence = {
   recordedAt: string
 }
 
-type SupplierOrderTaskInvestigationResult =
-  WorkItemActionResult<SupplierOrderInvestigationEvidence>
-
-type DeferSupplierOrderTaskAction = {
-  type: "DEFER"
-  orderId: string
-  reasonCode: string
-  comment?: string
-  queueContextId: string
+type SupplierOrderTaskInvestigationResult = {
+  workItemId: string
+  workItemStatus: "OPEN"
+  taskVersion: string
+  evidence: SupplierOrderInvestigationEvidence
 }
-
-type DeferSupplierOrderTaskCommand =
-  WorkItemActionCommand<DeferSupplierOrderTaskAction>
-
-type DeferSupplierOrderTaskResult =
-  WorkItemActionResult<{
-    reasonCode: string
-    queueContextId: string
-    nextQueueCursor?: string
-  }>
 
 type SupplierOrderAfterSalesCommand = {
   orderId: string
@@ -329,8 +321,11 @@ type SupplierOrderAfterSalesCommand = {
   comment?: string
 }
 
-type SupplierOrderTaskCompletionCommand =
-  WorkItemActionCommand<{
+type SupplierOrderTaskCompletionCommand = {
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  decision: {
     type: "CONFIRM_VERIFIED_TERMINAL_RESULT"
     orderId: string
     expectedOrderLockVersion: number
@@ -341,31 +336,23 @@ type SupplierOrderTaskCompletionCommand =
       | "ORDER_COMPLETED"
       | "CANCELED"
       | "REFUNDED"
-  }> & { expectedSubjectVersion: string }
-
-type SupplierOrderTaskTransferCommand =
-  WorkItemActionCommand<{
-    type: "TRANSFER_MANUAL"
-    orderId: string
-    targetOwnerRole: string
-    targetOwnerUserId?: string
-    reasonCode: string
-    comment?: string
-  }> & { expectedSubjectVersion: string }
+  }
+  idempotencyKey: string
+}
 ```
 
-- W26 直接引用 W02 的统一动作命令（`WorkItemActionCommand`）；其字段、校验和完成语义以 W02 为准，不在本工作面另造一套可选任务字段。
+- W26 只引用 W02 的开始处理、退回团队、转交和关闭责任命令；查询、重放和终态确认使用本节注册的强类型命令，不得恢复公共任务完成动作。
 - `SupplierOrderObjectInvestigationCommand` 只供非任务对象入口查询 / 重放；`SupplierOrderTaskInvestigationCommand` 只供正式任务入口。服务端不得因客户端漏传任务命令而把任务动作降级为普通对象动作。
-- 任务内 `QUERY_RESULT` / `REPLAY` 必须完整校验 `workItemId`、`expectedSubjectVersion`、订单当前版本和当前领取人；`targetSupplierActionId` 必须引用原供应商动作。
+- 任务内 `QUERY_RESULT` / `REPLAY` 必须完整校验 `workItemId`、`expectedTaskVersion`、`expectedSubjectVersion`、订单当前版本和当前责任人；`targetSupplierActionId` 必须引用原供应商动作。
 - 查询 / 重放任务动作以唯一请求身份标识本次动作。`REPLAY` 的外部调用仍由服务端沿用原供应商动作幂等键（DB 唯一键），两者不得混用；查询不产生新的业务订单或替换动作。
-- 查询 / 重放任务动作必须在同一事务追加查询或重放证据与任务处理记录，并返回 `WorkItemActionResult`。即使已取得可验证终态，动作结果也只能是 `workItemStatus: "IN_PROGRESS"`，可返回任务版本；前端不得自动下一项。
-- 若查询 / 重放后仍为 `RESULT_UNKNOWN`，必须保持同一 `workItemId` 为 `IN_PROGRESS` 并保留下一次查询入口；不得完成、关闭、转交或偷换成新任务。
-- “暂挂 / 本轮跳过”只使用 `DeferSupplierOrderTaskCommand`。服务端记录结构化原因后返回非终结动作结果：任务回到待领取（`UNCLAIMED`），不得写入不存在的 `paused` 状态；下一游标以服务端结果为准，客户端只能在同一 `queueContextId` / 队列快照内移动本轮游标。
+- 查询 / 重放任务动作必须在同一事务追加查询或重放证据与任务处理记录，并返回 `SupplierOrderTaskInvestigationResult`。即使已取得可验证终态，动作结果也只能是 `workItemStatus: "OPEN"`；前端不得自动下一项。
+- 若查询 / 重放后仍为 `RESULT_UNKNOWN`，必须保持同一 `workItemId` 为 `OPEN` 并保留下一次查询入口；不得完成、关闭或偷换成新任务。
+- “退回团队并跳过本轮”只使用 W02 `RELEASE_TO_TEAM`。服务端记录结构化原因、清空原任务个人责任并保持 `OPEN`，不得写入不存在的 `paused` 状态；下一游标以服务端结果为准，客户端只能在同一队列快照内移动本轮游标。
 - `SupplierOrderAfterSalesCommand` 是取消 / 退款领域直接动作：它只校验售后请求、订单版本和服务端固定幂等键，追加供应商动作及结果，不读取或改变 `work_item`。任务处理器不得把这类对象命令包装成“提交即完成”。
-- 只有已经取得可验证终态时，任务处理器才可用 `SupplierOrderTaskCompletionCommand`；服务端必须重新校验 `verifiedSupplierActionResultId`、订单版本、当前领取人、主体版本和处理器登记的 `completionAction`，并在同一事务固定业务结果与任务 `COMPLETED` 结果。证据仍未知时拒绝完成并保持原任务为 `IN_PROGRESS`；重复/误派等关闭场景只能另用 W02 `CLOSE` 动作，不得复用本完成命令。
-- 显式转交只使用 `SupplierOrderTaskTransferCommand`。服务端在同一事务直接更新责任人与转交审计，任务状态不变；不得用转交伪造业务终态。
+- 只有已经取得可验证终态时，任务处理器才可用 `SupplierOrderTaskCompletionCommand`；服务端必须重新校验 `verifiedSupplierActionResultId`、订单版本、当前责任人、主体版本和注册任务类型，并在同一事务固定业务结果与任务 `COMPLETED` 结果。证据仍未知时拒绝完成并保持原任务为 `OPEN`；重复/误派等关闭场景只能另用 W02 `CLOSE` 动作，不得复用本完成命令。
+- 显式转交只使用 W02 `REASSIGN`。服务端在同一事务更新原开放任务责任人与转交审计；不得创建同义后继任务或伪造业务终态。
 - mutation 返回 `operationId` / 动作记录、业务或证据结果、对象新版本和任务结果（如适用）；网络断开时按对应信封的幂等键查询同一次动作，不得换键重提。
-- 版本或处理权冲突不静默覆盖，显示当前状态与用户操作目标，由用户重新领取或确认仍适用的动作。
+- 版本或处理权冲突不静默覆盖，显示当前状态与用户操作目标；用户刷新任务，重新取得责任后再确认仍适用的动作。
 
 ### 8.3 前端边界
 
@@ -389,12 +376,12 @@ type SupplierOrderTaskTransferCommand =
 | 字段级隐藏 | 标签保留、敏感值掩码 | 其余授权动作 | 权限恢复后重查 |
 | 提交中 | 锁定当前正式动作，禁止重复点击 | 取消不可中断已发送请求 | 返回正式结果或结果未知 |
 | 正式动作成功 | `FormalActionResult` 固定展示供应商订单、履约/取消/退款轨结果、时间和下一步 | 返回 W25、进入 W27、继续处理 | 用户明确关闭结果 |
-| 任务内查询 / 重放成功 | 固定展示本次证据、动作记录号与“任务仍待处理”；即使取得终态也不自动完成 | 继续查询、确认可验证终态、暂挂或转交 | 同一任务保持 `IN_PROGRESS`；刷新任务版本 |
-| 暂挂成功 | 显示结构化原因，任务回到待领取，展示本轮下一项 | 返回当前任务或继续同一队列快照 | 只移动本轮游标，不产生暂停状态 |
+| 任务内查询 / 重放成功 | 固定展示本次证据、动作记录号与“任务仍待处理”；即使取得终态也不自动完成 | 继续查询、确认可验证终态、退回团队或转交 | 同一任务保持 `OPEN`；刷新任务版本 |
+| 退回团队成功 | 显示结构化原因，原任务保持 `OPEN` 且无个人责任人，展示本轮下一项 | 返回团队任务或继续同一队列快照 | 只移动本轮游标，不产生暂停状态 |
 | 结果未知 | 固定警示，不改变本地订单状态 | 查询原结果；不能直接再次下单 | 得到可验证终态或转人工 |
 | 明确无结果 | 显示供应商查询证据与安全重发判断 | 允许时使用原幂等键重发 | 重发结果固定展示 |
 | 版本冲突 | 对比当前三轨状态和原操作目标 | 重新加载、放弃旧动作 | 重新确认当前可用动作 |
-| 处理权 / 版本冲突 | 保留订单事实和用户输入，显示当前领取人或对象版本变化 | 返回任务刷新、重新领取；不能转普通对象操作绕过 | 版本一致后重提 |
+| 处理权 / 版本冲突 | 保留订单事实和用户输入，显示当前处理人或对象版本变化 | 返回任务刷新；不能转普通对象操作绕过 | 重新取得责任且版本一致后重提 |
 | 后台导出 | `BackgroundJobProgress` 显示筛选快照、字段遮罩、进度和任务号 | 查看任务 | 完成后下载；失败按原快照重试 |
 | 权限收回 | 清除敏感缓存并切无权限态 | 返回有权工作面 | 权限恢复后重查 |
 
@@ -436,9 +423,9 @@ type SupplierOrderTaskTransferCommand =
 - [ ] 供应商拒单或履约异常不删除商城支付、消费、订单或成本事实。
 - [x] 三类退款相关事实能分别看见缺口和责任方。
 - [x] 履约主状态只使用九个正式枚举；“结果未知”快捷筛选等价于 `fulfillmentStatus = RESULT_UNKNOWN`，没有独立状态源。
-- [ ] 任务内查询 / 重放使用 W02 的非终结动作，完整校验当前领取人和对象版本；成功后同一任务仍为 `IN_PROGRESS`，不会自动下一项。
-- [ ] 暂挂使用 W02 非终结动作并记录结构化原因；任务回到待领取、不完成、不转交、不写 `paused`，同一队列快照的本轮游标只按服务端结果更新。
-- [ ] 取消 / 退款领域命令不读写任务；只有可验证终态能通过正式完成信封终结任务，转交则必须原子创建合规的 `UNCLAIMED` 后继任务。
+- [ ] 任务内查询 / 重放使用 `SupplierOrderTaskInvestigationCommand`，完整校验当前责任人和对象版本；成功后同一任务仍为 `OPEN`，不会自动下一项。
+- [ ] 退回团队使用 W02 `RELEASE_TO_TEAM` 并记录结构化原因；原任务保持 `OPEN`、个人责任清空、不写 `paused`，同一队列快照的本轮游标只按服务端结果更新。
+- [ ] 取消 / 退款领域命令不读写任务；只有可验证终态能通过 `SupplierOrderTaskCompletionCommand` 完成任务；转交更新原开放任务责任，不创建同义后继任务。
 - [ ] 转人工默认责任人按异常类型分配：接单/履约→采购，员工售后沟通→客服，系统/接口→管理员。
 - [ ] 供应商无查询能力时，人工确认必须齐备外部工单或书面回复、核对时间、经办人、外部单号；缺一禁止改写终态。
 - [ ] `actionable` 默认可操作视图与异常指标均不包含长时间无状态变化但未超 SLA 的订单；此类订单仅可在“全部”视图检索。

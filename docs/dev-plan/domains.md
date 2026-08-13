@@ -30,7 +30,7 @@ backend/apps/web-api/src/core/routes/<domain>.rs  路由与权限挂载
 | --- | --- | --- | --- | --- |
 | D01 | `source_registry` | `source_system`、`external_identity_map`、`external_identity_target` | — | W17、W29 |
 | D02 | `document_registry` | `business_document`、`document_relation`、`document_participant`、`workflow_action` | D01 | 全部单据页 |
-| D03 | `work_item` | `work_item` | D02 | W01、W02 |
+| D03 | `work_item` | `approval_definition`、`approval_step_definition`、`approval_instance`、`approval_step_instance`、`work_item` | D02、D06 | W01、W02及全部审批入口 |
 | D04 | `bulk_job` | `bulk_selection_snapshot`、`bulk_selection_item`、`background_job`、`background_job_item` | D02 | W02、W18 |
 | D05 | `file_asset` | `file_asset`、`document_attachment` | D02 | W04、W18 |
 | D06 | `access_control` | `role`、`permission`、`user_role`、`data_scope`、`audit_event` | — | W19 |
@@ -93,8 +93,10 @@ backend/apps/web-api/src/core/routes/<domain>.rs  路由与权限挂载
 | G11 | D33 | `supplier_settlement` | `supplier_settlement_statement`、`supplier_settlement_item`、`supplier_settlement_difference` | D32、D19 | W27 |
 | G12 | D34 | `integration_ops` | `inbox_message`、`integration_error_task`、`reconciliation_difference`(+`_resolution`) | D01、D29、D32 | W29 |
 
-> 集成表是普通表组。禁止实现 outbox、消息中间件或投递状态机（数据模型 5.4 末条）。
-> 商城主动拉取与核对继续使用 D23 的专用表。
+> 当前两期的商城与供应商集成表是普通表组，不实现通用 outbox、消息中间件或投递状态机
+> （数据模型 5.4 末条）。商城主动拉取与核对继续使用 D23 的专用表。
+> 未来启用 `BPM` 审批运行时前，必须按 `approval-workflow-contract.md` 单独修订地基、域归属和
+> outbox/inbox 合同；不得复用 D34 的 `inbox_message` 或在现有批次内顺带实现。
 
 ---
 

@@ -9,6 +9,7 @@
 | --- | --- |
 | `docs/erp-phase-1.md` | 一期业务范围、流程、职责、规则索引 |
 | `docs/erp-phase-2.md` | 二期范围、切换、集成、验收场景 |
+| `docs/approval-workflow-contract.md` | 审批运行、步骤分派、多级推进、待办责任与 BPM 接入边界 |
 | `docs/erp-data-model.md` | 表、字段、索引、状态机、事务不变量、物理设计强制要求 |
 | `docs/erp-mall-data-mapping.md` | 旧商城数据防腐映射 |
 | `docs/ui-workspaces/w*.md`、`docs/ui-glossary.md` | 页面契约与用户可见术语 |

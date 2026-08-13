@@ -61,8 +61,8 @@
 - 任务列表由服务端按当前用户、角色、组织和数据范围过滤。
 - 前端不得先取全量任务再隐藏无权数据。
 - 指标数量必须按与任务列表相同的权限快照计算；不能用当前已加载的前几十条任务在浏览器中求和。
-- “待我处理”指标与默认列表必须仅计入已分配到当前用户的个人任务；未分配到个人、仅分配给角色池的任务不得计入“待我处理”。
-- 角色池任务必须与个人任务分开展示；服务端必须分别返回个人任务数与角色池任务数，前端不得把两者合并为单一“待我处理”口径。
+- “待我处理”指标与默认列表必须仅计入已分配到当前用户的个人任务；未分配到个人的 `POOL` 任务不得计入“待我处理”。
+- 团队待处理任务必须与个人任务分开展示；服务端必须分别返回个人任务数与团队待处理数，前端不得把两者合并为单一“待我处理”口径。
 
 ## 3. 入口、路由与任务页签
 
@@ -132,7 +132,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 | 页头 | `displayName` | `早上好，{姓名}` | 当前会话用户 | 问候语可按本地时段变化，姓名来自服务端 | 不展示无权查看的组织资料 |
 | 页头 | `roleSummary` | 角色摘要 | 当前有效角色 | 多角色时展示当前工作角色 | 允许用户切换的角色另由应用壳负责 |
 | 页头 | `statsUpdatedAt` | 工作台数据更新时间 | 统计查询更新时间 | 绝对时间 + 新鲜/陈旧状态 | 全员可见 |
-| 指标 | `assignedActiveCount` | 待我处理 | 服务端聚合 | 当前权限快照内、已分配到当前用户的有效个人任务数；不得计入角色池任务 | 不用加载列表求和 |
+| 指标 | `assignedActiveCount` | 待我处理 | 服务端聚合 | 当前权限快照内、已分配到当前用户的开放个人任务数；不得计入团队待处理任务 | 不用加载列表求和 |
 | 指标 | `dueTodayCount` | 今日到期 | 服务端聚合 | 以当前工作角色所属组织的已确认时区计算“今日”截止边界；该时区必须在界面明确展示 | 全员可见指标值；时区展示不得省略 |
 | 指标 | `overdueCount` | 已超期 | 服务端聚合 | `due_at < now` 且仍有效 | `destructive` 仅在数量大于 0 时使用 |
 | 指标 | `exceptionCount` | 同步异常 / 异常待处理 | 服务端聚合 | 当前角色有权处理的结果未知与业务异常 | 无对应模块权限时整项不展示 |
@@ -144,10 +144,10 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 | `workItemTypeLabel` | 采购二次确认、票款复核等 | 固定类型映射 | 原始类型代码不直接展示 |
 | `businessObject` | 对象类型 + 稳定单号 / 名称 | `business_object_type/id` 查询投影 | 点击“查看”进入对象中心，不直接用对象名作为身份 |
 | `counterpartyName` | 客户 / 供应商 | 对象查询投影 | 无权限时掩码或不返回 |
-| `statusLabel` | 待领取、待处理、处理中等 | `work_item.status` | 文字 + tone，不用纯色点 |
+| `statusLabel` | 待处理、已完成、已关闭 | `work_item.status` | 文字 + tone，不用纯色点 |
 | `enteredAt` | 进入时间 | `work_item.created_at` | 展示相对时间，提示中提供绝对时间 |
 | `dueAt` | 截止 / 已超期时长 | `work_item.due_at` | 服务端返回时间，前端按工作时区格式化 |
-| `responsibleParty` | 责任角色 · 当前责任人 | `owner_role/user_id` | 角色池任务无个人责任人时明确写“待领取” |
+| `responsibleParty` | 责任角色 · 当前责任人 | `assignment_mode + owner_role + owner_user_id` | `POOL` 无个人责任人时明确写“团队待处理” |
 | `reason` | 产生原因 | `reason_code` 的固定文案 + 安全参数 | 不直接展示内部错误堆栈 |
 | `impact` | 业务影响 | `impact_summary` | 必须是业务语言，例如“可能影响 8 月 3 日交付” |
 | `priority` | 紧急 / 高 / 普通 | `work_item.priority` | 普通优先级不重复显示徽章 |
@@ -169,7 +169,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 
 ### 6.1 默认状态
 
-- 默认视图：`scope=mine`、`due=all-active`（`scope=mine` 仅含个人任务；角色池任务仅当 `scope=role_pool` 时展示）。scope 控件文案「我的待办 / 团队待认领」。
+- 默认视图：`scope=mine`、`due=all-active`（`scope=mine` 仅含个人任务；未分派的 `POOL` 任务仅当 `scope=team` 时展示）。scope 控件文案「我的待办 / 团队待处理」。
 - 默认展示全部有权任务族；无任务的组不渲染空容器。
 - 每组首批数量必须使用服务端工作台配置的 `pagePreviewLimit`；超过时必须显示“查看该组全部 N 条”并进入 W02。仅当服务端未返回配置时，前端必须以 5 条作为展示回退，并标记 `previewLimitSource=TEMPORARY_FALLBACK`；该回退值禁止写入正式接口契约，也不得作为验收硬约束数字。
 - W01 禁止无限滚动；跨组浏览和批量治理必须进入 W02。
@@ -191,7 +191,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 3. 请求期间保留旧任务并显示轻量刷新状态；
 4. 浏览器后退恢复之前的筛选，而不是重置到首页。
 
-筛选/指标变更一律 `router.replace`，不膨胀历史（P2）。`scope` 计入激活筛选：`scope=role_pool` 无任务时走「当前筛选无结果」空态并提供「清除筛选」。
+筛选/指标变更一律 `router.replace`，不膨胀历史（P2）。`scope` 计入激活筛选：`scope=team` 无任务时走「当前筛选无结果」空态并提供「清除筛选」。
 
 工作台不提供对象全文搜索；稳定单号和基础资料名称使用应用壳全局搜索，复杂任务查询进入 W02。
 
@@ -201,7 +201,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 | --- | --- | --- | --- | --- | --- |
 | 刷新 | 页头 | W01 可访问 | 无 | 更新统计与任务查询；分别展示两类更新时间 | 保留旧数据并提供重试 |
 | 指标过滤 | 指标卡 | 对应指标可见 | 无 | 主区在原页过滤 | 请求失败恢复原列表和原筛选 |
-| 处理任务 | 任务条目主按钮 | `PROCESS` 在 `allowedActions` 中，且无 blocker | W01 不确认正式动作 | 打开对应 M3 / M4 / M5；W02 类目标的任务焦点经 `sessionStorage` 传递（内部 ID 不进地址栏） | 导航失败留在 W01；不提前领取或完成任务 |
+| 处理任务 | 任务条目主按钮 | `PROCESS` 在 `allowedActions` 中，且无 blocker | W01 不确认业务动作 | 打开对应 M3 / M4 / M5；W02 类目标的任务焦点经 `sessionStorage` 传递（内部 ID 不进地址栏） | 导航失败留在 W01；不提前开始处理或完成任务 |
 | 查看对象 | 任务条目次入口 | 有对象查看权限 | 无 | 聚焦或创建对象中心页签 | 无权限时转为明确无权限态 |
 | 查看全部待办 | 主区标题 / 组尾 | 有 W02 权限 | 无 | 打开 W02 并携带当前筛选 | 无 W02 权限时不展示入口 |
 | 打开预警 | 预警条目 | 有目标模块权限 | 无 | 打开负责处理该预警的工作面 | 目标权限已变化时显示无权限态 |
@@ -210,13 +210,13 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 ### 7.1 “处理”按钮的边界
 
 - W01 点击“处理”只负责导航，不在后台静默执行正式动作。
-- 是否领取任务由目标 M3 队列在进入时按 W02 统一领取契约完成。
+- `DIRECT` 任务直接进入处理；`POOL` 任务由目标 M3 队列按 W02 合同执行“开始处理”。
 - 任务身份使用 `workItemId`（内部 ID）。W02 类目标队列的任务焦点不写入 URL，经 `sessionStorage` 传递，避免内部 ID 出现在地址栏；外部链接仍可携带 `currentWorkItemId` 深链参数，W02 优先采纳。W18 按其受控 handler 契约原样传递 `workItemId`、`confirmationScope` 与 `queueContextId`。
 - 前端根据服务端返回的 `destinationWorkspaceId` 和稳定对象身份查本地路由注册表；不接受服务端任意 URL，避免开放跳转。
-- 已被他人有效领取的任务仍可按权限查看，但处理按钮禁用并显示领取人。
+- 已由他人负责的任务仍可按权限查看，但处理按钮禁用并显示当前处理人。
 - `IMPORT_BUSINESS_CONFIRMATION` 固定路由到 W18：以 `LEGACY_IMPORT_BATCH` 的稳定批次身份生成
   `section=confirm&confirmationScope={scope}&workItemId={workItemId}&queueContextId={queueContextId}`。
-  `confirmationScope` 仅用于定位被分派的责任确认，`workItemId` 仍是唯一任务身份；领取、完成和返回均由 W18 的受控 handler 处理。
+  `confirmationScope` 仅用于定位被分派的责任确认，`workItemId` 仍是唯一任务身份；开始处理、强类型完成和返回均由 W18 的受控 handler 处理。
 
 ## 8. 数据契约
 
@@ -226,7 +226,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 
 ```ts
 type TodayWorkspaceQuery = {
-  scope: "mine" | "role_pool"
+  scope: "mine" | "team"
   due?: "today" | "overdue"
   family?: "approval" | "finance" | "fulfillment" | "exception"
   timezone: string
@@ -276,6 +276,7 @@ type TodayWorkspaceView = {
 
 type WorkspaceWorkItem = {
   workItemId: string
+  taskVersion: string
   workItemType: string
   workItemTypeLabel: string
   businessObjectType: string
@@ -286,6 +287,7 @@ type WorkspaceWorkItem = {
   subjectVersion?: string
   status: WorkItemStatus
   statusLabel: string
+  processingState: "READY" | "APPROVAL_BLOCKED"
   priority: number
   createdAt: string
   dueAt?: string
@@ -314,6 +316,7 @@ type WorkspaceWarning = {
 ```
 
 `WorkspaceWorkItem.status` 直接复用 W02 `WorkItemStatus`；每条正式待办都返回 `workItemId` 和 `queueContextId`（数据字段，非 URL 参数）。W01 对 W02 类目标队列把 `workItemId` 写入 `sessionStorage` 作为当前项焦点，不创建新的任务身份或队列上下文别名；W18 不是 W02 队列位置，按其受控 handler 契约原样传递 `workItemId`、`confirmationScope` 与 `queueContextId`。
+`processingState=APPROVAL_BLOCKED` 时 `PROCESS` 不得出现在 `allowedActions`，并通过 `actionBlockers` 展示权限安全说明；该条目保留责任展示，但不计入可立即处理数。
 
 ### 8.3 数据新鲜度与计算边界
 
@@ -331,7 +334,7 @@ W01 没有业务写提交接口。
 
 - 刷新是查询失效与重新获取，不创建正式记录。
 - 指标筛选只改变查询状态。
-- 任务领取、审批、确认、驳回和暂挂全部在目标工作面完成，并遵守其领取、版本和结果反馈契约。
+- 开始处理、审批、确认、驳回和退回团队全部在目标工作面完成，并遵守其责任、版本和结果反馈合同。
 
 ## 9. 页面状态矩阵
 
@@ -410,7 +413,7 @@ W01 没有业务写提交接口。
 - [x] 点击处理能聚焦已有目标页签，避免重复打开同一对象。
 - [x] 筛选进入 URL，刷新和浏览器后退能恢复。
 - [x] 从目标页返回后恢复原筛选和任务焦点。
-- [ ] 任务已被他人领取、完成或权限变化时，目标页重新校验并给出明确结果。
+- [ ] 任务已由他人负责、完成或权限变化时，目标页重新校验并给出明确结果。
 - [ ] `IMPORT_BUSINESS_CONFIRMATION` 能以受控 W18 路由携带批次、责任范围、任务和队列上下文；未接线时不显示为可处理。
 
 ### 12.4 状态与响应式
@@ -425,6 +428,6 @@ W01 没有业务写提交接口。
 - `erp-ui-design.md` §3 应用壳、§4.2 M1、§8 角色默认着陆、§11 状态矩阵、§15 验收。
 - `erp-phase-1.md` §4.6.2：正式待办同步更新；工作台统计允许异步刷新且不超过 1 分钟。
 - `erp-phase-1.md` §5.1：统一待办与预警覆盖采购确认、财务审核、票款复核、资质到期、履约超期和同步失败。
-- `erp-data-model.md` §5.1 `work_item`：任务类型、对象身份、状态、责任人、优先级、时限、原因、影响、领取和完成审计。
+- `erp-data-model.md` §6.1 `work_item`：任务类型、对象身份、状态、分派模式、责任人、优先级、时限、原因、影响和处理审计。
 - `erp-data-model.md` §12：正式待办同步维护，工作台汇总和预警为异步统计视图。
 - `erp-ui-flows.md`：W01 只作为任务入口，正式处理进入对应 M3、M4 或 M5 工作面。

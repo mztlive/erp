@@ -11,7 +11,7 @@
 ### 1.1 用户目标
 
 - 采购连续核对销售提交快照中的供应商、可供数量、最新成本、进项税率、预计交期和履约方式。
-- 在不返回列表的情况下完成“通过”“驳回”或“暂挂当前项并处理下一项”。
+- 在不返回列表的情况下完成“通过”“驳回”或“退回团队并处理下一项”。
 - 对一个销售明细按多个供应商拆分确认，并在提交前看清数量覆盖、资质、能力、成本和交期差异。
 - 需要深挖客户承诺、合同或附件时打开 W05 销售单中心，返回后仍定位到原队列、原筛选和当前任务。
 - 驳回完成后清楚告知销售只能改品/改价后重提、照原条件申请低毛利上级确认或不做作废；采购能从后续新任务识别其新提交及来源链。
@@ -21,7 +21,7 @@
 - 把采购二次确认作为销售单生效前的正式行为闸门，而不是业务单据或普通详情页按钮。
 - 通过时在同一事务校验完整确认覆盖并使实物与服务销售单生效；驳回时把销售单退回销售处理。
 - 以不可变 `sales_order_submission` 作为确认对象，禁止对仍可编辑的销售草稿确认。
-- 以 `work_item` 原子领取（数据库条件更新）保障一个任务同一时间只有一个有效处理人，并支持高峰期连续处理。
+- 以 `work_item` 原子“开始处理”保障一个 `POOL` 任务同一时间只有一个当前责任人，并支持高峰期连续处理。
 - 驳回的旧任务永久完成；销售重提只能产生新提交和新的 `PROCUREMENT_CONFIRMATION`，照原条件承接必须经过已注册 `LOW_MARGIN_MANAGER_CONFIRMATION` 且上级通过不能替代采购再次确认。
 
 ### 1.3 不在本工作面完成
@@ -38,10 +38,10 @@
 
 | 角色 | 默认入口 | 可见范围 | 主要动作 |
 | --- | --- | --- | --- |
-| 采购经办 | W07 | 分配给本人或本人有权领取的采购确认任务 | 领取、编辑确认数据、通过、驳回、暂挂 |
-| 采购负责人 | W07 / W02 | 本采购责任域任务 | 查看；仅当服务端 `allowedActions` 含 `TRANSFER` 时发起受控转交（正式后继任务链）；禁止直接覆盖责任人；未授权时不得展示转交或代办动作 |
+| 采购经办 | W07 | 已由本人负责或本人有资格开始处理的采购确认任务 | 开始处理、编辑确认数据、通过、驳回、退回团队 |
+| 采购负责人 | W07 / W02 | 本采购责任域任务 | 查看；仅当服务端 `allowedActions` 含 `REASSIGN` 时受控转交原开放任务；未授权时不得展示转交或代办动作 |
 | 销售 | W05 / W01 | 自己负责销售单的确认结果 | 只读查看结果与驳回原因；不能进入采购成本编辑态 |
-| 销售经理 | W02 / W05 | 本团队销售单及有权领取的低毛利任务 | 通过已注册 `LOW_MARGIN_MANAGER_CONFIRMATION` 处理承接决定；通过后只创建新采购确认任务，不替代采购决定 |
+| 销售经理 | W02 / W05 | 本团队销售单及本人有资格处理的低毛利任务 | 通过已注册 `LOW_MARGIN_MANAGER_CONFIRMATION` 处理承接决定；通过后只创建新采购确认任务，不替代采购决定 |
 | 财务 | W08 / W12 | 财务数据范围 | 不参与二次确认；采购单提交后审核成本与付款条件 |
 | 系统管理员 | W19 审计 | 授权审计数据 | 查操作记录，不代替采购完成确认 |
 
@@ -50,20 +50,20 @@
 | 情况 | W07 行为 |
 | --- | --- |
 | 无 W07 模块权限 | 侧栏、命令和快捷入口均不展示；直接访问显示无权限页 |
-| 有模块权限但角色池为空 | 显示“当前责任范围没有待确认事项”，不是无权限状态 |
+| 有模块权限但团队待处理为空 | 显示“当前责任范围没有待确认事项”，不是无权限状态 |
 | 有查看权但无处理权 | 当前项只读；正式动作可见但禁用并显示 `actionBlocker` |
 | 成本或供应商敏感字段无权限 | 不应进入采购确认处理角色；只读跨角色视图按字段权限掩码 |
 | 销售提交已失效 | 当前任务标记失效并停止编辑；提供打开最新销售单/返回队列 |
 | 页面期间权限收回 | 立即停止写动作、清除成本与联系人敏感缓存，切换无权限态 |
 
-服务端按当前采购角色、组织、任务责任域和对象参与权筛选。前端不得查询全队列后再隐藏无权任务，也不得把 `allowedActions` 当成仅视觉提示。W07 仅当处理器已注册受控转交且服务端 `allowedActions` 包含 `TRANSFER` 时允许转交；转交必须使用正式后继任务链，禁止直接覆盖当前责任人或 `claimed_by`。不得把 W02 的通用转交能力自动视为 W07 已授权；未授权时处理器注册与 `allowedActions` 必须 fail-closed 排除 `TRANSFER`。
+服务端按当前采购角色、组织、任务责任域和对象参与权筛选。前端不得查询全队列后再隐藏无权任务，也不得把 `allowedActions` 当成仅视觉提示。W07 仅当处理器已注册受控转交且服务端 `allowedActions` 包含 `REASSIGN` 时允许转交；转交必须更新原开放任务责任并写审计，不得完成原任务再创建同义后继任务。不得把 W02 的转交能力自动视为 W07 已授权；未授权时处理器注册与 `allowedActions` 必须保守排除 `REASSIGN`。
 
-### 2.3 领取与动作契约
+### 2.3 责任与动作合同
 
-1. 领取 = W02 数据库条件更新原子完成：任务从 `UNCLAIMED` 置为 `IN_PROGRESS` 并归属当前用户，更新影响行数为 0 即表示已被他人领取；不存在租约到期或续租。
-2. 通过、驳回、保存、暂挂和受控转交等动作提交时，服务端统一校验当前领取人（或转交权）和对象版本（`expectedSubjectVersion`）；W07 不定义第二套任务令牌或版本协议。
-3. 版本冲突或处理权变化时保留本地输入供查看/复制，但所有写动作按服务端校验结果禁用；重新领取后必须重取当前确认数据再处理冲突。
-4. “暂挂”不是采购确认的新业务状态：它通过 W02 非终结任务动作记录原因，任务必须立即回到待领取状态，再把队列指针移到下一项，但不得完成任务。暂挂成功后禁止为原处理人保留独占窗口或队列优先展示；原处理人可再次领取，与其它有权人同等竞争。
+1. `POOL` 任务“开始处理”由 W02 数据库条件更新原子完成：仅当任务 `OPEN` 且无个人责任人时写入当前用户；同一用户重复请求幂等，其他用户收到责任冲突。
+2. 通过、驳回、保存、退回团队和受控转交等动作提交时，服务端统一校验当前责任人（或管理权限）和对象版本（`expectedSubjectVersion`）；W07 不定义第二套责任或版本协议。
+3. 版本冲突或处理权变化时保留输入供查看/复制，但所有写动作按服务端校验结果禁用；重新取得责任后必须重取当前确认数据再处理冲突。
+4. “退回团队”不是采购确认的新业务状态：它记录原因、清空原开放任务个人责任并保持 `OPEN`，再把队列指针移到下一项，但不得完成任务。
 
 ## 3. 入口、路由与任务页签
 
@@ -74,7 +74,7 @@
 | 从统一待办处理 | W02 行级“处理” | 携带相同 `currentWorkItemId` 与 `queueContextId`，恢复 W02 对应队列上下文 | 关闭 W07 后回 W02 原行 |
 | 从销售单查看进度 | W05 下一步/审计 | 只读定位指定任务或确认结果，不抢占他人处理 | 返回 W05 原子区 |
 | 深挖销售单 | 当前项“打开销售单” | 新开/聚焦 `sales-order:{salesOrderId}` 页签，W07 保留 | 关闭/返回后恢复当前项 |
-| 刷新浏览器 | 任意队列状态 | URL 必须恢复筛选、排序、`currentWorkItemId`、`queueContextId` 和显式 `autoNext` 临时值；`preferenceScope` 缺失时禁止从本地或服务端恢复持久偏好；刷新后按任务状态重新领取或只读展示 | W07 |
+| 刷新浏览器 | 任意队列状态 | URL 必须恢复筛选、排序、`currentWorkItemId`、`queueContextId` 和显式 `autoNext` 临时值；`preferenceScope` 缺失时禁止恢复持久偏好；刷新后从服务端责任事实恢复可编辑或只读状态 | W07 |
 
 正式 URL 状态必须为：
 
@@ -84,7 +84,7 @@
 
 TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同一队列上下文只保留一个页签；从不同筛选打开时更新同一页签 URL 并保留浏览器后退历史。
 
-临时确认层、驳回 Dialog 和未保存敏感值不进入 URL。刷新后若任务已由他人领取或已完成，页面展示确定结果并定位到队列中下一条有效任务。
+临时确认层、驳回 Dialog 和未保存敏感值不进入 URL。刷新后若任务已由他人负责或已完成，页面展示确定结果并定位到队列中下一条有效任务。
 
 ## 4. 页面布局
 
@@ -93,7 +93,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 ```text
 ┌ PageHeader：采购二次确认 · 待我处理 28              数据更新时间 09:36 ───┐
 ├ SequentialProcessBar：第 3/28 · 仅我的 · 自动下一项 开 [上一项][下一项]│
-│ 当前任务：已领取            [暂挂] [打开销售单中心]      │
+│ 当前任务：由你处理          [退回团队] [打开销售单中心]  │
 ├─────────────────────────────────────────────┬──────────────────────────┤
 │ 销售提交与客户承诺 约 66%                   │ 决策摘要 约 34%（sticky）│
 │ 销售单 XS… · 提交 #2 · 客户 · 期望日期      │ 数量覆盖 100%             │
@@ -104,7 +104,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 │  └ 供应商乙 40 · 成本 · 税率 · 交期 · 代发  │                          │
 │ 明细 2 · 服务 ...                            │ 驳回原因（选择驳回后展开） │
 ├─────────────────────────────────────────────┴──────────────────────────┤
-│ ValidationSummary       [暂挂] [驳回] [确认通过并使销售单生效]         │
+│ ValidationSummary   [退回团队] [驳回] [确认通过并使销售单生效]         │
 │ 驳回固定结果：旧任务已完成 · 销售三路提示 · [打开 W05 驳回处理]        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -118,7 +118,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 | 销售提交摘要 | 锁定采购正在确认的不可变客户承诺 | `DocumentSummary` `StatusTrackSummary` | 否 |
 | 确认明细编辑器 | 按销售提交明细维护一个或多个供应商确认分行 | `EditableLineItemTable` + 供应商选择器 | 主滚动区 |
 | 决策摘要 | 汇总覆盖、能力资质、金额差异、交期与阻塞 | `ValidationSummary` `CostCoverageNotice` | 桌面右栏 sticky |
-| 正式动作栏 | 暂挂、驳回、确认通过 | `FormalActionConfirmDialog` | 底部 sticky |
+| 正式动作栏 | 退回团队、驳回、确认通过 | `FormalActionConfirmDialog` | 底部 sticky |
 | 固定结果区 | 显示本项正式结果和下一项去向；驳回时展示销售三条固定出路及 W05 入口 | `FormalActionResult` + `ProcurementRejectionNextSteps` | 动作后替换决策区顶部 |
 
 ### 4.3 销售提交只读上下文
@@ -152,9 +152,9 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 | 队列 | `position` / `total` | 第 N/M 项 | 服务端当前队列快照 | 仅代表当前筛选快照，不伪装实时全量序号 | W07 用户可见 |
 | 队列 | `filterSummary` | 仅我的 · 今日到期等 | 查询参数服务端回显 | 业务文案，不显示内部 digest | 同上 |
 | 任务 | `workItemId` | 任务身份 | `work_item.id` | 不直接面向用户展示原始 ID | 处理者与审计角色 |
-| 任务 | `status` | 待领取 / 处理中 | `work_item.status` | 固定状态文案 | 同上 |
+| 任务 | `status` | 待处理 / 已完成 / 已关闭 | `work_item.status` | 固定状态文案 | 同上 |
 | 任务 | `dueAt` | 截止 / 已超期 | `work_item.due_at` | 业务时区；超期有文字 | 同上 |
-| 处理 | `claimedByLabel` | 处理人 | `work_item.claimed_by` | 任务已领取时显示处理人 | 当前查看者 |
+| 处理 | `ownerUserLabel` | 处理人 | `work_item.owner_user_id` | 已形成个人责任时显示处理人 | 当前查看者 |
 | 影响 | `impactSummary` | 业务影响 | `work_item.impact_summary` | 例如“影响客户 8 月 5 日交付” | 不含敏感技术信息 |
 
 ### 5.2 销售提交摘要
@@ -219,7 +219,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 
 | 能力 | 默认值 | URL 状态 | 行为 |
 | --- | --- | --- | --- |
-| 责任范围 | `mine` | `scope=mine|role_pool` | 工具条分段控件，文案「我的待办 / 团队待认领」；角色池任务需先领取；是否开放由权限决定 |
+| 责任范围 | `mine` | `scope=mine|team` | 工具条分段控件，文案「我的待办 / 团队待处理」；团队任务需先“开始处理”；是否开放由权限决定 |
 | 时限 | 有效全部 | `due=active|today|overdue` | 工具条分段控件，文案「全部时限 / 今日到期 / 已超期」；改变队列快照并重新计算位置 |
 | 履约方式 | 全部 | `mode=warehouse|direct|electronic|service` | 按至少一条确认明细的允许方式过滤 |
 | 供应商 | 全部 | `supplierId` | 仅对当前销售明细存在有效 W21 供给的供应商筛选，不泄露无权供应商 |
@@ -235,22 +235,22 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 领取任务 | 打开当前项 / 角色池“领取” | `CLAIM` 可用；任务待领取 | 无 | W02 条件更新原子领取，返回当前版本 | 被他人领取则转只读并可去下一项 |
-| 保存确认数据 | 自动保存 / `⌘S` | 当前领取人为本人，确认仍待处理，`editVersion` 匹配 | 无 | 返回新编辑版本与校验摘要 | 输入保留；版本冲突显示差异 |
+| 开始处理 | 打开当前项 / “团队待处理” | `START_PROCESSING` 可用；开放 `POOL` 任务尚无个人责任人 | 无 | W02 条件更新原子写入当前用户，返回当前版本 | 已由他人处理则转只读并可去下一项 |
+| 保存确认数据 | 自动保存 / `⌘S` | 当前责任人为本人，确认仍待处理，`editVersion` 匹配 | 无 | 返回新编辑版本与校验摘要 | 输入保留；版本冲突显示差异 |
 | 新增供应商分行 | 明细行“拆分供应商” | 供应商能力/资质有效且明细可拆 | 无 | 在当前确认编辑数据新增分行 | 校验失败保留原分行 |
-| 暂挂 | 连续处理条 / 底栏 | `DEFER` 可用；当前任务仍待处理 | 有未保存输入时确认保存或放弃 | 使用 W02 非终结动作记录原因，任务立即回到待领取状态，禁止原处理人独占保留；固定结果后打开下一项 | 失败停留当前项；不得假装已暂挂或已完成 |
-| 驳回 | 底栏 | `REJECT` 可用；当前领取人为本人、提交版本未变；结构化原因和说明完整 | 确认销售单将退回销售处理，并展示销售后续三条固定出路 | 原子写驳回确认、工作流审计并完成当前任务；不创建后继任务；固定结果提供 W05 驳回处理入口后可继续下一项 | 失败保留输入；结果不确定停留并查询；不得复用当前任务重提 |
-| 确认通过 | 底栏主动作 | `APPROVE` 可用；全部外采明细覆盖、能力资质有效、当前领取人和对象版本有效 | 展示供应商拆分、成本、交期、履约方式及“销售单将生效” | 原子形成确认记录、销售正式版本/应收和采购创建依据并完成当前任务；固定结果后仅在当前 `autoNext` 生效时自动下一项，否则停留结果页 | 失败不本地生效；不确定时查询最终结果 |
-| 受控转交 | 当前项 / W02 行级 | `TRANSFER` 在 `allowedActions` 中且 W07 处理器已注册受控转交；操作者有权 | 确认目标经办与后继任务链 | 使用正式后继任务链完成转交；禁止直接覆盖责任人；当前任务按处理器契约结束或让出处理权 | 失败停留当前项；不得本地改写领取人 |
+| 退回团队 | 连续处理条 / 底栏 | `RELEASE_TO_TEAM` 可用；当前任务仍待处理 | 有未保存输入时确认保存或放弃；原因必填 | 清空原任务个人责任并保持 `OPEN`；固定结果后打开下一项 | 失败停留当前项；不得假装已退回或已完成 |
+| 驳回 | 底栏 | `REJECT` 可用；当前责任人为本人、提交版本未变；结构化原因和说明完整 | 确认销售单将退回销售处理，并展示销售后续三条固定出路 | 原子写驳回确认、工作流审计并完成当前任务；不创建后继任务；固定结果提供 W05 驳回处理入口后可继续下一项 | 失败保留输入；结果不确定停留并查询；不得复用当前任务重提 |
+| 确认通过 | 底栏主动作 | `APPROVE` 可用；全部外采明细覆盖、能力资质有效、当前责任人和对象版本有效 | 展示供应商拆分、成本、交期、履约方式及“销售单将生效” | 原子形成确认记录、销售版本/应收和采购创建依据并完成当前任务；固定结果后仅在当前 `autoNext` 生效时自动下一项，否则停留结果页 | 失败不本地生效；不确定时查询原结果 |
+| 受控转交 | 当前项 / W02 行级 | `REASSIGN` 在 `allowedActions` 中且 W07 处理器已注册受控转交；操作者有权 | 确认目标经办人和原因 | 更新原开放任务责任并写审计；不完成任务、不创建同义后继任务 | 失败停留当前项；不得本地改写责任人 |
 | 打开销售单中心 | 页头/当前项 | 有 W05 对象权限 | 无 | 新开或聚焦 W05，W07 处理权保持不变 | 返回时重验提交版本 |
-| 上一项 / 下一项 | 连续处理条 | 无未处理脏输入；目标仍在快照 | 脏输入时确认 | 打开目标并领取/只读展示 | 目标失效则说明并选择最近有效项 |
+| 上一项 / 下一项 | 连续处理条 | 无未处理脏输入；目标仍在快照 | 脏输入时确认 | 打开目标并按分派模式处理/只读展示 | 目标失效则说明并选择最近有效项 |
 
 ### 7.1 通过事务边界
 
 确认通过不是“保存一张确认单”，而是一个跨聚合正式事务。服务端必须：
 
 1. 锁定 `sales_order_submission`、当前 `procurement_confirmation` 与 `work_item`；
-2. 校验提交仍有效、当前领取人一致、操作者有当前权限；
+2. 校验提交仍有效、当前责任人一致、操作者有当前权限；
 3. 校验全部需要外采的提交明细已被一个或多个确认分行完整覆盖，供应商能力和资质仍有效；
 4. 写采购确认通过事实、确认分行、处理人和时间；
 5. 把提交内容原样形成销售正式版本，更新销售状态并形成应收；
@@ -281,7 +281,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 
 ```ts
 type ProcurementConfirmationQueueQuery = {
-  scope: "mine" | "role_pool"
+  scope: "mine" | "team"
   due?: "active" | "today" | "overdue"
   fulfillmentMode?: "WAREHOUSE" | "SUPPLIER_DIRECT" | "ELECTRONIC" | "SERVICE"
   supplierId?: string
@@ -316,6 +316,7 @@ type ProcurementConfirmationQueueView = {
 type ProcurementConfirmationTaskView = {
   workItem: {
     workItemId: string
+    taskVersion: string
     workItemType: "PROCUREMENT_CONFIRMATION"
     status: WorkItemStatus
     priority: number
@@ -323,7 +324,7 @@ type ProcurementConfirmationTaskView = {
     impactSummary: string
     subjectVersion: string
   }
-  claimedByLabel?: string
+  ownerUserLabel?: string
   salesSubmission: {
     salesOrderId: string
     salesOrderNo: string
@@ -364,7 +365,7 @@ type ProcurementConfirmationTaskView = {
 
 `WorkItemStatus` 直接复用 W02 的固定状态联合类型。`queueContextId` 是跨 W01/W02/W07 的唯一队列上下文；任务与邻接项身份只使用 `workItemId`、`currentWorkItemId`、`previousWorkItemId` 和 `nextWorkItemId`。
 
-查询 View 只返回业务可读的处理信息（如 `claimedByLabel`）和对象版本；领取权是否有效由服务端在每次动作提交时按条件更新重新校验，不依赖查询响应中的任何令牌。
+查询 View 只返回业务可读的处理信息（如 `ownerUserLabel`）和对象版本；当前责任和处理资格由服务端在每次动作提交时重新校验，不依赖查询响应中的任何令牌。
 
 Query Key 至少包含用户、当前角色、权限/数据范围版本、全部筛选、排序、`queueContextId` 和 `currentWorkItemId`。列表总数和位置由服务端队列上下文提供；客户端当前缓存任务数不能冒充总数。
 
@@ -389,29 +390,18 @@ type SaveProcurementConfirmationAction = {
   }>
 }
 
-type SaveProcurementConfirmationCommand =
-  WorkItemActionCommand<SaveProcurementConfirmationAction>
-
-type DeferProcurementConfirmationAction = {
-  type: "DEFER"
-  queueContextId: string
-  reasonCode?: string
-  comment?: string
+type SaveProcurementConfirmationCommand = {
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  action: SaveProcurementConfirmationAction
+  idempotencyKey: string
 }
-
-type DeferProcurementConfirmationCommand =
-  WorkItemActionCommand<DeferProcurementConfirmationAction>
-
-type DeferProcurementConfirmationResult =
-  WorkItemActionResult<{
-    queueContextId: string
-    nextWorkItemId?: string
-  }>
 ```
 
-保存的是待处理确认的工作数据，不形成业务单据、不使销售生效、不完成或转交待办。`SaveProcurementConfirmationCommand` 直接复用 W02 `WorkItemActionCommand`（`kind="WORK_ITEM_ACTION"`），共享命令统一提供 `workItemId`、`expectedSubjectVersion` 和 `action`；W07 不复制这些任务字段，也不另建私有领取或版本协议。`action.expectedEditVersion` 保护确认工作数据版本。成功结果的任务状态仍为 `IN_PROGRESS`，并返回新 `editVersion`、规范化数值和完整校验摘要。
+保存的是待处理确认的工作数据，不形成业务单据、不使销售生效、不完成或转交待办。`SaveProcurementConfirmationCommand` 是本处理器的强类型非终结命令；`expectedTaskVersion` 保护任务责任与活动版本，`action.expectedEditVersion` 保护确认工作数据版本。成功结果的任务状态仍为 `OPEN`，并返回新 `taskVersion`、`editVersion`、规范化数值和完整校验摘要。
 
-`DeferProcurementConfirmationCommand` 追加暂挂动作证据并携带当前 `queueContextId`；返回 `DeferProcurementConfirmationResult`。成功结果的任务必须立即回到待领取（`UNCLAIMED`）状态，禁止为原处理人保留独占或优先展示；原处理人可再次领取。前端只在结果的 `queueContextId` 与当前上下文一致时，才把 `currentWorkItemId` 切到服务端返回的 `nextWorkItemId`。
+退回团队直接使用 W02 `WorkItemResponsibilityCommand` 的 `RELEASE_TO_TEAM` 分支，不定义 W07 私有命令。成功只清空原开放任务的个人责任并记录原因，任务保持 `OPEN`；`queueContextId` 和下一项只是页面导航结果，不进入责任状态。前端只在返回上下文与当前队列一致时切换焦点。
 
 ### 8.3 正式决策
 
@@ -432,8 +422,13 @@ type ProcurementConfirmationDecision =
       comment: string
     }
 
-type CompleteProcurementConfirmationCommand =
-  WorkItemActionCommand<ProcurementConfirmationDecision>
+type CompleteProcurementConfirmationCommand = {
+  workItemId: string
+  expectedTaskVersion: string
+  expectedSubjectVersion: string
+  decision: ProcurementConfirmationDecision
+  idempotencyKey: string
+}
 
 type ProcurementConfirmationBusinessResult =
   | {
@@ -459,11 +454,14 @@ type ProcurementConfirmationBusinessResult =
       successorWorkItemId?: never
     }
 
-type CompleteProcurementConfirmationResult =
-  WorkItemActionResult<ProcurementConfirmationBusinessResult>
+type CompleteProcurementConfirmationResult = {
+  workItemId: string
+  workItemStatus: "COMPLETED"
+  businessResult: ProcurementConfirmationBusinessResult
+}
 ```
 
-`CompleteProcurementConfirmationCommand` 直接复用 W02 `WorkItemActionCommand`，不得在 W07 重定义同名或等价私有命令。请求携带 `workItemId`、`expectedSubjectVersion` 和 `decision`；其中 `expectedSubjectVersion` 对应不可变销售提交版本，`expectedConfirmationEditVersion` 保护采购确认工作数据版本。
+`CompleteProcurementConfirmationCommand` 是 `PROCUREMENT_CONFIRMATION` 注册的唯一强类型完成命令。请求携带 `workItemId`、`expectedTaskVersion`、`expectedSubjectVersion` 和 `decision`；其中 `expectedTaskVersion` 对应当前任务版本，`expectedSubjectVersion` 对应不可变销售提交版本，`expectedConfirmationEditVersion` 保护采购确认工作数据版本。W07 不得改用公共任务完成接口。
 
 通过或驳回时，服务端在同一事务重读提交与确认版本，写该次采购确认的正式 `APPROVED` / `REJECTED` 事实及销售生效/退回结果、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`。驳回结果以 `successorWorkItemId?: never` 明确禁止本事务创建后继任务，只返回三条固定销售出路。销售在 W05 完成合法出路后，才可能为新的不可变提交创建全新的采购确认任务。任一部分失败均整体回滚；前端不得在业务请求成功后再补发“完成任务”。
 
@@ -490,7 +488,7 @@ type CompleteProcurementConfirmationResult =
 | 状态 | 页面表现 | 可执行动作 | 恢复方式 |
 | --- | --- | --- | --- |
 | 初载 | 页头、连续条、提交摘要和双栏 Skeleton | 应用壳导航可用 | 查询完成原位替换 |
-| 领取中 | 当前项只读，显示“正在取得处理权” | 打开销售单 | 领取成功进入编辑；失败说明占用者 |
+| 开始处理中 | 当前项只读，显示“正在开始处理” | 打开销售单 | 成功后进入编辑；失败显示当前处理人 |
 | 刷新 | 保留当前数据，显示数据更新时间；不重置表单 | 查看；正式动作等待重验 | 成功更新未编辑字段 |
 | 队列为空 | 明确“本筛选项已处理完” | 清除筛选、返回 W01/W02 | 新任务到达或切换筛选 |
 | 筛选无结果 | 展示筛选摘要 | 清除筛选 | 返回有效队列 |
@@ -499,16 +497,16 @@ type CompleteProcurementConfirmationResult =
 | 查询失败但有缓存 | 保留旧内容并标陈旧 | 只读查看；正式动作禁用 | 取到当前事实后恢复 |
 | 保存中 | 草稿保存指示，正式动作暂禁用 | 继续编辑其它字段 | 返回新编辑版本 |
 | 保存失败 | 输入保留，错误靠近动作区 | 重试、复制输入 | 重试成功 |
-| 校验失败 | `ValidationSummary` + 行内错误 | 修正、暂挂 | 校验通过 |
+| 校验失败 | `ValidationSummary` + 行内错误 | 修正、退回团队 | 校验通过 |
 | 提交已失效 | 显示旧/新提交摘要，全部写动作禁用 | 打开最新销售单、去下一项 | 服务端关闭旧任务并创建新任务 |
 | 版本冲突 | 显示当前服务端确认分行与本地差异 | 重载、逐行重新应用 | 基于新版本保存 |
-| 任务已被他人领取 | 当前项只读，显示处理人 | 去下一项、打开销售单 | 暂挂/转交或任务完成后重查 |
-| 处理权丢失（版本冲突或已转交） | 本地输入只读保留，正式动作禁用 | 重新领取、复制输入 | 重取数据并处理冲突 |
+| 任务已由他人负责 | 当前项只读，显示处理人 | 去下一项、打开销售单 | 有权转交、退回团队或任务完成后重查 |
+| 处理权变化（版本冲突或已转交） | 输入只读保留，正式动作禁用 | 刷新任务、复制输入 | 重新取得责任后重取数据并处理冲突 |
 | 正式动作进行中 | 锁定当前项与动作，禁止重复点击 | 无其它正式动作 | 返回确定结果 |
 | 正式动作成功 | 固定结果展示销售单状态/版本、确认结果和采购创建依据 | 自动/手动下一项、打开销售单/W08 | 用户明确继续 |
 | 驳回正式成功 | 固定结果展示旧提交、`REJECTED`、已完成旧任务和销售三条出路；不显示后继任务 | 打开 W05 驳回处理、继续队列 | 销售选择合法出路后，可能以新任务再次进入队列 |
-| 改品/改价后新任务 | 来源 Banner 展示新提交/新版本及上一驳回引用；不加载旧确认分行 | 领取、重新填写并独立通过/驳回 | 按新任务正式事务处理 |
-| 低毛利上级通过后新任务 | 来源 Banner 展示新提交/新版本和上级确认受控证据，明确“仍待采购确认” | 领取、重新填写并独立通过/驳回 | 上级证据不预选供应商、不自动通过 |
+| 改品/改价后新任务 | 来源 Banner 展示新提交/新版本及上一驳回引用；不加载旧确认分行 | 按分派模式建立责任、重新填写并独立通过/驳回 | 按新任务强类型事务处理 |
+| 低毛利上级通过后新任务 | 来源 Banner 展示新提交/新版本和上级确认受控证据，明确“仍待采购确认” | 按分派模式建立责任、重新填写并独立通过/驳回 | 上级证据不预选供应商、不自动通过 |
 | 旧驳回任务被再次打开 | 只读固定结果，写动作隐藏 | 打开 W05、返回队列 | 不恢复、转交或改绑旧任务 |
 | 正式结果不确定 | 不显示成功，不跳下一项 | 查询最终结果 | 确定成功或失败 |
 | 字段级隐藏 | 只读跨角色视图掩码；采购处理角色缺关键字段权限时不可处理 | 查看 blocker | 权限修正后重查 |
@@ -522,7 +520,7 @@ type CompleteProcurementConfirmationResult =
 | --- | --- | --- | --- |
 | 1440×900 | 66/34 双栏；连续条和底栏固定；至少两条确认分行同屏 | 队列位置、销售单/提交身份、数量覆盖、主动作 | 无 |
 | 1280×800 | 62/38 双栏；参考信息折叠 | 提交序号、供应商、数量、成本、交期、履约方式 | 附件与审计进入折叠区 |
-| 1024×768 | 单列：销售摘要 → 明细 → 决策摘要；底栏固定 | 当前项、阻塞、通过/驳回/暂挂 | 右栏改可展开摘要 |
+| 1024×768 | 单列：销售摘要 → 明细 → 决策摘要；底栏固定 | 当前项、阻塞、通过/驳回/退回团队 | 右栏改可展开摘要 |
 | 768×1024 | 导航抽屉；分行改卡片；连续条两行 | 队列位置、对象、覆盖、正式动作 | 供应商资质详情用 Sheet；次要参考值折叠 |
 | 375×812 | 只保证只读核对、简单单供应商确认和驳回；多供应商拆分提示转桌面 | 对象身份、提交版本、数量/交期、结果查看 | 多分行成本编辑、复杂拆分不作为手机主路径 |
 
@@ -530,7 +528,7 @@ type CompleteProcurementConfirmationResult =
 
 - 队列内 `j/k` 或 `↑/↓` 在无输入焦点时切换项；有脏输入先触发保存/放弃确认。
 - `⌘S` 保存当前确认数据；校验通过时 `⌘↵` 打开通过确认层，不绕过确认。
-- Tab 顺序：队列筛选 → 连续处理条 → 销售摘要 → 确认分行 → 决策摘要 → 暂挂/驳回/通过。
+- Tab 顺序：队列筛选 → 连续处理条 → 销售摘要 → 确认分行 → 决策摘要 → 退回团队/驳回/通过。
 - 新增供应商分行后焦点落到新分行供应商选择器；删除分行后回到相邻分行标题。
 - 驳回 Dialog 关闭后焦点回“驳回”；通过成功后焦点到固定结果标题。
 - 自动下一项时新对象标题获得焦点，`aria-live=polite` 播报“第 N/M 项，销售单号”。
@@ -554,7 +552,7 @@ type CompleteProcurementConfirmationResult =
 
 ### 12.1 体验与布局
 
-- [x] 采购默认着陆后无需返回列表，可连续处理通过、驳回和暂挂。
+- [x] 采购默认着陆后无需返回列表，可连续处理通过、驳回和退回团队。
 - [x] 二次确认页面和文案表达为“二次提交 · 无确认单号”，不生成确认单号或纸质单据。
 - [x] 1440×900 下队列位置、不可变销售提交、至少两条确认分行、覆盖摘要和主动作同屏可见。
 - [x] 多供应商拆分能逐明细说明确认数量，不能用总量掩盖单行缺口。
@@ -569,8 +567,8 @@ type CompleteProcurementConfirmationResult =
 - [ ] 改品/改价重提只以新 `submissionId`、递增提交号、新提交版本和新 `PROCUREMENT_CONFIRMATION` 返回 W07；旧确认分行与旧任务不复用。
 - [ ] 照原条件承接先进入已注册 `LOW_MARGIN_MANAGER_CONFIRMATION`；上级通过前 W07 不产生新任务，通过后仍创建全新采购确认且不能自动通过。
 - [ ] 不做路径在 W05 作废销售单且不创建任务；W07 只读保留旧驳回结果和审计链。
-- [x] 查询 View 不返回任何会话令牌；领取权只在服务端动作时按条件更新校验。
-- [ ] 领取、保存、暂挂、受控转交和正式决策均使用 W02 统一动作命令；暂挂立即置回待领取且不做原处理人独占保留；转交仅走正式后继任务链且禁止直接覆盖责任人；正式决策由处理器 `completionAction` 约束，不存在第二次“标记完成”调用。
+- [x] 查询 View 不返回任何会话令牌；责任和处理资格只在服务端动作时重新校验。
+- [ ] 开始处理与退回团队使用 W02 责任命令；保存和正式决策使用 W07 强类型命令；退回团队清空原任务个人责任，转交更新原开放任务责任且不创建同义后继任务；不存在第二次“标记完成”调用。
 - [x] 重复点击和超时重试不重复推进销售状态或生成多个采购创建依据。
 - [ ] 驳回结果重放不创建后继任务；新提交与固定任务类型存在服务端唯一约束，低毛利上级任务和采购任务的唯一性彼此独立。
 - [ ] 成本偏离阈值由服务端配置，W07 不硬编码百分比；销售端只接收风险结论不接收原始成本；仅 W05「照原条件承接」才创建低毛利任务。
@@ -587,7 +585,7 @@ type CompleteProcurementConfirmationResult =
 
 - `erp-phase-1.md` §4.4、§4.6、§7.1–§7.4：二次确认是销售生效闸门和处理行为，不是业务单据；确认字段与驳回路径。
 - `erp-phase-1.md` §4.5：供应商能力与资质控制新确认和采购可用性。
-- `erp-data-model.md` §6.1 `work_item`：固定任务类型、领取、转交、完成与关闭约束。
+- `erp-data-model.md` §6.1 `work_item`：固定任务类型、分派、转交、完成与关闭约束。
 - `erp-data-model.md` §6.5：不可变销售提交、`procurement_confirmation` 及多供应商确认分行规则。
 - `erp-data-model.md` §7.1、§8.1：销售固定状态机与采购确认通过事务不变量。
 - `erp-ui-design.md` §3.4–§3.5、§4.4、§5.1–§5.2、§7.2、§9–§11：连续处理队列、TaskTabs、五档响应式与正式结果规则。
