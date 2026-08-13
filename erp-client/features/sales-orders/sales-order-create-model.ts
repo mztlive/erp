@@ -1,7 +1,6 @@
 import { z } from "zod"
 import type { StandardSchemaV1Issue } from "@tanstack/react-form"
 
-import type { WizardStep } from "@/components/business"
 import { WELFARE_SCENARIO_OPTIONS } from "@/lib/business-options"
 import {
     compareDecimal,
@@ -384,40 +383,4 @@ export function errorMessage(error: unknown): string {
         VOUCHER_REQUIRES_EXACTLY_ONE_LINE: "卡券销售单必须恰好一条明细。",
     }
     return messages[message] ?? message
-}
-
-export const WIZARD_STEPS: readonly WizardStep[] = [
-    { id: "contract", label: "客户与合同" },
-    { id: "content", label: "销售内容" },
-    { id: "terms", label: "交付与结算" },
-    { id: "review", label: "核对并提交" },
-] as const
-export type WizardStepId = (typeof WIZARD_STEPS)[number]["id"]
-
-/** 字段名 → 所在步骤，用于校验失败时把用户带回能看见错误的那一步。 */
-const STEP_FIELD_PREFIXES: Record<WizardStepId, readonly string[]> = {
-    contract: [
-        "contractId",
-        "requestedContractRevisionId",
-        "customerName",
-        "settlementEntity",
-        "ownerUserId",
-        "ownerName",
-    ],
-    content: ["nature", "lineItems"],
-    terms: [
-        "welfareScene",
-        "paymentTerms",
-        "fulfillmentDeadline",
-        "taxRatePercent",
-    ],
-    review: [],
-}
-
-export function stepForFieldName(name: string): WizardStepId | null {
-    const prefix = name.split(/[.[]/)[0]
-    for (const step of WIZARD_STEPS) {
-        if (STEP_FIELD_PREFIXES[step.id].includes(prefix)) return step.id
-    }
-    return null
 }

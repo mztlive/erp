@@ -27,7 +27,6 @@ import {
     FormalActionResult,
     ListToolbar,
     MoneyValue,
-    OptionCombobox,
     PageActions,
     PageHeader,
     PageScaffold,
@@ -996,6 +995,92 @@ export function SalesOrdersListPage() {
                                                 },
                                             ]}
                                         />
+                                        <FixedOptionRadioFilter
+                                            label="商业状态"
+                                            value={filterDraft.commercialStatus}
+                                            onValueChange={(
+                                                commercialStatus,
+                                            ) => {
+                                                setFilterDraft((draft) => ({
+                                                    ...draft,
+                                                    commercialStatus,
+                                                }))
+                                            }}
+                                            options={[
+                                                { value: "all", label: "全部" },
+                                                ...SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
+                                            ]}
+                                        />
+                                        <FixedOptionRadioFilter
+                                            label="审核状态"
+                                            value={filterDraft.reviewStatus}
+                                            onValueChange={(reviewStatus) => {
+                                                setFilterDraft((draft) => ({
+                                                    ...draft,
+                                                    reviewStatus,
+                                                }))
+                                            }}
+                                            options={[
+                                                { value: "all", label: "全部" },
+                                                ...SALES_ORDER_REVIEW_STATUS_OPTIONS,
+                                            ]}
+                                        />
+                                        <FixedOptionRadioFilter
+                                            label="履约进度"
+                                            value={filterDraft.fulfillment}
+                                            onValueChange={(fulfillment) => {
+                                                setFilterDraft((draft) => ({
+                                                    ...draft,
+                                                    fulfillment,
+                                                }))
+                                            }}
+                                            options={[
+                                                { value: "all", label: "全部" },
+                                                ...SALES_ORDER_FULFILLMENT_OPTIONS,
+                                            ]}
+                                        />
+                                        <FixedOptionRadioFilter
+                                            label="回款进度"
+                                            value={filterDraft.collection}
+                                            onValueChange={(collection) => {
+                                                setFilterDraft((draft) => ({
+                                                    ...draft,
+                                                    collection,
+                                                }))
+                                            }}
+                                            options={[
+                                                { value: "all", label: "全部" },
+                                                ...SALES_ORDER_COLLECTION_OPTIONS,
+                                            ]}
+                                        />
+                                        <FixedOptionRadioFilter
+                                            label="开票进度"
+                                            value={filterDraft.invoice}
+                                            onValueChange={(invoice) => {
+                                                setFilterDraft((draft) => ({
+                                                    ...draft,
+                                                    invoice,
+                                                }))
+                                            }}
+                                            options={[
+                                                { value: "all", label: "全部" },
+                                                ...SALES_ORDER_INVOICE_OPTIONS,
+                                            ]}
+                                        />
+                                        <FixedOptionRadioFilter
+                                            label="关闭状态"
+                                            value={filterDraft.closeStatus}
+                                            onValueChange={(closeStatus) => {
+                                                setFilterDraft((draft) => ({
+                                                    ...draft,
+                                                    closeStatus,
+                                                }))
+                                            }}
+                                            options={[
+                                                { value: "all", label: "全部" },
+                                                ...SALES_ORDER_CLOSE_OPTIONS,
+                                            ]}
+                                        />
 
                                         <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                             <Field>
@@ -1081,184 +1166,6 @@ export function SalesOrdersListPage() {
                                                         )
                                                     }}
                                                     placeholder="全部创建人"
-                                                />
-                                            </Field>
-                                            <Field>
-                                                <FieldLabel>
-                                                    商业状态
-                                                </FieldLabel>
-                                                <OptionCombobox
-                                                    value={
-                                                        filterDraft.commercialStatus
-                                                    }
-                                                    onValueChange={(value) => {
-                                                        setFilterDraft(
-                                                            (draft) => ({
-                                                                ...draft,
-                                                                commercialStatus:
-                                                                    (value ??
-                                                                        "all") as SalesOrdersUrlState["commercialStatus"],
-                                                            }),
-                                                        )
-                                                    }}
-                                                    options={[
-                                                        {
-                                                            value: "all",
-                                                            label: "全部商业状态",
-                                                        },
-                                                        ...SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
-                                                    ]}
-                                                    allowClear={false}
-                                                    placeholder="全部商业状态"
-                                                    aria-label="商业状态"
-                                                />
-                                            </Field>
-                                            <Field>
-                                                <FieldLabel>
-                                                    审核状态
-                                                </FieldLabel>
-                                                <OptionCombobox
-                                                    value={
-                                                        filterDraft.reviewStatus
-                                                    }
-                                                    onValueChange={(value) => {
-                                                        setFilterDraft(
-                                                            (draft) => ({
-                                                                ...draft,
-                                                                reviewStatus:
-                                                                    (value ??
-                                                                        "all") as SalesOrdersUrlState["reviewStatus"],
-                                                            }),
-                                                        )
-                                                    }}
-                                                    options={[
-                                                        {
-                                                            value: "all",
-                                                            label: "全部审核状态",
-                                                        },
-                                                        ...SALES_ORDER_REVIEW_STATUS_OPTIONS,
-                                                    ]}
-                                                    allowClear={false}
-                                                    placeholder="全部审核状态"
-                                                    aria-label="审核状态"
-                                                />
-                                            </Field>
-                                            <Field>
-                                                <FieldLabel>
-                                                    履约进度
-                                                </FieldLabel>
-                                                <OptionCombobox
-                                                    value={
-                                                        filterDraft.fulfillment
-                                                    }
-                                                    onValueChange={(value) => {
-                                                        setFilterDraft(
-                                                            (draft) => ({
-                                                                ...draft,
-                                                                fulfillment:
-                                                                    (value ??
-                                                                        "all") as SalesOrdersUrlState["fulfillment"],
-                                                            }),
-                                                        )
-                                                    }}
-                                                    options={[
-                                                        {
-                                                            value: "all",
-                                                            label: "全部履约进度",
-                                                        },
-                                                        ...SALES_ORDER_FULFILLMENT_OPTIONS,
-                                                    ]}
-                                                    allowClear={false}
-                                                    placeholder="全部履约进度"
-                                                    aria-label="履约进度"
-                                                />
-                                            </Field>
-                                            <Field>
-                                                <FieldLabel>
-                                                    回款进度
-                                                </FieldLabel>
-                                                <OptionCombobox
-                                                    value={
-                                                        filterDraft.collection
-                                                    }
-                                                    onValueChange={(value) => {
-                                                        setFilterDraft(
-                                                            (draft) => ({
-                                                                ...draft,
-                                                                collection:
-                                                                    (value ??
-                                                                        "all") as SalesOrdersUrlState["collection"],
-                                                            }),
-                                                        )
-                                                    }}
-                                                    options={[
-                                                        {
-                                                            value: "all",
-                                                            label: "全部回款进度",
-                                                        },
-                                                        ...SALES_ORDER_COLLECTION_OPTIONS,
-                                                    ]}
-                                                    allowClear={false}
-                                                    placeholder="全部回款进度"
-                                                    aria-label="回款进度"
-                                                />
-                                            </Field>
-                                            <Field>
-                                                <FieldLabel>
-                                                    开票进度
-                                                </FieldLabel>
-                                                <OptionCombobox
-                                                    value={filterDraft.invoice}
-                                                    onValueChange={(value) => {
-                                                        setFilterDraft(
-                                                            (draft) => ({
-                                                                ...draft,
-                                                                invoice:
-                                                                    (value ??
-                                                                        "all") as SalesOrdersUrlState["invoice"],
-                                                            }),
-                                                        )
-                                                    }}
-                                                    options={[
-                                                        {
-                                                            value: "all",
-                                                            label: "全部开票进度",
-                                                        },
-                                                        ...SALES_ORDER_INVOICE_OPTIONS,
-                                                    ]}
-                                                    allowClear={false}
-                                                    placeholder="全部开票进度"
-                                                    aria-label="开票进度"
-                                                />
-                                            </Field>
-                                            <Field>
-                                                <FieldLabel>
-                                                    关闭状态
-                                                </FieldLabel>
-                                                <OptionCombobox
-                                                    value={
-                                                        filterDraft.closeStatus
-                                                    }
-                                                    onValueChange={(value) => {
-                                                        setFilterDraft(
-                                                            (draft) => ({
-                                                                ...draft,
-                                                                closeStatus:
-                                                                    (value ??
-                                                                        "all") as SalesOrdersUrlState["closeStatus"],
-                                                            }),
-                                                        )
-                                                    }}
-                                                    options={[
-                                                        {
-                                                            value: "all",
-                                                            label: "全部关闭状态",
-                                                        },
-                                                        ...SALES_ORDER_CLOSE_OPTIONS,
-                                                    ]}
-                                                    allowClear={false}
-                                                    placeholder="全部关闭状态"
-                                                    aria-label="关闭状态"
                                                 />
                                             </Field>
                                             <Field>

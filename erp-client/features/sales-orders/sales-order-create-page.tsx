@@ -14,7 +14,6 @@ import {
     PageScaffold,
     StickyTotalBar,
     ValidationSummary,
-    WizardSteps,
     surfaceInsetClassName,
     surfacePanelClassName,
     type EditableLineItemColumn,
@@ -60,14 +59,9 @@ import {
     errorMessage,
     hasMeaningfulLines,
     NATURE_OPTIONS,
-    stepForFieldName,
     validateSalesOrderForm,
-    WIZARD_STEPS,
 } from "@/features/sales-orders/sales-order-create-model"
-import type {
-    CreateSalesOrderFormValues,
-    WizardStepId,
-} from "@/features/sales-orders/sales-order-create-model"
+import type { CreateSalesOrderFormValues } from "@/features/sales-orders/sales-order-create-model"
 import type {
     CreateSalesOrderInput,
     SalesOrderCreateIntent,
@@ -105,9 +99,6 @@ function SalesOrderCreateForm({
     /** 继续编辑场景下，合同派生 effect 首次运行时不要覆盖已从草稿带回的付款条件。 */
     const skipPaymentTermsResetRef = React.useRef(initialDraft != null)
 
-    const [currentStep, setCurrentStep] =
-        React.useState<WizardStepId>("contract")
-    const currentStepIndex = WIZARD_STEPS.findIndex((s) => s.id === currentStep)
     /** 继续编辑场景：草稿在后端的身份与乐观锁版本，保存草稿从"新建"切到"更新"。 */
     const [draftIdentity, setDraftIdentity] = React.useState<{
         salesOrderId: string
@@ -248,27 +239,6 @@ function SalesOrderCreateForm({
             router.push(`/sales/orders/${result.salesOrderId}`)
         },
     })
-
-    /**
-     * 提交/保存草稿校验失败时，错误可能落在当前未展示的步骤上（字段仍挂载，
-     * 只是被 `hidden` 隐藏）——把用户带回能看见那条错误的步骤，不能让校验
-     * 失败后页面看起来什么都没发生。
-     */
-    const jumpToFirstInvalidStep = React.useCallback(() => {
-        const fieldMeta = form.state.fieldMeta as Record<
-            string,
-            { errors?: unknown[] } | undefined
-        >
-        for (const [name, meta] of Object.entries(fieldMeta)) {
-            if (meta?.errors && meta.errors.length > 0) {
-                const step = stepForFieldName(name)
-                if (step && step !== "review") {
-                    setCurrentStep(step)
-                    return
-                }
-            }
-        }
-    }, [form])
 
     const dirty = useSelector(form.store, (state) => state.isDirty)
     const [draftSaved, setDraftSaved] = React.useState<{
@@ -461,9 +431,7 @@ function SalesOrderCreateForm({
                 onSubmit={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
-                    void form.handleSubmit().then(() => {
-                        jumpToFirstInvalidStep()
-                    })
+                    void form.handleSubmit()
                 }}
             >
                 <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17.5rem] xl:gap-5">
@@ -473,24 +441,11 @@ function SalesOrderCreateForm({
                             "min-w-0 overflow-hidden",
                         )}
                     >
-                        <div className="border-b border-border/30 px-4 py-3 md:px-5 md:py-4 lg:px-6">
-                            <WizardSteps
-                                steps={WIZARD_STEPS}
-                                currentStepId={currentStep}
-                            />
-                        </div>
-
-                        <section
-                            className="border-b border-border/30 p-4 md:p-5 lg:p-6"
-                            hidden={currentStep !== "contract"}
-                        >
-                            <div className="mb-4 flex items-center justify-between gap-2">
+                        <section className="border-b border-border/30 p-4 md:p-5 lg:p-6">
+                            <div className="mb-4">
                                 <h2 className="font-heading text-sm font-semibold">
-                                    客户与合同
+                                    单据头
                                 </h2>
-                                <span className="text-xs text-muted-foreground">
-                                    第 1 步 · 合同与负责销售
-                                </span>
                             </div>
 
                             <div className="space-y-5">
@@ -643,6 +598,37 @@ function SalesOrderCreateForm({
                                 </form.Subscribe>
 
                                 <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    <form.AppField name="nature">
+                                        {(field) => (
+                                            <field.SelectField
+                                                label="业务性质"
+                                                options={NATURE_OPTIONS}
+                                                onValueChange={(value) => {
+                                                    const nature =
+                                                        value as SalesOrderNature
+                                                    if (
+                                                        nature ===
+                                                        field.state.value
+                                                    )
+                                                        return
+                                                    const lines =
+                                                        form.state.values
+                                                            .lineItems
+                                                    if (
+                                                        hasMeaningfulLines(
+                                                            lines,
+                                                        )
+                                                    ) {
+                                                        setPendingNature(
+                                                            nature,
+                                                        )
+                                                        return
+                                                    }
+                                                    applyNature(nature)
+                                                }}
+                                            />
+                                        )}
+                                    </form.AppField>
                                     <form.AppField name="ownerName">
                                         {(field) => (
                                             <field.TextField
@@ -659,151 +645,98 @@ function SalesOrderCreateForm({
                                             />
                                         )}
                                     </form.AppField>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section
-                            className="border-b border-border/30 p-4 md:p-5 lg:p-6"
-                            hidden={currentStep !== "terms"}
-                        >
-                            <div className="mb-4 flex items-center justify-between gap-2">
-                                <h2 className="font-heading text-sm font-semibold">
-                                    交付与结算
-                                </h2>
-                                <span className="text-xs text-muted-foreground">
-                                    第 3 步 · 付款、履约期限与税率
-                                </span>
-                            </div>
-                            <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                                <form.AppField
-                                    name="welfareScene"
-                                    validators={{
-                                        onBlur: z
-                                            .string()
-                                            .trim()
-                                            .min(1, "请选择福利场景")
-                                            .refine(
+                                    <form.AppField
+                                        name="welfareScene"
+                                        validators={{
+                                            onBlur: z
+                                                .string()
+                                                .trim()
+                                                .min(1, "请选择福利场景")
+                                                .refine(
+                                                    (value) =>
+                                                        WELFARE_SCENARIO_OPTIONS.some(
+                                                            (o) =>
+                                                                o.value ===
+                                                                value,
+                                                        ),
+                                                    "请选择有效的福利场景",
+                                                ),
+                                        }}
+                                    >
+                                        {(field) => (
+                                            <field.SelectField
+                                                label="福利场景"
+                                                options={
+                                                    WELFARE_SCENARIO_OPTIONS
+                                                }
+                                                placeholder="选择福利场景"
+                                            />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField
+                                        name="paymentTerms"
+                                        validators={{
+                                            onBlur: z
+                                                .string()
+                                                .min(1, "请选择付款条件"),
+                                        }}
+                                    >
+                                        {(field) => (
+                                            <field.SelectField
+                                                label="付款条件"
+                                                options={PAYMENT_TERM_OPTIONS}
+                                            />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField
+                                        name="fulfillmentDeadline"
+                                        validators={{
+                                            onBlur: z
+                                                .string()
+                                                .min(1, "请选择履约期限"),
+                                        }}
+                                    >
+                                        {(field) => (
+                                            <field.DateField label="履约期限" />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField
+                                        name="taxRatePercent"
+                                        validators={{
+                                            onBlur: decimalInput(
+                                                "税率",
+                                                6,
+                                            ).refine(
                                                 (value) =>
-                                                    WELFARE_SCENARIO_OPTIONS.some(
-                                                        (o) =>
-                                                            o.value === value,
+                                                    decimalAtMost(
+                                                        value,
+                                                        "100",
+                                                        6,
                                                     ),
-                                                "请选择有效的福利场景",
+                                                "税率不能超过 100%",
                                             ),
-                                    }}
-                                >
-                                    {(field) => (
-                                        <field.SelectField
-                                            label="福利场景"
-                                            options={WELFARE_SCENARIO_OPTIONS}
-                                            placeholder="选择福利场景"
-                                        />
-                                    )}
-                                </form.AppField>
-                                <form.AppField
-                                    name="paymentTerms"
-                                    validators={{
-                                        onBlur: z
-                                            .string()
-                                            .min(1, "请选择付款条件"),
-                                    }}
-                                >
-                                    {(field) => (
-                                        <field.SelectField
-                                            label="付款条件"
-                                            options={PAYMENT_TERM_OPTIONS}
-                                        />
-                                    )}
-                                </form.AppField>
-                                <form.AppField
-                                    name="fulfillmentDeadline"
-                                    validators={{
-                                        onBlur: z
-                                            .string()
-                                            .min(1, "请选择履约期限"),
-                                    }}
-                                >
-                                    {(field) => (
-                                        <field.DateField label="履约期限" />
-                                    )}
-                                </form.AppField>
-                                <form.AppField
-                                    name="taxRatePercent"
-                                    validators={{
-                                        onBlur: decimalInput("税率", 6).refine(
-                                            (value) =>
-                                                decimalAtMost(value, "100", 6),
-                                            "税率不能超过 100%",
-                                        ),
-                                    }}
-                                >
-                                    {(field) => (
-                                        <field.TextField
-                                            label="税率（%）"
-                                            type="number"
-                                            inputClassName="num"
-                                        />
-                                    )}
-                                </form.AppField>
-                            </div>
-                            <div className="mt-5">
-                                <form.AppField name="remark">
-                                    {(field) => (
-                                        <field.TextareaField
-                                            label="内部说明"
-                                            placeholder="补充客户确认、交付或内部协同说明（可选）"
-                                            rows={3}
-                                        />
-                                    )}
-                                </form.AppField>
+                                        }}
+                                    >
+                                        {(field) => (
+                                            <field.TextField
+                                                label="税率（%）"
+                                                type="number"
+                                                inputClassName="num"
+                                            />
+                                        )}
+                                    </form.AppField>
+                                </div>
                             </div>
                         </section>
 
                         <section
                             id="sales-line-items-section"
                             className="border-b border-border/30 p-4 md:p-5 lg:p-6"
-                            hidden={currentStep !== "content"}
                         >
                             <div className="mb-4 flex items-center justify-between gap-2">
                                 <h2 className="font-heading text-sm font-semibold">
-                                    销售内容
-                                </h2>
-                                <span className="text-xs text-muted-foreground">
-                                    第 2 步 · 业务性质与明细
-                                </span>
-                            </div>
-
-                            <div className="mb-5 max-w-xs">
-                                <form.AppField name="nature">
-                                    {(field) => (
-                                        <field.SelectField
-                                            label="业务性质"
-                                            options={NATURE_OPTIONS}
-                                            onValueChange={(value) => {
-                                                const nature =
-                                                    value as SalesOrderNature
-                                                if (
-                                                    nature === field.state.value
-                                                )
-                                                    return
-                                                const lines =
-                                                    form.state.values.lineItems
-                                                if (hasMeaningfulLines(lines)) {
-                                                    setPendingNature(nature)
-                                                    return
-                                                }
-                                                applyNature(nature)
-                                            }}
-                                        />
-                                    )}
-                                </form.AppField>
-                            </div>
-
-                            <div className="mb-4 flex items-center justify-between gap-2">
-                                <h3 className="text-sm font-medium">
                                     销售明细
-                                </h3>
+                                </h2>
                                 <form.Subscribe
                                     selector={(state) => state.values.nature}
                                 >
@@ -1326,120 +1259,18 @@ function SalesOrderCreateForm({
                                     )
                                 }}
                             </form.Subscribe>
-                        </section>
 
-                        <section
-                            className="border-b border-border/30 p-4 md:p-5 lg:p-6"
-                            hidden={currentStep !== "review"}
-                        >
-                            <div className="mb-4 flex items-center justify-between gap-2">
-                                <h2 className="font-heading text-sm font-semibold">
-                                    核对并提交
-                                </h2>
-                                <span className="text-xs text-muted-foreground">
-                                    第 4 步 · 确认内容无误后提交
-                                </span>
+                            <div className="mt-5">
+                                <form.AppField name="remark">
+                                    {(field) => (
+                                        <field.TextareaField
+                                            label="内部说明"
+                                            placeholder="补充客户确认、交付或内部协同说明（可选）"
+                                            rows={2}
+                                        />
+                                    )}
+                                </form.AppField>
                             </div>
-                            <form.Subscribe selector={(state) => state.values}>
-                                {(values) => {
-                                    const totals = calculateTotals(
-                                        values.lineItems,
-                                        values.taxRatePercent,
-                                    )
-                                    const flowNote =
-                                        values.nature === "card_voucher"
-                                            ? "提交后进入销售领导 → 运营两级审批，运营通过后生效并形成应收。"
-                                            : "提交后内容锁定并进入采购二次确认；生效以确认通过为准。"
-                                    return (
-                                        <dl
-                                            className={cn(
-                                                surfaceInsetClassName,
-                                                "grid gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2",
-                                            )}
-                                        >
-                                            <div className="flex justify-between gap-2">
-                                                <dt className="text-muted-foreground">
-                                                    合同
-                                                </dt>
-                                                <dd className="font-medium">
-                                                    {values.contractRevisionLabel ||
-                                                        "未选择"}
-                                                </dd>
-                                            </div>
-                                            <div className="flex justify-between gap-2">
-                                                <dt className="text-muted-foreground">
-                                                    客户
-                                                </dt>
-                                                <dd className="font-medium">
-                                                    {values.customerName || "—"}
-                                                </dd>
-                                            </div>
-                                            <div className="flex justify-between gap-2">
-                                                <dt className="text-muted-foreground">
-                                                    结算主体
-                                                </dt>
-                                                <dd className="font-medium">
-                                                    {values.settlementEntity ||
-                                                        "—"}
-                                                </dd>
-                                            </div>
-                                            <div className="flex justify-between gap-2">
-                                                <dt className="text-muted-foreground">
-                                                    业务性质
-                                                </dt>
-                                                <dd className="font-medium">
-                                                    {values.nature ===
-                                                    "card_voucher"
-                                                        ? "卡券"
-                                                        : "实物/服务"}
-                                                </dd>
-                                            </div>
-                                            <div className="flex justify-between gap-2">
-                                                <dt className="text-muted-foreground">
-                                                    明细行
-                                                </dt>
-                                                <dd className="font-medium">
-                                                    {values.lineItems.length} 行
-                                                </dd>
-                                            </div>
-                                            <div className="flex justify-between gap-2">
-                                                <dt className="text-muted-foreground">
-                                                    付款条件
-                                                </dt>
-                                                <dd className="font-medium">
-                                                    {paymentTermLabel(
-                                                        values.paymentTerms,
-                                                    ) || "未选择"}
-                                                </dd>
-                                            </div>
-                                            <div className="flex justify-between gap-2">
-                                                <dt className="text-muted-foreground">
-                                                    含税金额
-                                                </dt>
-                                                <dd className="num font-semibold">
-                                                    <MoneyValue
-                                                        value={totals.gross}
-                                                        taxBasis="gross"
-                                                    />
-                                                </dd>
-                                            </div>
-                                            <div className="flex justify-between gap-2">
-                                                <dt className="text-muted-foreground">
-                                                    税额
-                                                </dt>
-                                                <dd className="num font-medium">
-                                                    <MoneyValue
-                                                        value={totals.tax}
-                                                    />
-                                                </dd>
-                                            </div>
-                                            <p className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
-                                                {flowNote}
-                                            </p>
-                                        </dl>
-                                    )
-                                }}
-                            </form.Subscribe>
                         </section>
 
                         <form.Subscribe selector={(state) => state.values}>
@@ -1504,64 +1335,20 @@ function SalesOrderCreateForm({
                                                             "SAVE_DRAFT"
                                                     }}
                                                 />
-                                                {currentStepIndex > 0 ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        onClick={() =>
-                                                            setCurrentStep(
-                                                                WIZARD_STEPS[
-                                                                    currentStepIndex -
-                                                                        1
-                                                                ].id,
-                                                            )
-                                                        }
-                                                    >
-                                                        上一步
-                                                    </Button>
-                                                ) : null}
-                                                {currentStepIndex <
-                                                WIZARD_STEPS.length - 1 ? (
-                                                    <Button
-                                                        type="button"
-                                                        onClick={async () => {
-                                                            if (
-                                                                currentStep ===
-                                                                    "contract" &&
-                                                                !values.contractId.trim()
-                                                            ) {
-                                                                await form.validateField(
-                                                                    "contractId",
-                                                                    "change",
-                                                                )
-                                                                return
-                                                            }
-                                                            setCurrentStep(
-                                                                WIZARD_STEPS[
-                                                                    currentStepIndex +
-                                                                        1
-                                                                ].id,
-                                                            )
-                                                        }}
-                                                    >
-                                                        下一步
-                                                    </Button>
-                                                ) : (
-                                                    <form.SubmitButton
-                                                        label="提交"
-                                                        pendingLabel="正在提交…"
-                                                        onClick={() => {
-                                                            submitIntentRef.current =
-                                                                "SUBMIT"
-                                                        }}
-                                                    >
-                                                        <PlusIcon
-                                                            data-icon="inline-start"
-                                                            aria-hidden="true"
-                                                        />
-                                                        提交
-                                                    </form.SubmitButton>
-                                                )}
+                                                <form.SubmitButton
+                                                    label="提交"
+                                                    pendingLabel="正在提交…"
+                                                    onClick={() => {
+                                                        submitIntentRef.current =
+                                                            "SUBMIT"
+                                                    }}
+                                                >
+                                                    <PlusIcon
+                                                        data-icon="inline-start"
+                                                        aria-hidden="true"
+                                                    />
+                                                    提交
+                                                </form.SubmitButton>
                                             </form.AppForm>
                                         }
                                     />
