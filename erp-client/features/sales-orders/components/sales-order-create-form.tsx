@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { useSelector } from "@tanstack/react-form"
+import { revalidateLogic, useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
 
 import {
@@ -109,9 +109,16 @@ export function SalesOrderCreateForm({
 
     const form = useAppForm({
         defaultValues,
+        // 首次只在提交时整单校验；提交失败后改为随字段变更重跑。
+        // 否则表单级 onSubmit 写到未挂载字段（如明细 name、ownerUserId）
+        // 的错误不会被 setFieldValue / 兄弟字段变更清掉，提交按钮会一直 disabled。
+        validationLogic: revalidateLogic(),
         validators: {
-            onSubmit: ({ value }) =>
-                validateSalesOrderForm(value, submission.submitIntentRef.current),
+            onDynamic: ({ value }) =>
+                validateSalesOrderForm(
+                    value,
+                    submission.submitIntentRef.current,
+                ),
         },
         onSubmit: async ({ value }) => {
             await submission.handleSubmit(value, form)
@@ -255,9 +262,7 @@ export function SalesOrderCreateForm({
                                     initialCustomerId={initialCustomerId}
                                     contractFetching={contractQuery.isFetching}
                                     onContractChange={handleContractChange}
-                                    onUploadClick={() =>
-                                        setUploadOpen(true)
-                                    }
+                                    onUploadClick={() => setUploadOpen(true)}
                                 />
                                 <SalesOrderCreateHeaderFields
                                     form={form}

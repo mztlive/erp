@@ -14,9 +14,7 @@ import {
     hasMeaningfulLines,
 } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
-import {
-    MallSearchCombobox,
-} from "@/features/entity-selectors"
+import { MallSearchCombobox } from "@/features/entity-selectors"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 
@@ -62,6 +60,7 @@ export function SalesOrderCreateHeaderFields({
                     />
                 )}
             </form.AppField>
+            <form.AppField name="ownerUserId">{() => null}</form.AppField>
             <form.AppField name="ownerName">
                 {(field) => (
                     <field.TextField
@@ -159,9 +158,7 @@ export function SalesOrderCreateHeaderFields({
                                                     undefined
                                                 }
                                                 onValueChange={(id) =>
-                                                    field.handleChange(
-                                                        id ?? "",
-                                                    )
+                                                    field.handleChange(id ?? "")
                                                 }
                                                 onBlur={field.handleBlur}
                                                 placeholder="选择执行投影目标商城"
