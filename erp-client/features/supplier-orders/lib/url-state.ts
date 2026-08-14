@@ -13,7 +13,7 @@ import {
 } from "@/features/supplier-orders/types"
 import { createUrlStateCodec } from "@/lib/url-state"
 
-type SupplierOrdersUrlState = {
+export type SupplierOrdersUrlState = {
     view: ListView
     q?: string
     supplierId?: string
@@ -33,6 +33,17 @@ type SupplierOrdersUrlState = {
     sort?: string
     dir?: "asc" | "desc"
 }
+
+/** 列表页 URL 状态的部分更新（含 `page: 1` 等重置项） */
+export type SupplierOrdersUrlPatch = Partial<SupplierOrdersUrlState>
+
+/** 导航方式：筛选/分页用 replace 不膨胀历史；详情导航保留 push */
+export type SupplierOrdersUrlNavigate = "replace" | "push"
+
+export type SupplierOrdersUrlUpdater = (
+    patch: SupplierOrdersUrlPatch,
+    navigate?: SupplierOrdersUrlNavigate,
+) => void
 
 const VIEWS = ["actionable", "all", "recent_completed"] as const
 

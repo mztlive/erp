@@ -1,9 +1,19 @@
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
+import type { SalesOrderDetailView } from "@/features/sales-orders/api/contracts"
 import {
     isPendingReviewStage,
     PROCUREMENT_REJECT_REASON_LABEL,
     stageOwnerDisplay,
 } from "@/features/sales-orders/lib/labels"
+
+/** 详情页动作（作废/低毛利/发起改单等）的统一结果状态。 */
+export type SalesOrderDetailActionResult = {
+    status: "succeeded" | "blocked" | "rejected" | "unknown"
+    title: string
+    description: string
+    reference: string
+    nextResponsible?: string
+}
 
 export type NavSectionId =
     | "overview"
@@ -327,4 +337,44 @@ export function purchaseOrdersWorkspaceHref(
     selfReturn: string,
 ) {
     return `/procurement/orders?q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${encodeURIComponent(selfReturn)}`
+}
+
+export function navItemsFor(order: SalesOrderDetailView): Array<{
+    id: NavSectionId
+    label: string
+    hint: string
+    show: boolean
+}> {
+    return [
+        {
+            id: "overview",
+            label: "概览",
+            hint: "约定、明细和下一步",
+            show: true,
+        },
+        {
+            id: "fulfillment",
+            label: "履约",
+            hint: "采购、发货和验收",
+            show: true,
+        },
+        {
+            id: "receivable",
+            label: "票款",
+            hint: "回款和开票",
+            show: true,
+        },
+        {
+            id: "collaboration",
+            label: "协同",
+            hint: "商城同步与执行投影",
+            show: order.nature === "card_voucher",
+        },
+        {
+            id: "versions",
+            label: "版本",
+            hint: "改单与历史版本",
+            show: true,
+        },
+    ]
 }

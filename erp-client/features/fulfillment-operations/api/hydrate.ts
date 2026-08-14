@@ -1,0 +1,120 @@
+/**
+ * W09 履约单据处理 · 当前单据的明细补全（队列列表投影 → 可编辑草稿）。
+ * 补全失败时保留列表投影，不让明细缺失阻断整个队列。
+ */
+
+import { apiGet } from "@/lib/api"
+import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
+import { emptySourceLine, nowIso } from "@/features/fulfillment-operations/lib/projection"
+import type {
+    BackendDeliveryDetail,
+    BackendPurchaseReceiptDetail,
+} from "./documents"
+
+export async function hydrateOperationDetail(
+    operation: FulfillmentOperation,
+): Promise<FulfillmentOperation> {
+    try {
+        if (operation.operationType === "RECEIPT") {
+            const detail = await apiGet<BackendPurchaseReceiptDetail>(
+                `/admin/purchase-receipts/${encodeURIComponent(operation.operationId)}`,
+            )
+            const lines = detail.lines.map((l) =>
+                emptySourceLine({
+                    lineId: l.id,
+                    salesOrderLineId: l.purchase_order_revision_line_id,
+                    purchaseRevisionLineId: l.purchase_order_revision_line_id,
+                    remainingQuantity: l.received_quantity,
+                    orderedQuantity: l.received_quantity,
+                }),
+            )
+            const draftLines = detail.lines.map((l) => ({
+                purchaseRevisionLineId: l.purchase_order_revision_line_id,
+                receivedQuantity: l.received_quantity,
+                qualifiedQuantity: l.qualified_quantity,
+                rejectedQuantity: l.rejected_quantity,
+                qualityResult: l.quality_result,
+            }))
+            return {
+                ...operation,
+                editVersion: detail.receipt.version,
+                sourceVersion: String(detail.receipt.version),
+                lines,
+                draft: {
+                    type: "RECEIPT",
+                    warehouseId: detail.receipt.warehouse_id,
+                    warehouseLabel: detail.receipt.warehouse_id,
+                    occurredAt:
+                        operation.draft.type === "RECEIPT"
+                            ? operation.draft.occurredAt
+                            : nowIso().slice(0, 16),
+                    lines: draftLines,
+                },
+            }
+        }
+        if (
+            operation.operationType === "WAREHOUSE_SHIP" ||
+            operation.operationType === "SUPPLIER_DIRECT"
+        ) {
+            const detail = await apiGet<BackendDeliveryDetail>(
+                `/admin/deliveries/${encodeURIComponent(operation.operationId)}`,
+            )
+            const lines = detail.lines.map((l) =>
+                emptySourceLine({
+                    lineId: l.id,
+                    salesOrderLineId: l.sales_order_line_id,
+                    remainingQuantity: l.quantity,
+                    orderedQuantity: l.quantity,
+                    stockReservationId: l.stock_reservation_id ?? undefined,
+                    reservedQuantity: l.stock_reservation_id
+                        ? l.quantity
+                        : undefined,
+                    purchaseLineSalesAllocationId:
+                        l.purchase_line_sales_allocation_id ?? undefined,
+                }),
+            )
+            if (operation.operationType === "WAREHOUSE_SHIP") {
+                return {
+                    ...operation,
+                    editVersion: detail.delivery.version,
+                    sourceVersion: String(detail.delivery.version),
+                    lines,
+                    draft: {
+                        type: "WAREHOUSE_SHIP",
+                        warehouseId: detail.delivery.warehouse_id ?? "",
+                        warehouseLabel: detail.delivery.warehouse_id ?? "",
+                        carrier: detail.delivery.carrier ?? "",
+                        trackingNo: detail.delivery.tracking_no ?? "",
+                        shippedAt: nowIso().slice(0, 16),
+                        lines: detail.lines.map((l) => ({
+                            salesOrderLineId: l.sales_order_line_id,
+                            stockReservationId: l.stock_reservation_id ?? "",
+                            quantity: l.quantity,
+                        })),
+                    },
+                }
+            }
+            return {
+                ...operation,
+                editVersion: detail.delivery.version,
+                sourceVersion: String(detail.delivery.version),
+                lines,
+                draft: {
+                    type: "SUPPLIER_DIRECT",
+                    carrier: detail.delivery.carrier ?? "",
+                    trackingNo: detail.delivery.tracking_no ?? "",
+                    shippedAt: nowIso().slice(0, 16),
+                    lines: detail.lines.map((l) => ({
+                        salesOrderLineId: l.sales_order_line_id,
+                        purchaseLineSalesAllocationId:
+                            l.purchase_line_sales_allocation_id ?? "",
+                        quantity: l.quantity,
+                    })),
+                },
+            }
+        }
+    } catch {
+        // keep list projection
+    }
+    return operation
+}

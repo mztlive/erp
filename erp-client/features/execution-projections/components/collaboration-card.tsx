@@ -3,22 +3,12 @@
 import Link from "next/link"
 import { ExternalLinkIcon, HistoryIcon, RadarIcon } from "lucide-react"
 
-import {
-    BusinessStatusBadge,
-    DocumentSection,
-    MoneyValue,
-    StatusTrackSummary,
-    surfaceInsetClassName,
-} from "@/components/business"
+import { DocumentSection } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CollaborationConsumptionPanel } from "@/features/execution-projections/components/collaboration-consumption-panel"
+import { CollaborationProjectionPanel } from "@/features/execution-projections/components/collaboration-projection-panel"
 import { useSalesOrderCollaborationQuery } from "@/features/execution-projections/hooks/queries"
-import { useSalesOrderConsumptionSummaryQuery } from "@/features/mall-consumption-orders/queries"
-import {
-    DELIVERY_STATUS_LABEL,
-    RECONCILIATION_LABEL,
-} from "@/features/execution-projections/types"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -34,7 +24,6 @@ export function SalesOrderCollaborationCard({
     salesOrderNo: string
 }) {
     const query = useSalesOrderCollaborationQuery(salesOrderId)
-    const consumptionQuery = useSalesOrderConsumptionSummaryQuery(salesOrderId)
 
     if (query.isPending) {
         return (
@@ -94,9 +83,6 @@ export function SalesOrderCollaborationCard({
         )
     }
 
-    const tracks = data.tracks
-    const preview = data.whitelistPreview
-
     return (
         <DocumentSection
             title="与商城对接"
@@ -143,263 +129,12 @@ export function SalesOrderCollaborationCard({
                 </AlertDescription>
             </Alert>
 
-            {tracks ? (
-                <StatusTrackSummary
-                    aria-label="与商城对接进度"
-                    variant="table"
-                    tracks={[
-                        {
-                            id: "sales-fact",
-                            label: "销售生效",
-                            status: {
-                                label: tracks.salesFact.label,
-                                tone: tracks.salesFact.tone,
-                                description: tracks.salesFact.description,
-                            },
-                        },
-                        {
-                            id: "projection-delivery",
-                            label: "信息发出",
-                            status: {
-                                label: tracks.projectionDelivery.label,
-                                tone: tracks.projectionDelivery.tone,
-                                description:
-                                    tracks.projectionDelivery.description,
-                            },
-                        },
-                        {
-                            id: "mall-confirm",
-                            label: "商城确认",
-                            status: {
-                                label: tracks.mallConfirm.label,
-                                tone: tracks.mallConfirm.tone,
-                                description: tracks.mallConfirm.description,
-                            },
-                        },
-                    ]}
+            <CollaborationProjectionPanel data={data}>
+                <CollaborationConsumptionPanel
+                    salesOrderId={salesOrderId}
+                    salesOrderNo={salesOrderNo}
                 />
-            ) : null}
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <section className={`${surfaceInsetClassName} space-y-2 p-3`}>
-                    <div>
-                        <h3 className="text-sm font-medium">当前推送</h3>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            {data.projectionNo}
-                            {data.projectionRevisionNo != null
-                                ? ` · 推送 v${data.projectionRevisionNo}`
-                                : ""}
-                            {data.salesOrderRevisionNo != null
-                                ? ` · 对应销售 v${data.salesOrderRevisionNo}`
-                                : ""}
-                        </p>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-muted-foreground">
-                                目标商城
-                            </span>
-                            <span>{data.targetMallName ?? "—"}</span>
-                        </div>
-                        {data.delivery ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-muted-foreground">
-                                    接收状态
-                                </span>
-                                <BusinessStatusBadge
-                                    context="detail"
-                                    label={
-                                        data.delivery.statusLabel ??
-                                        DELIVERY_STATUS_LABEL[
-                                            data.delivery.status
-                                        ]
-                                    }
-                                    tone={data.delivery.statusTone}
-                                />
-                            </div>
-                        ) : null}
-                        {data.currentAckedRevisionNo != null ? (
-                            <div className="text-muted-foreground">
-                                商城已确认版本{" "}
-                                <span className="num text-foreground">
-                                    v{data.currentAckedRevisionNo}
-                                </span>
-                            </div>
-                        ) : (
-                            <div className="text-muted-foreground">
-                                商城尚未确认
-                            </div>
-                        )}
-                        {data.reconciliationStatus === "VERSION_MISMATCH" ? (
-                            <Badge variant="warning">
-                                {RECONCILIATION_LABEL.VERSION_MISMATCH}
-                            </Badge>
-                        ) : null}
-                        {data.delivery?.errorSummary ? (
-                            <p className="text-xs text-destructive">
-                                {data.delivery.errorSummary}
-                            </p>
-                        ) : null}
-                        <p className="text-xs text-muted-foreground">
-                            共 {data.historyCount}{" "}
-                            次推送记录；历史会写明对应哪一版销售单。
-                        </p>
-                    </div>
-                </section>
-
-                <section className={`${surfaceInsetClassName} space-y-2 p-3`}>
-                    <div>
-                        <h3 className="text-sm font-medium">推给商城的内容</h3>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            只含卡券基础信息，不含金额、税率、开票和玩法。
-                        </p>
-                    </div>
-                    {preview ? (
-                        <dl className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    卡券类目
-                                </dt>
-                                <dd>{preview.voucherCategoryErpName}</dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    面额
-                                </dt>
-                                <dd className="num">{preview.faceValue}</dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    数量
-                                </dt>
-                                <dd className="num">{preview.cardCount}</dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    卡形态
-                                </dt>
-                                <dd>{preview.cardForm}</dd>
-                            </div>
-                            <div className="col-span-2">
-                                <dt className="text-xs text-muted-foreground">
-                                    履约期限
-                                </dt>
-                                <dd className="num">
-                                    {preview.voucherExpiryAt}
-                                </dd>
-                            </div>
-                        </dl>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">
-                            暂无摘要
-                        </p>
-                    )}
-                </section>
-
-                <section
-                    className={`${surfaceInsetClassName} space-y-3 p-3 sm:col-span-2`}
-                >
-                    <div>
-                        <h3 className="text-sm font-medium">商城侧消费情况</h3>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            仅供查阅；持卡人消费多少都不决定本单是否结案。
-                        </p>
-                    </div>
-                    {consumptionQuery.isPending ? (
-                        <div className="h-12 animate-pulse rounded-lg bg-muted" />
-                    ) : consumptionQuery.isError ? (
-                        <Alert
-                            variant="destructive"
-                            role="alert"
-                            className="py-2"
-                        >
-                            <AlertTitle className="text-sm">
-                                消费情况加载失败
-                            </AlertTitle>
-                            <AlertDescription className="text-xs">
-                                {getErrorMessage(
-                                    consumptionQuery.error,
-                                    "无法读取商城消费订单汇总，请刷新后重试。",
-                                )}
-                            </AlertDescription>
-                        </Alert>
-                    ) : (
-                        <dl className="grid gap-3 text-sm sm:grid-cols-4">
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    消费订单
-                                </dt>
-                                <dd className="num font-medium">
-                                    {consumptionQuery.data?.orderCount ?? 0} 单
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    支付成功
-                                </dt>
-                                <dd>
-                                    <MoneyValue
-                                        value={
-                                            consumptionQuery.data?.paidAmount ??
-                                            "0.00"
-                                        }
-                                    />
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    商城退款
-                                </dt>
-                                <dd>
-                                    <MoneyValue
-                                        value={
-                                            consumptionQuery.data
-                                                ?.refundedAmount ?? "0.00"
-                                        }
-                                    />
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    余额恢复
-                                </dt>
-                                <dd>
-                                    <MoneyValue
-                                        value={
-                                            consumptionQuery.data
-                                                ?.restoredBalanceAmount ??
-                                            "0.00"
-                                        }
-                                    />
-                                </dd>
-                            </div>
-                        </dl>
-                    )}
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs text-muted-foreground">
-                            最近记录{" "}
-                            {consumptionQuery.data?.latestFactAt ?? "暂无"}
-                            ；本单结案仍看交付与回款是否完成。
-                        </p>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={
-                                <Link
-                                    href={`/commerce/consumption-orders?from=W05&salesOrderId=${encodeURIComponent(salesOrderId)}&q=${encodeURIComponent(salesOrderNo)}`}
-                                />
-                            }
-                        >
-                            <ExternalLinkIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            查看商城消费订单
-                        </Button>
-                    </div>
-                </section>
-            </div>
+            </CollaborationProjectionPanel>
         </DocumentSection>
     )
 }

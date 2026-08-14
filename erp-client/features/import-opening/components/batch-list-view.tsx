@@ -1,7 +1,5 @@
 "use client"
 
-import * as React from "react"
-import type { PaginationState } from "@tanstack/react-table"
 import { SearchIcon, ShieldAlertIcon } from "lucide-react"
 
 import {
@@ -28,6 +26,8 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useImportBatchListQuery } from "@/features/import-opening/hooks/queries"
 import { useBatchListColumns } from "@/features/import-opening/hooks/use-batch-list-columns"
+import { useBatchPagination } from "@/features/import-opening/hooks/use-batch-pagination"
+import { useBatchSearch } from "@/features/import-opening/hooks/use-batch-search"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import type {
     ImportBatchStatus,
@@ -48,8 +48,10 @@ export function BatchListView({
     urlState: ImportOpeningUrlState
     patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
 }) {
-    const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const { qDraft, setQDraft, searchInputRef } = useBatchSearch({
+        q: urlState.q,
+        patchUrl,
+    })
     const listQuery = useImportBatchListQuery({
         environment: urlState.environment,
         status: urlState.status,
@@ -59,64 +61,13 @@ export function BatchListView({
         pageSize: 20,
     })
 
-    React.useEffect(() => {
-        setQDraft(urlState.q ?? "")
-    }, [urlState.q])
-
-    // P3 搜索：300ms 防抖写 URL，Enter 兜底，/ 聚焦
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (qDraft.trim() === (urlState.q ?? "")) return
-            patchUrl({ q: qDraft.trim() || undefined, page: 1 })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
-    }, [qDraft])
-
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            ) {
-                return
-            }
-            const target = event.target as HTMLElement | null
-            const tag = target?.tagName
-            if (
-                tag === "INPUT" ||
-                tag === "TEXTAREA" ||
-                tag === "SELECT" ||
-                target?.isContentEditable
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
-
     const columns = useBatchListColumns({
         onOpenBatch: (batchId) =>
             patchUrl({ batchId, section: "overview", page: 1 }),
     })
 
     const data = listQuery.data
-    const [pagination, setPagination] = React.useState<PaginationState>({
-        pageIndex: Math.max(0, urlState.page - 1),
-        pageSize: 20,
-    })
-
-    React.useEffect(() => {
-        setPagination((p) => ({
-            ...p,
-            pageIndex: Math.max(0, urlState.page - 1),
-        }))
-    }, [urlState.page])
+    const { pagination, setPagination } = useBatchPagination(urlState.page)
 
     const hasListFilters = Boolean(
         urlState.q || urlState.status || urlState.objectType,

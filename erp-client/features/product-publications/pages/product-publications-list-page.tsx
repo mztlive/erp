@@ -1,79 +1,31 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import type { ColumnPinningState, PaginationState } from "@tanstack/react-table"
-import { BanIcon, PlusIcon, RefreshCwIcon, SearchIcon } from "lucide-react"
+import { BanIcon, PlusIcon, RefreshCwIcon } from "lucide-react"
 
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
     BusinessTableFrame,
     DataFreshness,
-    DataTable,
-    ListToolbar,
-    MetricFilterItem,
-    MetricStrip,
-    OptionCombobox,
     PageHeader,
     PageScaffold,
-    QuickPreviewSheet,
 } from "@/components/business"
-import { FilterChip } from "@/components/business/filter-chip"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
-import { Separator } from "@/components/ui/separator"
-import { MALLS } from "@/features/product-publications/api/publications"
-import { SafetyPausePanel } from "@/features/product-publications/components/safety-pause-panel"
-import {
-    usePublicationDetailQuery,
-    usePublicationListQuery,
-} from "@/features/product-publications/hooks/queries"
+import { PublicationListTable } from "@/features/product-publications/components/publication-list-table"
+import { PublicationListToolbar } from "@/features/product-publications/components/publication-list-toolbar"
+import { PublicationMetricStrip } from "@/features/product-publications/components/publication-metric-strip"
+import { PublicationPreviewSheet } from "@/features/product-publications/components/publication-preview-sheet"
+import { usePublicationListQuery } from "@/features/product-publications/hooks/queries"
 import { usePublicationListColumns } from "@/features/product-publications/hooks/use-publication-list-columns"
+import { usePublicationListFilters } from "@/features/product-publications/hooks/use-publication-list-filters"
 import type { ProductPublicationListQuery } from "@/features/product-publications/types"
-import { PUBLICATION_STATUS_LABEL } from "@/features/product-publications/types"
-
-function parseMetric(raw: string | null): string {
-    if (
-        raw === "pending_confirm" ||
-        raw === "failed_handoff" ||
-        raw === "mall_live" ||
-        raw === "paused" ||
-        raw === "pending_publish"
-    ) {
-        return raw
-    }
-    return "all"
-}
 
 export function ProductPublicationsListPage() {
     const router = useRouter()
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
+    const filters = usePublicationListFilters()
 
-    const qParam = searchParams.get("q") ?? ""
-    const skuId = searchParams.get("skuId") ?? undefined
-    const supplierOfferingRevisionId =
-        searchParams.get("supplierOfferingRevisionId") ?? undefined
-    const mallId = searchParams.get("mall") ?? undefined
-    const publicationStatus = searchParams.get("publicationStatus") ?? "all"
-    const deliveryStatus = searchParams.get("deliveryStatus") ?? "all"
-    const metric = parseMetric(searchParams.get("metric"))
-
-    const [searchInput, setSearchInput] = React.useState(qParam)
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-    const pageFromUrl = Math.max(
-        1,
-        Number(searchParams.get("page") ?? "1") || 1,
-    )
-    // 本地记录：pageSize 仅影响查询页大小（沿用页面默认 20，不写 URL）
-    const [pageSize, setPageSize] = React.useState(20)
     // 预览 Sheet 由本地 state 管理（导航上下文，不写 URL、不随清除筛选变化）
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [columnPinning] = React.useState<ColumnPinningState>({
@@ -81,126 +33,40 @@ export function ProductPublicationsListPage() {
         right: ["actions"],
     })
 
-    React.useEffect(() => {
-        // URL is source of truth when filters/metrics change outside the search box；
-        // 用户正在输入（焦点在搜索框）时不得用 URL 旧值覆盖草稿
-        const el = searchInputRef.current
-        if (el && document.activeElement === el) return
-        setSearchInput(qParam)
-    }, [qParam])
-
-    // P3：搜索 300ms 防抖自动写 URL（replace），Enter 兜底，`/` 聚焦
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchInput.trim() === qParam) return
-            replaceParams({ q: searchInput.trim() || undefined })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- replaceParams 以当前 URL 快照为准
-    }, [searchInput])
-
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            )
-                return
-            const target = event.target as HTMLElement | null
-            const tag = target?.tagName
-            if (
-                tag === "INPUT" ||
-                tag === "TEXTAREA" ||
-                tag === "SELECT" ||
-                target?.isContentEditable
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
-
     const query: ProductPublicationListQuery = {
-        q: qParam || undefined,
-        skuId,
-        supplierOfferingRevisionId,
-        mallId,
+        q: filters.qParam || undefined,
+        skuId: filters.skuId,
+        supplierOfferingRevisionId: filters.supplierOfferingRevisionId,
+        mallId: filters.mallId,
         publicationStatus:
-            publicationStatus === "all" ? undefined : publicationStatus,
-        deliveryStatus: deliveryStatus === "all" ? undefined : deliveryStatus,
-        metric: metric === "all" ? undefined : metric,
-        page: pageFromUrl,
-        pageSize,
+            filters.publicationStatus === "all"
+                ? undefined
+                : filters.publicationStatus,
+        deliveryStatus:
+            filters.deliveryStatus === "all" ? undefined : filters.deliveryStatus,
+        metric: filters.metric === "all" ? undefined : filters.metric,
+        page: filters.page,
+        pageSize: filters.pageSize,
     }
 
     const listQuery = usePublicationListQuery(query)
     const data = listQuery.data
     const items = data?.items ?? []
     const pagination: PaginationState = {
-        pageIndex: pageFromUrl - 1,
-        pageSize,
+        pageIndex: filters.page - 1,
+        pageSize: filters.pageSize,
     }
-    const previewQuery = usePublicationDetailQuery(previewId)
-    const previewRow = previewQuery.data
-
-    const replaceParams = React.useCallback(
-        (patch: Record<string, string | undefined>) => {
-            const sp = new URLSearchParams(searchParams.toString())
-            for (const [k, v] of Object.entries(patch)) {
-                if (!v || v === "all") sp.delete(k)
-                else sp.set(k, v)
-            }
-            sp.delete("page")
-            const qs = sp.toString()
-            router.replace(qs ? `${pathname}?${qs}` : pathname)
-        },
-        [pathname, router, searchParams],
-    )
-
-    const commitSearch = () => {
-        replaceParams({ q: searchInput.trim() || undefined })
-    }
-
-    // P4：清搜索词 + 全部筛选参数 + page 回 1；保留排序/视图/导航上下文等（本页无此类参数，语义等价全清）
-    const clearFilters = React.useCallback(() => {
-        setSearchInput("")
-        const sp = new URLSearchParams(searchParams.toString())
-        for (const k of [
-            "q",
-            "skuId",
-            "supplierOfferingRevisionId",
-            "mall",
-            "publicationStatus",
-            "deliveryStatus",
-            "metric",
-            "page",
-        ]) {
-            sp.delete(k)
-        }
-        const qs = sp.toString()
-        router.replace(qs ? `${pathname}?${qs}` : pathname)
-    }, [pathname, router, searchParams])
-
-    const handlePaginationChange = React.useCallback(
-        (next: PaginationState) => {
-            setPageSize(next.pageSize)
-            const sp = new URLSearchParams(searchParams.toString())
-            if (next.pageIndex <= 0) sp.delete("page")
-            else sp.set("page", String(next.pageIndex + 1))
-            const qs = sp.toString()
-            router.replace(qs ? `${pathname}?${qs}` : pathname)
-        },
-        [pathname, router, searchParams],
-    )
 
     const columns = usePublicationListColumns(setPreviewId)
-
     const metrics = data?.metrics
+
+    const toggleMetric = (metricKey: string) => {
+        filters.replaceParams({
+            metric: filters.metric === metricKey ? undefined : metricKey,
+            deliveryStatus: undefined,
+            publicationStatus: undefined,
+        })
+    }
 
     return (
         <PageScaffold>
@@ -256,449 +122,66 @@ export function ProductPublicationsListPage() {
                 </Alert>
             ) : null}
 
-            {/* 指标与「发布状态/发送状态」双向互斥：指标点击清除状态维度、状态变更清除指标。
-          这是有意设计（避免指标×状态矛盾空结果），与通用「指标点击不清其它筛选」不同；保留并注明。 */}
-            <MetricStrip>
-                <MetricFilterItem
-                    label="待发布"
-                    value={metrics?.pendingPublish ?? "—"}
-                    active={metric === "pending_publish"}
-                    onClick={() =>
-                        replaceParams({
-                            metric:
-                                metric === "pending_publish"
-                                    ? undefined
-                                    : "pending_publish",
-                            deliveryStatus: undefined,
-                            publicationStatus: undefined,
-                        })
-                    }
-                />
-                <MetricFilterItem
-                    label="待商城确认"
-                    value={metrics?.pendingConfirm ?? "—"}
-                    active={metric === "pending_confirm"}
-                    onClick={() =>
-                        replaceParams({
-                            metric:
-                                metric === "pending_confirm"
-                                    ? undefined
-                                    : "pending_confirm",
-                            deliveryStatus: undefined,
-                            publicationStatus: undefined,
-                        })
-                    }
-                />
-                <MetricFilterItem
-                    label="失败/转人工"
-                    value={metrics?.failedOrHandoff ?? "—"}
-                    active={metric === "failed_handoff"}
-                    onClick={() =>
-                        replaceParams({
-                            metric:
-                                metric === "failed_handoff"
-                                    ? undefined
-                                    : "failed_handoff",
-                            deliveryStatus: undefined,
-                            publicationStatus: undefined,
-                        })
-                    }
-                />
-                <MetricFilterItem
-                    label="商城已生效"
-                    value={metrics?.mallLive ?? "—"}
-                    active={metric === "mall_live"}
-                    onClick={() =>
-                        replaceParams({
-                            metric:
-                                metric === "mall_live"
-                                    ? undefined
-                                    : "mall_live",
-                            deliveryStatus: undefined,
-                            publicationStatus: undefined,
-                        })
-                    }
-                />
-                <MetricFilterItem
-                    label="已暂停"
-                    value={metrics?.paused ?? "—"}
-                    active={metric === "paused"}
-                    onClick={() =>
-                        replaceParams({
-                            metric: metric === "paused" ? undefined : "paused",
-                            deliveryStatus: undefined,
-                            publicationStatus: undefined,
-                        })
-                    }
-                />
-            </MetricStrip>
+            <PublicationMetricStrip
+                metrics={metrics}
+                metric={filters.metric}
+                onToggle={toggleMetric}
+            />
 
             <BusinessTableFrame
                 title="发布列表"
                 description="管理各 SKU 在目标商城的发布版本与发送确认状态。"
                 toolbar={
-                    <ListToolbar
-                        search={
-                            <InputGroup className="max-w-md">
-                                <InputGroupAddon>
-                                    <SearchIcon className="size-4" />
-                                </InputGroupAddon>
-                                <InputGroupInput
-                                    ref={searchInputRef}
-                                    value={searchInput}
-                                    placeholder="发布编号、SKU、商品名（/ 聚焦）"
-                                    onChange={(e) =>
-                                        setSearchInput(e.target.value)
-                                    }
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter") commitSearch()
-                                    }}
-                                />
-                            </InputGroup>
+                    <PublicationListToolbar
+                        searchInput={filters.searchInput}
+                        searchInputRef={filters.searchInputRef}
+                        onSearchInputChange={filters.setSearchInput}
+                        onSearchCommit={filters.commitSearch}
+                        mallId={filters.mallId}
+                        publicationStatus={filters.publicationStatus}
+                        deliveryStatus={filters.deliveryStatus}
+                        skuId={filters.skuId}
+                        supplierOfferingRevisionId={
+                            filters.supplierOfferingRevisionId
                         }
-                        filters={
-                            <>
-                                <OptionCombobox
-                                    value={mallId ?? "all"}
-                                    onValueChange={(v) => {
-                                        const next = v ?? "all"
-                                        replaceParams({
-                                            mall:
-                                                next === "all"
-                                                    ? undefined
-                                                    : next,
-                                        })
-                                    }}
-                                    options={[
-                                        { value: "all", label: "全部商城" },
-                                        ...MALLS.map((m) => ({
-                                            value: m.id,
-                                            label: m.name,
-                                        })),
-                                    ]}
-                                    className="w-36"
-                                    size="sm"
-                                    allowClear={false}
-                                    aria-label="目标商城"
-                                    placeholder="全部商城"
-                                />
-                                <OptionCombobox
-                                    value={publicationStatus}
-                                    onValueChange={(v) =>
-                                        replaceParams({
-                                            publicationStatus: v ?? "all",
-                                            metric: undefined,
-                                        })
-                                    }
-                                    options={[
-                                        { value: "all", label: "有效发布" },
-                                        ...(
-                                            Object.keys(
-                                                PUBLICATION_STATUS_LABEL,
-                                            ) as Array<
-                                                keyof typeof PUBLICATION_STATUS_LABEL
-                                            >
-                                        ).map((k) => ({
-                                            value: k,
-                                            label: PUBLICATION_STATUS_LABEL[k],
-                                        })),
-                                    ]}
-                                    className="w-36"
-                                    size="sm"
-                                    allowClear={false}
-                                    aria-label="发布状态"
-                                    placeholder="发布状态"
-                                />
-                                <OptionCombobox
-                                    value={deliveryStatus}
-                                    onValueChange={(v) =>
-                                        replaceParams({
-                                            deliveryStatus: v ?? "all",
-                                            metric: undefined,
-                                        })
-                                    }
-                                    options={[
-                                        { value: "all", label: "发送状态" },
-                                        {
-                                            value: "pending_confirm",
-                                            label: "待商城确认",
-                                        },
-                                        { value: "failed", label: "失败" },
-                                        { value: "handoff", label: "转人工" },
-                                        { value: "acked", label: "已确认" },
-                                    ]}
-                                    className="w-40"
-                                    size="sm"
-                                    allowClear={false}
-                                    aria-label="发送状态"
-                                    placeholder="发送状态"
-                                />
-                            </>
-                        }
-                        secondary={
-                            (skuId && data?.resolvedFilters.skuCode) ||
-                            (supplierOfferingRevisionId &&
-                                data?.resolvedFilters.supplierName) ||
-                            data?.filterSummary ? (
-                                <>
-                                    {skuId && data?.resolvedFilters.skuCode ? (
-                                        <FilterChip
-                                            label={`已按 SKU：${data.resolvedFilters.skuCode}`}
-                                            clearLabel={`移除按 ${data.resolvedFilters.skuCode} 筛选`}
-                                            onClear={() =>
-                                                replaceParams({
-                                                    skuId: undefined,
-                                                    supplierOfferingRevisionId:
-                                                        undefined,
-                                                })
-                                            }
-                                        />
-                                    ) : null}
-                                    {supplierOfferingRevisionId &&
-                                    data?.resolvedFilters.supplierName ? (
-                                        <FilterChip
-                                            label={`已按固定供给：${data.resolvedFilters.supplierName}`}
-                                            clearLabel={`移除按 ${data.resolvedFilters.supplierName} 筛选`}
-                                            onClear={() =>
-                                                replaceParams({
-                                                    skuId: undefined,
-                                                    supplierOfferingRevisionId:
-                                                        undefined,
-                                                })
-                                            }
-                                        />
-                                    ) : null}
-                                    {data?.filterSummary ? (
-                                        <span className="text-xs text-muted-foreground">
-                                            {data.filterSummary}
-                                        </span>
-                                    ) : null}
-                                </>
-                            ) : undefined
-                        }
-                        actions={
-                            <>
-                                {(qParam ||
-                                    mallId ||
-                                    skuId ||
-                                    supplierOfferingRevisionId ||
-                                    publicationStatus !== "all" ||
-                                    deliveryStatus !== "all" ||
-                                    metric !== "all") && (
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={clearFilters}
-                                    >
-                                        清除筛选
-                                    </Button>
-                                )}
-                            </>
-                        }
+                        resolvedSkuCode={data?.resolvedFilters.skuCode}
+                        resolvedSupplierName={data?.resolvedFilters.supplierName}
+                        filterSummary={data?.filterSummary}
+                        hasActiveFilters={filters.hasActiveFilters}
+                        onPatch={filters.replaceParams}
+                        onClearFilters={filters.clearFilters}
                     />
                 }
                 table={
-                    listQuery.isPending ? (
-                        <div
-                            className="h-64 animate-pulse rounded-lg bg-muted"
-                            aria-busy
-                        />
-                    ) : listQuery.isError ? (
-                        <BusinessFailureState
-                            title="加载失败"
-                            error={listQuery.error}
-                            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                            action={
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    onClick={() => void listQuery.refetch()}
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
-                    ) : items.length === 0 ? (
-                        <BusinessEmptyState
-                            kind={
-                                data?.emptyReason === "FILTER_NO_RESULT"
-                                    ? "filter"
-                                    : "no-data"
-                            }
-                            title={
-                                data?.emptyReason === "FILTER_NO_RESULT"
-                                    ? "无符合条件的发布"
-                                    : "尚无商品发布"
-                            }
-                            description={
-                                data?.emptyReason === "FILTER_NO_RESULT"
-                                    ? "可清除筛选或调整条件后重试；已失效发布请在「发布状态」选择「已失效」查看。"
-                                    : data?.creationBlocker.message
-                            }
-                            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                            action={
-                                data?.emptyReason === "FILTER_NO_RESULT" ? (
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        className="rounded-lg shadow-none"
-                                        onClick={clearFilters}
-                                    >
-                                        清除筛选
-                                    </Button>
-                                ) : undefined
-                            }
-                        />
-                    ) : (
-                        <DataTable
-                            data={items}
-                            columns={columns}
-                            getRowId={(row) => row.publicationId}
-                            density="compact"
-                            layout="flush"
-                            enableColumnPinning
-                            columnPinning={columnPinning}
-                            pagination={pagination}
-                            onPaginationChange={handlePaginationChange}
-                            rowCount={data?.total ?? 0}
-                            manualPagination
-                            loading={listQuery.isFetching}
-                            onRowPreview={(row) =>
-                                setPreviewId(row.publicationId)
-                            }
-                            onRowOpen={(row) => {
-                                router.push(
-                                    `/commerce/publications/${encodeURIComponent(row.publicationId)}`,
-                                )
-                            }}
-                            showPagination
-                            pageSizeOptions={[10, 20, 50]}
-                        />
-                    )
+                    <PublicationListTable
+                        isPending={listQuery.isPending}
+                        isError={listQuery.isError}
+                        error={listQuery.error}
+                        onRetry={() => void listQuery.refetch()}
+                        items={items}
+                        emptyReason={data?.emptyReason}
+                        creationBlockerMessage={data?.creationBlocker.message}
+                        onClearFilters={filters.clearFilters}
+                        columns={columns}
+                        columnPinning={columnPinning}
+                        pagination={pagination}
+                        onPaginationChange={filters.handlePaginationChange}
+                        rowCount={data?.total ?? 0}
+                        isFetching={listQuery.isFetching}
+                        onRowPreview={(row) => setPreviewId(row.publicationId)}
+                        onRowOpen={(row) => {
+                            router.push(
+                                `/commerce/publications/${encodeURIComponent(row.publicationId)}`,
+                            )
+                        }}
+                    />
                 }
             />
 
-            <QuickPreviewSheet
-                open={previewId != null}
-                onOpenChange={(open) => {
-                    if (!open) setPreviewId(null)
-                }}
-                title={previewRow?.selectedRevision.name ?? "发布预览"}
-                description={
-                    previewRow
-                        ? `${previewRow.identity.skuCode} · ${previewRow.identity.targetMallName}`
-                        : undefined
-                }
-            >
-                {previewQuery.isPending ? (
-                    <div
-                        className="h-40 animate-pulse rounded-lg bg-muted"
-                        aria-busy
-                    />
-                ) : previewRow ? (
-                    <div className="space-y-3 text-sm">
-                        <dl className="grid gap-2 sm:grid-cols-2">
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    发布编号
-                                </dt>
-                                <dd className="num">
-                                    {previewRow.identity.publicationCode}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    发布状态
-                                </dt>
-                                <dd>{previewRow.statusLabel}</dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    商城生效版
-                                </dt>
-                                <dd className="num">
-                                    {previewRow.currentAckedRevisionNo != null
-                                        ? `r${previewRow.currentAckedRevisionNo}`
-                                        : "尚未生效"}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    最新发布版
-                                </dt>
-                                <dd className="num">
-                                    {previewRow.latestRevisionNo != null
-                                        ? `r${previewRow.latestRevisionNo}`
-                                        : "—"}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    固定供给
-                                </dt>
-                                <dd>
-                                    {
-                                        previewRow.selectedRevision
-                                            .fixedOffering.supplierName
-                                    }
-                                    <div className="text-xs text-muted-foreground">
-                                        {
-                                            previewRow.selectedRevision
-                                                .fixedOffering.availabilityLabel
-                                        }
-                                    </div>
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    商城接收
-                                </dt>
-                                <dd>
-                                    {(() => {
-                                        const latestDelivery =
-                                            previewRow.deliveries.find(
-                                                (d) =>
-                                                    d.revisionId ===
-                                                    previewRow.latestRevisionId,
-                                            )
-                                        return (
-                                            latestDelivery?.statusLabel ?? "—"
-                                        )
-                                    })()}
-                                </dd>
-                            </div>
-                        </dl>
-                        {previewRow.safetyPause ? (
-                            <>
-                                <Separator />
-                                <SafetyPausePanel
-                                    pause={previewRow.safetyPause}
-                                    compact
-                                    sourceObjectLabel={`${previewRow.selectedRevision.fixedOffering.supplierName} · ${previewRow.identity.skuCode}`}
-                                    affectedPublicationLabels={{
-                                        [previewRow.identity.publicationId]:
-                                            previewRow.identity.publicationCode,
-                                    }}
-                                />
-                            </>
-                        ) : null}
-                        <Button
-                            type="button"
-                            className="w-full"
-                            render={
-                                <Link
-                                    href={`/commerce/publications/${encodeURIComponent(previewRow.identity.publicationId)}`}
-                                />
-                            }
-                        >
-                            查看详情
-                        </Button>
-                    </div>
-                ) : null}
-            </QuickPreviewSheet>
+            <PublicationPreviewSheet
+                previewId={previewId}
+                onClose={() => setPreviewId(null)}
+            />
         </PageScaffold>
     )
 }

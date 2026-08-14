@@ -10,12 +10,9 @@ import {
     createProductDefaults,
     hydrateFromCenter,
     newIdempotencyKey,
-    PRODUCT_EDITOR_SECTIONS,
     type ProductEditorFormValues,
-    type ProductEditorSectionId,
     validateProductEditor,
 } from "@/features/master-data/lib/product-editor-model"
-import { uploadFileAssetImage } from "@/features/file-assets/api"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
@@ -29,14 +26,15 @@ import {
     useMasterDataListQuery,
     useSkuSupplierCountsQuery,
 } from "@/features/master-data/hooks/queries"
-import type {
-    MasterDataMutationResult,
-    ProductFields,
-} from "@/features/master-data/types"
+import { useProductDirtyGuard } from "@/features/master-data/hooks/use-product-dirty-guard"
+import { useProductSectionSpy } from "@/features/master-data/hooks/use-product-section-spy"
+import { useProductStickyHeader } from "@/features/master-data/hooks/use-product-sticky-header"
+import { useProductUploads } from "@/features/master-data/hooks/use-product-uploads"
+import type { MasterDataMutationResult } from "@/features/master-data/types"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { useUnitOptionsQuery } from "@/hooks/use-options"
-import type { FixedSku } from "@/features/supplier-offerings/offering-dialogs"
+import type { FixedSku } from "@/features/supplier-offerings/types"
 
 export function useProductEditor(stableId: string) {
     const router = useRouter()
@@ -92,112 +90,26 @@ export function useProductEditor(stableId: string) {
     const [inventoryOpen, setInventoryOpen] = React.useState(false)
     const [inventoryInitialSkuId, setInventoryInitialSkuId] =
         React.useState<string>()
-    const [activeSection, setActiveSection] =
-        React.useState<ProductEditorSectionId>("basic")
     const errorRef = React.useRef<HTMLDivElement | null>(null)
     const checkedSnapshotRef = React.useRef<string | null>(null)
-    const stickyHeaderRef = React.useRef<HTMLElement>(null)
-    const [stickyHeaderHeight, setStickyHeaderHeight] = React.useState(160)
     const hydratedKeyRef = React.useRef<string | null>(null)
-    const [uploadingMedia, setUploadingMedia] = React.useState(false)
-    /** 本会话选择但尚未上传的图片文件；保存时按 fileName / SKU 行号上传并回填。 */
-    const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
-    const pendingSkuFilesRef = React.useRef<Map<number, File>>(new Map())
     const inventoryTriggerRef = React.useRef<HTMLButtonElement | null>(null)
-    const rememberPendingFiles = React.useCallback((files: File[]) => {
-        for (const file of files) {
-            pendingFilesRef.current.set(file.name, file)
-        }
-    }, [])
-    const rememberSkuFile = React.useCallback((index: number, file?: File) => {
-        if (file) pendingSkuFilesRef.current.set(index, file)
-    }, [])
 
-    /** 把仍是本地 blob 预览的图片上传为文件资产，返回回填后的字段。 */
-    const resolvePendingUploads = React.useCallback(
-        async (current: ProductFields): Promise<ProductFields> => {
-            const uploadIfPending = async (
-                fileName: string,
-                previewUrl: string | undefined,
-                knownAssetId: string | undefined,
-            ): Promise<{ url: string; assetId?: string } | null> => {
-                const url = previewUrl?.trim()
-                if (!url) return null
-                if (url.startsWith("blob:")) {
-                    const file = pendingFilesRef.current.get(fileName)
-                    if (!file) {
-                        throw new Error(
-                            `找不到待上传图片「${fileName}」的文件内容，请重新选择`,
-                        )
-                    }
-                    const uploaded = await uploadFileAssetImage(file)
-                    return { url: uploaded.url, assetId: uploaded.fileAssetId }
-                }
-                return {
-                    url,
-                    ...(knownAssetId?.trim() ? { assetId: knownAssetId } : {}),
-                }
-            }
-
-            const carouselPreviewUrls: Record<string, string> = {}
-            const carouselFileAssetIds: Record<string, string> = {}
-            for (const fileName of current.carouselImages) {
-                const resolved = await uploadIfPending(
-                    fileName,
-                    current.carouselPreviewUrls[fileName],
-                    current.carouselFileAssetIds[fileName],
-                )
-                if (resolved) {
-                    carouselPreviewUrls[fileName] = resolved.url
-                    if (resolved.assetId)
-                        carouselFileAssetIds[fileName] = resolved.assetId
-                }
-            }
-            const detailPreviewUrls: Record<string, string> = {}
-            const detailFileAssetIds: Record<string, string> = {}
-            for (const fileName of current.detailImages) {
-                const resolved = await uploadIfPending(
-                    fileName,
-                    current.detailPreviewUrls[fileName],
-                    current.detailFileAssetIds[fileName],
-                )
-                if (resolved) {
-                    detailPreviewUrls[fileName] = resolved.url
-                    if (resolved.assetId)
-                        detailFileAssetIds[fileName] = resolved.assetId
-                }
-            }
-            const skus = [...current.skus]
-            for (let index = 0; index < skus.length; index++) {
-                const sku = skus[index]
-                if (!sku.mainImage) continue
-                const previewUrl = sku.mainImagePreviewUrl?.trim()
-                if (!previewUrl) continue
-                if (!previewUrl.startsWith("blob:")) continue
-                const file = pendingSkuFilesRef.current.get(index)
-                if (!file) {
-                    throw new Error(
-                        `找不到待上传主图「${sku.mainImage}」的文件内容，请重新选择`,
-                    )
-                }
-                const uploaded = await uploadFileAssetImage(file)
-                skus[index] = {
-                    ...sku,
-                    mainImagePreviewUrl: uploaded.url,
-                    mainImageAssetId: uploaded.fileAssetId,
-                }
-            }
-            return {
-                ...current,
-                carouselPreviewUrls,
-                carouselFileAssetIds,
-                detailPreviewUrls,
-                detailFileAssetIds,
-                skus,
-            }
-        },
-        [],
+    const {
+        uploadingMedia,
+        setUploadingMedia,
+        rememberPendingFiles,
+        rememberSkuFile,
+        resolvePendingUploads,
+    } = useProductUploads()
+    const { activeSection, setActiveSection } = useProductSectionSpy(
+        isCreate,
+        data?.stableId,
     )
+    const { stickyHeaderRef, stickyHeaderHeight, sectionScrollMarginPx } =
+        useProductStickyHeader(isCreate, data?.stableId, data?.lockVersion)
+    useProductDirtyGuard(() => form.state.isDirty)
+
     const initialFormValues = React.useMemo(
         () =>
             !isCreate && data
@@ -300,30 +212,6 @@ export function useProductEditor(stableId: string) {
         hydratedKeyRef.current = key
     }, [data, form, isCreate])
 
-    React.useLayoutEffect(() => {
-        const el = stickyHeaderRef.current
-        if (!el) return
-        const update = () => {
-            setStickyHeaderHeight(Math.ceil(el.getBoundingClientRect().height))
-        }
-        update()
-        const observer = new ResizeObserver(update)
-        observer.observe(el)
-        return () => observer.disconnect()
-    }, [isCreate, data?.stableId, data?.lockVersion])
-
-    // 未保存离开保护：刷新 / 关闭标签页 / 返回列表
-    React.useEffect(() => {
-        const onBeforeUnload = (event: BeforeUnloadEvent) => {
-            if (form.state.isDirty) {
-                event.preventDefault()
-            }
-        }
-        window.addEventListener("beforeunload", onBeforeUnload)
-        return () => window.removeEventListener("beforeunload", onBeforeUnload)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时注册一次
-    }, [])
-
     // 校验错误出现时滚动到错误条（P2-15）
     React.useEffect(() => {
         if (formError) {
@@ -333,31 +221,6 @@ export function useProductEditor(stableId: string) {
             })
         }
     }, [formError])
-
-    // 分区 Tab 随滚动高亮（P2-19 scroll spy）
-    React.useEffect(() => {
-        if (isCreate) return
-        const sections = PRODUCT_EDITOR_SECTIONS.map((s) =>
-            document.getElementById(`product-section-${s.id}`),
-        ).filter((el): el is HTMLElement => el !== null)
-        if (sections.length === 0) return
-        const observer = new IntersectionObserver(
-            (entries) => {
-                for (const entry of entries) {
-                    if (entry.isIntersecting) {
-                        const id = entry.target.id.replace(
-                            "product-section-",
-                            "",
-                        )
-                        setActiveSection(id as ProductEditorSectionId)
-                    }
-                }
-            },
-            { rootMargin: "-20% 0px -65% 0px", threshold: 0 },
-        )
-        for (const section of sections) observer.observe(section)
-        return () => observer.disconnect()
-    }, [isCreate, data?.stableId])
 
     const navigateAway = React.useCallback(
         (href: string) => {
@@ -390,8 +253,6 @@ export function useProductEditor(stableId: string) {
     }, [])
 
     const listHref = "/master-data/products"
-    /** 吸顶卡片总高度；分区锚点需额外留一点空隙避免贴边 */
-    const sectionScrollMarginPx = stickyHeaderHeight + 12
     const pending =
         createMutation.isPending || reviseMutation.isPending || uploadingMedia
     const granted = accountQuery.data?.permissions

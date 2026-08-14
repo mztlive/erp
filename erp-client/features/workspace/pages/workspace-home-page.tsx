@@ -1,20 +1,8 @@
 "use client"
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import {
-    ArrowRightIcon,
-    ChevronDownIcon,
-    Clock3Icon,
-    RefreshCwIcon,
-    TriangleAlertIcon,
-    UserIcon,
-    UsersIcon,
-} from "lucide-react"
+import { RefreshCwIcon } from "lucide-react"
 
 import {
-    AsyncSectionState,
     BusinessEmptyState,
     BusinessFailureState,
     DataFreshness,
@@ -23,408 +11,40 @@ import {
     PageActions,
     PageHeader,
     PageScaffold,
-    surfacePanelClassName,
-    WorkTaskItem,
 } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardAction,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { cn } from "@/lib/utils"
-import {
-    buildProcessHref,
-    buildViewHref,
-    buildWarningHref,
-    resolveWorkspaceHref,
-} from "@/features/workspace/lib/destination"
+import { RecentPanel } from "@/features/workspace/components/recent-panel"
+import { ScopeSwitcher } from "@/features/workspace/components/scope-switcher"
+import { TaskListCard } from "@/features/workspace/components/task-list-card"
+import { WarningsPanel } from "@/features/workspace/components/warnings-panel"
+import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
+import { useWorkspaceHome } from "@/features/workspace/hooks/use-workspace-home"
 import {
     deriveProjectionFreshness,
     deriveWorkItemsFreshness,
     greetingForNow,
 } from "@/features/workspace/lib/freshness"
-import { canOpenWorkItemHandler } from "@/features/workspace/lib/navigation-eligibility"
-import { useWorkspaceDashboardQuery } from "@/features/workspace/hooks/queries"
-import { writeW02FocusId } from "@/features/unified-task-queue/queue-url"
 import {
-    buildGroupAllHref,
     buildTaskQueueHref,
-    buildWorkspaceSearchParams,
     filterSummaryFor,
-    metricKeyFromUrlState,
-    parseWorkspaceSearchParams,
-    toTodayWorkspaceQuery,
-    urlStateFromMetricKey,
-    type WorkspaceUrlState,
 } from "@/features/workspace/lib/url-state"
-import {
-    actionLabelForWorkItemType,
-    goToWorkspaceLabel,
-    responsibilityText,
-    sequentialText,
-} from "@/lib/ui-text"
-import type {
-    WorkspaceMetricKey,
-    WorkspaceTaskGroup,
-    WorkspaceWorkItem,
-} from "@/features/workspace/types"
-
-const VIEWER_TIMEZONE = "Asia/Shanghai"
-
-/** 焦点还原走 sessionStorage，不落地址栏（内部 ID 禁止进 URL）。 */
-const HOME_FOCUS_SESSION_KEY = "workspace-home.focus"
-
-function responsiblePartyLabel(item: WorkspaceWorkItem): string {
-    if (item.ownerUserLabel) {
-        return `${item.ownerRoleLabel} · ${item.ownerUserLabel}`
-    }
-    if (item.assignmentMode === "POOL") {
-        return `${item.ownerRoleLabel} · ${responsibilityText.poolAvailable}`
-    }
-    return `${item.ownerRoleLabel} · ${item.ownerOrganizationLabel}`
-}
-
-function processBlocker(item: WorkspaceWorkItem): string | undefined {
-    return item.actionBlockers.find((b) => b.action === "PROCESS")?.message
-}
-
-function canProcess(item: WorkspaceWorkItem): boolean {
-    return canOpenWorkItemHandler(
-        item.allowedActions,
-        item.actionBlockers.some((blocker) => blocker.action === "PROCESS"),
-    )
-}
-
-function canView(item: WorkspaceWorkItem): boolean {
-    return item.allowedActions.includes("VIEW")
-}
-
-function WorkspaceHomeSkeleton() {
-    return (
-        <PageScaffold>
-            <div className="space-y-2">
-                <Skeleton className="h-8 w-64" />
-                <Skeleton className="h-4 w-96 max-w-full" />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
-                {Array.from({ length: 4 }).map((_, index) => (
-                    <Skeleton key={index} className="h-20 rounded-lg" />
-                ))}
-            </div>
-            <div className="grid min-w-0 gap-3 md:gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
-                <Skeleton className="min-h-80 w-full rounded-lg" />
-                <div className="space-y-3 md:space-y-4">
-                    <Skeleton className="h-40 w-full rounded-lg" />
-                    <Skeleton className="h-32 w-full rounded-lg" />
-                </div>
-            </div>
-        </PageScaffold>
-    )
-}
-
-function TaskGroupSection({
-    group,
-    scope,
-    focusStableNumber,
-    onOpenTask,
-    groupAllHref,
-}: {
-    group: WorkspaceTaskGroup
-    scope: WorkspaceUrlState["scope"]
-    focusStableNumber?: string
-    onOpenTask: (item: WorkspaceWorkItem, intent: "PROCESS" | "VIEW") => void
-    groupAllHref: string
-}) {
-    const [open, setOpen] = React.useState(group.defaultExpanded)
-    const headingId = `task-group-${group.family}`
-    const previewLimit =
-        group.pagePreviewLimit ??
-        // TEMPORARY design fallback only — not an acceptance contract.
-        5
-    const previewItems = group.items.slice(0, previewLimit)
-    const hasMore = group.total > previewItems.length
-
-    return (
-        <Collapsible open={open} onOpenChange={setOpen}>
-            <div className="rounded-lg border">
-                <CollapsibleTrigger
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-expanded={open}
-                    aria-controls={`${headingId}-panel`}
-                    id={headingId}
-                >
-                    <span>
-                        {group.label}
-                        <span className="ml-2 text-muted-foreground num">
-                            {group.total}
-                        </span>
-                    </span>
-                    <ChevronDownIcon
-                        aria-hidden="true"
-                        className={
-                            open
-                                ? "size-4 shrink-0 rotate-180 transition"
-                                : "size-4 shrink-0 transition"
-                        }
-                    />
-                </CollapsibleTrigger>
-                <CollapsibleContent
-                    id={`${headingId}-panel`}
-                    role="region"
-                    aria-labelledby={headingId}
-                >
-                    <div className="space-y-2 border-t p-3">
-                        {previewItems.map((item) => {
-                            const processOk = canProcess(item)
-                            const viewOk = canView(item)
-                            const blocker = processBlocker(item)
-                            const processHref = buildProcessHref(item, scope)
-                            const viewHref = buildViewHref(item)
-                            const isFocused =
-                                focusStableNumber === item.stableNumber
-
-                            return (
-                                <div
-                                    key={item.workItemId}
-                                    id={`work-item-${item.stableNumber}`}
-                                    data-stable-number={item.stableNumber}
-                                    tabIndex={isFocused ? -1 : undefined}
-                                    className={
-                                        isFocused
-                                            ? "rounded-lg ring-2 ring-ring ring-offset-2"
-                                            : undefined
-                                    }
-                                >
-                                    <WorkTaskItem
-                                        taskType={item.workItemTypeLabel}
-                                        businessObject={item.objectTitle}
-                                        counterparty={item.counterpartyName}
-                                        enteredAt={item.enteredAtLabel}
-                                        enteredDateTime={item.createdAt}
-                                        enteredAtLabel="进入时间"
-                                        dueAt={item.dueAtLabel}
-                                        dueDateTime={item.dueAt}
-                                        responsibleParty={responsiblePartyLabel(
-                                            item,
-                                        )}
-                                        reason={item.reasonLabel}
-                                        impact={item.impactSummary}
-                                        status={{
-                                            label: item.statusLabel,
-                                            tone: item.statusTone,
-                                        }}
-                                        nextAction={
-                                            <div className="flex flex-col items-end gap-1">
-                                                {processOk ? (
-                                                    <Button
-                                                        size="sm"
-                                                        variant={
-                                                            item.statusTone ===
-                                                            "destructive"
-                                                                ? "default"
-                                                                : "outline"
-                                                        }
-                                                        render={
-                                                            <Link
-                                                                href={
-                                                                    processHref
-                                                                }
-                                                                onClick={() =>
-                                                                    onOpenTask(
-                                                                        item,
-                                                                        "PROCESS",
-                                                                    )
-                                                                }
-                                                            />
-                                                        }
-                                                    >
-                                                        {actionLabelForWorkItemType(
-                                                            item.workItemTypeLabel,
-                                                        )}
-                                                        <ArrowRightIcon
-                                                            data-icon="inline-end"
-                                                            aria-hidden="true"
-                                                        />
-                                                    </Button>
-                                                ) : (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled
-                                                        aria-disabled="true"
-                                                    >
-                                                        {actionLabelForWorkItemType(
-                                                            item.workItemTypeLabel,
-                                                        )}
-                                                    </Button>
-                                                )}
-                                                {!processOk && viewOk ? (
-                                                    <Button
-                                                        size="xs"
-                                                        variant="ghost"
-                                                        render={
-                                                            <Link
-                                                                href={viewHref}
-                                                                onClick={() =>
-                                                                    onOpenTask(
-                                                                        item,
-                                                                        "VIEW",
-                                                                    )
-                                                                }
-                                                            />
-                                                        }
-                                                    >
-                                                        查看
-                                                    </Button>
-                                                ) : null}
-                                                {blocker ? (
-                                                    <span className="max-w-40 text-right text-xs text-muted-foreground">
-                                                        {blocker}
-                                                    </span>
-                                                ) : null}
-                                            </div>
-                                        }
-                                    />
-                                </div>
-                            )
-                        })}
-                        {hasMore ? (
-                            <div className="flex justify-end pt-1">
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    render={<Link href={groupAllHref} />}
-                                >
-                                    查看该组全部 {group.total} 条
-                                    <ArrowRightIcon
-                                        data-icon="inline-end"
-                                        aria-hidden="true"
-                                    />
-                                </Button>
-                            </div>
-                        ) : null}
-                    </div>
-                </CollapsibleContent>
-            </div>
-        </Collapsible>
-    )
-}
 
 export function WorkspaceHomePage() {
-    const router = useRouter()
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
-
-    const urlState = React.useMemo(
-        () => parseWorkspaceSearchParams(searchParams),
-        [searchParams],
-    )
-
-    const queryInput = React.useMemo(
-        () => toTodayWorkspaceQuery(urlState, VIEWER_TIMEZONE),
-        [urlState],
-    )
-
-    const accountProfileQuery = useAccountProfileQuery()
-    const dashboardQuery = useWorkspaceDashboardQuery(
-        queryInput,
-        accountProfileQuery.data,
-    )
-    const view = dashboardQuery.data
-    const refreshing =
-        (accountProfileQuery.isFetching || dashboardQuery.isFetching) &&
-        !dashboardQuery.isPending &&
-        !!view
-
-    const [focusedStableNumber, setFocusedStableNumber] = React.useState<
-        string | null
-    >(null)
-
-    const activeMetric = metricKeyFromUrlState(urlState)
-    // scope 也是激活筛选：团队待处理无任务时走「当前筛选无结果」空态（D17）
-    const hasActiveFilter = Boolean(
-        urlState.scope === "team" || urlState.due || urlState.family,
-    )
-
-    // 筛选/指标变更恒 replace，不膨胀历史（P2）；scope 默认值省略，URL 最小化
-    const replaceUrl = React.useCallback(
-        (next: WorkspaceUrlState) => {
-            const qs = buildWorkspaceSearchParams(next)
-            router.replace(`${pathname}${qs}`, { scroll: false })
-        },
-        [pathname, router],
-    )
-
-    const onMetricClick = React.useCallback(
-        (key: WorkspaceMetricKey) => {
-            sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
-            setFocusedStableNumber(null)
-            replaceUrl(urlStateFromMetricKey(key, urlState))
-        },
-        [replaceUrl, urlState],
-    )
-
-    const clearFilters = React.useCallback(() => {
-        sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
-        setFocusedStableNumber(null)
-        replaceUrl({ scope: "mine" })
-    }, [replaceUrl])
-
-    const onOpenTask = React.useCallback(
-        (item: WorkspaceWorkItem, intent: "PROCESS" | "VIEW") => {
-            // Persist focus so a return restores the row without putting the
-            // internal task identity in the URL.
-            sessionStorage.setItem(HOME_FOCUS_SESSION_KEY, item.stableNumber)
-            if (intent === "PROCESS" && item.destinationWorkspaceId !== "W18") {
-                writeW02FocusId(item.workItemId)
-            }
-        },
-        [],
-    )
-
-    const refresh = React.useCallback(() => {
-        void accountProfileQuery.refetch().then((profileResult) => {
-            if (profileResult.isSuccess) void dashboardQuery.refetch()
-        })
-    }, [accountProfileQuery, dashboardQuery])
-
-    const onScopeChange = React.useCallback(
-        (scope: "mine" | "team") => {
-            if (scope === urlState.scope) return
-            sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
-            setFocusedStableNumber(null)
-            replaceUrl({ ...urlState, scope })
-        },
-        [replaceUrl, urlState],
-    )
-
-    // Restore task focus after return from a target page. One-shot: the stored
-    // focus is consumed here, so a plain refresh never re-scrolls unexpectedly.
-    React.useEffect(() => {
-        if (!view) return
-        const stableNumber = sessionStorage.getItem(HOME_FOCUS_SESSION_KEY)
-        if (!stableNumber) return
-        const el = document.getElementById(`work-item-${stableNumber}`)
-        sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
-        if (!el) return
-        setFocusedStableNumber(stableNumber)
-        el.scrollIntoView({ block: "nearest", behavior: "smooth" })
-        if (el instanceof HTMLElement) {
-            el.focus({ preventScroll: true })
-        }
-    }, [view])
+    const {
+        urlState,
+        view,
+        accountProfileQuery,
+        dashboardQuery,
+        refreshing,
+        focusedStableNumber,
+        activeMetric,
+        hasActiveFilter,
+        onMetricClick,
+        clearFilters,
+        onOpenTask,
+        refresh,
+        onScopeChange,
+    } = useWorkspaceHome()
 
     if ((accountProfileQuery.isPending || dashboardQuery.isPending) && !view) {
         return <WorkspaceHomeSkeleton />
@@ -546,50 +166,10 @@ export function WorkspaceHomePage() {
                 }
                 actions={
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                        {/*
-              分段切换：轨道 + 图标 + 选中白底浮起 / 未选中弱字色，
-              明确是「二选一控件」而不是静态标签。
-            */}
-                        <div
-                            role="group"
-                            aria-label="责任范围"
-                            className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                        >
-                            <button
-                                type="button"
-                                aria-pressed={urlState.scope === "mine"}
-                                onClick={() => onScopeChange("mine")}
-                                className={cn(
-                                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    urlState.scope === "mine"
-                                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                        : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                )}
-                            >
-                                <UserIcon
-                                    className="size-3.5 shrink-0"
-                                    aria-hidden="true"
-                                />
-                                我的待办
-                            </button>
-                            <button
-                                type="button"
-                                aria-pressed={urlState.scope === "team"}
-                                onClick={() => onScopeChange("team")}
-                                className={cn(
-                                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    urlState.scope === "team"
-                                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                        : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                )}
-                            >
-                                <UsersIcon
-                                    className="size-3.5 shrink-0"
-                                    aria-hidden="true"
-                                />
-                                {sequentialText.teamPending}
-                            </button>
-                        </div>
+                        <ScopeSwitcher
+                            scope={urlState.scope}
+                            onScopeChange={onScopeChange}
+                        />
                         <PageActions
                             actions={[
                                 {
@@ -631,265 +211,24 @@ export function WorkspaceHomePage() {
             </MetricStrip>
 
             <div className="grid min-w-0 gap-3 md:gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
-                <Card
-                    size="sm"
-                    className={cn("min-w-0", surfacePanelClassName)}
-                >
-                    <CardHeader className="rounded-t-lg border-b border-border/30">
-                        <CardTitle id="workspace-task-main-title">
-                            {filterLabel}
-                        </CardTitle>
-                        <CardDescription aria-live="polite" aria-atomic="true">
-                            {hasActiveFilter
-                                ? `当前筛选「${filterLabel}」共 ${visibleCount} 项`
-                                : `当前共 ${visibleCount} 项待办，按超期与截止时间展示`}
-                        </CardDescription>
-                        <CardAction className="flex flex-wrap gap-1">
-                            {hasActiveFilter ? (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="xs"
-                                    onClick={clearFilters}
-                                >
-                                    清除筛选
-                                </Button>
-                            ) : null}
-                            {view.canOpenTaskQueue ? (
-                                <Button
-                                    size="xs"
-                                    variant="secondary"
-                                    className="rounded-md shadow-none"
-                                    render={<Link href={taskQueueHref} />}
-                                >
-                                    查看全部待办
-                                    <ArrowRightIcon
-                                        data-icon="inline-end"
-                                        aria-hidden="true"
-                                    />
-                                </Button>
-                            ) : null}
-                        </CardAction>
-                    </CardHeader>
-                    <CardContent>
-                        <AsyncSectionState
-                            status={asyncStatus}
-                            refreshingLabel="正在刷新，仍显示上次结果"
-                            error="工作台任务刷新失败，已保留上次成功内容。"
-                            errorKind={
-                                dashboardQuery.isError ? "projection" : "system"
-                            }
-                            retryAction={
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={refresh}
-                                >
-                                    重试
-                                </Button>
-                            }
-                        >
-                            {visibleCount === 0 && !hasActiveFilter ? (
-                                <BusinessEmptyState
-                                    kind="no-tasks"
-                                    title="当前没有待处理事项"
-                                    description="当前没有待处理事项。可查看最近打开记录，或进入其它业务模块。"
-                                    // 嵌在任务卡内：去掉空态自带描边/底，避免框中套框
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0 md:p-8"
-                                    action={
-                                        <div className="flex flex-wrap items-center justify-center gap-2">
-                                            {/* secondary chip：有底有 hover，比 ghost 更像可点，比 outline 更轻 */}
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                className="rounded-lg shadow-none"
-                                                render={
-                                                    <Link
-                                                        href={resolveWorkspaceHref(
-                                                            "W05",
-                                                        )}
-                                                    />
-                                                }
-                                            >
-                                                销售单
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                className="rounded-lg shadow-none"
-                                                render={
-                                                    <Link
-                                                        href={resolveWorkspaceHref(
-                                                            "W07",
-                                                        )}
-                                                    />
-                                                }
-                                            >
-                                                采购确认
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                className="rounded-lg shadow-none"
-                                                render={
-                                                    <Link
-                                                        href={resolveWorkspaceHref(
-                                                            "W10",
-                                                        )}
-                                                    />
-                                                }
-                                            >
-                                                库存台账
-                                            </Button>
-                                        </div>
-                                    }
-                                />
-                            ) : null}
-
-                            {visibleCount === 0 && hasActiveFilter ? (
-                                <BusinessEmptyState
-                                    kind="filter"
-                                    title="当前筛选无结果"
-                                    description={`没有符合「${filterLabel}」的待办。可清除筛选查看全部任务。`}
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0 md:p-8"
-                                    action={
-                                        <Button
-                                            type="button"
-                                            variant="secondary"
-                                            size="sm"
-                                            className="rounded-lg shadow-none"
-                                            onClick={clearFilters}
-                                        >
-                                            清除筛选
-                                        </Button>
-                                    }
-                                />
-                            ) : null}
-
-                            {visibleCount > 0 ? (
-                                <div
-                                    className="space-y-3"
-                                    role="list"
-                                    aria-labelledby="workspace-task-main-title"
-                                >
-                                    {view.groups.map((group) => (
-                                        <div key={group.family} role="listitem">
-                                            <TaskGroupSection
-                                                group={group}
-                                                scope={urlState.scope}
-                                                focusStableNumber={
-                                                    focusedStableNumber ??
-                                                    undefined
-                                                }
-                                                onOpenTask={onOpenTask}
-                                                groupAllHref={buildGroupAllHref(
-                                                    urlState,
-                                                    group.family,
-                                                )}
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
-                        </AsyncSectionState>
-                    </CardContent>
-                </Card>
+                <TaskListCard
+                    view={view}
+                    urlState={urlState}
+                    filterLabel={filterLabel}
+                    visibleCount={visibleCount}
+                    hasActiveFilter={hasActiveFilter}
+                    taskQueueHref={taskQueueHref}
+                    asyncStatus={asyncStatus}
+                    hasRefreshError={dashboardQuery.isError}
+                    focusStableNumber={focusedStableNumber ?? undefined}
+                    onOpenTask={onOpenTask}
+                    clearFilters={clearFilters}
+                    refresh={refresh}
+                />
 
                 <div className="space-y-3 md:space-y-4">
-                    <Card size="sm" className={surfacePanelClassName}>
-                        <CardHeader className="rounded-t-lg border-b border-border/30">
-                            <CardTitle>需要关注的预警</CardTitle>
-                            <CardDescription>
-                                只显示需要你关注的异常
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            {view.warnings.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                    当前没有需要关注的预警。
-                                </p>
-                            ) : (
-                                view.warnings.map((warning) => (
-                                    <Alert
-                                        key={warning.warningId}
-                                        variant={
-                                            warning.severity === "destructive"
-                                                ? "destructive"
-                                                : warning.severity === "warning"
-                                                  ? "warning"
-                                                  : "default"
-                                        }
-                                    >
-                                        {warning.severity === "destructive" ? (
-                                            <TriangleAlertIcon aria-hidden="true" />
-                                        ) : (
-                                            <Clock3Icon aria-hidden="true" />
-                                        )}
-                                        <AlertTitle>{warning.title}</AlertTitle>
-                                        <AlertDescription className="flex flex-col gap-2">
-                                            <span>{warning.description}</span>
-                                            <Button
-                                                size="xs"
-                                                variant="outline"
-                                                className="w-fit"
-                                                render={
-                                                    <Link
-                                                        href={buildWarningHref(
-                                                            warning,
-                                                        )}
-                                                    />
-                                                }
-                                            >
-                                                {goToWorkspaceLabel(
-                                                    warning.destinationWorkspaceId,
-                                                )}
-                                                <ArrowRightIcon
-                                                    data-icon="inline-end"
-                                                    aria-hidden="true"
-                                                />
-                                            </Button>
-                                        </AlertDescription>
-                                    </Alert>
-                                ))
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card size="sm" className={surfacePanelClassName}>
-                        <CardHeader className="rounded-t-lg border-b border-border/30">
-                            <CardTitle>最近打开</CardTitle>
-                            <CardDescription>
-                                快速回到上次处理的任务。
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {view.recent.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                    暂无最近记录。
-                                </p>
-                            ) : (
-                                <nav
-                                    aria-label="最近打开的任务"
-                                    className="space-y-1"
-                                >
-                                    {view.recent.map((item) => (
-                                        <Button
-                                            key={item.id}
-                                            variant="ghost"
-                                            className="w-full justify-between"
-                                            render={<Link href={item.href} />}
-                                        >
-                                            <span className="truncate">
-                                                {item.label}
-                                            </span>
-                                            <ArrowRightIcon aria-hidden="true" />
-                                        </Button>
-                                    ))}
-                                </nav>
-                            )}
-                        </CardContent>
-                    </Card>
+                    <WarningsPanel warnings={view.warnings} />
+                    <RecentPanel recent={view.recent} />
                 </div>
             </div>
         </PageScaffold>

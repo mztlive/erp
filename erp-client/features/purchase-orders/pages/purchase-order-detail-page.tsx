@@ -3,115 +3,37 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { z } from "zod"
-import { ArrowLeftIcon, FilePenLineIcon, ShieldCheckIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    BusinessStatusBadge,
-    DocumentHeader,
-    DocumentSection,
-    DocumentTotals,
-    FormalActionConfirmDialog,
-    FormalActionResult,
-    MoneyValue,
-    PageActions,
     PageHeader,
     PageScaffold,
-    PrepaymentGate,
-    StatusTrackSummary,
-    surfaceInsetClassName,
-    surfacePanelClassName,
 } from "@/components/business"
-import { cn } from "@/lib/utils"
-import { getErrorMessage } from "@/lib/api/errors"
-import {
-    classifyFormalCommandError,
-    FormalCommandKeyLedger,
-} from "@/lib/formal-command"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import {
-    useAcquireDraftTokenMutation,
-    usePurchaseOrderCenterQuery,
-    useReviewPurchaseOrderMutation,
-    useSavePurchaseOrderDraftMutation,
-    useStartPurchaseChangeMutation,
-    useSubmitPurchaseOrderMutation,
-} from "@/features/purchase-orders/hooks/queries"
-import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import {
     EditSurface,
-    LinesTable,
     ReviewSurface,
 } from "@/features/purchase-orders/components/purchase-order-surfaces"
+import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
+import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
+import { PurchaseOrderDetailSections } from "@/features/purchase-orders/components/purchase-order-detail-sections"
+import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
+import { usePurchaseOrderDetailCommandState } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
+import { usePurchaseOrderDetailEditActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-actions"
+import { usePurchaseOrderDetailEditGuard } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-guard"
+import { usePurchaseOrderDetailPermissions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-permissions"
+import { usePurchaseOrderDetailReviewActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-review-actions"
 import {
-    positiveDecimal,
-    taxRateValid,
+    buildPurchaseOrderDetailNavItems,
+    resolvePurchaseOrderDetailMode,
+    resolvePurchaseOrderDetailSection,
+} from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
+import {
+    purchaseOrderDraftFormSchema,
+    purchaseOrderReviewFormSchema,
 } from "@/features/purchase-orders/lib/purchase-order-validation"
-import {
-    FULFILLMENT_RESPONSIBILITY_LABEL,
-    PAYMENT_TERM_OPTIONS,
-    PURCHASE_TYPE_LABEL,
-    REJECT_REASON_LABEL,
-    type SubmitPurchaseOrderPayload,
-} from "@/features/purchase-orders/types"
-import { responsibilityText } from "@/lib/ui-text"
-
-type SectionId =
-    | "overview"
-    | "lines"
-    | "fulfillment"
-    | "payable"
-    | "changes"
-    | "audit"
-
-type PageMode = "view" | "edit" | "review"
-
-function resolveSection(section?: string): SectionId {
-    if (
-        section === "lines" ||
-        section === "fulfillment" ||
-        section === "payable" ||
-        section === "changes" ||
-        section === "audit"
-    ) {
-        return section
-    }
-    return "overview"
-}
-
-function resolveMode(mode?: string): PageMode {
-    if (mode === "edit" || mode === "review") return mode
-    return "view"
-}
-
-const draftSchema = z.object({
-    paymentTermCode: z.string().min(1),
-    note: z.string(),
-})
-
-const reviewSchema = z.object({
-    reasonCode: z.string().min(1, "请选择驳回原因"),
-    comment: z.string().trim().min(2, "请填写说明"),
-})
 
 export function PurchaseOrderDetailPage({
     purchaseOrderId,
@@ -124,67 +46,20 @@ export function PurchaseOrderDetailPage({
 }) {
     const router = useRouter()
     const query = usePurchaseOrderCenterQuery(purchaseOrderId)
-    const acquireToken = useAcquireDraftTokenMutation()
-    const saveMutation = useSavePurchaseOrderDraftMutation()
-    const submitMutation = useSubmitPurchaseOrderMutation()
-    const reviewMutation = useReviewPurchaseOrderMutation()
-    const responsibilityMutation = useWorkItemResponsibilityMutation()
-    const changeMutation = useStartPurchaseChangeMutation()
 
-    const activeSection = resolveSection(section)
-    const mode = resolveMode(modeParam)
-
-    const [draftEditToken, setDraftEditToken] = React.useState<string | null>(
-        null,
-    )
-    const [lineEdits, setLineEdits] = React.useState<
-        Record<
-            string,
-            { quantity?: string; unitCostGross?: string; inputTaxRate: string }
-        >
-    >({})
-    const [leaveGuardOpen, setLeaveGuardOpen] = React.useState(false)
-    const [pendingLeave, setPendingLeave] = React.useState<(() => void) | null>(
-        null,
-    )
-    const [result, setResult] = React.useState<{
-        status: "succeeded" | "rejected" | "blocked" | "unknown"
-        title: string
-        description: string
-        reference?: string
-        facts?: { label: string; value: React.ReactNode }[]
-    } | null>(null)
-    const [submitConfirmOpen, setSubmitConfirmOpen] = React.useState(false)
-    const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
-    const [approveConfirmOpen, setApproveConfirmOpen] = React.useState(false)
-    const [releaseConfirmOpen, setReleaseConfirmOpen] = React.useState(false)
-    const [releaseReason, setReleaseReason] = React.useState("")
-    const commandLedgerRef = React.useRef<{
-        purchaseOrderId: string
-        ledger: FormalCommandKeyLedger
-    } | null>(null)
-    if (commandLedgerRef.current?.purchaseOrderId !== purchaseOrderId) {
-        commandLedgerRef.current = {
-            purchaseOrderId,
-            ledger: new FormalCommandKeyLedger(),
-        }
-    }
-    const commandLedger = commandLedgerRef.current.ledger
-    const titleRef = React.useRef<HTMLHeadingElement>(null)
-
+    const activeSection = resolvePurchaseOrderDetailSection(section)
+    const mode = resolvePurchaseOrderDetailMode(modeParam)
     const order = query.data
-    const documentReference =
-        order?.identity.purchaseNo ?? order?.identity.draftLabel
 
-    const draftForm = useAppForm({
-        defaultValues: {
-            paymentTermCode: order?.header.paymentTermCode ?? "POSTPAY_NET15",
-            note: "",
-        },
-        validators: { onChange: draftSchema },
-        onSubmit: async () => {
-            await handleSave()
-        },
+    const { commandLedger, result, setResult } =
+        usePurchaseOrderDetailCommandState(purchaseOrderId)
+
+    const reviewActions = usePurchaseOrderDetailReviewActions({
+        purchaseOrderId,
+        order,
+        refetch: query.refetch,
+        commandLedger,
+        setResult,
     })
 
     const reviewForm = useAppForm({
@@ -192,96 +67,51 @@ export function PurchaseOrderDetailPage({
             reasonCode: "COST_TAX",
             comment: "",
         },
-        validators: { onChange: reviewSchema },
+        validators: { onChange: purchaseOrderReviewFormSchema },
         onSubmit: async ({ value }) => {
-            await handleReject(value.reasonCode, value.comment)
+            await reviewActions.handleReject(value.reasonCode, value.comment)
         },
     })
+
+    const draftForm = useAppForm({
+        defaultValues: {
+            paymentTermCode: order?.header.paymentTermCode ?? "POSTPAY_NET15",
+            note: "",
+        },
+        validators: { onChange: purchaseOrderDraftFormSchema },
+        onSubmit: async () => {
+            await editActions.handleSave()
+        },
+    })
+
+    const editActions = usePurchaseOrderDetailEditActions({
+        purchaseOrderId,
+        mode,
+        order,
+        refetch: query.refetch,
+        commandLedger,
+        setResult,
+        getPaymentTermCode: () => draftForm.state.values.paymentTermCode,
+        setDraftPaymentTermCode: (value) =>
+            draftForm.setFieldValue("paymentTermCode", value),
+    })
+
+    const permissions = usePurchaseOrderDetailPermissions(order, commandLedger)
+
+    const guard = usePurchaseOrderDetailEditGuard({
+        mode,
+        order,
+        paymentTermCode: draftForm.state.values.paymentTermCode,
+        note: draftForm.state.values.note,
+        lineEdits: editActions.lineEdits,
+        onSave: editActions.handleSave,
+    })
+
+    const titleRef = React.useRef<HTMLHeadingElement>(null)
 
     React.useEffect(() => {
         titleRef.current?.focus()
     }, [purchaseOrderId, mode])
-
-    // 编辑态脏检测：行级数量/单价/税率或付款条件与当前内容不一致
-    const editDirty = React.useMemo(() => {
-        if (mode !== "edit" || !order) return false
-        if (
-            draftForm.state.values.paymentTermCode !==
-            order.header.paymentTermCode
-        )
-            return true
-        if (draftForm.state.values.note.trim()) return true
-        return order.currentContent.lines.some((line) => {
-            const edit = lineEdits[line.lineId]
-            if (!edit) return false
-            return (
-                (edit.quantity ?? line.quantity) !== line.quantity ||
-                (edit.unitCostGross ?? line.unitCostGross) !==
-                    line.unitCostGross ||
-                edit.inputTaxRate !== line.inputTaxRate
-            )
-        })
-    }, [
-        draftForm.state.values.note,
-        draftForm.state.values.paymentTermCode,
-        lineEdits,
-        mode,
-        order,
-    ])
-
-    // 编辑态刷新/关页守卫
-    React.useEffect(() => {
-        if (mode !== "edit" || !editDirty) return
-        const onBeforeUnload = (event: BeforeUnloadEvent) => {
-            event.preventDefault()
-            event.returnValue = ""
-        }
-        window.addEventListener("beforeunload", onBeforeUnload)
-        return () => window.removeEventListener("beforeunload", onBeforeUnload)
-    }, [editDirty, mode])
-
-    /** 编辑态离开前弹「保存并离开 / 放弃修改 / 继续编辑」确认 */
-    const requestLeave = React.useCallback(
-        (go: () => void) => {
-            if (mode === "edit" && editDirty) {
-                setPendingLeave(() => go)
-                setLeaveGuardOpen(true)
-                return
-            }
-            go()
-        },
-        [editDirty, mode],
-    )
-
-    React.useEffect(() => {
-        if (!order || mode !== "edit") return
-        if (draftEditToken) return
-        if (!order.allowedActions.includes("EDIT")) return
-        void acquireToken
-            .mutateAsync(purchaseOrderId)
-            .then((res) => {
-                setDraftEditToken(res.draftEditToken)
-            })
-            .catch((error: Error) => {
-                setResult({
-                    status: "blocked",
-                    title: responsibilityText.cannotEdit,
-                    description: error.message,
-                })
-            })
-        // init line edits
-        const next: typeof lineEdits = {}
-        for (const line of order.currentContent.lines) {
-            next[line.lineId] = {
-                quantity: line.quantity,
-                unitCostGross: line.unitCostGross,
-                inputTaxRate: line.inputTaxRate,
-            }
-        }
-        setLineEdits(next)
-        draftForm.setFieldValue("paymentTermCode", order.header.paymentTermCode)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- only when entering edit
-    }, [order?.identity.purchaseOrderId, mode])
 
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
@@ -291,497 +121,17 @@ export function PurchaseOrderDetailPage({
                 event.key.toLowerCase() === "s"
             ) {
                 event.preventDefault()
-                void handleSave()
+                void editActions.handleSave()
             }
             if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                 event.preventDefault()
-                setSubmitConfirmOpen(true)
+                editActions.setSubmitConfirmOpen(true)
             }
         }
         window.addEventListener("keydown", onKey)
         return () => window.removeEventListener("keydown", onKey)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, draftEditToken, lineEdits, order])
-
-    async function handleSave(): Promise<boolean> {
-        if (!order || !draftEditToken) return false
-        if (commandLedger.peek("submit")) {
-            setResult({
-                status: "unknown",
-                title: "提交结果待确认",
-                description: "请先使用原提交操作确认结果，确认前不能另存草稿。",
-                reference: documentReference,
-            })
-            return false
-        }
-        // 行内即时校验：数量/单价为正数，税率为 0-1 小数
-        const invalidLine = order.currentContent.lines.find((line) => {
-            const edit = lineEdits[line.lineId]
-            if (!edit) return false
-            return (
-                !positiveDecimal(edit.quantity ?? line.quantity) ||
-                !positiveDecimal(edit.unitCostGross ?? line.unitCostGross) ||
-                !taxRateValid(edit.inputTaxRate)
-            )
-        })
-        if (invalidLine) {
-            setResult({
-                status: "rejected",
-                title: "保存失败",
-                description: `「${invalidLine.itemName}」数量与含税单价须为正数，税率须为 0 到 1 的十进制数（如 0.13 表示 13%）。`,
-            })
-            return false
-        }
-        const paymentTermCode = draftForm.state.values.paymentTermCode
-        const paymentTermLabel =
-            PAYMENT_TERM_OPTIONS.find(
-                (option) => option.value === paymentTermCode,
-            )?.label ?? order.header.paymentTermLabel
-
-        const payload = {
-            purchaseOrderId,
-            expectedLockVersion: order.identity.lockVersion,
-            draftEditToken,
-            paymentTermCode,
-            paymentTermLabel,
-            lines: order.currentContent.lines.map((line) => ({
-                lineId: line.lineId,
-                lineType: line.lineType,
-                quantity: lineEdits[line.lineId]?.quantity ?? line.quantity,
-                unitCostGross:
-                    lineEdits[line.lineId]?.unitCostGross ?? line.unitCostGross,
-                inputTaxRate:
-                    lineEdits[line.lineId]?.inputTaxRate ?? line.inputTaxRate,
-                logisticsFeeReason: line.logisticsFeeReason,
-            })),
-        }
-        const command = commandLedger.acquire(
-            "save-draft",
-            `purchase:${purchaseOrderId}:save`,
-            payload,
-        )
-        const response = await saveMutation.mutateAsync({
-            ...command.payload,
-            idempotencyKey: command.idempotencyKey,
-        })
-        commandLedger.settle("save-draft", response.status)
-
-        if (response.status === "succeeded") {
-            setResult({
-                status: "succeeded",
-                title: "草稿已保存",
-                description: `金额已按系统规范计算：含税 ${response.data.totals.gross} / 不含税 ${response.data.totals.net} / 税额 ${response.data.totals.tax}`,
-                reference: response.reference,
-                facts: [
-                    {
-                        label: "数据版本",
-                        value: `v${response.data.lockVersion}`,
-                    },
-                ],
-            })
-            await query.refetch()
-        } else if (response.status === "unknown") {
-            setResult({
-                status: "unknown",
-                title: "保存结果未知",
-                description: `${response.message} 输入已保留，未切换状态。`,
-                reference: documentReference,
-            })
-        } else {
-            setResult({
-                status: "rejected",
-                title: "保存失败",
-                description: `${response.message} 输入已保留。`,
-            })
-        }
-        return response.status === "succeeded"
-    }
-
-    async function handleSubmit() {
-        if (!order || !draftEditToken) return
-        let submitCommand =
-            commandLedger.peek<SubmitPurchaseOrderPayload>("submit")
-        if (!submitCommand) {
-            const savePayload = {
-                purchaseOrderId,
-                expectedLockVersion: order.identity.lockVersion,
-                draftEditToken,
-                paymentTermCode: draftForm.state.values.paymentTermCode,
-                paymentTermLabel: order.header.paymentTermLabel,
-                lines: order.currentContent.lines.map((line) => ({
-                    lineId: line.lineId,
-                    lineType: line.lineType,
-                    quantity: lineEdits[line.lineId]?.quantity ?? line.quantity,
-                    unitCostGross:
-                        lineEdits[line.lineId]?.unitCostGross ??
-                        line.unitCostGross,
-                    inputTaxRate:
-                        lineEdits[line.lineId]?.inputTaxRate ??
-                        line.inputTaxRate,
-                })),
-            }
-            const saveCommand = commandLedger.acquire(
-                "save-before-submit",
-                `purchase:${purchaseOrderId}:save-before-submit`,
-                savePayload,
-            )
-            const saveRes = await saveMutation.mutateAsync({
-                ...saveCommand.payload,
-                idempotencyKey: saveCommand.idempotencyKey,
-            })
-            commandLedger.settle("save-before-submit", saveRes.status)
-            if (saveRes.status !== "succeeded") {
-                setSubmitConfirmOpen(false)
-                setResult({
-                    status:
-                        saveRes.status === "unknown" ? "unknown" : "rejected",
-                    title: "提交前保存未成功",
-                    description: saveRes.message,
-                    reference:
-                        saveRes.status === "unknown"
-                            ? documentReference
-                            : undefined,
-                })
-                return
-            }
-
-            const refreshed = await query.refetch()
-            const lockVersion =
-                refreshed.data?.identity.lockVersion ?? saveRes.data.lockVersion
-            submitCommand = commandLedger.acquire(
-                "submit",
-                `purchase:${purchaseOrderId}:submit`,
-                {
-                    purchaseOrderId,
-                    expectedLockVersion: lockVersion,
-                    expectedDraftContentHash: saveRes.data.draftContentHash,
-                    draftEditToken,
-                },
-            )
-        }
-        if (!submitCommand) return
-        const response = await submitMutation.mutateAsync({
-            ...submitCommand.payload,
-            idempotencyKey: submitCommand.idempotencyKey,
-        })
-        commandLedger.settle("submit", response.status)
-        setSubmitConfirmOpen(false)
-        if (response.status === "succeeded") {
-            setDraftEditToken(null)
-            setResult({
-                status: "succeeded",
-                title: "已提交财务审核",
-                description:
-                    "已形成不可修改的采购提交与采购审核任务；编辑已结束。",
-                reference: response.reference,
-                facts: [
-                    { label: "单据编号", value: response.data.purchaseNo },
-                    {
-                        label: "提交记录",
-                        value: `第 ${response.data.submissionNo} 次提交`,
-                    },
-                    {
-                        label: "数据版本",
-                        value: `v${response.data.lockVersion}`,
-                    },
-                    { label: "审核任务", value: "已创建" },
-                ],
-            })
-            router.replace(`/procurement/orders/${purchaseOrderId}?mode=review`)
-        } else if (response.status === "unknown") {
-            setResult({
-                status: "unknown",
-                title: "提交结果未知",
-                description: response.message,
-                reference: documentReference,
-            })
-        } else {
-            setResult({
-                status: "rejected",
-                title: "提交失败",
-                description: response.message,
-            })
-        }
-    }
-
-    async function handleApprove() {
-        if (!order?.reviewWorkItem || !order.identity.currentSubmissionId)
-            return
-        if (commandLedger.peek("review-reject")) {
-            setResult({
-                status: "unknown",
-                title: "审核结果待确认",
-                description:
-                    "原驳回操作的结果仍待确认，请先重试原操作，不能改为通过。",
-                reference: documentReference,
-            })
-            throw new Error("原驳回操作的结果仍待确认")
-        }
-        const payload = {
-            workItemId: order.reviewWorkItem.workItemId,
-            expectedTaskVersion: order.reviewWorkItem.taskVersion,
-            expectedSubjectVersion: order.reviewWorkItem.subjectVersion,
-            decision: {
-                purchaseOrderId,
-                submissionId: order.identity.currentSubmissionId,
-                expectedPurchaseOrderLockVersion: order.identity.lockVersion,
-                reviewResult: "APPROVED",
-            },
-        } as const
-        const command = commandLedger.acquire(
-            "review-approve",
-            `w08:${order.reviewWorkItem.workItemId}:${order.reviewWorkItem.taskVersion}:approve`,
-            payload,
-        )
-        const response = await reviewMutation.mutateAsync({
-            ...command.payload,
-            idempotencyKey: command.idempotencyKey,
-        })
-        commandLedger.settle("review-approve", response.status)
-        setApproveConfirmOpen(false)
-        if (response.status === "succeeded") {
-            setResult({
-                status: "succeeded",
-                title: "财务审核已通过",
-                description:
-                    "已形成采购生效版本与应付原始分录；审核任务完成。实际付款独立推进。",
-                reference: response.reference,
-                facts: [
-                    {
-                        label: "版本",
-                        value: `v${response.data.revisionNo ?? 1}`,
-                    },
-                    {
-                        label: "应付未结",
-                        value: response.data.payableOpenAmount ?? "—",
-                    },
-                ],
-            })
-            await query.refetch()
-            router.replace(`/procurement/orders/${purchaseOrderId}`)
-        } else if (response.status === "unknown") {
-            setResult({
-                status: "unknown",
-                title: "审核结果未知",
-                description: response.message,
-                reference: documentReference,
-            })
-        } else {
-            setResult({
-                status: "rejected",
-                title: "通过失败",
-                description: response.message,
-            })
-        }
-    }
-
-    async function handleReject(reasonCode: string, comment: string) {
-        if (!order?.reviewWorkItem || !order.identity.currentSubmissionId)
-            return
-        if (commandLedger.peek("review-approve")) {
-            setResult({
-                status: "unknown",
-                title: "审核结果待确认",
-                description:
-                    "原通过操作的结果仍待确认，请先重试原操作，不能改为驳回。",
-                reference: documentReference,
-            })
-            throw new Error("原通过操作的结果仍待确认")
-        }
-        const payload = {
-            workItemId: order.reviewWorkItem.workItemId,
-            expectedTaskVersion: order.reviewWorkItem.taskVersion,
-            expectedSubjectVersion: order.reviewWorkItem.subjectVersion,
-            decision: {
-                purchaseOrderId,
-                submissionId: order.identity.currentSubmissionId,
-                expectedPurchaseOrderLockVersion: order.identity.lockVersion,
-                reviewResult: "REJECTED",
-                reasonCode,
-                comment,
-            },
-        } as const
-        const command = commandLedger.acquire(
-            "review-reject",
-            `w08:${order.reviewWorkItem.workItemId}:${order.reviewWorkItem.taskVersion}:reject`,
-            payload,
-        )
-        const response = await reviewMutation.mutateAsync({
-            ...command.payload,
-            idempotencyKey: command.idempotencyKey,
-        })
-        commandLedger.settle("review-reject", response.status)
-        if (response.status === "succeeded") {
-            setResult({
-                status: "rejected",
-                title: "财务已驳回",
-                description:
-                    "已记录驳回结论并完成当前审核任务；不创建替代任务。采购可改草稿后重新提交。",
-                reference: response.reference,
-                facts: [
-                    {
-                        label: "原因",
-                        value: REJECT_REASON_LABEL[reasonCode] ?? reasonCode,
-                    },
-                    { label: "说明", value: comment },
-                ],
-            })
-            await query.refetch()
-            router.replace(`/procurement/orders/${purchaseOrderId}?mode=edit`)
-        } else if (response.status === "unknown") {
-            setResult({
-                status: "unknown",
-                title: "驳回结果未知",
-                description: response.message,
-                reference: documentReference,
-            })
-        } else {
-            setResult({
-                status: "rejected",
-                title: "驳回失败",
-                description: response.message,
-            })
-        }
-    }
-
-    async function handleStartProcessing() {
-        const workItem = order?.reviewWorkItem
-        if (!workItem?.responsibilityActions.includes("START_PROCESSING"))
-            return
-        const payload = {
-            kind: "START_PROCESSING" as const,
-            workItemId: workItem.workItemId,
-            expectedTaskVersion: workItem.taskVersion,
-        }
-        const command = commandLedger.acquire(
-            "review-responsibility",
-            `w08:${workItem.workItemId}:${workItem.taskVersion}:start`,
-            payload,
-        )
-        try {
-            await responsibilityMutation.mutateAsync({
-                ...command.payload,
-                idempotencyKey: command.idempotencyKey,
-            })
-            commandLedger.settle("review-responsibility", "succeeded")
-            await query.refetch()
-        } catch (error) {
-            const settlement = classifyFormalCommandError(error)
-            commandLedger.settle("review-responsibility", settlement)
-            setResult({
-                status: settlement === "unknown" ? "unknown" : "blocked",
-                title: responsibilityText.changed,
-                description: getErrorMessage(
-                    error,
-                    settlement === "unknown"
-                        ? "处理结果待确认，请使用本次操作重试"
-                        : "开始处理失败，请刷新后重试",
-                ),
-                reference:
-                    settlement === "unknown" ? documentReference : undefined,
-            })
-        }
-    }
-
-    async function handleReleaseToTeam() {
-        const workItem = order?.reviewWorkItem
-        const reason = releaseReason.trim()
-        if (
-            !workItem?.responsibilityActions.includes("RELEASE_TO_TEAM") ||
-            !reason
-        )
-            return
-        const payload = {
-            kind: "RELEASE_TO_TEAM" as const,
-            workItemId: workItem.workItemId,
-            expectedTaskVersion: workItem.taskVersion,
-            reason,
-        }
-        const command = commandLedger.acquire(
-            "review-responsibility",
-            `w08:${workItem.workItemId}:${workItem.taskVersion}:release`,
-            payload,
-        )
-        try {
-            await responsibilityMutation.mutateAsync({
-                ...command.payload,
-                idempotencyKey: command.idempotencyKey,
-            })
-            commandLedger.settle("review-responsibility", "succeeded")
-            setReleaseConfirmOpen(false)
-            setReleaseReason("")
-            setResult({
-                status: "succeeded",
-                title: responsibilityText.releaseToTeam,
-                description: "当前审核任务仍为开放状态，已回到团队待处理。",
-            })
-            await query.refetch()
-        } catch (error) {
-            const settlement = classifyFormalCommandError(error)
-            commandLedger.settle("review-responsibility", settlement)
-            setResult({
-                status: settlement === "unknown" ? "unknown" : "blocked",
-                title: responsibilityText.changed,
-                description: getErrorMessage(
-                    error,
-                    settlement === "unknown"
-                        ? "处理结果待确认，请使用本次操作重试"
-                        : "退回团队失败，请刷新后重试",
-                ),
-                reference:
-                    settlement === "unknown" ? documentReference : undefined,
-            })
-        }
-    }
-
-    async function handleStartChange() {
-        if (!order) return
-        const payload = {
-            purchaseOrderId,
-            expectedLockVersion: order.identity.lockVersion,
-        }
-        const command = commandLedger.acquire(
-            "start-change",
-            `purchase:${purchaseOrderId}:change`,
-            payload,
-        )
-        const response = await changeMutation.mutateAsync({
-            ...command.payload,
-            idempotencyKey: command.idempotencyKey,
-        })
-        commandLedger.settle("start-change", response.status)
-        setChangeConfirmOpen(false)
-        if (response.status === "succeeded") {
-            setResult({
-                status: "succeeded",
-                title: "已创建采购变更工作副本",
-                description:
-                    "生效字段锁定；不覆盖已发生付款、发票或履约记录。变更以基准版本创建目标提交。",
-                reference: response.reference,
-                facts: [
-                    { label: "变更记录", value: "已创建" },
-                    {
-                        label: "基准版本",
-                        value: `v${response.data.baseRevisionNo}`,
-                    },
-                ],
-            })
-            await query.refetch()
-        } else if (response.status === "unknown") {
-            setResult({
-                status: "unknown",
-                title: "变更结果待确认",
-                description: response.message,
-                reference: documentReference,
-            })
-        } else {
-            setResult({
-                status: "blocked",
-                title: "无法发起变更",
-                description: response.message,
-            })
-        }
-    }
+    }, [mode, editActions.draftEditToken, editActions.lineEdits, order])
 
     if (query.isPending) {
         return (
@@ -853,81 +203,8 @@ export function PurchaseOrderDetailPage({
         "采购单（未编号）"
     const costMasked = order.currentContent.costMasked
     const gate = order.progress.prepaymentGate
-    const canEdit = order.allowedActions.includes("EDIT")
-    const canSubmit = order.allowedActions.includes("SUBMIT")
-    const reviewWorkItem = order.reviewWorkItem
-    const canOpenReview = Boolean(reviewWorkItem)
-    const approveResultPending = Boolean(commandLedger.peek("review-approve"))
-    const rejectResultPending = Boolean(commandLedger.peek("review-reject"))
-    const responsibilityResultPending = Boolean(
-        commandLedger.peek("review-responsibility"),
-    )
-    const canApprove = Boolean(
-        reviewWorkItem?.processingState === "READY" &&
-        reviewWorkItem.domainAllowedActions.includes("APPROVE") &&
-        !rejectResultPending &&
-        !responsibilityResultPending,
-    )
-    const canReject = Boolean(
-        reviewWorkItem?.processingState === "READY" &&
-        reviewWorkItem.domainAllowedActions.includes("REJECT") &&
-        !approveResultPending &&
-        !responsibilityResultPending,
-    )
-    const canStartReview = Boolean(
-        reviewWorkItem?.processingState === "READY" &&
-        reviewWorkItem.responsibilityActions.includes("START_PROCESSING") &&
-        !approveResultPending &&
-        !rejectResultPending,
-    )
-    const canReleaseReview = Boolean(
-        reviewWorkItem?.processingState === "READY" &&
-        reviewWorkItem.responsibilityActions.includes("RELEASE_TO_TEAM") &&
-        !approveResultPending &&
-        !rejectResultPending,
-    )
-    const canChange = order.allowedActions.includes("START_CHANGE")
-    const canFulfill = order.allowedActions.includes("FULFILL")
-    const canPay = order.allowedActions.includes("PAY")
-    const fulfillBlocker = order.actionBlockers.find(
-        (b) => b.action === "FULFILL",
-    )
-    const changeBlocker = order.actionBlockers.find(
-        (b) => b.action === "START_CHANGE",
-    )
 
-    const navItems: {
-        id: SectionId
-        label: string
-        href: string
-    }[] = [
-        { id: "overview", label: "概览", href: baseHref },
-        {
-            id: "lines",
-            label: "明细与分配",
-            href: `${baseHref}?section=lines${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-        {
-            id: "fulfillment",
-            label: "履约",
-            href: `${baseHref}?section=fulfillment${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-        {
-            id: "payable",
-            label: "应付与票款",
-            href: `${baseHref}?section=payable${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-        {
-            id: "changes",
-            label: "变更与异常",
-            href: `${baseHref}?section=changes${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-        {
-            id: "audit",
-            label: "审计",
-            href: `${baseHref}?section=audit${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-    ]
+    const navItems = buildPurchaseOrderDetailNavItems(baseHref, mode)
 
     const modeLabel =
         mode === "edit"
@@ -940,994 +217,111 @@ export function PurchaseOrderDetailPage({
 
     return (
         <PageScaffold>
-            <PageHeader
-                variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "proc",
-                        label: "采购与履约",
-                        href: "/procurement/confirm",
-                    },
-                    {
-                        id: "orders",
-                        label: "采购单",
-                        href: "/procurement/orders",
-                    },
-                    { id: "current", label: displayNo, current: true },
-                ]}
-                metadata={
-                    <span className="inline-flex items-center gap-2">
-                        <span
-                            ref={titleRef}
-                            tabIndex={-1}
-                            className="outline-none font-medium text-foreground"
-                        >
-                            {modeLabel}
-                        </span>
-                    </span>
-                }
-                actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "back",
-                                label: "返回列表",
-                                icon: ArrowLeftIcon,
-                                variant: "outline",
-                                onClick: () =>
-                                    requestLeave(() =>
-                                        router.push("/procurement/orders"),
-                                    ),
-                            },
-                            ...(canPay
-                                ? [
-                                      {
-                                          actionKey: "pay",
-                                          label: "去供应商往来",
-                                          variant: "outline" as const,
-                                          onClick: () =>
-                                              router.push(w12PayHref),
-                                      },
-                                      {
-                                          actionKey: "settle",
-                                          label: "去对账结算",
-                                          variant: "outline" as const,
-                                          onClick: () =>
-                                              router.push(w27SettleHref),
-                                      },
-                                  ]
-                                : []),
-                            ...(canFulfill
-                                ? [
-                                      {
-                                          actionKey: "fulfill",
-                                          label: "去交付",
-                                          variant: "outline" as const,
-                                          onClick: () =>
-                                              router.push(
-                                                  `/fulfillment?lane=procurement&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`,
-                                              ),
-                                      },
-                                  ]
-                                : []),
-                            ...(canEdit && mode !== "edit"
-                                ? [
-                                      {
-                                          actionKey: "edit",
-                                          label: "编辑草稿",
-                                          icon: FilePenLineIcon,
-                                          onClick: () =>
-                                              router.push(
-                                                  `${baseHref}?mode=edit`,
-                                              ),
-                                      },
-                                  ]
-                                : []),
-                            ...(canOpenReview && mode !== "review"
-                                ? [
-                                      {
-                                          actionKey: "review",
-                                          label: "打开审核",
-                                          icon: ShieldCheckIcon,
-                                          onClick: () =>
-                                              router.push(
-                                                  `${baseHref}?mode=review`,
-                                              ),
-                                      },
-                                  ]
-                                : []),
-                            ...(canChange
-                                ? [
-                                      {
-                                          actionKey: "change",
-                                          label: "发起采购变更",
-                                          variant: "outline" as const,
-                                          onClick: () =>
-                                              setChangeConfirmOpen(true),
-                                      },
-                                  ]
-                                : []),
-                        ]}
-                    />
-                }
+            <PurchaseOrderDetailHeader
+                order={order}
+                mode={mode}
+                displayNo={displayNo}
+                modeLabel={modeLabel}
+                titleRef={titleRef}
+                router={router}
+                baseHref={baseHref}
+                w12PayHref={w12PayHref}
+                w27SettleHref={w27SettleHref}
+                canPay={permissions.canPay}
+                canFulfill={permissions.canFulfill}
+                canEdit={permissions.canEdit}
+                canOpenReview={permissions.canOpenReview}
+                canChange={permissions.canChange}
+                requestLeave={guard.requestLeave}
+                onRequestChange={() => editActions.setChangeConfirmOpen(true)}
+                result={result}
+                onDismissResult={() => setResult(null)}
             />
 
-            {result ? (
-                <FormalActionResult
-                    status={result.status}
-                    title={result.title}
-                    description={result.description}
-                    reference={result.reference}
-                    facts={result.facts}
-                    actions={
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setResult(null)}
-                        >
-                            关闭
-                        </Button>
-                    }
-                />
-            ) : null}
-
-            <DocumentHeader
-                density="compact"
-                title={order.header.supplierSnapshot || "采购单"}
-                documentNumber={displayNo}
-                primaryStatus={{
-                    label: order.identity.statusLabel,
-                    tone: order.identity.statusTone,
-                }}
-                version={
-                    order.identity.revisionNo
-                        ? order.identity.revisionNo
-                        : "草稿"
-                }
-                meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-1.5">
-                        <span>来源 {order.header.salesOrderNo}</span>
-                    </span>
-                }
-                statuses={[
-                    {
-                        id: "type",
-                        label: "类型",
-                        status: {
-                            label: PURCHASE_TYPE_LABEL[
-                                order.header.purchaseType
-                            ],
-                            tone: "neutral",
-                        },
-                    },
-                    {
-                        id: "resp",
-                        label: "履约",
-                        status: {
-                            label: FULFILLMENT_RESPONSIBILITY_LABEL[
-                                order.header.fulfillmentResponsibility
-                            ],
-                            tone: "neutral",
-                        },
-                    },
-                ]}
-            />
-
-            <StatusTrackSummary
-                tracks={[
-                    {
-                        id: "review",
-                        label: "审核",
-                        status: {
-                            label: order.identity.reviewLabel,
-                            tone:
-                                order.identity.reviewStatus === "PENDING"
-                                    ? "warning"
-                                    : order.identity.reviewStatus === "APPROVED"
-                                      ? "success"
-                                      : order.identity.reviewStatus ===
-                                          "REJECTED"
-                                        ? "destructive"
-                                        : "neutral",
-                        },
-                    },
-                    {
-                        id: "payment",
-                        label: "付款",
-                        status: {
-                            label: order.progress.payment,
-                            tone:
-                                order.progress.payment === "已付"
-                                    ? "success"
-                                    : order.progress.payment === "部分"
-                                      ? "info"
-                                      : "neutral",
-                        },
-                    },
-                    {
-                        id: "invoice",
-                        label: "进项票",
-                        status: {
-                            label: order.progress.invoice,
-                            tone:
-                                order.progress.invoice === "完成"
-                                    ? "success"
-                                    : order.progress.invoice === "部分"
-                                      ? "info"
-                                      : "neutral",
-                        },
-                    },
-                    {
-                        id: "fulfillment",
-                        label: "履约",
-                        status: {
-                            label: order.progress.fulfillment,
-                            tone: order.fulfillmentSummary.progressTone,
-                        },
-                    },
-                ]}
-            />
-
-            {mode === "review" && reviewWorkItem ? (
+            {mode === "review" && order.reviewWorkItem ? (
                 <ReviewSurface
                     order={order}
                     // @ts-expect-error useAppForm generic variance vs surface prop
                     reviewForm={reviewForm}
                     pending={
-                        reviewMutation.isPending ||
-                        responsibilityMutation.isPending
+                        reviewActions.reviewPending ||
+                        reviewActions.responsibilityPending
                     }
-                    canApprove={canApprove}
-                    canReject={canReject}
-                    canStartProcessing={canStartReview}
-                    canReleaseToTeam={canReleaseReview}
-                    onApprove={() => setApproveConfirmOpen(true)}
-                    onStartProcessing={() => void handleStartProcessing()}
-                    onReleaseToTeam={() => setReleaseConfirmOpen(true)}
+                    canApprove={permissions.canApprove}
+                    canReject={permissions.canReject}
+                    canStartProcessing={permissions.canStartReview}
+                    canReleaseToTeam={permissions.canReleaseReview}
+                    onApprove={() => reviewActions.setApproveConfirmOpen(true)}
+                    onStartProcessing={() =>
+                        void reviewActions.handleStartProcessing()
+                    }
+                    onReleaseToTeam={() =>
+                        reviewActions.setReleaseConfirmOpen(true)
+                    }
                     costMasked={costMasked}
                 />
             ) : null}
 
-            {mode === "edit" && canEdit ? (
+            {mode === "edit" && permissions.canEdit ? (
                 <EditSurface
                     order={order}
                     // @ts-expect-error useAppForm generic variance vs surface prop
                     draftForm={draftForm}
-                    lineEdits={lineEdits}
-                    setLineEdits={setLineEdits}
-                    draftEditToken={draftEditToken}
-                    canSubmit={canSubmit}
-                    savePending={saveMutation.isPending}
-                    onSave={() => void handleSave()}
-                    onSubmitOpen={() => setSubmitConfirmOpen(true)}
+                    lineEdits={editActions.lineEdits}
+                    setLineEdits={editActions.setLineEdits}
+                    draftEditToken={editActions.draftEditToken}
+                    canSubmit={permissions.canSubmit}
+                    savePending={editActions.savePending}
+                    onSave={() => void editActions.handleSave()}
+                    onSubmitOpen={() => editActions.setSubmitConfirmOpen(true)}
                 />
             ) : null}
 
-            <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
-            >
-                <nav
-                    className="flex flex-wrap gap-1 border-b border-border/30 px-3 py-1.5"
-                    aria-label="详情子区"
-                >
-                    {navItems.map((item) => (
-                        <Button
-                            key={item.id}
-                            type="button"
-                            size="sm"
-                            variant={
-                                activeSection === item.id
-                                    ? "secondary"
-                                    : "ghost"
-                            }
-                            render={<Link href={item.href} />}
-                        >
-                            {item.label}
-                        </Button>
-                    ))}
-                </nav>
-
-                <div className="space-y-4 px-3 py-4 md:px-4">
-                    {mode === "view" || activeSection !== "overview" ? (
-                        <div className="grid gap-4">
-                            {activeSection === "overview" && mode === "view" ? (
-                                <DocumentSection title="概览">
-                                    <DescriptionList columns="three">
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                供应商
-                                            </DescriptionTerm>
-                                            <DescriptionDetails>
-                                                {order.header.supplierSnapshot}
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                来源销售单
-                                            </DescriptionTerm>
-                                            <DescriptionDetails>
-                                                <Link
-                                                    href={`/sales/orders/${order.header.salesOrderId}`}
-                                                    className="num text-primary underline-offset-2 hover:underline"
-                                                >
-                                                    {order.header.salesOrderNo}
-                                                </Link>
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                付款条件
-                                            </DescriptionTerm>
-                                            <DescriptionDetails>
-                                                {order.header.paymentTermLabel}
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                内容来源
-                                            </DescriptionTerm>
-                                            <DescriptionDetails>
-                                                {order.currentContent.source ===
-                                                "DRAFT"
-                                                    ? "草稿"
-                                                    : order.currentContent
-                                                            .source ===
-                                                        "SUBMISSION"
-                                                      ? "已提交内容"
-                                                      : "生效版本"}
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                最近预计交期
-                                            </DescriptionTerm>
-                                            <DescriptionDetails className="num">
-                                                {order.header.expectedDate ??
-                                                    "—"}
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                负责人
-                                            </DescriptionTerm>
-                                            <DescriptionDetails>
-                                                {order.header.ownerName}
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                    </DescriptionList>
-                                    {gate.state !== "NOT_APPLICABLE" ? (
-                                        <div className="mt-4">
-                                            <PrepaymentGate
-                                                condition={{
-                                                    kind: "amount",
-                                                    required: costMasked
-                                                        ? "•••"
-                                                        : gate.required,
-                                                    description: gate.message,
-                                                }}
-                                                allocated={
-                                                    costMasked
-                                                        ? "•••"
-                                                        : gate.allocated
-                                                }
-                                                gap={
-                                                    costMasked
-                                                        ? "•••"
-                                                        : gate.gap
-                                                }
-                                                updatedAt={{
-                                                    dateTime: gate.updatedAt,
-                                                    label: gate.updatedAt,
-                                                }}
-                                                allowed={
-                                                    gate.state === "SATISFIED"
-                                                }
-                                                paymentAction={
-                                                    canPay ? (
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            render={
-                                                                <Link
-                                                                    href={
-                                                                        w12PayHref
-                                                                    }
-                                                                />
-                                                            }
-                                                        >
-                                                            去供应商往来
-                                                        </Button>
-                                                    ) : undefined
-                                                }
-                                            />
-                                        </div>
-                                    ) : null}
-                                    <DocumentTotals
-                                        className="mt-4 max-w-md"
-                                        title="系统合计"
-                                        items={[
-                                            {
-                                                id: "g",
-                                                label: "含税",
-                                                value: costMasked ? (
-                                                    "•••"
-                                                ) : (
-                                                    <MoneyValue
-                                                        value={
-                                                            order.currentContent
-                                                                .totals.gross
-                                                        }
-                                                    />
-                                                ),
-                                                basis: "含税",
-                                            },
-                                            {
-                                                id: "n",
-                                                label: "不含税",
-                                                value: costMasked ? (
-                                                    "•••"
-                                                ) : (
-                                                    <MoneyValue
-                                                        value={
-                                                            order.currentContent
-                                                                .totals.net
-                                                        }
-                                                    />
-                                                ),
-                                                basis: "不含税",
-                                            },
-                                            {
-                                                id: "t",
-                                                label: "税额",
-                                                value: costMasked ? (
-                                                    "•••"
-                                                ) : (
-                                                    <MoneyValue
-                                                        value={
-                                                            order.currentContent
-                                                                .totals.tax
-                                                        }
-                                                    />
-                                                ),
-                                            },
-                                        ]}
-                                    />
-                                </DocumentSection>
-                            ) : null}
-
-                            {activeSection === "lines" ? (
-                                <DocumentSection title="明细与分配">
-                                    <LinesTable
-                                        order={order}
-                                        costMasked={costMasked}
-                                    />
-                                    <DocumentTotals
-                                        className="mt-4 max-w-md ml-auto"
-                                        title="系统合计"
-                                        items={[
-                                            {
-                                                id: "g",
-                                                label: "含税",
-                                                value: costMasked ? (
-                                                    "•••"
-                                                ) : (
-                                                    <MoneyValue
-                                                        value={
-                                                            order.currentContent
-                                                                .totals.gross
-                                                        }
-                                                    />
-                                                ),
-                                                basis: "含税",
-                                            },
-                                            {
-                                                id: "n",
-                                                label: "不含税",
-                                                value: costMasked ? (
-                                                    "•••"
-                                                ) : (
-                                                    <MoneyValue
-                                                        value={
-                                                            order.currentContent
-                                                                .totals.net
-                                                        }
-                                                    />
-                                                ),
-                                                basis: "不含税",
-                                            },
-                                            {
-                                                id: "t",
-                                                label: "税额",
-                                                value: costMasked ? (
-                                                    "•••"
-                                                ) : (
-                                                    <MoneyValue
-                                                        value={
-                                                            order.currentContent
-                                                                .totals.tax
-                                                        }
-                                                    />
-                                                ),
-                                            },
-                                        ]}
-                                    />
-                                </DocumentSection>
-                            ) : null}
-
-                            {activeSection === "fulfillment" ? (
-                                <DocumentSection title="履约">
-                                    <DescriptionList columns="three">
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                进度
-                                            </DescriptionTerm>
-                                            <DescriptionDetails>
-                                                <BusinessStatusBadge
-                                                    context="detail"
-                                                    label={
-                                                        order.fulfillmentSummary
-                                                            .progressLabel
-                                                    }
-                                                    tone={
-                                                        order.fulfillmentSummary
-                                                            .progressTone
-                                                    }
-                                                />
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                入库
-                                            </DescriptionTerm>
-                                            <DescriptionDetails className="num">
-                                                {
-                                                    order.fulfillmentSummary
-                                                        .inboundQty
-                                                }
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                发货
-                                            </DescriptionTerm>
-                                            <DescriptionDetails className="num">
-                                                {
-                                                    order.fulfillmentSummary
-                                                        .shippedQty
-                                                }
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                        <DescriptionItem>
-                                            <DescriptionTerm>
-                                                剩余
-                                            </DescriptionTerm>
-                                            <DescriptionDetails className="num">
-                                                {
-                                                    order.fulfillmentSummary
-                                                        .remainingQty
-                                                }
-                                            </DescriptionDetails>
-                                        </DescriptionItem>
-                                    </DescriptionList>
-                                    {order.fulfillmentSummary.note ? (
-                                        <p className="mt-2 text-sm text-muted-foreground">
-                                            {order.fulfillmentSummary.note}
-                                        </p>
-                                    ) : null}
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                        {canFulfill ? (
-                                            <Button
-                                                type="button"
-                                                render={
-                                                    <Link
-                                                        href={`/fulfillment?lane=procurement&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`}
-                                                    />
-                                                }
-                                            >
-                                                去交付与代发
-                                            </Button>
-                                        ) : (
-                                            <div className="space-y-1">
-                                                <Button type="button" disabled>
-                                                    履约入口未开放
-                                                </Button>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {fulfillBlocker?.message ??
-                                                        "当前状态下不能进入交付，可先完成前置条件。"}
-                                                </p>
-                                            </div>
-                                        )}
-                                        {fulfillBlocker?.code ===
-                                        "PREPAYMENT_GATE" ? (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                render={
-                                                    <Link href={w12PayHref} />
-                                                }
-                                            >
-                                                去供应商往来
-                                            </Button>
-                                        ) : null}
-                                    </div>
-                                    {gate.state === "BLOCKED" ? (
-                                        <div className="mt-4">
-                                            <PrepaymentGate
-                                                condition={{
-                                                    kind: "amount",
-                                                    required: costMasked
-                                                        ? "•••"
-                                                        : gate.required,
-                                                    description: gate.message,
-                                                }}
-                                                allocated={
-                                                    costMasked
-                                                        ? "•••"
-                                                        : gate.allocated
-                                                }
-                                                gap={
-                                                    costMasked
-                                                        ? "•••"
-                                                        : gate.gap
-                                                }
-                                                updatedAt={{
-                                                    dateTime: gate.updatedAt,
-                                                    label: gate.updatedAt,
-                                                }}
-                                                allowed={false}
-                                                paymentAction={
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        render={
-                                                            <Link
-                                                                href={
-                                                                    w12PayHref
-                                                                }
-                                                            />
-                                                        }
-                                                    >
-                                                        去供应商往来
-                                                    </Button>
-                                                }
-                                            />
-                                        </div>
-                                    ) : null}
-                                </DocumentSection>
-                            ) : null}
-
-                            {activeSection === "payable" ? (
-                                <DocumentSection title="应付与票款">
-                                    {order.payableSummary ? (
-                                        <DescriptionList columns="three">
-                                            <DescriptionItem>
-                                                <DescriptionTerm>
-                                                    应付未结
-                                                </DescriptionTerm>
-                                                <DescriptionDetails>
-                                                    {costMasked ? (
-                                                        "•••"
-                                                    ) : (
-                                                        <MoneyValue
-                                                            value={
-                                                                order
-                                                                    .payableSummary
-                                                                    .payableOpenAmount
-                                                            }
-                                                        />
-                                                    )}
-                                                </DescriptionDetails>
-                                            </DescriptionItem>
-                                            <DescriptionItem>
-                                                <DescriptionTerm>
-                                                    已付并核销
-                                                </DescriptionTerm>
-                                                <DescriptionDetails>
-                                                    {costMasked ? (
-                                                        "•••"
-                                                    ) : (
-                                                        <MoneyValue
-                                                            value={
-                                                                order
-                                                                    .payableSummary
-                                                                    .paidAllocatedAmount
-                                                            }
-                                                        />
-                                                    )}
-                                                </DescriptionDetails>
-                                            </DescriptionItem>
-                                            <DescriptionItem>
-                                                <DescriptionTerm>
-                                                    已收票并核销
-                                                </DescriptionTerm>
-                                                <DescriptionDetails>
-                                                    {costMasked ? (
-                                                        "•••"
-                                                    ) : (
-                                                        <MoneyValue
-                                                            value={
-                                                                order
-                                                                    .payableSummary
-                                                                    .purchaseInvoiceAllocatedAmount
-                                                            }
-                                                        />
-                                                    )}
-                                                </DescriptionDetails>
-                                            </DescriptionItem>
-                                        </DescriptionList>
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground">
-                                            尚未形成应付（需财务审核通过）。
-                                        </p>
-                                    )}
-                                    <div className="mt-4">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled={!canPay}
-                                            render={<Link href={w12PayHref} />}
-                                        >
-                                            去供应商往来
-                                        </Button>
-                                    </div>
-                                </DocumentSection>
-                            ) : null}
-
-                            {activeSection === "changes" ? (
-                                <DocumentSection title="变更与异常">
-                                    {order.changes.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground">
-                                            暂无采购变更。生效后变化须走变更，不得在本版本直接覆写付款/发票/履约记录。
-                                        </p>
-                                    ) : (
-                                        <ul className="space-y-2">
-                                            {order.changes.map((change) => (
-                                                <li
-                                                    key={change.changeId}
-                                                    className={cn(
-                                                        surfaceInsetClassName,
-                                                        "flex items-center justify-between px-3 py-2 text-sm",
-                                                    )}
-                                                >
-                                                    <span>
-                                                        {change.label}
-                                                        {change.baseRevisionNo !=
-                                                        null
-                                                            ? ` · 基准 v${change.baseRevisionNo}`
-                                                            : ""}
-                                                    </span>
-                                                    <BusinessStatusBadge
-                                                        context="list"
-                                                        label={
-                                                            change.statusLabel
-                                                        }
-                                                        tone={change.tone}
-                                                    />
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                        {canChange ? (
-                                            <Button
-                                                type="button"
-                                                onClick={() =>
-                                                    setChangeConfirmOpen(true)
-                                                }
-                                            >
-                                                发起采购变更
-                                            </Button>
-                                        ) : (
-                                            <div className="space-y-1">
-                                                <Button type="button" disabled>
-                                                    发起采购变更
-                                                </Button>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {changeBlocker?.message ??
-                                                        "当前状态下不能发起变更，可先完成前置条件。"}
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </DocumentSection>
-                            ) : null}
-
-                            {activeSection === "audit" ? (
-                                <DocumentSection title="审计">
-                                    <ul className="space-y-2">
-                                        {order.workflow.map((item) => (
-                                            <li
-                                                key={item.id}
-                                                className={cn(
-                                                    surfaceInsetClassName,
-                                                    "px-3 py-2 text-sm",
-                                                )}
-                                            >
-                                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                                    <span className="font-medium">
-                                                        {item.actionLabel}
-                                                    </span>
-                                                    <span className="num text-xs text-muted-foreground">
-                                                        {item.at}
-                                                    </span>
-                                                </div>
-                                                <div className="mt-0.5 text-xs text-muted-foreground">
-                                                    {item.actorLabel}
-                                                    {item.comment
-                                                        ? ` · ${item.comment}`
-                                                        : ""}
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </DocumentSection>
-                            ) : null}
-
-                            {activeSection === "overview" && mode === "view" ? (
-                                <DocumentSection title="明细摘要">
-                                    <LinesTable
-                                        order={order}
-                                        costMasked={costMasked}
-                                    />
-                                </DocumentSection>
-                            ) : null}
-                        </div>
-                    ) : null}
-                </div>
-            </div>
-
-            <FormalActionConfirmDialog
-                open={submitConfirmOpen}
-                onOpenChange={setSubmitConfirmOpen}
-                title="提交财务审核"
-                actionLabel="提交"
-                confirmLabel="确认提交"
-                fromStatus={{ label: "草稿", tone: "neutral" }}
-                toStatus={{ label: "待财务审核", tone: "warning" }}
-                lockedFields={[
-                    "供应商 / 采购类型 / 履约责任 / 付款条件",
-                    "商品行（二次确认分行）与物流费用",
-                    "销售分配与系统金额",
-                ]}
-                effects={[
-                    "形成不可修改的采购提交与数据版本",
-                    "创建采购审核任务",
-                    "结束草稿编辑；中心转等待审核态",
-                ]}
-                nextDepartment="财务审核"
-                pending={submitMutation.isPending || saveMutation.isPending}
-                onConfirm={() => void handleSubmit()}
+            <PurchaseOrderDetailSections
+                order={order}
+                activeSection={activeSection}
+                mode={mode}
+                navItems={navItems}
+                costMasked={costMasked}
+                gate={gate}
+                canPay={permissions.canPay}
+                canFulfill={permissions.canFulfill}
+                fulfillBlocker={permissions.fulfillBlocker}
+                canChange={permissions.canChange}
+                changeBlocker={permissions.changeBlocker}
+                baseHref={baseHref}
+                w12PayHref={w12PayHref}
+                onRequestChange={() => editActions.setChangeConfirmOpen(true)}
             />
 
-            <FormalActionConfirmDialog
-                open={approveConfirmOpen}
-                onOpenChange={setApproveConfirmOpen}
-                title="财务审核通过"
-                actionLabel="通过"
-                confirmLabel="确认通过"
-                fromStatus={{ label: "待财务审核", tone: "warning" }}
-                toStatus={{ label: "已生效", tone: "success" }}
-                lockedFields={[
-                    `本次审核的提交内容（销售单 ${order.header.salesOrderNo}）`,
-                    "不可变提交头行与销售分配",
-                ]}
-                effects={[
-                    "形成采购版本与应付原始分录",
-                    "完成当前审核任务",
-                    "不登记实际付款；履约受先款门禁约束",
-                ]}
-                nextDepartment="履约 / 付款"
-                pending={reviewMutation.isPending}
-                onConfirm={() => void handleApprove()}
+            <PurchaseOrderDetailDialogs
+                order={order}
+                submitConfirmOpen={editActions.submitConfirmOpen}
+                onSubmitConfirmOpenChange={editActions.setSubmitConfirmOpen}
+                approveConfirmOpen={reviewActions.approveConfirmOpen}
+                onApproveConfirmOpenChange={reviewActions.setApproveConfirmOpen}
+                releaseConfirmOpen={reviewActions.releaseConfirmOpen}
+                onReleaseConfirmOpenChange={reviewActions.setReleaseConfirmOpen}
+                changeConfirmOpen={editActions.changeConfirmOpen}
+                onChangeConfirmOpenChange={editActions.setChangeConfirmOpen}
+                leaveGuardOpen={guard.leaveGuardOpen}
+                onLeaveGuardOpenChange={guard.setLeaveGuardOpen}
+                releaseReason={reviewActions.releaseReason}
+                onReleaseReasonChange={reviewActions.setReleaseReason}
+                submitPending={editActions.submitPending}
+                savePending={editActions.savePending}
+                reviewPending={reviewActions.reviewPending}
+                responsibilityPending={reviewActions.responsibilityPending}
+                changePending={editActions.changePending}
+                onConfirmSubmit={() => void editActions.handleSubmit()}
+                onConfirmApprove={() => void reviewActions.handleApprove()}
+                onConfirmRelease={() =>
+                    void reviewActions.handleReleaseToTeam()
+                }
+                onConfirmChange={() => void editActions.handleStartChange()}
+                onSaveAndLeave={() => void guard.saveAndLeave()}
+                onDiscardAndLeave={guard.discardAndLeave}
             />
-
-            <Dialog
-                open={releaseConfirmOpen}
-                onOpenChange={setReleaseConfirmOpen}
-            >
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {responsibilityText.releaseToTeam}
-                        </DialogTitle>
-                        <DialogDescription>
-                            当前采购审核保持开放，个人责任会被清空并回到团队待处理。请填写原因。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Textarea
-                        value={releaseReason}
-                        onChange={(event) =>
-                            setReleaseReason(event.target.value)
-                        }
-                        placeholder="填写退回团队原因"
-                        aria-label="退回团队原因"
-                    />
-                    <DialogFooter>
-                        <DialogClose
-                            render={<Button type="button" variant="outline" />}
-                        >
-                            取消
-                        </DialogClose>
-                        <Button
-                            type="button"
-                            disabled={
-                                !releaseReason.trim() ||
-                                responsibilityMutation.isPending
-                            }
-                            onClick={() => void handleReleaseToTeam()}
-                        >
-                            {responsibilityMutation.isPending
-                                ? "正在退回…"
-                                : responsibilityText.releaseToTeam}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <FormalActionConfirmDialog
-                open={changeConfirmOpen}
-                onOpenChange={setChangeConfirmOpen}
-                title="发起采购变更"
-                actionLabel="创建变更"
-                confirmLabel="创建工作副本"
-                fromStatus={{
-                    label: order.identity.statusLabel,
-                    tone: order.identity.statusTone,
-                }}
-                toStatus={{ label: "变更工作副本", tone: "warning" }}
-                lockedFields={[
-                    `基准版本 v${order.identity.revisionNo ?? 1}`,
-                    "已发生入库/发货/付款/发票记录不回退",
-                ]}
-                effects={[
-                    "创建采购变更工作副本（同对象页签）",
-                    "不得在原版本表单直接覆写",
-                ]}
-                pending={changeMutation.isPending}
-                onConfirm={() => void handleStartChange()}
-            />
-
-            <Dialog open={leaveGuardOpen} onOpenChange={setLeaveGuardOpen}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>有未保存的修改</DialogTitle>
-                        <DialogDescription>
-                            当前编辑内容尚未保存，离开后修改将丢失。建议先保存草稿。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <DialogClose
-                            render={<Button type="button" variant="outline" />}
-                        >
-                            继续编辑
-                        </DialogClose>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={saveMutation.isPending}
-                            onClick={async () => {
-                                const ok = await handleSave()
-                                if (!ok) return
-                                setLeaveGuardOpen(false)
-                                pendingLeave?.()
-                            }}
-                        >
-                            保存并离开
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            onClick={() => {
-                                setLeaveGuardOpen(false)
-                                pendingLeave?.()
-                            }}
-                        >
-                            放弃修改并离开
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </PageScaffold>
     )
 }

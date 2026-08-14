@@ -1,6 +1,8 @@
 /**
  * W25 商城消费订单 · 客户端契约
  * 对齐 docs/ui-workspaces/w25-mall-consumption-orders.md §5 / §8
+ * 声明式数据豁免：本文件全部为类型声明与枚举中文映射表（const 配置数据），
+ * 无逻辑与组件，超过 400 行也按声明式数据表豁免拆分。
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"
@@ -459,6 +461,16 @@ export type ExportCommand = {
     requestId: string
     rowCount: number
     filterSummary: string
+}
+
+/** 导出任务创建成功后的页内结果展示状态。 */
+export type ExportResultState = {
+    jobId: string
+    rowCount: number
+    permissionVersion: string
+    maskDisclaimer: string
+    downloadLabel: string
+    expiresAt: string
 }
 
 export type ExportJobResult = {

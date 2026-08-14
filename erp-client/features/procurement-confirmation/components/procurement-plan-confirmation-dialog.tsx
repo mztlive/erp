@@ -1,15 +1,16 @@
 "use client"
 
+import { CheckIcon, CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     BusinessFailureState,
-    OptionCombobox,
     ValidationSummary,
 } from "@/components/business"
 import type { ValidationIssue } from "@/components/business/feedback"
-import { DatePicker } from "@/components/ui/date-picker"
+import type { SupplierComboboxItem } from "@/components/business/entity-comboboxes"
 import {
     Dialog,
     DialogClose,
@@ -19,38 +20,23 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-    CheckIcon,
-    CircleCheckIcon,
-    PlusIcon,
-    TriangleAlertIcon,
-} from "lucide-react"
-
-import type { SupplierComboboxItem } from "@/components/business/entity-comboboxes"
 import type { ProcurementSupplyOption } from "@/features/procurement-confirmation/api"
+import { PlanSummaryCards } from "@/features/procurement-confirmation/components/plan-dialog-summary-cards"
 import {
-    type ConfirmationLineDraft,
-    type FulfillmentMode,
-    type ProcurementConfirmationTask,
-    type ProcurementRecommendation,
-} from "@/features/procurement-confirmation/types"
+    PlanSubmissionSection,
+    type PlanCoverage,
+} from "@/features/procurement-confirmation/components/plan-dialog-submission-section"
 import { money } from "@/features/procurement-confirmation/lib/format"
-import { capabilityCodeForMode } from "@/features/procurement-confirmation/lib/supply-cost"
+import type {
+    ConfirmationLineDraft,
+    FulfillmentMode,
+    ProcurementConfirmationTask,
+    ProcurementRecommendation,
+} from "@/features/procurement-confirmation/types"
 
 type SelectionOption = {
     value: string
     label: string
-}
-
-type PlanCoverage = {
-    submissionLineId: string
-    itemName: string
-    confirmed: string
-    required: string
-    complete: boolean
-    gap: string
 }
 
 type ProcurementPlanConfirmationDialogProps = {
@@ -159,38 +145,11 @@ export function ProcurementPlanConfirmationDialog({
                             </AlertDescription>
                         </Alert>
 
-                        <div className="grid gap-3 sm:grid-cols-3">
-                            <div className="rounded-lg border border-border p-3">
-                                <p className="text-xs text-muted-foreground">
-                                    销售含税金额
-                                </p>
-                                <p className="num mt-1 font-semibold">
-                                    {money.format(
-                                        Number(recommendation.salesGross),
-                                    )}
-                                </p>
-                            </div>
-                            <div className="rounded-lg border border-border p-3">
-                                <p className="text-xs text-muted-foreground">
-                                    预计采购金额
-                                </p>
-                                <p className="num mt-1 font-semibold">
-                                    {money.format(
-                                        currentPlanSummary.purchaseGross,
-                                    )}
-                                </p>
-                            </div>
-                            <div className="rounded-lg border border-border p-3">
-                                <p className="text-xs text-muted-foreground">
-                                    预计毛利
-                                </p>
-                                <p className="num mt-1 font-semibold">
-                                    {money.format(
-                                        currentPlanSummary.grossMargin,
-                                    )}
-                                </p>
-                            </div>
-                        </div>
+                        <PlanSummaryCards
+                            salesGross={recommendation.salesGross}
+                            purchaseGross={currentPlanSummary.purchaseGross}
+                            grossMargin={currentPlanSummary.grossMargin}
+                        />
 
                         <section
                             className="space-y-3"
@@ -227,395 +186,28 @@ export function ProcurementPlanConfirmationDialog({
                                         subLine.submissionLineId,
                                 )
                                 return (
-                                    <div
+                                    <PlanSubmissionSection
                                         key={subLine.submissionLineId}
-                                        className="overflow-hidden rounded-lg border border-border"
-                                    >
-                                        <div className="flex flex-wrap items-start justify-between gap-2 bg-muted/40 px-4 py-3">
-                                            <div>
-                                                <p className="font-medium">
-                                                    {subLine.itemName}
-                                                </p>
-                                                <p className="mt-1 text-xs text-muted-foreground">
-                                                    需要采购{" "}
-                                                    {subLine.committedQuantity}{" "}
-                                                    {subLine.unit} · 客户交期{" "}
-                                                    {
-                                                        subLine.requestedDeliveryDate
-                                                    }
-                                                </p>
-                                            </div>
-                                            <Badge
-                                                variant={
-                                                    lineCoverage?.complete
-                                                        ? "secondary"
-                                                        : "destructive"
-                                                }
-                                            >
-                                                已安排{" "}
-                                                {lineCoverage?.confirmed ?? "0"}
-                                                /
-                                                {lineCoverage?.required ??
-                                                    subLine.committedQuantity}{" "}
-                                                {subLine.unit}
-                                            </Badge>
-                                        </div>
-
-                                        <div className="space-y-3 p-3">
-                                            {planLines.map((line) => {
-                                                const offering =
-                                                    supplyOptions.find(
-                                                        (option) =>
-                                                            option.offeringRevisionId ===
-                                                            line.offeringRevisionId,
-                                                    )
-                                                const allocatedQuantity =
-                                                    lineDrafts
-                                                        .filter(
-                                                            (item) =>
-                                                                item.offeringRevisionId ===
-                                                                line.offeringRevisionId,
-                                                        )
-                                                        .reduce(
-                                                            (total, item) =>
-                                                                total +
-                                                                Number(
-                                                                    item.confirmedQuantity ||
-                                                                        0,
-                                                                ),
-                                                            0,
-                                                        )
-                                                const usesBulkPrice = offering
-                                                    ? allocatedQuantity >=
-                                                      Number(
-                                                          offering.bulkMinimumOrderQuantity,
-                                                      )
-                                                    : false
-                                                return (
-                                                    <div
-                                                        key={line.lineKey}
-                                                        className="grid min-w-0 gap-3 rounded-md border border-border p-3 md:grid-cols-2 lg:grid-cols-4"
-                                                    >
-                                                        <div className="min-w-0 space-y-1.5 md:col-span-2 lg:col-span-2">
-                                                            <Label>
-                                                                供应商报价
-                                                            </Label>
-                                                            <OptionCombobox
-                                                                value={
-                                                                    line.offeringRevisionId ||
-                                                                    undefined
-                                                                }
-                                                                onValueChange={(
-                                                                    revisionId,
-                                                                ) => {
-                                                                    const nextOffering =
-                                                                        supplyOptions.find(
-                                                                            (
-                                                                                option,
-                                                                            ) =>
-                                                                                option.offeringRevisionId ===
-                                                                                revisionId,
-                                                                        )
-                                                                    const supplier =
-                                                                        supplierOptions?.find(
-                                                                            (
-                                                                                option,
-                                                                            ) =>
-                                                                                option.supplierId ===
-                                                                                nextOffering?.supplierId,
-                                                                        )
-                                                                    const matchingCapabilities =
-                                                                        nextOffering?.capabilities.filter(
-                                                                            (
-                                                                                capability,
-                                                                            ) =>
-                                                                                capability.capabilityCode ===
-                                                                                capabilityCodeForMode(
-                                                                                    line.fulfillmentMode,
-                                                                                ),
-                                                                        ) ?? []
-                                                                    const capability =
-                                                                        matchingCapabilities.length ===
-                                                                        1
-                                                                            ? matchingCapabilities[0]
-                                                                            : undefined
-                                                                    updatePlanLine(
-                                                                        line.lineKey,
-                                                                        {
-                                                                            supplierId:
-                                                                                nextOffering?.supplierId ??
-                                                                                "",
-                                                                            supplierName:
-                                                                                supplier?.supplierName ??
-                                                                                "",
-                                                                            offeringRevisionId:
-                                                                                nextOffering?.offeringRevisionId ??
-                                                                                "",
-                                                                            inputTaxRate:
-                                                                                nextOffering?.inputTaxRate ??
-                                                                                "",
-                                                                            capabilityRevisionId:
-                                                                                capability?.revisionId ??
-                                                                                "",
-                                                                            capabilitySummary:
-                                                                                capability?.label ??
-                                                                                "请选择供应资质",
-                                                                            qualificationStatus:
-                                                                                capability
-                                                                                    ? "VALID"
-                                                                                    : "INVALID",
-                                                                        },
-                                                                    )
-                                                                }}
-                                                                options={offeringOptionsForSku(
-                                                                    subLine.itemSku,
-                                                                )}
-                                                                disabled={
-                                                                    formalPending
-                                                                }
-                                                                placeholder="选择供应商报价"
-                                                                className="w-full min-w-0"
-                                                                inputClassName="h-9 min-h-9"
-                                                            />
-                                                        </div>
-
-                                                        <div className="min-w-0 space-y-1.5">
-                                                            <Label>
-                                                                采购数量
-                                                            </Label>
-                                                            <Input
-                                                                className="num h-9"
-                                                                inputMode="decimal"
-                                                                value={
-                                                                    line.confirmedQuantity
-                                                                }
-                                                                onChange={(
-                                                                    event,
-                                                                ) =>
-                                                                    updatePlanLine(
-                                                                        line.lineKey,
-                                                                        {
-                                                                            confirmedQuantity:
-                                                                                event
-                                                                                    .target
-                                                                                    .value,
-                                                                        },
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    formalPending
-                                                                }
-                                                            />
-                                                        </div>
-
-                                                        <div className="min-w-0 space-y-1.5">
-                                                            <Label>
-                                                                含税单价
-                                                            </Label>
-                                                            <div className="flex h-9 min-w-0 items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 text-sm">
-                                                                <span className="num shrink-0 font-medium">
-                                                                    {line.latestCostGross
-                                                                        ? money.format(
-                                                                              Number(
-                                                                                  line.latestCostGross,
-                                                                              ),
-                                                                          )
-                                                                        : "—"}
-                                                                </span>
-                                                                <span className="truncate text-xs text-muted-foreground">
-                                                                    {offering
-                                                                        ? usesBulkPrice
-                                                                            ? "集采价"
-                                                                            : "一件代发价"
-                                                                        : "选择供应商后计算"}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="min-w-0 space-y-1.5">
-                                                            <Label>
-                                                                交付方式
-                                                            </Label>
-                                                            <OptionCombobox
-                                                                value={
-                                                                    line.fulfillmentMode
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) => {
-                                                                    if (!value)
-                                                                        return
-                                                                    const fulfillmentMode =
-                                                                        value as FulfillmentMode
-                                                                    const capabilities =
-                                                                        offering?.capabilities.filter(
-                                                                            (
-                                                                                capability,
-                                                                            ) =>
-                                                                                capability.capabilityCode ===
-                                                                                capabilityCodeForMode(
-                                                                                    fulfillmentMode,
-                                                                                ),
-                                                                        ) ?? []
-                                                                    const capability =
-                                                                        capabilities.length ===
-                                                                        1
-                                                                            ? capabilities[0]
-                                                                            : undefined
-                                                                    updatePlanLine(
-                                                                        line.lineKey,
-                                                                        {
-                                                                            fulfillmentMode,
-                                                                            capabilityRevisionId:
-                                                                                capability?.revisionId ??
-                                                                                "",
-                                                                            capabilitySummary:
-                                                                                capability?.label ??
-                                                                                "请选择供应资质",
-                                                                            qualificationStatus:
-                                                                                capability
-                                                                                    ? "VALID"
-                                                                                    : "INVALID",
-                                                                        },
-                                                                    )
-                                                                }}
-                                                                options={fulfillmentOptionsForOffering(
-                                                                    line.offeringRevisionId,
-                                                                )}
-                                                                allowClear={
-                                                                    false
-                                                                }
-                                                                disabled={
-                                                                    formalPending
-                                                                }
-                                                                placeholder="选择交付方式"
-                                                                className="w-full min-w-0"
-                                                                inputClassName="h-9 min-h-9"
-                                                            />
-                                                        </div>
-
-                                                        <div className="min-w-0 space-y-1.5">
-                                                            <Label>
-                                                                供应商交期
-                                                            </Label>
-                                                            <DatePicker
-                                                                value={
-                                                                    line.expectedDeliveryDate ||
-                                                                    undefined
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) =>
-                                                                    updatePlanLine(
-                                                                        line.lineKey,
-                                                                        {
-                                                                            expectedDeliveryDate:
-                                                                                value ??
-                                                                                "",
-                                                                        },
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    formalPending
-                                                                }
-                                                                className="h-9 w-full min-w-0"
-                                                            />
-                                                        </div>
-
-                                                        <div className="min-w-0 space-y-1.5">
-                                                            <Label>
-                                                                供应资质
-                                                            </Label>
-                                                            <OptionCombobox
-                                                                value={
-                                                                    line.capabilityRevisionId ||
-                                                                    undefined
-                                                                }
-                                                                onValueChange={(
-                                                                    revisionId,
-                                                                ) => {
-                                                                    const capability =
-                                                                        capabilityOptionsForOffering(
-                                                                            line.offeringRevisionId,
-                                                                            line.fulfillmentMode,
-                                                                        ).find(
-                                                                            (
-                                                                                option,
-                                                                            ) =>
-                                                                                option.value ===
-                                                                                revisionId,
-                                                                        )
-                                                                    updatePlanLine(
-                                                                        line.lineKey,
-                                                                        {
-                                                                            capabilityRevisionId:
-                                                                                revisionId ??
-                                                                                "",
-                                                                            capabilitySummary:
-                                                                                capability?.label ??
-                                                                                "",
-                                                                            qualificationStatus:
-                                                                                revisionId
-                                                                                    ? "VALID"
-                                                                                    : "INVALID",
-                                                                        },
-                                                                    )
-                                                                }}
-                                                                options={capabilityOptionsForOffering(
-                                                                    line.offeringRevisionId,
-                                                                    line.fulfillmentMode,
-                                                                )}
-                                                                disabled={
-                                                                    formalPending
-                                                                }
-                                                                placeholder="选择供应资质"
-                                                                className="w-full min-w-0"
-                                                                inputClassName="h-9 min-h-9"
-                                                            />
-                                                        </div>
-
-                                                        <div className="flex min-w-0 items-end justify-end">
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                disabled={
-                                                                    formalPending ||
-                                                                    planLines.length <=
-                                                                        1
-                                                                }
-                                                                onClick={() =>
-                                                                    removeLine(
-                                                                        line.lineKey,
-                                                                    )
-                                                                }
-                                                            >
-                                                                删除
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })}
-
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={formalPending}
-                                                onClick={() =>
-                                                    addSplitLine(
-                                                        subLine.submissionLineId,
-                                                    )
-                                                }
-                                            >
-                                                <PlusIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                增加供应商
-                                            </Button>
-                                        </div>
-                                    </div>
+                                        subLine={subLine}
+                                        planLines={planLines}
+                                        lineCoverage={lineCoverage}
+                                        allLineDrafts={lineDrafts}
+                                        formalPending={formalPending}
+                                        supplyOptions={supplyOptions}
+                                        supplierOptions={supplierOptions}
+                                        offeringOptionsForSku={
+                                            offeringOptionsForSku
+                                        }
+                                        capabilityOptionsForOffering={
+                                            capabilityOptionsForOffering
+                                        }
+                                        fulfillmentOptionsForOffering={
+                                            fulfillmentOptionsForOffering
+                                        }
+                                        updatePlanLine={updatePlanLine}
+                                        addSplitLine={addSplitLine}
+                                        removeLine={removeLine}
+                                    />
                                 )
                             })}
 

@@ -1,77 +1,19 @@
 "use client"
 
-import * as React from "react"
 import { SearchIcon } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
 import { InputGroupInput } from "@/components/ui/input-group"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
-import { PERMISSION_GROUPS } from "@/lib/permissions.generated"
+import { usePermissionPanel } from "@/features/admin/hooks/use-permission-panel"
+import {
+    BUSINESS_GROUPS,
+    PERMISSION_PANEL_TAB_LABEL,
+    SYSTEM_GROUPS,
+} from "@/features/admin/lib/permission-catalog"
 
-type PermissionItemOption = {
-    /** 后端权限字符串（resource:action）。 */
-    code: string
-    description: string
-    method: string
-    path: string
-}
-
-type PermissionGroupOption = {
-    name: string
-    description: string
-    items: PermissionItemOption[]
-}
-
-/** 归属「系统」维度的权限组名（平台 / 治理 / 访问控制类）；其余归「业务」。 */
-const SYSTEM_GROUP_NAMES = new Set([
-    "账号管理",
-    "角色管理",
-    "系统审计",
-    "来源注册",
-    "单据注册",
-    "统一待办",
-    "批量任务",
-    "文件资产",
-    "权限与审计",
-    "集成治理",
-])
-
-export type PermissionPanelTab = "business" | "system"
-
-const PERMISSION_PANEL_TAB_LABEL: Record<PermissionPanelTab, string> = {
-    business: "业务",
-    system: "系统",
-}
-
-function isSystemGroup(name: string): boolean {
-    return SYSTEM_GROUP_NAMES.has(name)
-}
-
-/** 权限目录：由 build.rs 生成的 PERMISSION_GROUPS 派生，按分组与维度归类。 */
-const PERMISSION_CATALOG: readonly PermissionGroupOption[] =
-    PERMISSION_GROUPS.map((group) => ({
-        name: group.name,
-        description: group.description,
-        items: group.permissions.map((permission) => ({
-            code: `${permission.permission.resource}:${permission.permission.action}`,
-            description: permission.description,
-            method: permission.method,
-            path: permission.path,
-        })),
-    }))
-
-const BUSINESS_GROUPS: readonly PermissionGroupOption[] =
-    PERMISSION_CATALOG.filter((group) => !isSystemGroup(group.name))
-const SYSTEM_GROUPS: readonly PermissionGroupOption[] =
-    PERMISSION_CATALOG.filter((group) => isSystemGroup(group.name))
-
-function matchesKeyword(item: PermissionItemOption, q: string): boolean {
-    return [item.code, item.description, item.path]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-}
+export type { PermissionPanelTab } from "@/features/admin/lib/permission-catalog"
 
 type PermissionOptionsPanelProps = {
     selected: readonly string[]
@@ -92,47 +34,16 @@ export function PermissionOptionsPanel({
     onChange,
     className,
 }: PermissionOptionsPanelProps) {
-    const [keyword, setKeyword] = React.useState("")
-    const [tab, setTab] = React.useState<PermissionPanelTab>("business")
-    const [activeGroup, setActiveGroup] = React.useState<string | null>(null)
-    const q = keyword.trim().toLowerCase()
-
-    const sourceGroups = tab === "system" ? SYSTEM_GROUPS : BUSINESS_GROUPS
-
-    const visibleGroups = React.useMemo(() => {
-        if (!q) return sourceGroups
-        return sourceGroups
-            .map((group) => ({
-                ...group,
-                items: group.items.filter((item) => matchesKeyword(item, q)),
-            }))
-            .filter((group) => group.items.length > 0)
-    }, [q, sourceGroups])
-
-    // 搜索或切换维度后，把当前组定位到第一个仍可见的组
-    React.useEffect(() => {
-        if (!visibleGroups.some((group) => group.name === activeGroup)) {
-            setActiveGroup(visibleGroups[0]?.name ?? null)
-        }
-    }, [visibleGroups, activeGroup])
-
-    const currentGroup =
-        visibleGroups.find((group) => group.name === activeGroup) ?? null
-
-    const selectedCountByTab = React.useMemo(() => {
-        const counts: Record<PermissionPanelTab, number> = {
-            business: 0,
-            system: 0,
-        }
-        for (const code of selected) {
-            const group = PERMISSION_CATALOG.find((candidate) =>
-                candidate.items.some((item) => item.code === code),
-            )
-            if (!group) continue
-            counts[isSystemGroup(group.name) ? "system" : "business"] += 1
-        }
-        return counts
-    }, [selected])
+    const {
+        keyword,
+        setKeyword,
+        tab,
+        setTab,
+        setActiveGroup,
+        visibleGroups,
+        currentGroup,
+        selectedCountByTab,
+    } = usePermissionPanel(selected)
 
     return (
         <div className={cn("space-y-2", className)}>

@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { SearchIcon } from "lucide-react"
 
 import { FilterChip, ListToolbar, OptionCombobox } from "@/components/business"
@@ -19,6 +18,7 @@ import {
     type DueFilter,
     type GateFilter,
 } from "@/features/fulfillment-operations/lib/filters"
+import { useSearchDraft } from "@/features/fulfillment-operations/hooks/use-search-draft"
 
 export type QueueFilterPatch = Record<string, string | null>
 
@@ -65,16 +65,10 @@ export function FulfillmentQueueToolbar({
     onAutoNextChange: (next: boolean) => void
 }) {
     // 输入过程不打 URL，回车/失焦才提交，避免每个按键都重查队列
-    const [searchDraft, setSearchDraft] = React.useState(q ?? "")
-    React.useEffect(() => {
-        setSearchDraft(q ?? "")
-    }, [q])
-
-    const commitSearch = () => {
-        const next = searchDraft.trim()
-        if (next === (q ?? "")) return
-        onPatch({ q: next || null, currentOperationId: null })
-    }
+    const { searchDraft, setSearchDraft, commitSearch } = useSearchDraft(
+        q,
+        (next) => onPatch({ q: next, currentOperationId: null }),
+    )
 
     const hasFilters = Boolean(
         q ||

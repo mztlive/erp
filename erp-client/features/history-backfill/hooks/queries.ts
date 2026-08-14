@@ -11,6 +11,7 @@ import type {
     HistoryBackfillCommandInput,
     HistoryBackfillDetailQuery,
     HistoryBackfillListQuery,
+    HistoryBackfillProcessingStatus,
 } from "@/features/history-backfill/types"
 
 const historyBackfillKeys = {
@@ -28,6 +29,14 @@ export function useHistoryBackfillListQuery(query: HistoryBackfillListQuery) {
     })
 }
 
+/** 运行中任务允许后台刷新，但不把轮询当成功判定 */
+export function historyBackfillDetailRefetchInterval(
+    status: HistoryBackfillProcessingStatus | undefined,
+): number | false {
+    if (status === "RUNNING" || status === "VALIDATING") return 8_000
+    return false
+}
+
 export function useHistoryBackfillDetailQuery(
     query: HistoryBackfillDetailQuery,
     enabled = true,
@@ -36,12 +45,10 @@ export function useHistoryBackfillDetailQuery(
         queryKey: historyBackfillKeys.detail(query),
         queryFn: () => fetchHistoryBackfillDetail(query),
         enabled: enabled && Boolean(query.jobId),
-        // 运行中任务允许后台刷新，但不把轮询当成功判定
-        refetchInterval: (q) => {
-            const status = q.state.data?.job.processingStatus
-            if (status === "RUNNING" || status === "VALIDATING") return 8_000
-            return false
-        },
+        refetchInterval: (q) =>
+            historyBackfillDetailRefetchInterval(
+                q.state.data?.job.processingStatus,
+            ),
     })
 }
 

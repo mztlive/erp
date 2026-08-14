@@ -1,3 +1,5 @@
+// 本文件是销售单域共享的 API 契约类型表：除 PERMISSION_VERSION 外全部为类型声明，
+// 无任何逻辑，按声明式数据表保留单文件，避免拆分出零散的纯类型模块。
 import type {
     SalesOrderListItem,
     SalesOrderOrigin,

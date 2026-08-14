@@ -1,37 +1,19 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import {
-    ArrowLeftIcon,
-    KeyRoundIcon,
-    RefreshCwIcon,
-    ShieldAlertIcon,
-    TriangleAlertIcon,
-} from "lucide-react"
+import { ArrowLeftIcon } from "lucide-react"
 
 import {
-    BatchImpactPreview,
     BusinessEmptyState,
     BusinessFailureState,
-    DocumentHeader,
     FormalActionResult,
-    PageHeader,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CenterAlerts } from "@/features/supplier-api-connections/components/center-alerts"
+import { CenterHeader } from "@/features/supplier-api-connections/components/center-header"
 import {
     AuditSection,
     CapabilitiesSection,
@@ -42,7 +24,10 @@ import {
     RelatedSection,
     SecuritySection,
 } from "@/features/supplier-api-connections/components/connection-center-sections"
-import { OpaqueReferenceSearchCombobox } from "@/features/supplier-api-connections/components/opaque-reference-search-combobox"
+import { DisableConnectionDialog } from "@/features/supplier-api-connections/components/dialogs/disable-connection-dialog"
+import { EnableConnectionDialog } from "@/features/supplier-api-connections/components/dialogs/enable-connection-dialog"
+import { ReferenceBindDialog } from "@/features/supplier-api-connections/components/dialogs/reference-bind-dialog"
+import { RunHealthCheckDialog } from "@/features/supplier-api-connections/components/dialogs/run-health-check-dialog"
 import {
     useBindCredentialMutation,
     useBindEndpointMutation,
@@ -59,17 +44,12 @@ import {
     outcomeToResult,
 } from "@/features/supplier-api-connections/lib/operations"
 import type { ConnectionsUrlState } from "@/features/supplier-api-connections/lib/url-state"
-import type {
-    ConnectionSection,
-    FormalOutcome,
-} from "@/features/supplier-api-connections/types"
 import {
-    REFERENCE_STATE_LABEL,
     SECTION_LABEL,
     SECTIONS,
+    type ConnectionSection,
+    type FormalOutcome,
 } from "@/features/supplier-api-connections/types"
-import { getErrorMessage } from "@/lib/api/errors"
-import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 import { type ResultState } from "@/components/business/feedback"
 
@@ -111,9 +91,8 @@ export function ConnectionCenter({
     const conn = centerQuery.data
     const section = urlState.section
 
-    const applyOutcome = (outcome: FormalOutcome) => {
+    const applyOutcome = (outcome: FormalOutcome) =>
         setResult(outcomeToResult(outcome))
-    }
 
     if (centerQuery.isPending) {
         return (
@@ -167,8 +146,6 @@ export function ConnectionCenter({
     }
 
     const isProd = conn.environment === "PRODUCTION"
-    const authFailed = conn.lastHealth?.result === "AUTH_FAILED"
-    const resultUnknown = conn.lastHealth?.result === "UNKNOWN"
     const actionBlocker = (action: string) =>
         conn.actionBlockers.find((blocker) => blocker.action === action)
     const canRunHealth = conn.allowedActions.includes("RUN_HEALTH_CHECK")
@@ -180,191 +157,24 @@ export function ConnectionCenter({
 
     return (
         <PageScaffold>
-            <PageHeader
-                variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "api",
-                        label: "供应商 API",
-                        href: "/supplier-api/connections",
-                    },
-                    {
-                        id: "conn",
-                        label: "API 连接",
-                        href: "/supplier-api/connections",
-                    },
-                    {
-                        id: "detail",
-                        label: conn.connectionCode,
-                        current: true,
-                    },
-                ]}
-                actions={
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={onBack}
-                    >
-                        <ArrowLeftIcon className="size-4" aria-hidden="true" />
-                        返回列表
-                    </Button>
-                }
+            <CenterHeader
+                conn={conn}
+                onBack={onBack}
+                canRunHealth={canRunHealth}
+                canEnable={canEnable}
+                canDisable={canDisable}
+                healthPending={runHealth.isPending}
+                enablePending={enableMut.isPending}
+                disablePending={disableMut.isPending}
+                healthBlocker={healthBlocker}
+                enableBlocker={enableBlocker}
+                disableBlocker={disableBlocker}
+                onRunHealth={() => setConfirmHealthOpen(true)}
+                onEnable={() => setConfirmEnableOpen(true)}
+                onDisable={() => setDisableOpen(true)}
             />
 
-            <DocumentHeader
-                density="compact"
-                title={`${conn.connectionCode} · ${conn.supplier.name}`}
-                documentNumber={conn.connectionCode}
-                primaryStatus={{
-                    label: conn.statusLabel,
-                    tone: conn.statusTone,
-                }}
-                version={conn.version}
-                meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <span>
-                            业务{" "}
-                            <span className="font-medium text-foreground">
-                                {conn.businessOwner?.label ?? "—"}
-                            </span>
-                        </span>
-                        <span className="text-border" aria-hidden="true">
-                            ·
-                        </span>
-                        <span>
-                            技术{" "}
-                            <span className="font-medium text-foreground">
-                                {conn.technicalOwner?.label ?? "—"}
-                            </span>
-                        </span>
-                        <span className="text-border" aria-hidden="true">
-                            ·
-                        </span>
-                        <span className="text-muted-foreground">
-                            配置 {formatDateTime(conn.updatedAt, "default")}
-                        </span>
-                    </span>
-                }
-                statuses={[
-                    {
-                        id: "env",
-                        label: "环境",
-                        status: {
-                            label: conn.environmentLabel,
-                            tone: isProd ? "destructive" : "neutral",
-                        },
-                    },
-                    {
-                        id: "health",
-                        label: "最近健康",
-                        status: {
-                            label: conn.lastHealth?.resultLabel ?? "未检查",
-                            tone:
-                                conn.lastHealth?.result === "SUCCESS"
-                                    ? "success"
-                                    : conn.lastHealth?.result ===
-                                            "AUTH_FAILED" ||
-                                        conn.lastHealth?.result === "FAILED"
-                                      ? "destructive"
-                                      : "warning",
-                        },
-                    },
-                ]}
-                primaryAction={
-                    <div className="flex flex-wrap gap-2">
-                        {canRunHealth || healthBlocker ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={!canRunHealth || runHealth.isPending}
-                                title={healthBlocker?.message}
-                                onClick={() => setConfirmHealthOpen(true)}
-                            >
-                                <RefreshCwIcon
-                                    className="size-4"
-                                    aria-hidden="true"
-                                />
-                                健康检查
-                            </Button>
-                        ) : null}
-                        {canEnable || enableBlocker ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                disabled={!canEnable || enableMut.isPending}
-                                title={enableBlocker?.message}
-                                onClick={() => setConfirmEnableOpen(true)}
-                            >
-                                启用连接
-                            </Button>
-                        ) : null}
-                        {canDisable || disableBlocker ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="destructive"
-                                disabled={!canDisable || disableMut.isPending}
-                                title={disableBlocker?.message}
-                                onClick={() => setDisableOpen(true)}
-                            >
-                                停用连接
-                            </Button>
-                        ) : null}
-                    </div>
-                }
-            />
-
-            {isProd ? (
-                <Alert variant="warning" role="status">
-                    <TriangleAlertIcon aria-hidden="true" />
-                    <AlertTitle>生产环境</AlertTitle>
-                    <AlertDescription>
-                        当前连接运行在生产环境。启停、密钥轮换与全能力检查均需二次确认；检查不会创建真实业务订单。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {conn.alerts.map((al) => (
-                <Alert
-                    key={al.id}
-                    variant={
-                        al.severity === "destructive"
-                            ? "destructive"
-                            : al.severity === "warning"
-                              ? "warning"
-                              : "default"
-                    }
-                    role="alert"
-                >
-                    <ShieldAlertIcon aria-hidden="true" />
-                    <AlertTitle>{al.title}</AlertTitle>
-                    <AlertDescription>{al.description}</AlertDescription>
-                </Alert>
-            ))}
-
-            {authFailed &&
-            !conn.alerts.some((a) => a.title.includes("鉴权")) ? (
-                <Alert variant="destructive" role="alert">
-                    <ShieldAlertIcon aria-hidden="true" />
-                    <AlertTitle>鉴权/签名失败 · 自动重试已停止</AlertTitle>
-                    <AlertDescription>
-                        {conn.lastHealth?.errorSummary ??
-                            "高风险故障。请运维检查密钥引用与适配器；本页不展示密钥正文。"}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {resultUnknown ? (
-                <Alert variant="warning" role="status" aria-live="polite">
-                    <TriangleAlertIcon aria-hidden="true" />
-                    <AlertTitle>处理结果待确认</AlertTitle>
-                    <AlertDescription>
-                        不得按成功或失败处理，不乐观改变启停或引用状态。请按原任务号查询最终结论。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
+            <CenterAlerts conn={conn} />
 
             {result ? (
                 <div className="space-y-2">
@@ -383,7 +193,6 @@ export function ConnectionCenter({
                     />
                 </div>
             ) : null}
-
             <div
                 className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
             >
@@ -460,381 +269,107 @@ export function ConnectionCenter({
                 </div>
             </div>
 
-            {/* 停用影响预览 */}
-            <Dialog open={disableOpen} onOpenChange={setDisableOpen}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {isProd ? "停用生产环境连接" : "停用连接"}
-                        </DialogTitle>
-                        <DialogDescription>
-                            停用改变治理状态，不删除连接、版本和历史业务记录。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <BatchImpactPreview
-                        title="停用影响预览"
-                        description="请核对发布、待处理订单与同步任务影响。"
-                        filterSummary={`${conn.connectionCode} · ${conn.environmentLabel}`}
-                        selectionScope={`${conn.supplier.name} · 单一连接`}
-                        estimated={
-                            conn.relatedImpact.activePublications +
-                            conn.relatedImpact.openSupplierOrders +
-                            conn.relatedImpact.activeSyncJobs
-                        }
-                        estimatedLabel="受影响发布/订单/任务"
-                        processable={1}
-                        processableLabel="连接"
-                        skipped={0}
-                        background={false}
-                        sensitiveFields={["密钥配置", "签名材料"]}
-                        skippedReason={undefined}
-                    />
-                    <dl className="grid gap-2 text-sm sm:grid-cols-3">
-                        <div className="rounded-lg border p-3">
-                            <dt className="text-xs text-muted-foreground">
-                                生效发布
-                            </dt>
-                            <dd className="num font-medium">
-                                {conn.relatedImpact.activePublications}
-                            </dd>
-                        </div>
-                        <div className="rounded-lg border p-3">
-                            <dt className="text-xs text-muted-foreground">
-                                待处理订单
-                            </dt>
-                            <dd className="num font-medium">
-                                {conn.relatedImpact.openSupplierOrders}
-                            </dd>
-                        </div>
-                        <div className="rounded-lg border p-3">
-                            <dt className="text-xs text-muted-foreground">
-                                同步任务
-                            </dt>
-                            <dd className="num font-medium">
-                                {conn.relatedImpact.activeSyncJobs}
-                            </dd>
-                        </div>
-                    </dl>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                        <p>历史版本与业务记录保留，不会删除任何数据。</p>
-                        <p className="flex flex-wrap items-center gap-x-3">
-                            替代方案：
-                            <Link
-                                href="/procurement/supplier-offerings"
-                                className="text-primary underline-offset-2 hover:underline"
-                            >
-                                供应商供给
-                            </Link>
-                            <Link
-                                href="/supplier-api/orders"
-                                className="text-primary underline-offset-2 hover:underline"
-                            >
-                                供应商订单
-                            </Link>
-                            <Link
-                                href="/governance/integration-errors"
-                                className="text-primary underline-offset-2 hover:underline"
-                            >
-                                接口错误中心
-                            </Link>
-                        </p>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setDisableOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={!canDisable || disableMut.isPending}
-                            onClick={async () => {
-                                const outcome = await disableMut.mutateAsync({
-                                    connectionId: conn.connectionId,
-                                    expectedVersion: conn.version,
-                                    reasonCode: "ADMIN_DISABLE",
-                                    idempotencyKey:
-                                        newIdempotencyKey("disable"),
-                                })
-                                applyOutcome(outcome)
-                                setDisableOpen(false)
-                            }}
-                        >
-                            确认停用
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <DisableConnectionDialog
+                open={disableOpen}
+                onOpenChange={setDisableOpen}
+                conn={conn}
+                canDisable={canDisable}
+                pending={disableMut.isPending}
+                onSubmit={async () => {
+                    const outcome = await disableMut.mutateAsync({
+                        connectionId: conn.connectionId,
+                        expectedVersion: conn.version,
+                        reasonCode: "ADMIN_DISABLE",
+                        idempotencyKey: newIdempotencyKey("disable"),
+                    })
+                    applyOutcome(outcome)
+                    setDisableOpen(false)
+                }}
+            />
 
-            {/* 密钥引用选择器 — 仅不透明引用 */}
-            <Dialog open={credOpen} onOpenChange={setCredOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            {isProd
-                                ? "轮换生产环境密钥引用"
-                                : "绑定/轮换密钥引用"}
-                        </DialogTitle>
-                        <DialogDescription>
-                            只能从密钥管理系统选择不透明引用。无明文密钥输入框；页面、URL
-                            与结果均不返回正文。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-3">
-                        {listQuery.isError ? (
-                            <Alert variant="destructive" role="alert">
-                                <AlertTitle>引用选项加载失败</AlertTitle>
-                                <AlertDescription>
-                                    {getErrorMessage(
-                                        listQuery.error,
-                                        "无法取得密钥管理引用列表，请重试后再选择。",
-                                    )}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                        <Label htmlFor="opaque-ref">密钥管理引用</Label>
-                        <OpaqueReferenceSearchCombobox
-                            kind="credential"
-                            id="opaque-ref"
-                            value={selectedRef || null}
-                            onValueChange={(v) => {
-                                if (v) setSelectedRef(v)
-                            }}
-                            placeholder="选择不透明引用"
-                            allowClear={false}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            当前状态：
-                            {
-                                REFERENCE_STATE_LABEL[
-                                    conn.safeReferences.credential.state
-                                ]
-                            }
-                            {conn.safeReferences.credential.alias
-                                ? ` · ${conn.safeReferences.credential.alias}`
-                                : ""}
-                        </p>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setCredOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            type="button"
-                            disabled={
-                                !conn.allowedActions.includes(
-                                    "BIND_CREDENTIAL_REFERENCE",
-                                ) ||
-                                !selectedRef ||
-                                bindCred.isPending
-                            }
-                            onClick={async () => {
-                                const outcome = await bindCred.mutateAsync({
-                                    connectionId: conn.connectionId,
-                                    opaqueReferenceId: selectedRef,
-                                    expectedVersion: conn.version,
-                                    idempotencyKey: newIdempotencyKey("cred"),
-                                })
-                                applyOutcome(outcome)
-                                if (outcome.status === "succeeded")
-                                    setCredOpen(false)
-                            }}
-                        >
-                            <KeyRoundIcon
-                                className="size-4"
-                                aria-hidden="true"
-                            />
-                            确认绑定引用
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <ReferenceBindDialog
+                kind="credential"
+                open={credOpen}
+                onOpenChange={setCredOpen}
+                conn={conn}
+                optionsError={listQuery.isError ? listQuery.error : undefined}
+                value={selectedRef}
+                onValueChange={setSelectedRef}
+                allowed={conn.allowedActions.includes(
+                    "BIND_CREDENTIAL_REFERENCE",
+                )}
+                pending={bindCred.isPending}
+                onSubmit={async () => {
+                    const outcome = await bindCred.mutateAsync({
+                        connectionId: conn.connectionId,
+                        opaqueReferenceId: selectedRef,
+                        expectedVersion: conn.version,
+                        idempotencyKey: newIdempotencyKey("cred"),
+                    })
+                    applyOutcome(outcome)
+                    if (outcome.status === "succeeded") setCredOpen(false)
+                }}
+            />
 
-            {/* 地址配置引用选择器 — 仅不透明引用 */}
-            <Dialog open={endpointOpen} onOpenChange={setEndpointOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            {isProd
-                                ? "轮换生产环境地址引用"
-                                : "绑定/轮换地址引用"}
-                        </DialogTitle>
-                        <DialogDescription>
-                            只能从系统提供的地址配置引用中选择，不能自由输入地址。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-3">
-                        {listQuery.isError ? (
-                            <Alert variant="destructive" role="alert">
-                                <AlertTitle>引用选项加载失败</AlertTitle>
-                                <AlertDescription>
-                                    {getErrorMessage(
-                                        listQuery.error,
-                                        "无法取得地址配置引用列表，请重试后再选择。",
-                                    )}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                        <Label htmlFor="endpoint-ref">地址配置引用</Label>
-                        <OpaqueReferenceSearchCombobox
-                            kind="endpoint"
-                            id="endpoint-ref"
-                            value={selectedEndpointRef || null}
-                            onValueChange={(v) => {
-                                if (v) setSelectedEndpointRef(v)
-                            }}
-                            placeholder="选择地址配置引用"
-                            allowClear={false}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            当前状态：
-                            {
-                                REFERENCE_STATE_LABEL[
-                                    conn.safeReferences.endpoint.state
-                                ]
-                            }
-                            {conn.safeReferences.endpoint.alias
-                                ? ` · ${conn.safeReferences.endpoint.alias}`
-                                : ""}
-                        </p>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setEndpointOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            type="button"
-                            disabled={
-                                !conn.allowedActions.includes(
-                                    "BIND_ENDPOINT_REFERENCE",
-                                ) ||
-                                !selectedEndpointRef ||
-                                bindEndpoint.isPending
-                            }
-                            onClick={async () => {
-                                const outcome = await bindEndpoint.mutateAsync({
-                                    connectionId: conn.connectionId,
-                                    opaqueReferenceId: selectedEndpointRef,
-                                    expectedVersion: conn.version,
-                                    idempotencyKey:
-                                        newIdempotencyKey("endpoint"),
-                                })
-                                applyOutcome(outcome)
-                                if (outcome.status === "succeeded")
-                                    setEndpointOpen(false)
-                            }}
-                        >
-                            <KeyRoundIcon
-                                className="size-4"
-                                aria-hidden="true"
-                            />
-                            确认绑定地址
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <ReferenceBindDialog
+                kind="endpoint"
+                open={endpointOpen}
+                onOpenChange={setEndpointOpen}
+                conn={conn}
+                optionsError={listQuery.isError ? listQuery.error : undefined}
+                value={selectedEndpointRef}
+                onValueChange={setSelectedEndpointRef}
+                allowed={conn.allowedActions.includes(
+                    "BIND_ENDPOINT_REFERENCE",
+                )}
+                pending={bindEndpoint.isPending}
+                onSubmit={async () => {
+                    const outcome = await bindEndpoint.mutateAsync({
+                        connectionId: conn.connectionId,
+                        opaqueReferenceId: selectedEndpointRef,
+                        expectedVersion: conn.version,
+                        idempotencyKey: newIdempotencyKey("endpoint"),
+                    })
+                    applyOutcome(outcome)
+                    if (outcome.status === "succeeded") setEndpointOpen(false)
+                }}
+            />
 
-            {/* 健康检查确认（生产环境二次确认） */}
-            <Dialog
+            <RunHealthCheckDialog
                 open={confirmHealthOpen}
                 onOpenChange={setConfirmHealthOpen}
-            >
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>执行健康检查</DialogTitle>
-                        <DialogDescription>
-                            将对全能力执行健康检查并记录结果。
-                            {isProd
-                                ? "生产环境检查不会创建真实业务订单。"
-                                : "结果可随时在本页健康记录中查看。"}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setConfirmHealthOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            type="button"
-                            disabled={!canRunHealth || runHealth.isPending}
-                            onClick={async () => {
-                                const outcome = await runHealth.mutateAsync({
-                                    connectionId: conn.connectionId,
-                                    expectedVersion: conn.version,
-                                    idempotencyKey: newIdempotencyKey("health"),
-                                    checkType: conn.healthCheckTypes[0]!,
-                                })
-                                applyOutcome(outcome)
-                                setConfirmHealthOpen(false)
-                            }}
-                        >
-                            <RefreshCwIcon
-                                className="size-4"
-                                aria-hidden="true"
-                            />
-                            确认执行
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                isProd={isProd}
+                canRunHealth={canRunHealth}
+                pending={runHealth.isPending}
+                onSubmit={async () => {
+                    const outcome = await runHealth.mutateAsync({
+                        connectionId: conn.connectionId,
+                        expectedVersion: conn.version,
+                        idempotencyKey: newIdempotencyKey("health"),
+                        checkType: conn.healthCheckTypes[0]!,
+                    })
+                    applyOutcome(outcome)
+                    setConfirmHealthOpen(false)
+                }}
+            />
 
-            {/* 启用连接确认（生产环境二次确认） */}
-            <Dialog
+            <EnableConnectionDialog
                 open={confirmEnableOpen}
                 onOpenChange={setConfirmEnableOpen}
-            >
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {isProd ? "启用生产环境连接" : "启用连接"}
-                        </DialogTitle>
-                        <DialogDescription>
-                            启用后连接将恢复对外接口可用，后续下单、查询等业务请求将按能力声明放行。
-                            {isProd ? " 生产环境操作需谨慎核对。" : ""}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setConfirmEnableOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            type="button"
-                            disabled={!canEnable || enableMut.isPending}
-                            onClick={async () => {
-                                const outcome = await enableMut.mutateAsync({
-                                    connectionId: conn.connectionId,
-                                    expectedVersion: conn.version,
-                                    idempotencyKey: newIdempotencyKey("enable"),
-                                })
-                                applyOutcome(outcome)
-                                setConfirmEnableOpen(false)
-                            }}
-                        >
-                            确认启用
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                isProd={isProd}
+                canEnable={canEnable}
+                pending={enableMut.isPending}
+                onSubmit={async () => {
+                    const outcome = await enableMut.mutateAsync({
+                        connectionId: conn.connectionId,
+                        expectedVersion: conn.version,
+                        idempotencyKey: newIdempotencyKey("enable"),
+                    })
+                    applyOutcome(outcome)
+                    setConfirmEnableOpen(false)
+                }}
+            />
 
-            {/* 管理员能力配置 */}
             <CapConfigDialog
                 open={capConfigOpen}
                 onOpenChange={setCapConfigOpen}

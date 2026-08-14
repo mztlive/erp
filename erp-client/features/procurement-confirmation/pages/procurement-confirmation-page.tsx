@@ -1,1092 +1,49 @@
 "use client"
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { TriangleAlertIcon } from "lucide-react"
 
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
     DataFreshness,
-    OptionCombobox,
     PageHeader,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
-import { getErrorMessage } from "@/lib/api/errors"
-import { useSupplierOptionsQuery } from "@/hooks/use-options"
-import { useAppForm } from "@/components/form"
+import { freshnessText } from "@/lib/ui-text"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import type {
-    ConfirmationLineDraft,
-    FormalOutcome,
-    FulfillmentMode,
-    RejectReasonCode,
-} from "@/features/procurement-confirmation/types"
-import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
-import { useContractCenterQuery } from "@/features/contracts/queries"
 import { ProcurementSalesDocument } from "@/features/procurement-confirmation/components/procurement-sales-document"
 import { ProcurementPlanConfirmationDialog } from "@/features/procurement-confirmation/components/procurement-plan-confirmation-dialog"
 import { LegacyProcurementPlanEditor } from "@/features/procurement-confirmation/components/legacy-procurement-plan-editor"
 import { ProcurementConfirmationSidebar } from "@/features/procurement-confirmation/components/procurement-confirmation-sidebar"
 import { ProcurementQueueControls } from "@/features/procurement-confirmation/components/procurement-queue-controls"
 import { ProcurementOutcomeFeedback } from "@/features/procurement-confirmation/components/procurement-result"
+import { w05Href } from "@/features/procurement-confirmation/lib/urls"
+import { ContractPreviewDialog } from "./components/contract-preview-dialog"
 import {
-    FULFILLMENT_MODE_LABEL,
-    NEXT_SALES_RESOLUTION_COPY,
-    REJECT_REASON_LABEL,
-} from "@/features/procurement-confirmation/types"
-import { money } from "@/features/procurement-confirmation/lib/format"
-import {
-    capabilityCodeForMode,
-    supplyCostForQuantity,
-} from "@/features/procurement-confirmation/lib/supply-cost"
-import {
-    buildReturnHref,
-    w05Href,
-} from "@/features/procurement-confirmation/lib/urls"
-import { rejectSchema } from "@/features/procurement-confirmation/lib/validation"
-import {
-    useCompleteProcurementMutation,
-    useProcurementConfirmationQuery,
-    useProcurementRecommendationQuery,
-    useProcurementSupplyOptionsQuery,
-    useSaveProcurementConfirmationMutation,
-} from "@/features/procurement-confirmation/hooks/queries"
-import { useWorkItemResponsibilityMutation } from "@/features/work-items"
-import { freshnessText } from "@/lib/ui-text"
-
-type ResultState = SharedResultState<FormalOutcome>
+    ProcurementEmptyStates,
+    ProcurementPageError,
+    ProcurementPagePending,
+} from "./components/procurement-page-states"
+import { RejectConfirmationDialog } from "./components/reject-confirmation-dialog"
+import { useProcurementConfirmationController } from "./hooks/use-procurement-confirmation-controller"
 
 export function ProcurementConfirmationPage() {
-    const router = useRouter()
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
+    const controller = useProcurementConfirmationController()
+    const { url, drafts, actions } = controller
+    const task = controller.task
+    const context = controller.context
 
-    const scope: "mine" | "team" =
-        searchParams.get("scope") === "team" ? "team" : "mine"
-    const dueParam = searchParams.get("due")
-    const due: "active" | "today" | "overdue" =
-        dueParam === "today" || dueParam === "overdue" || dueParam === "active"
-            ? dueParam
-            : "active"
-    const sortParam = searchParams.get("sort")
-    const sort: "due_at" | "submitted_at" | "priority" =
-        sortParam === "submitted_at" || sortParam === "priority"
-            ? sortParam
-            : "due_at"
-    const orderNo = searchParams.get("orderNo") ?? undefined
-    const currentWorkItemId =
-        searchParams.get("currentWorkItemId") ??
-        searchParams.get("task") ??
-        undefined
-    const queueContextId =
-        searchParams.get("queueContextId") ??
-        `queue:procurement-confirmation:${scope}`
-
-    // autoNext：显式 URL 优先；否则会话默认 true；不写 localStorage
-    const autoNextExplicit = searchParams.get("autoNext")
-    const [sessionAutoNext, setSessionAutoNext] = React.useState(true)
-    const autoNext =
-        autoNextExplicit === "0"
-            ? false
-            : autoNextExplicit === "1"
-              ? true
-              : sessionAutoNext
-
-    const filters = React.useMemo(
-        () => ({
-            scope,
-            due,
-            sort,
-            orderNo,
-            currentWorkItemId,
-            queueContextId,
-        }),
-        [scope, due, sort, orderNo, currentWorkItemId, queueContextId],
-    )
-
-    const [confirmOpen, setConfirmOpen] = React.useState(false)
-
-    const queueQuery = useProcurementConfirmationQuery(filters)
-    const responsibilityMutation = useWorkItemResponsibilityMutation()
-    const saveMutation = useSaveProcurementConfirmationMutation()
-    const completeMutation = useCompleteProcurementMutation()
-    const { data: supplierOptions } = useSupplierOptionsQuery()
-
-    const view = queueQuery.data
-    const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
-    const context = view?.context
-    const task =
-        tasks.find((t) => t.workItemId === currentWorkItemId) ??
-        view?.current ??
-        tasks[0]
-    const recommendationQuery = useProcurementRecommendationQuery(
-        task?.confirmation.confirmationId ?? "",
-        confirmOpen,
-    )
-    const recommendation = recommendationQuery.data
-    const contractQuery = useContractCenterQuery(
-        task?.salesSubmission.contractId ?? "",
-    )
-    const taskSkuIds = React.useMemo(
-        () => task?.salesSubmission.lines.map((line) => line.itemSku) ?? [],
-        [task],
-    )
-    const supplyOptionsQuery = useProcurementSupplyOptionsQuery(taskSkuIds)
-    const supplyOptions = React.useMemo(
-        () => supplyOptionsQuery.data ?? [],
-        [supplyOptionsQuery.data],
-    )
-    const currentIndex = task
-        ? Math.max(
-              0,
-              tasks.findIndex((t) => t.workItemId === task.workItemId),
-          )
-        : 0
-    const completed = Boolean(view) && tasks.length === 0
-
-    const [lineDrafts, setLineDrafts] = React.useState<ConfirmationLineDraft[]>(
-        [],
-    )
-    const [dirty, setDirty] = React.useState(false)
-    const [loadedPlanKey, setLoadedPlanKey] = React.useState<string | null>(
-        null,
-    )
-    const [rejectOpen, setRejectOpen] = React.useState(false)
-    const [contractOpen, setContractOpen] = React.useState(false)
-    const [advanceAfterConfirm, setAdvanceAfterConfirm] = React.useState(true)
-    const [lastResult, setLastResult] = React.useState<ResultState>(null)
-    /** 自动下一项跳转后保留的上一条结果（轻量条，可关闭） */
-    const [finishedResult, setFinishedResult] =
-        React.useState<ResultState>(null)
-    const [actionError, setActionError] = React.useState<string | null>(null)
-    const [saveMessage, setSaveMessage] = React.useState<string | null>(null)
-    /** 单号搜索草稿：输入过程不打 URL，防抖/回车才提交（P3） */
-    const [orderNoDraft, setOrderNoDraft] = React.useState(orderNo ?? "")
-    const orderNoInputRef = React.useRef<HTMLInputElement>(null)
-    const headingRef = React.useRef<HTMLHeadingElement>(null)
-    const resultRef = React.useRef<HTMLDivElement>(null)
-
-    // 同步当前任务分行草稿
-    React.useEffect(() => {
-        if (!task) {
-            setLineDrafts([])
-            setDirty(false)
-            setLoadedPlanKey(null)
-            return
-        }
-        setLineDrafts(task.confirmation.lines.map((line) => ({ ...line })))
-        setDirty(false)
-        setLoadedPlanKey(null)
-        setActionError(null)
-        setSaveMessage(null)
-    }, [task])
-
-    // 只有采购点击“确认通过”后才把最低成本方案装入可编辑草稿；关闭再打开时保留本次调整。
-    React.useEffect(() => {
-        if (!confirmOpen || !task || !recommendation?.ready || dirty) return
-        const planKey = `${task.confirmation.confirmationId}:${recommendation.calculatedAt}`
-        if (loadedPlanKey === planKey) return
-        setLineDrafts(recommendation.lines.map((line) => ({ ...line })))
-        setLoadedPlanKey(planKey)
-        setSaveMessage(null)
-    }, [confirmOpen, dirty, loadedPlanKey, recommendation, task])
-
-    // 选项异步到达时仅回填展示名称，不覆盖用户已编辑的草稿字段。
-    React.useEffect(() => {
-        if (!supplierOptions?.length) return
-        setLineDrafts((current) =>
-            current.map((line) => {
-                const supplier = supplierOptions.find(
-                    (option) => option.supplierId === line.supplierId,
-                )
-                return supplier && supplier.supplierName !== line.supplierName
-                    ? { ...line, supplierName: supplier.supplierName }
-                    : line
-            }),
-        )
-    }, [supplierOptions])
-
-    // 单号搜索框与 URL 双向同步：后退/分享后输入框与结果保持一致
-    React.useEffect(() => {
-        setOrderNoDraft(orderNo ?? "")
-    }, [orderNo])
-
-    // 默认 URL：scope / currentWorkItemId / queueContextId（不写 autoNext 除非用户切换）
-    React.useEffect(() => {
-        if (queueQuery.isPending || !view) return
-        const hasScope = searchParams.has("scope")
-        const hasItem =
-            searchParams.has("currentWorkItemId") || searchParams.has("task")
-        const hasCtx = searchParams.has("queueContextId")
-        if (hasScope && hasCtx && (hasItem || tasks.length === 0)) return
-        const params = new URLSearchParams(searchParams.toString())
-        if (!hasScope) params.set("scope", scope)
-        if (!hasCtx) params.set("queueContextId", queueContextId)
-        if (!hasItem && task) {
-            params.set("currentWorkItemId", task.workItemId)
-            params.delete("task")
-        }
-        // 兼容旧 task= 参数：迁移到 currentWorkItemId
-        if (searchParams.has("task") && task) {
-            params.set("currentWorkItemId", task.workItemId)
-            params.delete("task")
-        }
-        params.delete("completed")
-        const qs = params.toString()
-        const next = qs ? `${pathname}?${qs}` : pathname
-        router.replace(next, { scroll: false })
-    }, [
-        queueQuery.isPending,
-        view,
-        searchParams,
-        scope,
-        queueContextId,
-        task,
-        tasks.length,
-        pathname,
-        router,
-    ])
-
-    React.useEffect(() => {
-        if (lastResult) {
-            resultRef.current?.focus()
-        } else if (task) {
-            headingRef.current?.focus()
-        }
-    }, [task, lastResult])
-
-    const replaceUrl = React.useCallback(
-        (patch: Record<string, string | null | undefined>) => {
-            const params = new URLSearchParams(searchParams.toString())
-            for (const [key, value] of Object.entries(patch)) {
-                if (value == null || value === "") params.delete(key)
-                else params.set(key, value)
-            }
-            params.delete("task")
-            params.delete("completed")
-            const qs = params.toString()
-            router.replace(qs ? `${pathname}?${qs}` : pathname, {
-                scroll: false,
-            })
-        },
-        [pathname, router, searchParams],
-    )
-
-    // 单号搜索：300ms 防抖写 URL（replace）；筛选变化时清空焦点（P3）
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (orderNoDraft.trim() === (orderNo ?? "")) return
-            replaceUrl({
-                orderNo: orderNoDraft.trim() || null,
-                currentWorkItemId: null,
-            })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-    }, [orderNo, orderNoDraft, replaceUrl])
-
-    const commitOrderNo = React.useCallback(() => {
-        if (orderNoDraft.trim() === (orderNo ?? "")) return
-        replaceUrl({
-            orderNo: orderNoDraft.trim() || null,
-            currentWorkItemId: null,
-        })
-    }, [orderNo, orderNoDraft, replaceUrl])
-
-    // scope/sort 不算筛选（P4 保留项）；due/orderNo 才算激活筛选
-    const hasActiveFilter = Boolean(
-        orderNo || dueParam === "today" || dueParam === "overdue",
-    )
-
-    // 清除筛选：清 orderNo/due + 焦点，保留 scope/sort/queueContextId（P4）
-    const clearFilters = React.useCallback(() => {
-        setOrderNoDraft("")
-        replaceUrl({ orderNo: null, due: null, currentWorkItemId: null })
-    }, [replaceUrl])
-
-    const goToWorkItem = React.useCallback(
-        (workItemId: string | undefined | null) => {
-            setLastResult(null)
-            setActionError(null)
-            if (!workItemId) {
-                replaceUrl({ currentWorkItemId: null })
-                return
-            }
-            replaceUrl({ currentWorkItemId: workItemId })
-        },
-        [replaceUrl],
-    )
-
-    const neighborId = React.useCallback(
-        (delta: number) => {
-            const idx = currentIndex + delta
-            return tasks[idx]?.workItemId
-        },
-        [currentIndex, tasks],
-    )
-
-    const coverage = React.useMemo(() => {
-        if (!task) return []
-        return task.salesSubmission.lines.map((line) => {
-            const confirmed = lineDrafts
-                .filter((c) => c.submissionLineId === line.submissionLineId)
-                .reduce((sum, c) => sum + Number(c.confirmedQuantity || 0), 0)
-            const required = Number(line.committedQuantity)
-            const complete = confirmed + 1e-9 >= required && required > 0
-            const gap = Math.max(0, required - confirmed)
-            return {
-                submissionLineId: line.submissionLineId,
-                itemName: line.itemName,
-                confirmed: confirmed.toFixed(0),
-                required: line.committedQuantity,
-                complete,
-                gap: gap.toFixed(0),
-            }
-        })
-    }, [task, lineDrafts])
-
-    const linesValid =
-        lineDrafts.length > 0 &&
-        lineDrafts.every(
-            (line) =>
-                line.supplierId.trim().length > 0 &&
-                line.offeringRevisionId.trim().length > 0 &&
-                line.confirmedQuantity.trim().length > 0 &&
-                Number(line.confirmedQuantity) > 0 &&
-                line.latestCostGross.trim().length > 0 &&
-                Number(line.latestCostGross) >= 0 &&
-                line.inputTaxRate.trim().length > 0 &&
-                Number(line.inputTaxRate) >= 0 &&
-                line.expectedDeliveryDate.trim().length > 0 &&
-                line.capabilityRevisionId.trim().length > 0,
-        )
-    const allCovered =
-        coverage.length > 0 && coverage.every((c) => c.complete) && linesValid
-    const clientBlocking = coverage
-        .filter((c) => !c.complete)
-        .map((c) => ({
-            id: c.submissionLineId,
-            label: c.itemName,
-            message: `已确认 ${c.confirmed}/${c.required}，缺口 ${c.gap}`,
-            targetId: `submission-line-${c.submissionLineId}`,
-        }))
-
-    const estimatedPurchase = recommendation?.estimatedPurchaseGross
-
-    const currentPlanSummary = React.useMemo(() => {
-        let purchaseGross = 0
-        const chargedGroups = new Set<string>()
-        const orderGroups = new Set<string>()
-        for (const line of lineDrafts) {
-            const quantity = Number(line.confirmedQuantity || 0)
-            const unitCost = Number(line.latestCostGross || 0)
-            if (Number.isFinite(quantity) && Number.isFinite(unitCost)) {
-                purchaseGross += quantity * unitCost
-            }
-            if (!line.offeringRevisionId || !line.supplierId) continue
-            const feeGroup = `${line.offeringRevisionId}:${line.fulfillmentMode}`
-            orderGroups.add(`${line.supplierId}:${line.fulfillmentMode}`)
-            if (chargedGroups.has(feeGroup)) continue
-            chargedGroups.add(feeGroup)
-            const offering = supplyOptions.find(
-                (option) =>
-                    option.offeringRevisionId === line.offeringRevisionId,
-            )
-            if (!offering) continue
-            purchaseGross += Number(offering.serviceFeeAmount || 0)
-            if (line.fulfillmentMode === "WAREHOUSE") {
-                purchaseGross += Number(offering.freightAmount || 0)
-            }
-        }
-        return {
-            purchaseGross,
-            grossMargin:
-                Number(task?.salesSubmission.grossAmount ?? 0) - purchaseGross,
-            orderCount: orderGroups.size,
-        }
-    }, [lineDrafts, supplyOptions, task?.salesSubmission.grossAmount])
-
-    const updateLine = React.useCallback(
-        (lineKey: string, patch: Partial<ConfirmationLineDraft>) => {
-            setLineDrafts((prev) =>
-                prev.map((l) =>
-                    l.lineKey === lineKey ? { ...l, ...patch } : l,
-                ),
-            )
-            setDirty(true)
-        },
-        [],
-    )
-
-    const repriceDrafts = React.useCallback(
-        (drafts: ConfirmationLineDraft[]) => {
-            const quantityByOffering = new Map<string, number>()
-            for (const line of drafts) {
-                if (!line.offeringRevisionId) continue
-                quantityByOffering.set(
-                    line.offeringRevisionId,
-                    (quantityByOffering.get(line.offeringRevisionId) ?? 0) +
-                        Number(line.confirmedQuantity || 0),
-                )
-            }
-            return drafts.map((line) => {
-                const offering = supplyOptions.find(
-                    (option) =>
-                        option.offeringRevisionId === line.offeringRevisionId,
-                )
-                if (!offering) return line
-                return {
-                    ...line,
-                    latestCostGross: supplyCostForQuantity(
-                        offering,
-                        String(
-                            quantityByOffering.get(line.offeringRevisionId) ??
-                                0,
-                        ),
-                    ),
-                }
-            })
-        },
-        [supplyOptions],
-    )
-
-    const updatePlanLine = React.useCallback(
-        (lineKey: string, patch: Partial<ConfirmationLineDraft>) => {
-            setLineDrafts((current) =>
-                repriceDrafts(
-                    current.map((line) =>
-                        line.lineKey === lineKey ? { ...line, ...patch } : line,
-                    ),
-                ),
-            )
-            setDirty(true)
-        },
-        [repriceDrafts],
-    )
-
-    const applyRecommendation = React.useCallback(() => {
-        if (!recommendation?.ready || recommendation.lines.length === 0) {
-            setActionError("当前没有可执行的系统采购方案，请先处理阻断项")
-            return
-        }
-        setLineDrafts(recommendation.lines.map((line) => ({ ...line })))
-        setDirty(true)
-        setSaveMessage("已重新载入系统最低成本方案，请核对交期后保存")
-        setActionError(null)
-    }, [recommendation])
-
-    const offeringOptionsForSku = React.useCallback(
-        (skuId: string) =>
-            supplyOptions
-                .filter((option) => option.skuId === skuId)
-                .map((option) => {
-                    const supplier = supplierOptions?.find(
-                        (row) => row.supplierId === option.supplierId,
-                    )
-                    return {
-                        value: option.offeringRevisionId,
-                        label: `${supplier?.supplierName ?? "供应商"} · 一件代发 ${money.format(Number(option.dropshipCostGross))} / 集采 ${money.format(Number(option.bulkCostGross))}（满 ${option.bulkMinimumOrderQuantity}）`,
-                    }
-                }),
-        [supplierOptions, supplyOptions],
-    )
-
-    const capabilityOptionsForOffering = React.useCallback(
-        (offeringRevisionId: string, fulfillmentMode: FulfillmentMode) =>
-            supplyOptions
-                .find(
-                    (option) =>
-                        option.offeringRevisionId === offeringRevisionId,
-                )
-                ?.capabilities.filter(
-                    (capability) =>
-                        capability.capabilityCode ===
-                        capabilityCodeForMode(fulfillmentMode),
-                )
-                .map((capability) => ({
-                    value: capability.revisionId,
-                    label: capability.label,
-                })) ?? [],
-        [supplyOptions],
-    )
-
-    const fulfillmentOptionsForOffering = React.useCallback(
-        (offeringRevisionId: string) => {
-            const offering = supplyOptions.find(
-                (option) => option.offeringRevisionId === offeringRevisionId,
-            )
-            const modes = (
-                Object.keys(FULFILLMENT_MODE_LABEL) as FulfillmentMode[]
-            ).filter(
-                (mode) =>
-                    !offering ||
-                    (supplyCostForQuantity(offering, "1").length > 0 &&
-                        offering.capabilities.some(
-                            (capability) =>
-                                capability.capabilityCode ===
-                                capabilityCodeForMode(mode),
-                        )),
-            )
-            return modes.map((mode) => ({
-                value: mode,
-                label: FULFILLMENT_MODE_LABEL[mode],
-            }))
-        },
-        [supplyOptions],
-    )
-
-    const addSplitLine = React.useCallback(
-        (submissionLineId: string) => {
-            if (!task) return
-            const sub = task.salesSubmission.lines.find(
-                (l) => l.submissionLineId === submissionLineId,
-            )
-            if (!sub) return
-            const key = `cl_new_${submissionLineId}_${Date.now().toString(36)}`
-            setLineDrafts((prev) => [
-                ...prev,
-                {
-                    lineKey: key,
-                    submissionLineId,
-                    supplierId: "",
-                    supplierName: "",
-                    offeringRevisionId: "",
-                    confirmedQuantity: "0",
-                    latestCostGross: "",
-                    inputTaxRate: "",
-                    expectedDeliveryDate: "",
-                    fulfillmentMode: "WAREHOUSE",
-                    capabilityRevisionId: "",
-                    capabilitySummary: "请选择供应商并核对供给与能力",
-                    qualificationStatus: "INVALID",
-                },
-            ])
-            setDirty(true)
-        },
-        [task],
-    )
-
-    const removeLine = React.useCallback((lineKey: string) => {
-        setLineDrafts((prev) => {
-            const target = prev.find((l) => l.lineKey === lineKey)
-            if (!target) return prev
-            const same = prev.filter(
-                (l) => l.submissionLineId === target.submissionLineId,
-            )
-            if (same.length <= 1) return prev
-            return prev.filter((l) => l.lineKey !== lineKey)
-        })
-        setDirty(true)
-    }, [])
-
-    const assertAllowed = React.useCallback(
-        (action: string) => {
-            if (!task) throw new Error("无当前任务")
-            if (!task.allowedActions.includes(action)) {
-                throw new Error("当前责任或任务版本已变化，请刷新后再处理")
-            }
-        },
-        [task],
-    )
-
-    const handleSave = React.useCallback(async (): Promise<boolean> => {
-        if (!task) return false
-        if (!linesValid) {
-            setActionError(
-                "请先补齐供应商、数量、成本、税率、交期和供应资质后再保存",
-            )
-            return false
-        }
-        try {
-            assertAllowed("SAVE")
-            const result = await saveMutation.mutateAsync({
-                workItemId: task.workItemId,
-                expectedTaskVersion: task.taskVersion,
-                expectedSubjectVersion: task.subjectVersion,
-                confirmationId: task.confirmation.confirmationId,
-                submissionId: task.salesSubmission.submissionId,
-                expectedEditVersion: task.confirmation.editVersion,
-                lines: lineDrafts,
-                idempotencyKey: `w07:${task.workItemId}:${task.taskVersion}:save:${task.confirmation.editVersion}`,
-            })
-            setDirty(false)
-            setSaveMessage(`已保存 · 第 ${result.editVersion} 次修改`)
-            setActionError(null)
-            return true
-        } catch (error) {
-            setActionError(getErrorMessage(error, "保存失败"))
-            return false
-        }
-    }, [assertAllowed, lineDrafts, linesValid, saveMutation, task])
-
-    /** 终局操作打开前：dirty 时先保存，保存失败则中止打开（防止按旧草稿提交） */
-    const guardTerminalOpen = React.useCallback(async (): Promise<boolean> => {
-        if (!dirty) return true
-        const saved = await handleSave()
-        if (!saved) {
-            setActionError("有未保存的确认分行修改且保存失败，请先处理后再继续")
-            return false
-        }
-        return true
-    }, [dirty, handleSave])
-
-    const advanceIfNeeded = React.useCallback(
-        (shouldAdvance: boolean) => {
-            if (!shouldAdvance) return
-            const nextId =
-                neighborId(1) ??
-                tasks.find((t) => t.workItemId !== task?.workItemId)?.workItemId
-            if (nextId) {
-                goToWorkItem(nextId)
-            } else {
-                replaceUrl({ currentWorkItemId: null })
-            }
-        },
-        [goToWorkItem, neighborId, replaceUrl, task?.workItemId, tasks],
-    )
-
-    const handleApprove = React.useCallback(async () => {
-        if (!task) return
-        if (!recommendation?.ready || recommendation.lines.length === 0) {
-            setActionError("当前采购方案还不能执行，请先处理方案中的问题")
-            return
-        }
-        if (!allCovered) {
-            setActionError("请先补齐每项商品的供应商、采购数量、交期和供应资质")
-            return
-        }
-        setActionError(null)
-        try {
-            assertAllowed("APPROVE")
-            await saveMutation.mutateAsync({
-                workItemId: task.workItemId,
-                expectedTaskVersion: task.taskVersion,
-                expectedSubjectVersion: task.subjectVersion,
-                confirmationId: task.confirmation.confirmationId,
-                submissionId: task.salesSubmission.submissionId,
-                expectedEditVersion: task.confirmation.editVersion,
-                lines: lineDrafts,
-                idempotencyKey: `w07:${task.workItemId}:${task.taskVersion}:save:${task.confirmation.editVersion}`,
-            })
-            setDirty(false)
-            // 方案落库后编辑版本已变化：正式确认前重读当前任务。
-            const latestTask =
-                (await queueQuery.refetch()).data?.tasks.find(
-                    (t) => t.workItemId === task.workItemId,
-                ) ?? task
-            const response = await completeMutation.mutateAsync({
-                workItemId: latestTask.workItemId,
-                expectedTaskVersion: latestTask.taskVersion,
-                expectedSubjectVersion: latestTask.subjectVersion,
-                idempotencyKey: `w07:${latestTask.workItemId}:${latestTask.taskVersion}:approve`,
-                decision: {
-                    reviewResult: "APPROVED",
-                    confirmationId: latestTask.confirmation.confirmationId,
-                    submissionId: latestTask.salesSubmission.submissionId,
-                    expectedConfirmationEditVersion:
-                        latestTask.confirmation.editVersion,
-                    salesOrderId: latestTask.salesSubmission.salesOrderId,
-                    salesOrderNo: latestTask.salesSubmission.salesOrderNo,
-                    subjectHash: latestTask.salesSubmission.subjectHash,
-                },
-            })
-
-            if (response.status === "failed") {
-                setActionError(response.message)
-                return
-            }
-            if (response.status === "unknown") {
-                setConfirmOpen(false)
-                setLastResult({
-                    status: "unknown",
-                    title: "采购确认结果待核实",
-                    description: response.message,
-                    reference: response.idempotencyKey,
-                    pendingIdempotencyKey: response.idempotencyKey,
-                    stayOnItem: true,
-                })
-                return
-            }
-
-            const outcome = response.outcome
-            if (outcome.kind !== "APPROVED_AND_SALES_EFFECTIVE") return
-            setConfirmOpen(false)
-            const approvedResult: ResultState = {
-                status: "succeeded",
-                title: "采购确认已通过 · 已形成采购创建依据",
-                description:
-                    advanceAfterConfirm && autoNext
-                        ? "销售单已生效，采购创建依据已形成；队列将打开下一条。"
-                        : "销售单已生效，采购创建依据已形成；后续建单尚未在本次事务中执行。",
-                reference: outcome.reference,
-                outcome,
-                stayOnItem: !(advanceAfterConfirm && autoNext),
-            }
-            setLastResult(approvedResult)
-            if (advanceAfterConfirm && autoNext) {
-                setFinishedResult(approvedResult)
-                advanceIfNeeded(true)
-            } else {
-                setFinishedResult(null)
-            }
-        } catch (error) {
-            setActionError(getErrorMessage(error, "通过失败"))
-        }
-    }, [
-        advanceAfterConfirm,
-        advanceIfNeeded,
-        allCovered,
-        autoNext,
-        completeMutation,
-        assertAllowed,
-        lineDrafts,
-        queueQuery,
-        recommendation,
-        saveMutation,
-        task,
-    ])
-
-    const handleRejectSubmit = React.useCallback(
-        async (value: { reasonCode: RejectReasonCode; comment: string }) => {
-            if (!task) return
-            setActionError(null)
-            try {
-                assertAllowed("REJECT")
-                // guard 自动保存后编辑版本可能已 +1：终局提交前重读任务
-                const latestTask =
-                    (await queueQuery.refetch()).data?.tasks.find(
-                        (t) => t.workItemId === task.workItemId,
-                    ) ?? task
-                const response = await completeMutation.mutateAsync({
-                    workItemId: latestTask.workItemId,
-                    expectedTaskVersion: latestTask.taskVersion,
-                    expectedSubjectVersion: latestTask.subjectVersion,
-                    idempotencyKey: `w07:${latestTask.workItemId}:${latestTask.taskVersion}:reject`,
-                    decision: {
-                        reviewResult: "REJECTED",
-                        confirmationId: latestTask.confirmation.confirmationId,
-                        submissionId: latestTask.salesSubmission.submissionId,
-                        expectedConfirmationEditVersion:
-                            latestTask.confirmation.editVersion,
-                        salesOrderId: latestTask.salesSubmission.salesOrderId,
-                        salesOrderNo: latestTask.salesSubmission.salesOrderNo,
-                        subjectHash: latestTask.salesSubmission.subjectHash,
-                        rejectReasonCode: value.reasonCode,
-                        comment: value.comment,
-                    },
-                })
-                setRejectOpen(false)
-                if (response.status === "failed") {
-                    setActionError(response.message)
-                    return
-                }
-                if (response.status === "unknown") {
-                    setLastResult({
-                        status: "unknown",
-                        title: "采购驳回结果待核实",
-                        description: response.message,
-                        reference: response.idempotencyKey,
-                        pendingIdempotencyKey: response.idempotencyKey,
-                        stayOnItem: true,
-                    })
-                    return
-                }
-                const outcome = response.outcome
-                if (outcome.kind !== "REJECTED_TO_SALES") return
-                const rejectedResult: ResultState = {
-                    status: "rejected",
-                    title: "采购确认已驳回 · 本次提交已结束",
-                    description:
-                        "已形成本次采购确认的驳回结论；未创建采购单、变更单或后继任务。销售可在销售单选择三条固定出路。",
-                    reference: outcome.reference,
-                    outcome,
-                    stayOnItem: !autoNext,
-                }
-                setLastResult(rejectedResult)
-                if (autoNext) {
-                    setFinishedResult(rejectedResult)
-                    advanceIfNeeded(true)
-                } else {
-                    setFinishedResult(null)
-                }
-            } catch (error) {
-                setActionError(getErrorMessage(error, "驳回失败"))
-            }
-        },
-        [
-            advanceIfNeeded,
-            autoNext,
-            completeMutation,
-            assertAllowed,
-            queueQuery,
-            task,
-        ],
-    )
-
-    const rejectForm = useAppForm({
-        defaultValues: {
-            reasonCode: "",
-            comment: "",
-        },
-        validators: { onChange: rejectSchema, onMount: rejectSchema },
-        onSubmit: async ({ value }) => {
-            await handleRejectSubmit({
-                reasonCode: value.reasonCode as RejectReasonCode,
-                comment: value.comment.trim(),
-            })
-        },
-    })
-
-    const handleReleaseToTeam = React.useCallback(async () => {
-        if (!task) return
-        setActionError(null)
-        try {
-            let currentTask = task
-            if (dirty) {
-                const saved = await handleSave()
-                if (!saved) {
-                    setActionError(
-                        "有未保存的确认分行修改且保存失败；请重试保存后再跳过",
-                    )
-                    return
-                }
-                const refreshed = await queueQuery.refetch()
-                if (refreshed.isError) {
-                    throw refreshed.error
-                }
-                const refreshedTask = refreshed.data?.tasks.find(
-                    (candidate) => candidate.workItemId === task.workItemId,
-                )
-                if (!refreshedTask) {
-                    throw new Error(
-                        "保存后未取得当前任务的新版本，已禁止使用旧版本退回团队",
-                    )
-                }
-                currentTask = refreshedTask
-            }
-            if (!currentTask.allowedActions.includes("RELEASE_TO_TEAM")) {
-                throw new Error("当前责任已变化，请刷新后再退回团队")
-            }
-            const nextId = neighborId(1)
-            const response = await responsibilityMutation.mutateAsync({
-                kind: "RELEASE_TO_TEAM",
-                workItemId: currentTask.workItemId,
-                expectedTaskVersion: currentTask.taskVersion,
-                reason: "当前确认数据已保存，退回团队继续安排",
-                idempotencyKey: `w07:${currentTask.workItemId}:${currentTask.taskVersion}:release`,
-            })
-            if (response.status !== "OPEN") {
-                throw new Error("退回团队后任务未保持开放，请刷新核对")
-            }
-            const released = {
-                kind: "RELEASED_TO_TEAM" as const,
-                workItemId: response.id,
-                workItemStatus: response.status,
-                taskVersion: String(response.task_version),
-                reference: response.id,
-            }
-            setLastResult({
-                status: "blocked",
-                title: "当前项已退回团队",
-                description:
-                    "原任务保持待处理，未形成通过或驳回结论；个人责任已退回团队。",
-                reference: released.reference,
-                outcome: released,
-            })
-            if (nextId) goToWorkItem(nextId)
-        } catch (error) {
-            setActionError(getErrorMessage(error, "退回团队失败"))
-        }
-    }, [
-        dirty,
-        goToWorkItem,
-        handleSave,
-        neighborId,
-        queueQuery,
-        responsibilityMutation,
-        task,
-    ])
-
-    // 键盘：无输入焦点时 j/k 切换；⌘S 保存；⌘↵ 打开通过
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            const target = event.target as HTMLElement | null
-            const tag = target?.tagName
-            const inField =
-                tag === "INPUT" ||
-                tag === "TEXTAREA" ||
-                tag === "SELECT" ||
-                target?.isContentEditable
-
-            if (
-                (event.metaKey || event.ctrlKey) &&
-                event.key.toLowerCase() === "s"
-            ) {
-                event.preventDefault()
-                void handleSave()
-                return
-            }
-            if (
-                (event.metaKey || event.ctrlKey) &&
-                event.key === "Enter" &&
-                !inField
-            ) {
-                event.preventDefault()
-                if (task?.allowedActions.includes("APPROVE")) {
-                    setAdvanceAfterConfirm(autoNext)
-                    setConfirmOpen(true)
-                }
-                return
-            }
-            if (inField) return
-            if (event.key === "/") {
-                event.preventDefault()
-                orderNoInputRef.current?.focus()
-                return
-            }
-            if (event.key === "j" || event.key === "ArrowDown") {
-                event.preventDefault()
-                if (dirty) {
-                    setActionError("有未保存修改，请先保存后再切换")
-                    return
-                }
-                const next = neighborId(1)
-                if (next) goToWorkItem(next)
-            }
-            if (event.key === "k" || event.key === "ArrowUp") {
-                event.preventDefault()
-                if (dirty) {
-                    setActionError("有未保存修改，请先保存后再切换")
-                    return
-                }
-                const prev = neighborId(-1)
-                if (prev) goToWorkItem(prev)
-            }
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [
-        task?.allowedActions,
-        autoNext,
-        dirty,
-        goToWorkItem,
-        handleSave,
-        neighborId,
-        orderNoInputRef,
-    ])
-
-    const toggleAutoNext = React.useCallback(
-        (next: boolean) => {
-            // preferenceScope 未配置：只写显式 URL / 会话，不写 localStorage
-            setSessionAutoNext(next)
-            replaceUrl({ autoNext: next ? "1" : "0" })
-        },
-        [replaceUrl],
-    )
-
-    const formalPending =
-        completeMutation.isPending ||
-        saveMutation.isPending ||
-        responsibilityMutation.isPending ||
-        lastResult?.status === "unknown"
-
-    const handleOpenReject = React.useCallback(async () => {
-        try {
-            assertAllowed("REJECT")
-        } catch (error) {
-            setActionError(getErrorMessage(error, "当前任务不可驳回"))
-            return
-        }
-        if (!(await guardTerminalOpen())) return
-        setRejectOpen(true)
-    }, [assertAllowed, guardTerminalOpen])
-
-    const handleStartProcessing = React.useCallback(async () => {
-        if (!task) return
-        setActionError(null)
-        try {
-            assertAllowed("START_PROCESSING")
-            await responsibilityMutation.mutateAsync({
-                kind: "START_PROCESSING",
-                workItemId: task.workItemId,
-                expectedTaskVersion: task.taskVersion,
-                idempotencyKey: `w07:${task.workItemId}:${task.taskVersion}:start`,
-            })
-            replaceUrl({
-                scope: null,
-                queueContextId: null,
-                currentWorkItemId: task.workItemId,
-            })
-            await queueQuery.refetch()
-        } catch (error) {
-            setActionError(getErrorMessage(error, "开始处理失败"))
-        }
-    }, [assertAllowed, queueQuery, replaceUrl, responsibilityMutation, task])
-
-    const handleOpenConfirm = React.useCallback(async () => {
-        try {
-            assertAllowed("APPROVE")
-            setAdvanceAfterConfirm(autoNext)
-            setConfirmOpen(true)
-        } catch (error) {
-            setActionError(getErrorMessage(error, "当前任务不可处理"))
-        }
-    }, [assertAllowed, autoNext])
-
-    const returnTo = buildReturnHref(
-        new URLSearchParams(searchParams.toString()),
-    )
-
-    if (queueQuery.isPending) {
-        return (
-            <PageScaffold>
-                <PageHeader title="采购二次确认" description="正在加载队列…" />
-                <div
-                    className="h-12 animate-pulse rounded-lg bg-muted"
-                    aria-hidden="true"
-                />
-                <div className="grid gap-3 md:gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-                    <div className="h-80 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-64 animate-pulse rounded-lg bg-muted" />
-                </div>
-            </PageScaffold>
-        )
+    if (controller.queueQuery.isPending) {
+        return <ProcurementPagePending />
     }
 
-    if (queueQuery.isError) {
+    if (controller.queueQuery.isError) {
         return (
-            <PageScaffold>
-                <PageHeader title="采购二次确认" description="队列加载失败" />
-                <BusinessFailureState
-                    title="队列加载失败"
-                    error={queueQuery.error}
-                    onRetry={() => void queueQuery.refetch()}
-                    action={
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            render={<Link href="/workspace" />}
-                        >
-                            返回今日工作台
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+            <ProcurementPageError
+                error={controller.queueQuery.error}
+                onRetry={() => void controller.queueQuery.refetch()}
+            />
         )
     }
 
@@ -1129,100 +86,51 @@ export function ProcurementConfirmationPage() {
             />
 
             <ProcurementQueueControls
-                scope={scope}
-                due={due}
-                orderNoInputRef={orderNoInputRef}
-                orderNoDraft={orderNoDraft}
-                onOrderNoDraftChange={setOrderNoDraft}
-                onCommitOrderNo={commitOrderNo}
-                hasActiveFilter={hasActiveFilter}
-                onClearFilters={clearFilters}
-                autoNext={autoNext}
-                onToggleAutoNext={toggleAutoNext}
-                onScopeChange={(nextScope) =>
-                    replaceUrl({
-                        scope: nextScope === "mine" ? null : nextScope,
-                        queueContextId: null,
-                        currentWorkItemId: null,
-                    })
-                }
-                onDueChange={(nextDue) =>
-                    replaceUrl({
-                        due: nextDue === "active" ? null : nextDue,
-                        currentWorkItemId: null,
-                    })
-                }
+                scope={url.scope}
+                due={url.due}
+                orderNoInputRef={url.orderNoInputRef}
+                orderNoDraft={url.orderNoDraft}
+                onOrderNoDraftChange={url.setOrderNoDraft}
+                onCommitOrderNo={url.commitOrderNo}
+                hasActiveFilter={url.hasActiveFilter}
+                onClearFilters={url.clearFilters}
+                autoNext={url.autoNext}
+                onToggleAutoNext={url.toggleAutoNext}
+                onScopeChange={url.handleScopeChange}
+                onDueChange={url.handleDueChange}
             />
 
             <ProcurementOutcomeFeedback
-                finishedResult={finishedResult}
-                lastResult={lastResult}
+                finishedResult={controller.finishedResult}
+                lastResult={controller.lastResult}
                 fallbackSalesOrderId={task?.salesSubmission.salesOrderId}
                 context={context}
                 submissionNo={task?.salesSubmission.submissionNo}
-                returnTo={returnTo}
-                resultRef={resultRef}
-                onDismissFinished={() => setFinishedResult(null)}
+                returnTo={url.returnTo}
+                resultRef={controller.resultRef}
+                onDismissFinished={() => controller.setFinishedResult(null)}
                 onNext={() => {
                     const next =
                         context?.nextWorkItemId ??
-                        neighborId(1) ??
-                        tasks[0]?.workItemId
-                    goToWorkItem(next)
+                        controller.neighborId(1) ??
+                        controller.tasks[0]?.workItemId
+                    controller.goToWorkItem(next)
                 }}
             />
 
-            {actionError ? (
+            {controller.actionError ? (
                 <Alert variant="destructive" role="alert">
                     <TriangleAlertIcon aria-hidden="true" />
                     <AlertTitle>操作未生效</AlertTitle>
-                    <AlertDescription>{actionError}</AlertDescription>
+                    <AlertDescription>{controller.actionError}</AlertDescription>
                 </Alert>
             ) : null}
 
-            {completed ? (
-                view?.emptyReason === "FILTER_NO_RESULT" ? (
-                    <BusinessEmptyState
-                        kind="filter"
-                        title="当前筛选无结果"
-                        description="没有单号或范围匹配的待确认事项，可清除筛选后重试。"
-                        action={
-                            <div className="flex flex-wrap gap-2">
-                                <Button
-                                    variant="outline"
-                                    onClick={clearFilters}
-                                >
-                                    清除筛选
-                                </Button>
-                                <Button render={<Link href="/workspace" />}>
-                                    返回今日工作台
-                                </Button>
-                            </div>
-                        }
-                    />
-                ) : view?.emptyReason === "NO_DATA_SCOPE" ? (
-                    <BusinessEmptyState
-                        kind="no-scope"
-                        title="当前角色无数据范围"
-                        description="你可以进入此页面，但当前角色范围内没有可查看的待确认事项。"
-                        action={
-                            <Button render={<Link href="/workspace" />}>
-                                返回今日工作台
-                            </Button>
-                        }
-                    />
-                ) : (
-                    <BusinessEmptyState
-                        kind="no-tasks"
-                        title="本筛选项已处理完"
-                        description="当前采购二次确认队列已经清空，可以返回工作台处理其它事项。"
-                        action={
-                            <Button render={<Link href="/workspace" />}>
-                                返回今日工作台
-                            </Button>
-                        }
-                    />
-                )
+            {controller.completed ? (
+                <ProcurementEmptyStates
+                    emptyReason={controller.view?.emptyReason}
+                    onClearFilters={url.clearFilters}
+                />
             ) : task ? (
                 <>
                     {/* 1440 双栏：左销售提交+分行，右决策摘要 sticky */}
@@ -1250,263 +158,143 @@ export function ProcurementConfirmationPage() {
                                 task={task}
                                 onOpenContract={
                                     task.salesSubmission.contractId
-                                        ? () => setContractOpen(true)
+                                        ? () =>
+                                              controller.setContractOpen(true)
                                         : undefined
                                 }
                             />
 
                             <LegacyProcurementPlanEditor
                                 task={task}
-                                recommendation={recommendation}
+                                recommendation={controller.recommendation}
                                 recommendationPending={
-                                    recommendationQuery.isPending
+                                    controller.recommendationQuery.isPending
                                 }
                                 recommendationFailed={
-                                    recommendationQuery.isError
+                                    controller.recommendationQuery.isError
                                 }
-                                lineDrafts={lineDrafts}
-                                coverage={coverage}
-                                supplyOptions={supplyOptions}
-                                supplierOptions={supplierOptions}
-                                offeringOptionsForSku={offeringOptionsForSku}
+                                lineDrafts={drafts.lineDrafts}
+                                coverage={drafts.coverage}
+                                supplyOptions={controller.supplyOptions}
+                                supplierOptions={controller.supplierOptions}
+                                offeringOptionsForSku={
+                                    drafts.offeringOptionsForSku
+                                }
                                 capabilityOptionsForOffering={
-                                    capabilityOptionsForOffering
+                                    drafts.capabilityOptionsForOffering
                                 }
                                 fulfillmentOptionsForOffering={
-                                    fulfillmentOptionsForOffering
+                                    drafts.fulfillmentOptionsForOffering
                                 }
                                 formalPending={
-                                    formalPending ||
+                                    controller.formalPending ||
                                     !task.allowedActions.includes("SAVE")
                                 }
-                                onApplyRecommendation={applyRecommendation}
-                                onUpdateLine={updateLine}
-                                onAddSplitLine={addSplitLine}
-                                onRemoveLine={removeLine}
-                                saveMessage={saveMessage}
-                                dirty={dirty}
+                                onApplyRecommendation={
+                                    drafts.applyRecommendation
+                                }
+                                onUpdateLine={drafts.updateLine}
+                                onAddSplitLine={drafts.addSplitLine}
+                                onRemoveLine={drafts.removeLine}
+                                saveMessage={controller.saveMessage}
+                                dirty={drafts.dirty}
                             />
                         </div>
 
                         {/* 决策摘要：桌面 sticky；top 避开 sticky 处理条 */}
                         <ProcurementConfirmationSidebar
                             task={task}
-                            headingRef={headingRef}
-                            formalPending={formalPending}
-                            onReject={handleOpenReject}
-                            onConfirm={handleOpenConfirm}
-                            onStartProcessing={handleStartProcessing}
-                            onReleaseToTeam={handleReleaseToTeam}
-                            coverage={coverage}
-                            estimatedPurchase={estimatedPurchase}
-                            lineDrafts={lineDrafts}
-                            recommendation={recommendation}
-                            clientBlocking={clientBlocking}
+                            headingRef={controller.headingRef}
+                            formalPending={controller.formalPending}
+                            onReject={actions.handleOpenReject}
+                            onConfirm={actions.handleOpenConfirm}
+                            onStartProcessing={actions.handleStartProcessing}
+                            onReleaseToTeam={actions.handleReleaseToTeam}
+                            coverage={drafts.coverage}
+                            estimatedPurchase={controller.estimatedPurchase}
+                            lineDrafts={drafts.lineDrafts}
+                            recommendation={controller.recommendation}
+                            clientBlocking={drafts.clientBlocking}
                             salesOrderHref={w05Href(
                                 task.salesSubmission.salesOrderId,
-                                returnTo,
+                                url.returnTo,
                                 task.workItemId,
                             )}
                         />
                     </div>
 
-                    {contractQuery.data ? (
+                    {controller.contractQuery.data ? (
                         <ContractPaperDialog
-                            contract={contractQuery.data}
-                            open={contractOpen}
-                            onOpenChange={setContractOpen}
+                            contract={controller.contractQuery.data}
+                            open={controller.contractOpen}
+                            onOpenChange={controller.setContractOpen}
                         />
                     ) : (
-                        <Dialog
-                            open={contractOpen}
-                            onOpenChange={setContractOpen}
-                        >
-                            <DialogContent className="sm:max-w-lg">
-                                <DialogHeader>
-                                    <DialogTitle>
-                                        {contractQuery.isPending
-                                            ? "正在读取合同"
-                                            : "合同信息暂不可读取"}
-                                    </DialogTitle>
-                                    <DialogDescription>
-                                        {contractQuery.isPending
-                                            ? "合同仍在加载，完成后会在当前页面显示。"
-                                            : "当前账号未取得合同详情，或合同记录已不存在。采购确认仍以销售提交中的合同快照为准。"}
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <dl className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4 text-sm">
-                                    <div className="flex justify-between gap-4">
-                                        <dt className="text-muted-foreground">
-                                            合同编号
-                                        </dt>
-                                        <dd className="font-medium">
-                                            {task.salesSubmission
-                                                .contractSnapshot ?? "—"}
-                                        </dd>
-                                    </div>
-                                    <div className="flex justify-between gap-4">
-                                        <dt className="text-muted-foreground">
-                                            客户
-                                        </dt>
-                                        <dd>
-                                            {
-                                                task.salesSubmission
-                                                    .customerSnapshot
-                                            }
-                                        </dd>
-                                    </div>
-                                    <div className="flex justify-between gap-4">
-                                        <dt className="text-muted-foreground">
-                                            付款条件
-                                        </dt>
-                                        <dd>
-                                            {
-                                                task.salesSubmission
-                                                    .paymentTermLabel
-                                            }
-                                        </dd>
-                                    </div>
-                                </dl>
-                                <DialogFooter>
-                                    <DialogClose
-                                        render={<Button type="button" />}
-                                    >
-                                        关闭
-                                    </DialogClose>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
+                        <ContractPreviewDialog
+                            open={controller.contractOpen}
+                            onOpenChange={controller.setContractOpen}
+                            pending={controller.contractQuery.isPending}
+                            contractSnapshot={
+                                task.salesSubmission.contractSnapshot
+                            }
+                            customerSnapshot={
+                                task.salesSubmission.customerSnapshot
+                            }
+                            paymentTermLabel={
+                                task.salesSubmission.paymentTermLabel
+                            }
+                        />
                     )}
 
                     <ProcurementPlanConfirmationDialog
-                        open={confirmOpen}
-                        onOpenChange={setConfirmOpen}
+                        open={controller.confirmOpen}
+                        onOpenChange={controller.setConfirmOpen}
                         task={task}
-                        recommendation={recommendation}
-                        recommendationPending={recommendationQuery.isPending}
-                        recommendationFailed={recommendationQuery.isError}
-                        recommendationError={recommendationQuery.error}
+                        recommendation={controller.recommendation}
+                        recommendationPending={
+                            controller.recommendationQuery.isPending
+                        }
+                        recommendationFailed={
+                            controller.recommendationQuery.isError
+                        }
+                        recommendationError={
+                            controller.recommendationQuery.error
+                        }
                         onRetryRecommendation={() => {
-                            void recommendationQuery.refetch()
+                            void controller.recommendationQuery.refetch()
                         }}
-                        currentPlanSummary={currentPlanSummary}
-                        dirty={dirty}
-                        lineDrafts={lineDrafts}
-                        coverage={coverage}
-                        supplyOptions={supplyOptions}
-                        supplierOptions={supplierOptions}
-                        offeringOptionsForSku={offeringOptionsForSku}
+                        currentPlanSummary={drafts.currentPlanSummary}
+                        dirty={drafts.dirty}
+                        lineDrafts={drafts.lineDrafts}
+                        coverage={drafts.coverage}
+                        supplyOptions={controller.supplyOptions}
+                        supplierOptions={controller.supplierOptions}
+                        offeringOptionsForSku={drafts.offeringOptionsForSku}
                         capabilityOptionsForOffering={
-                            capabilityOptionsForOffering
+                            drafts.capabilityOptionsForOffering
                         }
                         fulfillmentOptionsForOffering={
-                            fulfillmentOptionsForOffering
+                            drafts.fulfillmentOptionsForOffering
                         }
-                        updatePlanLine={updatePlanLine}
-                        addSplitLine={addSplitLine}
-                        removeLine={removeLine}
-                        clientBlocking={clientBlocking}
-                        allCovered={allCovered}
-                        formalPending={formalPending}
+                        updatePlanLine={drafts.updatePlanLine}
+                        addSplitLine={drafts.addSplitLine}
+                        removeLine={drafts.removeLine}
+                        clientBlocking={drafts.clientBlocking}
+                        allCovered={drafts.allCovered}
+                        formalPending={controller.formalPending}
                         isSubmitting={
-                            saveMutation.isPending || completeMutation.isPending
+                            controller.saveMutation.isPending ||
+                            controller.completeMutation.isPending
                         }
-                        advanceAfterConfirm={advanceAfterConfirm}
-                        onApprove={handleApprove}
+                        advanceAfterConfirm={controller.advanceAfterConfirm}
+                        onApprove={actions.handleApprove}
                     />
 
-                    <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-                        <DialogContent className="sm:max-w-lg">
-                            <DialogHeader>
-                                <DialogTitle>驳回采购二次确认</DialogTitle>
-                                <DialogDescription>
-                                    将形成本次确认的驳回结论并结束当前任务；不创建采购单、变更单或后继任务。销售可在销售单选择三条固定出路。
-                                </DialogDescription>
-                            </DialogHeader>
-                            <form
-                                onSubmit={(event) => {
-                                    event.preventDefault()
-                                    void rejectForm.handleSubmit()
-                                }}
-                                className="space-y-4"
-                            >
-                                <div className="space-y-2">
-                                    <Label htmlFor="reject-reason-code">
-                                        驳回原因
-                                    </Label>
-                                    <rejectForm.AppField name="reasonCode">
-                                        {(field) => (
-                                            <OptionCombobox
-                                                id="reject-reason-code"
-                                                value={field.state.value}
-                                                onValueChange={(value) => {
-                                                    if (value)
-                                                        field.handleChange(
-                                                            value as RejectReasonCode,
-                                                        )
-                                                }}
-                                                options={(
-                                                    Object.keys(
-                                                        REJECT_REASON_LABEL,
-                                                    ) as RejectReasonCode[]
-                                                ).map((code) => ({
-                                                    value: code,
-                                                    label: REJECT_REASON_LABEL[
-                                                        code
-                                                    ],
-                                                }))}
-                                                allowClear={false}
-                                                aria-label="驳回原因"
-                                                placeholder="请选择驳回原因"
-                                            />
-                                        )}
-                                    </rejectForm.AppField>
-                                </div>
-                                <rejectForm.AppField name="comment">
-                                    {(field) => (
-                                        <field.TextareaField
-                                            label="补充说明"
-                                            placeholder="请说明无法履约、成本、交期或资质等问题"
-                                            rows={4}
-                                        />
-                                    )}
-                                </rejectForm.AppField>
-                                <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                                    <p className="mb-2 font-medium text-foreground">
-                                        销售后续三条固定出路（驳回后只读展示）
-                                    </p>
-                                    <ol className="list-decimal space-y-1 pl-4">
-                                        {NEXT_SALES_RESOLUTION_COPY.map(
-                                            (item) => (
-                                                <li key={item.code}>
-                                                    {item.title}
-                                                </li>
-                                            ),
-                                        )}
-                                    </ol>
-                                </div>
-                                <DialogFooter>
-                                    <DialogClose
-                                        render={
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                            />
-                                        }
-                                    >
-                                        取消
-                                    </DialogClose>
-                                    <rejectForm.AppForm>
-                                        <rejectForm.SubmitButton
-                                            label="确认驳回并完成任务"
-                                            pendingLabel="正在驳回"
-                                            variant="destructive"
-                                        />
-                                    </rejectForm.AppForm>
-                                </DialogFooter>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
+                    <RejectConfirmationDialog
+                        open={controller.rejectOpen}
+                        onOpenChange={controller.setRejectOpen}
+                        onSubmit={actions.handleRejectSubmit}
+                    />
                 </>
             ) : null}
         </PageScaffold>

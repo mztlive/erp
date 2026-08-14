@@ -86,7 +86,7 @@ export type ProjectionWhitelistContent = {
     contentHash: string
 }
 
-type ExecutionProjectionDelivery = {
+export type ExecutionProjectionDelivery = {
     deliveryId: string
     status: DeliveryStatus
     statusLabel: string

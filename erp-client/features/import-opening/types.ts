@@ -1,6 +1,9 @@
 /**
  * W18 导入与期初 · 客户端契约类型
  * 对齐 docs/ui-workspaces/w18-import-opening.md §5/§8。
+ *
+ * 本文件是纯声明模块（类型定义 + 枚举中文标签映射表），无逻辑与组件，
+ * 刻意保持单文件，不做拆分。
  */
 
 import type { ImportStageKey } from "@/components/business"

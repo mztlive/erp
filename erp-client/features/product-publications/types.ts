@@ -1,103 +1,26 @@
 /**
  * W22 商品发布 · 客户端契约
  * 对齐 docs/ui-workspaces/w22-product-publication.md §5 / §8
+ *
+ * 安全暂停契约类型见 lib/safety-pause-types.ts；枚举中文映射见
+ * lib/status-labels.ts。两者均在此原样再导出，保持既有导入路径稳定。
  */
 
-export type SafetyPauseCause =
-    | "SUPPLIER_STOPPED"
-    | "ZERO_INVENTORY"
-    | "SUPPLY_UNAVAILABLE"
-    | "AVAILABILITY_STALE"
-    | "COST_CHANGE_UNCONFIRMED"
-    | "CRITICAL_SUPPLY_CHANGE_UNCONFIRMED"
+import type { SystemSafetyPauseOperationView } from "@/features/product-publications/lib/safety-pause-types"
 
-type SafetyPauseFollowUpWorkItemRef = {
-    workItemId: string
-    taskVersion: string
-    workItemType: "BUSINESS_EXCEPTION"
-    businessObjectType: "SUPPLIER_OFFERING"
-    businessObjectId: string
-    subjectVersion: string
-    subjectHash: string
-    handlerKey: string
-}
-
-type SafetyPauseNoTaskBlocker = {
-    code: "NO_MANUAL_FOLLOW_UP_TASK_BY_CURRENT_POLICY"
-    message: string
-    evidenceReference: string
-}
-
-type SafetyPauseReviewRegistrationBlocker = {
-    code: "NORMAL_REVIEW_WORK_ITEM_TYPE_UNREGISTERED"
-    message: string
-    evidenceReference: string
-}
-
-type SafetyPauseAffectedPublicationView =
-    | {
-          publicationId: string
-          pauseArtifactKind: "REVISION"
-          pauseRevisionId: string
-          deliveryId: string
-          outboxMessageId: string
-      }
-    | {
-          publicationId: string
-          pauseArtifactKind: "ACTION"
-          pauseActionId: string
-          deliveryId: string
-          outboxMessageId: string
-      }
-
-type KnownSafetyPauseOperationBase = {
-    operationId: string
-    resultStatus: "COMMITTED" | "ALREADY_SAFE"
-    sourceObjectType: "SUPPLIER_OFFERING"
-    sourceObjectId: string
-    sourceVersion: string
-    subjectHash: string
-    availabilityEffect: "PAUSED"
-    affectedPublications: [
-        SafetyPauseAffectedPublicationView,
-        ...SafetyPauseAffectedPublicationView[],
-    ]
-    committedAt: string
-}
-
-export type SystemSafetyPauseOperationView =
-    | (KnownSafetyPauseOperationBase & {
-          cause: "SUPPLIER_STOPPED"
-          followUpWorkItem: SafetyPauseFollowUpWorkItemRef
-          followUpBlocker?: never
-      })
-    | (KnownSafetyPauseOperationBase & {
-          cause: "ZERO_INVENTORY" | "SUPPLY_UNAVAILABLE" | "AVAILABILITY_STALE"
-          followUpWorkItem?: never
-          followUpBlocker: SafetyPauseNoTaskBlocker
-      })
-    | (KnownSafetyPauseOperationBase & {
-          cause:
-              | "COST_CHANGE_UNCONFIRMED"
-              | "CRITICAL_SUPPLY_CHANGE_UNCONFIRMED"
-          followUpWorkItem?: never
-          followUpBlocker: SafetyPauseReviewRegistrationBlocker
-      })
-    | {
-          operationId: string
-          resultStatus: "UNKNOWN"
-          cause: SafetyPauseCause
-          sourceObjectType: "SUPPLIER_OFFERING"
-          sourceObjectId: string
-          sourceVersion: string
-          subjectHash: string
-          originalIdempotencyKey: string
-          availabilityEffect: "FAIL_CLOSED_PENDING_RESULT"
-          affectedPublications?: never
-          followUpWorkItem?: never
-          followUpBlocker?: never
-          committedAt?: never
-      }
+export type { SystemSafetyPauseOperationView }
+export type { SafetyPauseCause } from "@/features/product-publications/lib/safety-pause-types"
+export {
+    DELIVERY_STATUS_LABEL,
+    DELIVERY_STATUS_TONE,
+    MEDIA_ROLE_LABEL,
+    MEDIA_SCAN_STATUS_LABEL,
+    PUBLICATION_STATUS_LABEL,
+    PUBLICATION_STATUS_TONE,
+    SAFETY_PAUSE_CAUSE_LABEL,
+    SALE_STATUS_LABEL,
+    WORK_ITEM_TYPE_LABEL,
+} from "@/features/product-publications/lib/status-labels"
 
 type PublicationCreationBlocker = {
     code: "PUBLICATION_IDENTITY_POLICY_UNCONFIRMED"
@@ -441,83 +364,3 @@ export type RetryDeliveryResult =
       }
     | { status: "blocked"; code: string; message: string }
     | { status: "unknown"; requestId: string; message: string }
-
-export const PUBLICATION_STATUS_LABEL: Record<PublicationStatus, string> = {
-    DRAFT: "草稿",
-    PENDING_PUBLISH: "待发布",
-    MALL_LIVE: "商城已生效",
-    PAUSED: "已暂停",
-    SAFETY_PAUSED: "安全暂停",
-    INVALID: "已失效",
-}
-
-export const PUBLICATION_STATUS_TONE: Record<
-    PublicationStatus,
-    "success" | "warning" | "destructive" | "info" | "neutral"
-> = {
-    DRAFT: "neutral",
-    PENDING_PUBLISH: "info",
-    MALL_LIVE: "success",
-    PAUSED: "warning",
-    SAFETY_PAUSED: "destructive",
-    INVALID: "neutral",
-}
-
-export const DELIVERY_STATUS_LABEL: Record<DeliveryStatus, string> = {
-    PENDING_SEND: "待发送",
-    SENDING: "发送中",
-    RETRYING: "重试中",
-    ACKED: "已确认",
-    FAILED: "失败",
-    HANDOFF: "转人工",
-}
-
-export const DELIVERY_STATUS_TONE: Record<
-    DeliveryStatus,
-    "success" | "warning" | "destructive" | "info" | "neutral"
-> = {
-    PENDING_SEND: "info",
-    SENDING: "info",
-    RETRYING: "warning",
-    ACKED: "success",
-    FAILED: "destructive",
-    HANDOFF: "warning",
-}
-
-export const SALE_STATUS_LABEL: Record<SaleStatus, string> = {
-    ON_SALE: "上架",
-    OFF_SALE: "下架",
-    PAUSED: "暂停下单",
-}
-
-export const SAFETY_PAUSE_CAUSE_LABEL: Record<SafetyPauseCause, string> = {
-    SUPPLIER_STOPPED: "供应商停供",
-    ZERO_INVENTORY: "零库存",
-    SUPPLY_UNAVAILABLE: "明确不可供",
-    AVAILABILITY_STALE: "可供数据过期",
-    COST_CHANGE_UNCONFIRMED: "成本变化未确认",
-    CRITICAL_SUPPLY_CHANGE_UNCONFIRMED: "关键供给变化未确认",
-}
-
-export const MEDIA_ROLE_LABEL: Record<
-    PublicationMediaItem["mediaRole"],
-    string
-> = {
-    MAIN: "主图",
-    CAROUSEL: "轮播图",
-    DETAIL: "详情图",
-}
-
-export const MEDIA_SCAN_STATUS_LABEL: Record<
-    PublicationMediaItem["securityScanStatus"],
-    string
-> = {
-    PASSED: "已通过",
-    PENDING: "检查中",
-    FAILED: "未通过",
-}
-
-/** 安全暂停后续任务类型中文名（禁止枚举原值上屏）。 */
-export const WORK_ITEM_TYPE_LABEL: Record<string, string> = {
-    BUSINESS_EXCEPTION: "业务异常",
-}

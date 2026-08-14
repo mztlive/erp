@@ -6,21 +6,16 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     DocumentHeader,
-    FormalActionResult,
     ImportStageIndicator,
     PageHeader,
     PageScaffold,
     surfacePanelClassName,
-    type ImportStageStates,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Card,
     CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
 } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -33,23 +28,21 @@ import {
     ResultSection,
     TrialSection,
 } from "@/features/import-opening/components/batch-detail-sections"
-import { Fact, GateRow } from "@/features/import-opening/components/batch-facts"
+import { Fact } from "@/features/import-opening/components/batch-facts"
+import { ProductionGateCard } from "@/features/import-opening/components/production-gate-card"
 import {
     useImportBatchDetailQuery,
     useImportIssuesQuery,
 } from "@/features/import-opening/hooks/queries"
 import { formatObjectSet } from "@/features/import-opening/lib/labels"
+import { buildStageStates, importStageLabels } from "@/features/import-opening/lib/pipeline"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
-import type {
-    BatchSection,
-    ImportPipelineStage,
-} from "@/features/import-opening/types"
+import type { BatchSection } from "@/features/import-opening/types"
 import {
     BATCH_STATUS_LABEL,
     BATCH_STATUS_TONE,
     ENVIRONMENT_LABEL,
     PIPELINE_STAGE_LABEL,
-    PIPELINE_TO_INDICATOR,
 } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -62,44 +55,6 @@ const SECTION_TABS: { id: BatchSection; label: string }[] = [
     { id: "result", label: "结果" },
     { id: "audit", label: "审计" },
 ]
-
-const PIPELINE_ORDER: ImportPipelineStage[] = [
-    "RECEIVE",
-    "VALIDATE",
-    "TRIAL",
-    "CONFIRM",
-    "APPLY",
-    "RESULT",
-]
-
-function buildStageStates(current: ImportPipelineStage): ImportStageStates {
-    const currentIdx = PIPELINE_ORDER.indexOf(current)
-    const states: {
-        [K in import("@/components/business").ImportStageKey]: {
-            status: "pending" | "current" | "complete" | "failed"
-            description?: string
-        }
-    } = {
-        upload: { status: "pending" },
-        mapping: { status: "pending" },
-        validation: { status: "pending" },
-        preview: { status: "pending" },
-        submission: { status: "pending" },
-        result: { status: "pending" },
-    }
-    for (let i = 0; i < PIPELINE_ORDER.length; i += 1) {
-        const stage = PIPELINE_ORDER[i]!
-        const key = PIPELINE_TO_INDICATOR[stage]
-        let status: "pending" | "current" | "complete" | "failed" = "pending"
-        if (i < currentIdx) status = "complete"
-        else if (i === currentIdx) status = "current"
-        states[key] = {
-            status,
-            description: PIPELINE_STAGE_LABEL[stage],
-        }
-    }
-    return states
-}
 
 export function BatchDetailView({
     batchId,
@@ -188,19 +143,8 @@ export function BatchDetailView({
     }
 
     const stageStates = buildStageStates(batch.stage)
-    const importStageLabels = {
-        upload: PIPELINE_STAGE_LABEL.RECEIVE,
-        mapping: PIPELINE_STAGE_LABEL.VALIDATE,
-        validation: PIPELINE_STAGE_LABEL.TRIAL,
-        preview: PIPELINE_STAGE_LABEL.CONFIRM,
-        submission: PIPELINE_STAGE_LABEL.APPLY,
-        result: PIPELINE_STAGE_LABEL.RESULT,
-    }
     const confirmBlocked = batch.actionBlockers.filter(
         (b) => b.action === "CONFIRM_SCOPE",
-    )
-    const applyBlocked = batch.actionBlockers.filter(
-        (b) => b.action === "START_APPLY",
     )
     const workItemTypeMissing = !batch.productionGates.workItemTypeRegistered
 
@@ -408,63 +352,7 @@ export function BatchDetailView({
 
             {/* 生产应用门禁：仅提交应用前阶段展示 */}
             {batch.stage !== "RESULT" && batch.stage !== "APPLY" ? (
-                <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
-                        <CardTitle>提交前检查</CardTitle>
-                        <CardDescription>
-                            验证环境校验与业务确认是生产应用前置条件；系统管理员不能代替确认。
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-4">
-                        <GateRow
-                            ok={batch.productionGates.validationEnvPassed}
-                            label="验证环境校验与确认已通过并关联"
-                        />
-                        <GateRow
-                            ok={batch.productionGates.allConfirmationsComplete}
-                            label="全部必要责任确认完成"
-                        />
-                        <GateRow
-                            ok={batch.productionGates.noBlockingIssues}
-                            label="无阻塞校验问题"
-                        />
-                        <GateRow
-                            ok={batch.productionGates.trialVersionMatches}
-                            label="试算版本与确认一致（未因规则变化失效）"
-                        />
-                        <GateRow
-                            ok={batch.productionGates.ruleVersionStable}
-                            label="规则版本稳定"
-                        />
-                        <GateRow
-                            ok={batch.productionGates.workItemTypeRegistered}
-                            label="导入确认任务与专用提交命令已接线"
-                        />
-                        {applyBlocked.length > 0 ? (
-                            <FormalActionResult
-                                status="blocked"
-                                title="提交生产应用已阻断"
-                                description={applyBlocked
-                                    .map((b) => b.message)
-                                    .join(" ")}
-                                facts={applyBlocked.map((b) => ({
-                                    label: b.code,
-                                    value: b.message,
-                                }))}
-                            />
-                        ) : (
-                            <FormalActionResult
-                                status="succeeded"
-                                title={
-                                    batch.stage === "CONFIRM"
-                                        ? "检查已完成，可提交应用"
-                                        : "检查已完成"
-                                }
-                                description="提交时系统会再次核验权限与数据，确认无误后开始导入。"
-                            />
-                        )}
-                    </CardContent>
-                </Card>
+                <ProductionGateCard batch={batch} />
             ) : null}
         </PageScaffold>
     )

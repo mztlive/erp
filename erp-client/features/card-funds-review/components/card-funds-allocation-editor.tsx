@@ -20,22 +20,10 @@ import { Label } from "@/components/ui/label"
 import type {
     AllocationDraftLine,
     CardFundsReviewItemView,
+    InvoiceDraft,
+    ReceiptDraft,
 } from "@/features/card-funds-review/types"
 import { formatMoney, moneyStrSafe } from "../lib/presentation"
-
-type ReceiptDraft = Readonly<{
-    receiptNo: string
-    receivedAt: string
-    grossAmount: string
-}>
-
-type InvoiceDraft = Readonly<{
-    invoiceNo: string
-    issuedAt: string
-    grossAmount: string
-    netAmount: string
-    taxAmount: string
-}>
 
 export function CardFundsAllocationEditor({
     allocationMode,

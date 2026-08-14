@@ -1,0 +1,366 @@
+import type { StatusTone } from "@/components/ui/status-badge"
+import type {
+    BackendCloseEligibility,
+    BackendRevision,
+    BackendSalesOrderView,
+    BackendWorkingCopyLine,
+} from "@/features/sales-orders/api/contracts"
+import type {
+    ActionBlocker,
+    ActiveLowMarginManagerConfirmation,
+    CardSalesApproval,
+    FormalAllowedAction,
+    ProcurementRejectionResolution,
+    ProgressTrack,
+    SalesChangeOrderSummary,
+    SalesOrderLineItem,
+    SalesOrderListItem,
+    SalesOrderNature,
+    SalesOrderOrigin,
+    SalesOrderRevisionSnapshot,
+} from "@/features/sales-orders/types"
+import type { ApiError } from "@/lib/api/errors"
+
+const validationError = (message: string): ApiError => ({
+    kind: "Validation",
+    message,
+    status: 400,
+})
+
+export function throwValidation(message: string): never {
+    throw validationError(message)
+}
+
+export function formatInstant(secs?: number | null): string {
+    if (secs == null || secs <= 0) return ""
+    const d = new Date(secs * 1000)
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+export function formatIsoNow(): string {
+    return new Date().toISOString()
+}
+
+export function mapNature(businessType: string): SalesOrderNature {
+    return businessType === "VOUCHER" ? "card_voucher" : "physical_service"
+}
+
+function mapOrigin(origin: string): SalesOrderOrigin {
+    return origin === "MALL" ? "mall" : "erp"
+}
+
+export function toneForStatus(label: string): StatusTone {
+    if (label.includes("作废") || label.includes("关闭")) return "void"
+    if (
+        label.includes("生效") ||
+        label.includes("完成") ||
+        label.includes("通过")
+    )
+        return "success"
+    if (
+        label.includes("待") ||
+        label.includes("审核") ||
+        label.includes("确认") ||
+        label.includes("审批")
+    )
+        return "warning"
+    if (label.includes("履约") || label.includes("部分")) return "info"
+    return "neutral"
+}
+
+/** 后端 `stage.tone` 映射为前端徽标语气；后端只产出 `neutral` 兜底值以外的语气。 */
+function mapStageTone(tone: string): StatusTone {
+    return tone as StatusTone
+}
+
+function mapFulfillment(code: string): ProgressTrack {
+    switch (code) {
+        case "PARTIALLY_FULFILLED":
+            return { label: "部分履约", tone: "warning" }
+        case "COMPLETED":
+            return { label: "已完成", tone: "success" }
+        default:
+            return { label: "未开始", tone: "neutral" }
+    }
+}
+
+function mapCollection(code: string): ProgressTrack {
+    switch (code) {
+        case "PARTIALLY_COLLECTED":
+            return { label: "部分回款", tone: "warning" }
+        case "SETTLED":
+            return { label: "已结清", tone: "success" }
+        default:
+            return { label: "未收", tone: "neutral" }
+    }
+}
+
+function mapInvoicing(code: string): ProgressTrack {
+    switch (code) {
+        case "PARTIALLY_INVOICED":
+            return { label: "部分开票", tone: "warning" }
+        case "COMPLETED":
+            return { label: "已完成", tone: "success" }
+        default:
+            return { label: "未开", tone: "neutral" }
+    }
+}
+
+/**
+ * 结案条件卡只在详情页展示（`components/close-conditions-card.tsx`），列表行从不渲染
+ * 这个字段；纯列表拉取（`sales_order_list`）不携带后端权威结案资格，避免为
+ * 不可见字段逐行加查询成本。详情路径（`mapDetailToListItem`）会用
+ * `detail.close_eligibility` 覆盖这个占位值。
+ */
+const LIST_ROW_CLOSE_ELIGIBILITY_PLACEHOLDER: SalesOrderListItem["closeEligibility"] =
+    {
+        fulfillmentComplete: false,
+        receivableSettled: false,
+        invoiceComplete: false,
+        eligibleToClose: false,
+        blockers: [],
+        note: "",
+    }
+
+function mapCloseEligibilityFromBackend(
+    backend: BackendCloseEligibility,
+): SalesOrderListItem["closeEligibility"] {
+    return {
+        fulfillmentComplete: backend.fulfillment_complete,
+        receivableSettled: backend.receivable_settled,
+        invoiceComplete: backend.invoice_complete,
+        eligibleToClose: backend.eligible_to_close,
+        blockers: backend.blockers,
+        note: backend.note,
+    }
+}
+
+export function mapWorkingCopyLines(
+    lines: BackendWorkingCopyLine[] | undefined,
+): SalesOrderLineItem[] {
+    if (!lines?.length) return []
+    return lines.map((line) => {
+        const isVoucher = line.line_type === "VOUCHER"
+        const item: SalesOrderLineItem = {
+            id: line.sales_order_line_id || line.id,
+            name: line.item_name_snapshot,
+            sku: line.spec_snapshot || line.sku_id || undefined,
+            quantity: isVoucher
+                ? String(line.card_count ?? line.quantity ?? "0")
+                : (line.quantity ?? "0"),
+            unit:
+                line.unit_snapshot ||
+                line.base_unit_code ||
+                (isVoucher ? "张" : ""),
+            unitPriceGross: line.unit_price_gross ?? "0.00",
+            amountGross: line.gross_amount ?? line.transaction_amount ?? "0.00",
+        }
+        if (isVoucher) {
+            item.faceValue = line.face_value ?? undefined
+            item.cardForm =
+                line.card_form === "PHYSICAL"
+                    ? "实体卡"
+                    : line.card_form === "ELECTRONIC"
+                      ? "电子卡"
+                      : (line.card_form ?? undefined)
+        }
+        return item
+    })
+}
+
+export function mapRevisions(
+    revisions: BackendRevision[] | undefined,
+): SalesOrderRevisionSnapshot[] {
+    if (!revisions?.length) return []
+    return revisions.map((rev) => ({
+        revisionNo: rev.revision_no,
+        effectiveAt: formatInstant(rev.effective_at),
+        contractRevisionLabel: "",
+        customerSnapshot: "",
+        amountGross: rev.gross_amount,
+        lineSummary: "",
+        note: rev.revision_source,
+    }))
+}
+
+function defaultAllowedActions(
+    commercial: string,
+    hasCardApproval: boolean,
+    hasRejection: boolean,
+    /**
+     * 能否发起销售变更单——后端权威判定（`sales_order_detail` 的
+     * `can_start_sales_change_order`/`change_order_blocker`）。纯列表拉取没有
+     * 这份数据（避免为不可见的行内操作逐行查询），此时不下结论：既不放进
+     * `allowed` 也不放进 `blockers`，不在前端重新猜测规则。
+     */
+    startSalesChange?: { allowed: boolean; blocker?: string | null },
+): { allowed: FormalAllowedAction[]; blockers: ActionBlocker[] } {
+    const allowed: FormalAllowedAction[] = [
+        "PRINT",
+        "EXPORT",
+        "VIEW_CLOSE_CONDITIONS",
+    ]
+    const blockers: ActionBlocker[] = []
+
+    if (startSalesChange?.allowed) {
+        allowed.push("START_SALES_CHANGE")
+    } else if (startSalesChange && startSalesChange.blocker) {
+        blockers.push({
+            action: "START_SALES_CHANGE",
+            reason: startSalesChange.blocker,
+        })
+    }
+
+    if (commercial === "EFFECTIVE" || commercial === "PENDING_REVIEW") {
+        allowed.push("REGISTER_ACCEPTANCE")
+    }
+
+    if (hasRejection) {
+        allowed.push("RESOLVE_PROCUREMENT_REJECTION")
+    }
+    if (hasCardApproval) {
+        allowed.push("HANDLE_CARD_APPROVAL")
+    }
+
+    return { allowed, blockers }
+}
+
+export function mapListItemFromBackend(
+    row: BackendSalesOrderView,
+    extras?: {
+        customerName?: string
+        contractNumber?: string
+        contractCompanyName?: string
+        amountGross?: string
+        amountNet?: string
+        taxAmount?: string
+        lineItems?: SalesOrderLineItem[]
+        ownerName?: string
+        paymentTerms?: string
+        welfareScene?: string
+        fulfillmentDeadline?: string
+        remark?: string
+        settlementEntity?: string
+        revisions?: SalesOrderRevisionSnapshot[]
+        procurementRejection?: ProcurementRejectionResolution | null
+        activeCardSalesApproval?: CardSalesApproval | null
+        activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
+        cardApprovalProjectionBlocker?: string | null
+        activeChangeOrder?: SalesChangeOrderSummary | null
+        customerContact?: string
+        closeEligibility?: BackendCloseEligibility
+        startSalesChange?: { allowed: boolean; blocker?: string | null }
+    },
+): SalesOrderListItem {
+    const nature = mapNature(row.business_type)
+    const originSystem = mapOrigin(row.origin_system)
+    const primaryStatus = {
+        code: row.stage.code,
+        label: row.stage.label,
+        tone: mapStageTone(row.stage.tone),
+        ownerRole: row.stage.owner_role,
+        ownerUserId: row.stage.owner_user_id,
+        ownerUserName: row.stage.owner_user_name,
+        dueAt: row.stage.due_at,
+    }
+    const fulfillment = mapFulfillment(row.fulfillment_progress)
+    const collection = mapCollection(row.collection_progress)
+    const invoicing = mapInvoicing(row.invoice_progress)
+    const hasCard = Boolean(
+        extras?.activeCardSalesApproval ||
+        extras?.cardApprovalProjectionBlocker,
+    )
+    const hasRejection = Boolean(extras?.procurementRejection)
+    const { allowed, blockers } = defaultAllowedActions(
+        row.commercial_status,
+        hasCard,
+        hasRejection,
+        extras?.startSalesChange,
+    )
+
+    const commercialReadOnly =
+        originSystem === "mall" ||
+        primaryStatus.label === "已关闭" ||
+        primaryStatus.label === "已作废" ||
+        hasCard ||
+        row.commercial_status === "EFFECTIVE"
+
+    return {
+        id: row.id,
+        documentNumber: row.order_no,
+        customerName: extras?.customerName ?? row.customer_id,
+        contractId: row.contract_id ?? "",
+        contractNumber: extras?.contractNumber ?? "",
+        contractCompanyName:
+            extras?.contractCompanyName ?? extras?.customerName ?? "",
+        contractRevisionLabel: extras?.contractNumber
+            ? `${extras.contractNumber}`
+            : "",
+        nature,
+        originSystem,
+        primaryStatus,
+        fulfillment,
+        collection,
+        invoicing,
+        amountGross: extras?.amountGross ?? "0.00",
+        amountNet: extras?.amountNet ?? "0.00",
+        taxAmount: extras?.taxAmount ?? "0.00",
+        receivedAmount: "0.00",
+        invoicedAmount: "0.00",
+        ownerName: extras?.ownerName ?? "",
+        submittedAt: formatInstant(row.created_at),
+        welfareScene: extras?.welfareScene ?? "",
+        remark: extras?.remark,
+        version: Number(row.version) || 1,
+        lockVersion: Number(row.version) || 1,
+        settlementEntity: extras?.settlementEntity ?? "",
+        sellerEntity: "",
+        paymentTerms: extras?.paymentTerms ?? "",
+        fulfillmentDeadline: extras?.fulfillmentDeadline ?? "",
+        customerContact: extras?.customerContact,
+        lineItems: extras?.lineItems ?? [],
+        related: {
+            purchaseOrders: 0,
+            fulfillments: 0,
+            receipts: 0,
+            invoices: 0,
+        },
+        closeEligibility: extras?.closeEligibility
+            ? mapCloseEligibilityFromBackend(extras.closeEligibility)
+            : LIST_ROW_CLOSE_ELIGIBILITY_PLACEHOLDER,
+        natureLocked: true,
+        commercialReadOnly,
+        commercialReadOnlyReason: commercialReadOnly
+            ? originSystem === "mall"
+                ? "这单由商城开单，商业数据同步中，本系统只读；改内容请在商城处理。"
+                : row.commercial_status === "EFFECTIVE"
+                  ? "本单已生效，不能直接改；改内容请「发起改单」。"
+                  : undefined
+            : undefined,
+        revisions: extras?.revisions ?? [],
+        procurementRejection: extras?.procurementRejection ?? null,
+        activeCardSalesApproval: extras?.activeCardSalesApproval ?? null,
+        activeLowMarginManagerConfirmation:
+            extras?.activeLowMarginManagerConfirmation ?? null,
+        cardApprovalProjectionBlocker:
+            extras?.cardApprovalProjectionBlocker ?? null,
+        activeChangeOrder: extras?.activeChangeOrder ?? null,
+        allowedActions: allowed,
+        actionBlockers: blockers,
+    }
+}
+
+export function formatEpochDate(secs?: number | null): string {
+    if (secs == null || !Number.isFinite(secs) || secs <= 0) return ""
+    try {
+        const d = new Date(secs * 1000)
+        if (Number.isNaN(d.getTime())) return ""
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, "0")
+        const day = String(d.getDate()).padStart(2, "0")
+        return `${y}-${m}-${day}`
+    } catch {
+        return ""
+    }
+}

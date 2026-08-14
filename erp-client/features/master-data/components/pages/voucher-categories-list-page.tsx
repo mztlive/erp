@@ -2,13 +2,9 @@
 
 import { DownloadIcon, PlusIcon } from "lucide-react"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    BusinessTableFrame,
-    DataTable,
-} from "@/components/business"
+import { BusinessTableFrame } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { DictionaryListTable } from "@/features/master-data/components/list/dictionary-list-table"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { VoucherCategoryFormDialog } from "@/features/master-data/components/list/voucher-category-form-dialog"
@@ -102,70 +98,30 @@ export function VoucherCategoriesListPage() {
                     />
                 }
                 table={
-                    <DataTable
-                        data={state.pageRows}
+                    <DictionaryListTable
+                        rows={state.rows}
+                        pageRows={state.pageRows}
                         columns={columns}
-                        getRowId={(row) => row.stableId}
-                        rowCount={state.rows.length}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
-                        layout="flush"
-                        density="compact"
-                        defaultColumnPinning={{
-                            left: ["stableNo"],
-                            right: ["actions"],
-                        }}
-                        errorState={
-                            listLoadFailed ? (
-                                <BusinessFailureState
-                                    error={state.listQuery.error}
-                                    onRetry={() => void state.listQuery.refetch()}
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !listLoadFailed && state.rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind={
-                                        hasActiveFilters ? "filter" : "no-data"
-                                    }
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                                    title={
-                                        hasActiveFilters
-                                            ? "当前筛选无结果"
-                                            : "还没有卡券类目资料"
-                                    }
-                                    description={
-                                        hasActiveFilters
-                                            ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "点击「新建」创建第一份资料；历史记录会随资料保留。"
-                                    }
-                                    action={
-                                        hasActiveFilters ? (
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
-                                                onClick={filters.clearAllFilters}
-                                            >
-                                                清除筛选
-                                            </Button>
-                                        ) : state.canCreate ? (
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
-                                                onClick={() =>
-                                                    state.setCreateOpen(true)
-                                                }
-                                            >
-                                                {masterDataCopy.actionCreate}
-                                            </Button>
-                                        ) : undefined
-                                    }
-                                />
+                        listLoadFailed={listLoadFailed}
+                        error={state.listQuery.error}
+                        onRetry={() => void state.listQuery.refetch()}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={filters.clearAllFilters}
+                        emptyTitle="还没有卡券类目资料"
+                        emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
+                        emptyAction={
+                            state.canCreate ? (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="rounded-lg shadow-none"
+                                    onClick={() => state.setCreateOpen(true)}
+                                >
+                                    {masterDataCopy.actionCreate}
+                                </Button>
                             ) : undefined
                         }
                         onRowPreview={(row) => {

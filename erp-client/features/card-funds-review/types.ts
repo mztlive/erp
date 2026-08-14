@@ -6,6 +6,17 @@ export type ReviewType = "OPENING" | "SYNC_DELTA"
 
 export type WorkItemType = "CARD_FUNDS_REVIEW" | "CARD_FUNDS_DELTA_REVIEW"
 
+/** 当前任务允许执行的领域动作（责任动作 + 复核/登记动作）。 */
+export type WorkItemAction =
+    | "START_PROCESSING"
+    | "CONFIRM_ZERO"
+    | "APPROVE"
+    | "REJECT"
+    | "RELEASE_TO_TEAM"
+    | "REASSIGN"
+    | "REGISTER_RECEIPT"
+    | "REGISTER_INVOICE"
+
 type ReviewResult = "APPROVED" | "REJECTED"
 
 export type ApproveConclusion =
@@ -100,16 +111,7 @@ export type CardFundsReviewItemView = Readonly<{
         assignmentMode: AssignmentMode
         dueAt?: string
         ownerUser?: { id: string; displayName: string }
-        allowedActions: readonly (
-            | "START_PROCESSING"
-            | "CONFIRM_ZERO"
-            | "APPROVE"
-            | "REJECT"
-            | "RELEASE_TO_TEAM"
-            | "REASSIGN"
-            | "REGISTER_RECEIPT"
-            | "REGISTER_INVOICE"
-        )[]
+        allowedActions: readonly WorkItemAction[]
         actionBlockers: readonly {
             action: string
             code: string
@@ -322,3 +324,27 @@ export const APPROVE_CONCLUSION_LABEL: Record<ApproveConclusion, string> = {
 
 export const REJECT_FOLLOW_UP_COLLABORATION =
     "驳回后续待定：驳回仅形成本次复核记录并完成当前任务，不创建或转交后继任务。请人工与财务负责人协作登记任务类型与责任分工后再启用驳回后继。"
+
+/** 登记历史回款表单草稿。 */
+export type ReceiptDraft = Readonly<{
+    receiptNo: string
+    receivedAt: string
+    grossAmount: string
+}>
+
+/** 登记历史发票表单草稿。 */
+export type InvoiceDraft = Readonly<{
+    invoiceNo: string
+    issuedAt: string
+    grossAmount: string
+    netAmount: string
+    taxAmount: string
+}>
+
+/** 复核结论确认弹窗模式（approve/zero/reject/release 四类）。 */
+export type ConfirmMode =
+    | { kind: "approve"; conclusion: ApproveConclusion; advance: boolean }
+    | { kind: "zero"; advance: boolean }
+    | { kind: "reject" }
+    | { kind: "release" }
+    | null

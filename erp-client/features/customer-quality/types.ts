@@ -4,7 +4,7 @@
  */
 
 export type FundsReviewFilter = "all" | "reviewed_only"
-type BusinessTypeFilter = "VOUCHER" | "GOODS_SERVICE"
+export type BusinessTypeFilter = "VOUCHER" | "GOODS_SERVICE"
 export type PeriodSelectionSource =
     | "SERVER_DEFAULT"
     | "CONFIGURED_PRESET"

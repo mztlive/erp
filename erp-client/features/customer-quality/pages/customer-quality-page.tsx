@@ -2,107 +2,44 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { PaginationState, SortingState } from "@tanstack/react-table"
-import {
-    CalendarRangeIcon,
-    DownloadIcon,
-    InfoIcon,
-    RefreshCwIcon,
-    SearchIcon,
-} from "lucide-react"
+import { useSearchParams } from "next/navigation"
 
-import {
-    BackgroundJobProgress,
-    BusinessEmptyState,
-    BusinessFailureState,
-    BusinessStatusBadge,
-    BusinessTableFrame,
-    CostCoverageNotice,
-    DataFreshness,
-    DataTable,
-    GuardedBusinessAction,
-    MetricFilterItem,
-    MetricItem,
-    MetricStrip,
-    OptionCombobox,
-    PageHeader,
-    PageScaffold,
-    surfacePanelClassName,
-} from "@/components/business"
-import { formatDateTime } from "@/lib/datetime"
+import { BusinessFailureState, PageScaffold } from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
-import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
-import { FilterChip } from "@/components/business/filter-chip"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+
+import type { BusinessTag, CustomerQualityExportJob } from "../types"
 import {
-    Card,
-    CardAction,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import { DatePicker } from "@/components/ui/date-picker"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
-import { Label } from "@/components/ui/label"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
-    useCustomerQualityPeriodPolicyQuery,
     useCustomerQualityQuery,
     useRefreshCustomerQualityMutation,
     useStartCustomerQualityExportMutation,
 } from "../hooks/queries"
-import type {
-    BusinessTag,
-    CustomerQualityExportJob,
-    CustomerQualityQuery,
-    PeriodSelectionSource,
-} from "../types"
-import { openWorkspaceLabel } from "@/lib/ui-text"
-import { CustomerQualityCharts } from "../components/customer-quality-charts"
 import { useCustomerQualityColumns } from "../hooks/use-customer-quality-columns"
-import { parseFundsReview, parseScenario } from "../lib/url-state"
+import { useCustomerQualityNavigationState } from "../hooks/use-customer-quality-navigation-state"
+import { useCustomerQualityPeriodState } from "../hooks/use-customer-quality-period-state"
+import { useCustomerQualityRowFocus } from "../hooks/use-customer-quality-row-focus"
+import { useCustomerQualitySearch } from "../hooks/use-customer-quality-search"
 import {
-    formatClock,
-    formatSourceWatermark,
-    freshnessPresentation,
-    metricReliabilityDetail,
-} from "../lib/presentation"
-import { buildReturnTo } from "../lib/links"
+    parseBusinessType,
+    parseFundsReview,
+    parseScenario,
+} from "../lib/url-state"
+import { CustomerQualityMainView } from "../components/customer-quality-main-view"
+import { CustomerQualityPageSkeleton } from "../components/customer-quality-page-skeleton"
+import { PeriodBlockerCard } from "../components/period-blocker-card"
 
 export function CustomerQualityPage() {
-    const router = useRouter()
-    const pathname = usePathname()
     const searchParams = useSearchParams()
 
     const scenario = parseScenario(searchParams.get("scenario"))
     const fromParam = searchParams.get("from")
     const toParam = searchParams.get("to")
     const fundsReview = parseFundsReview(searchParams.get("fundsReview"))
-    const businessTypeRaw = searchParams.get("businessType")
-    const businessType =
-        businessTypeRaw === "VOUCHER" || businessTypeRaw === "GOODS_SERVICE"
-            ? businessTypeRaw
-            : undefined
+    const businessType = parseBusinessType(searchParams.get("businessType"))
     const scaleTag = searchParams.get("scaleTag") ?? undefined
     const profitTag = searchParams.get("profitTag") ?? undefined
     const riskTag = searchParams.get("riskTag") ?? undefined
     const qParam = searchParams.get("q") ?? ""
-    const sort = searchParams.get("sort") ?? "salesGrossAmount:desc"
     const chartDimension = searchParams.get("chartDimension") ?? undefined
     const chartCode = searchParams.get("chartCode") ?? undefined
     const customerId = searchParams.get("customerId") ?? undefined
@@ -112,195 +49,39 @@ export function CustomerQualityPage() {
     // 数据范围固定为当前角色默认范围；不接受 URL 隐形覆盖（URL 参数与控件一一对应）
     const scopeId = "scope:team:sales-east"
 
-    const [searchInput, setSearchInput] = React.useState(qParam)
-    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-    const [explicitFrom, setExplicitFrom] = React.useState(fromParam ?? "")
-    const [explicitTo, setExplicitTo] = React.useState(toParam ?? "")
-    const pageFromUrl = Math.max(
-        1,
-        Number(searchParams.get("page") ?? "1") || 1,
-    )
-    const [pagination, setPagination] = React.useState<PaginationState>({
-        pageIndex: pageFromUrl - 1,
-        pageSize: 20,
+    const nav = useCustomerQualityNavigationState()
+    const search = useCustomerQualitySearch({
+        qParam,
+        patchUrl: nav.patchUrl,
     })
-    const [tagDialog, setTagDialog] = React.useState<BusinessTag | null>(null)
-    const [exportJob, setExportJob] =
-        React.useState<CustomerQualityExportJob | null>(null)
-    const [refreshError, setRefreshError] = React.useState<string | null>(null)
-    const [periodWriteDone, setPeriodWriteDone] = React.useState(false)
-    const rowFocusRef = React.useRef<string | null>(focusCustomerId ?? null)
-
-    // P3：URL 回填搜索草稿（输入中不被旧值覆盖）；300ms 防抖自动写 URL；`/` 聚焦；Enter 兜底
-    React.useEffect(() => {
-        const el = searchInputRef.current
-        if (el && document.activeElement === el) return
-        setSearchInput(qParam)
-    }, [qParam])
-
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchInput.trim() === qParam) return
-            patchUrl({ q: searchInput.trim() || null })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
-    }, [searchInput])
-
-    React.useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (
-                event.key !== "/" ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.altKey
-            )
-                return
-            const target = event.target as HTMLElement | null
-            const tag = target?.tagName
-            if (
-                tag === "INPUT" ||
-                tag === "TEXTAREA" ||
-                tag === "SELECT" ||
-                target?.isContentEditable
-            ) {
-                return
-            }
-            event.preventDefault()
-            searchInputRef.current?.focus()
-        }
-        window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
-    }, [])
-
-    const periodPolicyQuery = useCustomerQualityPeriodPolicyQuery(scenario)
-    const periodPolicy = periodPolicyQuery.data
-
-    // Apply server default period into URL when missing (never silent calendar-year client fallback).
-    React.useEffect(() => {
-        if (periodWriteDone) return
-        if (!periodPolicy) return
-        if (fromParam && toParam) {
-            setPeriodWriteDone(true)
-            return
-        }
-        if (periodPolicy.hasDefault && periodPolicy.from && periodPolicy.to) {
-            const next = new URLSearchParams(searchParams.toString())
-            next.set("from", periodPolicy.from)
-            next.set("to", periodPolicy.to)
-            if (periodPolicy.customerQualityPeriodPolicyId) {
-                next.set(
-                    "customerQualityPeriodPolicyId",
-                    periodPolicy.customerQualityPeriodPolicyId,
-                )
-            }
-            if (periodPolicy.customerQualityPeriodPolicyVersion != null) {
-                next.set(
-                    "customerQualityPeriodPolicyVersion",
-                    String(periodPolicy.customerQualityPeriodPolicyVersion),
-                )
-            }
-            if (
-                !next.get("periodPreset") &&
-                periodPolicy.selectionSource === "SERVER_DEFAULT"
-            ) {
-                next.set("periodPreset", "ytd")
-            }
-            router.replace(`${pathname}?${next.toString()}`)
-            setPeriodWriteDone(true)
-        } else {
-            setPeriodWriteDone(true)
-        }
-    }, [
-        periodPolicy,
+    const period = useCustomerQualityPeriodState({
+        scenario,
         fromParam,
         toParam,
-        periodWriteDone,
-        pathname,
-        router,
-        searchParams,
-    ])
-
-    const resolvedFrom = fromParam ?? undefined
-    const resolvedTo = toParam ?? undefined
-    const hasPeriod = Boolean(resolvedFrom && resolvedTo)
-    const needsPeriodBlocker =
-        periodWriteDone &&
-        !hasPeriod &&
-        periodPolicy != null &&
-        !periodPolicy.hasDefault
-
-    const periodSelectionSource: PeriodSelectionSource =
-        searchParams.get("periodSelectionSource") === "EXPLICIT" ||
-        (hasPeriod && !periodPolicy?.hasDefault)
-            ? "EXPLICIT"
-            : periodPreset
-              ? "CONFIGURED_PRESET"
-              : "SERVER_DEFAULT"
-
-    const analysisQuery: CustomerQualityQuery | null = React.useMemo(() => {
-        if (!resolvedFrom || !resolvedTo) return null
-        return {
-            from: resolvedFrom,
-            to: resolvedTo,
-            periodBasis:
-                periodSelectionSource === "EXPLICIT"
-                    ? "EXPLICIT"
-                    : (periodPolicy?.periodBasis ?? "BUSINESS_DATE"),
-            periodSelectionSource,
-            customerQualityPeriodPolicyId:
-                searchParams.get("customerQualityPeriodPolicyId") ??
-                periodPolicy?.customerQualityPeriodPolicyId,
-            customerQualityPeriodPolicyVersion: Number(
-                searchParams.get("customerQualityPeriodPolicyVersion") ??
-                    periodPolicy?.customerQualityPeriodPolicyVersion ??
-                    NaN,
-            )
-                ? Number(
-                      searchParams.get("customerQualityPeriodPolicyVersion") ??
-                          periodPolicy?.customerQualityPeriodPolicyVersion,
-                  )
-                : undefined,
-            scopeId,
-            fundsReview,
-            businessType,
-            scaleTag,
-            profitTag,
-            riskTag,
-            q: qParam || undefined,
-            sort,
-            page: pagination.pageIndex + 1,
-            pageSize: pagination.pageSize,
-            chartDimension,
-            chartCode,
-            customerId,
-            scenario,
-        }
-    }, [
-        resolvedFrom,
-        resolvedTo,
-        periodSelectionSource,
-        periodPolicy,
-        searchParams,
-        scopeId,
+        periodPreset,
         fundsReview,
         businessType,
         scaleTag,
         profitTag,
         riskTag,
         qParam,
-        sort,
-        pagination.pageIndex,
-        pagination.pageSize,
+        sort: nav.sort,
         chartDimension,
         chartCode,
         customerId,
-        scenario,
-    ])
+        scopeId,
+        pagination: nav.pagination,
+        patchUrl: nav.patchUrl,
+    })
 
-    const viewQuery = useCustomerQualityQuery(analysisQuery)
+    const viewQuery = useCustomerQualityQuery(period.analysisQuery)
     const exportMutation = useStartCustomerQualityExportMutation()
     const refreshMutation = useRefreshCustomerQualityMutation()
+
+    const [tagDialog, setTagDialog] = React.useState<BusinessTag | null>(null)
+    const [exportJob, setExportJob] =
+        React.useState<CustomerQualityExportJob | null>(null)
+    const [refreshError, setRefreshError] = React.useState<string | null>(null)
 
     async function handleRefresh() {
         setRefreshError(null)
@@ -316,77 +97,6 @@ export function CustomerQualityPage() {
 
     const data = viewQuery.data
 
-    function patchUrl(
-        patch: Record<string, string | null | undefined>,
-        options?: { replace?: boolean },
-    ) {
-        // P1/P2/P6：筛选变更恒 replace；page 入 URL，任何筛选变更回第 1 页（删除 page 即省略）
-        patchSearchParams(
-            { router, pathname, searchParams },
-            { ...patch, page: null },
-            { replace: true, ...options },
-        )
-        setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
-    }
-
-    const resetPage = React.useCallback(() => {
-        setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
-    }, [])
-
-    // P6：分页写 URL（page），URL 回读同步本地分页
-    React.useEffect(() => {
-        setPagination((p) =>
-            p.pageIndex === pageFromUrl - 1
-                ? p
-                : { ...p, pageIndex: pageFromUrl - 1 },
-        )
-    }, [pageFromUrl])
-
-    const handlePaginationChange = React.useCallback(
-        (next: PaginationState) => {
-            setPagination(next)
-            const sp = new URLSearchParams(searchParams.toString())
-            if (next.pageIndex <= 0) sp.delete("page")
-            else sp.set("page", String(next.pageIndex + 1))
-            const qs = sp.toString()
-            router.replace(qs ? `${pathname}?${qs}` : pathname)
-        },
-        [pathname, router, searchParams],
-    )
-
-    const returnTo = React.useMemo(
-        () =>
-            buildReturnTo(
-                pathname,
-                new URLSearchParams(searchParams.toString()),
-            ),
-        [pathname, searchParams],
-    )
-
-    // 排序状态与顶部「排序」下拉同源（URL sort）；表头点击回写同一参数。
-    const tableSorting = React.useMemo<SortingState>(() => {
-        const [id, dir] = sort.split(":")
-        return [{ id, desc: dir === "desc" }]
-    }, [sort])
-
-    const handleTableSortingChange = React.useCallback(
-        (next: SortingState) => {
-            const nextSort = next[0]
-            patchUrl({
-                sort: nextSort
-                    ? `${nextSort.id}:${nextSort.desc ? "desc" : "asc"}`
-                    : "salesGrossAmount:desc",
-            })
-            resetPage()
-        },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [sort],
-    )
-
-    const periodInvalid = Boolean(
-        resolvedFrom && resolvedTo && resolvedFrom > resolvedTo,
-    )
-
     // 定位失败降级：目标客户不在当前页/排序结果时滚动到明细表顶部
     const tableSectionRef = React.useRef<HTMLDivElement>(null)
     const scrollToTableTop = React.useCallback(() => {
@@ -397,49 +107,16 @@ export function CustomerQualityPage() {
         tableSectionRef.current?.focus({ preventScroll: true })
     }, [])
 
-    // Restore row focus after returning from drill
-    React.useEffect(() => {
-        if (!focusCustomerId || !data) return
-        const frame = window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => {
-                const row = document.querySelector<HTMLElement>(
-                    `[data-customer-row="${CSS.escape(focusCustomerId)}"]`,
-                )
-                const metricTarget = focusMetric
-                    ? document.querySelector<HTMLElement>(
-                          `[data-customer-id="${CSS.escape(focusCustomerId)}"][data-focus-metric="${CSS.escape(focusMetric)}"]`,
-                      )
-                    : null
-                if (metricTarget ?? row) {
-                    ;(metricTarget ?? row)?.focus()
-                    rowFocusRef.current = focusCustomerId
-                } else {
-                    scrollToTableTop()
-                }
-            })
-        })
-        // D3：focus 参数用完即清理（replace，不滞留 URL；重新进入/分享时不再无谓定位）
-        const sp = new URLSearchParams(searchParams.toString())
-        if (sp.has("focusCustomerId") || sp.has("focusMetric")) {
-            sp.delete("focusCustomerId")
-            sp.delete("focusMetric")
-            const qs = sp.toString()
-            router.replace(qs ? `${pathname}?${qs}` : pathname)
-        }
-        return () => window.cancelAnimationFrame(frame)
-    }, [
+    useCustomerQualityRowFocus({
         focusCustomerId,
         focusMetric,
         data,
         scrollToTableTop,
-        pathname,
-        router,
-        searchParams,
-    ])
+    })
 
     const columns = useCustomerQualityColumns({
         data,
-        returnTo,
+        returnTo: nav.returnTo,
         businessType,
         onTagClick: setTagDialog,
     })
@@ -463,9 +140,9 @@ export function CustomerQualityPage() {
     }, [chartDimension, chartCode, data])
 
     async function handleExport() {
-        if (!data || !analysisQuery) return
+        if (!data || !period.analysisQuery) return
         const job = await exportMutation.mutateAsync({
-            query: analysisQuery,
+            query: period.analysisQuery,
             filterSummary: data.filterSummary,
             projectionWatermark: data.freshness.sourceWatermark,
             permissionVersion: data.scope.permissionVersion,
@@ -474,63 +151,61 @@ export function CustomerQualityPage() {
         setExportJob(job)
     }
 
-    function applyExplicitPeriod() {
-        if (!explicitFrom || !explicitTo) return
-        if (explicitFrom > explicitTo) return
-        patchUrl({
-            from: explicitFrom,
-            to: explicitTo,
-            periodSelectionSource: "EXPLICIT",
-            periodPreset: null,
-            customerQualityPeriodPolicyId: null,
-            customerQualityPeriodPolicyVersion: null,
+    function clearAllFilters() {
+        search.setSearchInput("")
+        // P4：清除筛选保留排序与期间（分析页维度参数）
+        nav.patchUrl({
+            q: null,
+            scaleTag: null,
+            profitTag: null,
+            riskTag: null,
+            chartDimension: null,
+            chartCode: null,
+            businessType: null,
+            fundsReview: null,
+            customerId: null,
+            focusMetric: null,
         })
+        nav.resetPage()
     }
 
-    function applyPreset(presetId: string, from: string, to: string) {
-        patchUrl({
-            from,
-            to,
-            periodPreset: presetId,
-            periodSelectionSource: "CONFIGURED_PRESET",
-            customerQualityPeriodPolicyId:
-                periodPolicy?.customerQualityPeriodPolicyId ?? null,
-            customerQualityPeriodPolicyVersion:
-                periodPolicy?.customerQualityPeriodPolicyVersion != null
-                    ? String(periodPolicy.customerQualityPeriodPolicyVersion)
-                    : null,
+    function clearTableFilters() {
+        // P4：清除筛选保留排序与期间（分析页维度参数）
+        nav.patchUrl({
+            q: null,
+            scaleTag: null,
+            profitTag: null,
+            riskTag: null,
+            chartDimension: null,
+            chartCode: null,
+            businessType: null,
+            fundsReview: null,
+            customerId: null,
+            focusMetric: null,
         })
+        nav.resetPage()
     }
 
     // —— Loading shells ——
     if (
-        periodPolicyQuery.isPending ||
-        (!periodWriteDone && !needsPeriodBlocker)
+        period.periodPolicyQuery.isPending ||
+        (!period.periodWriteDone && !period.needsPeriodBlocker)
     ) {
-        return (
-            <PageScaffold>
-                <Skeleton className="h-10 w-64 rounded-lg" />
-                <Skeleton className="h-24 w-full rounded-lg" />
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                    {Array.from({ length: 8 }).map((_, i) => (
-                        <Skeleton key={i} className="h-20 rounded-lg" />
-                    ))}
-                </div>
-                <Skeleton className="h-64 w-full rounded-lg" />
-            </PageScaffold>
-        )
+        return <CustomerQualityPageSkeleton variant="policy-loading" />
     }
 
-    if (periodPolicyQuery.isError) {
+    if (period.periodPolicyQuery.isError) {
         return (
             <PageScaffold>
                 <BusinessFailureState
                     title="期间配置加载失败"
-                    error={periodPolicyQuery.error}
+                    error={period.periodPolicyQuery.error}
                     action={
                         <Button
                             type="button"
-                            onClick={() => void periodPolicyQuery.refetch()}
+                            onClick={() =>
+                                void period.periodPolicyQuery.refetch()
+                            }
                         >
                             重试
                         </Button>
@@ -541,102 +216,18 @@ export function CustomerQualityPage() {
     }
 
     // —— Period blocker ——
-    if (needsPeriodBlocker) {
+    if (period.needsPeriodBlocker) {
         return (
             <PageScaffold>
-                <PageHeader
-                    title="客户经营质量"
-                    description="未配置默认统计期间，请选择起止日期后开始分析。"
-                    breadcrumbs={[
-                        {
-                            id: "an",
-                            label: "分析",
-                            href: "/analytics/customer-quality",
-                        },
-                        { id: "cq", label: "客户经营质量", current: true },
-                    ]}
+                <PeriodBlockerCard
+                    periodPolicy={period.periodPolicy}
+                    explicitFrom={period.explicitFrom}
+                    explicitTo={period.explicitTo}
+                    onFromChange={period.setExplicitFrom}
+                    onToChange={period.setExplicitTo}
+                    onApplyExplicit={period.applyExplicitPeriod}
+                    onApplyPreset={period.applyPreset}
                 />
-                <Alert variant="warning">
-                    <CalendarRangeIcon aria-hidden="true" />
-                    <AlertTitle>请选择统计期间</AlertTitle>
-                    <AlertDescription>
-                        尚未设置默认统计期间。选定期间后才会显示指标、图表与明细。
-                    </AlertDescription>
-                </Alert>
-                <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
-                        <CardTitle>显式期间</CardTitle>
-                        <CardDescription>
-                            选定后作为本页所有统计的唯一期间。
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-4 pt-4 sm:flex-row sm:items-end">
-                        <div className="grid flex-1 gap-2 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="cq-from">开始日期</Label>
-                                <DatePicker
-                                    value={explicitFrom || undefined}
-                                    onValueChange={(next) =>
-                                        setExplicitFrom(next ?? "")
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="cq-to">结束日期</Label>
-                                <DatePicker
-                                    value={explicitTo || undefined}
-                                    onValueChange={(next) =>
-                                        setExplicitTo(next ?? "")
-                                    }
-                                />
-                            </div>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                            <Button
-                                type="button"
-                                disabled={
-                                    !explicitFrom ||
-                                    !explicitTo ||
-                                    (explicitFrom > explicitTo &&
-                                        explicitFrom !== explicitTo)
-                                }
-                                onClick={applyExplicitPeriod}
-                            >
-                                开始分析
-                            </Button>
-                            {explicitFrom &&
-                            explicitTo &&
-                            explicitFrom > explicitTo ? (
-                                <p className="text-xs text-destructive">
-                                    开始日期不能晚于结束日期，请调整后提交。
-                                </p>
-                            ) : null}
-                        </div>
-                    </CardContent>
-                    {periodPolicy?.presets &&
-                    periodPolicy.presets.length > 0 ? (
-                        <CardContent className="border-t pt-4">
-                            <p className="mb-2 text-sm text-muted-foreground">
-                                或选择快捷期间：
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                                {periodPolicy.presets.map((p) => (
-                                    <Button
-                                        key={p.id}
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                            applyPreset(p.id, p.from, p.to)
-                                        }
-                                    >
-                                        {p.label}
-                                    </Button>
-                                ))}
-                            </div>
-                        </CardContent>
-                    ) : null}
-                </Card>
             </PageScaffold>
         )
     }
@@ -661,18 +252,7 @@ export function CustomerQualityPage() {
     }
 
     if (viewQuery.isPending || !data) {
-        return (
-            <PageScaffold>
-                <Skeleton className="h-10 w-64 rounded-lg" />
-                <Skeleton className="h-28 w-full rounded-lg" />
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                    {Array.from({ length: 8 }).map((_, i) => (
-                        <Skeleton key={i} className="h-20 rounded-lg" />
-                    ))}
-                </div>
-                <Skeleton className="h-72 w-full rounded-lg" />
-            </PageScaffold>
-        )
+        return <CustomerQualityPageSkeleton variant="view-loading" />
     }
 
     if (data.emptyKind === "forbidden") {
@@ -696,808 +276,80 @@ export function CustomerQualityPage() {
         )
     }
 
-    const freshUi = freshnessPresentation(
-        data.freshness.state,
-        data.freshness.refreshFailed,
-        viewQuery.isFetching && !viewQuery.isPending,
-    )
-
-    const isVoucherOnly = businessType === "VOUCHER"
-
     // customerId 深链参数的显性名称（在当前页数据中反查客户名）
     const chipCustomerName = data.customers.items.find(
         (c) => c.customerId === customerId,
     )?.customerName
 
+    const showClearFilters = Boolean(
+        qParam ||
+            scaleTag ||
+            profitTag ||
+            riskTag ||
+            chartCode ||
+            businessType ||
+            fundsReview === "reviewed_only" ||
+            customerId,
+    )
+
     return (
-        <PageScaffold>
-            <PageHeader
-                title="客户经营质量"
-                breadcrumbs={[
-                    {
-                        id: "an",
-                        label: "分析",
-                        href: "/analytics/customer-quality",
-                    },
-                    { id: "cq", label: "客户经营质量", current: true },
-                ]}
-                metadata={
-                    <div className="flex flex-col gap-1">
-                        <DataFreshness
-                            updatedAt={formatClock(data.freshness.projectedAt)}
-                            dateTime={data.freshness.projectedAt}
-                            state={freshUi.state}
-                            statusLabel={freshUi.statusLabel}
-                            label="经营质量汇总"
-                        />
-                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                            <span>
-                                期间 {data.period.from} ~ {data.period.to}
-                                {data.period.selectionSource ===
-                                "SERVER_DEFAULT"
-                                    ? " · 系统默认"
-                                    : data.period.selectionSource ===
-                                        "CONFIGURED_PRESET"
-                                      ? " · 配置快捷项"
-                                      : " · 显式选择"}
-                            </span>
-                            <span>· {data.scope.label}</span>
-                        </div>
-                    </div>
-                }
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground hover:text-foreground"
-                            disabled={viewQuery.isFetching}
-                            onClick={() => {
-                                void handleRefresh()
-                            }}
-                        >
-                            <RefreshCwIcon className="size-4" aria-hidden />
-                            {viewQuery.isFetching ? "刷新中" : "刷新"}
-                        </Button>
-                        <GuardedBusinessAction
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                                !data.canExport ||
-                                data.customers.filteredTotal === 0 ||
-                                exportMutation.isPending
-                            }
-                            reason={
-                                !data.canExport
-                                    ? "当前角色无导出权限"
-                                    : data.customers.filteredTotal === 0
-                                      ? "当前没有客户结果可导出"
-                                      : exportMutation.isPending
-                                        ? "导出任务进行中"
-                                        : undefined
-                            }
-                            onClick={() => void handleExport()}
-                        >
-                            <DownloadIcon className="size-4" aria-hidden />
-                            导出
-                        </GuardedBusinessAction>
-                    </div>
-                }
-            />
-
-            {/* Distinct freshness / coverage alerts — not mutually substitutable */}
-            {refreshError ? (
-                <Alert variant="destructive">
-                    <AlertTitle>刷新失败</AlertTitle>
-                    <AlertDescription>{refreshError}</AlertDescription>
-                </Alert>
-            ) : null}
-            {data.freshness.state === "stale" &&
-            !data.freshness.refreshFailed ? (
-                <Alert variant="warning">
-                    <AlertTitle>数据可能不是最新</AlertTitle>
-                    <AlertDescription>
-                        最近成功更新{" "}
-                        {formatDateTime(
-                            data.freshness.projectedAt,
-                            "full",
-                            "passthrough",
-                        )}
-                        ；来源更新时间{" "}
-                        <span className="num">
-                            {formatSourceWatermark(
-                                data.freshness.sourceWatermark,
-                            )}
-                        </span>
-                        。数据可能不是最新，可点击刷新。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            {data.freshness.state === "rebuilding" ? (
-                <Alert variant="info">
-                    <AlertTitle>数据更新中</AlertTitle>
-                    <AlertDescription>
-                        更新中，已保留最近成功结果。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            {data.freshness.refreshFailed ? (
-                <Alert variant="destructive">
-                    <AlertTitle>刷新失败</AlertTitle>
-                    <AlertDescription>
-                        已保留旧结果。请重试；业务记录未被修改。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            {data.freshness.state === "failed" ? (
-                <Alert variant="destructive">
-                    <AlertTitle>数据加载失败</AlertTitle>
-                    <AlertDescription>
-                        显示上次成功数据（若有）。请查看后台任务或稍后重试。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            {/* Filters */}
-            <Card size="sm" className={surfacePanelClassName}>
-                <CardContent className="flex flex-col gap-3 pt-4">
-                    <div className="flex flex-wrap items-end gap-3">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="cq-period-from">期间起</Label>
-                            <DatePicker
-                                className="w-[10.5rem]"
-                                value={resolvedFrom || undefined}
-                                onValueChange={(next) => {
-                                    patchUrl({
-                                        from: next || null,
-                                        periodSelectionSource: "EXPLICIT",
-                                        periodPreset: null,
-                                    })
-                                    resetPage()
-                                }}
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="cq-period-to">期间止</Label>
-                            <DatePicker
-                                className="w-[10.5rem]"
-                                value={resolvedTo || undefined}
-                                onValueChange={(next) => {
-                                    patchUrl({
-                                        to: next || null,
-                                        periodSelectionSource: "EXPLICIT",
-                                        periodPreset: null,
-                                    })
-                                    resetPage()
-                                }}
-                            />
-                        </div>
-                        {periodInvalid ? (
-                            <p
-                                id="cq-period-invalid"
-                                className="w-full text-xs text-destructive"
-                                role="alert"
-                            >
-                                开始日期晚于结束日期，将查询不到结果，请调整。
-                            </p>
-                        ) : null}
-                        {periodPolicy?.presets?.length ? (
-                            <div className="space-y-1.5">
-                                <Label htmlFor="cq-preset">快捷期间</Label>
-                                <OptionCombobox
-                                    id="cq-preset"
-                                    value={periodPreset ?? ""}
-                                    onValueChange={(v) => {
-                                        const id = v ?? ""
-                                        const preset =
-                                            periodPolicy.presets?.find(
-                                                (p) => p.id === id,
-                                            )
-                                        if (preset) {
-                                            applyPreset(
-                                                preset.id,
-                                                preset.from,
-                                                preset.to,
-                                            )
-                                            resetPage()
-                                        } else patchUrl({ periodPreset: null })
-                                    }}
-                                    options={[
-                                        { value: "", label: "自定义" },
-                                        ...periodPolicy.presets.map((p) => ({
-                                            value: p.id,
-                                            label: p.label,
-                                        })),
-                                    ]}
-                                    className="w-40"
-                                    size="sm"
-                                    allowClear={false}
-                                    aria-label="快捷期间"
-                                    placeholder="自定义"
-                                />
-                            </div>
-                        ) : null}
-                        <div className="space-y-1.5">
-                            <Label htmlFor="cq-funds">票款口径</Label>
-                            <OptionCombobox
-                                id="cq-funds"
-                                value={fundsReview}
-                                onValueChange={(v) => {
-                                    patchUrl({
-                                        fundsReview:
-                                            (v ?? "all") === "reviewed_only"
-                                                ? "reviewed_only"
-                                                : null,
-                                    })
-                                    resetPage()
-                                }}
-                                options={[
-                                    { value: "all", label: "全部授权记录" },
-                                    {
-                                        value: "reviewed_only",
-                                        label: "仅已复核卡券票款",
-                                    },
-                                ]}
-                                className="w-44"
-                                size="sm"
-                                allowClear={false}
-                                aria-label="票款口径"
-                                placeholder="票款口径"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="cq-nature">业务性质</Label>
-                            <OptionCombobox
-                                id="cq-nature"
-                                value={businessType ?? ""}
-                                onValueChange={(v) => {
-                                    patchUrl({
-                                        businessType: v || null,
-                                    })
-                                    resetPage()
-                                }}
-                                options={[
-                                    { value: "", label: "全部" },
-                                    { value: "VOUCHER", label: "卡券" },
-                                    { value: "GOODS_SERVICE", label: "非卡券" },
-                                ]}
-                                className="w-36"
-                                size="sm"
-                                allowClear={false}
-                                aria-label="业务性质"
-                                placeholder="全部"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="cq-sort">排序</Label>
-                            <OptionCombobox
-                                id="cq-sort"
-                                value={sort}
-                                onValueChange={(v) => {
-                                    patchUrl({ sort: v ?? sort })
-                                    resetPage()
-                                }}
-                                options={[
-                                    {
-                                        value: "salesGrossAmount:desc",
-                                        label: "成交金额降序",
-                                    },
-                                    {
-                                        value: "actualProfitLossNet:desc",
-                                        label: "实际盈亏降序",
-                                    },
-                                    {
-                                        value: "overdueGross:desc",
-                                        label: "逾期金额降序",
-                                    },
-                                    {
-                                        value: "costCoverageRate:asc",
-                                        label: "覆盖率升序",
-                                    },
-                                    {
-                                        value: "latestBusinessAt:desc",
-                                        label: "最近业务",
-                                    },
-                                ]}
-                                className="w-44"
-                                size="sm"
-                                allowClear={false}
-                                aria-label="排序"
-                                placeholder="排序"
-                            />
-                        </div>
-                        <div className="min-w-[12rem] flex-1 space-y-1.5">
-                            <Label htmlFor="cq-q">搜索客户</Label>
-                            <InputGroup>
-                                <InputGroupAddon>
-                                    <SearchIcon aria-hidden="true" />
-                                </InputGroupAddon>
-                                <InputGroupInput
-                                    id="cq-q"
-                                    ref={searchInputRef}
-                                    value={searchInput}
-                                    placeholder="客户编号 / 名称（/ 聚焦）"
-                                    onChange={(e) =>
-                                        setSearchInput(e.target.value)
-                                    }
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                            patchUrl({
-                                                q: searchInput.trim() || null,
-                                            })
-                                        }
-                                    }}
-                                />
-                            </InputGroup>
-                        </div>
-                        {customerId ? (
-                            <FilterChip
-                                label={`客户：${chipCustomerName ?? "已定位客户"}`}
-                                onClear={() => patchUrl({ customerId: null })}
-                            />
-                        ) : null}
-                        {(qParam ||
-                            scaleTag ||
-                            profitTag ||
-                            riskTag ||
-                            chartCode ||
-                            businessType ||
-                            fundsReview === "reviewed_only" ||
-                            customerId) && (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                    setSearchInput("")
-                                    // P4：清除筛选保留排序与期间（分析页维度参数）
-                                    patchUrl({
-                                        q: null,
-                                        scaleTag: null,
-                                        profitTag: null,
-                                        riskTag: null,
-                                        chartDimension: null,
-                                        chartCode: null,
-                                        businessType: null,
-                                        fundsReview: null,
-                                        customerId: null,
-                                        focusMetric: null,
-                                    })
-                                    resetPage()
-                                }}
-                            >
-                                清除筛选
-                            </Button>
-                        )}
-                    </div>
-                    <p
-                        className="text-xs text-muted-foreground"
-                        aria-live="polite"
-                    >
-                        当前口径：{data.filterSummary} · 明细{" "}
-                        {data.customers.filteredTotal}/{data.customers.total} 户
-                    </p>
-                </CardContent>
-            </Card>
-
-            {data.emptyKind === "no-scope" ? (
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="当前角色无客户数据范围"
-                    description="当前角色无客户数据范围，请申请权限。"
-                />
-            ) : (
-                <>
-                    {/* Coverage: card funds + cost — always co-displayed with affected metrics */}
-                    <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-                        <Card
-                            size="sm"
-                            className={surfacePanelClassName}
-                            data-slot="card-funds-coverage-notice"
-                        >
-                            <CardHeader className="border-b border-border/30">
-                                <CardTitle>卡券票款复核进度</CardTitle>
-                                <CardDescription>
-                                    与受影响应收指标同屏；未复核不得假装可靠。
-                                </CardDescription>
-                                <CardAction>
-                                    <Badge
-                                        variant={
-                                            data.coverage.cardFundsState ===
-                                            "complete"
-                                                ? "success"
-                                                : "warning"
-                                        }
-                                    >
-                                        {data.coverage.cardFundsReviewRate}
-                                    </Badge>
-                                </CardAction>
-                            </CardHeader>
-                            <CardContent className="space-y-3 pt-4">
-                                <p className="text-sm">
-                                    已复核{" "}
-                                    <span className="num font-medium">
-                                        {
-                                            data.coverage
-                                                .reviewedVoucherOrderCount
-                                        }
-                                    </span>{" "}
-                                    / 应复核{" "}
-                                    <span className="num font-medium">
-                                        {
-                                            data.coverage
-                                                .requiredVoucherOrderCount
-                                        }
-                                    </span>{" "}
-                                    张卡券销售单（
-                                    {data.coverage.cardFundsReviewRate}）
-                                </p>
-                                {data.coverage.cardFundsState !== "complete" ? (
-                                    <Alert variant="warning">
-                                        <AlertTitle>票款复核不足</AlertTitle>
-                                        <AlertDescription className="flex flex-wrap items-center gap-2">
-                                            应收余额、逾期金额等指标标记为部分可靠。可切换「仅已复核」或前往卡券票款复核。
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() =>
-                                                    patchUrl({
-                                                        fundsReview:
-                                                            "reviewed_only",
-                                                    })
-                                                }
-                                            >
-                                                仅看已复核
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                render={
-                                                    <Link href="/finance/card-funds-review?from=W15" />
-                                                }
-                                            >
-                                                {openWorkspaceLabel("W13")}
-                                            </Button>
-                                        </AlertDescription>
-                                    </Alert>
-                                ) : null}
-                            </CardContent>
-                        </Card>
-
-                        <CostCoverageNotice
-                            basis={data.coverage.costBasis}
-                            coveragePercent={data.coverage.costCoveragePercent}
-                            coverageLabel={data.coverage.costCoverageRate}
-                            coverageState={data.coverage.costCoverageState}
-                            breakdown={{
-                                ACTUAL: data.coverage.costCoveredNetRevenue,
-                                STANDARD: "—",
-                                NONE: data.coverage.costUncoveredNetRevenue,
-                            }}
-                            profitBasis="非卡券净收入 − 实际净成本（不含税）；卡券不计入"
-                            notice={
-                                <>
-                                    成本覆盖收入{" "}
-                                    <span className="num">
-                                        {data.coverage.costCoveredNetRevenue}
-                                    </span>
-                                    、未覆盖收入{" "}
-                                    <span className="num">
-                                        {data.coverage.costUncoveredNetRevenue}
-                                    </span>
-                                    、覆盖率{" "}
-                                    <span className="num">
-                                        {data.coverage.costCoverageRate}
-                                    </span>
-                                    。缺失成本不显示为
-                                    0，利润须与覆盖率同屏解读。
-                                </>
-                            }
-                        />
-                    </div>
-
-                    {isVoucherOnly ? (
-                        <Alert variant="info">
-                            <AlertTitle>业务性质：卡券</AlertTitle>
-                            <AlertDescription>
-                                卡券实际经营结果请前往卡券经营分析；本页不显示卡券实际盈亏，卡券收入仍计入规模与回款分析。
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="ml-2"
-                                    render={
-                                        <Link
-                                            href={`/analytics/card-business?from=${encodeURIComponent(data.period.from)}&to=${encodeURIComponent(data.period.to)}&source=W15`}
-                                        />
-                                    }
-                                >
-                                    {openWorkspaceLabel("W28")}
-                                </Button>
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-
-                    {/* Metrics */}
-                    <MetricStrip columns={4} aria-label="客户经营质量核心指标">
-                        {data.metrics
-                            .filter((m) => m.visible)
-                            .map((m) => {
-                                const detail = metricReliabilityDetail(
-                                    m.reliability,
-                                    m.explanation,
-                                    m.fieldDenied,
-                                )
-                                const valueNode =
-                                    m.fieldDenied ||
-                                    m.reliability === "unavailable" ? (
-                                        <span className="text-muted-foreground">
-                                            {m.fieldDenied
-                                                ? "当前角色不可查看"
-                                                : "暂无可靠口径"}
-                                        </span>
-                                    ) : (
-                                        m.value
-                                    )
-                                if (
-                                    m.key === "overdueGross" ||
-                                    m.key === "actualProfitLossNet" ||
-                                    m.key === "salesGrossAmount"
-                                ) {
-                                    // D3：focusMetric 不再作伪筛选写 URL；保留「滚动定位到明细表」交互，
-                                    // 用普通按钮语义（不带 active 筛选态），消除「点了只滚动不筛数」的指标
-                                    return (
-                                        <MetricFilterItem
-                                            key={m.key}
-                                            label={m.label}
-                                            value={valueNode}
-                                            detail={detail}
-                                            onClick={() => scrollToTableTop()}
-                                        />
-                                    )
-                                }
-                                return (
-                                    <MetricItem
-                                        key={m.key}
-                                        label={m.label}
-                                        value={valueNode}
-                                        detail={detail}
-                                        status={
-                                            m.reliability === "partial"
-                                                ? {
-                                                      label: "部分可靠",
-                                                      tone: "warning",
-                                                  }
-                                                : m.reliability ===
-                                                    "unavailable"
-                                                  ? {
-                                                        label: "不可用",
-                                                        tone: "neutral",
-                                                    }
-                                                  : undefined
-                                        }
-                                    />
-                                )
-                            })}
-                    </MetricStrip>
-
-                    <CustomerQualityCharts
-                        scaleDimension={scaleDimension}
-                        profitDimension={profitDimension}
-                        natureDimension={natureDimension}
-                        chartDimension={chartDimension}
-                        chartCode={chartCode}
-                        isVoucherOnly={isVoucherOnly}
-                        patchUrl={patchUrl}
-                        setPagination={setPagination}
-                    />
-                    {chartFilterSummary ? (
-                        <Alert variant="info">
-                            <AlertTitle>图表筛选已生效</AlertTitle>
-                            <AlertDescription>
-                                <span aria-live="polite">
-                                    {chartFilterSummary.dimensionTitle} ·{" "}
-                                    {chartFilterSummary.itemLabel} · 结果{" "}
-                                    <span className="num font-medium">
-                                        {chartFilterSummary.resultCount}
-                                    </span>{" "}
-                                    户
-                                </span>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="ml-2"
-                                    onClick={() => {
-                                        patchUrl({
-                                            chartDimension: null,
-                                            chartCode: null,
-                                            scaleTag: null,
-                                            profitTag: null,
-                                        })
-                                        resetPage()
-                                    }}
-                                >
-                                    清除图表筛选
-                                </Button>
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-
-                    {/* Customer detail table */}
-                    {data.emptyKind === "no-data" ? (
-                        <BusinessEmptyState
-                            kind="no-data"
-                            title="期间内无授权经营记录"
-                            description="可调整统计期间或数据范围后重查。"
-                            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                        />
-                    ) : data.emptyKind === "filter" ? (
-                        <BusinessEmptyState
-                            kind="filter"
-                            title="当前筛选无客户结果"
-                            description={
-                                <>
-                                    总体指标仍按当前期间与权限范围聚合（未因表格筛选归零）。筛选：
-                                    {data.filterSummary}
-                                </>
-                            }
-                            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                            action={
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    onClick={() => {
-                                        // P4：清除筛选保留排序与期间（分析页维度参数）
-                                        patchUrl({
-                                            q: null,
-                                            scaleTag: null,
-                                            profitTag: null,
-                                            riskTag: null,
-                                            chartDimension: null,
-                                            chartCode: null,
-                                            businessType: null,
-                                            fundsReview: null,
-                                            customerId: null,
-                                            focusMetric: null,
-                                        })
-                                        resetPage()
-                                    }}
-                                >
-                                    清除筛选
-                                </Button>
-                            }
-                        />
-                    ) : (
-                        <div
-                            ref={tableSectionRef}
-                            tabIndex={-1}
-                            data-slot="customer-detail-table"
-                            className="focus:outline-none"
-                        >
-                            <BusinessTableFrame
-                                title="客户明细"
-                                description="点击客户进入客户中心；逾期与实际盈亏可分别下钻。金额口径与指标、图表、导出一致。"
-                                table={
-                                    <DataTable
-                                        data={[...data.customers.items]}
-                                        columns={columns}
-                                        getRowId={(row) => row.customerId}
-                                        rowCount={data.customers.filteredTotal}
-                                        pagination={pagination}
-                                        onPaginationChange={
-                                            handlePaginationChange
-                                        }
-                                        sorting={tableSorting}
-                                        onSortingChange={
-                                            handleTableSortingChange
-                                        }
-                                        layout="flush"
-                                        density="compact"
-                                    />
-                                }
-                            />
-                        </div>
-                    )}
-                </>
-            )}
-
-            {exportJob ? (
-                <BackgroundJobProgress
-                    mode="all-or-nothing"
-                    status={
-                        exportJob.status === "queued"
-                            ? "queued"
-                            : exportJob.status === "running"
-                              ? "running"
-                              : exportJob.status === "succeeded"
-                                ? "succeeded"
-                                : "failed"
-                    }
-                    total={exportJob.total}
-                    completed={exportJob.completed}
-                    succeeded={
-                        exportJob.status === "succeeded"
-                            ? exportJob.total
-                            : undefined
-                    }
-                    label="客户经营质量导出"
-                    description={
-                        <>
-                            期间 {exportJob.period.from} ~ {exportJob.period.to}
-                            。{exportJob.filterSummary}。数据更新时间{" "}
-                            <span className="num">
-                                {formatSourceWatermark(
-                                    exportJob.projectionWatermark,
-                                )}
-                            </span>
-                            。{exportJob.amountBasisNote}
-                            {exportJob.downloadLabel ? (
-                                <span className="mt-1 block font-medium">
-                                    可下载（保留 7 天）：
-                                    {exportJob.downloadLabel}
-                                    {exportJob.expiresAt
-                                        ? ` · 失效 ${formatDateTime(exportJob.expiresAt, "full", "passthrough")}`
-                                        : ""}
-                                </span>
-                            ) : null}
-                        </>
-                    }
-                />
-            ) : null}
-
-            <Dialog
-                open={tagDialog != null}
-                onOpenChange={(open) => {
-                    if (!open) setTagDialog(null)
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <InfoIcon className="size-4" aria-hidden="true" />
-                            经营标签说明
-                        </DialogTitle>
-                        <DialogDescription>
-                            标签由系统固定规则生成，页面不提供人工修改入口。
-                        </DialogDescription>
-                    </DialogHeader>
-                    {tagDialog ? (
-                        <div className="space-y-3 text-sm">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <BusinessStatusBadge
-                                    context="list"
-                                    label={tagDialog.label}
-                                    tone={tagDialog.tone}
-                                />
-                                <Badge variant="outline">
-                                    规则版本 {tagDialog.ruleVersion}
-                                </Badge>
-                                <Badge variant="neutral">
-                                    {tagDialog.type === "scale"
-                                        ? "规模"
-                                        : tagDialog.type === "profit"
-                                          ? "利润贡献"
-                                          : "回款风险"}
-                                </Badge>
-                            </div>
-                            <p className="text-muted-foreground">
-                                {tagDialog.explanation}
-                            </p>
-                            {tagDialog.type === "profit" ? (
-                                <p className="text-xs text-muted-foreground">
-                                    卡券收入进入规模和回款分析，但不进入利润贡献标签与实际盈亏。
-                                </p>
-                            ) : null}
-                        </div>
-                    ) : null}
-                </DialogContent>
-            </Dialog>
-        </PageScaffold>
+        <CustomerQualityMainView
+            data={data}
+            refreshError={refreshError}
+            refreshing={viewQuery.isFetching && !viewQuery.isPending}
+            onRefresh={() => {
+                void handleRefresh()
+            }}
+            exportPending={exportMutation.isPending}
+            onExport={() => {
+                void handleExport()
+            }}
+            exportJob={exportJob}
+            resolvedFrom={period.resolvedFrom}
+            resolvedTo={period.resolvedTo}
+            periodInvalid={period.periodInvalid}
+            presets={period.periodPolicy?.presets}
+            periodPreset={periodPreset}
+            fundsReview={fundsReview}
+            businessType={businessType}
+            sort={nav.sort}
+            searchInput={search.searchInput}
+            searchInputRef={search.searchInputRef}
+            onSearchInputChange={search.setSearchInput}
+            customerId={customerId}
+            chipCustomerName={chipCustomerName}
+            showClearFilters={showClearFilters}
+            onClearFilters={clearAllFilters}
+            onPresetSelect={(id) => {
+                const preset = period.periodPolicy?.presets?.find(
+                    (p) => p.id === id,
+                )
+                if (preset) {
+                    period.applyPreset(preset.id, preset.from, preset.to)
+                    nav.resetPage()
+                } else nav.patchUrl({ periodPreset: null })
+            }}
+            patchUrl={nav.patchUrl}
+            resetPage={nav.resetPage}
+            scaleDimension={scaleDimension}
+            profitDimension={profitDimension}
+            natureDimension={natureDimension}
+            chartDimension={chartDimension}
+            chartCode={chartCode}
+            chartFilterSummary={chartFilterSummary}
+            setPagination={nav.setPagination}
+            columns={columns}
+            pagination={nav.pagination}
+            onPaginationChange={nav.handlePaginationChange}
+            tableSorting={nav.tableSorting}
+            onSortingChange={nav.handleTableSortingChange}
+            tableSectionRef={tableSectionRef}
+            onFocusTable={scrollToTableTop}
+            onClearTableFilters={clearTableFilters}
+            tagDialog={tagDialog}
+            onTagDialogOpenChange={(open) => {
+                if (!open) setTagDialog(null)
+            }}
+        />
     )
 }

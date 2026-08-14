@@ -4,13 +4,11 @@ import Link from "next/link"
 import { DownloadIcon, PlusIcon } from "lucide-react"
 
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
     BusinessTableFrame,
-    DataTable,
     FormalActionResult,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { DictionaryListTable } from "@/features/master-data/components/list/dictionary-list-table"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
@@ -145,60 +143,19 @@ export function WarehousesListPage() {
                     />
                 }
                 table={
-                    <DataTable
-                        data={state.pageRows}
+                    <DictionaryListTable
+                        rows={state.rows}
+                        pageRows={state.pageRows}
                         columns={columns}
-                        getRowId={(row) => row.stableId}
-                        rowCount={state.rows.length}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
-                        layout="flush"
-                        density="compact"
-                        defaultColumnPinning={{
-                            left: ["stableNo"],
-                            right: ["actions"],
-                        }}
-                        errorState={
-                            listLoadFailed ? (
-                                <BusinessFailureState
-                                    error={state.listQuery.error}
-                                    onRetry={() => void state.listQuery.refetch()}
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !listLoadFailed && state.rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind={
-                                        hasActiveFilters ? "filter" : "no-data"
-                                    }
-                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                                    title={
-                                        hasActiveFilters
-                                            ? "当前筛选无结果"
-                                            : "还没有仓库资料"
-                                    }
-                                    description={
-                                        hasActiveFilters
-                                            ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "仓库资料暂不可新建，请从库存台账核对现有仓库。"
-                                    }
-                                    action={
-                                        hasActiveFilters ? (
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
-                                                onClick={filters.clearAllFilters}
-                                            >
-                                                清除筛选
-                                            </Button>
-                                        ) : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
+                        listLoadFailed={listLoadFailed}
+                        error={state.listQuery.error}
+                        onRetry={() => void state.listQuery.refetch()}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={filters.clearAllFilters}
+                        emptyTitle="还没有仓库资料"
+                        emptyDescription="仓库资料暂不可新建，请从库存台账核对现有仓库。"
                         onRowPreview={(row) => {
                             lastFocusedRowId.current = row.stableId
                             state.setPreviewId(row.stableId)

@@ -24,6 +24,7 @@ import type {
     ContractListRow,
 } from "@/features/contracts/types"
 import { contractOwnerLabel } from "@/features/contracts/types"
+import { formatAsOf } from "@/features/contracts/lib/format-as-of"
 import { sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 
@@ -31,20 +32,6 @@ type ContractPreviewPanelProps = {
     row: ContractListRow
     detail: ContractCenterView | null | undefined
     detailLoading?: boolean
-}
-
-function formatAsOf(iso: string): string {
-    try {
-        return new Intl.DateTimeFormat("zh-CN", {
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: "Asia/Shanghai",
-        }).format(new Date(iso))
-    } catch {
-        return iso
-    }
 }
 
 /**

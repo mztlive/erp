@@ -263,7 +263,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
     )
 }
 
-function seedError(order: SupplierOrderDetailView): string {
+export function seedError(order: SupplierOrderDetailView): string {
     if (order.order.errorSummary) return order.order.errorSummary
     const blockers = order.actionBlockers[0]?.message
     if (order.order.fulfillmentStatus === "RESULT_UNKNOWN") {

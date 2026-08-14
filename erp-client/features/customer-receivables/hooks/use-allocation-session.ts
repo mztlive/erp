@@ -1,0 +1,385 @@
+"use client"
+
+import * as React from "react"
+
+import { type ResultState } from "@/components/business/feedback"
+import { type ValidationIssue } from "@/components/business"
+import { useAppForm } from "@/components/form"
+import { getErrorMessage } from "@/lib/api/errors"
+import { resultText } from "@/lib/ui-text"
+import {
+    factDefaultValues,
+    factFormSchema,
+    factFromValues,
+} from "@/features/customer-receivables/lib/fact-form"
+import {
+    money,
+    parseAmt,
+} from "@/features/customer-receivables/lib/allocation-math"
+import {
+    usePostAllocationMutation,
+    useResolvePostUnknownMutation,
+    useSaveAllocationDraftMutation,
+} from "@/features/customer-receivables/hooks/queries"
+import type {
+    AllocationDraftLine,
+    AllocationSessionView,
+    AllocationTarget,
+    PostAllocationResult,
+} from "@/features/customer-receivables/types"
+
+/**
+ * 核销工作区控制器：草稿分配行、记录表单、校验问题、保存/提交/结果回填。
+ * 组件层只消费返回值渲染，不持有业务状态。
+ */
+export function useAllocationSession({
+    session,
+    onClose,
+    onPosted,
+}: {
+    session: AllocationSessionView
+    onClose: () => void
+    onPosted: () => void
+}) {
+    const saveMutation = useSaveAllocationDraftMutation()
+    const postMutation = usePostAllocationMutation()
+    const resolveMutation = useResolvePostUnknownMutation()
+
+    const [allocations, setAllocations] = React.useState<AllocationDraftLine[]>(
+        () => session.allocations.map((a) => ({ ...a })),
+    )
+    const [editVersion, setEditVersion] = React.useState(session.editVersion)
+    const [confirmOpen, setConfirmOpen] = React.useState(false)
+    const [result, setResult] = React.useState<ResultState>(null)
+    const [actionError, setActionError] = React.useState<string | null>(null)
+    const [draftSavedAt, setDraftSavedAt] = React.useState(session.savedAt)
+    const [postedLocally, setPostedLocally] = React.useState(false)
+    const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
+    const [pendingRemove, setPendingRemove] = React.useState<string | null>(
+        null,
+    )
+    const idempotencyRef = React.useRef<string | null>(null)
+    const baselineRef = React.useRef("")
+
+    const isReceipt = session.mode === "receipt"
+    const existing = Boolean(session.existingFactId)
+
+    const form = useAppForm({
+        defaultValues: factDefaultValues(session.fact, isReceipt),
+        validators: {
+            onChange: factFormSchema,
+        },
+        onSubmit: async () => {
+            setConfirmOpen(true)
+        },
+    })
+
+    const snapshot = () =>
+        JSON.stringify({ values: form.state.values, allocations })
+
+    React.useEffect(() => {
+        setAllocations(session.allocations.map((a) => ({ ...a })))
+        setEditVersion(session.editVersion)
+        setDraftSavedAt(session.savedAt)
+        setPostedLocally(false)
+        baselineRef.current = snapshot()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session.draftSessionId, session.editVersion, session.savedAt])
+
+    React.useEffect(() => {
+        const onBeforeUnload = (event: BeforeUnloadEvent) => {
+            if (session.status === "posted" || postedLocally) return
+            if (snapshot() === baselineRef.current) return
+            event.preventDefault()
+            event.returnValue = ""
+        }
+        window.addEventListener("beforeunload", onBeforeUnload)
+        return () => window.removeEventListener("beforeunload", onBeforeUnload)
+    })
+
+    function requestClose() {
+        if (session.status === "posted" || postedLocally) {
+            onClose()
+            return
+        }
+        if (snapshot() !== baselineRef.current) {
+            setLeaveConfirmOpen(true)
+            return
+        }
+        onClose()
+    }
+
+    // 发票 gross 变化时按 13% 预填不含税/税额（可手动覆盖）
+    const invoiceGross = isReceipt
+        ? ""
+        : String(form.state.values.grossAmount ?? "")
+    React.useEffect(() => {
+        if (isReceipt || !invoiceGross) return
+        const net = String(form.state.values.netAmount ?? "").trim()
+        const tax = String(form.state.values.taxAmount ?? "").trim()
+        if (net || tax) return
+        const gross = Number(invoiceGross)
+        if (!Number.isFinite(gross) || gross <= 0) return
+        form.setFieldValue("netAmount", (gross / 1.13).toFixed(2))
+        form.setFieldValue("taxAmount", (gross - gross / 1.13).toFixed(2))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [invoiceGross, isReceipt])
+
+    const factAmountStr = isReceipt
+        ? String(form.state.values.amount ?? "")
+        : String(form.state.values.grossAmount ?? "")
+    const proposedAllocated = allocations.reduce(
+        (s, a) => s + parseAmt(a.amount),
+        0,
+    )
+    const proposedUnallocated = Math.max(
+        0,
+        parseAmt(factAmountStr) - proposedAllocated,
+    )
+
+    const issues: ValidationIssue[] = []
+    if (!session.leaseValid) {
+        issues.push({
+            id: "lease",
+            label: "处理状态",
+            message: "权限已收回或处理已失效，禁止提交",
+        })
+    }
+    for (const line of allocations) {
+        if (parseAmt(line.amount) < 0) {
+            issues.push({
+                id: `neg-${line.lineKey}`,
+                label: line.label,
+                message: "分配金额不能为负",
+            })
+        }
+        if (parseAmt(line.amount) - parseAmt(line.openAmount) > 1e-9) {
+            issues.push({
+                id: `over-${line.lineKey}`,
+                label: line.label,
+                message: `拟分配不可超过开放余额 ${line.openAmount}`,
+            })
+        }
+    }
+    if (proposedAllocated - parseAmt(factAmountStr) > 1e-9) {
+        issues.push({
+            id: "over-fact",
+            label: "拟分配合计",
+            message: "拟分配合计超过记录金额",
+        })
+    }
+
+    const canSubmit =
+        session.leaseValid &&
+        issues.length === 0 &&
+        parseAmt(factAmountStr) > 0 &&
+        session.status === "draft"
+
+    function addFromPool(target: AllocationTarget) {
+        if (allocations.some((a) => a.targetId === target.targetId)) return
+        if (target.counterpartyPartyId !== session.counterpartyPartyId) {
+            setActionError("跨主体目标不能分配，请选择同主体目标。")
+            return
+        }
+        setAllocations((prev) => [
+            ...prev,
+            {
+                lineKey: `line_${target.targetId}_${Date.now()}`,
+                targetId: target.targetId,
+                targetKind: target.targetKind,
+                label: target.label,
+                salesOrderNo: target.salesOrderNo,
+                openAmount: target.openAmount,
+                amount: "",
+                baselineVersion: target.baselineVersion,
+            },
+        ])
+    }
+
+    function updateAmount(lineKey: string, amount: string) {
+        setAllocations((prev) =>
+            prev.map((a) => (a.lineKey === lineKey ? { ...a, amount } : a)),
+        )
+    }
+
+    function removeLine(lineKey: string) {
+        setAllocations((prev) => prev.filter((a) => a.lineKey !== lineKey))
+    }
+
+    function fillLineAmount(target: AllocationDraftLine) {
+        const others = allocations
+            .filter((a) => a.lineKey !== target.lineKey)
+            .reduce((s, a) => s + parseAmt(a.amount), 0)
+        const remaining = Math.max(0, parseAmt(factAmountStr) - others)
+        const fill = Math.min(parseAmt(target.openAmount), remaining)
+        setAllocations((prev) =>
+            prev.map((a) =>
+                a.lineKey === target.lineKey
+                    ? { ...a, amount: money(fill) }
+                    : a,
+            ),
+        )
+    }
+
+    async function doSaveDraft() {
+        setActionError(null)
+        try {
+            const fact = factFromValues(form.state.values, isReceipt)
+            const next = await saveMutation.mutateAsync({
+                draftSessionId: session.draftSessionId,
+                fact,
+                allocations,
+                editVersion,
+            })
+            setEditVersion(next.editVersion)
+            setDraftSavedAt(next.savedAt)
+            baselineRef.current = snapshot()
+        } catch (err) {
+            setActionError(getErrorMessage(err, "保存草稿失败"))
+        }
+    }
+
+    async function doPost() {
+        setActionError(null)
+        if (!idempotencyRef.current) {
+            idempotencyRef.current = `w11-post-${session.draftSessionId}-${Date.now()}`
+        }
+        // 先保存草稿同步服务端
+        try {
+            const fact = factFromValues(form.state.values, isReceipt)
+            const saved = await saveMutation.mutateAsync({
+                draftSessionId: session.draftSessionId,
+                fact,
+                allocations,
+                editVersion,
+            })
+            setEditVersion(saved.editVersion)
+
+            const res = await postMutation.mutateAsync({
+                draftSessionId: session.draftSessionId,
+                editVersion: saved.editVersion,
+                idempotencyKey: idempotencyRef.current,
+            })
+            applyPostResult(res)
+        } catch (err) {
+            setActionError(getErrorMessage(err, "提交失败"))
+            setConfirmOpen(false)
+        }
+    }
+
+    function applyPostResult(res: PostAllocationResult) {
+        if (res.status === "succeeded") {
+            setPostedLocally(true)
+            setResult({
+                status: "succeeded",
+                title: isReceipt ? "回款已登记并核销" : "销项发票已登记并分配",
+                description: `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}。`,
+                reference: res.operationId,
+                facts: [
+                    {
+                        label: isReceipt ? "回款单号" : "发票号码",
+                        value: res.factNo,
+                    },
+                    { label: "净已分配", value: res.allocatedTotal },
+                    { label: "未分配余额", value: res.unallocatedAmount },
+                    { label: "往来主体", value: session.counterpartyPartyName },
+                ],
+                returnTo: res.returnTo,
+            })
+            setConfirmOpen(false)
+            onPosted()
+            return
+        }
+        if (res.status === "unknown") {
+            setResult({
+                status: "unknown",
+                title: resultText.unknown,
+                description: res.message,
+                reference: res.operationId,
+                pendingKey: res.idempotencyKey,
+            })
+            setConfirmOpen(false)
+            return
+        }
+        if (res.code === "DUPLICATE_INVOICE") {
+            setResult({
+                status: "failed",
+                title: "发票号码重复",
+                description: res.message,
+                reference: res.existingInvoiceNo,
+                facts: res.existingInvoiceId
+                    ? [
+                          {
+                              label: "已有发票",
+                              value: res.existingInvoiceNo ?? "",
+                          },
+                      ]
+                    : undefined,
+            })
+            setConfirmOpen(false)
+            return
+        }
+        if (res.code === "BALANCE_CONFLICT" || res.code === "OVER_ALLOCATE") {
+            setActionError(res.message)
+            if (res.refreshedTargets) {
+                setAllocations((prev) =>
+                    prev.map((line) => {
+                        const hit = res.refreshedTargets?.find(
+                            (t) => t.targetId === line.targetId,
+                        )
+                        return hit
+                            ? { ...line, openAmount: hit.openAmount }
+                            : line
+                    }),
+                )
+            }
+            setConfirmOpen(false)
+            return
+        }
+        setActionError(res.message)
+        setConfirmOpen(false)
+    }
+
+    async function resolveUnknown() {
+        if (!result?.pendingKey) return
+        const res = await resolveMutation.mutateAsync(result.pendingKey)
+        if (res) applyPostResult(res)
+    }
+
+    const locked = existing || session.status === "posted" || postedLocally
+
+    return {
+        form,
+        isReceipt,
+        existing,
+        locked,
+        allocations,
+        editVersion,
+        draftSavedAt,
+        postedLocally,
+        result,
+        actionError,
+        confirmOpen,
+        setConfirmOpen,
+        leaveConfirmOpen,
+        setLeaveConfirmOpen,
+        pendingRemove,
+        setPendingRemove,
+        issues,
+        canSubmit,
+        factAmountStr,
+        proposedAllocated,
+        proposedUnallocated,
+        addFromPool,
+        updateAmount,
+        removeLine,
+        fillLineAmount,
+        requestClose,
+        doSaveDraft,
+        doPost,
+        resolveUnknown,
+        saveMutation,
+        postMutation,
+        resolveMutation,
+    }
+}
