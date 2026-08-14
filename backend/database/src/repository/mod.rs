@@ -4,6 +4,7 @@
 
 mod access_control;
 mod account_core;
+mod approval;
 mod audit_log;
 mod base;
 mod bulk_job;
@@ -43,10 +44,14 @@ mod supplier_settlement;
 mod warehouse;
 mod work_item;
 
+pub use approval::{ApprovalInstanceFilter, ApprovalRepository};
 pub use audit_log::AuditLogFilter;
 pub use base::{PageResult, Pagination, QueryFilter, Repository};
 pub use catalog::SkuRow;
 pub use customer::CustomerAccountRow;
 pub use extensions::DatabaseExt;
+pub use projection::{ProjectionDeliveryEscalation, ProjectionDeliveryFailure};
+pub use publication::{PublicationDeliveryEscalation, PublicationDeliveryFailure};
 pub use supplier::SupplierAccountRow;
 pub use supplier_offering::SupplierOfferingRow;
+pub use work_item::{StartProcessingEligibility, StartProcessingOutcome, WorkItemRow};

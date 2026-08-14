@@ -3,13 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
-    claimCardFundsReviewWorkItem,
     completeCardFundsReview,
     fetchCardFundsReviewQueue,
-    holdCardFundsReview,
     registerHistoricalInvoice,
     registerHistoricalReceipt,
-    saveCardFundsEvidence,
 } from "@/features/card-funds-review/api"
 import type { CardFundsReviewQueueQuery } from "@/features/card-funds-review/types"
 
@@ -26,36 +23,10 @@ export function useCardFundsReviewQueueQuery(query: CardFundsReviewQueueQuery) {
     })
 }
 
-export function useClaimCardFundsMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: claimCardFundsReviewWorkItem,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({
-                queryKey: cardFundsReviewKeys.all,
-            })
-        },
-    })
-}
-
 export function useCompleteCardFundsMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: completeCardFundsReview,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: cardFundsReviewKeys.all,
-                })
-            }
-        },
-    })
-}
-
-export function useHoldCardFundsMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: holdCardFundsReview,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
                 await queryClient.invalidateQueries({
@@ -82,18 +53,6 @@ export function useRegisterInvoiceMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: registerHistoricalInvoice,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({
-                queryKey: cardFundsReviewKeys.all,
-            })
-        },
-    })
-}
-
-export function useSaveCardFundsEvidenceMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: saveCardFundsEvidence,
         onSuccess: async () => {
             await queryClient.invalidateQueries({
                 queryKey: cardFundsReviewKeys.all,

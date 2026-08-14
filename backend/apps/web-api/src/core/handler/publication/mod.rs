@@ -14,11 +14,13 @@ use axum::{
 use services::{
     audit::AuditActor,
     publication::{
-        CreateProductPublicationRequest, CreateProductPublicationRevisionRequest,
-        DeliverPublicationRevisionRequest, PageView, ProductPublicationDeliveryListParams,
-        ProductPublicationDeliveryView, ProductPublicationListParams, ProductPublicationRevisionMediaView,
-        ProductPublicationRevisionView, ProductPublicationView, PublicationDeliveryResultView,
-        PublicationService, UnavailableMallConnector, UpdateProductPublicationRequest,
+        CreateProductPublicationRevisionRequest, DeliverPublicationRevisionRequest, PageView,
+        ProcessPublicationDeliveriesRequest, ProcessPublicationDeliveriesResult,
+        ProductPublicationDeliveryListParams, ProductPublicationDeliveryView, ProductPublicationListParams,
+        ProductPublicationRevisionMediaView, ProductPublicationRevisionView, ProductPublicationView,
+        PublicationDeliveryActionResultView, PublicationDeliveryCommand, PublicationDeliveryResultView,
+        PublicationService, SystemSafetyPauseOperationView, UnavailableMallConnector,
+        UpdateProductPublicationRequest,
     },
 };
 
@@ -74,34 +76,6 @@ pub async fn product_publication_detail(
 ) -> Result<ProductPublicationView> {
     let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
         .publication_detail(&id)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "商品发布",
-    group_desc = "二期商品发布与投递（W22）",
-    desc = "创建商品发布",
-    resource = "product_publication",
-    action = "create"
-)]
-/// 创建稳定发布（草稿状态）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`sku_id`/`target_mall_id`）
-///
-/// # 返回
-/// 返回新建发布的响应视图。
-pub async fn product_publication_create(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Json(req): Json<CreateProductPublicationRequest>,
-) -> Result<ProductPublicationView> {
-    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .create_publication(req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -275,4 +249,65 @@ pub async fn product_publication_delivery_list(
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "商品发布",
+    group_desc = "二期商品发布与投递（W22）",
+    desc = "执行发布投递对象动作",
+    resource = "product_publication_delivery",
+    action = "operate"
+)]
+/// 对固定发布投递执行查询原结果、受控重试或升级 W29。
+pub async fn product_publication_delivery_action(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(delivery_id): Path<String>,
+    Json(command): Json<PublicationDeliveryCommand>,
+) -> Result<PublicationDeliveryActionResultView> {
+    let result = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
+        .apply_publication_delivery_command(&delivery_id, command, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "商品发布",
+    group_desc = "二期商品发布与投递（W22）",
+    desc = "处理待发送发布投递",
+    resource = "product_publication_delivery",
+    action = "process_pending"
+)]
+/// 以有界批次处理待发送与已到期重试投递。
+pub async fn product_publication_delivery_process_pending(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<ProcessPublicationDeliveriesRequest>,
+) -> Result<ProcessPublicationDeliveriesResult> {
+    let result = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
+        .process_pending_publication_deliveries(req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "商品发布",
+    group_desc = "二期商品发布与投递（W22）",
+    desc = "查询系统安全暂停结果",
+    resource = "product_publication",
+    action = "detail"
+)]
+/// 按原幂等键查询已落库的系统安全暂停结果。
+///
+/// 此处只提供只读恢复查询；系统安全暂停触发不暴露给浏览器，必须来自可信
+/// 目录/供给服务并加入来源事实的同一事务。
+pub async fn product_publication_safety_pause_detail(
+    State(state): State<AppState>,
+    Path(idempotency_key): Path<String>,
+) -> Result<SystemSafetyPauseOperationView> {
+    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
+        .safety_pause_operation(&idempotency_key)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
 }

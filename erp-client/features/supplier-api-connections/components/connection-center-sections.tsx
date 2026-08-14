@@ -201,6 +201,12 @@ function CapabilitiesSection({
     conn: ConnectionCenterView
     onOpenConfig: () => void
 }) {
+    const canConfigure = conn.capabilities.some((capability) =>
+        capability.allowedActions?.includes("UPDATE_CAPABILITIES"),
+    )
+    const configureBlocker = conn.capabilities
+        .flatMap((capability) => capability.actionBlockers ?? [])
+        .find((blocker) => blocker.action === "UPDATE_CAPABILITIES")
     const columns = React.useMemo<ColumnDef<CapabilityView>[]>(
         () => [
             {
@@ -282,11 +288,19 @@ function CapabilitiesSection({
                     / 商品发布返回。能力启停由系统管理员配置。
                 </AlertDescription>
             </Alert>
-            <div className="flex justify-end">
-                <Button type="button" size="sm" onClick={onOpenConfig}>
-                    配置能力
-                </Button>
-            </div>
+            {canConfigure || configureBlocker ? (
+                <div className="flex justify-end">
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={!canConfigure}
+                        title={configureBlocker?.message}
+                        onClick={onOpenConfig}
+                    >
+                        配置能力
+                    </Button>
+                </div>
+            ) : null}
             <BusinessTableFrame
                 title="能力矩阵"
                 description="连接级能力 × 状态 × 业务需求 × 验证；不等于商品级可用"
@@ -325,6 +339,18 @@ function SecuritySection({
     onBind: () => void
     onBindEndpoint: () => void
 }) {
+    const canBindEndpoint = conn.allowedActions.includes(
+        "BIND_ENDPOINT_REFERENCE",
+    )
+    const canBindCredential = conn.allowedActions.includes(
+        "BIND_CREDENTIAL_REFERENCE",
+    )
+    const endpointBlocker = conn.actionBlockers.find(
+        (blocker) => blocker.action === "BIND_ENDPOINT_REFERENCE",
+    )
+    const credentialBlocker = conn.actionBlockers.find(
+        (blocker) => blocker.action === "BIND_CREDENTIAL_REFERENCE",
+    )
     return (
         <div className="space-y-3">
             <Alert>
@@ -351,13 +377,17 @@ function SecuritySection({
                             version={conn.safeReferences.endpoint.version}
                             visible={conn.safeReferences.endpoint.visible}
                         />
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={onBindEndpoint}
-                        >
-                            绑定/轮换地址
-                        </Button>
+                        {canBindEndpoint || endpointBlocker ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={!canBindEndpoint}
+                                title={endpointBlocker?.message}
+                                onClick={onBindEndpoint}
+                            >
+                                绑定/轮换地址
+                            </Button>
+                        ) : null}
                     </CardContent>
                 </Card>
                 <Card
@@ -376,9 +406,17 @@ function SecuritySection({
                             version={conn.safeReferences.credential.version}
                             visible={conn.safeReferences.credential.visible}
                         />
-                        <Button type="button" size="sm" onClick={onBind}>
-                            绑定/轮换引用
-                        </Button>
+                        {canBindCredential || credentialBlocker ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={!canBindCredential}
+                                title={credentialBlocker?.message}
+                                onClick={onBind}
+                            >
+                                绑定/轮换引用
+                            </Button>
+                        ) : null}
                     </CardContent>
                 </Card>
             </div>
@@ -535,6 +573,10 @@ function CatalogSection({
     onSync: () => Promise<void>
 }) {
     const progress = conn.catalog.progress
+    const canSync = conn.allowedActions.includes("START_CATALOG_SYNC")
+    const syncBlocker = conn.actionBlockers.find(
+        (blocker) => blocker.action === "START_CATALOG_SYNC",
+    )
     return (
         <div className="space-y-3">
             <Card
@@ -583,16 +625,19 @@ function CatalogSection({
                             description="目录同步在后台执行；同来源批次不会重复处理。"
                         />
                     ) : null}
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            type="button"
-                            size="sm"
-                            disabled={syncing}
-                            onClick={() => void onSync()}
-                        >
-                            触发目录同步
-                        </Button>
-                    </div>
+                    {canSync || syncBlocker ? (
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={!canSync || syncing}
+                                title={syncBlocker?.message}
+                                onClick={() => void onSync()}
+                            >
+                                触发目录同步
+                            </Button>
+                        </div>
+                    ) : null}
                 </CardContent>
             </Card>
         </div>

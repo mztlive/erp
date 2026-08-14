@@ -6,39 +6,21 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import type { Page } from "@/lib/api"
+import {
+    listWorkItems,
+    mapWorkItemDto,
+    type WorkItemDto,
+    type WorkItemProjection,
+} from "@/features/work-items"
 import type {
-    CardFundsReviewDecision,
     CardFundsReviewItemView,
     CardFundsReviewQueueQuery,
     CardFundsReviewQueueView,
+    CompleteCardFundsReviewCommand,
     FormalActionResponse,
-    FormalOutcome,
     RegisterFundsResult,
-    WorkItemLease,
 } from "@/features/card-funds-review/types"
-import { REJECT_FOLLOW_UP_COLLABORATION } from "@/features/card-funds-review/types"
 // ─── Backend DTOs ──────────────────────────────────────────────────────────
-
-type BackendWorkItem = {
-    id: string
-    work_item_type: string
-    business_object_type: string
-    business_object_id: string
-    subject_version?: string | null
-    status: string
-    owner_role?: string | null
-    owner_user_id?: string | null
-    priority: string | number
-    due_at?: number | null
-    reason_code?: string | null
-    impact_summary?: string | null
-    completion_action: string
-    completed_at?: number | null
-    completed_by?: string | null
-    version: number
-    created_at: number
-}
 
 type BackendReceivableEntry = {
     id: string
@@ -58,14 +40,44 @@ type BackendFundsReview = {
     reviewed_by: string
     reviewed_at: number
     evidence_reference?: string | null
+    subject_hash_at_review?: string | null
+}
+
+type BackendReceiptFact = {
+    receipt_id: string
+    receipt_no: string
+    received_at: string
+    gross_amount: string
+    allocated_to_account: string
+    other_allocation_summary?: string | null
+    reversed: boolean
+}
+
+type BackendInvoiceFact = {
+    invoice_id: string
+    invoice_no: string
+    direction: "BLUE" | "RED"
+    issued_at: string
+    gross_amount: string
+    net_amount: string
+    tax_amount: string
+    allocated_to_account: string
+    reversed: boolean
 }
 
 type BackendReceivableAccount = {
     id: string
     sales_order_id: string
+    source_sales_order_revision_id: string
+    current_sales_order_revision_id: string
+    sales_order_no: string
+    sales_order_revision_no: number
+    sales_order_snapshot_at: number
     account_seq: number
     customer_id: string
+    customer_name: string
     counterparty_party_id: string
+    counterparty_party_name?: string | null
     review_status: string
     gross_total: string
     settled_total: string
@@ -75,9 +87,30 @@ type BackendReceivableAccount = {
     open_invoiceable_total: string
     status: string
     version: number
+    account_domain_version: string
     created_at: number
     entries: BackendReceivableEntry[]
     reviews: BackendFundsReview[]
+    review_chain_tail_id?: string | null
+    review_chain_version?: string | null
+    next_review_no?: number | null
+    funds_fact_version?: string | null
+    receipt_facts?: BackendReceiptFact[] | null
+    invoice_facts?: BackendInvoiceFact[] | null
+    work_item?: WorkItemDto | null
+    active_review_type?: "OPENING" | "SYNC_DELTA" | null
+    allowed_actions?: Array<
+        | "CONFIRM_ZERO"
+        | "APPROVE"
+        | "REJECT"
+        | "REGISTER_RECEIPT"
+        | "REGISTER_INVOICE"
+    >
+    action_blockers?: Array<{
+        action: string
+        code: string
+        message: string
+    }>
 }
 
 type BackendCustomerReceipt = {
@@ -121,15 +154,6 @@ function instantToIso(secs: number | undefined | null): string {
     return new Date(Number(secs) * 1000).toISOString()
 }
 
-function mapWorkItemStatus(
-    s: string,
-): CardFundsReviewItemView["workItem"]["workItemStatus"] {
-    if (s === "COMPLETED" || s === "completed") return "COMPLETED"
-    if (s === "IN_PROGRESS" || s === "in_progress") return "IN_PROGRESS"
-    // UNCLAIMED / CLOSED / other → PENDING for queue display
-    return "PENDING"
-}
-
 function mapPriority(p: string | number): number {
     if (typeof p === "number") return p
     switch (p) {
@@ -142,30 +166,6 @@ function mapPriority(p: string | number): number {
         default:
             return 50
     }
-}
-
-function reviewTypeFromWorkItem(
-    workItemType: string,
-): CardFundsReviewItemView["reviewType"] {
-    if (
-        workItemType === "CARD_FUNDS_DELTA_REVIEW" ||
-        workItemType === "card_funds_delta_review"
-    ) {
-        return "SYNC_DELTA"
-    }
-    return "OPENING"
-}
-
-function mapFundsReviewType(
-    t: CardFundsReviewItemView["reviewType"],
-): "opening" | "sync_delta" {
-    return t === "SYNC_DELTA" ? "sync_delta" : "opening"
-}
-
-function mapReviewResultBackend(
-    r: "APPROVED" | "REJECTED",
-): "passed" | "rejected" {
-    return r === "APPROVED" ? "passed" : "rejected"
 }
 
 function mapReviewResultFrontend(r: string): "APPROVED" | "REJECTED" {
@@ -181,13 +181,21 @@ function mapReviewTypeFrontend(
 
 function filterSummary(q: CardFundsReviewQueueQuery): string {
     const parts = [
-        q.scope === "mine" ? "仅我的" : "团队",
+        q.scope === "mine"
+            ? "仅我的"
+            : q.scope === "team"
+              ? "团队"
+              : "处理历史",
         q.type === "opening"
             ? "期初"
             : q.type === "delta"
               ? "同步差额"
               : "全部类型",
-        q.status === "held" ? "已跳过" : "待处理有效队列",
+        q.status === "COMPLETED"
+            ? "已完成"
+            : q.status === "CLOSED"
+              ? "已关闭"
+              : "待处理有效队列",
         q.due === "overdue"
             ? "已超期"
             : q.due === "today"
@@ -198,86 +206,108 @@ function filterSummary(q: CardFundsReviewQueueQuery): string {
     return parts.join(" · ")
 }
 
-async function loadWorkItems(workItemType: string): Promise<BackendWorkItem[]> {
-    const page = await apiGet<Page<BackendWorkItem>>("/admin/work-items", {
-        work_item_type: workItemType,
+async function loadWorkItems(
+    workItemType: string,
+    query: CardFundsReviewQueueQuery,
+): Promise<WorkItemProjection[]> {
+    const page = await listWorkItems({
+        scope: query.scope,
+        workItemType,
+        status:
+            query.scope === "history" && query.status !== "OPEN"
+                ? query.status
+                : undefined,
+        due:
+            query.due === "today" || query.due === "overdue"
+                ? query.due
+                : undefined,
+        query: query.q,
+        sort: "priority_due",
+        queueContextId: query.queueContextId,
+        currentWorkItemId: query.currentWorkItemId,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         page: 1,
-        page_size: 100,
-        sort_by: "created_at",
-        sort_dir: "desc",
+        pageSize: 100,
     })
-    return page.items ?? []
+    return page.items.map(mapWorkItemDto)
 }
 
 async function loadAccount(
     id: string,
+    workItemId?: string,
 ): Promise<BackendReceivableAccount | null> {
     try {
         return await apiGet<BackendReceivableAccount>(
             `/admin/receivable-accounts/${encodeURIComponent(id)}`,
+            { work_item_id: workItemId },
         )
-    } catch {
-        return null
+    } catch (error) {
+        if (
+            error &&
+            typeof error === "object" &&
+            "status" in error &&
+            (error as { status?: number }).status === 404
+        ) {
+            return null
+        }
+        throw error
     }
 }
 
 async function projectItem(
-    wi: BackendWorkItem,
+    wi: WorkItemProjection,
 ): Promise<CardFundsReviewItemView | null> {
-    if (wi.status === "COMPLETED" || wi.status === "CLOSED") return null
+    const accountId = wi.businessObjectId
+    const account = await loadAccount(accountId, wi.workItemId)
+    if (!account) {
+        throw new Error(
+            `任务 ${wi.workItemId} 绑定的应收子账 ${accountId} 不存在；已禁止隐藏任务或继续复核`,
+        )
+    }
 
-    const accountId = wi.business_object_id
-    const account = await loadAccount(accountId)
-    if (!account) return null
-
-    const reviewType = reviewTypeFromWorkItem(wi.work_item_type)
+    if (!account.work_item) {
+        throw new Error(
+            `应收子账 ${accountId} 未返回 actor-specific 正式任务；已禁止从队列待办推导领域动作`,
+        )
+    }
+    const projectedWorkItem = mapWorkItemDto(account.work_item)
+    if (
+        projectedWorkItem.workItemId !== wi.workItemId ||
+        projectedWorkItem.businessObjectId !== accountId
+    ) {
+        throw new Error("服务端返回的 W13 正式任务与队列身份不一致")
+    }
+    const reviewType = account.active_review_type
+    if (!reviewType) {
+        throw new Error("服务端未返回 W13 复核类型")
+    }
     const workItemType =
         reviewType === "SYNC_DELTA"
             ? ("CARD_FUNDS_DELTA_REVIEW" as const)
             : ("CARD_FUNDS_REVIEW" as const)
 
-    const settled = account.settled_total
-    const invoiced = account.invoiced_total
-    const canConfirmZero =
-        reviewType === "OPENING" &&
-        (settled === "0" || settled === "0.00") &&
-        (invoiced === "0" || invoiced === "0.00")
-
-    const status = mapWorkItemStatus(wi.status)
-    const held = false
-
-    const allowedActions: Array<
-        CardFundsReviewItemView["workItem"]["allowedActions"][number]
-    > = [
-        "CLAIM",
-        "APPROVE",
-        "REJECT",
-        "HOLD",
-        "REGISTER_RECEIPT",
-        "REGISTER_INVOICE",
-    ]
-    if (canConfirmZero) {
-        allowedActions.push("CONFIRM_ZERO")
-    }
-
+    const responsibilityActions = projectedWorkItem.allowedActions.filter(
+        (
+            action,
+        ): action is "START_PROCESSING" | "RELEASE_TO_TEAM" | "REASSIGN" =>
+            ["START_PROCESSING", "RELEASE_TO_TEAM", "REASSIGN"].includes(
+                action,
+            ),
+    )
+    const allowedActions: CardFundsReviewItemView["workItem"]["allowedActions"] =
+        [...responsibilityActions, ...(account.allowed_actions ?? [])]
     const actionBlockers: Array<{
         action: string
         code: string
         message: string
-    }> = []
-    if (!canConfirmZero) {
-        actionBlockers.push({
-            action: "CONFIRM_ZERO",
-            code:
-                reviewType !== "OPENING"
-                    ? "NOT_OPENING"
-                    : "SETTLED_OR_INVOICED_NOT_ZERO",
-            message:
-                reviewType !== "OPENING"
-                    ? "「从 0 起」仅适用于期初复核任务"
-                    : "净已收或净已开不为 0，不能使用「从 0 起」结论",
-        })
-    }
+    }> = [
+        ...(account.action_blockers ?? []),
+        ...projectedWorkItem.actionBlockers.map((message) => ({
+            action: "PROCESS_TASK",
+            code: "WORK_ITEM_ACTION_BLOCKED",
+            message,
+        })),
+    ]
 
     const chainItems = (account.reviews ?? []).map((r) => ({
         reviewId: r.id,
@@ -290,51 +320,67 @@ async function projectItem(
                 : ("RECORDED_FACTS_RECONCILED" as const),
         reviewerLabel: r.reviewed_by,
         completedAt: instantToIso(r.reviewed_at),
-        subjectHashAtReview: wi.subject_version ?? String(account.version),
+        subjectHashAtReview: r.subject_hash_at_review ?? "",
         readOnly: true as const,
     }))
 
-    const subjectHash =
-        wi.subject_version ?? `acct:${account.id}:v${account.version}`
-    const fundsFactVersion = `ffv:${account.id}:v${account.version}`
-
-    // receipt/invoice facts: not linked by work-item; leave empty unless we can filter by party (gap)
-    const receiptFacts: CardFundsReviewItemView["receiptFacts"] = []
-    const invoiceFacts: CardFundsReviewItemView["invoiceFacts"] = []
+    const receiptFacts: CardFundsReviewItemView["receiptFacts"] = (
+        account.receipt_facts ?? []
+    ).map((fact) => ({
+        receiptId: fact.receipt_id,
+        receiptNo: fact.receipt_no,
+        receivedAt: fact.received_at,
+        grossAmount: fact.gross_amount,
+        allocatedToAccount: fact.allocated_to_account,
+        otherAllocationSummary: fact.other_allocation_summary ?? undefined,
+        reversed: fact.reversed,
+    }))
+    const invoiceFacts: CardFundsReviewItemView["invoiceFacts"] = (
+        account.invoice_facts ?? []
+    ).map((fact) => ({
+        invoiceId: fact.invoice_id,
+        invoiceNo: fact.invoice_no,
+        direction: fact.direction,
+        issuedAt: fact.issued_at,
+        grossAmount: fact.gross_amount,
+        netAmount: fact.net_amount,
+        taxAmount: fact.tax_amount,
+        allocatedToAccount: fact.allocated_to_account,
+        reversed: fact.reversed,
+    }))
 
     return {
         workItem: {
-            workItemId: wi.id,
+            workItemId: projectedWorkItem.workItemId,
+            taskVersion: projectedWorkItem.taskVersion,
             workItemType,
-            completionAction: wi.completion_action,
-            subjectVersion: String(wi.version),
-            subjectHash,
-            workItemStatus: status,
-            dueAt: wi.due_at ? instantToIso(wi.due_at) : undefined,
-            claimedBy: wi.owner_user_id
-                ? { userId: wi.owner_user_id, displayName: wi.owner_user_id }
+            subjectVersion: projectedWorkItem.subjectVersion,
+            workItemStatus: projectedWorkItem.status,
+            assignmentMode: projectedWorkItem.assignmentMode,
+            dueAt: projectedWorkItem.dueAt
+                ? instantToIso(projectedWorkItem.dueAt)
                 : undefined,
+            ownerUser: projectedWorkItem.ownerUser,
             allowedActions,
             actionBlockers,
-            held,
-            reason: wi.reason_code ?? "卡券票款复核",
-            impact: wi.impact_summary ?? "",
-            priority: mapPriority(wi.priority),
+            reason: projectedWorkItem.reasonLabel,
+            impact: projectedWorkItem.impactSummary,
+            priority: mapPriority(projectedWorkItem.priority),
         },
         salesOrder: {
             id: account.sales_order_id,
-            orderNo: account.sales_order_id,
-            revisionNo: 1,
-            snapshotAt: instantToIso(account.created_at),
+            orderNo: account.sales_order_no,
+            revisionNo: account.sales_order_revision_no,
+            snapshotAt: instantToIso(account.sales_order_snapshot_at),
         },
         account: {
             id: account.id,
             accountSeq: account.account_seq,
-            domainVersion: String(account.version),
+            domainVersion: account.account_domain_version,
             customerId: account.customer_id,
-            customerName: account.customer_id,
+            customerName: account.customer_name,
             counterpartyPartyId: account.counterparty_party_id,
-            counterpartyPartyName: account.counterparty_party_id,
+            counterpartyPartyName: account.counterparty_party_name ?? "",
             mallName: "",
             reviewStatus: account.review_status,
             grossTotal: account.gross_total,
@@ -353,26 +399,20 @@ async function projectItem(
                     : "卡券票款待复核，指标暂不可靠",
         },
         reviewChain: {
-            tailReviewId:
-                chainItems.length > 0
-                    ? chainItems[chainItems.length - 1]!.reviewId
-                    : undefined,
-            chainVersion: `cv:${chainItems.length}`,
-            nextReviewNo:
-                chainItems.length > 0
-                    ? chainItems[chainItems.length - 1]!.reviewNo + 1
-                    : 1,
+            tailReviewId: account.review_chain_tail_id ?? undefined,
+            chainVersion: account.review_chain_version ?? "",
+            nextReviewNo: account.next_review_no ?? 0,
             items: chainItems,
         },
-        currentSalesOrderRevisionId: account.sales_order_id,
-        fundsFactVersion,
+        currentSalesOrderRevisionId: account.current_sales_order_revision_id,
+        fundsFactVersion: account.funds_fact_version ?? "",
         receiptFacts,
         invoiceFacts,
         reviewType,
         fingerprintStatus: {
             label: "数据版本",
             tone: "neutral",
-            detail: `subject=${subjectHash}`,
+            detail: `subject=${projectedWorkItem.subjectVersion}`,
         },
         currentEvidence: {
             evidenceDocumentIds: [],
@@ -387,47 +427,28 @@ async function projectItem(
 export async function fetchCardFundsReviewQueue(
     query: CardFundsReviewQueueQuery,
 ): Promise<CardFundsReviewQueueView> {
+    if (
+        (query.scope === "history" && query.status === "OPEN") ||
+        (query.scope !== "history" && query.status !== "OPEN")
+    ) {
+        throw {
+            kind: "Validation",
+            status: 400,
+            message: "当前责任范围与任务状态不兼容，请重新选择筛选条件",
+        }
+    }
     const types: string[] = []
     if (query.type === "opening") types.push("CARD_FUNDS_REVIEW")
     else if (query.type === "delta") types.push("CARD_FUNDS_DELTA_REVIEW")
     else types.push("CARD_FUNDS_REVIEW", "CARD_FUNDS_DELTA_REVIEW")
 
     const allItems = (
-        await Promise.all(types.map((t) => loadWorkItems(t)))
+        await Promise.all(types.map((t) => loadWorkItems(t, query)))
     ).flat()
 
-    let tasks = (
+    const tasks = (
         await Promise.all(allItems.map((wi) => projectItem(wi)))
     ).filter((t): t is CardFundsReviewItemView => t != null)
-
-    if (query.status === "held") {
-        tasks = tasks.filter((t) => t.workItem.held)
-    }
-
-    if (query.q?.trim()) {
-        const q = query.q.trim().toUpperCase()
-        tasks = tasks.filter(
-            (t) =>
-                t.salesOrder.orderNo.toUpperCase().includes(q) ||
-                t.account.customerName.toUpperCase().includes(q) ||
-                t.account.counterpartyPartyName.toUpperCase().includes(q) ||
-                t.account.id.toUpperCase().includes(q),
-        )
-    }
-
-    // due filters require client clock for "overdue"/"today" — use server due_at only when present
-    if (query.due === "overdue") {
-        const now = Date.now()
-        tasks = tasks.filter(
-            (t) =>
-                t.workItem.dueAt && new Date(t.workItem.dueAt).getTime() < now,
-        )
-    } else if (query.due === "today") {
-        const today = new Date().toISOString().slice(0, 10)
-        tasks = tasks.filter((t) => t.workItem.dueAt?.startsWith(today))
-    }
-
-    tasks = [...tasks].sort((a, b) => b.workItem.priority - a.workItem.priority)
 
     const queueContextId =
         query.queueContextId ?? `queue:card-funds-review:${query.scope}`
@@ -462,194 +483,145 @@ export async function fetchCardFundsReviewQueue(
     }
 }
 
-export async function claimCardFundsReviewWorkItem(
-    workItemId: string,
-): Promise<WorkItemLease> {
-    const detail = await apiGet<BackendWorkItem>(
-        `/admin/work-items/${encodeURIComponent(workItemId)}`,
-    )
-    const claimed = await apiPost<BackendWorkItem>(
-        `/admin/work-items/${encodeURIComponent(workItemId)}/claim`,
-        { version: detail.version },
-    )
-    return {
-        workItemId,
-        claimedByLabel: claimed.owner_user_id ?? "当前用户",
-        subjectVersion: String(claimed.version),
-    }
-}
-
-export async function holdCardFundsReview(input: {
-    workItemId: string
-    expectedSubjectVersion: string
-    reasonCode: string
-    note?: string
-    nextWorkItemId?: string
-}): Promise<FormalActionResponse> {
+export async function completeCardFundsReview(
+    input: CompleteCardFundsReviewCommand,
+): Promise<FormalActionResponse> {
     try {
-        const detail = await apiGet<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(input.workItemId)}`,
-        )
-        const version = Number(input.expectedSubjectVersion) || detail.version
-        await apiPost(
-            `/admin/work-items/${encodeURIComponent(input.workItemId)}/defer`,
-            {
-                version,
-                comment: input.note ?? input.reasonCode,
-            },
-        )
-        const outcome: FormalOutcome = {
-            kind: "HELD",
-            workItemId: input.workItemId,
-            workItemStatus: "IN_PROGRESS",
-            heldAt: new Date().toISOString(),
-            resumeHint: "任务已暂挂。未形成复核记录。可在队列中重新领取处理。",
-            reference: `W13-HOLD-${input.workItemId.toUpperCase()}`,
-            nextWorkItemId: input.nextWorkItemId,
-        }
-        return { status: "succeeded", outcome }
-    } catch (err) {
-        const message =
-            err && typeof err === "object" && "message" in err
-                ? String((err as { message: unknown }).message)
-                : "暂挂失败"
-        const code =
-            err && typeof err === "object" && "status" in err
-                ? String((err as { status?: number }).status ?? "HTTP_ERROR")
-                : "HTTP_ERROR"
-        return { status: "failed", code, message }
-    }
-}
-
-export async function completeCardFundsReview(input: {
-    workItemId: string
-    expectedSubjectVersion: string
-    decision: CardFundsReviewDecision
-}): Promise<FormalActionResponse> {
-    try {
-        const detail = await apiGet<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(input.workItemId)}`,
-        )
-        const account = await loadAccount(input.decision.receivableAccountId)
-        if (!account) {
-            return {
-                status: "failed",
-                code: "NOT_FOUND",
-                message: "应收往来子账不存在",
-            }
-        }
-
-        if (
-            input.decision.evidenceDocumentIds.length === 0 &&
-            input.decision.evidenceReferences.length === 0
-        ) {
-            return {
-                status: "failed",
-                code: "EVIDENCE_REQUIRED",
-                message: "完成复核时证据不能为空",
-            }
-        }
-
-        if (
-            input.decision.reviewResult === "APPROVED" &&
-            input.decision.conclusion === "NO_HISTORY_FROM_ZERO"
-        ) {
-            if (input.decision.reviewType !== "OPENING") {
-                return {
-                    status: "failed",
-                    code: "ZERO_ONLY_OPENING",
-                    message: "「从 0 起」仅允许 OPENING + APPROVED",
+        const result = await apiPost<{
+            work_item_id: string
+            work_item_status: "COMPLETED"
+            business_result: {
+                receivable_funds_review_id: string
+                receivable_account_id: string
+                review_no: number
+                account_review_status: string
+                workflow_action_id: string
+                operation_id: string
+                completed_at: string
+                review_result: "APPROVED" | "REJECTED"
+                conclusion:
+                    | "NO_HISTORY_FROM_ZERO"
+                    | "RECORDED_FACTS_RECONCILED"
+                    | "REJECTED"
+                follow_up_configuration?: {
+                    status: "BLOCKED"
+                    blocker_code: "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED"
+                    collaboration_message: string
+                    required_registration: readonly (
+                        | "WORK_ITEM_TYPE"
+                        | "OWNER_POOL"
+                        | "HANDLER_KEY"
+                    )[]
                 }
             }
-        }
-
-        const nowSecs = Math.floor(Date.now() / 1000)
-        const evidenceRef =
-            input.decision.evidenceReferences[0] ??
-            input.decision.evidenceDocumentIds[0] ??
-            ""
-
-        const review = await apiPost<{
-            id: string
-            review_no: number
-            review_type: string
-            review_result: string
-            reviewed_by: string
-            reviewed_at: number
         }>("/admin/receivable-funds-reviews", {
-            receivable_account_id: input.decision.receivableAccountId,
             work_item_id: input.workItemId,
-            review_type: mapFundsReviewType(input.decision.reviewType),
-            review_result: mapReviewResultBackend(input.decision.reviewResult),
-            evidence_reference: evidenceRef || undefined,
-            reviewed_by: "finance_reviewer",
-            reviewed_at: nowSecs,
-        })
-
-        const version = Number(input.expectedSubjectVersion) || detail.version
-        await apiPost(
-            `/admin/work-items/${encodeURIComponent(input.workItemId)}/complete`,
-            { version },
-        )
-
-        const completedAt = new Date().toISOString()
-        const operationId = `op_w13_${input.workItemId.slice(0, 12)}`
-        const workflowActionId = `wa_w13_${input.workItemId}_${review.review_no}`
-
-        if (input.decision.reviewResult === "APPROVED") {
-            const business = {
-                receivableFundsReviewId: review.id,
-                receivableAccountId: input.decision.receivableAccountId,
-                reviewNo: review.review_no,
-                accountReviewStatus:
-                    input.decision.reviewType === "OPENING"
-                        ? "OPENING_APPROVED"
-                        : "DELTA_APPROVED",
-                workflowActionId,
-                operationId,
-                completedAt,
-                reviewResult: "APPROVED" as const,
+            expected_task_version: input.expectedTaskVersion,
+            expected_subject_version: input.expectedSubjectVersion,
+            decision: {
+                review_result: input.decision.reviewResult,
                 conclusion: input.decision.conclusion,
-                subjectHash:
-                    detail.subject_version ??
-                    `acct:${account.id}:v${account.version}`,
-                reference: `W13-OK-${String(review.review_no).padStart(4, "0")}`,
+                reason_code:
+                    input.decision.reviewResult === "REJECTED"
+                        ? input.decision.reasonCode
+                        : undefined,
+                receivable_account_id: input.decision.receivableAccountId,
+                expected_account_seq: input.decision.expectedAccountSeq,
+                expected_account_domain_version:
+                    input.decision.expectedAccountDomainVersion,
+                expected_review_chain_tail_id:
+                    input.decision.expectedReviewChainTailId,
+                expected_review_chain_version:
+                    input.decision.expectedReviewChainVersion,
+                expected_next_review_no: input.decision.expectedNextReviewNo,
+                expected_sales_order_revision_id:
+                    input.decision.expectedSalesOrderRevisionId,
+                expected_funds_fact_version:
+                    input.decision.expectedFundsFactVersion,
+                review_type: input.decision.reviewType,
+                evidence_document_ids: input.decision.evidenceDocumentIds,
+                evidence_references: input.decision.evidenceReferences,
+                comment: input.decision.comment,
+            },
+            idempotency_key: input.idempotencyKey,
+        })
+        const row = result.business_result
+        if (
+            result.work_item_id !== input.workItemId ||
+            result.work_item_status !== "COMPLETED" ||
+            !row?.receivable_funds_review_id ||
+            !row.workflow_action_id ||
+            !row.operation_id
+        ) {
+            return {
+                status: "failed",
+                code: "INCOMPLETE_FORMAL_RESULT",
+                message: "任务、复核记录或操作号不完整；当前结果不能按成功展示",
+            }
+        }
+        const businessBase = {
+            receivableFundsReviewId: row.receivable_funds_review_id,
+            receivableAccountId: row.receivable_account_id,
+            reviewNo: row.review_no,
+            accountReviewStatus: row.account_review_status,
+            workflowActionId: row.workflow_action_id,
+            operationId: row.operation_id,
+            completedAt: row.completed_at,
+        }
+        if (row.review_result === "APPROVED") {
+            if (
+                row.conclusion !== "NO_HISTORY_FROM_ZERO" &&
+                row.conclusion !== "RECORDED_FACTS_RECONCILED"
+            ) {
+                return {
+                    status: "failed",
+                    code: "INCOMPLETE_FORMAL_RESULT",
+                    message: "通过复核的记录不完整，请刷新任务核对处理结果",
+                }
             }
             return {
                 status: "succeeded",
-                outcome: { kind: "APPROVED", business },
+                outcome: {
+                    kind: "APPROVED",
+                    business: {
+                        ...businessBase,
+                        reviewResult: "APPROVED",
+                        conclusion: row.conclusion,
+                    },
+                },
             }
         }
-
-        const business = {
-            receivableFundsReviewId: review.id,
-            receivableAccountId: input.decision.receivableAccountId,
-            reviewNo: review.review_no,
-            accountReviewStatus: "REJECTED",
-            workflowActionId,
-            operationId,
-            completedAt,
-            reviewResult: "REJECTED" as const,
-            conclusion: "REJECTED" as const,
-            subjectHash:
-                detail.subject_version ??
-                `acct:${account.id}:v${account.version}`,
-            reference: `W13-REJ-${String(review.review_no).padStart(4, "0")}`,
-            followUpConfiguration: {
-                status: "BLOCKED" as const,
-                blockerCode:
-                    "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED" as const,
-                collaborationMessage: REJECT_FOLLOW_UP_COLLABORATION,
-                requiredRegistration: [
-                    "WORK_ITEM_TYPE" as const,
-                    "OWNER_POOL" as const,
-                    "HANDLER_KEY" as const,
-                ],
-            },
+        if (
+            row.review_result !== "REJECTED" ||
+            row.conclusion !== "REJECTED" ||
+            row.follow_up_configuration?.status !== "BLOCKED" ||
+            row.follow_up_configuration.blocker_code !==
+                "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED"
+        ) {
+            return {
+                status: "failed",
+                code: "INCOMPLETE_FORMAL_RESULT",
+                message: "驳回后的处理规则不完整；当前结果不能按成功展示",
+            }
         }
         return {
             status: "succeeded",
-            outcome: { kind: "REJECTED", business },
+            outcome: {
+                kind: "REJECTED",
+                business: {
+                    ...businessBase,
+                    reviewResult: "REJECTED",
+                    conclusion: "REJECTED",
+                    followUpConfiguration: {
+                        status: row.follow_up_configuration.status,
+                        blockerCode: row.follow_up_configuration.blocker_code,
+                        collaborationMessage:
+                            row.follow_up_configuration.collaboration_message,
+                        requiredRegistration:
+                            row.follow_up_configuration.required_registration,
+                    },
+                },
+            },
         }
     } catch (err) {
         const message =
@@ -660,6 +632,18 @@ export async function completeCardFundsReview(input: {
             err && typeof err === "object" && "status" in err
                 ? (err as { status?: number }).status
                 : undefined
+        const kind =
+            err && typeof err === "object" && "kind" in err
+                ? (err as { kind?: unknown }).kind
+                : undefined
+        if (kind === "Network" || kind === "Parse") {
+            return {
+                status: "unknown",
+                idempotencyKey: input.idempotencyKey,
+                message:
+                    "请求结果尚未确认；请按操作号查询处理结果，确认前不得再次推进任务",
+            }
+        }
         return {
             status: "failed",
             code:
@@ -695,10 +679,20 @@ export async function registerHistoricalReceipt(input: {
         })
     }
 
-    const wi = await apiGet<BackendWorkItem>(
-        `/admin/work-items/${encodeURIComponent(input.workItemId)}`,
+    const workItems = await listWorkItems({
+        scope: "mine",
+        workItemType: "CARD_FUNDS_REVIEW",
+        currentWorkItemId: input.workItemId,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        page: 1,
+        pageSize: 1,
+    })
+    const workItem = workItems.items.find(
+        (item) => item.id === input.workItemId,
     )
-    const account = await loadAccount(wi.business_object_id)
+    const account = workItem
+        ? await loadAccount(workItem.business_object_id)
+        : null
     if (!account) {
         return Promise.reject({
             kind: "Http",
@@ -790,10 +784,20 @@ export async function registerHistoricalInvoice(input: {
         })
     }
 
-    const wi = await apiGet<BackendWorkItem>(
-        `/admin/work-items/${encodeURIComponent(input.workItemId)}`,
+    const workItems = await listWorkItems({
+        scope: "mine",
+        workItemType: "CARD_FUNDS_REVIEW",
+        currentWorkItemId: input.workItemId,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        page: 1,
+        pageSize: 1,
+    })
+    const workItem = workItems.items.find(
+        (item) => item.id === input.workItemId,
     )
-    const account = await loadAccount(wi.business_object_id)
+    const account = workItem
+        ? await loadAccount(workItem.business_object_id)
+        : null
     if (!account) {
         return Promise.reject({
             kind: "Http",
@@ -852,17 +856,4 @@ export async function registerHistoricalInvoice(input: {
             },
         ],
     }
-}
-
-export async function saveCardFundsEvidence(input: {
-    workItemId: string
-    expectedSubjectVersion: string
-    evidenceDocumentIds: string[]
-    evidenceReferences: string[]
-    comment?: string
-}): Promise<{ ok: true }> {
-    // Evidence draft has no dedicated backend endpoint; accepted client-side only.
-    // Formal evidence is submitted with complete (append_funds_review).
-    void input
-    return { ok: true }
 }

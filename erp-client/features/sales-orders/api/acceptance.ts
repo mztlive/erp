@@ -247,7 +247,6 @@ export async function fetchCustomerAcceptanceWorkspace(
                 fieldVisibility: { customerName: "full" },
             },
             workItem: null,
-            lease: null,
             workItemConfigBlocker,
         }
     }
@@ -342,12 +341,10 @@ export async function fetchCustomerAcceptanceWorkspace(
         // 草稿读取失败不阻塞工作台
     }
 
-    const allowedActions = [
-        "CREATE_ACCEPTANCE",
-        "POST_ACCEPTANCE",
-        "SAVE_DRAFT",
-    ]
-    if (history.some((h) => h.status === "POSTED")) {
+    const allowedActions = params.workItemId
+        ? []
+        : ["CREATE_ACCEPTANCE", "POST_ACCEPTANCE", "SAVE_DRAFT"]
+    if (!params.workItemId && history.some((h) => h.status === "POSTED")) {
         allowedActions.push("REVERSE_ACCEPTANCE")
     }
 
@@ -381,14 +378,31 @@ export async function fetchCustomerAcceptanceWorkspace(
         history,
         permissions: {
             allowedActions,
-            actionBlockers: [],
+            actionBlockers: params.workItemId
+                ? [
+                      {
+                          action: "CREATE_ACCEPTANCE",
+                          code: "WORK_ITEM_HANDLER_NOT_REGISTERED",
+                          message: workItemConfigBlocker!,
+                      },
+                      {
+                          action: "SAVE_DRAFT",
+                          code: "WORK_ITEM_HANDLER_NOT_REGISTERED",
+                          message: workItemConfigBlocker!,
+                      },
+                      {
+                          action: "POST_ACCEPTANCE",
+                          code: "WORK_ITEM_HANDLER_NOT_REGISTERED",
+                          message: workItemConfigBlocker!,
+                      },
+                  ]
+                : [],
             fieldVisibility: {
                 customerName: "full",
                 customerContact: "full",
             },
         },
         workItem: null,
-        lease: null,
         workItemConfigBlocker,
     }
 }

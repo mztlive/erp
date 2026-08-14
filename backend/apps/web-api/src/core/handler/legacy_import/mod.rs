@@ -10,10 +10,12 @@ use axum::{
 use services::{
     audit::AuditActor,
     legacy_import::{
-        ApplyLegacyImportBatchRequest, CreateLegacyImportBatchRequest, CreateLegacyImportConfirmationRequest,
-        DecideLegacyImportConfirmationRequest, LegacyImportBatchListItem, LegacyImportBatchListParams,
-        LegacyImportBatchView, LegacyImportConfirmationListParams, LegacyImportConfirmationView,
-        LegacyImportRowListParams, LegacyImportRowView, LegacyImportService, PageView,
+        ApplyLegacyImportBatchRequest, CompleteImportBusinessConfirmationCommand,
+        CompleteImportBusinessConfirmationResult, CreateLegacyImportBatchRequest,
+        CreateLegacyImportConfirmationRequest, ImportExecutionCommand, ImportExecutionResult,
+        LegacyImportBatchListItem, LegacyImportBatchListParams, LegacyImportBatchView,
+        LegacyImportConfirmationListParams, LegacyImportConfirmationView, LegacyImportRowListParams,
+        LegacyImportRowView, LegacyImportService, PageView,
     },
 };
 
@@ -131,6 +133,36 @@ pub async fn legacy_import_batch_apply(
 #[permission_macros::permission(
     group = "导入与期初",
     group_desc = "旧数据导入批次、导入行与业务确认事实管理",
+    desc = "执行导入应用命令",
+    resource = "legacy_import_batch",
+    action = "execute"
+)]
+/// 执行 W18 导入应用阶段强命令。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 导入批次 ID；必须与命令体 `batch_id` 一致
+/// * `command` - `START_APPLY` / `CANCEL_PENDING` / `RETRY_FAILED` 强命令
+///
+/// # 返回
+/// 返回事务提交后的批次、后台任务、下一步与审计收据。
+pub async fn legacy_import_execution_command(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(command): Json<ImportExecutionCommand>,
+) -> Result<ImportExecutionResult> {
+    let result = LegacyImportService::new(state.db())
+        .execute_import_command(&id, command, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "导入与期初",
+    group_desc = "旧数据导入批次、导入行与业务确认事实管理",
     desc = "查询导入行列表",
     resource = "legacy_import_row",
     action = "list"
@@ -167,16 +199,18 @@ pub async fn legacy_import_row_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前查询人
 /// * `query` - 分页与筛选参数（`batch_id` 为主要筛选）
 ///
 /// # 返回
 /// 返回契约形状的分页视图。
 pub async fn legacy_import_confirmation_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<LegacyImportConfirmationListParams>,
 ) -> Result<PageView<LegacyImportConfirmationView>> {
     let page = LegacyImportService::new(state.db())
-        .confirmation_list(&params)
+        .confirmation_list(&params, &actor, state.rbac())
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -213,28 +247,26 @@ pub async fn legacy_import_confirmation_create(
 #[permission_macros::permission(
     group = "导入与期初",
     group_desc = "旧数据导入批次、导入行与业务确认事实管理",
-    desc = "决策导入确认事实",
+    desc = "完成导入业务确认任务",
     resource = "legacy_import_confirmation",
-    action = "decide"
+    action = "complete"
 )]
-/// 决策导入确认事实（`CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`；全绿时批次推进到导入中）。
+/// 执行 W18 唯一 `CompleteImportBusinessConfirmation` 强类型命令。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 确认事实 ID
-/// * `req` - 决策请求
+/// * `req` - 带任务、批次、试算版本和幂等键的强类型命令
 ///
 /// # 返回
-/// 返回决策后确认事实的响应视图。
-pub async fn legacy_import_confirmation_decide(
+/// 返回确认事实、已完成任务、批次新版本、下一步与审计收据。
+pub async fn legacy_import_confirmation_complete(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<DecideLegacyImportConfirmationRequest>,
-) -> Result<LegacyImportConfirmationView> {
+    Json(req): Json<CompleteImportBusinessConfirmationCommand>,
+) -> Result<CompleteImportBusinessConfirmationResult> {
     let view = LegacyImportService::new(state.db())
-        .decide_confirmation(&id, req, &actor)
+        .complete_import_business_confirmation(req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

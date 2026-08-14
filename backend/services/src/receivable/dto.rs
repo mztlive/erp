@@ -9,7 +9,9 @@
 //! 见 P3 PR「契约变更」一节（后端统一 snake_case + 秒级时间戳）。
 
 use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{CustomerAccountId, PartyId, ReceivableAccountId, ReceivableEntryId, WorkItemId};
+use entities::ids::{
+    CustomerAccountId, FileAssetId, PartyId, ReceivableAccountId, ReceivableEntryId, WorkItemId,
+};
 use entities::money::Amount;
 use entities::receivable::{
     AccountReviewStatus, AllocationAction, CustomerReceiptStatus, EntryDirection, FundsReviewType,
@@ -20,6 +22,7 @@ use validator::Validate;
 
 use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use crate::work_item::WorkItemView;
 
 /// 应收往来子账列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const RECEIVABLE_ACCOUNT_SORT_FIELDS: &[&str] = &[
@@ -153,22 +156,6 @@ pub struct CreateReceivableAccountRequest {
     pub source_sequence: u32,
 }
 
-/// 应收往来子账复核缓存更新请求（W13 复核结论落账前的账户缓存刷新）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct UpdateReceivableAccountReviewRequest {
-    /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
-    /// 复核状态。
-    pub review_status: AccountReviewStatus,
-    /// 复核人。
-    pub reviewed_by: String,
-    /// 复核时间（秒级时间戳）。
-    pub reviewed_at: Instant,
-    /// 复核证据引用。
-    pub review_evidence_reference: String,
-}
-
 /// 应收分录响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReceivableEntryView {
@@ -211,6 +198,48 @@ pub struct FundsReviewView {
     pub evidence_reference: Option<String>,
 }
 
+/// W13 当前应收账户关联的正式回款事实投影。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReceivableReceiptFactView {
+    /// 回款单 ID。
+    pub receipt_id: String,
+    /// 回款单号。
+    pub receipt_no: String,
+    /// 实际到账时间（RFC 3339）。
+    pub received_at: String,
+    /// 回款含税金额。
+    pub gross_amount: Amount,
+    /// 当前应收账户的净核销金额。
+    pub allocated_to_account: Amount,
+    /// 分配到其它账户的说明；当前投影无法完整证明时为空。
+    pub other_allocation_summary: Option<String>,
+    /// 回款单是否已经冲正。
+    pub reversed: bool,
+}
+
+/// W13 当前应收账户关联的正式销项发票事实投影。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReceivableInvoiceFactView {
+    /// 发票 ID。
+    pub invoice_id: String,
+    /// 发票号码。
+    pub invoice_no: String,
+    /// 蓝票或红票稳定代码（`BLUE` / `RED`）。
+    pub direction: String,
+    /// 开票业务日期（`YYYY-MM-DD`）。
+    pub issued_at: String,
+    /// 含税金额。
+    pub gross_amount: Amount,
+    /// 不含税金额。
+    pub net_amount: Amount,
+    /// 税额。
+    pub tax_amount: Amount,
+    /// 当前应收账户的净分配含税金额。
+    pub allocated_to_account: Amount,
+    /// 当前发票是否已被红冲。
+    pub reversed: bool,
+}
+
 /// 应收往来子账响应视图（W11 应收台账行 + 详情）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReceivableAccountView {
@@ -218,12 +247,26 @@ pub struct ReceivableAccountView {
     pub id: String,
     /// 来源销售单。
     pub sales_order_id: String,
+    /// 销售单业务单号。
+    pub sales_order_no: String,
+    /// 当前不可变销售版本号。
+    pub sales_order_revision_no: u32,
+    /// 当前销售版本生效时间（秒级时间戳）。
+    pub sales_order_snapshot_at: u64,
     /// 往来子账序号。
     pub account_seq: u32,
+    /// 本子账开始适用的销售版本。
+    pub source_sales_order_revision_id: String,
+    /// 当前销售版本（W13 正式动作的领域版本锁）。
+    pub current_sales_order_revision_id: String,
     /// 企业客户经营归属。
     pub customer_id: String,
+    /// 当前销售版本冻结的客户名称。
+    pub customer_name: String,
     /// 收款和开票往来主体。
     pub counterparty_party_id: String,
+    /// 当前销售版本冻结的收款/开票往来主体名称；缺失时为空并阻断登记动作。
+    pub counterparty_party_name: Option<String>,
     /// 卡券票款复核状态缓存。
     pub review_status: AccountReviewStatus,
     /// 含税应收总额。
@@ -242,12 +285,85 @@ pub struct ReceivableAccountView {
     pub status: ReceivableAccountStatus,
     /// 乐观锁版本。
     pub version: u64,
+    /// W13 不透明账户领域版本；客户端不得自行递增或与其它版本互换。
+    pub account_domain_version: String,
+    /// 当前复核链尾；空链为 `None`。
+    pub review_chain_tail_id: Option<String>,
+    /// W13 不透明复核链版本。
+    pub review_chain_version: String,
+    /// 服务端计算的下一复核号。
+    pub next_review_no: u32,
+    /// W13 不透明票款事实版本。
+    pub funds_fact_version: String,
+    /// 当前账户关联的正式回款事实。
+    pub receipt_facts: Vec<ReceivableReceiptFactView>,
+    /// 当前账户关联的正式销项发票事实。
+    pub invoice_facts: Vec<ReceivableInvoiceFactView>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 应收分录（含抵销合计）。
     pub entries: Vec<ReceivableEntryView>,
     /// 卡券票款复核链。
     pub reviews: Vec<FundsReviewView>,
+    /// 当前操作人可见的 W13 正式任务。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work_item: Option<WorkItemView>,
+    /// 由正式任务类型确定的 W13 复核类型。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_review_type: Option<CardFundsReviewType>,
+    /// W13 领域动作，不得从通用任务动作推导。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_actions: Vec<CardFundsReviewAllowedAction>,
+    /// W13 领域动作阻断事实。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub action_blockers: Vec<CardFundsReviewActionBlockerView>,
+}
+
+/// W13 详情查询参数。
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CardFundsReviewDetailParams {
+    /// 从正式待办进入时必须携带的任务 ID。
+    pub work_item_id: Option<String>,
+}
+
+/// W13 卡券票款强类型领域动作。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CardFundsReviewAllowedAction {
+    /// 期初且确无历史票款事实时从零起算。
+    ConfirmZero,
+    /// 核对已登记票款事实后通过。
+    Approve,
+    /// 驳回当前复核。
+    Reject,
+    /// 进入正式回款登记。
+    RegisterReceipt,
+    /// 进入正式销项发票登记。
+    RegisterInvoice,
+}
+
+impl CardFundsReviewAllowedAction {
+    /// 返回稳定动作代码。
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::ConfirmZero => "CONFIRM_ZERO",
+            Self::Approve => "APPROVE",
+            Self::Reject => "REJECT",
+            Self::RegisterReceipt => "REGISTER_RECEIPT",
+            Self::RegisterInvoice => "REGISTER_INVOICE",
+        }
+    }
+}
+
+/// W13 单个领域动作阻断事实。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CardFundsReviewActionBlockerView {
+    /// 被阻断的 W13 动作。
+    pub action: String,
+    /// 稳定阻断码。
+    pub code: String,
+    /// 面向当前处理人的安全说明。
+    pub message: String,
 }
 
 /// 应收往来子账列表查询参数（分页参数与筛选字段扁平传递）。
@@ -692,30 +808,209 @@ impl InvoiceListParams {
 // 卡券票款复核（receivable_funds_review，W13）
 // ---------------------------------------------------------------------------
 
-/// 卡券票款复核追加请求（W13 正式复核：复核链尾锁定 + 账户复核缓存同步）。
+/// W13 正式复核类型（HTTP 稳定代码）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CardFundsReviewType {
+    /// 卡券期初票款复核。
+    Opening,
+    /// 商城同步差额复核。
+    SyncDelta,
+}
+
+/// W13 正式复核结果（HTTP 稳定代码）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CardFundsReviewResult {
+    /// 通过。
+    Approved,
+    /// 驳回。
+    Rejected,
+}
+
+impl CardFundsReviewResult {
+    /// 返回 HTTP 稳定代码。
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Approved => "APPROVED",
+            Self::Rejected => "REJECTED",
+        }
+    }
+}
+
+/// W13 正式复核结论（与结果组合受 Service 严格校验）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CardFundsReviewConclusion {
+    /// 已核实不存在上线前历史票款，从零起算。
+    NoHistoryFromZero,
+    /// 已登记正式票款事实且核对一致。
+    RecordedFactsReconciled,
+    /// 驳回。
+    Rejected,
+}
+
+impl CardFundsReviewConclusion {
+    /// 返回 HTTP 稳定代码。
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::NoHistoryFromZero => "NO_HISTORY_FROM_ZERO",
+            Self::RecordedFactsReconciled => "RECORDED_FACTS_RECONCILED",
+            Self::Rejected => "REJECTED",
+        }
+    }
+}
+
+/// W13 强类型正式决定；所有领域版本均位于 `decision` 内。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct AppendFundsReviewRequest {
-    /// 往来子账。
+#[serde(deny_unknown_fields)]
+pub struct CardFundsReviewDecision {
+    /// 应收往来子账。
     pub receivable_account_id: ReceivableAccountId,
-    /// 对应 `CARD_FUNDS_REVIEW` 或 `CARD_FUNDS_DELTA_REVIEW` 任务。
-    pub work_item_id: WorkItemId,
-    /// 复核类型（期初复核 / 同步差额复核）。
-    pub review_type: FundsReviewType,
+    /// 期望子账序号。
+    #[validate(range(min = 1, message = "往来子账序号必须从 1 开始"))]
+    pub expected_account_seq: u32,
+    /// 期望账户领域版本（服务端不透明字符串）。
+    #[validate(custom(function = "non_blank", message = "账户领域版本不能为空"))]
+    #[validate(length(max = 128, message = "账户领域版本不能超过 128 个字符"))]
+    pub expected_account_domain_version: String,
+    /// 期望复核链尾；空链必须省略。
+    #[validate(length(max = 128, message = "复核链尾不能超过 128 个字符"))]
+    pub expected_review_chain_tail_id: Option<String>,
+    /// 期望复核链版本（服务端不透明字符串）。
+    #[validate(custom(function = "non_blank", message = "复核链版本不能为空"))]
+    #[validate(length(max = 128, message = "复核链版本不能超过 128 个字符"))]
+    pub expected_review_chain_version: String,
+    /// 期望下一复核号。
+    #[validate(range(min = 1, message = "下一复核号必须从 1 开始"))]
+    pub expected_next_review_no: u32,
+    /// 期望当前销售版本。
+    #[validate(custom(function = "non_blank", message = "销售版本不能为空"))]
+    #[validate(length(max = 128, message = "销售版本不能超过 128 个字符"))]
+    pub expected_sales_order_revision_id: String,
+    /// 期望票款事实版本（服务端不透明字符串）。
+    #[validate(custom(function = "non_blank", message = "票款事实版本不能为空"))]
+    #[validate(length(max = 128, message = "票款事实版本不能超过 128 个字符"))]
+    pub expected_funds_fact_version: String,
+    /// 复核类型。
+    pub review_type: CardFundsReviewType,
     /// 复核结果。
-    pub review_result: ReviewResult,
-    /// 证据引用（与证据单据至少提供其一）。
-    pub evidence_reference: Option<String>,
-    /// 财务复核人。
-    #[validate(custom(function = "non_blank", message = "复核人不能为空"))]
-    pub reviewed_by: String,
-    /// 复核时间（秒级时间戳）。
-    pub reviewed_at: Instant,
+    pub review_result: CardFundsReviewResult,
+    /// 复核结论。
+    pub conclusion: CardFundsReviewConclusion,
+    /// 受控证据文件。
+    #[validate(length(max = 20, message = "证据文件最多 20 个"))]
+    pub evidence_document_ids: Vec<FileAssetId>,
+    /// 受控证据引用。
+    #[validate(length(max = 20, message = "证据引用最多 20 条"))]
+    pub evidence_references: Vec<String>,
+    /// 补充说明。
+    #[validate(length(max = 512, message = "复核说明不能超过 512 个字符"))]
+    pub comment: Option<String>,
+    /// 驳回原因代码；仅 `REJECTED` 必填。
+    #[validate(length(max = 64, message = "驳回原因代码不能超过 64 个字符"))]
+    pub reason_code: Option<String>,
+}
+
+/// W13 唯一正式复核命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CompleteCardFundsReviewCommand {
+    /// 当前正式任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务版本；HTTP 接受不透明字符串，由 Service 严格解析。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
+    pub expected_task_version: String,
+    /// 查询所得任务对象版本。
+    #[validate(custom(function = "non_blank", message = "任务对象版本不能为空"))]
+    #[validate(length(max = 128, message = "任务对象版本不能超过 128 个字符"))]
+    pub expected_subject_version: String,
+    /// 完整领域决定。
+    #[validate(nested)]
+    pub decision: CardFundsReviewDecision,
+    /// 客户端稳定幂等键。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(length(max = 128, message = "幂等键不能超过 128 个字符"))]
+    pub idempotency_key: String,
+}
+
+/// 正式复核完成后的固定任务状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CompletedWorkItemStatus {
+    /// 已完成。
+    Completed,
+}
+
+/// 驳回后继尚未注册时所缺的固定配置项。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum FollowUpRequiredRegistration {
+    /// 后继任务类型。
+    WorkItemType,
+    /// 责任池。
+    OwnerPool,
+    /// 处理器键。
+    HandlerKey,
+}
+
+/// W13 驳回后的固定配置 blocker。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CardFundsReviewFollowUpConfiguration {
+    /// 固定为 `BLOCKED`。
+    pub status: String,
+    /// 固定 blocker 代码。
+    pub blocker_code: String,
+    /// 人工协作说明。
+    pub collaboration_message: String,
+    /// 必须先完成的配置注册。
+    pub required_registration: Vec<FollowUpRequiredRegistration>,
+}
+
+/// W13 正式复核业务结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CardFundsReviewBusinessResult {
+    /// 新增复核事实。
+    pub receivable_funds_review_id: String,
+    /// 应收往来子账。
+    pub receivable_account_id: String,
+    /// 正式复核号。
+    pub review_no: u32,
+    /// 事务完成后的账户复核状态。
+    pub account_review_status: String,
+    /// 同事务写入的工作流动作。
+    pub workflow_action_id: String,
+    /// 可用于结果追踪与严格重放的稳定操作号。
+    pub operation_id: String,
+    /// 服务端完成时间（RFC 3339）。
+    pub completed_at: String,
+    /// 正式复核结果。
+    pub review_result: CardFundsReviewResult,
+    /// 正式复核结论。
+    pub conclusion: CardFundsReviewConclusion,
+    /// 仅驳回时返回固定 blocker。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow_up_configuration: Option<CardFundsReviewFollowUpConfiguration>,
+}
+
+/// W13 强类型正式复核命令结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CompleteCardFundsReviewResult {
+    /// 已完成的原任务。
+    pub work_item_id: String,
+    /// 固定为 `COMPLETED`。
+    pub work_item_status: CompletedWorkItemStatus,
+    /// 领域正式结果。
+    pub business_result: CardFundsReviewBusinessResult,
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_sort, CustomerReceiptListParams, InvoiceListParams, ReceivableAccountListParams, SortDir,
+        normalize_sort, CardFundsReviewConclusion, CardFundsReviewResult, CardFundsReviewType,
+        CompleteCardFundsReviewCommand, CustomerReceiptListParams, InvoiceListParams,
+        ReceivableAccountListParams, SortDir,
     };
     use entities::receivable::{CustomerReceiptStatus, InvoiceDirection, ReceivableAccountStatus};
     use validator::Validate;
@@ -802,5 +1097,75 @@ mod tests {
         let query = invoice.normalized().unwrap();
         assert_eq!(query.invoice_direction, Some(InvoiceDirection::Sales));
         assert_eq!(query.paging.page_size, 99);
+    }
+
+    #[test]
+    fn complete_card_funds_review_command_accepts_documented_shape() {
+        let command: CompleteCardFundsReviewCommand = serde_json::from_value(serde_json::json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "7",
+            "expected_subject_version": "sor-9",
+            "decision": {
+                "receivable_account_id": "ra-1",
+                "expected_account_seq": 1,
+                "expected_account_domain_version": "4",
+                "expected_review_chain_tail_id": "review-2",
+                "expected_review_chain_version": "rcv:abc",
+                "expected_next_review_no": 3,
+                "expected_sales_order_revision_id": "sor-9",
+                "expected_funds_fact_version": "ffv:def",
+                "review_type": "SYNC_DELTA",
+                "review_result": "REJECTED",
+                "conclusion": "REJECTED",
+                "evidence_document_ids": ["file-1"],
+                "evidence_references": ["BANK-REF-1"],
+                "comment": "金额不一致",
+                "reason_code": "FACTS_MISMATCH"
+            },
+            "idempotency_key": "card-review-1"
+        }))
+        .unwrap();
+
+        assert_eq!(command.expected_task_version, "7");
+        assert_eq!(command.decision.review_type, CardFundsReviewType::SyncDelta);
+        assert_eq!(command.decision.review_result, CardFundsReviewResult::Rejected);
+        assert_eq!(command.decision.conclusion, CardFundsReviewConclusion::Rejected);
+        assert!(command.validate().is_ok());
+    }
+
+    #[test]
+    fn complete_card_funds_review_command_rejects_legacy_or_invented_fields() {
+        let legacy = serde_json::json!({
+            "receivable_account_id": "ra-1",
+            "review_type": "opening",
+            "review_result": "passed",
+            "reviewed_by": "client-spoofed-user",
+            "reviewed_at": 1_700_000_000,
+            "evidence_reference": "legacy"
+        });
+        assert!(serde_json::from_value::<CompleteCardFundsReviewCommand>(legacy).is_err());
+
+        let invented_subject_hash = serde_json::json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "1",
+            "expected_subject_version": "sor-1",
+            "decision": {
+                "receivable_account_id": "ra-1",
+                "expected_account_seq": 1,
+                "expected_account_domain_version": "1",
+                "expected_review_chain_version": "rcv:empty",
+                "expected_next_review_no": 1,
+                "expected_sales_order_revision_id": "sor-1",
+                "expected_funds_fact_version": "ffv:empty",
+                "expected_subject_hash": "client-invented",
+                "review_type": "OPENING",
+                "review_result": "APPROVED",
+                "conclusion": "NO_HISTORY_FROM_ZERO",
+                "evidence_document_ids": [],
+                "evidence_references": ["核对记录"]
+            },
+            "idempotency_key": "card-review-2"
+        });
+        assert!(serde_json::from_value::<CompleteCardFundsReviewCommand>(invented_subject_hash).is_err());
     }
 }

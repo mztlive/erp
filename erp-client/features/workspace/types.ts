@@ -1,9 +1,13 @@
 /**
  * W01 今日工作台 — 客户端契约类型（对齐 docs/ui-workspaces/w01 §8）。
- * 任务行与指标由 `/admin/work-items` 投影；工作台汇总 as_of 依赖 E3（见 p4-evidence/F7.md）。
+ * 任务行由 `/admin/work-items` 提供，指标由同一授权规则的 `/admin/work-items/stats` 聚合。
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"
+import type {
+    AssignmentMode,
+    WorkItemStatus,
+} from "@/features/work-items/types"
 import type { WorkspaceId } from "@/lib/workspace-registry"
 
 export type WorkspaceDueFilter = "today" | "overdue"
@@ -12,28 +16,32 @@ export type WorkspaceFamilyFilter =
     | "finance"
     | "fulfillment"
     | "exception"
-    | "procurement"
 
 export type WorkspaceMetricKey = "mine" | "due_today" | "overdue" | "exception"
 
-type WorkspaceActionCode = "VIEW" | "PROCESS"
+export type WorkspaceActionCode = "VIEW" | "PROCESS" | "START_PROCESSING"
 
 export type WorkspaceWorkItem = Readonly<{
     workItemId: string
+    taskVersion: string
     workItemType: string
     workItemTypeLabel: string
     businessObjectType: string
     businessObjectId: string
+    subjectVersion: string
     stableNumber: string
     objectTitle: string
     counterpartyName: string
-    status: string
+    status: WorkItemStatus
     statusLabel: string
     statusTone: StatusTone
+    processingState: "READY" | "APPROVAL_BLOCKED"
+    assignmentMode: AssignmentMode
     priority: number
     createdAt: string
     dueAt: string
     ownerRoleLabel: string
+    ownerOrganizationLabel: string
     ownerUserLabel?: string
     reasonLabel: string
     impactSummary: string
@@ -44,7 +52,11 @@ export type WorkspaceWorkItem = Readonly<{
         message: string
     }[]
     destinationWorkspaceId: WorkspaceId
-    queueContextId: string
+    queueContextId?: string
+    handlerKey: string
+    routeContext?: {
+        confirmationScope?: string
+    }
     enteredAtLabel: string
     dueAtLabel: string
     dueBucket: "today" | "overdue" | "later"
@@ -56,7 +68,7 @@ export type WorkspaceTaskGroup = Readonly<{
     label: string
     total: number
     pagePreviewLimit?: number
-    previewLimitSource?: "SERVER" | "TEMPORARY_FALLBACK"
+    previewLimitSource?: "CONFIGURED" | "TEMPORARY_FALLBACK"
     defaultExpanded: boolean
     items: readonly WorkspaceWorkItem[]
 }>
@@ -90,7 +102,7 @@ type WorkspaceRecentItem = Readonly<{
 }>
 
 export type TodayWorkspaceQuery = Readonly<{
-    scope: "mine" | "role_pool"
+    scope: "mine" | "team"
     due?: WorkspaceDueFilter
     family?: WorkspaceFamilyFilter
     timezone: string

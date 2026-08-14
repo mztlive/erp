@@ -17,6 +17,9 @@ export type SupplierOfferingsUrlState = Readonly<{
     availabilityStatus?: AvailabilityStatus
     page: number
     returnTo?: string
+    workItemId?: string
+    queueContextId?: string
+    from?: "W02"
 }>
 
 const codec = createUrlStateCodec<SupplierOfferingsUrlState>([
@@ -42,6 +45,9 @@ const codec = createUrlStateCodec<SupplierOfferingsUrlState>([
     },
     { key: "page", type: "number", defaultValue: 1, min: 1 },
     { key: "returnTo", type: "string" },
+    { key: "workItemId", type: "string", trim: true },
+    { key: "queueContextId", type: "string", trim: true },
+    { key: "from", type: "enum", values: ["W02"] },
 ])
 
 /** 从只读查询参数解析供应商供给列表状态。 */

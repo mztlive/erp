@@ -48,6 +48,7 @@ pub struct RegisterInboxMessageRequest {
 
 /// 入站消息结果回写请求（乐观锁：携带期望版本）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct WriteBackInboxResultRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
@@ -59,12 +60,6 @@ pub struct WriteBackInboxResultRequest {
     pub processed_at: Option<i64>,
     /// 失败时的错误分类（`outcome=failed` 必填）。
     pub error_class: Option<ErrorClass>,
-    /// 失败时的责任角色。
-    #[validate(length(max = 64, message = "责任角色过长"))]
-    pub owner_role: Option<String>,
-    /// 失败时的责任人。
-    #[validate(length(max = 128, message = "责任人过长"))]
-    pub owner_user_id: Option<String>,
     /// 失败时的脱敏尝试结果摘要。
     #[validate(length(max = 512, message = "尝试结果摘要过长"))]
     pub attempt_summary: Option<String>,

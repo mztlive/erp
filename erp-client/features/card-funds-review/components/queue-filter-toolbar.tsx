@@ -23,10 +23,10 @@ export function QueueFilterToolbar({
     setAutoNext,
     replaceUrl,
 }: {
-    scope: "mine" | "role_pool"
+    scope: "mine" | "team" | "history"
     type: "all" | "opening" | "delta"
     due: "all" | "today" | "overdue"
-    status: "pending" | "held"
+    status: "OPEN" | "COMPLETED" | "CLOSED"
     searchInput: string
     onSearchInputChange: (value: string) => void
     autoNext: boolean
@@ -47,8 +47,12 @@ export function QueueFilterToolbar({
                         [
                             { value: "mine" as const, label: "我的待办" },
                             {
-                                value: "role_pool" as const,
-                                label: "团队待认领",
+                                value: "team" as const,
+                                label: "团队待处理",
+                            },
+                            {
+                                value: "history" as const,
+                                label: "处理历史",
                             },
                         ] as const
                     ).map((opt) => (
@@ -60,6 +64,10 @@ export function QueueFilterToolbar({
                                 replaceUrl({
                                     scope:
                                         opt.value === "mine" ? null : opt.value,
+                                    status:
+                                        opt.value === "history"
+                                            ? "COMPLETED"
+                                            : null,
                                     queueContextId: null,
                                     currentWorkItemId: null,
                                 })
@@ -148,8 +156,9 @@ export function QueueFilterToolbar({
                 >
                     {(
                         [
-                            { value: "pending" as const, label: "待处理" },
-                            { value: "held" as const, label: "已跳过" },
+                            { value: "OPEN" as const, label: "待处理" },
+                            { value: "COMPLETED" as const, label: "已完成" },
+                            { value: "CLOSED" as const, label: "已关闭" },
                         ] as const
                     ).map((opt) => (
                         <button
@@ -159,9 +168,9 @@ export function QueueFilterToolbar({
                             onClick={() =>
                                 replaceUrl({
                                     status:
-                                        opt.value === "pending"
-                                            ? null
-                                            : opt.value,
+                                        opt.value === "OPEN" ? null : opt.value,
+                                    scope:
+                                        opt.value === "OPEN" ? null : "history",
                                     currentWorkItemId: null,
                                 })
                             }

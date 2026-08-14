@@ -8,12 +8,17 @@ use crate::errors::Result;
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 use super::common::{non_blank, normalize_sort, PageParams};
+use super::error_task::ActionBlockerView;
+use super::task_decision::{
+    ControlledEvidenceRef, ReconciliationReasonRegistryView, ResolutionEvidencePolicyView,
+};
 
 /// `reconciliation_difference` 列表允许的排序字段白名单（仅差异发现时间）。
 pub(crate) const DIFFERENCE_SORT_FIELDS: &[&str] = &["created_at"];
 
 /// 对账差异登记请求（创建后不可修改，不设软删除）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreateDifferenceRequest {
     /// 差异对象类型（如商城订单、供应商订单、销售单等）。
     #[validate(
@@ -111,97 +116,6 @@ impl DifferenceListParams {
     }
 }
 
-/// 差异人工处理请求（非终态动作：领取/处理中/补证，只追加处理记录）。
-///
-/// 差异本身是不可变正式事实（锁版本永不变化），并发保护以「处理记录序号」为
-/// 乐观锁令牌：`version` = 期望的最新处理序号（0 表示尚无处理记录），由上一次
-/// 处理/解决响应回传；序号不一致或并发追加冲突时返回 409。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ProcessDifferenceRequest {
-    /// 期望的最新处理序号（0 表示无处理记录；由上一次响应回传）。
-    #[validate(range(max = 1_000_000, message = "处理序号不合法"))]
-    pub version: Option<u64>,
-    /// 处理动作：`claim` 领取（仅首条）/ `processing` 处理中 / `add_evidence` 补充证据。
-    pub action: DifferenceProcessAction,
-    /// 终态证据或补充证据引用（追加式，不可覆盖历史）。
-    #[validate(length(max = 512, message = "证据引用过长"))]
-    pub evidence_reference: Option<String>,
-    /// 备注。
-    #[validate(length(max = 512, message = "备注过长"))]
-    pub comment: Option<String>,
-}
-
-/// 差异人工处理动作取值。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DifferenceProcessAction {
-    /// 领取（仅首条处理记录允许）。
-    Claim,
-    /// 处理中。
-    Processing,
-    /// 补充证据。
-    AddEvidence,
-}
-
-/// 差异终结结论请求（只追加处理记录并派生终态；不完成/关闭任何任务）。
-///
-/// 并发保护同 [`ProcessDifferenceRequest`]：`version` 是期望的最新处理序号。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ResolveDifferenceRequest {
-    /// 期望的最新处理序号（0 表示无处理记录；由上一次响应回传）。
-    #[validate(range(max = 1_000_000, message = "处理序号不合法"))]
-    pub version: Option<u64>,
-    /// 终结结论：`confirm_no_error` 确认无误 / `confirm_valid_difference` 确认有效差异。
-    pub conclusion: DifferenceConclusion,
-    /// 固定原因枚举（禁止自由文本，W29 §7）。
-    pub reason_code: DifferenceReasonCode,
-    /// 受控证据引用（非空）。
-    #[validate(
-        custom(function = "non_blank", message = "受控证据不能为空"),
-        length(max = 400, message = "证据引用过长")
-    )]
-    pub evidence_reference: String,
-    /// 备注。
-    #[validate(length(max = 512, message = "备注过长"))]
-    pub comment: Option<String>,
-}
-
-/// 差异终结结论取值（`confirm_no_error` / `confirm_valid_difference`）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DifferenceConclusion {
-    /// 确认无误。
-    ConfirmNoError,
-    /// 确认有效差异。
-    ConfirmValidDifference,
-}
-
-/// 差异终结固定原因枚举（W29 §7 至少含三项；禁止自由字符串原因）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum DifferenceReasonCode {
-    /// 来源已更正并重新归集。
-    SourceCorrectedAndReattributed,
-    /// 业务确认无误。
-    BusinessConfirmedNoError,
-    /// 已补偿闭环。
-    CompensationClosed,
-}
-
-impl DifferenceReasonCode {
-    /// 返回原因稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于写入处理记录证据引用的稳定字符串。
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::SourceCorrectedAndReattributed => "SOURCE_CORRECTED_AND_REATTRIBUTED",
-            Self::BusinessConfirmedNoError => "BUSINESS_CONFIRMED_NO_ERROR",
-            Self::CompensationClosed => "COMPENSATION_CLOSED",
-        }
-    }
-}
-
 /// 对账差异列表响应视图（`status` 由最后一条处理记录派生；无处理记录时为 `None`）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DifferenceView {
@@ -219,7 +133,7 @@ pub struct DifferenceView {
     pub right_fact_reference: Option<String>,
     /// 派生处理状态（`None` 表示尚无处理记录）。
     pub status: Option<ResultingStatus>,
-    /// 乐观锁版本。
+    /// 最新追加式决定序号；初始为 `0`。
     pub version: u64,
     /// 差异发现时间（秒级时间戳）。
     pub created_at: u64,
@@ -238,8 +152,6 @@ pub struct ResolutionView {
     pub resulting_status: ResultingStatus,
     /// 终态证据引用。
     pub evidence_reference: Option<String>,
-    /// 替代任务 ID（关闭重复时关联）。
-    pub replacement_task_id: Option<String>,
     /// 处理人。
     pub handled_by: String,
     /// 处理时间（秒级时间戳）。
@@ -261,7 +173,6 @@ impl From<ReconciliationDifferenceResolution> for ResolutionView {
             resolution_action: resolution.resolution_action,
             resulting_status: resolution.resulting_status,
             evidence_reference: resolution.evidence_reference,
-            replacement_task_id: resolution.replacement_task_id.map(|id| id.to_string()),
             handled_by: resolution.handled_by,
             handled_at: resolution.handled_at.unix_secs(),
         }
@@ -276,16 +187,16 @@ pub struct DifferenceDetailView {
     pub difference: DifferenceView,
     /// 处理记录时间线（按处理序号升序，不可变）。
     pub resolutions: Vec<ResolutionView>,
-}
-
-/// 差异处理动作响应视图（追加的处理记录 + 最新处理序号，供下一次动作乐观锁回传）。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DifferenceActionView {
-    /// 本次追加的处理记录（扁平展开）。
-    #[serde(flatten)]
-    pub resolution: ResolutionView,
-    /// 追加后的最新处理序号（下一次处理/解决请求的 `version`）。
-    pub version: u64,
+    /// 服务端按任务关联与当前差异状态开放的动作。
+    pub allowed_actions: Vec<String>,
+    /// 当前阻断原因。
+    pub action_blockers: Vec<ActionBlockerView>,
+    /// 服务端发现并重验的受控证据。
+    pub linked_evidence: Vec<ControlledEvidenceRef>,
+    /// 有正式任务时使用的固定终态证据策略。
+    pub resolution_evidence_policy: Option<ResolutionEvidencePolicyView>,
+    /// 无正式任务时使用的固定直接对账原因注册表。
+    pub reconciliation_reason_registry: Option<ReconciliationReasonRegistryView>,
 }
 
 impl From<ReconciliationDifference> for DifferenceView {
@@ -305,7 +216,7 @@ impl From<ReconciliationDifference> for DifferenceView {
             left_fact_reference: difference.left_fact_reference,
             right_fact_reference: difference.right_fact_reference,
             status: None,
-            version: difference.base.version,
+            version: 0,
             created_at: difference.base.created_at,
         }
     }
@@ -313,7 +224,7 @@ impl From<ReconciliationDifference> for DifferenceView {
 
 #[cfg(test)]
 mod tests {
-    use super::{DifferenceListParams, DifferenceReasonCode};
+    use super::DifferenceListParams;
     use validator::Validate;
 
     #[test]
@@ -348,23 +259,5 @@ mod tests {
         assert_eq!(query.created_at_to, Some(1_700_000_100));
         assert_eq!(query.paging.page, 3);
         assert_eq!(query.paging.page_size, 10);
-    }
-
-    #[test]
-    fn reason_code_serializes_with_stable_codes() {
-        use serde_json::json;
-
-        assert_eq!(
-            serde_json::to_string(&DifferenceReasonCode::SourceCorrectedAndReattributed).unwrap(),
-            "\"SOURCE_CORRECTED_AND_REATTRIBUTED\""
-        );
-        assert_eq!(
-            DifferenceReasonCode::CompensationClosed.as_str(),
-            "COMPENSATION_CLOSED"
-        );
-
-        let parsed: DifferenceReasonCode =
-            serde_json::from_value(json!("BUSINESS_CONFIRMED_NO_ERROR")).unwrap();
-        assert_eq!(parsed, DifferenceReasonCode::BusinessConfirmedNoError);
     }
 }

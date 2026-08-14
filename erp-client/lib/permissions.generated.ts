@@ -299,13 +299,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     },
     {
         name: "统一待办",
-        description: "正式待办队列与处理",
+        description: "待办队列与责任处理",
         permissions: [
             {
                 module: "admin",
                 method: "GET",
                 path: "/admin/work-items",
-                description: "查询待办列表",
+                description: "查询本人授权范围内的待办",
                 permission: {
                     resource: "work_item",
                     action: "list",
@@ -313,19 +313,19 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "POST",
-                path: "/admin/work-items",
-                description: "派发待办",
+                method: "GET",
+                path: "/admin/work-items/stats",
+                description: "查询本人授权范围内的待办统计",
                 permission: {
                     resource: "work_item",
-                    action: "create",
+                    action: "list",
                 },
             },
             {
                 module: "admin",
                 method: "GET",
                 path: "/admin/work-items/{id}",
-                description: "查询待办详情",
+                description: "查询本人有权查看的待办详情",
                 permission: {
                     resource: "work_item",
                     action: "detail",
@@ -334,51 +334,67 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/work-items/{id}/claim",
-                description: "领取待办",
+                path: "/admin/work-items/{id}/start-processing",
+                description: "从团队待处理建立本人责任",
                 permission: {
                     resource: "work_item",
-                    action: "claim",
+                    action: "start_processing",
                 },
             },
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/work-items/{id}/defer",
-                description: "暂挂待办",
+                path: "/admin/work-items/{id}/release-to-team",
+                description: "将本人负责的责任池任务退回团队",
                 permission: {
                     resource: "work_item",
-                    action: "defer",
+                    action: "release_to_team",
                 },
             },
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/work-items/{id}/transfer",
-                description: "转交待办",
+                path: "/admin/work-items/{id}/reassign",
+                description: "在授权范围内受控转交任务",
                 permission: {
                     resource: "work_item",
-                    action: "transfer",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/work-items/{id}/complete",
-                description: "完成任务",
-                permission: {
-                    resource: "work_item",
-                    action: "complete",
+                    action: "reassign",
                 },
             },
             {
                 module: "admin",
                 method: "POST",
                 path: "/admin/work-items/{id}/close",
-                description: "关闭待办",
+                description: "关闭重复、误派或已有替代的任务",
                 permission: {
                     resource: "work_item",
                     action: "close",
+                },
+            },
+        ],
+    },
+    {
+        name: "阻塞审批管理",
+        description: "诊断并受控恢复无法安全路由的审批实例",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances",
+                description: "按授权组织查询阻塞审批",
+                permission: {
+                    resource: "approval_instance",
+                    action: "diagnose",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-instances/{id}/recover",
+                description: "重新解析并恢复原当前审批步骤",
+                permission: {
+                    resource: "approval_instance",
+                    action: "recover",
                 },
             },
         ],
@@ -1628,6 +1644,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/sales-orders/{id}/procurement-rejection-resolution",
+                description: "处置采购驳回",
+                permission: {
+                    resource: "sales_order",
+                    action: "resolve_procurement_rejection",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/sales-orders/{id}/void",
                 description: "作废销售单草稿",
                 permission: {
@@ -1654,21 +1680,31 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/sales-order-reviews/{id}/approve",
-                description: "通过卡券销售审批",
+                path: "/admin/sales-order-reviews/decisions",
+                description: "提交卡券销售审批决定",
                 permission: {
                     resource: "sales_order_review",
-                    action: "approve",
+                    action: "decide",
                 },
             },
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/sales-order-reviews/{id}/reject",
-                description: "驳回卡券销售审批",
+                path: "/admin/sales-order-reviews/low-margin-decisions",
+                description: "完成低毛利上级确认",
                 permission: {
                     resource: "sales_order_review",
-                    action: "reject",
+                    action: "low_margin_decide",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-reviews/cancellations",
+                description: "撤回本人提交的卡券销售审批",
+                permission: {
+                    resource: "sales_order",
+                    action: "cancel_approval",
                 },
             },
             {
@@ -1714,21 +1750,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/procurement-confirmations/{id}/approve",
-                description: "采购确认通过",
+                path: "/admin/procurement-confirmations/{id}/decisions",
+                description: "完成采购确认",
                 permission: {
                     resource: "procurement_confirmation",
-                    action: "approve",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/procurement-confirmations/{id}/reject",
-                description: "采购确认驳回",
-                permission: {
-                    resource: "procurement_confirmation",
-                    action: "reject",
+                    action: "complete",
                 },
             },
             {
@@ -1880,21 +1906,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/purchase-orders/{id}/review/approve",
-                description: "采购财务审核通过",
+                path: "/admin/purchase-orders/{id}/review-decisions",
+                description: "采购财务审核决定",
                 permission: {
                     resource: "purchase_order",
-                    action: "approve",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/review/reject",
-                description: "采购财务审核驳回",
-                permission: {
-                    resource: "purchase_order",
-                    action: "reject",
+                    action: "review",
                 },
             },
             {
@@ -2347,22 +2363,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "PUT",
-                path: "/admin/receivable-accounts/{id}/review",
-                description: "更新应收往来子账复核缓存",
-                permission: {
-                    resource: "receivable_account",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
                 method: "POST",
                 path: "/admin/receivable-funds-reviews",
-                description: "追加卡券票款正式复核",
+                description: "完成卡券票款正式复核",
                 permission: {
                     resource: "receivable_funds_review",
-                    action: "create",
+                    action: "complete",
                 },
             },
             {
@@ -2821,6 +2827,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-batches/{id}/commands",
+                description: "执行导入应用命令",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "execute",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/legacy-import-confirmations",
                 description: "查询导入确认事实列表",
@@ -2842,11 +2858,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/legacy-import-confirmations/{id}/decide",
-                description: "决策导入确认事实",
+                path: "/admin/legacy-import-confirmations/complete",
+                description: "完成导入业务确认任务",
                 permission: {
                     resource: "legacy_import_confirmation",
-                    action: "decide",
+                    action: "complete",
                 },
             },
         ],
@@ -2977,6 +2993,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/master-mapping-tasks/{id}",
+                description: "查询映射任务详情",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/master-mapping-tasks",
                 description: "创建映射任务",
@@ -2988,11 +3014,41 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/master-mapping-tasks/{id}/resolve",
-                description: "处理映射任务",
+                path: "/admin/master-mapping-tasks/{id}/confirm",
+                description: "确认映射目标",
                 permission: {
                     resource: "master_mapping_task",
-                    action: "resolve",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/master-mapping-tasks/{id}/request-source-fix",
+                description: "请求来源系统修复映射证据",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "request_source_fix",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/master-mapping-tasks/{id}/reapply",
+                description: "重新归集商城快照",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "reapply",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/master-mapping-tasks/{id}/reapply-operations/{operation_id}",
+                description: "查询重新归集操作结果",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "detail",
                 },
             },
         ],
@@ -3079,32 +3135,42 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "PUT",
-                path: "/admin/supplier-api-connections/{id}",
-                description: "更新供应商 API 连接",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/commands",
+                description: "执行供应商 API 连接治理强命令",
                 permission: {
                     resource: "supplier_api_connection",
-                    action: "update",
+                    action: "command",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/business-capability-confirmations",
+                description: "确认供应商 API 业务能力需求",
+                permission: {
+                    resource: "supplier_api_capability",
+                    action: "confirm_requirement",
                 },
             },
             {
                 module: "admin",
                 method: "PUT",
                 path: "/admin/supplier-api-connections/{id}/capabilities",
-                description: "替换供应商 API 连接能力清单",
+                description: "配置供应商 API 能力",
                 permission: {
-                    resource: "supplier_api_connection",
+                    resource: "supplier_api_capability",
                     action: "update",
                 },
             },
             {
                 module: "admin",
-                method: "POST",
-                path: "/admin/supplier-api-connections/{id}/health-check",
-                description: "执行连接健康检查",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}/jobs/{job_id}",
+                description: "查询供应商 API 连接后台任务",
                 permission: {
                     resource: "supplier_api_connection",
-                    action: "health_check",
+                    action: "detail",
                 },
             },
             {
@@ -3131,16 +3197,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "product_publication",
                     action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/product-publications",
-                description: "创建商品发布",
-                permission: {
-                    resource: "product_publication",
-                    action: "create",
                 },
             },
             {
@@ -3211,6 +3267,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "product_publication_delivery",
                     action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-publication-deliveries/{delivery_id}/actions",
+                description: "执行发布投递对象动作",
+                permission: {
+                    resource: "product_publication_delivery",
+                    action: "operate",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-publication-deliveries/process-pending",
+                description: "处理待发送发布投递",
+                permission: {
+                    resource: "product_publication_delivery",
+                    action: "process_pending",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publication-safety-pauses/{idempotency_key}",
+                description: "查询系统安全暂停结果",
+                permission: {
+                    resource: "product_publication",
+                    action: "detail",
                 },
             },
         ],
@@ -3287,6 +3373,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "sales_order_projection_delivery",
                     action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projection-deliveries/process-pending",
+                description: "受控处理待发送投递",
+                permission: {
+                    resource: "sales_order_projection_delivery",
+                    action: "process_pending",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projection-deliveries/{delivery_id}/actions",
+                description: "执行投递对象强动作",
+                permission: {
+                    resource: "sales_order_projection_delivery",
+                    action: "operate",
                 },
             },
         ],
@@ -3575,6 +3681,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/investigations",
+                description: "从订单入口调查供应商原动作结果",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "investigate",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/task-investigations",
+                description: "从正式任务调查供应商原动作结果",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "investigate",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/task-completions",
+                description: "根据已验证结果完成供应商履约任务",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "complete",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-fulfillment-orders/{id}",
                 description: "查询供应商履约订单详情",
@@ -3662,7 +3798,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/supplier-settlement-statements/{id}/submit-review",
+                path: "/admin/supplier-settlement-statements/{id}/review-submissions",
                 description: "提交结算复核",
                 permission: {
                     resource: "supplier_settlement_statement",
@@ -3672,8 +3808,38 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/supplier-settlement-statements/{id}/confirm",
-                description: "确认结算并形成应付",
+                path: "/admin/supplier-settlement-statements/{id}/refreshes",
+                description: "刷新供应商结算权威来源试算",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-source-evidence",
+                description: "查询最新供应商结算来源证据",
+                permission: {
+                    resource: "supplier_settlement_source_evidence",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-source-evidence",
+                description: "录入供应商结算不可变来源证据",
+                permission: {
+                    resource: "supplier_settlement_source_evidence",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/review-decisions",
+                description: "执行供应商结算正式复核决定",
                 permission: {
                     resource: "supplier_settlement_statement",
                     action: "confirm",
@@ -3712,8 +3878,18 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/supplier-settlement-differences/{id}/resolve",
+                path: "/admin/supplier-settlement-differences/{id}/decisions",
                 description: "登记结算差异处理结论",
+                permission: {
+                    resource: "supplier_settlement_difference",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-differences/{id}/evidence",
+                description: "追加结算差异正式补证",
                 permission: {
                     resource: "supplier_settlement_difference",
                     action: "update",
@@ -3798,61 +3974,21 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/integration/error-tasks/{id}/query",
-                description: "查询原结果",
+                path: "/admin/integration/task-actions",
+                description: "执行集成任务非终结动作",
                 permission: {
-                    resource: "integration_error_task",
-                    action: "query",
+                    resource: "integration_task",
+                    action: "process",
                 },
             },
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/integration/error-tasks/{id}/replay",
-                description: "重放原动作",
+                path: "/admin/integration/task-completions",
+                description: "根据已验证结果完成集成任务",
                 permission: {
-                    resource: "integration_error_task",
-                    action: "replay",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/integration/error-tasks/{id}/hold",
-                description: "暂挂或跳过当前任务",
-                permission: {
-                    resource: "integration_error_task",
-                    action: "hold",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/integration/error-tasks/{id}/transfer",
-                description: "转交集成错误任务",
-                permission: {
-                    resource: "integration_error_task",
-                    action: "transfer",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/integration/error-tasks/{id}/resolve",
-                description: "解决集成错误任务",
-                permission: {
-                    resource: "integration_error_task",
-                    action: "resolve",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/integration/error-tasks/{id}/close",
-                description: "关闭集成错误任务",
-                permission: {
-                    resource: "integration_error_task",
-                    action: "close",
+                    resource: "integration_task",
+                    action: "complete",
                 },
             },
             {
@@ -3888,21 +4024,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/integration/differences/{id}/process",
-                description: "人工处理对账差异",
+                path: "/admin/integration/differences/{id}/decisions",
+                description: "提交无正式任务的对账差异决定",
                 permission: {
                     resource: "reconciliation_difference",
-                    action: "process",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/integration/differences/{id}/resolve",
-                description: "解决对账差异",
-                permission: {
-                    resource: "reconciliation_difference",
-                    action: "resolve",
+                    action: "decide",
                 },
             },
         ],

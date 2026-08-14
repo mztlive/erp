@@ -614,6 +614,34 @@ type GovernanceActionResult = {
 W17 只复用 W02 的责任命令；映射确认、请求来源修复和重新归集分别使用已注册的强类型命令。
 客户端不能传入任意完成动作、下一任务类型或责任路由。
 
+### 8.3 映射注册表与操作查询
+
+服务端必须执行以下固定注册表；客户端传入的 `objectType`、来源字段或关系角色不得扩展注册范围：
+
+| `mappingType` | 命令目标类型 | ERP 权威对象 | 来源身份字段白名单 | 关系角色 |
+| --- | --- | --- | --- | --- |
+| `CUSTOMER` | `CUSTOMER` | `customer_account` | `customer_external_id`、`customer_id`、`company_id` | `PRIMARY` |
+| `CONTRACT` | `CONTRACT` | `contract` | `contract_external_id`、`contract_no`、`contract_id` | `PRIMARY` |
+| `SETTLEMENT_PARTY` | `SETTLEMENT_PARTY` | `party` | `settlement_party_external_id`、`settlement_party_id`、`parent_company_id` | `PRIMARY` |
+| `VOUCHER_CATEGORY` | `VOUCHER_CATEGORY` | 启用且上架的卡券类目 SKU | `voucher_category_external_id`、`card_type_id`、`category_id` | `PRIMARY` |
+| `UNIQUE_LINE` | 不注册 | 无独立 ERP 规范身份 | 无 | 无 |
+| `AMOUNT_FORMAT` | 不注册 | 无独立 ERP 规范身份 | 无 | 无 |
+
+已注册类型必须由服务端验证目标存在、当前有效、当前正式修订和当前账号业务范围。
+同一来源身份已有谱系时，命令必须携带当前 `externalIdentityMapId`；事务内关闭旧活动目标、追加新目标、更新映射头、解决领域任务并完成正式待办。谱系 ID 不匹配时返回冲突，不得覆盖或退回第一条谱系。
+
+映射列表和详情均返回当前 actor 的正式任务、候选、来源白名单证据、当前谱系、`allowedActions` 和结构化 `actionBlockers`。详情固定使用
+`GET /admin/master-mapping-tasks/{mappingTaskId}?work_item_id={workItemId}`；显式双 ID 不一致时返回契约错误，不得按对象回退到第一条待办。
+
+重新归集固定使用独立操作资源：
+
+- `POST /admin/master-mapping-tasks/{mappingTaskId}/reapply` 创建或幂等回读操作；
+- `GET /admin/master-mapping-tasks/{mappingTaskId}/reapply-operations/{operationId}` 查询结果；
+- 同一映射任务内 `idempotencyKey` 摘要唯一；同键异参或同 `operationId` 异参必须冲突；
+- 无法形成销售版本与应收证据时必须保存明确 `FAILED` 及错误代码，不得返回伪成功；传输结果不确定时保存或返回 `UNKNOWN`，映射任务继续保持 `RESOLVED`。
+
+`POST /admin/mall-sales-sync-jobs` 只接受 `TriggerMallSyncCommand`。人工增量、按单补拉、失败重试和核对均必须携带 `executionStage`、来源身份、理由与幂等键；按单补拉必须携带协议原值 `externalOrderNo`。Service 必须重读当前阶段、水位或原失败作业并形成执行范围，禁止接收客户端提供的任意范围或固定策略 blocker。
+
 - `TriggerMallSyncCommand` 以 `executionStage` 强判别：`FIRST_PHASE_MALL_OWNED` 只能使用普通增量、按单补拉、普通失败重试或普通核对；阶段已封存时同步、核对及一切执行类写命令整体拒绝。
 - 定时增量只走 `ScheduledIncrementalMallSyncCommand`，不携带人工字段。人工立即增量与按单补拉只能走对应 manual 分支，每次提交追加审计；服务端按阶段校验，封存后人工动作整体拒绝。
 - `executionStage` 是并发校验值，不是客户端可选择的放行开关。所有同步、确认映射与重新归集提交都先由服务端重读当前阶段；实际已封存却提交普通一期分支时必须整体拒绝，未知阶段值也按契约错误拒绝而不是忽略。

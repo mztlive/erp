@@ -4,6 +4,7 @@
 //! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；业务日期 `baseline_date`
 //! 为 `YYYY-MM-DD` 字符串；本域无金额字段。
 
+use entities::bulk_job::JobStatus;
 use entities::common::time::BusinessDate;
 use entities::ids::{
     BackgroundJobId, FileAssetId, LegacyImportBatchId, LegacyImportRowId, SourceSystemId, WorkItemId,
@@ -12,6 +13,7 @@ use entities::legacy_import::{
     ConfirmationDecision, ConfirmationStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchStatus,
     LegacyImportConfirmation, MappingStatus, ParseStatus,
 };
+use entities::work_item::{AssignmentMode, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -435,15 +437,13 @@ impl LegacyImportRowListParams {
 
 /// 导入确认创建请求（数据模型 §6.12：每批按版本化确认矩阵为必要范围各创建一个事实）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreateLegacyImportConfirmationRequest {
     /// 所属导入批次。
     pub batch_id: LegacyImportBatchId,
     /// 责任范围（销售、采购、运营、仓储、财务等）。
     #[validate(custom(function = "non_blank", message = "确认范围不能为空"))]
     pub confirmation_scope: String,
-    /// 责任角色。
-    #[validate(custom(function = "non_blank", message = "责任角色不能为空"))]
-    pub owner_role: String,
     /// 本次确认针对的批次版本。
     pub batch_version: u32,
     /// 本次确认针对的试算版本（`(batch_id, scope, trial_version)` 唯一）。
@@ -451,19 +451,82 @@ pub struct CreateLegacyImportConfirmationRequest {
     /// 本次确认针对的导入规则版本。
     #[validate(custom(function = "non_blank", message = "导入规则版本不能为空"))]
     pub import_rule_version: String,
-    /// 对应 `IMPORT_BUSINESS_CONFIRMATION` 正式任务。
-    pub work_item_id: WorkItemId,
 }
 
-/// 导入确认决策请求（`CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`，退回原因必填）。
+/// 导入业务确认的领域决定。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct DecideLegacyImportConfirmationRequest {
+#[serde(deny_unknown_fields)]
+pub struct ImportBusinessConfirmationDecision {
+    /// 命令锁定的导入批次。
+    pub batch_id: LegacyImportBatchId,
+    /// 客户端最近查询到的批次乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "批次版本不能为空"))]
+    pub expected_batch_version: String,
+    /// 命令锁定的试算版本。
+    #[validate(custom(function = "non_blank", message = "试算版本不能为空"))]
+    pub expected_trial_version: String,
+    /// 服务端固定注册表中的责任范围。
+    #[validate(custom(function = "non_blank", message = "确认范围不能为空"))]
+    pub confirmation_scope: String,
     /// 确认本范围或退回修复。
-    pub decision: ConfirmationDecision,
+    pub action: ConfirmationDecision,
     /// 退回原因代码（退回时必填）。
     pub reason_code: Option<String>,
     /// 意见说明（确认意见可选）。
     pub comment: Option<String>,
+}
+
+/// `CompleteImportBusinessConfirmation` 强类型命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CompleteImportBusinessConfirmationCommand {
+    /// 当前 `IMPORT_BUSINESS_CONFIRMATION` 正式任务。
+    pub work_item_id: WorkItemId,
+    /// 客户端读取到的任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    pub expected_task_version: String,
+    /// 任务冻结的批次试算主体版本。
+    #[validate(custom(function = "non_blank", message = "任务主体版本不能为空"))]
+    pub expected_subject_version: String,
+    /// 业务对象、版本与正式结论只存在于该强类型信封。
+    #[validate(nested)]
+    pub decision: ImportBusinessConfirmationDecision,
+    /// 正式操作幂等键；只以服务端不可逆摘要进入审计。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 导入确认任务的服务端真实投影。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ImportBusinessConfirmationWorkItemView {
+    /// 任务稳定 ID。
+    pub work_item_id: String,
+    /// 固定任务类型。
+    pub work_item_type: WorkItemType,
+    /// 任务乐观锁版本。
+    pub task_version: String,
+    /// 任务冻结的主体版本。
+    pub subject_version: String,
+    /// 任务生命周期状态。
+    pub status: WorkItemStatus,
+    /// 固定分派模式。
+    pub assignment_mode: AssignmentMode,
+    /// 固定责任角色。
+    pub owner_role: String,
+    /// 固定责任组织。
+    pub owner_organization_id: String,
+    /// 当前个人责任人。
+    pub owner_user_id: Option<String>,
+    /// 导入确认不依赖审批步骤，固定为 `READY`。
+    pub processing_state: String,
+    /// 当前查询无操作人上下文，动作必须失败关闭。
+    pub allowed_actions: Vec<String>,
+    /// 当前投影无额外审批阻断事实。
+    pub action_blockers: Vec<String>,
+    /// 服务端任务处理器键。
+    pub handler_key: String,
+    /// 服务端目标工作面。
+    pub destination_workspace_id: String,
 }
 
 /// 导入确认响应视图。
@@ -491,6 +554,8 @@ pub struct LegacyImportConfirmationView {
     pub comment: Option<String>,
     /// 对应 `IMPORT_BUSINESS_CONFIRMATION` 正式任务。
     pub work_item_id: String,
+    /// 任务实时投影；关联任务缺失时为空并由客户端失败关闭。
+    pub work_item: Option<ImportBusinessConfirmationWorkItemView>,
     /// 实际确认或退回人。
     pub decided_by: Option<String>,
     /// 实际确认或退回时间（秒级时间戳）。
@@ -522,12 +587,165 @@ impl From<LegacyImportConfirmation> for LegacyImportConfirmationView {
             reason_code: confirmation.reason_code,
             comment: confirmation.comment,
             work_item_id: confirmation.work_item_id.to_string(),
+            work_item: None,
             decided_by: confirmation.decided_by,
             decided_at: confirmation.decided_at.map(|at| at.unix_secs()),
             version: confirmation.base.version,
             created_at: confirmation.base.created_at,
         }
     }
+}
+
+/// 强类型确认命令的最终结果状态。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ImportBusinessConfirmationResultStatus {
+    /// 已确认责任范围。
+    Confirmed,
+    /// 已形成退回修复结论。
+    Rejected,
+    /// 结果未知；当前同步实现不主动返回此值。
+    Unknown,
+}
+
+/// 强类型确认完成后的固定下一步。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ImportBusinessConfirmationNextStep {
+    /// 等待同一试算矩阵的其它责任范围。
+    AwaitOtherConfirmations,
+    /// 全部必要范围已确认，可进入应用阶段。
+    StartApply,
+    /// 修复问题并产生新试算版本。
+    FixAndRevalidate,
+}
+
+/// `CompleteImportBusinessConfirmation` 稳定结果信封。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CompleteImportBusinessConfirmationResult {
+    /// 领域结论状态。
+    pub result_status: ImportBusinessConfirmationResultStatus,
+    /// 不可变的确认或退回事实。
+    pub confirmation: LegacyImportConfirmationView,
+    /// 已完成的正式任务投影。
+    pub work_item: ImportBusinessConfirmationWorkItemView,
+    /// 事务提交后的批次乐观锁版本。
+    pub batch_version: u64,
+    /// 服务端确定的下一步。
+    pub next_step: ImportBusinessConfirmationNextStep,
+    /// 不含原始幂等键的稳定审计收据 ID。
+    pub audit_receipt: String,
+}
+
+/// 导入应用阶段强命令动作。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ImportExecutionAction {
+    /// 提交应用：待应用批次进入导入中，后台任务开始运行。
+    StartApply,
+    /// 取消尚未应用的项；已形成的业务事实不回滚。
+    CancelPending,
+    /// 仅把上一轮失败项重新准备为待应用。
+    RetryFailed,
+}
+
+impl ImportExecutionAction {
+    /// 返回稳定的 wire code。
+    ///
+    /// # 返回
+    /// 返回 `START_APPLY` / `CANCEL_PENDING` / `RETRY_FAILED`。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::StartApply => "START_APPLY",
+            Self::CancelPending => "CANCEL_PENDING",
+            Self::RetryFailed => "RETRY_FAILED",
+        }
+    }
+}
+
+/// W18 导入执行强类型命令。
+///
+/// 命令与责任确认分离：确认完成只使批次就绪，本命令中的
+/// `START_APPLY` 才能启动后台应用。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ImportExecutionCommand {
+    /// 命令锁定的导入批次。
+    pub batch_id: LegacyImportBatchId,
+    /// 客户端最近读取到的批次乐观锁版本（wire string）。
+    #[validate(custom(function = "non_blank", message = "批次版本不能为空"))]
+    pub expected_batch_version: String,
+    /// 命令锁定的当前试算版本；提交应用和重试失败项时必填。
+    pub expected_trial_version: Option<String>,
+    /// 执行动作。
+    pub action: ImportExecutionAction,
+    /// 结构化原因码；取消尚未应用项时必填。
+    #[validate(length(max = 128, message = "原因码过长"))]
+    pub reason_code: Option<String>,
+    /// 操作说明。
+    #[validate(length(max = 1024, message = "操作说明过长"))]
+    pub comment: Option<String>,
+    /// 请求幂等身份；原值不进入审计消息。
+    #[validate(
+        length(max = 128, message = "请求身份过长"),
+        custom(function = "non_blank", message = "请求身份不能为空")
+    )]
+    pub request_id: String,
+}
+
+/// 导入执行命令的稳定结果状态。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ImportExecutionResultStatus {
+    /// 后台应用已启动。
+    Started,
+    /// 尚未应用的项已取消。
+    Cancelled,
+    /// 失败项已重新准备，尚未启动应用。
+    RetryPrepared,
+    /// 交易结果待核实；当前同步实现不主动返回此值。
+    Unknown,
+}
+
+/// 导入执行命令完成后的固定下一步。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ImportExecutionNextStep {
+    /// 查看后台应用进度。
+    MonitorProgress,
+    /// 查看取消后的最终分区结果。
+    ReviewResult,
+    /// 失败项已准备，需要显式提交应用。
+    StartApply,
+}
+
+/// W18 导入执行强命令稳定结果信封。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ImportExecutionResult {
+    /// 本次执行动作。
+    pub action: ImportExecutionAction,
+    /// 命令结果状态。
+    pub result_status: ImportExecutionResultStatus,
+    /// 导入批次 ID。
+    pub batch_id: String,
+    /// 交易提交后的批次状态。
+    pub batch_status: LegacyImportBatchStatus,
+    /// 交易提交后的批次版本（wire string）。
+    pub batch_version: String,
+    /// 本次命令锁定的试算版本。
+    pub trial_version: Option<String>,
+    /// 对应后台任务 ID。
+    pub background_job_id: String,
+    /// 交易提交后的后台任务状态。
+    pub background_job_status: JobStatus,
+    /// 交易提交后的后台任务版本（wire string）。
+    pub background_job_version: String,
+    /// 本次启动、取消或重新准备的项数。
+    pub affected_items: u64,
+    /// 服务端确定的下一步。
+    pub next_step: ImportExecutionNextStep,
+    /// 不含原始 `request_id` 的稳定审计收据 ID。
+    pub audit_receipt: String,
 }
 
 /// 导入确认列表查询参数（按批次查询为主）。
@@ -761,5 +979,45 @@ mod tests {
     #[test]
     fn background_job_no_is_prefixed_and_unique() {
         assert_eq!(super::background_job_no_for("IMP-1"), "BJ-IMP-1");
+    }
+
+    #[test]
+    fn import_execution_command_uses_frozen_wire_shape() {
+        let request: super::ImportExecutionCommand = serde_json::from_value(json!({
+            "batch_id": "batch-1",
+            "expected_batch_version": "7",
+            "expected_trial_version": "3",
+            "action": "START_APPLY",
+            "comment": "提交应用",
+            "request_id": "request-1"
+        }))
+        .unwrap();
+
+        assert_eq!(request.action, super::ImportExecutionAction::StartApply);
+        assert_eq!(request.expected_batch_version, "7");
+        assert_eq!(request.expected_trial_version.as_deref(), Some("3"));
+        assert!(request.validate().is_ok());
+    }
+
+    #[test]
+    fn import_execution_command_rejects_unknown_fields_and_numeric_versions() {
+        let unknown = json!({
+            "batch_id": "batch-1",
+            "expected_batch_version": "7",
+            "expected_trial_version": "3",
+            "action": "START_APPLY",
+            "request_id": "request-1",
+            "start_immediately": true
+        });
+        assert!(serde_json::from_value::<super::ImportExecutionCommand>(unknown).is_err());
+
+        let numeric = json!({
+            "batch_id": "batch-1",
+            "expected_batch_version": 7,
+            "expected_trial_version": 3,
+            "action": "START_APPLY",
+            "request_id": "request-1"
+        });
+        assert!(serde_json::from_value::<super::ImportExecutionCommand>(numeric).is_err());
     }
 }

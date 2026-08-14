@@ -1,4 +1,4 @@
-//! `work_item`：正式待办及处理结果（数据模型 §6.1）。
+//! `work_item`：审批与独立人工任务的当前责任事实。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -10,24 +10,19 @@ use crate::errors::{Error, Result};
 use crate::ids::WorkItemId;
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
-/// 业务对象类型代码最大长度。
 const OBJECT_TYPE_MAX_LEN: usize = 64;
-/// 业务对象 ID 最大长度。
 const OBJECT_ID_MAX_LEN: usize = 128;
-/// 版本标识最大长度。
-const SUBJECT_VERSION_MAX_LEN: usize = 64;
-/// 角色标识最大长度。
+const RESPONSIBILITY_KEY_MAX_LEN: usize = 128;
+const SUBJECT_VERSION_MAX_LEN: usize = 128;
+const APPROVAL_STEP_INSTANCE_ID_MAX_LEN: usize = 128;
 const ROLE_MAX_LEN: usize = 128;
-/// 用户 ID 最大长度。
+const ORGANIZATION_ID_MAX_LEN: usize = 128;
 const USER_ID_MAX_LEN: usize = 128;
-/// 原因代码最大长度。
 const REASON_CODE_MAX_LEN: usize = 64;
-/// 影响摘要最大长度。
 const IMPACT_SUMMARY_MAX_LEN: usize = 512;
-/// 完成动作标识最大长度。
-const COMPLETION_ACTION_MAX_LEN: usize = 128;
+const CLOSE_REASON_MAX_LEN: usize = 512;
 
-/// 任务类型（数据模型 §6.1：当前两期固定 15 类，禁止临时创造同义代码）。
+/// 当前代码注册的任务类型。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WorkItemType {
@@ -37,6 +32,10 @@ pub enum WorkItemType {
     LowMarginManagerConfirmation,
     /// 采购单财务审核。
     PurchaseOrderReview,
+    /// 销售变更履约影响复核。
+    SalesChangeImpactReview,
+    /// 销售变更财务影响复核。
+    SalesChangeFinanceReview,
     /// 卡券票款复核。
     CardFundsReview,
     /// 卡券票款差异复核。
@@ -64,15 +63,17 @@ pub enum WorkItemType {
 }
 
 impl WorkItemType {
-    /// 返回任务类型的中文展示名。
+    /// 返回面向用户的任务类型标签。
     ///
     /// # 返回
-    /// 返回面向用户的中文标签。
+    /// 返回稳定中文展示名。
     pub fn label(&self) -> &'static str {
         match self {
             Self::ProcurementConfirmation => "采购二次确认",
             Self::LowMarginManagerConfirmation => "低毛利上级确认",
             Self::PurchaseOrderReview => "采购单财务审核",
+            Self::SalesChangeImpactReview => "销售变更履约影响复核",
+            Self::SalesChangeFinanceReview => "销售变更财务影响复核",
             Self::CardFundsReview => "卡券票款复核",
             Self::CardFundsDeltaReview => "卡券票款差异复核",
             Self::CardSalesManagerApproval => "卡券销售领导审批",
@@ -88,15 +89,17 @@ impl WorkItemType {
         }
     }
 
-    /// 返回任务类型的稳定代码。
+    /// 返回任务类型的持久化代码。
     ///
     /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
+    /// 返回 `SCREAMING_SNAKE_CASE` 稳定代码。
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::ProcurementConfirmation => "PROCUREMENT_CONFIRMATION",
             Self::LowMarginManagerConfirmation => "LOW_MARGIN_MANAGER_CONFIRMATION",
             Self::PurchaseOrderReview => "PURCHASE_ORDER_REVIEW",
+            Self::SalesChangeImpactReview => "SALES_CHANGE_IMPACT_REVIEW",
+            Self::SalesChangeFinanceReview => "SALES_CHANGE_FINANCE_REVIEW",
             Self::CardFundsReview => "CARD_FUNDS_REVIEW",
             Self::CardFundsDeltaReview => "CARD_FUNDS_DELTA_REVIEW",
             Self::CardSalesManagerApproval => "CARD_SALES_MANAGER_APPROVAL",
@@ -112,79 +115,51 @@ impl WorkItemType {
         }
     }
 
-    /// 判断任务类型是否允许人工关闭。
+    /// 返回当前任务类型是否允许由通用管理动作关闭。
     ///
-    /// 数据模型 §6.1：审批、确认、结果未知和未完成补偿任务不得人工关闭；
-    /// 只有重复、误派或已有替代正式任务时允许关闭。本方法按任务类型给出
-    /// 保守默认（审批/确认/结果未知/异常补偿一律不允许人工关闭），
-    /// 每类任务注册时的最终关闭策略由 P3 服务层核对。
+    /// 当前注册表内均为审批、确认、复核或异常补偿任务，必须由强类型策略决定
+    /// 关闭原因，因此通用入口一律保守拒绝。
     ///
     /// # 返回
-    /// 不允许人工关闭时返回 `false`。
+    /// 当前注册类型均返回 `false`。
     pub fn is_manually_closable(self) -> bool {
-        !matches!(
-            self,
-            Self::ProcurementConfirmation
-                | Self::LowMarginManagerConfirmation
-                | Self::PurchaseOrderReview
-                | Self::CardFundsReview
-                | Self::CardFundsDeltaReview
-                | Self::CardSalesManagerApproval
-                | Self::CardSalesOperationApproval
-                | Self::OwnershipMigrationSalesConfirmation
-                | Self::OwnershipMigrationFinanceConfirmation
-                | Self::InventoryAdjustmentReview
-                | Self::FinanceCorrectionReview
-                | Self::SupplierSettlementReview
-                | Self::ImportBusinessConfirmation
-                | Self::IntegrationResultUnknown
-                | Self::BusinessException
-        )
+        false
     }
 }
 
-/// 任务状态（数据模型 §6.1：`UNCLAIMED` / `IN_PROGRESS` / `COMPLETED` / `CLOSED`）。
-///
-/// 固定状态机（无运行时扩展）：
-/// `UNCLAIMED → IN_PROGRESS`（领取）、`IN_PROGRESS → UNCLAIMED`（暂挂/转交返回）、
-/// `IN_PROGRESS → COMPLETED`（正式完成）、`UNCLAIMED | IN_PROGRESS → CLOSED`（关闭）。
-/// `COMPLETED` / `CLOSED` 是终态。
+/// 任务生命周期状态；个人责任是否形成由 `owner_user_id` 独立表达。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WorkItemStatus {
-    /// 待领取。
+    /// 当前仍需处理。
     #[default]
-    Unclaimed,
-    /// 处理中。
-    InProgress,
-    /// 已完成。
+    Open,
+    /// 已由强类型领域命令原子完成。
     Completed,
-    /// 已关闭。
+    /// 已按受控原因关闭。
     Closed,
 }
 
 impl WorkItemStatus {
-    /// 返回状态的中文展示名。
+    /// 返回面向用户的状态标签。
     ///
     /// # 返回
-    /// 返回面向用户的中文标签。
+    /// 返回稳定中文展示名。
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Unclaimed => "待领取",
-            Self::InProgress => "处理中",
+            Self::Open => "待处理",
             Self::Completed => "已完成",
             Self::Closed => "已关闭",
         }
     }
 
-    /// 返回状态的稳定代码。
+    /// 返回状态的持久化代码。
     ///
     /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
+    /// 返回 `OPEN`、`COMPLETED` 或 `CLOSED`。
+    pub fn as_str(self) -> &'static str {
         match self {
-            Self::Unclaimed => "UNCLAIMED",
-            Self::InProgress => "IN_PROGRESS",
+            Self::Open => "OPEN",
             Self::Completed => "COMPLETED",
             Self::Closed => "CLOSED",
         }
@@ -194,14 +169,71 @@ impl WorkItemStatus {
 impl DocumentState for WorkItemStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Unclaimed => &[Self::InProgress, Self::Closed],
-            Self::InProgress => &[Self::Unclaimed, Self::Completed, Self::Closed],
+            Self::Open => &[Self::Completed, Self::Closed],
             Self::Completed | Self::Closed => &[],
         }
     }
 }
 
-/// 优先级（数据模型 §6.1：优先级和时限）。
+/// 人工责任的分派模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AssignmentMode {
+    /// 激活任务时已解析到唯一个人责任人。
+    Direct,
+    /// 激活任务时先进入责任池，由合格用户开始处理。
+    Pool,
+}
+
+impl AssignmentMode {
+    /// 返回分派模式的持久化代码。
+    ///
+    /// # 返回
+    /// 返回 `DIRECT` 或 `POOL`。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Direct => "DIRECT",
+            Self::Pool => "POOL",
+        }
+    }
+}
+
+/// 当前个人责任的已注册形成来源。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AssignmentSource {
+    /// 审批步骤的固定处理人解析器。
+    StepResolver,
+    /// 独立任务的固定系统规则。
+    SystemRule,
+    /// 责任池用户主动开始处理。
+    SelfStart,
+    /// 管理员受控转交。
+    AdminReassign,
+    /// 管理员或已授权处理人退回责任池。
+    AdminRelease,
+    /// 阻塞恢复时重新执行冻结解析器。
+    RecoveryResolver,
+}
+
+impl AssignmentSource {
+    /// 返回责任来源的持久化代码。
+    ///
+    /// # 返回
+    /// 返回已注册的稳定来源代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::StepResolver => "STEP_RESOLVER",
+            Self::SystemRule => "SYSTEM_RULE",
+            Self::SelfStart => "SELF_START",
+            Self::AdminReassign => "ADMIN_REASSIGN",
+            Self::AdminRelease => "ADMIN_RELEASE",
+            Self::RecoveryResolver => "RECOVERY_RESOLVER",
+        }
+    }
+}
+
+/// 待办优先级。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkItemPriority {
@@ -216,10 +248,10 @@ pub enum WorkItemPriority {
 }
 
 impl WorkItemPriority {
-    /// 返回优先级的中文展示名。
+    /// 返回面向用户的优先级标签。
     ///
     /// # 返回
-    /// 返回面向用户的中文标签。
+    /// 返回稳定中文展示名。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Urgent => "紧急",
@@ -229,11 +261,11 @@ impl WorkItemPriority {
         }
     }
 
-    /// 返回优先级的稳定代码。
+    /// 返回优先级的持久化代码。
     ///
     /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
+    /// 返回小写稳定代码。
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Urgent => "urgent",
             Self::High => "high",
@@ -243,64 +275,29 @@ impl WorkItemPriority {
     }
 }
 
-/// 任务创建数据。
+/// 创建任务所需的责任与业务对象快照。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkItemData {
-    /// 任务类型。
+    /// 固定任务类型。
     pub work_item_type: WorkItemType,
-    /// 业务对象类型代码（跨域开放目录，按稳定代码形态校验）。
+    /// 审批步骤实例；独立人工任务为空。
+    pub approval_step_instance_id: Option<String>,
+    /// 业务对象类型。
     pub business_object_type: String,
     /// 业务对象 ID。
     pub business_object_id: String,
-    /// 任务针对的对象版本（适用时）。
-    pub subject_version: Option<String>,
+    /// 被处理的不可变提交或业务版本。
+    pub subject_version: String,
+    /// 责任分派模式。
+    pub assignment_mode: AssignmentMode,
     /// 责任角色。
-    pub owner_role: Option<String>,
-    /// 当前责任人（创建时不领取，由领取动作写入）。
+    pub owner_role: String,
+    /// 责任组织。
+    pub owner_organization_id: String,
+    /// 直接分派的个人责任人；责任池创建时必须为空。
     pub owner_user_id: Option<String>,
-    /// 优先级。
-    pub priority: WorkItemPriority,
-    /// 时限（适用时）。
-    pub due_at: Option<Instant>,
-    /// 产生原因代码。
-    pub reason_code: Option<String>,
-    /// 业务影响摘要。
-    pub impact_summary: Option<String>,
-    /// 该任务唯一允许的完成动作。
-    pub completion_action: String,
-}
-
-/// 任务关闭数据。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WorkItemCloseData {
-    /// 关闭原因代码（结构化原因，必填）。
-    pub close_reason_code: String,
-    /// 关闭原因说明。
-    pub close_reason_text: Option<String>,
-}
-
-/// 正式待办实体（数据模型 §6.1）。
-///
-/// 领取 = 条件更新（行锁）原子完成（P2/P3 实现条件更新，实体层保证状态前置）；
-/// 完成或关闭任务本身不修改正式业务事实（§6.1）。
-#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
-pub struct WorkItem {
-    #[serde(flatten)]
-    pub base: BaseModel,
-    /// 任务类型。
-    pub work_item_type: WorkItemType,
-    /// 业务对象类型代码。
-    pub business_object_type: String,
-    /// 业务对象 ID。
-    pub business_object_id: String,
-    /// 任务针对的对象版本。
-    pub subject_version: Option<String>,
-    /// 任务状态。
-    pub status: WorkItemStatus,
-    /// 责任角色。
-    pub owner_role: Option<String>,
-    /// 当前责任人。
-    pub owner_user_id: Option<String>,
+    /// 初始责任来源。
+    pub assignment_source: AssignmentSource,
     /// 优先级。
     pub priority: WorkItemPriority,
     /// 时限。
@@ -309,430 +306,656 @@ pub struct WorkItem {
     pub reason_code: Option<String>,
     /// 业务影响摘要。
     pub impact_summary: Option<String>,
-    /// 该任务唯一允许的完成动作。
-    pub completion_action: String,
-    /// 正式完成审计时间。
+}
+
+/// 受控关闭任务的数据。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkItemCloseData {
+    /// 不可为空的关闭原因。
+    pub close_reason: String,
+}
+
+/// 当前人工责任事实。
+#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+pub struct WorkItem {
+    #[serde(flatten)]
+    pub base: BaseModel,
+    /// 固定任务类型。
+    pub work_item_type: WorkItemType,
+    /// 审批步骤实例；独立任务为空。
+    pub approval_step_instance_id: Option<String>,
+    /// 业务对象类型。
+    pub business_object_type: String,
+    /// 业务对象 ID。
+    pub business_object_id: String,
+    /// 服务端冻结的可选责任维度；普通任务为空，存在时参与开放任务唯一性。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    responsibility_key: Option<String>,
+    /// 被处理的不可变提交或业务版本。
+    pub subject_version: String,
+    /// 生命周期状态。
+    pub status: WorkItemStatus,
+    /// 责任分派模式。
+    pub assignment_mode: AssignmentMode,
+    /// 责任角色。
+    pub owner_role: String,
+    /// 责任组织。
+    pub owner_organization_id: String,
+    /// 当前个人责任人；责任池未开始处理时为空。
+    pub owner_user_id: Option<String>,
+    /// 曾形成个人责任的用户 ID；只追加、去重，退回与终态动作均保留。
+    pub responsibility_actor_ids: Vec<String>,
+    /// 当前或最近一次责任来源。
+    pub assignment_source: AssignmentSource,
+    /// 首次形成个人责任的时间。
+    pub assigned_at: Option<Instant>,
+    /// 首次正式处理时间。
+    pub started_at: Option<Instant>,
+    /// 当前个人责任生效时间。
+    pub current_assignment_at: Option<Instant>,
+    /// 最近一次非只读活动时间。
+    pub last_activity_at: Option<Instant>,
+    /// 优先级。
+    pub priority: WorkItemPriority,
+    /// 时限。
+    pub due_at: Option<Instant>,
+    /// 产生原因代码。
+    pub reason_code: Option<String>,
+    /// 业务影响摘要。
+    pub impact_summary: Option<String>,
+    /// 正式完成时间。
     pub completed_at: Option<Instant>,
-    /// 正式完成执行人。
+    /// 正式完成人。
     pub completed_by: Option<String>,
-    /// 关闭原因代码（关闭时必填）。
-    pub close_reason_code: Option<String>,
-    /// 关闭原因说明。
-    pub close_reason_text: Option<String>,
+    /// 受控关闭时间。
+    pub closed_at: Option<Instant>,
+    /// 受控关闭操作人。
+    pub closed_by: Option<String>,
+    /// 受控关闭原因。
+    pub close_reason: Option<String>,
 }
 
 impl WorkItem {
-    /// 创建待办任务。
+    /// 创建任务并建立初始责任事实。
     ///
-    /// 完成业务对象与动作类字段的校验与规范化（trim、非空、长度上限），
-    /// 初始状态为 `UNCLAIMED`，不写完成/关闭审计。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`entities::ids::WorkItemId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的任务实体。
+    /// `DIRECT` 必须给出唯一责任人，并立即形成 `assigned_at` 与
+    /// `current_assignment_at`；`POOL` 创建时禁止预填责任人。
     ///
     /// # 错误
-    /// 当业务对象类型/ID 或完成动作为空/超长时返回错误。
+    /// 必填字段为空、字段超长或分派模式与个人责任不匹配时返回错误。
     pub fn new(id: WorkItemId, data: WorkItemData) -> Result<Self> {
-        let business_object_type = normalize_required_text(
-            data.business_object_type,
-            "业务对象类型不能为空",
-            OBJECT_TYPE_MAX_LEN,
-            "业务对象类型过长",
+        Self::new_at_with_optional_responsibility_key(id, data, None, Instant::now())
+    }
+
+    /// 创建带服务端责任维度的任务。
+    ///
+    /// 责任维度在创建时规范化并冻结；后续开始处理、退回团队和转交均不得修改。
+    /// 客户端输入不得直接调用本入口，应用服务只能传入已注册的固定维度。
+    ///
+    /// # 错误
+    /// 责任维度为空、字段超长，或任务基础数据无效时返回错误。
+    pub fn new_with_responsibility_key(
+        id: WorkItemId,
+        data: WorkItemData,
+        responsibility_key: impl Into<String>,
+    ) -> Result<Self> {
+        let responsibility_key = normalize_required_text(
+            responsibility_key.into(),
+            "责任维度不能为空",
+            RESPONSIBILITY_KEY_MAX_LEN,
+            "责任维度过长",
         )?;
-        let business_object_id = normalize_required_text(
-            data.business_object_id,
-            "业务对象ID不能为空",
-            OBJECT_ID_MAX_LEN,
-            "业务对象ID过长",
-        )?;
-        let subject_version =
-            normalize_optional_text(data.subject_version, "对象版本", SUBJECT_VERSION_MAX_LEN)?;
-        let owner_role = normalize_optional_text(data.owner_role, "责任角色", ROLE_MAX_LEN)?;
-        let owner_user_id = normalize_optional_text(data.owner_user_id, "责任人", USER_ID_MAX_LEN)?;
-        let reason_code = normalize_optional_text(data.reason_code, "原因代码", REASON_CODE_MAX_LEN)?;
-        let impact_summary =
-            normalize_optional_text(data.impact_summary, "影响摘要", IMPACT_SUMMARY_MAX_LEN)?;
-        let completion_action = normalize_required_text(
-            data.completion_action,
-            "完成动作不能为空",
-            COMPLETION_ACTION_MAX_LEN,
-            "完成动作过长",
-        )?;
+        Self::new_at_with_optional_responsibility_key(id, data, Some(responsibility_key), Instant::now())
+    }
+
+    /// 使用确定时间创建任务，供事务编排和确定性测试使用。
+    ///
+    /// # 错误
+    /// 必填字段为空、字段超长或分派模式与个人责任不匹配时返回错误。
+    pub fn new_at(id: WorkItemId, data: WorkItemData, at: Instant) -> Result<Self> {
+        Self::new_at_with_optional_responsibility_key(id, data, None, at)
+    }
+
+    fn new_at_with_optional_responsibility_key(
+        id: WorkItemId,
+        data: WorkItemData,
+        responsibility_key: Option<String>,
+        at: Instant,
+    ) -> Result<Self> {
+        let normalized = NormalizedWorkItemData::try_from(data)?;
+        normalized.ensure_assignment_invariant()?;
+        let has_direct_owner = normalized.assignment_mode == AssignmentMode::Direct;
+        let responsibility_actor_ids = normalized.owner_user_id.iter().cloned().collect();
         Ok(Self {
             base: BaseModel::new(id.to_string()),
-            work_item_type: data.work_item_type,
-            business_object_type,
-            business_object_id,
-            subject_version,
-            status: WorkItemStatus::Unclaimed,
-            owner_role,
-            owner_user_id,
-            priority: data.priority,
-            due_at: data.due_at,
-            reason_code,
-            impact_summary,
-            completion_action,
+            work_item_type: normalized.work_item_type,
+            approval_step_instance_id: normalized.approval_step_instance_id,
+            business_object_type: normalized.business_object_type,
+            business_object_id: normalized.business_object_id,
+            responsibility_key,
+            subject_version: normalized.subject_version,
+            status: WorkItemStatus::Open,
+            assignment_mode: normalized.assignment_mode,
+            owner_role: normalized.owner_role,
+            owner_organization_id: normalized.owner_organization_id,
+            owner_user_id: normalized.owner_user_id,
+            responsibility_actor_ids,
+            assignment_source: normalized.assignment_source,
+            assigned_at: has_direct_owner.then_some(at),
+            started_at: None,
+            current_assignment_at: has_direct_owner.then_some(at),
+            last_activity_at: None,
+            priority: normalized.priority,
+            due_at: normalized.due_at,
+            reason_code: normalized.reason_code,
+            impact_summary: normalized.impact_summary,
             completed_at: None,
             completed_by: None,
-            close_reason_code: None,
-            close_reason_text: None,
+            closed_at: None,
+            closed_by: None,
+            close_reason: None,
         })
     }
 
-    /// 领取任务。
-    ///
-    /// 仅 `UNCLAIMED` 可领取：状态迁移到 `IN_PROGRESS` 并写入当前责任人。
-    /// 同一时刻只能被一个用户处理（数据库层以条件更新原子完成，见 §6.1）。
-    ///
-    /// # 参数
-    /// * `user_id` - 领取人
+    /// 返回创建时冻结的责任维度。
     ///
     /// # 返回
-    /// 无返回值。
+    /// 普通任务返回 `None`；采用多责任维度开放唯一性的任务返回固定键。
+    pub fn responsibility_key(&self) -> Option<&str> {
+        self.responsibility_key.as_deref()
+    }
+
+    /// 记录当前责任人的首次处理或后续非终结活动。
+    ///
+    /// `started_at` 只在第一次调用时写入；后续调用仅推进 `last_activity_at`。
     ///
     /// # 错误
-    /// 当任务不是 `UNCLAIMED` 状态或领取人非法时返回错误。
-    pub fn claim(&mut self, user_id: impl Into<String>) -> Result<()> {
-        if self.status != WorkItemStatus::Unclaimed {
-            return Err(Error::InvalidStateTransition {
-                from: format!("{:?}", self.status),
-                to: format!("{:?}", WorkItemStatus::InProgress),
-            });
-        }
-        let user_id =
-            normalize_required_text(user_id.into(), "领取人不能为空", USER_ID_MAX_LEN, "领取人过长")?;
-        self.status = WorkItemStatus::InProgress;
-        self.owner_user_id = Some(user_id);
+    /// 任务非开放、没有个人责任或操作人不是当前责任人时返回错误。
+    pub fn record_activity(&mut self, actor_id: &str, at: Instant) -> Result<()> {
+        self.ensure_current_owner(actor_id)?;
+        self.started_at.get_or_insert(at);
+        self.last_activity_at = Some(at);
         Ok(())
     }
 
-    /// 暂挂任务。
+    /// 将开放的责任池任务退回团队。
     ///
-    /// 暂挂（Defer）后任务回到待领取状态，清除当前责任人（W02 契约）。
-    ///
-    /// # 返回
-    /// 无返回值。
+    /// 保留首次分派与首次处理时间，只清空当前个人责任和当前责任时间。
+    /// 调用方必须在应用层完成权限、原因和不可变审计校验。
     ///
     /// # 错误
-    /// 当任务不是 `IN_PROGRESS` 状态时返回错误。
-    pub fn defer(&mut self) -> Result<()> {
-        if self.status != WorkItemStatus::InProgress {
-            return Err(Error::InvalidStateTransition {
-                from: format!("{:?}", self.status),
-                to: format!("{:?}", WorkItemStatus::Unclaimed),
-            });
+    /// 任务不是开放的 `POOL` 任务或尚未形成个人责任时返回错误。
+    pub fn release_to_pool(&mut self, at: Instant) -> Result<()> {
+        self.ensure_open()?;
+        if self.assignment_mode != AssignmentMode::Pool || self.owner_user_id.is_none() {
+            return Err(Error::from("只有已形成个人责任的开放POOL任务可以退回团队"));
         }
-        self.status = WorkItemStatus::Unclaimed;
         self.owner_user_id = None;
+        self.current_assignment_at = None;
+        self.assignment_source = AssignmentSource::AdminRelease;
+        self.last_activity_at = Some(at);
         Ok(())
     }
 
-    /// 转交任务。
+    /// 转交开放任务的当前个人责任。
     ///
-    /// 转交到指定责任角色与责任人，任务保持处理中并写入新领取人。
-    ///
-    /// # 参数
-    /// * `role` - 新责任角色
-    /// * `user_id` - 新责任人
-    ///
-    /// # 返回
-    /// 无返回值。
+    /// 首次分派时间只在此前从未形成个人责任时写入；首次处理时间保持不变。
+    /// 调用方必须在应用层重新校验目标任职、角色、数据范围与岗位分离。
     ///
     /// # 错误
-    /// 当任务不是 `IN_PROGRESS` 状态或转交对象非法时返回错误。
-    pub fn transfer(&mut self, role: impl Into<String>, user_id: impl Into<String>) -> Result<()> {
-        if self.status != WorkItemStatus::InProgress {
-            return Err(Error::InvalidStateTransition {
-                from: format!("{:?}", self.status),
-                to: format!("{:?}", WorkItemStatus::InProgress),
-            });
+    /// 任务非开放或目标用户为空、超长时返回错误。
+    pub fn reassign(&mut self, target_user_id: impl Into<String>, at: Instant) -> Result<()> {
+        self.assign_to(target_user_id, AssignmentSource::AdminReassign, at)
+    }
+
+    /// 在审批阻塞恢复时重新形成或校正个人责任。
+    ///
+    /// 本动作保留首次分派与首次处理时间，并以 `RECOVERY_RESOLVER` 区分管理员
+    /// 主动转交；调用方必须先证明原阻塞原因已经消除。
+    ///
+    /// # 错误
+    /// 任务非开放或解析出的用户为空、超长时返回错误。
+    pub fn recover_assignment(&mut self, target_user_id: impl Into<String>, at: Instant) -> Result<()> {
+        self.assign_to(target_user_id, AssignmentSource::RecoveryResolver, at)
+    }
+
+    /// 在审批阻塞恢复时把失效的责任池个人责任清回团队。
+    ///
+    /// 保留首次时间，仅清空当前个人责任；调用方必须先证明当前责任人已经失效。
+    ///
+    /// # 错误
+    /// 任务非开放或不是 `POOL` 模式时返回错误。
+    pub fn recover_to_pool(&mut self, at: Instant) -> Result<()> {
+        self.ensure_open()?;
+        if self.assignment_mode != AssignmentMode::Pool {
+            return Err(Error::from("只有开放POOL任务可以在恢复时退回团队"));
         }
-        let role = normalize_required_text(role.into(), "责任角色不能为空", ROLE_MAX_LEN, "责任角色过长")?;
-        let user_id =
-            normalize_required_text(user_id.into(), "责任人不能为空", USER_ID_MAX_LEN, "责任人过长")?;
-        self.owner_role = Some(role);
-        self.owner_user_id = Some(user_id);
+        self.owner_user_id = None;
+        self.current_assignment_at = None;
+        self.assignment_source = AssignmentSource::RecoveryResolver;
+        self.last_activity_at = Some(at);
         Ok(())
     }
 
-    /// 正式完成任务。
+    /// 由强类型领域命令完成当前开放任务。
     ///
-    /// 仅 `IN_PROGRESS` 可完成；写入完成审计。业务事实与任务 `COMPLETED`
-    /// 必须在同一事务返回（§6.1，由 P3 事务编排保证）。
-    ///
-    /// # 参数
-    /// * `completed_by` - 完成执行人
-    /// * `at` - 完成时刻
-    ///
-    /// # 返回
-    /// 无返回值。
+    /// 本方法只形成任务事实；调用方必须把正式领域事实、审批推进和本实体写入
+    /// 放在同一事务。完成动作同时按 `if_null` 语义形成首次处理时间。
     ///
     /// # 错误
-    /// 当任务不是 `IN_PROGRESS` 状态或执行人非法时返回错误。
-    pub fn complete(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
-        if self.status != WorkItemStatus::InProgress {
-            return Err(Error::InvalidStateTransition {
-                from: format!("{:?}", self.status),
-                to: format!("{:?}", WorkItemStatus::Completed),
-            });
-        }
+    /// 任务非开放、没有个人责任或执行人不是当前责任人时返回错误。
+    pub fn complete_by_domain_command(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
         let completed_by = normalize_required_text(
             completed_by.into(),
             "完成执行人不能为空",
             USER_ID_MAX_LEN,
             "完成执行人过长",
         )?;
+        self.ensure_current_owner(&completed_by)?;
+        self.started_at.get_or_insert(at);
         self.status = WorkItemStatus::Completed;
         self.completed_at = Some(at);
         self.completed_by = Some(completed_by);
         Ok(())
     }
 
-    /// 关闭任务。
+    /// 以受控原因关闭开放任务。
     ///
-    /// 仅非终态任务可关闭（`UNCLAIMED` / `IN_PROGRESS`）；关闭必须记录结构化
-    /// 原因（§6.1：只有重复、误派或已有替代正式任务时允许关闭）。任务类型
-    /// 是否允许人工关闭由 [`WorkItemType::is_manually_closable`] 给出，由
-    /// P3 服务层按任务类型与场景核对后调用；关闭操作人与时间作为
-    /// `workflow_action` 关闭记录追加（W02 契约），实体只保存结构化原因。
-    ///
-    /// # 参数
-    /// * `data` - 关闭数据（关闭原因代码必填）
-    ///
-    /// # 返回
-    /// 无返回值。
+    /// 调用方必须先执行任务类型关闭策略与专门权限校验；关闭不会完成业务动作。
     ///
     /// # 错误
-    /// 当任务已是终态或关闭原因代码为空/超长时返回错误。
-    pub fn close(&mut self, data: WorkItemCloseData) -> Result<()> {
-        if matches!(self.status, WorkItemStatus::Completed | WorkItemStatus::Closed) {
-            return Err(Error::InvalidStateTransition {
-                from: format!("{:?}", self.status),
-                to: format!("{:?}", WorkItemStatus::Closed),
-            });
-        }
-        let close_reason_code = normalize_required_text(
-            data.close_reason_code,
-            "关闭原因代码不能为空",
-            REASON_CODE_MAX_LEN,
-            "关闭原因代码过长",
+    /// 任务非开放、操作人或关闭原因为空、超长时返回错误。
+    pub fn close(
+        &mut self,
+        closed_by: impl Into<String>,
+        data: WorkItemCloseData,
+        at: Instant,
+    ) -> Result<()> {
+        self.ensure_open()?;
+        let closed_by = normalize_required_text(
+            closed_by.into(),
+            "关闭操作人不能为空",
+            USER_ID_MAX_LEN,
+            "关闭操作人过长",
         )?;
-        let close_reason_text =
-            normalize_optional_text(data.close_reason_text, "关闭原因", IMPACT_SUMMARY_MAX_LEN)?;
+        let close_reason = normalize_required_text(
+            data.close_reason,
+            "关闭原因不能为空",
+            CLOSE_REASON_MAX_LEN,
+            "关闭原因过长",
+        )?;
         self.status = WorkItemStatus::Closed;
-        self.close_reason_code = Some(close_reason_code);
-        self.close_reason_text = close_reason_text;
+        self.closed_at = Some(at);
+        self.closed_by = Some(closed_by);
+        self.close_reason = Some(close_reason);
         Ok(())
     }
 
-    /// 判断任务是否已处于终态。
+    /// 返回任务是否已进入不可逆终态。
     ///
     /// # 返回
-    /// `COMPLETED` / `CLOSED` 时返回 `true`。
+    /// `COMPLETED` 或 `CLOSED` 时返回 `true`。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, WorkItemStatus::Completed | WorkItemStatus::Closed)
     }
 
-    /// 判断当前责任人。
-    ///
-    /// # 参数
-    /// * `user_id` - 待核对的用户
+    /// 判断给定用户是否是开放任务的当前个人责任人。
     ///
     /// # 返回
-    /// 当前责任人与 `user_id` 相同（非终态且已领取）时返回 `true`。
+    /// 任务开放且责任人与给定用户相同时返回 `true`。
     pub fn is_owned_by(&self, user_id: &str) -> bool {
-        self.owner_user_id.as_deref() == Some(user_id) && !self.is_terminal()
+        self.status == WorkItemStatus::Open && self.owner_user_id.as_deref() == Some(user_id)
+    }
+
+    fn ensure_open(&self) -> Result<()> {
+        if self.status == WorkItemStatus::Open {
+            return Ok(());
+        }
+        Err(Error::from("只有开放任务可以执行责任动作"))
+    }
+
+    fn ensure_current_owner(&self, actor_id: &str) -> Result<()> {
+        self.ensure_open()?;
+        if self.owner_user_id.as_deref() == Some(actor_id) {
+            return Ok(());
+        }
+        Err(Error::from("只有当前责任人可以处理任务"))
+    }
+
+    fn assign_to(
+        &mut self,
+        target_user_id: impl Into<String>,
+        source: AssignmentSource,
+        at: Instant,
+    ) -> Result<()> {
+        self.ensure_open()?;
+        let target_user_id = normalize_required_text(
+            target_user_id.into(),
+            "目标责任人不能为空",
+            USER_ID_MAX_LEN,
+            "目标责任人过长",
+        )?;
+        self.assigned_at.get_or_insert(at);
+        self.record_responsibility_actor(&target_user_id);
+        self.owner_user_id = Some(target_user_id);
+        self.current_assignment_at = Some(at);
+        self.assignment_source = source;
+        self.last_activity_at = Some(at);
+        Ok(())
+    }
+
+    /// 追加首次出现的个人责任人，保留稳定的责任形成顺序。
+    fn record_responsibility_actor(&mut self, actor_id: &str) {
+        if !self.responsibility_actor_ids.iter().any(|id| id == actor_id) {
+            self.responsibility_actor_ids.push(actor_id.to_string());
+        }
+    }
+}
+
+struct NormalizedWorkItemData {
+    work_item_type: WorkItemType,
+    approval_step_instance_id: Option<String>,
+    business_object_type: String,
+    business_object_id: String,
+    subject_version: String,
+    assignment_mode: AssignmentMode,
+    owner_role: String,
+    owner_organization_id: String,
+    owner_user_id: Option<String>,
+    assignment_source: AssignmentSource,
+    priority: WorkItemPriority,
+    due_at: Option<Instant>,
+    reason_code: Option<String>,
+    impact_summary: Option<String>,
+}
+
+impl TryFrom<WorkItemData> for NormalizedWorkItemData {
+    type Error = Error;
+
+    fn try_from(data: WorkItemData) -> Result<Self> {
+        Ok(Self {
+            work_item_type: data.work_item_type,
+            approval_step_instance_id: normalize_optional_text(
+                data.approval_step_instance_id,
+                "审批步骤实例ID",
+                APPROVAL_STEP_INSTANCE_ID_MAX_LEN,
+            )?,
+            business_object_type: normalize_required_text(
+                data.business_object_type,
+                "业务对象类型不能为空",
+                OBJECT_TYPE_MAX_LEN,
+                "业务对象类型过长",
+            )?,
+            business_object_id: normalize_required_text(
+                data.business_object_id,
+                "业务对象ID不能为空",
+                OBJECT_ID_MAX_LEN,
+                "业务对象ID过长",
+            )?,
+            subject_version: normalize_required_text(
+                data.subject_version,
+                "对象版本不能为空",
+                SUBJECT_VERSION_MAX_LEN,
+                "对象版本过长",
+            )?,
+            assignment_mode: data.assignment_mode,
+            owner_role: normalize_required_text(
+                data.owner_role,
+                "责任角色不能为空",
+                ROLE_MAX_LEN,
+                "责任角色过长",
+            )?,
+            owner_organization_id: normalize_required_text(
+                data.owner_organization_id,
+                "责任组织不能为空",
+                ORGANIZATION_ID_MAX_LEN,
+                "责任组织过长",
+            )?,
+            owner_user_id: normalize_optional_text(data.owner_user_id, "责任人", USER_ID_MAX_LEN)?,
+            assignment_source: data.assignment_source,
+            priority: data.priority,
+            due_at: data.due_at,
+            reason_code: normalize_optional_text(data.reason_code, "原因代码", REASON_CODE_MAX_LEN)?,
+            impact_summary: normalize_optional_text(data.impact_summary, "影响摘要", IMPACT_SUMMARY_MAX_LEN)?,
+        })
+    }
+}
+
+impl NormalizedWorkItemData {
+    fn ensure_assignment_invariant(&self) -> Result<()> {
+        match (self.assignment_mode, self.owner_user_id.is_some()) {
+            (AssignmentMode::Direct, true) | (AssignmentMode::Pool, false) => Ok(()),
+            (AssignmentMode::Direct, false) => Err(Error::from("DIRECT任务必须有唯一个人责任人")),
+            (AssignmentMode::Pool, true) => Err(Error::from("POOL任务创建时不得预填个人责任人")),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType};
+    use super::{
+        AssignmentMode, AssignmentSource, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority,
+        WorkItemStatus, WorkItemType,
+    };
     use crate::common::state::ensure_transition;
     use crate::common::time::Instant;
     use crate::ids::WorkItemId;
 
-    fn data() -> WorkItemData {
+    fn pool_data() -> WorkItemData {
         WorkItemData {
             work_item_type: WorkItemType::ImportBusinessConfirmation,
+            approval_step_instance_id: None,
             business_object_type: " LEGACY_IMPORT_BATCH ".to_string(),
             business_object_id: " batch-1 ".to_string(),
-            subject_version: Some(" v3 ".to_string()),
-            owner_role: Some("sales".to_string()),
+            subject_version: " v3 ".to_string(),
+            assignment_mode: AssignmentMode::Pool,
+            owner_role: " sales ".to_string(),
+            owner_organization_id: " org-1 ".to_string(),
             owner_user_id: None,
+            assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::Normal,
             due_at: Some(Instant::from_unix_secs(1_700_086_400)),
             reason_code: Some("IMPORT_READY".to_string()),
             impact_summary: Some(" 待确认导入范围 ".to_string()),
-            completion_action: " COMPLETE_IMPORT_BUSINESS_CONFIRMATION ".to_string(),
         }
     }
 
-    /// happy path：字段 trim、初始状态 UNCLAIMED。
     #[test]
-    fn new_trims_fields_and_starts_unclaimed() {
-        let item = WorkItem::new(WorkItemId::new("wi-1"), data()).unwrap();
+    fn pool_starts_open_without_personal_responsibility() {
+        let item =
+            WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), Instant::from_unix_secs(100)).unwrap();
+
+        assert_eq!(item.status, WorkItemStatus::Open);
         assert_eq!(item.business_object_type, "LEGACY_IMPORT_BATCH");
-        assert_eq!(item.business_object_id, "batch-1");
-        assert_eq!(item.subject_version.as_deref(), Some("v3"));
-        assert_eq!(item.completion_action, "COMPLETE_IMPORT_BUSINESS_CONFIRMATION");
-        assert_eq!(item.impact_summary.as_deref(), Some("待确认导入范围"));
-        assert_eq!(item.status, WorkItemStatus::Unclaimed);
+        assert_eq!(item.subject_version, "v3");
+        assert_eq!(item.responsibility_key(), None);
+        assert_eq!(item.owner_role, "sales");
         assert!(item.owner_user_id.is_none());
+        assert!(item.responsibility_actor_ids.is_empty());
+        assert!(item.assigned_at.is_none());
+        assert!(item.current_assignment_at.is_none());
     }
 
-    /// 失败路径：必填为空被拒。
     #[test]
-    fn new_rejects_empty_business_object_type() {
-        let payload = WorkItemData {
-            business_object_type: "  ".to_string(),
-            ..data()
+    fn server_responsibility_key_is_normalized_and_frozen_at_creation() {
+        let mut item =
+            WorkItem::new_with_responsibility_key(WorkItemId::new("wi-scope"), pool_data(), " SALES ")
+                .unwrap();
+
+        assert_eq!(item.responsibility_key(), Some("SALES"));
+        item.reassign("alice", Instant::from_unix_secs(110)).unwrap();
+        item.release_to_pool(Instant::from_unix_secs(120)).unwrap();
+        assert_eq!(item.responsibility_key(), Some("SALES"));
+        assert!(
+            WorkItem::new_with_responsibility_key(WorkItemId::new("wi-empty-scope"), pool_data(), "   ",)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn direct_requires_owner_and_records_first_assignment() {
+        let at = Instant::from_unix_secs(100);
+        let direct = WorkItemData {
+            assignment_mode: AssignmentMode::Direct,
+            owner_user_id: Some(" alice ".to_string()),
+            assignment_source: AssignmentSource::StepResolver,
+            ..pool_data()
         };
-        assert!(WorkItem::new(WorkItemId::new("wi-1"), payload).is_err());
-    }
+        let item = WorkItem::new_at(WorkItemId::new("wi-1"), direct, at).unwrap();
 
-    /// 失败路径：超长字段被拒。
-    #[test]
-    fn new_rejects_overlong_completion_action() {
-        let payload = WorkItemData {
-            completion_action: "A".repeat(129),
-            ..data()
+        assert_eq!(item.owner_user_id.as_deref(), Some("alice"));
+        assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
+        assert_eq!(item.assigned_at, Some(at));
+        assert_eq!(item.current_assignment_at, Some(at));
+        assert!(item.started_at.is_none());
+
+        let missing_owner = WorkItemData {
+            assignment_mode: AssignmentMode::Direct,
+            ..pool_data()
         };
-        assert!(WorkItem::new(WorkItemId::new("wi-1"), payload).is_err());
+        assert!(WorkItem::new_at(WorkItemId::new("wi-2"), missing_owner, at).is_err());
     }
 
-    /// 状态机：领取 → 完成全链路合法迁移。
     #[test]
-    fn lifecycle_claim_defer_transfer_complete() {
-        let mut item = WorkItem::new(WorkItemId::new("wi-1"), data()).unwrap();
-        assert!(!item.is_owned_by("alice"));
+    fn pool_rejects_prefilled_owner() {
+        let data = WorkItemData {
+            owner_user_id: Some("alice".to_string()),
+            ..pool_data()
+        };
 
-        item.claim("alice").unwrap();
-        assert_eq!(item.status, WorkItemStatus::InProgress);
-        assert!(item.is_owned_by("alice"));
-        assert!(!item.is_owned_by("bob"));
+        assert!(WorkItem::new(WorkItemId::new("wi-1"), data).is_err());
+    }
 
-        item.defer().unwrap();
-        assert_eq!(item.status, WorkItemStatus::Unclaimed);
-        assert!(item.owner_user_id.is_none());
-
-        item.claim("bob").unwrap();
-        item.transfer("finance", "carol").unwrap();
-        assert_eq!(item.owner_role.as_deref(), Some("finance"));
-        assert_eq!(item.owner_user_id.as_deref(), Some("carol"));
-
-        item.complete("carol", Instant::from_unix_secs(1_700_100_000))
+    #[test]
+    fn responsibility_changes_preserve_first_times() {
+        let first = Instant::from_unix_secs(100);
+        let mut item = WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), first).unwrap();
+        item.reassign("alice", first).unwrap();
+        let started = Instant::from_unix_secs(110);
+        item.record_activity("alice", started).unwrap();
+        item.release_to_pool(Instant::from_unix_secs(120)).unwrap();
+        item.reassign("bob", Instant::from_unix_secs(130)).unwrap();
+        item.reassign("bob", Instant::from_unix_secs(140)).unwrap();
+        item.complete_by_domain_command("bob", Instant::from_unix_secs(150))
             .unwrap();
+
+        assert_eq!(item.assigned_at, Some(first));
+        assert_eq!(item.started_at, Some(started));
+        assert_eq!(item.current_assignment_at, Some(Instant::from_unix_secs(140)));
+        assert_eq!(item.owner_user_id.as_deref(), Some("bob"));
+        assert_eq!(item.completed_by.as_deref(), Some("bob"));
+        assert_eq!(
+            item.responsibility_actor_ids,
+            vec!["alice".to_string(), "bob".to_string()]
+        );
+        assert_eq!(item.assignment_source, AssignmentSource::AdminReassign);
+    }
+
+    #[test]
+    fn recovery_uses_registered_source_without_rewriting_first_times() {
+        let first = Instant::from_unix_secs(100);
+        let mut item = WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), first).unwrap();
+        item.recover_assignment("alice", Instant::from_unix_secs(110))
+            .unwrap();
+        item.record_activity("alice", Instant::from_unix_secs(120))
+            .unwrap();
+        item.recover_to_pool(Instant::from_unix_secs(130)).unwrap();
+
+        assert_eq!(item.assigned_at, Some(Instant::from_unix_secs(110)));
+        assert_eq!(item.started_at, Some(Instant::from_unix_secs(120)));
+        assert!(item.owner_user_id.is_none());
+        assert!(item.current_assignment_at.is_none());
+        assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
+        assert_eq!(item.assignment_source, AssignmentSource::RecoveryResolver);
+    }
+
+    #[test]
+    fn complete_requires_current_owner_and_is_terminal() {
+        let mut item = WorkItem::new_at(
+            WorkItemId::new("wi-1"),
+            WorkItemData {
+                assignment_mode: AssignmentMode::Direct,
+                owner_user_id: Some("alice".to_string()),
+                assignment_source: AssignmentSource::StepResolver,
+                ..pool_data()
+            },
+            Instant::from_unix_secs(100),
+        )
+        .unwrap();
+
+        assert!(item
+            .complete_by_domain_command("bob", Instant::from_unix_secs(110))
+            .is_err());
+        item.complete_by_domain_command("alice", Instant::from_unix_secs(110))
+            .unwrap();
+
         assert_eq!(item.status, WorkItemStatus::Completed);
-        assert_eq!(item.completed_by.as_deref(), Some("carol"));
+        assert_eq!(item.started_at, Some(Instant::from_unix_secs(110)));
+        assert_eq!(item.completed_by.as_deref(), Some("alice"));
+        assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
         assert!(item.is_terminal());
     }
 
-    /// 状态机：非法迁移被拒（未领取直接完成、领取后重复领取）。
     #[test]
-    fn illegal_transitions_are_rejected() {
-        let mut item = WorkItem::new(WorkItemId::new("wi-1"), data()).unwrap();
-        assert!(item
-            .complete("alice", Instant::from_unix_secs(1_700_100_000))
-            .is_err());
+    fn close_records_full_audit_and_rejects_terminal() {
+        let mut item =
+            WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), Instant::from_unix_secs(100)).unwrap();
+        item.reassign("alice", Instant::from_unix_secs(110)).unwrap();
+        let at = Instant::from_unix_secs(120);
 
-        item.claim("alice").unwrap();
-        assert!(item.claim("bob").is_err(), "已领取任务不能重复领取");
-        assert!(item.transfer("sales", "bob").is_ok());
-
-        assert!(ensure_transition(WorkItemStatus::Completed, WorkItemStatus::InProgress).is_err());
-        assert!(ensure_transition(WorkItemStatus::Unclaimed, WorkItemStatus::Completed).is_err());
-    }
-
-    /// 状态机：逐边定向断言（含不可逆终态，不调用对称闭包辅助）。
-    #[test]
-    fn directed_edge_assertions() {
-        assert!(ensure_transition(WorkItemStatus::Unclaimed, WorkItemStatus::Unclaimed).is_ok());
-        assert!(ensure_transition(WorkItemStatus::Unclaimed, WorkItemStatus::InProgress).is_ok());
-        assert!(ensure_transition(WorkItemStatus::Unclaimed, WorkItemStatus::Closed).is_ok());
-        assert!(ensure_transition(WorkItemStatus::InProgress, WorkItemStatus::Unclaimed).is_ok());
-        assert!(ensure_transition(WorkItemStatus::InProgress, WorkItemStatus::Completed).is_ok());
-        assert!(ensure_transition(WorkItemStatus::InProgress, WorkItemStatus::Closed).is_ok());
-        assert!(ensure_transition(WorkItemStatus::Completed, WorkItemStatus::Completed).is_ok());
-        assert!(ensure_transition(WorkItemStatus::Closed, WorkItemStatus::Closed).is_ok());
-
-        for terminal in [WorkItemStatus::Completed, WorkItemStatus::Closed] {
-            for &from in &[WorkItemStatus::Unclaimed, WorkItemStatus::InProgress] {
-                assert!(ensure_transition(terminal, from).is_err(), "终态不可回退");
-            }
-        }
-        assert!(ensure_transition(WorkItemStatus::Completed, WorkItemStatus::Closed).is_err());
-        assert!(ensure_transition(WorkItemStatus::Closed, WorkItemStatus::Completed).is_err());
-    }
-
-    /// 关闭：必须记录结构化原因；终态任务不可关闭。
-    #[test]
-    fn close_requires_reason_and_rejects_terminal() {
-        let mut item = WorkItem::new(WorkItemId::new("wi-1"), data()).unwrap();
-        assert!(item
-            .close(WorkItemCloseData {
-                close_reason_code: "  ".to_string(),
-                close_reason_text: None,
-            })
-            .is_err());
-
-        item.close(WorkItemCloseData {
-            close_reason_code: "DUPLICATE_TASK".to_string(),
-            close_reason_text: Some(" 重复任务 ".to_string()),
-        })
+        item.close(
+            "admin",
+            WorkItemCloseData {
+                close_reason: " 重复任务 ".to_string(),
+            },
+            at,
+        )
         .unwrap();
-        assert_eq!(item.status, WorkItemStatus::Closed);
-        assert_eq!(item.close_reason_code.as_deref(), Some("DUPLICATE_TASK"));
-        assert_eq!(item.close_reason_text.as_deref(), Some("重复任务"));
 
+        assert_eq!(item.status, WorkItemStatus::Closed);
+        assert_eq!(item.closed_at, Some(at));
+        assert_eq!(item.closed_by.as_deref(), Some("admin"));
+        assert_eq!(item.close_reason.as_deref(), Some("重复任务"));
+        assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
         assert!(item
-            .close(WorkItemCloseData {
-                close_reason_code: "DUPLICATE_TASK".to_string(),
-                close_reason_text: None,
-            })
+            .close(
+                "admin",
+                WorkItemCloseData {
+                    close_reason: "再次关闭".to_string(),
+                },
+                Instant::from_unix_secs(130),
+            )
             .is_err());
     }
 
-    /// 固定任务类型代码与人工关闭策略。
     #[test]
-    fn work_item_type_codes_and_manual_close_policy() {
-        assert_eq!(
-            serde_json::to_string(&WorkItemType::ProcurementConfirmation).unwrap(),
-            "\"PROCUREMENT_CONFIRMATION\""
-        );
-        assert_eq!(
-            WorkItemType::IntegrationResultUnknown.as_str(),
-            "INTEGRATION_RESULT_UNKNOWN"
-        );
-        assert_eq!(WorkItemType::BusinessException.label(), "业务异常");
-        assert_eq!(WorkItemType::ImportBusinessConfirmation.label(), "导入业务确认");
-        assert!(
-            !WorkItemType::ImportBusinessConfirmation.is_manually_closable(),
-            "确认类任务不得人工关闭"
-        );
+    fn state_machine_has_only_open_to_terminal_edges() {
+        assert!(ensure_transition(WorkItemStatus::Open, WorkItemStatus::Completed).is_ok());
+        assert!(ensure_transition(WorkItemStatus::Open, WorkItemStatus::Closed).is_ok());
+        assert!(ensure_transition(WorkItemStatus::Completed, WorkItemStatus::Open).is_err());
+        assert!(ensure_transition(WorkItemStatus::Closed, WorkItemStatus::Open).is_err());
+        assert_eq!(WorkItemStatus::Open.as_str(), "OPEN");
+        assert_eq!(WorkItemStatus::Open.label(), "待处理");
     }
 
-    /// 优先级与状态代码稳定。
     #[test]
-    fn priority_and_status_codes_are_stable() {
+    fn codes_and_bson_shape_are_stable() {
+        assert_eq!(AssignmentMode::Pool.as_str(), "POOL");
+        assert_eq!(AssignmentSource::SelfStart.as_str(), "SELF_START");
         assert_eq!(
-            serde_json::to_string(&WorkItemPriority::Urgent).unwrap(),
-            "\"urgent\""
+            WorkItemType::CardSalesManagerApproval.as_str(),
+            "CARD_SALES_MANAGER_APPROVAL"
         );
-        assert_eq!(WorkItemStatus::InProgress.as_str(), "IN_PROGRESS");
-        assert_eq!(WorkItemStatus::Unclaimed.label(), "待领取");
         assert_eq!(WorkItemPriority::High.label(), "高");
-    }
 
-    /// BSON 往返。
-    #[test]
-    fn entity_roundtrips_through_bson() {
-        let item = WorkItem::new(WorkItemId::new("wi-1"), data()).unwrap();
-        let roundtrip: WorkItem = bson::from_document(bson::to_document(&item).unwrap()).unwrap();
+        let item =
+            WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), Instant::from_unix_secs(100)).unwrap();
+        let document = bson::to_document(&item).unwrap();
+        assert_eq!(document.get_str("status").unwrap(), "OPEN");
+        assert_eq!(document.get_str("assignment_mode").unwrap(), "POOL");
+        assert!(!document.contains_key("responsibility_key"));
+        assert!(document.get_array("responsibility_actor_ids").unwrap().is_empty());
+        let roundtrip: WorkItem = bson::from_document(document).unwrap();
         assert_eq!(roundtrip, item);
     }
 }

@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
 type ProcurementQueueControlsProps = {
-    scope: "mine" | "role_pool"
+    scope: "mine" | "team"
     due: "active" | "today" | "overdue"
     orderNoInputRef: Ref<HTMLInputElement>
     orderNoDraft: string
@@ -26,7 +26,7 @@ type ProcurementQueueControlsProps = {
     onClearFilters: () => void
     autoNext: boolean
     onToggleAutoNext: (value: boolean) => void
-    onScopeChange: (value: "mine" | "role_pool") => void
+    onScopeChange: (value: "mine" | "team") => void
     onDueChange: (value: "active" | "today" | "overdue") => void
 }
 
@@ -61,8 +61,8 @@ export function ProcurementQueueControls({
                         [
                             { value: "mine" as const, label: "我的待办" },
                             {
-                                value: "role_pool" as const,
-                                label: "团队待认领",
+                                value: "team" as const,
+                                label: "团队待处理",
                             },
                         ] as const
                     ).map((option) => (

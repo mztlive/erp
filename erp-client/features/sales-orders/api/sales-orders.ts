@@ -24,16 +24,18 @@ import type {
 } from "@/features/sales-orders/types"
 import {
     PERMISSION_VERSION,
+    type BackendLowMarginManagerDecisionResult,
+    type BackendProcurementRejectionResolutionResult,
     type BackendContractDetail,
     type BackendCustomerDetail,
     type BackendPartyContact,
     type BackendSalesChangeOrder,
     type BackendSalesOrderDetail,
-    type BackendSalesOrderReview,
     type BackendSalesOrderView,
     type BackendWorkingCopy,
     type BackendWorkingCopyLine,
     type PageView,
+    type LowMarginManagerDecisionOutcome,
     type ProcurementResolutionOutcome,
     type SalesOrderDetailView,
     type SalesOrderListView,
@@ -44,7 +46,6 @@ import {
     formatEpochDate,
     formatInstant,
     formatIsoNow,
-    localOrderNo,
     mapCardForm,
     mapCardFormFromBackend,
     mapChangeOrder,
@@ -58,7 +59,6 @@ import {
     mapInvoiceFilterToBackend,
     mapNature,
     mapReviewStatusFilterToBackend,
-    mapReviewToCardApproval,
     mapSortBy,
     mapWelfareScenarioCode,
     percentToRate,
@@ -73,8 +73,8 @@ export type {
 } from "@/features/sales-orders/api/contracts"
 
 export {
-    claimCardSalesApproval,
-    completeCardSalesApproval,
+    cancelCardSalesApproval,
+    submitCardSalesApprovalDecision,
 } from "@/features/sales-orders/api/card-approval"
 export { createSalesOrderExportJob } from "@/features/sales-orders/api/export"
 
@@ -191,10 +191,9 @@ async function loadContractDisplays(
                     const contract = await apiGet<BackendContractDetail>(
                         `/admin/contracts/${contractId}`,
                     )
-                    const revision =
-                        contract.revisions.find(
-                            (item) => item.id === contract.current_revision_id,
-                        ) ?? contract.revisions[0]
+                    const revision = contract.revisions.find(
+                        (item) => item.id === contract.current_revision_id,
+                    )
                     return [
                         contractId,
                         {
@@ -232,10 +231,9 @@ export async function downloadSalesOrderContractPdf(
     const contract = await apiGet<BackendContractDetail>(
         `/admin/contracts/${id}`,
     )
-    const revision =
-        contract.revisions.find(
-            (item) => item.id === contract.current_revision_id,
-        ) ?? contract.revisions[0]
+    const revision = contract.revisions.find(
+        (item) => item.id === contract.current_revision_id,
+    )
     const fileId = revision?.contract_pdf_file_id?.trim()
     if (!fileId) {
         throwValidation("合同尚未归档 PDF，无法下载")
@@ -254,44 +252,19 @@ async function loadDetailExtras(
     salesOrderId: string,
     nature: SalesOrderNature,
 ) {
-    const [reviewsPage, changeOrdersPage] = await Promise.all([
-        apiGet<PageView<BackendSalesOrderReview>>(
-            "/admin/sales-order-reviews",
-            {
-                sales_order_id: salesOrderId,
-                status: "PENDING",
-                page: 1,
-                page_size: 20,
-            },
-        ).catch(() => ({
-            items: [] as BackendSalesOrderReview[],
-            total: 0,
-            page: 1,
-            page_size: 20,
-        })),
-        apiGet<PageView<BackendSalesChangeOrder>>(
-            "/admin/sales-change-orders",
-            {
-                sales_order_id: salesOrderId,
-                page: 1,
-                page_size: 10,
-            },
-        ).catch(() => ({
-            items: [] as BackendSalesChangeOrder[],
-            total: 0,
+    const changeOrdersPage = await apiGet<PageView<BackendSalesChangeOrder>>(
+        "/admin/sales-change-orders",
+        {
+            sales_order_id: salesOrderId,
             page: 1,
             page_size: 10,
-        })),
-    ])
-
-    const pendingReview =
-        reviewsPage.items.find(
-            (r) =>
-                r.sales_order_id === salesOrderId &&
-                r.status === "PENDING" &&
-                (r.review_stage === "SALES_LEADER" ||
-                    r.review_stage === "OPERATIONS"),
-        ) ?? null
+        },
+    ).catch(() => ({
+        items: [] as BackendSalesChangeOrder[],
+        total: 0,
+        page: 1,
+        page_size: 10,
+    }))
 
     const activeChange =
         changeOrdersPage.items.find(
@@ -303,9 +276,6 @@ async function loadDetailExtras(
         ) ?? null
 
     return {
-        activeCardSalesApproval: pendingReview
-            ? mapReviewToCardApproval(pendingReview)
-            : null,
         activeChangeOrder: activeChange
             ? mapChangeOrder(activeChange, nature)
             : null,
@@ -366,10 +336,9 @@ export async function fetchSalesOrderDetail(
                 `/admin/contracts/${detail.contract_id}`,
             )
             contractNumber = contract.contract_no
-            const rev =
-                contract.revisions.find(
-                    (r) => r.id === contract.current_revision_id,
-                ) ?? contract.revisions[0]
+            const rev = contract.revisions.find(
+                (r) => r.id === contract.current_revision_id,
+            )
             if (rev?.customer_name) customerName = rev.customer_name
         } catch {
             // 合同域缺口时保留 id 展示
@@ -439,6 +408,8 @@ type DraftContentInput = {
     welfareScene: string
     paymentTerms: string
     fulfillmentDeadline: string
+    targetMallId: string
+    receivableDueDate: string
     taxRatePercent: string
     remark: string
     lineItems: CreateSalesOrderInput["lineItems"]
@@ -524,6 +495,7 @@ function buildDraftPayload(
                 input.ownerUserId.trim() || input.ownerName.trim() || "unknown",
             customer_name: requested.customer_name,
             contract_no: contract.contract_no,
+            requested_contract_revision_id: requested.id,
             settlement_party_name: requested.settlement_party_name,
             payment_term_code: requested.payment_term_code || "CUSTOM",
             payment_term_name:
@@ -543,6 +515,14 @@ function buildDraftPayload(
                 input.nature === "card_voucher"
                     ? dateToUnixSecs(input.fulfillmentDeadline)
                     : null,
+            target_mall_id:
+                input.nature === "card_voucher"
+                    ? input.targetMallId.trim() || null
+                    : null,
+            receivable_due_date:
+                input.nature === "card_voucher"
+                    ? input.receivableDueDate.trim() || null
+                    : null,
             lines,
         },
     }
@@ -550,7 +530,7 @@ function buildDraftPayload(
 
 async function resolveContractRevision(input: {
     contractId: string
-    requestedContractRevisionId?: string
+    requestedContractRevisionId: string
 }): Promise<{
     contract: BackendContractDetail
     requested: BackendContractDetail["revisions"][number]
@@ -558,12 +538,9 @@ async function resolveContractRevision(input: {
     const contract = await apiGet<BackendContractDetail>(
         `/admin/contracts/${input.contractId}`,
     )
-    const requested =
-        contract.revisions.find(
-            (r) => r.id === input.requestedContractRevisionId,
-        ) ??
-        contract.revisions.find((r) => r.id === contract.current_revision_id) ??
-        contract.revisions[0]
+    const requested = contract.revisions.find(
+        (r) => r.id === input.requestedContractRevisionId,
+    )
 
     if (!requested) {
         throwValidation("合同修订不存在")
@@ -590,9 +567,8 @@ export async function createSalesOrder(
         requested,
     )
 
-    const orderNo = localOrderNo()
     const body = {
-        order_no: orderNo,
+        order_no: input.orderNo,
         business_type: businessType,
         customer_id: contract.customer_id,
         contract_id: contract.id,
@@ -650,11 +626,15 @@ export async function saveSalesOrderDraft(
 }
 
 /** 提交已存在的草稿进入审核轨（继续编辑场景的"提交"动作）。 */
-export async function submitSalesOrder(input: {
+export type SubmitSalesOrderInput = {
     salesOrderId: string
     version: number
     idempotencyKey: string
-}): Promise<{ salesOrderId: string }> {
+}
+
+export async function submitSalesOrder(
+    input: SubmitSalesOrderInput,
+): Promise<{ salesOrderId: string }> {
     await apiPost(`/admin/sales-orders/${input.salesOrderId}/submit`, {
         version: input.version,
         idempotency_key: input.idempotencyKey,
@@ -671,6 +651,8 @@ export type SalesOrderDraftResumeData = {
     welfareScene: string
     paymentTerms: string
     fulfillmentDeadline: string
+    targetMallId: string
+    receivableDueDate: string
     taxRatePercent: string
     remark: string
     lineItems: SalesOrderDraftLineInput[]
@@ -759,6 +741,8 @@ export async function fetchSalesOrderDraftForResume(
         welfareScene,
         paymentTerms,
         fulfillmentDeadline: formatEpochDate(voucherExpiry),
+        targetMallId: source.target_mall_id ?? "",
+        receivableDueDate: source.receivable_due_date ?? "",
         taxRatePercent: rateToPercent(lines[0]?.sales_tax_rate),
         remark: remark ?? "",
         lineItems: mapDraftLines(lines, voucherCategorySkuId),
@@ -857,54 +841,256 @@ export async function adjustProcurementRejectionDraft(input: {
     return { ok: true }
 }
 
-export async function resolveProcurementRejection(input: {
+export type ResolveProcurementRejectionIntent = {
     salesOrderId: string
-    action: "RESUBMIT_CHANGED_TERMS" | "VOID_AFTER_REJECTION"
-    idempotencyKey: string
-    voidReason?: string
-}): Promise<ProcurementResolutionOutcome> {
-    const detail = await apiGet<BackendSalesOrderDetail>(
-        `/admin/sales-orders/${input.salesOrderId}`,
-    )
+} & (
+    | {
+          action: "RESUBMIT_CHANGED_TERMS"
+          customerReconfirmationEvidenceIds: string[]
+      }
+    | {
+          action: "REQUEST_LOW_MARGIN_ACCEPTANCE"
+          lowMarginAcceptanceReason: string
+          evidenceReferenceIds: string[]
+      }
+    | {
+          action: "VOID_AFTER_REJECTION"
+          voidReasonCode: string
+          comment: string
+      }
+)
 
-    if (input.action === "VOID_AFTER_REJECTION") {
-        await apiPost(`/admin/sales-orders/${input.salesOrderId}/void`, {
-            version: detail.version,
-        })
-        return {
-            outcome: "VOIDED_AFTER_PROCUREMENT_REJECTION",
-            reference: `PR-VOID-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
-            detail: `销售单已作废并保留驳回历史。原因：${input.voidReason ?? "不做"}`,
-            reviewStatus: "VOIDED",
-            primaryStatusLabel: "已作废",
+export type ResolveProcurementRejectionPayload =
+    ResolveProcurementRejectionIntent & {
+        rejectedProcurementConfirmationId: string
+        rejectedSubmissionId: string
+        expectedSalesOrderLockVersion: number
+        expectedDraftVersion?: number
+    }
+
+export type ResolveProcurementRejectionInput =
+    ResolveProcurementRejectionPayload & {
+        idempotencyKey: string
+    }
+
+/**
+ * 冻结采购驳回处置所需的对象身份与版本。调用方必须把返回值和命令键一起保存；
+ * 结果未知后的重试不得重新读取并拼装另一份命令。
+ */
+export async function prepareProcurementRejectionResolution(
+    intent: ResolveProcurementRejectionIntent,
+): Promise<ResolveProcurementRejectionPayload> {
+    const detail = await apiGet<BackendSalesOrderDetail>(
+        `/admin/sales-orders/${intent.salesOrderId}`,
+    )
+    const rejection = detail.open_procurement_rejection
+    if (!rejection) {
+        throwValidation("当前销售单没有可处理的采购驳回")
+    }
+    if (intent.action !== "VOID_AFTER_REJECTION" && !detail.working_copy) {
+        throwValidation("当前销售单没有可处理的工作副本")
+    }
+    return {
+        ...intent,
+        rejectedProcurementConfirmationId:
+            rejection.procurement_confirmation_id,
+        rejectedSubmissionId: rejection.submission_id,
+        expectedSalesOrderLockVersion: detail.version,
+        expectedDraftVersion: detail.working_copy?.version,
+    }
+}
+
+/**
+ * 处置采购驳回的唯一入口。对象身份和版本必须来自同一次 prepare 并被冻结；
+ * 客户证据只能由调用方显式提供，禁止补造引用或结果编号。
+ */
+export async function resolveProcurementRejection(
+    input: ResolveProcurementRejectionInput,
+): Promise<ProcurementResolutionOutcome> {
+    const common = {
+        action: input.action,
+        sales_order_id: input.salesOrderId,
+        rejected_procurement_confirmation_id:
+            input.rejectedProcurementConfirmationId,
+        rejected_submission_id: input.rejectedSubmissionId,
+        expected_sales_order_lock_version: input.expectedSalesOrderLockVersion,
+        operation_id: input.idempotencyKey,
+        idempotency_key: input.idempotencyKey,
+    }
+    let command: Record<string, unknown>
+    if (input.action === "RESUBMIT_CHANGED_TERMS") {
+        if (input.customerReconfirmationEvidenceIds.length === 0) {
+            throwValidation("改品或改价重提必须登记客户重新确认依据")
+        }
+        command = {
+            ...common,
+            expected_draft_version: input.expectedDraftVersion,
+            customer_reconfirmation_evidence_ids:
+                input.customerReconfirmationEvidenceIds,
+        }
+    } else if (input.action === "REQUEST_LOW_MARGIN_ACCEPTANCE") {
+        if (!input.lowMarginAcceptanceReason.trim()) {
+            throwValidation("请填写低毛利承接理由")
+        }
+        if (input.evidenceReferenceIds.length === 0) {
+            throwValidation("申请低毛利承接必须登记证据依据")
+        }
+        command = {
+            ...common,
+            expected_draft_version: input.expectedDraftVersion,
+            low_margin_acceptance_reason:
+                input.lowMarginAcceptanceReason.trim(),
+            evidence_reference_ids: input.evidenceReferenceIds,
+        }
+    } else {
+        if (!input.voidReasonCode.trim() || !input.comment.trim()) {
+            throwValidation("作废原因代码和说明不能为空")
+        }
+        command = {
+            ...common,
+            void_reason_code: input.voidReasonCode.trim(),
+            comment: input.comment.trim(),
         }
     }
 
-    const submission = await apiPost<{
-        id: string
-        submission_no: number
-    }>(`/admin/sales-orders/${input.salesOrderId}/submit`, {
-        version: detail.version,
-        idempotency_key: input.idempotencyKey,
-    })
+    const result = await apiPost<BackendProcurementRejectionResolutionResult>(
+        `/admin/sales-orders/${input.salesOrderId}/procurement-rejection-resolution`,
+        command,
+    )
+    if (result.outcome === "CHANGED_TERMS_RESUBMITTED") {
+        return {
+            outcome: result.outcome,
+            reference: result.new_procurement_confirmation_id,
+            detail: "已冻结新提交并创建新的采购确认待办；旧驳回记录保持历史。",
+            newSubmissionNo: result.new_submission_no,
+            newSubjectHash: result.new_submission_id,
+            newWorkItemId: result.new_procurement_work_item_id,
+            reviewStatus: "RESOLVED",
+            primaryStatusLabel: "待二次确认",
+        }
+    }
+    if (result.outcome === "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED") {
+        return {
+            outcome: result.outcome,
+            reference: result.low_margin_confirmation_id,
+            detail: "已冻结原商业条件并转交销售上级确认低毛利承接。",
+            newSubmissionNo: result.new_submission_no,
+            newSubjectHash: result.new_submission_id,
+            newWorkItemId: result.low_margin_manager_work_item_id,
+            reviewStatus: "RESOLVED",
+            primaryStatusLabel: "待销售上级确认",
+        }
+    }
     return {
-        outcome: "CHANGED_TERMS_RESUBMITTED",
-        reference: `PR-RESUB-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
-        detail: "已提交新版本进入采购二次确认；旧驳回记录保持历史。",
-        newSubmissionNo: submission.submission_no,
-        newSubjectHash: submission.id,
-        reviewStatus: "RESOLVED",
-        primaryStatusLabel: "待二次确认",
+        outcome: result.outcome,
+        reference: result.workflow_action_id,
+        detail: "销售单已作废，采购驳回与历史提交记录已保留。",
+        reviewStatus: "VOIDED",
+        primaryStatusLabel: "已作废",
+    }
+}
+
+type CompleteLowMarginManagerConfirmationInput = {
+    salesOrderId: string
+    workItemId: string
+    taskVersion: string
+    subjectVersion: string
+    lowMarginSubmissionId: string
+    rejectedProcurementConfirmationId: string
+    expectedSalesOrderLockVersion: number
+    idempotencyKey: string
+} & (
+    | { decision: "APPROVE"; comment?: string }
+    | {
+          decision: "REJECT"
+          reasonCode: string
+          comment: string
+      }
+)
+
+/** 提交低毛利上级确认的唯一强类型决定。 */
+export async function completeLowMarginManagerConfirmation(
+    input: CompleteLowMarginManagerConfirmationInput,
+): Promise<LowMarginManagerDecisionOutcome> {
+    const decision =
+        input.decision === "APPROVE"
+            ? {
+                  decision: "APPROVE",
+                  work_item_type: "LOW_MARGIN_MANAGER_CONFIRMATION",
+                  sales_order_id: input.salesOrderId,
+                  rejected_procurement_confirmation_id:
+                      input.rejectedProcurementConfirmationId,
+                  low_margin_submission_id: input.lowMarginSubmissionId,
+                  expected_sales_order_lock_version:
+                      input.expectedSalesOrderLockVersion,
+                  comment: input.comment?.trim() || null,
+              }
+            : {
+                  decision: "REJECT",
+                  work_item_type: "LOW_MARGIN_MANAGER_CONFIRMATION",
+                  sales_order_id: input.salesOrderId,
+                  rejected_procurement_confirmation_id:
+                      input.rejectedProcurementConfirmationId,
+                  low_margin_submission_id: input.lowMarginSubmissionId,
+                  expected_sales_order_lock_version:
+                      input.expectedSalesOrderLockVersion,
+                  reason_code: input.reasonCode.trim(),
+                  comment: input.comment.trim(),
+              }
+    const result = await apiPost<BackendLowMarginManagerDecisionResult>(
+        "/admin/sales-order-reviews/low-margin-decisions",
+        {
+            work_item_id: input.workItemId,
+            expected_task_version: input.taskVersion,
+            expected_subject_version: input.subjectVersion,
+            decision,
+            idempotency_key: input.idempotencyKey,
+        },
+    )
+    const business = result.business_result
+    if (
+        business.outcome === "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
+    ) {
+        return {
+            outcome: business.outcome,
+            salesOrderId: business.sales_order_id,
+            lowMarginSubmissionId: business.low_margin_submission_id,
+            salesOrderReviewId: business.sales_order_review_id,
+            workflowActionId: business.workflow_action_id,
+            newProcurementConfirmationId:
+                business.new_procurement_confirmation_id,
+            newProcurementWorkItemId: business.new_procurement_work_item_id,
+        }
+    }
+    return {
+        outcome: business.outcome,
+        salesOrderId: business.sales_order_id,
+        lowMarginSubmissionId: business.low_margin_submission_id,
+        salesOrderReviewId: business.sales_order_review_id,
+        workflowActionId: business.workflow_action_id,
     }
 }
 
 // ─── 销售变更单 ──────────────────────────────────────────────────────────────
 
-export async function startSalesChangeOrder(input: {
+export type StartSalesChangeOrderIntent = {
     salesOrderId: string
     baseRevisionNo: number
     nature: "physical_service" | "card_voucher"
-}): Promise<SalesChangeOrderSummary> {
+}
+
+export type StartSalesChangeOrderPayload = StartSalesChangeOrderIntent & {
+    command: Record<string, unknown>
+}
+
+export type StartSalesChangeOrderInput = StartSalesChangeOrderPayload & {
+    idempotencyKey: string
+}
+
+/** 冻结改单完整载荷；正式请求结果未知后禁止重新从可变详情拼装。 */
+export async function prepareStartSalesChangeOrder(
+    input: StartSalesChangeOrderIntent,
+): Promise<StartSalesChangeOrderPayload> {
     const detail = await apiGet<BackendSalesOrderDetail>(
         `/admin/sales-orders/${input.salesOrderId}`,
     )
@@ -927,10 +1113,9 @@ export async function startSalesChangeOrder(input: {
                 `/admin/contracts/${detail.contract_id}`,
             )
             contractNo = contract.contract_no
-            const rev =
-                contract.revisions.find(
-                    (r) => r.id === contract.current_revision_id,
-                ) ?? contract.revisions[0]
+            const rev = contract.revisions.find(
+                (r) => r.id === contract.current_revision_id,
+            )
             if (rev) {
                 customerName = rev.customer_name
                 settlementName = rev.settlement_party_name
@@ -1000,13 +1185,13 @@ export async function startSalesChangeOrder(input: {
         throwValidation("无法发起变更：缺少可变更的明细草稿")
     }
 
-    const created = await apiPost<BackendSalesChangeOrder>(
-        "/admin/sales-change-orders",
-        {
+    return {
+        ...input,
+        baseRevisionNo: input.baseRevisionNo || latestRev?.revision_no || 0,
+        command: {
             sales_order_id: input.salesOrderId,
             change_type: input.nature === "card_voucher" ? "OTHER" : "AMOUNT",
             reason: "销售发起变更",
-            idempotency_key: `sco-${input.salesOrderId}-${Date.now()}`,
             draft: {
                 editor_user_id: wc?.editor_user_id ?? "unknown",
                 customer_name: customerName,
@@ -1023,10 +1208,61 @@ export async function startSalesChangeOrder(input: {
                 lines,
             },
         },
-    )
+    }
+}
 
+/** 使用已冻结载荷创建改单。 */
+export async function startSalesChangeOrder(
+    input: StartSalesChangeOrderInput,
+): Promise<SalesChangeOrderSummary> {
+    const created = await apiPost<BackendSalesChangeOrder>(
+        "/admin/sales-change-orders",
+        {
+            ...input.command,
+            idempotency_key: input.idempotencyKey,
+        },
+    )
     return {
         ...mapChangeOrder(created, input.nature),
-        baseRevisionNo: input.baseRevisionNo || latestRev?.revision_no || 0,
+        baseRevisionNo: input.baseRevisionNo,
     }
+}
+
+export type SalesChangeReviewDecisionInput = Readonly<{
+    salesChangeOrderId: string
+    handlerKey: "sales_change_impact_review" | "sales_change_finance_review"
+    decision: "APPROVE" | "REJECT"
+    workItemId: string
+    expectedTaskVersion: string
+    expectedSubjectVersion: string
+    decisionReason?: string
+    idempotencyKey: string
+}>
+
+/** 提交销售变更复核强命令；任务处理器与决定共同固定唯一业务端点。 */
+export async function submitSalesChangeReviewDecision(
+    input: SalesChangeReviewDecisionInput,
+): Promise<BackendSalesChangeOrder> {
+    const taskVersion = Number(input.expectedTaskVersion)
+    if (!Number.isSafeInteger(taskVersion) || taskVersion <= 0) {
+        throwValidation("待办版本无效，请刷新任务后重试")
+    }
+    const action =
+        input.handlerKey === "sales_change_impact_review"
+            ? input.decision === "APPROVE"
+                ? "impact-confirm"
+                : "impact-reject"
+            : input.decision === "APPROVE"
+              ? "finance-confirm"
+              : "finance-reject"
+    return apiPost<BackendSalesChangeOrder>(
+        `/admin/sales-change-orders/${encodeURIComponent(input.salesChangeOrderId)}/${action}`,
+        {
+            work_item_id: input.workItemId,
+            expected_task_version: taskVersion,
+            expected_subject_version: input.expectedSubjectVersion,
+            decision_reason: input.decisionReason?.trim() || null,
+            idempotency_key: input.idempotencyKey,
+        },
+    )
 }

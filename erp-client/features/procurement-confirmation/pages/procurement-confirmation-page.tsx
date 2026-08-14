@@ -61,21 +61,14 @@ import {
 } from "@/features/procurement-confirmation/lib/urls"
 import { rejectSchema } from "@/features/procurement-confirmation/lib/validation"
 import {
-    useClaimProcurementMutation,
     useCompleteProcurementMutation,
-    useDeferProcurementMutation,
     useProcurementConfirmationQuery,
     useProcurementRecommendationQuery,
     useProcurementSupplyOptionsQuery,
     useSaveProcurementConfirmationMutation,
 } from "@/features/procurement-confirmation/hooks/queries"
+import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import { freshnessText } from "@/lib/ui-text"
-
-/** 会话内存中的处理权（不写 URL / localStorage） */
-type SessionLease = {
-    workItemId: string
-    claimedByLabel: string
-}
 
 type ResultState = SharedResultState<FormalOutcome>
 
@@ -84,8 +77,8 @@ export function ProcurementConfirmationPage() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
-    const scope: "mine" | "role_pool" =
-        searchParams.get("scope") === "role_pool" ? "role_pool" : "mine"
+    const scope: "mine" | "team" =
+        searchParams.get("scope") === "team" ? "team" : "mine"
     const dueParam = searchParams.get("due")
     const due: "active" | "today" | "overdue" =
         dueParam === "today" || dueParam === "overdue" || dueParam === "active"
@@ -101,8 +94,6 @@ export function ProcurementConfirmationPage() {
         searchParams.get("currentWorkItemId") ??
         searchParams.get("task") ??
         undefined
-    const isProcessingEntry =
-        searchParams.get("from") === "W02" && Boolean(currentWorkItemId)
     const queueContextId =
         searchParams.get("queueContextId") ??
         `queue:procurement-confirmation:${scope}`
@@ -132,10 +123,9 @@ export function ProcurementConfirmationPage() {
     const [confirmOpen, setConfirmOpen] = React.useState(false)
 
     const queueQuery = useProcurementConfirmationQuery(filters)
-    const claimMutation = useClaimProcurementMutation()
+    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const saveMutation = useSaveProcurementConfirmationMutation()
     const completeMutation = useCompleteProcurementMutation()
-    const deferMutation = useDeferProcurementMutation()
     const { data: supplierOptions } = useSupplierOptionsQuery()
 
     const view = queueQuery.data
@@ -191,10 +181,6 @@ export function ProcurementConfirmationPage() {
     const orderNoInputRef = React.useRef<HTMLInputElement>(null)
     const headingRef = React.useRef<HTMLHeadingElement>(null)
     const resultRef = React.useRef<HTMLDivElement>(null)
-    /** 会话内存处理权，禁止序列化到 URL / storage */
-    const [sessionLease, setSessionLease] = React.useState<SessionLease | null>(
-        null,
-    )
 
     // 同步当前任务分行草稿
     React.useEffect(() => {
@@ -277,50 +263,6 @@ export function ProcurementConfirmationPage() {
         router,
     ])
 
-    // Only an explicit W02 process transition may auto-claim. Sidebar/default
-    // navigation and W05 read-only inspection must never acquire a lease.
-    React.useEffect(() => {
-        if (
-            !task ||
-            !isProcessingEntry ||
-            task.workItemId !== currentWorkItemId ||
-            task.lease
-        ) {
-            return
-        }
-        if (sessionLease?.workItemId === task.workItemId) return
-        if (claimMutation.isPending) return
-        let cancelled = false
-        void claimMutation
-            .mutateAsync(task.workItemId)
-            .then((lease) => {
-                if (cancelled) return
-                setSessionLease({
-                    workItemId: lease.workItemId,
-                    claimedByLabel: lease.claimedByLabel,
-                })
-            })
-            .catch((error) => {
-                if (cancelled) return
-                setActionError(
-                    getErrorMessage(
-                        error,
-                        "领取处理权失败，请点击「领取任务」重试",
-                    ),
-                )
-            })
-        return () => {
-            cancelled = true
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在任务切换时领取
-    }, [
-        currentWorkItemId,
-        isProcessingEntry,
-        sessionLease?.workItemId,
-        task?.lease,
-        task?.workItemId,
-    ])
-
     React.useEffect(() => {
         if (lastResult) {
             resultRef.current?.focus()
@@ -397,19 +339,6 @@ export function ProcurementConfirmationPage() {
         },
         [currentIndex, tasks],
     )
-
-    const activeLease = React.useMemo(() => {
-        if (sessionLease?.workItemId === task?.workItemId) {
-            return sessionLease
-        }
-        if (task?.lease) {
-            return {
-                workItemId: task.workItemId,
-                claimedByLabel: task.lease.claimedByLabel,
-            }
-        }
-        return null
-    }, [sessionLease, task?.lease, task?.workItemId])
 
     const coverage = React.useMemo(() => {
         if (!task) return []
@@ -665,32 +594,15 @@ export function ProcurementConfirmationPage() {
         setDirty(true)
     }, [])
 
-    const ensureLease = React.useCallback(async () => {
-        if (!task) throw new Error("无当前任务")
-        if (task.lease) {
-            return {
-                workItemId: task.workItemId,
-                claimedByLabel: task.lease.claimedByLabel,
+    const assertAllowed = React.useCallback(
+        (action: string) => {
+            if (!task) throw new Error("无当前任务")
+            if (!task.allowedActions.includes(action)) {
+                throw new Error("当前责任或任务版本已变化，请刷新后再处理")
             }
-        }
-        if (sessionLease?.workItemId === task.workItemId) {
-            return sessionLease
-        }
-        const lease = await claimMutation.mutateAsync(task.workItemId)
-        const session: SessionLease = {
-            workItemId: lease.workItemId,
-            claimedByLabel: lease.claimedByLabel,
-        }
-        setSessionLease(session)
-        if (scope === "role_pool") {
-            replaceUrl({
-                scope: null,
-                queueContextId: null,
-                currentWorkItemId: task.workItemId,
-            })
-        }
-        return session
-    }, [claimMutation, replaceUrl, scope, sessionLease, task])
+        },
+        [task],
+    )
 
     const handleSave = React.useCallback(async (): Promise<boolean> => {
         if (!task) return false
@@ -701,13 +613,16 @@ export function ProcurementConfirmationPage() {
             return false
         }
         try {
-            await ensureLease()
+            assertAllowed("SAVE")
             const result = await saveMutation.mutateAsync({
                 workItemId: task.workItemId,
+                expectedTaskVersion: task.taskVersion,
+                expectedSubjectVersion: task.subjectVersion,
                 confirmationId: task.confirmation.confirmationId,
                 submissionId: task.salesSubmission.submissionId,
                 expectedEditVersion: task.confirmation.editVersion,
                 lines: lineDrafts,
+                idempotencyKey: `w07:${task.workItemId}:${task.taskVersion}:save:${task.confirmation.editVersion}`,
             })
             setDirty(false)
             setSaveMessage(`已保存 · 第 ${result.editVersion} 次修改`)
@@ -717,7 +632,7 @@ export function ProcurementConfirmationPage() {
             setActionError(getErrorMessage(error, "保存失败"))
             return false
         }
-    }, [ensureLease, lineDrafts, linesValid, saveMutation, task])
+    }, [assertAllowed, lineDrafts, linesValid, saveMutation, task])
 
     /** 终局操作打开前：dirty 时先保存，保存失败则中止打开（防止按旧草稿提交） */
     const guardTerminalOpen = React.useCallback(async (): Promise<boolean> => {
@@ -737,8 +652,6 @@ export function ProcurementConfirmationPage() {
                 neighborId(1) ??
                 tasks.find((t) => t.workItemId !== task?.workItemId)?.workItemId
             if (nextId) {
-                // 清空本任务租约引用（任务已终局）
-                setSessionLease(null)
                 goToWorkItem(nextId)
             } else {
                 replaceUrl({ currentWorkItemId: null })
@@ -759,23 +672,28 @@ export function ProcurementConfirmationPage() {
         }
         setActionError(null)
         try {
-            await ensureLease()
+            assertAllowed("APPROVE")
             await saveMutation.mutateAsync({
                 workItemId: task.workItemId,
+                expectedTaskVersion: task.taskVersion,
+                expectedSubjectVersion: task.subjectVersion,
                 confirmationId: task.confirmation.confirmationId,
                 submissionId: task.salesSubmission.submissionId,
                 expectedEditVersion: task.confirmation.editVersion,
                 lines: lineDrafts,
+                idempotencyKey: `w07:${task.workItemId}:${task.taskVersion}:save:${task.confirmation.editVersion}`,
             })
             setDirty(false)
-            // 方案落库后编辑版本已变化：生成采购单前重读当前任务。
+            // 方案落库后编辑版本已变化：正式确认前重读当前任务。
             const latestTask =
                 (await queueQuery.refetch()).data?.tasks.find(
                     (t) => t.workItemId === task.workItemId,
                 ) ?? task
             const response = await completeMutation.mutateAsync({
                 workItemId: latestTask.workItemId,
+                expectedTaskVersion: latestTask.taskVersion,
                 expectedSubjectVersion: latestTask.subjectVersion,
+                idempotencyKey: `w07:${latestTask.workItemId}:${latestTask.taskVersion}:approve`,
                 decision: {
                     reviewResult: "APPROVED",
                     confirmationId: latestTask.confirmation.confirmationId,
@@ -792,18 +710,29 @@ export function ProcurementConfirmationPage() {
                 setActionError(response.message)
                 return
             }
+            if (response.status === "unknown") {
+                setConfirmOpen(false)
+                setLastResult({
+                    status: "unknown",
+                    title: "采购确认结果待核实",
+                    description: response.message,
+                    reference: response.idempotencyKey,
+                    pendingIdempotencyKey: response.idempotencyKey,
+                    stayOnItem: true,
+                })
+                return
+            }
 
             const outcome = response.outcome
             if (outcome.kind !== "APPROVED_AND_SALES_EFFECTIVE") return
             setConfirmOpen(false)
-            setSessionLease(null)
             const approvedResult: ResultState = {
                 status: "succeeded",
-                title: "采购确认已通过 · 采购单已生成",
+                title: "采购确认已通过 · 已形成采购创建依据",
                 description:
                     advanceAfterConfirm && autoNext
-                        ? `销售单已生效，已生成 ${outcome.purchaseOrders.length} 张采购单；队列将打开下一条。`
-                        : `销售单已生效，已生成 ${outcome.purchaseOrders.length} 张采购单，可直接核对后提交。`,
+                        ? "销售单已生效，采购创建依据已形成；队列将打开下一条。"
+                        : "销售单已生效，采购创建依据已形成；后续建单尚未在本次事务中执行。",
                 reference: outcome.reference,
                 outcome,
                 stayOnItem: !(advanceAfterConfirm && autoNext),
@@ -824,7 +753,7 @@ export function ProcurementConfirmationPage() {
         allCovered,
         autoNext,
         completeMutation,
-        ensureLease,
+        assertAllowed,
         lineDrafts,
         queueQuery,
         recommendation,
@@ -837,7 +766,7 @@ export function ProcurementConfirmationPage() {
             if (!task) return
             setActionError(null)
             try {
-                await ensureLease()
+                assertAllowed("REJECT")
                 // guard 自动保存后编辑版本可能已 +1：终局提交前重读任务
                 const latestTask =
                     (await queueQuery.refetch()).data?.tasks.find(
@@ -845,7 +774,9 @@ export function ProcurementConfirmationPage() {
                     ) ?? task
                 const response = await completeMutation.mutateAsync({
                     workItemId: latestTask.workItemId,
+                    expectedTaskVersion: latestTask.taskVersion,
                     expectedSubjectVersion: latestTask.subjectVersion,
+                    idempotencyKey: `w07:${latestTask.workItemId}:${latestTask.taskVersion}:reject`,
                     decision: {
                         reviewResult: "REJECTED",
                         confirmationId: latestTask.confirmation.confirmationId,
@@ -864,9 +795,19 @@ export function ProcurementConfirmationPage() {
                     setActionError(response.message)
                     return
                 }
+                if (response.status === "unknown") {
+                    setLastResult({
+                        status: "unknown",
+                        title: "采购驳回结果待核实",
+                        description: response.message,
+                        reference: response.idempotencyKey,
+                        pendingIdempotencyKey: response.idempotencyKey,
+                        stayOnItem: true,
+                    })
+                    return
+                }
                 const outcome = response.outcome
                 if (outcome.kind !== "REJECTED_TO_SALES") return
-                setSessionLease(null)
                 const rejectedResult: ResultState = {
                     status: "rejected",
                     title: "采购确认已驳回 · 本次提交已结束",
@@ -891,7 +832,7 @@ export function ProcurementConfirmationPage() {
             advanceIfNeeded,
             autoNext,
             completeMutation,
-            ensureLease,
+            assertAllowed,
             queueQuery,
             task,
         ],
@@ -911,10 +852,11 @@ export function ProcurementConfirmationPage() {
         },
     })
 
-    const handleDefer = React.useCallback(async () => {
+    const handleReleaseToTeam = React.useCallback(async () => {
         if (!task) return
         setActionError(null)
         try {
+            let currentTask = task
             if (dirty) {
                 const saved = await handleSave()
                 if (!saved) {
@@ -923,43 +865,60 @@ export function ProcurementConfirmationPage() {
                     )
                     return
                 }
+                const refreshed = await queueQuery.refetch()
+                if (refreshed.isError) {
+                    throw refreshed.error
+                }
+                const refreshedTask = refreshed.data?.tasks.find(
+                    (candidate) => candidate.workItemId === task.workItemId,
+                )
+                if (!refreshedTask) {
+                    throw new Error(
+                        "保存后未取得当前任务的新版本，已禁止使用旧版本退回团队",
+                    )
+                }
+                currentTask = refreshedTask
             }
-            await ensureLease()
+            if (!currentTask.allowedActions.includes("RELEASE_TO_TEAM")) {
+                throw new Error("当前责任已变化，请刷新后再退回团队")
+            }
             const nextId = neighborId(1)
-            const response = await deferMutation.mutateAsync({
-                workItemId: task.workItemId,
-                queueContextId,
-                nextWorkItemId: nextId,
+            const response = await responsibilityMutation.mutateAsync({
+                kind: "RELEASE_TO_TEAM",
+                workItemId: currentTask.workItemId,
+                expectedTaskVersion: currentTask.taskVersion,
+                reason: "当前确认数据已保存，退回团队继续安排",
+                idempotencyKey: `w07:${currentTask.workItemId}:${currentTask.taskVersion}:release`,
             })
-            if (
-                response.status !== "succeeded" ||
-                response.outcome.kind !== "DEFERRED"
-            ) {
-                if (response.status === "failed")
-                    setActionError(response.message)
-                return
+            if (response.status !== "OPEN") {
+                throw new Error("退回团队后任务未保持开放，请刷新核对")
             }
-            setSessionLease(null)
+            const released = {
+                kind: "RELEASED_TO_TEAM" as const,
+                workItemId: response.id,
+                workItemStatus: response.status,
+                taskVersion: String(response.task_version),
+                reference: response.id,
+            }
             setLastResult({
                 status: "blocked",
-                title: "当前项已跳过",
+                title: "当前项已退回团队",
                 description:
-                    "任务仍保留在待处理队列，未形成通过或驳回结论。本次已结束并打开下一条。",
-                reference: response.outcome.reference,
-                outcome: response.outcome,
+                    "原任务保持待处理，未形成通过或驳回结论；个人责任已退回团队。",
+                reference: released.reference,
+                outcome: released,
             })
             if (nextId) goToWorkItem(nextId)
         } catch (error) {
-            setActionError(getErrorMessage(error, "跳过失败"))
+            setActionError(getErrorMessage(error, "退回团队失败"))
         }
     }, [
         dirty,
-        deferMutation,
-        ensureLease,
         goToWorkItem,
         handleSave,
         neighborId,
-        queueContextId,
+        queueQuery,
+        responsibilityMutation,
         task,
     ])
 
@@ -988,7 +947,7 @@ export function ProcurementConfirmationPage() {
                 !inField
             ) {
                 event.preventDefault()
-                if (activeLease) {
+                if (task?.allowedActions.includes("APPROVE")) {
                     setAdvanceAfterConfirm(autoNext)
                     setConfirmOpen(true)
                 }
@@ -1022,7 +981,7 @@ export function ProcurementConfirmationPage() {
         window.addEventListener("keydown", onKey)
         return () => window.removeEventListener("keydown", onKey)
     }, [
-        activeLease,
+        task?.allowedActions,
         autoNext,
         dirty,
         goToWorkItem,
@@ -1043,23 +1002,51 @@ export function ProcurementConfirmationPage() {
     const formalPending =
         completeMutation.isPending ||
         saveMutation.isPending ||
-        deferMutation.isPending ||
-        claimMutation.isPending
+        responsibilityMutation.isPending ||
+        lastResult?.status === "unknown"
 
     const handleOpenReject = React.useCallback(async () => {
+        try {
+            assertAllowed("REJECT")
+        } catch (error) {
+            setActionError(getErrorMessage(error, "当前任务不可驳回"))
+            return
+        }
         if (!(await guardTerminalOpen())) return
         setRejectOpen(true)
-    }, [guardTerminalOpen])
+    }, [assertAllowed, guardTerminalOpen])
+
+    const handleStartProcessing = React.useCallback(async () => {
+        if (!task) return
+        setActionError(null)
+        try {
+            assertAllowed("START_PROCESSING")
+            await responsibilityMutation.mutateAsync({
+                kind: "START_PROCESSING",
+                workItemId: task.workItemId,
+                expectedTaskVersion: task.taskVersion,
+                idempotencyKey: `w07:${task.workItemId}:${task.taskVersion}:start`,
+            })
+            replaceUrl({
+                scope: null,
+                queueContextId: null,
+                currentWorkItemId: task.workItemId,
+            })
+            await queueQuery.refetch()
+        } catch (error) {
+            setActionError(getErrorMessage(error, "开始处理失败"))
+        }
+    }, [assertAllowed, queueQuery, replaceUrl, responsibilityMutation, task])
 
     const handleOpenConfirm = React.useCallback(async () => {
         try {
-            await ensureLease()
+            assertAllowed("APPROVE")
             setAdvanceAfterConfirm(autoNext)
             setConfirmOpen(true)
         } catch (error) {
-            setActionError(getErrorMessage(error, "领取任务失败"))
+            setActionError(getErrorMessage(error, "当前任务不可处理"))
         }
-    }, [autoNext, ensureLease])
+    }, [assertAllowed, autoNext])
 
     const returnTo = buildReturnHref(
         new URLSearchParams(searchParams.toString()),
@@ -1288,7 +1275,10 @@ export function ProcurementConfirmationPage() {
                                 fulfillmentOptionsForOffering={
                                     fulfillmentOptionsForOffering
                                 }
-                                formalPending={formalPending}
+                                formalPending={
+                                    formalPending ||
+                                    !task.allowedActions.includes("SAVE")
+                                }
                                 onApplyRecommendation={applyRecommendation}
                                 onUpdateLine={updateLine}
                                 onAddSplitLine={addSplitLine}
@@ -1305,7 +1295,8 @@ export function ProcurementConfirmationPage() {
                             formalPending={formalPending}
                             onReject={handleOpenReject}
                             onConfirm={handleOpenConfirm}
-                            onDefer={handleDefer}
+                            onStartProcessing={handleStartProcessing}
+                            onReleaseToTeam={handleReleaseToTeam}
                             coverage={coverage}
                             estimatedPurchase={estimatedPurchase}
                             lineDrafts={lineDrafts}

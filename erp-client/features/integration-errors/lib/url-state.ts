@@ -37,7 +37,7 @@ const VIEW_VALUES = [
 
 const MODE_VALUES = ["all", "errors"] as const
 const ENV_VALUES = ["all", "production", "verification"] as const
-const OWNER_VALUES = ["me", "role_pool", "claimed", "all"] as const
+const OWNER_VALUES = ["me", "team", "assigned"] as const
 
 const codec = createUrlStateCodec<IntegrationUrlState>([
     {

@@ -33,7 +33,8 @@ export function commandToResultState(
         return {
             status: "succeeded",
             title: "已升级到错误中心",
-            description: "处理任务仅在错误中心领取与完成；本页不提供任务处理。",
+            description:
+                "处理任务仅在错误中心建立责任并完成；本页不提供任务处理。",
             reference: result.operationId,
             facts: [
                 { label: "操作编号", value: result.operationId },

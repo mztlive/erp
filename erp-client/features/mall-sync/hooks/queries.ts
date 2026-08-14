@@ -3,12 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
-    claimMappingWorkItem,
     confirmMapping,
-    deferMapping,
     fetchMallSyncPage,
     fetchSourceSystems,
     reapplyMallSnapshot,
+    requestSourceFix,
     resolveUnknownReapply,
     retryFailedJob,
     triggerManualIncremental,
@@ -100,39 +99,39 @@ export function useRetryJobMutation() {
     })
 }
 
-export function useClaimMappingMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: claimMappingWorkItem,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: mallSyncKeys.all })
-        },
-    })
-}
-
 export function useConfirmMappingMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: confirmMapping,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: mallSyncKeys.all,
-                })
+                await Promise.all([
+                    queryClient.invalidateQueries({
+                        queryKey: mallSyncKeys.all,
+                    }),
+                    queryClient.invalidateQueries({
+                        queryKey: ["work-items"],
+                    }),
+                ])
             }
         },
     })
 }
 
-export function useDeferMappingMutation() {
+export function useRequestSourceFixMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: deferMapping,
+        mutationFn: requestSourceFix,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: mallSyncKeys.all,
-                })
+                await Promise.all([
+                    queryClient.invalidateQueries({
+                        queryKey: mallSyncKeys.all,
+                    }),
+                    queryClient.invalidateQueries({
+                        queryKey: ["work-items"],
+                    }),
+                ])
             }
         },
     })
@@ -142,12 +141,10 @@ export function useReapplyMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: reapplyMallSnapshot,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: mallSyncKeys.all,
-                })
-            }
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: mallSyncKeys.all,
+            })
         },
     })
 }
@@ -156,12 +153,10 @@ export function useResolveUnknownReapplyMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: resolveUnknownReapply,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: mallSyncKeys.all,
-                })
-            }
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: mallSyncKeys.all,
+            })
         },
     })
 }

@@ -4,8 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
     adjustProcurementRejectionDraft,
-    claimCardSalesApproval,
-    completeCardSalesApproval,
+    cancelCardSalesApproval,
     createSalesOrder,
     createSalesOrderExportJob,
     fetchSalesOrderDetail,
@@ -14,7 +13,9 @@ import {
     resolveProcurementRejection,
     saveSalesOrderDraft,
     startSalesChangeOrder,
+    submitSalesChangeReviewDecision,
     submitSalesOrder,
+    submitCardSalesApprovalDecision,
     type SalesOrdersListQuery,
 } from "@/features/sales-orders/api/sales-orders"
 
@@ -145,10 +146,27 @@ export function useStartSalesChangeOrderMutation() {
     })
 }
 
-export function useClaimCardSalesApprovalMutation() {
+export function useSalesChangeReviewDecisionMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: claimCardSalesApproval,
+        mutationFn: submitSalesChangeReviewDecision,
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: ["work-items"],
+                }),
+            ])
+        },
+    })
+}
+
+export function useSubmitCardSalesApprovalDecisionMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: submitCardSalesApprovalDecision,
         onSuccess: async () => {
             await queryClient.invalidateQueries({
                 queryKey: salesOrderKeys.all,
@@ -157,10 +175,11 @@ export function useClaimCardSalesApprovalMutation() {
     })
 }
 
-export function useCompleteCardSalesApprovalMutation() {
+/** 撤回卡券审批后刷新对象详情与销售单列表。 */
+export const useCancelCardSalesApprovalMutation = () => {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: completeCardSalesApproval,
+        mutationFn: cancelCardSalesApproval,
         onSuccess: async () => {
             await queryClient.invalidateQueries({
                 queryKey: salesOrderKeys.all,

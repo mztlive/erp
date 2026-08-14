@@ -8,7 +8,8 @@ use entities::common::source::SourceType;
 use entities::ids::{
     CostAllocationId, CostEntryId, MallAfterSalesRequestId, MallAfterSalesRequestLineId, MallOrderId,
     MallOrderItemId, PayableEntryId, PaymentAllocationId, SupplierAccountId, SupplierApiConnectionId,
-    SupplierFulfillmentItemId, SupplierOfferingRevisionId,
+    SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId, SupplierOrderActionId,
+    WorkItemId,
 };
 use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::supplier_fulfillment::{
@@ -20,6 +21,7 @@ use validator::Validate;
 
 use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use crate::work_item::WorkItemView;
 
 /// 供应商履约订单列表允许的排序字段白名单（Service 层校验，禁止任意字段透传）。
 pub(crate) const FULFILLMENT_ORDER_SORT_FIELDS: &[&str] =
@@ -495,6 +497,341 @@ pub struct SupplierFulfillmentOrderDetailView {
     pub actions: Vec<SupplierOrderActionView>,
     /// 退款事实（含分配行）。
     pub refund_facts: Vec<SupplierRefundFactView>,
+    /// 权威供应商名称；基础资料缺失时为空，禁止回退显示 ID。
+    pub supplier_name: Option<String>,
+    /// 权威商城订单号；商城订单缺失时为空。
+    pub mall_order_no: Option<String>,
+    /// 地址的服务端安全投影。
+    pub address: SupplierOrderAddressView,
+    /// 当前操作人可见的 W26 正式任务。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work_item: Option<WorkItemView>,
+    /// 当前任务/对象入口对应的权威原供应商动作。
+    pub target_supplier_action_id: Option<String>,
+    /// 该原动作的最新结构化调查证据。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_investigation: Option<SupplierOrderInvestigationEvidenceView>,
+    /// W26 领域动作，不得从通用任务动作推导。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_actions: Vec<SupplierOrderAllowedAction>,
+    /// W26 领域动作及展示事实阻断。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub action_blockers: Vec<SupplierOrderActionBlockerView>,
+}
+
+/// W26 详情查询参数。
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SupplierFulfillmentOrderDetailParams {
+    /// 从正式待办进入时必须携带的任务 ID。
+    pub work_item_id: Option<String>,
+}
+
+/// W26 详情的地址安全投影。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierOrderAddressView {
+    /// 权限安全的脱敏地址；当前无权威脱敏器时为空。
+    pub masked: Option<String>,
+    /// 当前详情是否已注册可审计的短时揭示入口。
+    pub can_reveal: bool,
+    /// 不可揭示或无法投影时的稳定阻断码。
+    pub blocker_code: Option<String>,
+    /// 面向当前处理人的安全说明。
+    pub blocker_message: Option<String>,
+}
+
+/// W26 强类型领域动作。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierOrderAllowedAction {
+    /// 查询权威原动作的供应商结果。
+    QueryResult,
+    /// 只在最新证据明确无结果时按原幂等语义重放。
+    Replay,
+    /// 以已验证终态证据完成正式任务。
+    ConfirmVerifiedTerminalResult,
+}
+
+impl SupplierOrderAllowedAction {
+    /// 返回稳定动作代码。
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::QueryResult => "QUERY_RESULT",
+            Self::Replay => "REPLAY",
+            Self::ConfirmVerifiedTerminalResult => "CONFIRM_VERIFIED_TERMINAL_RESULT",
+        }
+    }
+}
+
+/// W26 对象入口的供应商结果调查命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SupplierOrderObjectInvestigationCommand {
+    /// 供应商履约订单。
+    pub order_id: SupplierFulfillmentOrderId,
+    /// 查询所得订单乐观锁版本。
+    #[validate(range(min = 1, message = "订单版本必须大于 0"))]
+    pub expected_lock_version: u64,
+    /// 固定调查动作。
+    pub action: SupplierOrderInvestigationAction,
+    /// 客户端生成的本次操作身份。
+    #[validate(custom(function = "non_blank", message = "操作ID不能为空"))]
+    #[validate(length(max = 64, message = "操作ID不能超过 64 个字符"))]
+    pub operation_id: String,
+    /// 被调查或按原幂等键重放的供应商原动作。
+    pub target_supplier_action_id: SupplierOrderActionId,
+    /// 客户端稳定请求幂等键；不得作为供应商重放幂等键。
+    #[validate(custom(function = "non_blank", message = "请求标识不能为空"))]
+    #[validate(length(max = 128, message = "请求标识不能超过 128 个字符"))]
+    pub idempotency_key: String,
+}
+
+/// W26 正式任务入口的供应商结果调查命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SupplierOrderTaskInvestigationCommand {
+    /// 当前正式任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务版本；服务端按正整数字符串严格解析。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    pub expected_task_version: String,
+    /// 查询所得任务主体版本。
+    #[validate(custom(function = "non_blank", message = "任务主体版本不能为空"))]
+    #[validate(length(max = 128, message = "任务主体版本不能超过 128 个字符"))]
+    pub expected_subject_version: String,
+    /// 带订单身份与版本的固定调查动作。
+    #[validate(nested)]
+    pub action: SupplierOrderTaskInvestigationAction,
+    /// 客户端稳定请求幂等键；不得作为供应商重放幂等键。
+    #[validate(custom(function = "non_blank", message = "请求标识不能为空"))]
+    #[validate(length(max = 128, message = "请求标识不能超过 128 个字符"))]
+    pub idempotency_key: String,
+}
+
+/// 任务调查命令内的固定动作载荷。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SupplierOrderTaskInvestigationAction {
+    /// 固定调查动作。
+    #[serde(rename = "type")]
+    pub action_type: SupplierOrderInvestigationAction,
+    /// 供应商履约订单。
+    pub order_id: SupplierFulfillmentOrderId,
+    /// 查询所得订单乐观锁版本。
+    #[validate(range(min = 1, message = "订单版本必须大于 0"))]
+    pub expected_order_lock_version: u64,
+    /// 被调查或按原幂等键重放的供应商原动作。
+    pub target_supplier_action_id: SupplierOrderActionId,
+    /// 客户端生成的本次操作身份。
+    #[validate(custom(function = "non_blank", message = "操作ID不能为空"))]
+    #[validate(length(max = 64, message = "操作ID不能超过 64 个字符"))]
+    pub operation_id: String,
+}
+
+/// W26 允许的供应商结果调查动作。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierOrderInvestigationAction {
+    /// 查询原供应商动作结果。
+    QueryResult,
+    /// 已证明原请求无结果后，沿原供应商幂等键安全重放。
+    Replay,
+}
+
+/// W26 唯一强类型任务完成命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SupplierOrderTaskCompletionCommand {
+    /// 当前正式任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务版本；服务端按正整数字符串严格解析。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    pub expected_task_version: String,
+    /// 查询所得任务主体版本。
+    #[validate(custom(function = "non_blank", message = "任务主体版本不能为空"))]
+    #[validate(length(max = 128, message = "任务主体版本不能超过 128 个字符"))]
+    pub expected_subject_version: String,
+    /// 固定终态确认决定。
+    #[validate(nested)]
+    pub decision: SupplierOrderTaskCompletionDecision,
+    /// 客户端稳定请求幂等键。
+    #[validate(custom(function = "non_blank", message = "请求标识不能为空"))]
+    #[validate(length(max = 128, message = "请求标识不能超过 128 个字符"))]
+    pub idempotency_key: String,
+}
+
+/// W26 任务完成命令内的终态确认决定。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SupplierOrderTaskCompletionDecision {
+    /// 固定决定类型；其它值在反序列化边界即拒绝。
+    #[serde(rename = "type")]
+    pub decision_type: SupplierOrderTaskCompletionDecisionType,
+    /// 供应商履约订单。
+    pub order_id: SupplierFulfillmentOrderId,
+    /// 查询所得订单乐观锁版本。
+    #[validate(range(min = 1, message = "订单版本必须大于 0"))]
+    pub expected_order_lock_version: u64,
+    /// 查询或重放形成的服务端可验证终态证据。
+    pub verified_supplier_action_result_id: SupplierOrderActionId,
+    /// 待固定的业务终态。
+    pub resolution: SupplierOrderResolution,
+}
+
+/// W26 唯一允许的任务完成决定类型。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierOrderTaskCompletionDecisionType {
+    /// 以服务端证据确认终态并完成原任务。
+    ConfirmVerifiedTerminalResult,
+}
+
+/// W26 可由已验证供应商证据确认的终态。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierOrderResolution {
+    /// 供应商已接单。
+    OrderAccepted,
+    /// 供应商明确拒单。
+    OrderRejected,
+    /// 供应商履约完成。
+    OrderCompleted,
+    /// 供应商取消完成。
+    Canceled,
+    /// 供应商退款完成。
+    Refunded,
+}
+
+impl SupplierOrderResolution {
+    /// 返回稳定终态代码。
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::OrderAccepted => "ORDER_ACCEPTED",
+            Self::OrderRejected => "ORDER_REJECTED",
+            Self::OrderCompleted => "ORDER_COMPLETED",
+            Self::Canceled => "CANCELED",
+            Self::Refunded => "REFUNDED",
+        }
+    }
+
+    /// 返回面向处理人的业务结果名称。
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::OrderAccepted => "供应商已接单",
+            Self::OrderRejected => "供应商已拒单",
+            Self::OrderCompleted => "供应商履约已完成",
+            Self::Canceled => "供应商取消已完成",
+            Self::Refunded => "供应商退款已完成",
+        }
+    }
+}
+
+/// 调查证据的服务端结论。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierOrderInvestigationOutcome {
+    /// 已由持久化业务事实证明终态。
+    VerifiedTerminal,
+    /// 供应商查询明确证明原请求没有形成结果。
+    VerifiedNoResult,
+    /// 查询或重放后仍无法证明原结果。
+    ResultUnknown,
+}
+
+/// 调查命令结果状态。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierOrderInvestigationResultStatus {
+    /// 已取得终态或明确无结果证据。
+    Succeeded,
+    /// 结果仍未知。
+    Unknown,
+    /// 当前服务端事实禁止继续。
+    Blocked,
+}
+
+/// W26 调查证据视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierOrderInvestigationEvidenceView {
+    /// 服务端不可变证据动作 ID。
+    pub evidence_id: String,
+    /// 被调查的原供应商动作。
+    pub target_supplier_action_id: String,
+    /// 证据结论。
+    pub outcome: SupplierOrderInvestigationOutcome,
+    /// 证据记录时间（秒级时间戳）。
+    pub recorded_at: i64,
+    /// 服务端是否已证明可沿原供应商幂等键安全重放。
+    pub can_safe_retry: bool,
+    /// 已验证终态对应的供应商外部订单号。
+    pub external_order_no: Option<String>,
+    /// 权限安全的业务说明。
+    pub summary: String,
+    /// 已验证终态证据动作；仅 `VERIFIED_TERMINAL` 返回。
+    pub verified_supplier_action_result_id: Option<String>,
+    /// 已验证业务终态；仅 `VERIFIED_TERMINAL` 返回。
+    pub verified_resolution: Option<SupplierOrderResolution>,
+}
+
+/// 调查动作关联的原开放任务投影。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierOrderInvestigationWorkItemView {
+    /// 原任务 ID。
+    pub id: String,
+    /// 调查后仍固定为开放。
+    pub status: entities::work_item::WorkItemStatus,
+    /// 调查处理记录提交后的任务版本。
+    pub task_version: u64,
+}
+
+/// 当前动作阻断说明。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierOrderActionBlockerView {
+    /// 被阻断动作。
+    pub action: String,
+    /// 稳定阻断码。
+    pub code: String,
+    /// 权限安全的业务说明。
+    pub message: String,
+    /// 可选目标工作面。
+    pub destination_workspace_id: Option<String>,
+}
+
+/// W26 对象/任务调查统一响应。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierOrderInvestigationResultView {
+    /// 调查结果状态。
+    pub result_status: SupplierOrderInvestigationResultStatus,
+    /// 权限安全的业务说明。
+    pub message: String,
+    /// 客户端提交的操作身份。
+    pub operation_id: String,
+    /// 本次新增的不可变证据。
+    pub evidence: SupplierOrderInvestigationEvidenceView,
+    /// 返回时的订单事实。
+    pub order: SupplierFulfillmentOrderView,
+    /// 任务入口返回原开放任务；对象入口为空。
+    pub work_item: Option<SupplierOrderInvestigationWorkItemView>,
+    /// 本次证据后允许的固定下一动作。
+    pub allowed_actions: Vec<String>,
+    /// 本次证据后的动作阻断说明。
+    pub action_blockers: Vec<SupplierOrderActionBlockerView>,
+}
+
+/// W26 强类型任务完成结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierOrderTaskCompletionResultView {
+    /// 服务端稳定操作结果身份。
+    pub operation_id: String,
+    /// 已完成的正式任务。
+    pub work_item_id: String,
+    /// 固定为 `COMPLETED`。
+    pub work_item_status: entities::work_item::WorkItemStatus,
+    /// 完成后的任务版本。
+    pub task_version: u64,
+    /// 终态确认时的订单版本。
+    pub order_lock_version: u64,
+    /// 已固定的业务终态。
+    pub resolution: SupplierOrderResolution,
 }
 
 /// 供应商取消/退款动作提交请求（动作行冻结实际提交给供应商的范围）。
@@ -698,5 +1035,58 @@ mod tests {
         });
         let request: super::PlaceFulfillmentOrderRequest = serde_json::from_value(blank_no).unwrap();
         assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn w26_task_investigation_accepts_only_the_registered_shape() {
+        let command: super::SupplierOrderTaskInvestigationCommand = serde_json::from_value(json!({
+            "work_item_id": "work-item-1",
+            "expected_task_version": "4",
+            "expected_subject_version": "12",
+            "action": {
+                "type": "QUERY_RESULT",
+                "order_id": "supplier-order-1",
+                "expected_order_lock_version": 12,
+                "target_supplier_action_id": "supplier-action-1",
+                "operation_id": "operation-1"
+            },
+            "idempotency_key": "request-1"
+        }))
+        .unwrap();
+        assert!(command.validate().is_ok());
+
+        let unknown_field = serde_json::from_value::<super::SupplierOrderTaskInvestigationCommand>(json!({
+            "work_item_id": "work-item-1",
+            "expected_task_version": "4",
+            "expected_subject_version": "12",
+            "action": {
+                "type": "QUERY_RESULT",
+                "order_id": "supplier-order-1",
+                "expected_order_lock_version": 12,
+                "target_supplier_action_id": "supplier-action-1",
+                "operation_id": "operation-1"
+            },
+            "idempotency_key": "request-1",
+            "unknown_field": "COMPLETE"
+        }));
+        assert!(unknown_field.is_err());
+    }
+
+    #[test]
+    fn w26_task_completion_rejects_unregistered_decisions() {
+        let result = serde_json::from_value::<super::SupplierOrderTaskCompletionCommand>(json!({
+            "work_item_id": "work-item-1",
+            "expected_task_version": "4",
+            "expected_subject_version": "12",
+            "decision": {
+                "type": "MARK_SUCCESS_LOCALLY",
+                "order_id": "supplier-order-1",
+                "expected_order_lock_version": 12,
+                "verified_supplier_action_result_id": "evidence-1",
+                "resolution": "ORDER_ACCEPTED"
+            },
+            "idempotency_key": "request-1"
+        }));
+        assert!(result.is_err());
     }
 }

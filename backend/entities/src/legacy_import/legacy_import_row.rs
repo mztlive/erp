@@ -123,7 +123,8 @@ impl DocumentState for MappingStatus {
 
 /// 导入状态（数据模型 §6.12：待导入、已导入、失败、跳过）。
 ///
-/// 固定状态机：待导入单向推进到已导入、失败或跳过。
+/// 固定状态机：待导入推进到已导入、失败或跳过；失败行可由
+/// `RETRY_FAILED` 强命令重新准备为待导入，已导入与已跳过行不回退。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportStatus {
@@ -169,7 +170,8 @@ impl DocumentState for ImportStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::PendingImport => &[Self::Imported, Self::Failed, Self::Skipped],
-            Self::Imported | Self::Failed | Self::Skipped => &[],
+            Self::Failed => &[Self::PendingImport],
+            Self::Imported | Self::Skipped => &[],
         }
     }
 }
@@ -438,6 +440,26 @@ impl LegacyImportRow {
         Ok(())
     }
 
+    /// 将失败行重新准备为待导入。
+    ///
+    /// 只允许失败行进入新的应用尝试；方法保留解析、映射和来源身份，
+    /// 只清理上次导入失败诊断。已导入或已跳过行不得调用。
+    ///
+    /// # 返回
+    /// 重新准备成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当当前行不是失败态时返回状态迁移错误。
+    pub fn prepare_failed_retry(&mut self) -> Result<()> {
+        ensure_transition(self.import_status, ImportStatus::PendingImport)?;
+        self.import_status = ImportStatus::PendingImport;
+        self.error_code = None;
+        self.error_detail = None;
+        self.target_document_id = None;
+        self.target_object_reference = None;
+        Ok(())
+    }
+
     /// 校验行已通过解析。
     ///
     /// # 参数
@@ -591,6 +613,48 @@ mod tests {
         assert_eq!(row.target_document_id.as_deref(), Some("SO-100"));
         assert_eq!(row.target_object_reference.as_deref(), Some("sales/so-100"));
         assert_eq!(row.import_status, ImportStatus::Imported);
+    }
+
+    #[test]
+    fn failed_row_can_be_prepared_for_retry_without_reverting_mapping() {
+        let mut row = LegacyImportRow::new(LegacyImportRowId::new("row-retry"), row_data()).unwrap();
+        row.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
+        row.mark_mapped(ExternalIdentityMapId::new("map-retry")).unwrap();
+        row.mark_import_failed("TEMPORARY_FAILURE".to_string(), Some("可重试".to_string()))
+            .unwrap();
+
+        row.prepare_failed_retry().unwrap();
+
+        assert_eq!(row.import_status, ImportStatus::PendingImport);
+        assert_eq!(row.parse_status, ParseStatus::Valid);
+        assert_eq!(row.mapping_status, MappingStatus::Mapped);
+        assert_eq!(
+            row.external_identity_map_id,
+            Some(ExternalIdentityMapId::new("map-retry"))
+        );
+        assert!(row.error_code.is_none());
+        assert!(row.error_detail.is_none());
+    }
+
+    #[test]
+    fn imported_and_skipped_rows_cannot_be_prepared_for_retry() {
+        let mut imported = LegacyImportRow::new(LegacyImportRowId::new("row-imported"), row_data()).unwrap();
+        imported
+            .mark_parse_result(ParseStatus::Valid, None, None)
+            .unwrap();
+        imported
+            .mark_mapped(ExternalIdentityMapId::new("map-imported"))
+            .unwrap();
+        imported.mark_imported("SO-1".to_string(), None).unwrap();
+        assert!(imported.prepare_failed_retry().is_err());
+
+        let mut skipped = LegacyImportRow::new(LegacyImportRowId::new("row-skipped"), row_data()).unwrap();
+        skipped.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
+        skipped
+            .mark_mapped(ExternalIdentityMapId::new("map-skipped"))
+            .unwrap();
+        skipped.mark_skipped("DUPLICATE".to_string(), None).unwrap();
+        assert!(skipped.prepare_failed_retry().is_err());
     }
 
     #[test]

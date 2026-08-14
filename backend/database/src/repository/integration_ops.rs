@@ -19,8 +19,8 @@
 use entities::common::time::Instant;
 use entities::integration_ops::{
     ErrorClass, ErrorTaskStatus, InboxMessage, InboxMessageId, InboxMessageStatus, IntegrationErrorTask,
-    IntegrationErrorTaskId, MessageType, ReconciliationDifference, ReconciliationDifferenceId,
-    ReconciliationDifferenceResolution, ResolutionAction, ResolutionType, ResultingStatus, SourceSystemId,
+    MessageType, ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
+    ResolutionAction, ResolutionType, ResultingStatus, SourceSystemId,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -326,8 +326,6 @@ pub struct ResolutionHistoryRow {
     pub resulting_status: ResultingStatus,
     /// 终态证据引用。
     pub evidence_reference: Option<String>,
-    /// 替代任务 ID（关闭重复时关联）。
-    pub replacement_task_id: Option<IntegrationErrorTaskId>,
     /// 处理人。
     pub handled_by: String,
     /// 处理时间。
@@ -847,7 +845,6 @@ fn resolution_history_projection() -> Document {
         "resolution_action": 1,
         "resulting_status": 1,
         "evidence_reference": 1,
-        "replacement_task_id": 1,
         "handled_by": 1,
         "handled_at": 1,
     }

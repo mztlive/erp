@@ -6,8 +6,8 @@
 //! `<mongodb::Database as SalesReviewExt>::SALES_ORDER_REVIEWS` 等值。
 
 use entities::sales_review::{
-    ProcurementConfirmation, ProcurementConfirmationLine, SalesChangeOrder, SalesChangeReview,
-    SalesChangeSubmission, SalesChangeSubmissionLine, SalesOrderReview,
+    LowMarginManagerConfirmation, ProcurementConfirmation, ProcurementConfirmationLine, SalesChangeOrder,
+    SalesChangeReview, SalesChangeSubmission, SalesChangeSubmissionLine, SalesOrderReview,
 };
 use mongodb::Database;
 
@@ -20,6 +20,8 @@ use crate::Repository;
 pub trait SalesReviewExt {
     /// `sales_order_review` 集合名。
     const SALES_ORDER_REVIEWS: &'static str = "sales_order_reviews";
+    /// `low_margin_manager_confirmation` 集合名。
+    const LOW_MARGIN_MANAGER_CONFIRMATIONS: &'static str = "low_margin_manager_confirmations";
     /// `procurement_confirmation` 集合名。
     const PROCUREMENT_CONFIRMATIONS: &'static str = "procurement_confirmations";
     /// `procurement_confirmation_line` 集合名。
@@ -47,6 +49,9 @@ pub trait SalesReviewExt {
     /// # 返回
     /// 返回 `Repository<'_, entities::sales_review::SalesOrderReview>`。
     fn sales_order_reviews(&self) -> Repository<'_, SalesOrderReview>;
+
+    /// 获取低毛利上级确认事实仓储。
+    fn low_margin_manager_confirmations(&self) -> Repository<'_, LowMarginManagerConfirmation>;
 
     /// 获取 `procurement_confirmation` 集合的 Repository。
     ///
@@ -98,6 +103,10 @@ impl SalesReviewExt for Database {
 
     fn sales_order_reviews(&self) -> Repository<'_, SalesOrderReview> {
         Repository::new(self, Self::SALES_ORDER_REVIEWS)
+    }
+
+    fn low_margin_manager_confirmations(&self) -> Repository<'_, LowMarginManagerConfirmation> {
+        Repository::new(self, Self::LOW_MARGIN_MANAGER_CONFIRMATIONS)
     }
 
     fn procurement_confirmations(&self) -> Repository<'_, ProcurementConfirmation> {

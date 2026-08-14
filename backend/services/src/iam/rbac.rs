@@ -676,7 +676,7 @@ impl RbacService {
     ///
     /// # 错误
     /// 当 Casbin policy 加载失败时返回错误。
-    pub(crate) async fn role_ids(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<String>> {
+    pub async fn role_ids(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<String>> {
         let enforcer = self.fresh_enforcer().await?.read().await;
         Ok(role_ids_for_account(&enforcer, account_kind, account_id))
     }
@@ -709,11 +709,7 @@ impl RbacService {
     ///
     /// # 错误
     /// 当 Casbin policy 包含非法权限时返回错误。
-    pub(crate) async fn permissions(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-    ) -> Result<Vec<Permission>> {
+    pub async fn permissions(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<Permission>> {
         let policies = self
             .fresh_enforcer()
             .await?

@@ -25,7 +25,7 @@ export type QueueFilterPatch = Record<string, string | null>
 /**
  * W09 队列工具栏（第 1 / 2 层）。
  *
- * 第 0 层（scope / 类型）由页面 sticky 处理面渲染；本组件只负责：
+ * 第 0 层（类型）由页面 sticky 处理面渲染；本组件只负责：
  * - 第 1 层：搜索 + 主筛 ≤3（仓库 / 到期 / 门禁）
  * - 第 2 层：来源锁定 FilterChip
  * - actions：计数、清除、自动下一项
@@ -59,7 +59,7 @@ export function FulfillmentQueueToolbar({
     total: number
     /** 只读角色不会连续处理，不显示自动下一项 */
     showAutoNext: boolean
-    /** 任务类型筛选（slug，多值逗号分隔）；"all" 视为未激活 */
+    /** 单据类型筛选（slug，多值逗号分隔）；"all" 视为未激活 */
     type?: string | null
     onPatch: (patch: QueueFilterPatch) => void
     onAutoNextChange: (next: boolean) => void
@@ -73,7 +73,7 @@ export function FulfillmentQueueToolbar({
     const commitSearch = () => {
         const next = searchDraft.trim()
         if (next === (q ?? "")) return
-        onPatch({ q: next || null, currentWorkItemId: null })
+        onPatch({ q: next || null, currentOperationId: null })
     }
 
     const hasFilters = Boolean(
@@ -90,7 +90,7 @@ export function FulfillmentQueueToolbar({
 
     return (
         <ListToolbar
-            aria-label="待办筛选"
+            aria-label="履约单据筛选"
             search={
                 <form
                     onSubmit={(event) => {
@@ -109,7 +109,7 @@ export function FulfillmentQueueToolbar({
                             }
                             onBlur={commitSearch}
                             placeholder="销售单号、采购单号、客户、供应商"
-                            aria-label="搜索任务"
+                            aria-label="搜索履约单据"
                         />
                     </InputGroup>
                 </form>
@@ -124,7 +124,7 @@ export function FulfillmentQueueToolbar({
                         onValueChange={(value) =>
                             onPatch({
                                 warehouseId: value ?? null,
-                                currentWorkItemId: null,
+                                currentOperationId: null,
                             })
                         }
                     />
@@ -136,7 +136,10 @@ export function FulfillmentQueueToolbar({
                         aria-label="按到期筛选"
                         inputClassName="w-[8.5rem]"
                         onValueChange={(v) =>
-                            onPatch({ due: v ?? null, currentWorkItemId: null })
+                            onPatch({
+                                due: v ?? null,
+                                currentOperationId: null,
+                            })
                         }
                     />
                     <OptionCombobox
@@ -149,7 +152,7 @@ export function FulfillmentQueueToolbar({
                         onValueChange={(v) =>
                             onPatch({
                                 gate: v ?? null,
-                                currentWorkItemId: null,
+                                currentOperationId: null,
                             })
                         }
                     />
@@ -164,7 +167,7 @@ export function FulfillmentQueueToolbar({
                                 onClear={() =>
                                     onPatch({
                                         salesOrderId: null,
-                                        currentWorkItemId: null,
+                                        currentOperationId: null,
                                     })
                                 }
                             />
@@ -175,7 +178,7 @@ export function FulfillmentQueueToolbar({
                                 onClear={() =>
                                     onPatch({
                                         purchaseOrderId: null,
-                                        currentWorkItemId: null,
+                                        currentOperationId: null,
                                     })
                                 }
                             />
@@ -205,7 +208,7 @@ export function FulfillmentQueueToolbar({
                                     gate: null,
                                     salesOrderId: null,
                                     purchaseOrderId: null,
-                                    currentWorkItemId: null,
+                                    currentOperationId: null,
                                 })
                             }
                         >

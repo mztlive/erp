@@ -12,10 +12,8 @@ use entities::purchase_order::{
 use entities::sales_review::ProcurementConfirmationStatus;
 use id_generator::next_id;
 
-use super::dto::ApprovePurchaseOrderRequest;
 use super::shared::zero_amount;
 use super::PurchaseOrderService;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 impl PurchaseOrderService {
@@ -49,8 +47,6 @@ impl PurchaseOrderService {
         submission: &PurchaseOrderSubmission,
         submission_lines: &[PurchaseOrderSubmissionLine],
         revision_no: u32,
-        _req: &ApprovePurchaseOrderRequest,
-        _actor: &AuditActor,
     ) -> Result<(PurchaseOrderRevision, Vec<PurchaseOrderRevisionLine>)> {
         // 逐行复验：商品/服务行必须引用已通过的采购确认分行（§6.6 必需约束）。
         for line in submission_lines {

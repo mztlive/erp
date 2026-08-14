@@ -25,8 +25,14 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/api/errors"
+import {
+    classifyFormalCommandError,
+    FormalCommandKeyLedger,
+} from "@/lib/formal-command"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import {
     Dialog,
     DialogClose,
@@ -50,6 +56,7 @@ import {
     useStartPurchaseChangeMutation,
     useSubmitPurchaseOrderMutation,
 } from "@/features/purchase-orders/hooks/queries"
+import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import {
     EditSurface,
     LinesTable,
@@ -64,8 +71,9 @@ import {
     PAYMENT_TERM_OPTIONS,
     PURCHASE_TYPE_LABEL,
     REJECT_REASON_LABEL,
+    type SubmitPurchaseOrderPayload,
 } from "@/features/purchase-orders/types"
-import { leaseText } from "@/lib/ui-text"
+import { responsibilityText } from "@/lib/ui-text"
 
 type SectionId =
     | "overview"
@@ -120,6 +128,7 @@ export function PurchaseOrderDetailPage({
     const saveMutation = useSavePurchaseOrderDraftMutation()
     const submitMutation = useSubmitPurchaseOrderMutation()
     const reviewMutation = useReviewPurchaseOrderMutation()
+    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const changeMutation = useStartPurchaseChangeMutation()
 
     const activeSection = resolveSection(section)
@@ -148,9 +157,24 @@ export function PurchaseOrderDetailPage({
     const [submitConfirmOpen, setSubmitConfirmOpen] = React.useState(false)
     const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
     const [approveConfirmOpen, setApproveConfirmOpen] = React.useState(false)
+    const [releaseConfirmOpen, setReleaseConfirmOpen] = React.useState(false)
+    const [releaseReason, setReleaseReason] = React.useState("")
+    const commandLedgerRef = React.useRef<{
+        purchaseOrderId: string
+        ledger: FormalCommandKeyLedger
+    } | null>(null)
+    if (commandLedgerRef.current?.purchaseOrderId !== purchaseOrderId) {
+        commandLedgerRef.current = {
+            purchaseOrderId,
+            ledger: new FormalCommandKeyLedger(),
+        }
+    }
+    const commandLedger = commandLedgerRef.current.ledger
     const titleRef = React.useRef<HTMLHeadingElement>(null)
 
     const order = query.data
+    const documentReference =
+        order?.identity.purchaseNo ?? order?.identity.draftLabel
 
     const draftForm = useAppForm({
         defaultValues: {
@@ -241,7 +265,7 @@ export function PurchaseOrderDetailPage({
             .catch((error: Error) => {
                 setResult({
                     status: "blocked",
-                    title: leaseText.cannotEdit,
+                    title: responsibilityText.cannotEdit,
                     description: error.message,
                 })
             })
@@ -281,6 +305,15 @@ export function PurchaseOrderDetailPage({
 
     async function handleSave(): Promise<boolean> {
         if (!order || !draftEditToken) return false
+        if (commandLedger.peek("submit")) {
+            setResult({
+                status: "unknown",
+                title: "提交结果待确认",
+                description: "请先使用原提交操作确认结果，确认前不能另存草稿。",
+                reference: documentReference,
+            })
+            return false
+        }
         // 行内即时校验：数量/单价为正数，税率为 0-1 小数
         const invalidLine = order.currentContent.lines.find((line) => {
             const edit = lineEdits[line.lineId]
@@ -305,7 +338,7 @@ export function PurchaseOrderDetailPage({
                 (option) => option.value === paymentTermCode,
             )?.label ?? order.header.paymentTermLabel
 
-        const response = await saveMutation.mutateAsync({
+        const payload = {
             purchaseOrderId,
             expectedLockVersion: order.identity.lockVersion,
             draftEditToken,
@@ -321,8 +354,17 @@ export function PurchaseOrderDetailPage({
                     lineEdits[line.lineId]?.inputTaxRate ?? line.inputTaxRate,
                 logisticsFeeReason: line.logisticsFeeReason,
             })),
-            idempotencyKey: `save-${purchaseOrderId}-${Date.now()}`,
+        }
+        const command = commandLedger.acquire(
+            "save-draft",
+            `purchase:${purchaseOrderId}:save`,
+            payload,
+        )
+        const response = await saveMutation.mutateAsync({
+            ...command.payload,
+            idempotencyKey: command.idempotencyKey,
         })
+        commandLedger.settle("save-draft", response.status)
 
         if (response.status === "succeeded") {
             setResult({
@@ -343,7 +385,7 @@ export function PurchaseOrderDetailPage({
                 status: "unknown",
                 title: "保存结果未知",
                 description: `${response.message} 输入已保留，未切换状态。`,
-                reference: response.idempotencyKey,
+                reference: documentReference,
             })
         } else {
             setResult({
@@ -357,45 +399,72 @@ export function PurchaseOrderDetailPage({
 
     async function handleSubmit() {
         if (!order || !draftEditToken) return
-        // ensure latest save hash
-        const saveRes = await saveMutation.mutateAsync({
-            purchaseOrderId,
-            expectedLockVersion: order.identity.lockVersion,
-            draftEditToken,
-            paymentTermCode: draftForm.state.values.paymentTermCode,
-            paymentTermLabel: order.header.paymentTermLabel,
-            lines: order.currentContent.lines.map((line) => ({
-                lineId: line.lineId,
-                lineType: line.lineType,
-                quantity: lineEdits[line.lineId]?.quantity ?? line.quantity,
-                unitCostGross:
-                    lineEdits[line.lineId]?.unitCostGross ?? line.unitCostGross,
-                inputTaxRate:
-                    lineEdits[line.lineId]?.inputTaxRate ?? line.inputTaxRate,
-            })),
-            idempotencyKey: `save-before-submit-${purchaseOrderId}-${Date.now()}`,
-        })
-        if (saveRes.status !== "succeeded") {
-            setSubmitConfirmOpen(false)
-            setResult({
-                status: saveRes.status === "unknown" ? "unknown" : "rejected",
-                title: "提交前保存未成功",
-                description: saveRes.message,
+        let submitCommand =
+            commandLedger.peek<SubmitPurchaseOrderPayload>("submit")
+        if (!submitCommand) {
+            const savePayload = {
+                purchaseOrderId,
+                expectedLockVersion: order.identity.lockVersion,
+                draftEditToken,
+                paymentTermCode: draftForm.state.values.paymentTermCode,
+                paymentTermLabel: order.header.paymentTermLabel,
+                lines: order.currentContent.lines.map((line) => ({
+                    lineId: line.lineId,
+                    lineType: line.lineType,
+                    quantity: lineEdits[line.lineId]?.quantity ?? line.quantity,
+                    unitCostGross:
+                        lineEdits[line.lineId]?.unitCostGross ??
+                        line.unitCostGross,
+                    inputTaxRate:
+                        lineEdits[line.lineId]?.inputTaxRate ??
+                        line.inputTaxRate,
+                })),
+            }
+            const saveCommand = commandLedger.acquire(
+                "save-before-submit",
+                `purchase:${purchaseOrderId}:save-before-submit`,
+                savePayload,
+            )
+            const saveRes = await saveMutation.mutateAsync({
+                ...saveCommand.payload,
+                idempotencyKey: saveCommand.idempotencyKey,
             })
-            return
+            commandLedger.settle("save-before-submit", saveRes.status)
+            if (saveRes.status !== "succeeded") {
+                setSubmitConfirmOpen(false)
+                setResult({
+                    status:
+                        saveRes.status === "unknown" ? "unknown" : "rejected",
+                    title: "提交前保存未成功",
+                    description: saveRes.message,
+                    reference:
+                        saveRes.status === "unknown"
+                            ? documentReference
+                            : undefined,
+                })
+                return
+            }
+
+            const refreshed = await query.refetch()
+            const lockVersion =
+                refreshed.data?.identity.lockVersion ?? saveRes.data.lockVersion
+            submitCommand = commandLedger.acquire(
+                "submit",
+                `purchase:${purchaseOrderId}:submit`,
+                {
+                    purchaseOrderId,
+                    expectedLockVersion: lockVersion,
+                    expectedDraftContentHash: saveRes.data.draftContentHash,
+                    draftEditToken,
+                },
+            )
         }
-
-        const refreshed = await query.refetch()
-        const lockVersion =
-            refreshed.data?.identity.lockVersion ?? saveRes.data.lockVersion
-
+        if (!submitCommand) return
         const response = await submitMutation.mutateAsync({
-            purchaseOrderId,
-            expectedLockVersion: lockVersion,
-            expectedDraftContentHash: saveRes.data.draftContentHash,
-            draftEditToken,
-            idempotencyKey: `submit-${purchaseOrderId}-${Date.now()}`,
+            ...submitCommand.payload,
+            idempotencyKey: submitCommand.idempotencyKey,
         })
+        commandLedger.settle("submit", response.status)
         setSubmitConfirmOpen(false)
         if (response.status === "succeeded") {
             setDraftEditToken(null)
@@ -424,7 +493,7 @@ export function PurchaseOrderDetailPage({
                 status: "unknown",
                 title: "提交结果未知",
                 description: response.message,
-                reference: response.idempotencyKey,
+                reference: documentReference,
             })
         } else {
             setResult({
@@ -438,14 +507,37 @@ export function PurchaseOrderDetailPage({
     async function handleApprove() {
         if (!order?.reviewWorkItem || !order.identity.currentSubmissionId)
             return
-        const response = await reviewMutation.mutateAsync({
-            purchaseOrderId,
-            submissionId: order.identity.currentSubmissionId,
+        if (commandLedger.peek("review-reject")) {
+            setResult({
+                status: "unknown",
+                title: "审核结果待确认",
+                description:
+                    "原驳回操作的结果仍待确认，请先重试原操作，不能改为通过。",
+                reference: documentReference,
+            })
+            throw new Error("原驳回操作的结果仍待确认")
+        }
+        const payload = {
             workItemId: order.reviewWorkItem.workItemId,
-            expectedLockVersion: order.identity.lockVersion,
-            reviewResult: "APPROVED",
-            idempotencyKey: `approve-${purchaseOrderId}-${Date.now()}`,
+            expectedTaskVersion: order.reviewWorkItem.taskVersion,
+            expectedSubjectVersion: order.reviewWorkItem.subjectVersion,
+            decision: {
+                purchaseOrderId,
+                submissionId: order.identity.currentSubmissionId,
+                expectedPurchaseOrderLockVersion: order.identity.lockVersion,
+                reviewResult: "APPROVED",
+            },
+        } as const
+        const command = commandLedger.acquire(
+            "review-approve",
+            `w08:${order.reviewWorkItem.workItemId}:${order.reviewWorkItem.taskVersion}:approve`,
+            payload,
+        )
+        const response = await reviewMutation.mutateAsync({
+            ...command.payload,
+            idempotencyKey: command.idempotencyKey,
         })
+        commandLedger.settle("review-approve", response.status)
         setApproveConfirmOpen(false)
         if (response.status === "succeeded") {
             setResult({
@@ -472,7 +564,7 @@ export function PurchaseOrderDetailPage({
                 status: "unknown",
                 title: "审核结果未知",
                 description: response.message,
-                reference: response.idempotencyKey,
+                reference: documentReference,
             })
         } else {
             setResult({
@@ -486,16 +578,39 @@ export function PurchaseOrderDetailPage({
     async function handleReject(reasonCode: string, comment: string) {
         if (!order?.reviewWorkItem || !order.identity.currentSubmissionId)
             return
-        const response = await reviewMutation.mutateAsync({
-            purchaseOrderId,
-            submissionId: order.identity.currentSubmissionId,
+        if (commandLedger.peek("review-approve")) {
+            setResult({
+                status: "unknown",
+                title: "审核结果待确认",
+                description:
+                    "原通过操作的结果仍待确认，请先重试原操作，不能改为驳回。",
+                reference: documentReference,
+            })
+            throw new Error("原通过操作的结果仍待确认")
+        }
+        const payload = {
             workItemId: order.reviewWorkItem.workItemId,
-            expectedLockVersion: order.identity.lockVersion,
-            reviewResult: "REJECTED",
-            reasonCode,
-            comment,
-            idempotencyKey: `reject-${purchaseOrderId}-${Date.now()}`,
+            expectedTaskVersion: order.reviewWorkItem.taskVersion,
+            expectedSubjectVersion: order.reviewWorkItem.subjectVersion,
+            decision: {
+                purchaseOrderId,
+                submissionId: order.identity.currentSubmissionId,
+                expectedPurchaseOrderLockVersion: order.identity.lockVersion,
+                reviewResult: "REJECTED",
+                reasonCode,
+                comment,
+            },
+        } as const
+        const command = commandLedger.acquire(
+            "review-reject",
+            `w08:${order.reviewWorkItem.workItemId}:${order.reviewWorkItem.taskVersion}:reject`,
+            payload,
+        )
+        const response = await reviewMutation.mutateAsync({
+            ...command.payload,
+            idempotencyKey: command.idempotencyKey,
         })
+        commandLedger.settle("review-reject", response.status)
         if (response.status === "succeeded") {
             setResult({
                 status: "rejected",
@@ -518,7 +633,7 @@ export function PurchaseOrderDetailPage({
                 status: "unknown",
                 title: "驳回结果未知",
                 description: response.message,
-                reference: response.idempotencyKey,
+                reference: documentReference,
             })
         } else {
             setResult({
@@ -529,13 +644,112 @@ export function PurchaseOrderDetailPage({
         }
     }
 
+    async function handleStartProcessing() {
+        const workItem = order?.reviewWorkItem
+        if (!workItem?.responsibilityActions.includes("START_PROCESSING"))
+            return
+        const payload = {
+            kind: "START_PROCESSING" as const,
+            workItemId: workItem.workItemId,
+            expectedTaskVersion: workItem.taskVersion,
+        }
+        const command = commandLedger.acquire(
+            "review-responsibility",
+            `w08:${workItem.workItemId}:${workItem.taskVersion}:start`,
+            payload,
+        )
+        try {
+            await responsibilityMutation.mutateAsync({
+                ...command.payload,
+                idempotencyKey: command.idempotencyKey,
+            })
+            commandLedger.settle("review-responsibility", "succeeded")
+            await query.refetch()
+        } catch (error) {
+            const settlement = classifyFormalCommandError(error)
+            commandLedger.settle("review-responsibility", settlement)
+            setResult({
+                status: settlement === "unknown" ? "unknown" : "blocked",
+                title: responsibilityText.changed,
+                description: getErrorMessage(
+                    error,
+                    settlement === "unknown"
+                        ? "处理结果待确认，请使用本次操作重试"
+                        : "开始处理失败，请刷新后重试",
+                ),
+                reference:
+                    settlement === "unknown" ? documentReference : undefined,
+            })
+        }
+    }
+
+    async function handleReleaseToTeam() {
+        const workItem = order?.reviewWorkItem
+        const reason = releaseReason.trim()
+        if (
+            !workItem?.responsibilityActions.includes("RELEASE_TO_TEAM") ||
+            !reason
+        )
+            return
+        const payload = {
+            kind: "RELEASE_TO_TEAM" as const,
+            workItemId: workItem.workItemId,
+            expectedTaskVersion: workItem.taskVersion,
+            reason,
+        }
+        const command = commandLedger.acquire(
+            "review-responsibility",
+            `w08:${workItem.workItemId}:${workItem.taskVersion}:release`,
+            payload,
+        )
+        try {
+            await responsibilityMutation.mutateAsync({
+                ...command.payload,
+                idempotencyKey: command.idempotencyKey,
+            })
+            commandLedger.settle("review-responsibility", "succeeded")
+            setReleaseConfirmOpen(false)
+            setReleaseReason("")
+            setResult({
+                status: "succeeded",
+                title: responsibilityText.releaseToTeam,
+                description: "当前审核任务仍为开放状态，已回到团队待处理。",
+            })
+            await query.refetch()
+        } catch (error) {
+            const settlement = classifyFormalCommandError(error)
+            commandLedger.settle("review-responsibility", settlement)
+            setResult({
+                status: settlement === "unknown" ? "unknown" : "blocked",
+                title: responsibilityText.changed,
+                description: getErrorMessage(
+                    error,
+                    settlement === "unknown"
+                        ? "处理结果待确认，请使用本次操作重试"
+                        : "退回团队失败，请刷新后重试",
+                ),
+                reference:
+                    settlement === "unknown" ? documentReference : undefined,
+            })
+        }
+    }
+
     async function handleStartChange() {
         if (!order) return
-        const response = await changeMutation.mutateAsync({
+        const payload = {
             purchaseOrderId,
             expectedLockVersion: order.identity.lockVersion,
-            idempotencyKey: `change-${purchaseOrderId}-${Date.now()}`,
+        }
+        const command = commandLedger.acquire(
+            "start-change",
+            `purchase:${purchaseOrderId}:change`,
+            payload,
+        )
+        const response = await changeMutation.mutateAsync({
+            ...command.payload,
+            idempotencyKey: command.idempotencyKey,
         })
+        commandLedger.settle("start-change", response.status)
         setChangeConfirmOpen(false)
         if (response.status === "succeeded") {
             setResult({
@@ -553,14 +767,18 @@ export function PurchaseOrderDetailPage({
                 ],
             })
             await query.refetch()
+        } else if (response.status === "unknown") {
+            setResult({
+                status: "unknown",
+                title: "变更结果待确认",
+                description: response.message,
+                reference: documentReference,
+            })
         } else {
             setResult({
                 status: "blocked",
                 title: "无法发起变更",
-                description:
-                    response.status === "failed"
-                        ? response.message
-                        : "未知错误",
+                description: response.message,
             })
         }
     }
@@ -637,7 +855,37 @@ export function PurchaseOrderDetailPage({
     const gate = order.progress.prepaymentGate
     const canEdit = order.allowedActions.includes("EDIT")
     const canSubmit = order.allowedActions.includes("SUBMIT")
-    const canReview = order.allowedActions.includes("REVIEW")
+    const reviewWorkItem = order.reviewWorkItem
+    const canOpenReview = Boolean(reviewWorkItem)
+    const approveResultPending = Boolean(commandLedger.peek("review-approve"))
+    const rejectResultPending = Boolean(commandLedger.peek("review-reject"))
+    const responsibilityResultPending = Boolean(
+        commandLedger.peek("review-responsibility"),
+    )
+    const canApprove = Boolean(
+        reviewWorkItem?.processingState === "READY" &&
+        reviewWorkItem.domainAllowedActions.includes("APPROVE") &&
+        !rejectResultPending &&
+        !responsibilityResultPending,
+    )
+    const canReject = Boolean(
+        reviewWorkItem?.processingState === "READY" &&
+        reviewWorkItem.domainAllowedActions.includes("REJECT") &&
+        !approveResultPending &&
+        !responsibilityResultPending,
+    )
+    const canStartReview = Boolean(
+        reviewWorkItem?.processingState === "READY" &&
+        reviewWorkItem.responsibilityActions.includes("START_PROCESSING") &&
+        !approveResultPending &&
+        !rejectResultPending,
+    )
+    const canReleaseReview = Boolean(
+        reviewWorkItem?.processingState === "READY" &&
+        reviewWorkItem.responsibilityActions.includes("RELEASE_TO_TEAM") &&
+        !approveResultPending &&
+        !rejectResultPending,
+    )
     const canChange = order.allowedActions.includes("START_CHANGE")
     const canFulfill = order.allowedActions.includes("FULFILL")
     const canPay = order.allowedActions.includes("PAY")
@@ -757,7 +1005,7 @@ export function PurchaseOrderDetailPage({
                                           variant: "outline" as const,
                                           onClick: () =>
                                               router.push(
-                                                  `/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`,
+                                                  `/fulfillment?lane=procurement&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`,
                                               ),
                                       },
                                   ]
@@ -775,7 +1023,7 @@ export function PurchaseOrderDetailPage({
                                       },
                                   ]
                                 : []),
-                            ...(canReview && mode !== "review"
+                            ...(canOpenReview && mode !== "review"
                                 ? [
                                       {
                                           actionKey: "review",
@@ -921,13 +1169,22 @@ export function PurchaseOrderDetailPage({
                 ]}
             />
 
-            {mode === "review" && canReview ? (
+            {mode === "review" && reviewWorkItem ? (
                 <ReviewSurface
                     order={order}
                     // @ts-expect-error useAppForm generic variance vs surface prop
                     reviewForm={reviewForm}
-                    pending={reviewMutation.isPending}
+                    pending={
+                        reviewMutation.isPending ||
+                        responsibilityMutation.isPending
+                    }
+                    canApprove={canApprove}
+                    canReject={canReject}
+                    canStartProcessing={canStartReview}
+                    canReleaseToTeam={canReleaseReview}
                     onApprove={() => setApproveConfirmOpen(true)}
+                    onStartProcessing={() => void handleStartProcessing()}
+                    onReleaseToTeam={() => setReleaseConfirmOpen(true)}
                     costMasked={costMasked}
                 />
             ) : null}
@@ -1264,7 +1521,7 @@ export function PurchaseOrderDetailPage({
                                                 type="button"
                                                 render={
                                                     <Link
-                                                        href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`}
+                                                        href={`/fulfillment?lane=procurement&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`}
                                                     />
                                                 }
                                             >
@@ -1564,6 +1821,49 @@ export function PurchaseOrderDetailPage({
                 pending={reviewMutation.isPending}
                 onConfirm={() => void handleApprove()}
             />
+
+            <Dialog
+                open={releaseConfirmOpen}
+                onOpenChange={setReleaseConfirmOpen}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {responsibilityText.releaseToTeam}
+                        </DialogTitle>
+                        <DialogDescription>
+                            当前采购审核保持开放，个人责任会被清空并回到团队待处理。请填写原因。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Textarea
+                        value={releaseReason}
+                        onChange={(event) =>
+                            setReleaseReason(event.target.value)
+                        }
+                        placeholder="填写退回团队原因"
+                        aria-label="退回团队原因"
+                    />
+                    <DialogFooter>
+                        <DialogClose
+                            render={<Button type="button" variant="outline" />}
+                        >
+                            取消
+                        </DialogClose>
+                        <Button
+                            type="button"
+                            disabled={
+                                !releaseReason.trim() ||
+                                responsibilityMutation.isPending
+                            }
+                            onClick={() => void handleReleaseToTeam()}
+                        >
+                            {responsibilityMutation.isPending
+                                ? "正在退回…"
+                                : responsibilityText.releaseToTeam}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <FormalActionConfirmDialog
                 open={changeConfirmOpen}

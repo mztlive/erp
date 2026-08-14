@@ -6,7 +6,8 @@
 //! `<mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS` 等值。
 
 use entities::supplier_settlement::{
-    SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
+    SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementItem,
+    SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
 use mongodb::Database;
 
@@ -24,6 +25,10 @@ pub trait SupplierSettlementExt {
     const SUPPLIER_SETTLEMENT_ITEMS: &'static str = "supplier_settlement_items";
     /// `supplier_settlement_difference` 集合名。
     const SUPPLIER_SETTLEMENT_DIFFERENCES: &'static str = "supplier_settlement_differences";
+    /// `supplier_settlement_source_evidence` 集合名。
+    const SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE: &'static str = "supplier_settlement_source_evidence";
+    /// `supplier_settlement_difference_evidence` 集合名。
+    const SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE: &'static str = "supplier_settlement_difference_evidence";
 
     /// 供应商结算单列表筛选条件类型（定义见 `repository::supplier_settlement`）。
     type SupplierSettlementStatementFilter;
@@ -52,6 +57,13 @@ pub trait SupplierSettlementExt {
     /// 返回 `Repository<'_, entities::supplier_settlement::SupplierSettlementDifference>`。
     fn supplier_settlement_differences(&self) -> Repository<'_, SupplierSettlementDifference>;
 
+    /// 获取不可变结算来源证据批次 Repository。
+    fn supplier_settlement_source_evidence(&self) -> Repository<'_, SupplierSettlementSourceEvidence>;
+
+    /// 获取不可变结算差异补证 Repository。
+    fn supplier_settlement_difference_evidence(&self)
+        -> Repository<'_, SupplierSettlementDifferenceEvidence>;
+
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
@@ -74,6 +86,16 @@ impl SupplierSettlementExt for Database {
 
     fn supplier_settlement_differences(&self) -> Repository<'_, SupplierSettlementDifference> {
         Repository::new(self, Self::SUPPLIER_SETTLEMENT_DIFFERENCES)
+    }
+
+    fn supplier_settlement_source_evidence(&self) -> Repository<'_, SupplierSettlementSourceEvidence> {
+        Repository::new(self, Self::SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE)
+    }
+
+    fn supplier_settlement_difference_evidence(
+        &self,
+    ) -> Repository<'_, SupplierSettlementDifferenceEvidence> {
+        Repository::new(self, Self::SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE)
     }
 
     fn supplier_settlement(&self) -> SupplierSettlementRepository<'_> {

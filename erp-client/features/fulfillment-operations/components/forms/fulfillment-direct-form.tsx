@@ -7,16 +7,16 @@ import { Label } from "@/components/ui/label"
 import { CARRIER_OPTIONS } from "@/lib/business-options"
 import type {
     FulfillmentDraft,
-    FulfillmentTask,
+    FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 
 export function FulfillmentDirectForm({
-    task,
+    operation,
     draft,
     onChange,
     disabled,
 }: {
-    task: FulfillmentTask
+    operation: FulfillmentOperation
     draft: Extract<FulfillmentDraft, { type: "SUPPLIER_DIRECT" }>
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
@@ -65,7 +65,7 @@ export function FulfillmentDirectForm({
                 </div>
             </div>
             {draft.lines.map((line, i) => {
-                const src = task.lines.find(
+                const src = operation.lines.find(
                     (l) => l.salesOrderLineId === line.salesOrderLineId,
                 )
                 return (
@@ -75,7 +75,7 @@ export function FulfillmentDirectForm({
                     >
                         <p className="text-sm font-medium">{src?.itemName}</p>
                         <p className="text-xs text-muted-foreground">
-                            对应 {task.source.salesOrderNo} · 还剩{" "}
+                            对应 {operation.source.salesOrderNo} · 还剩{" "}
                             <span className="num">
                                 {src?.remainingQuantity}
                             </span>

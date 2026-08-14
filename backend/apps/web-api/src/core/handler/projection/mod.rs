@@ -15,8 +15,9 @@ use services::{
     audit::AuditActor,
     projection::{
         CreateSalesOrderProjectionRequest, CreateSalesOrderProjectionRevisionRequest,
-        DeliverProjectionRevisionRequest, PageView, ProjectionDeliveryResultView, ProjectionService,
-        SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView,
+        DeliverProjectionRevisionRequest, PageView, ProcessProjectionDeliveriesRequest,
+        ProcessProjectionDeliveriesResult, ProjectionDeliveryCommand, ProjectionDeliveryResultView,
+        ProjectionService, SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView,
         SalesOrderProjectionListParams, SalesOrderProjectionRevisionView, SalesOrderProjectionView,
         UnavailableMallConnector,
     },
@@ -219,4 +220,48 @@ pub async fn sales_order_projection_delivery_list(
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "执行投影",
+    group_desc = "销售单执行投影与下发（W23）",
+    desc = "执行投递对象强动作",
+    resource = "sales_order_projection_delivery",
+    action = "operate"
+)]
+/// 执行 `QUERY_RESULT / RETRY / ESCALATE` 投递对象动作。
+pub async fn sales_order_projection_delivery_action(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(delivery_id): Path<String>,
+    Json(command): Json<ProjectionDeliveryCommand>,
+) -> Result<ProjectionDeliveryResultView> {
+    let result = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
+        .apply_delivery_command(&delivery_id, command, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "执行投影",
+    group_desc = "销售单执行投影与下发（W23）",
+    desc = "受控处理待发送投递",
+    resource = "sales_order_projection_delivery",
+    action = "process_pending"
+)]
+/// 有界处理待发送及到期重试投递。
+///
+/// 该入口供内部调度器或受控运维触发；每条记录仍通过 CAS 取得，不接受任意
+/// 投影内容，也不把连接器不可用当作成功。
+pub async fn sales_order_projection_delivery_process_pending(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<ProcessProjectionDeliveriesRequest>,
+) -> Result<ProcessProjectionDeliveriesResult> {
+    let result = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
+        .process_pending_deliveries(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(result))
 }

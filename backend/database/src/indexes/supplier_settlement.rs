@@ -23,6 +23,10 @@ pub(crate) const SUPPLIER_SETTLEMENT_ITEMS: &str =
 /// `supplier_settlement_difference` 集合名。
 pub(crate) const SUPPLIER_SETTLEMENT_DIFFERENCES: &str =
     <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCES;
+pub(crate) const SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE: &str =
+    <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE;
+pub(crate) const SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE: &str =
+    <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -50,7 +54,63 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
         supplier_settlement_difference_indexes(),
     )
     .await?;
+    create_indexes(
+        db,
+        SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE,
+        supplier_settlement_source_evidence_indexes(),
+    )
+    .await?;
+    create_indexes(
+        db,
+        SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE,
+        supplier_settlement_difference_evidence_indexes(),
+    )
+    .await?;
     Ok(())
+}
+
+fn supplier_settlement_source_evidence_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index(
+            "uk_supplier_settlement_source_evidence_request",
+            doc! { "request_id": 1 },
+        ),
+        unique_index(
+            "uk_supplier_settlement_source_evidence_period_version",
+            doc! {
+                "supplier_id": 1,
+                "period_start": 1,
+                "period_end": 1,
+                "period_policy_id": 1,
+                "period_policy_version": 1,
+                "source_version": 1,
+            },
+        ),
+        named_index(
+            "idx_supplier_settlement_source_evidence_latest",
+            doc! {
+                "supplier_id": 1,
+                "period_start": 1,
+                "period_end": 1,
+                "period_policy_id": 1,
+                "period_policy_version": 1,
+                "source_version": -1,
+            },
+        ),
+    ]
+}
+
+fn supplier_settlement_difference_evidence_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index(
+            "uk_supplier_settlement_difference_evidence_request",
+            doc! { "request_id": 1 },
+        ),
+        named_index(
+            "idx_supplier_settlement_difference_evidence_difference",
+            doc! { "difference_id": 1, "provided_at": 1 },
+        ),
+    ]
 }
 
 /// 为单个集合创建一组幂等命名索引。
@@ -150,7 +210,8 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        supplier_settlement_difference_indexes, supplier_settlement_item_indexes,
+        supplier_settlement_difference_evidence_indexes, supplier_settlement_difference_indexes,
+        supplier_settlement_item_indexes, supplier_settlement_source_evidence_indexes,
         supplier_settlement_statement_indexes,
     };
 
@@ -224,5 +285,26 @@ mod tests {
             .iter()
             .any(|index| index.keys == doc! { "statement_item_id": 1 }));
         assert!(indexes.iter().any(|index| index.keys == doc! { "status": 1 }));
+    }
+
+    #[test]
+    fn source_and_difference_evidence_indexes_enforce_idempotency() {
+        let source = supplier_settlement_source_evidence_indexes();
+        assert!(source.iter().any(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                == Some("uk_supplier_settlement_source_evidence_request")
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+        assert!(source.iter().any(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                == Some("uk_supplier_settlement_source_evidence_period_version")
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+        let evidence = supplier_settlement_difference_evidence_indexes();
+        assert!(evidence.iter().any(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                == Some("uk_supplier_settlement_difference_evidence_request")
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
     }
 }

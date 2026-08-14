@@ -38,3 +38,6 @@ permission-macros = { workspace = true }
 
 [build-dependencies]
 syn = { workspace = true, features = ["full"] }
+
+[dev-dependencies]
+test-support = { workspace = true }

@@ -80,4 +80,20 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 projection::sales_order_projection_delivery_list_permission_key(),
             ),
         )
+        .route(
+            "/sales-order-projection-deliveries/process-pending",
+            with_permission(
+                post(projection::sales_order_projection_delivery_process_pending),
+                rbac,
+                projection::sales_order_projection_delivery_process_pending_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-order-projection-deliveries/{delivery_id}/actions",
+            with_permission(
+                post(projection::sales_order_projection_delivery_action),
+                rbac,
+                projection::sales_order_projection_delivery_action_permission_key(),
+            ),
+        )
 }

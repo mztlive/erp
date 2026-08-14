@@ -1,6 +1,4 @@
-/**
- * W09 履约作业 · 客户端契约类型（对齐工作面文档 §5/§8）。
- */
+/** W09 履约单据处理 · 客户端契约类型。 */
 
 export type FulfillmentOperationType =
     | "RECEIPT"
@@ -12,13 +10,6 @@ export type FulfillmentOperationType =
 type GateState = "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
 
 export type FulfillmentResultCode = "SUCCESS" | "PARTIAL" | "FAILED"
-
-export type DeferReasonCode =
-    | "WAITING_SUPPLIER"
-    | "WAITING_WAREHOUSE"
-    | "WAITING_PAYMENT"
-    | "NEED_CLARIFICATION"
-    | "OTHER"
 
 export const OPERATION_TYPE_LABEL: Record<FulfillmentOperationType, string> = {
     RECEIPT: "入库",
@@ -74,20 +65,6 @@ export const OPERATION_CLEARED_LABEL: Record<FulfillmentOperationType, string> =
         ELECTRONIC: "今天的电子交付都干完了",
         SERVICE: "今天的服务都干完了",
     }
-
-export const DEFER_REASON_LABEL: Record<DeferReasonCode, string> = {
-    WAITING_SUPPLIER: "等待供应商",
-    WAITING_WAREHOUSE: "等待仓储配合",
-    WAITING_PAYMENT: "等待付款核销",
-    NEED_CLARIFICATION: "需业务澄清",
-    OTHER: "其他",
-}
-
-/** 跳过后的任务状态 → 中文（禁止 PENDING 等枚举原值上屏）。 */
-export const WORK_ITEM_STATUS_LABEL: Record<string, string> = {
-    PENDING: "待处理",
-    IN_PROGRESS: "处理中",
-}
 
 export const RESULT_LABEL: Record<FulfillmentResultCode, string> = {
     SUCCESS: "成功",
@@ -218,19 +195,17 @@ export type FulfillmentDraft =
           lines: ServiceDraftLine[]
       }
 
-export type FulfillmentTask = Readonly<{
-    workItemId: string
+export type FulfillmentOperation = Readonly<{
+    operationId: string
     operationType: FulfillmentOperationType
     priority: number
     dueAt: string
     dueLabel: string
     overdue: boolean
-    held?: boolean
     statusLabel: string
     statusTone: "warning" | "info" | "success" | "destructive" | "neutral"
     responsibleLabel: string
     sourceVersion: string
-    subjectHash: string
     editVersion: number
     source: {
         purchaseOrderId?: string
@@ -254,15 +229,11 @@ export type FulfillmentTask = Readonly<{
     draft: FulfillmentDraft
     summary: string
     impact: string
-    allowedActions: readonly string[]
     actionBlockers: readonly {
         action: string
         code: string
         message: string
     }[]
-    lease?: {
-        claimedByLabel: string
-    }
 }>
 
 type FulfillmentQueueMetrics = ReadonlyArray<{
@@ -274,12 +245,11 @@ type FulfillmentQueueMetrics = ReadonlyArray<{
 
 export type FulfillmentQueueView = Readonly<{
     context: {
-        queueContextId: string
         position: number
         total: number
-        currentWorkItemId?: string
-        previousWorkItemId?: string
-        nextWorkItemId?: string
+        currentOperationId?: string
+        previousOperationId?: string
+        nextOperationId?: string
         filterSummary: string
         /** 仓筛选可选值，按权限范围全量投影去重（不随当前队列收缩） */
         warehouseOptions: ReadonlyArray<{ value: string; label: string }>
@@ -292,19 +262,14 @@ export type FulfillmentQueueView = Readonly<{
         snapshotUpdatedAt: string
     }
     metrics: FulfillmentQueueMetrics
-    tasks: readonly FulfillmentTask[]
-    current?: FulfillmentTask
+    operations: readonly FulfillmentOperation[]
+    current?: FulfillmentOperation
     emptyReason?:
-        | "NO_TASKS"
+        | "NO_OPERATIONS"
         | "FILTER_NO_RESULT"
         | "NO_DATA_SCOPE"
         | "NO_PERMISSION"
     preferences: { autoNextDefault: boolean }
-}>
-
-export type WorkItemLease = Readonly<{
-    workItemId: string
-    claimedByLabel: string
 }>
 
 type InventoryDelta = Readonly<{
@@ -325,7 +290,7 @@ type ReservationDelta = Readonly<{
 
 export type FulfillmentFormalOutcome = Readonly<{
     kind: "POSTED"
-    workItemId: string
+    operationId: string
     factType:
         | "PURCHASE_RECEIPT"
         | "DELIVERY"
@@ -347,26 +312,35 @@ export type FulfillmentFormalOutcome = Readonly<{
     acceptanceNextStep: string
     inventoryImpactSummary: string
     reference: string
-    nextWorkItemId?: string
     salesOrderId: string
     salesOrderNo: string
 }>
 
-export type DeferOutcome = Readonly<{
-    kind: "DEFERRED"
-    workItemId: string
-    workItemStatus: "PENDING" | "IN_PROGRESS"
-    leaseDisposition: "RELEASED"
-    reasonCode: DeferReasonCode
-    reasonNote?: string
-    nextWorkItemId?: string
-    reference: string
-}>
-
 export type FormalActionResponse =
-    | { status: "succeeded"; outcome: FulfillmentFormalOutcome | DeferOutcome }
+    | { status: "succeeded"; outcome: FulfillmentFormalOutcome }
     | { status: "failed"; message: string; code: string }
     | { status: "unknown"; message: string; idempotencyKey: string }
+
+export type SaveFulfillmentOperationCommand = Readonly<{
+    operationId: string
+    expectedDocumentVersion: number
+    expectedSourceVersion: string
+    idempotencyKey: string
+    draft: FulfillmentDraft
+}>
+
+export type PostFulfillmentOperationCommand = Readonly<{
+    operationId: string
+    expectedDocumentVersion: number
+    expectedSourceVersion: string
+    idempotencyKey: string
+    draft: FulfillmentDraft
+}>
+
+export type ResolveFulfillmentOperationCommand = Readonly<{
+    operationId: string
+    idempotencyKey: string
+}>
 
 /** 正式记录状态码 → 人话（界面不出现 POSTED/SHIPPED 这类原值） */
 export const FORMAL_STATUS_LABEL: Record<string, string> = {

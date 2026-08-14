@@ -4,6 +4,7 @@
 //! 本文件 P0 后冻结：新增域在 `indexes/<domain>.rs` 内实现自己的 `ensure` 并加入下方顺序调用。
 
 mod access_control;
+mod approval;
 mod bulk_job;
 mod card_instance;
 mod catalog;
@@ -47,6 +48,7 @@ mod work_item;
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure_indexes(db: &mongodb::Database) -> crate::Result<()> {
     access_control::ensure(db).await?;
+    approval::ensure(db).await?;
     bulk_job::ensure(db).await?;
     card_instance::ensure(db).await?;
     catalog::ensure(db).await?;

@@ -30,6 +30,7 @@ mod admin;
 mod public;
 
 mod access_control;
+mod approval_instance;
 mod bulk_job;
 mod card_instance;
 mod catalog;

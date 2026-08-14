@@ -7,7 +7,22 @@ use serde::{Deserialize, Serialize};
 use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::SourceSystemId;
+use crate::ids::{MallSalesSyncJobId, SourceSystemId};
+use crate::validation::normalize_optional_text;
+
+const ORDER_NO_MAX_LEN: usize = 128;
+const REASON_MAX_LEN: usize = 1024;
+const ACTOR_MAX_LEN: usize = 128;
+
+/// 同步作业触发来源。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum MallSyncTriggerSource {
+    /// 系统调度。
+    Scheduled,
+    /// 授权用户人工触发。
+    Manual,
+}
 
 /// 同步作业类型（数据模型 §6.13：期初基线、增量拉取、按月全量核对、单号补拉）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,6 +131,16 @@ pub struct MallSalesSyncJobData {
     pub range_start: Option<Instant>,
     /// 本次查询时间边界止；与 `range_start` 必须成对出现。
     pub range_end: Option<Instant>,
+    /// 按单补拉的原来源销售单号。
+    pub external_order_no: Option<String>,
+    /// 触发来源。
+    pub trigger_source: MallSyncTriggerSource,
+    /// 人工触发理由；系统调度为空。
+    pub trigger_reason: Option<String>,
+    /// 人工触发人；系统调度为空。
+    pub triggered_by: Option<String>,
+    /// 失败重试沿用的原作业。
+    pub source_job_id: Option<MallSalesSyncJobId>,
     /// 任务开始时间。
     pub started_at: Instant,
 }
@@ -136,6 +161,16 @@ pub struct MallSalesSyncJob {
     pub range_start: Option<Instant>,
     /// 本次查询时间边界止。
     pub range_end: Option<Instant>,
+    /// 按单补拉的原来源销售单号。
+    pub external_order_no: Option<String>,
+    /// 触发来源。
+    pub trigger_source: MallSyncTriggerSource,
+    /// 人工触发理由。
+    pub trigger_reason: Option<String>,
+    /// 人工触发人。
+    pub triggered_by: Option<String>,
+    /// 失败重试沿用的原作业。
+    pub source_job_id: Option<MallSalesSyncJobId>,
     /// 任务开始时间。
     pub started_at: Instant,
     /// 任务结束时间。
@@ -167,6 +202,17 @@ impl MallSalesSyncJob {
     /// 查询区间只提供一端或起晚于止时返回错误。
     pub fn new(id: crate::ids::MallSalesSyncJobId, data: MallSalesSyncJobData) -> Result<Self> {
         Self::ensure_range(data.range_start, data.range_end)?;
+        let external_order_no =
+            normalize_optional_text(data.external_order_no, "来源单号", ORDER_NO_MAX_LEN)?;
+        let trigger_reason = normalize_optional_text(data.trigger_reason, "触发理由", REASON_MAX_LEN)?;
+        let triggered_by = normalize_optional_text(data.triggered_by, "触发人", ACTOR_MAX_LEN)?;
+        Self::ensure_trigger_contract(
+            data.job_type,
+            data.trigger_source,
+            external_order_no.as_deref(),
+            trigger_reason.as_deref(),
+            triggered_by.as_deref(),
+        )?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -174,6 +220,11 @@ impl MallSalesSyncJob {
             job_type: data.job_type,
             range_start: data.range_start,
             range_end: data.range_end,
+            external_order_no,
+            trigger_source: data.trigger_source,
+            trigger_reason,
+            triggered_by,
+            source_job_id: data.source_job_id,
             started_at: data.started_at,
             finished_at: None,
             status: MallSalesSyncJobStatus::Running,
@@ -247,6 +298,24 @@ impl MallSalesSyncJob {
             _ => Err(Error::from("查询区间起点与终点必须同时提供或同时省略")),
         }
     }
+
+    fn ensure_trigger_contract(
+        job_type: MallSalesSyncJobType,
+        trigger_source: MallSyncTriggerSource,
+        external_order_no: Option<&str>,
+        trigger_reason: Option<&str>,
+        triggered_by: Option<&str>,
+    ) -> Result<()> {
+        if (job_type == MallSalesSyncJobType::SingleOrderBackfill) != external_order_no.is_some() {
+            return Err(Error::from("只有单号补拉必须且只能携带原来源单号"));
+        }
+        match trigger_source {
+            MallSyncTriggerSource::Scheduled if trigger_reason.is_none() && triggered_by.is_none() => Ok(()),
+            MallSyncTriggerSource::Manual if trigger_reason.is_some() && triggered_by.is_some() => Ok(()),
+            MallSyncTriggerSource::Scheduled => Err(Error::from("系统调度不得携带人工理由或操作人")),
+            MallSyncTriggerSource::Manual => Err(Error::from("人工触发必须同时记录理由与操作人")),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -261,6 +330,11 @@ mod tests {
             job_type: MallSalesSyncJobType::Incremental,
             range_start: Some(Instant::from_unix_secs(1_700_000_000)),
             range_end: Some(Instant::from_unix_secs(1_700_030_000)),
+            external_order_no: None,
+            trigger_source: MallSyncTriggerSource::Manual,
+            trigger_reason: Some("人工检查同步进度".to_string()),
+            triggered_by: Some("user-1".to_string()),
+            source_job_id: None,
             started_at: Instant::from_unix_secs(1_700_000_100),
         }
     }
@@ -298,11 +372,30 @@ mod tests {
             job_type: MallSalesSyncJobType::SingleOrderBackfill,
             range_start: None,
             range_end: None,
+            external_order_no: Some("MALL-001".to_string()),
             ..job_data()
         };
         let job = MallSalesSyncJob::new(MallSalesSyncJobId::new("j-4"), backfill).unwrap();
         assert!(job.range_start.is_none());
         assert!(job.range_end.is_none());
+        assert_eq!(job.external_order_no.as_deref(), Some("MALL-001"));
+    }
+
+    #[test]
+    fn trigger_contract_rejects_fake_single_order_and_manual_without_reason() {
+        let missing_order = MallSalesSyncJobData {
+            job_type: MallSalesSyncJobType::SingleOrderBackfill,
+            range_start: None,
+            range_end: None,
+            ..job_data()
+        };
+        assert!(MallSalesSyncJob::new(MallSalesSyncJobId::new("j-missing"), missing_order).is_err());
+
+        let missing_reason = MallSalesSyncJobData {
+            trigger_reason: None,
+            ..job_data()
+        };
+        assert!(MallSalesSyncJob::new(MallSalesSyncJobId::new("j-reason"), missing_reason).is_err());
     }
 
     #[test]

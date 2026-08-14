@@ -21,10 +21,11 @@ const FILE_HMAC_MAX_LEN: usize = 128;
 /// 脱敏错误码摘要与确认状态摘要最大长度。
 const SUMMARY_MAX_LEN: usize = 2048;
 
-/// 导入批次状态（数据模型 §6.12：待校验、校验中、待确认、导入中、完成、部分失败、失败）。
+/// 导入批次状态（待校验、校验中、待确认、待应用、导入中及结果态）。
 ///
-/// 固定状态机：按文档列出的处理管线单向推进，失败为终态；
-/// 重跑使用原批次或明确的修复批次（§6.12），不定义失败后回退迁移。
+/// 最后一项责任确认只推进到 `ReadyToApply`，只有独立的
+/// `START_APPLY` 命令才能进入 `Importing`。失败项重试可将失败结果态
+/// 重新准备为 `ReadyToApply`，已成功或已跳过的行不回退。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LegacyImportBatchStatus {
@@ -34,6 +35,8 @@ pub enum LegacyImportBatchStatus {
     Validating,
     /// 待确认（等待必要责任范围确认）。
     PendingConfirmation,
+    /// 待应用（全部必要责任范围已确认，等待独立提交应用命令）。
+    ReadyToApply,
     /// 导入中。
     Importing,
     /// 完成。
@@ -54,6 +57,7 @@ impl LegacyImportBatchStatus {
             Self::PendingValidation => "待校验",
             Self::Validating => "校验中",
             Self::PendingConfirmation => "待确认",
+            Self::ReadyToApply => "待应用",
             Self::Importing => "导入中",
             Self::Completed => "完成",
             Self::PartialFailed => "部分失败",
@@ -70,6 +74,7 @@ impl LegacyImportBatchStatus {
             Self::PendingValidation => "pending_validation",
             Self::Validating => "validating",
             Self::PendingConfirmation => "pending_confirmation",
+            Self::ReadyToApply => "ready_to_apply",
             Self::Importing => "importing",
             Self::Completed => "completed",
             Self::PartialFailed => "partial_failed",
@@ -83,9 +88,11 @@ impl DocumentState for LegacyImportBatchStatus {
         match self {
             Self::PendingValidation => &[Self::Validating],
             Self::Validating => &[Self::PendingConfirmation, Self::PartialFailed, Self::Failed],
-            Self::PendingConfirmation => &[Self::Importing],
+            Self::PendingConfirmation => &[Self::ReadyToApply],
+            Self::ReadyToApply => &[Self::Importing, Self::PartialFailed, Self::Failed],
             Self::Importing => &[Self::Completed, Self::PartialFailed, Self::Failed],
-            Self::Completed | Self::PartialFailed | Self::Failed => &[],
+            Self::PartialFailed | Self::Failed => &[Self::ReadyToApply],
+            Self::Completed => &[],
         }
     }
 }
@@ -421,6 +428,7 @@ mod tests {
         batch
             .advance(LegacyImportBatchStatus::PendingConfirmation)
             .unwrap();
+        batch.advance(LegacyImportBatchStatus::ReadyToApply).unwrap();
         batch.advance(LegacyImportBatchStatus::Importing).unwrap();
         batch.advance(LegacyImportBatchStatus::Completed).unwrap();
 
@@ -454,6 +462,16 @@ mod tests {
             LegacyImportBatchStatus::PartialFailed
         )
         .is_ok());
+        assert!(ensure_transition(
+            LegacyImportBatchStatus::PendingConfirmation,
+            LegacyImportBatchStatus::ReadyToApply
+        )
+        .is_ok());
+        assert!(ensure_transition(
+            LegacyImportBatchStatus::PartialFailed,
+            LegacyImportBatchStatus::ReadyToApply
+        )
+        .is_ok());
         assert!(
             ensure_transition(
                 LegacyImportBatchStatus::PendingValidation,
@@ -464,7 +482,7 @@ mod tests {
         );
         assert!(ensure_transition(
             LegacyImportBatchStatus::PendingConfirmation,
-            LegacyImportBatchStatus::Failed
+            LegacyImportBatchStatus::Importing
         )
         .is_err());
     }
@@ -517,5 +535,9 @@ mod tests {
             "\"partial_failed\""
         );
         assert_eq!(LegacyImportBatchStatus::Importing.label(), "导入中");
+        assert_eq!(
+            serde_json::to_string(&LegacyImportBatchStatus::ReadyToApply).unwrap(),
+            "\"ready_to_apply\""
+        );
     }
 }

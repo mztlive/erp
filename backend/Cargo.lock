@@ -4920,6 +4920,7 @@ dependencies = [
  "sha2 0.10.9",
  "storage",
  "syn 2.0.117",
+ "test-support",
  "thiserror 2.0.18",
  "tokio",
  "tower",

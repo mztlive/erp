@@ -19,6 +19,12 @@ pub(crate) const SUPPLIER_API_CONNECTIONS: &str =
 /// `supplier_api_capability` 集合名。
 pub(crate) const SUPPLIER_API_CAPABILITIES: &str =
     <mongodb::Database as SupplierApiExt>::SUPPLIER_API_CAPABILITIES;
+pub(crate) const SUPPLIER_API_BUSINESS_CONFIRMATIONS: &str =
+    <mongodb::Database as SupplierApiExt>::SUPPLIER_API_BUSINESS_CONFIRMATIONS;
+pub(crate) const SUPPLIER_API_HEALTH_CHECK_RUNS: &str =
+    <mongodb::Database as SupplierApiExt>::SUPPLIER_API_HEALTH_CHECK_RUNS;
+pub(crate) const SUPPLIER_API_COMMAND_RECEIPTS: &str =
+    <mongodb::Database as SupplierApiExt>::SUPPLIER_API_COMMAND_RECEIPTS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -35,6 +41,14 @@ pub(crate) const SUPPLIER_API_CAPABILITIES: &str =
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_API_CONNECTIONS, supplier_api_connection_indexes()).await?;
     create_indexes(db, SUPPLIER_API_CAPABILITIES, supplier_api_capability_indexes()).await?;
+    create_indexes(
+        db,
+        SUPPLIER_API_BUSINESS_CONFIRMATIONS,
+        business_confirmation_indexes(),
+    )
+    .await?;
+    create_indexes(db, SUPPLIER_API_HEALTH_CHECK_RUNS, health_check_run_indexes()).await?;
+    create_indexes(db, SUPPLIER_API_COMMAND_RECEIPTS, command_receipt_indexes()).await?;
     Ok(())
 }
 
@@ -57,7 +71,57 @@ fn supplier_api_connection_indexes() -> Vec<IndexModel> {
             "idx_supplier_api_connections_supplier_status",
             doc! { "supplier_id": 1, "status": 1 },
         ),
+        named_index(
+            "idx_supplier_api_connections_environment_status_health",
+            doc! { "environment": 1, "status": 1, "last_health_result": 1, "updated_at": -1 },
+        ),
     ]
+}
+
+fn business_confirmation_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index(
+            "uk_supplier_api_business_confirmations_operation",
+            doc! { "connection_id": 1, "operation_id": 1 },
+        ),
+        unique_index(
+            "uk_supplier_api_business_confirmations_idempotency",
+            doc! { "connection_id": 1, "confirmed_by": 1, "idempotency_key_hash": 1 },
+        ),
+        named_index(
+            "idx_supplier_api_business_confirmations_latest",
+            doc! { "connection_id": 1, "capability_code": 1, "confirmed_at": -1, "id": -1 },
+        ),
+    ]
+}
+
+fn health_check_run_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index(
+            "uk_supplier_api_health_runs_background_job",
+            doc! { "background_job_id": 1 },
+        ),
+        unique_index(
+            "uk_supplier_api_health_runs_idempotency",
+            doc! { "connection_id": 1, "requested_by": 1, "idempotency_key_hash": 1 },
+        ),
+        named_index(
+            "idx_supplier_api_health_runs_latest",
+            doc! { "connection_id": 1, "created_at": -1, "id": -1 },
+        ),
+    ]
+}
+
+fn command_receipt_indexes() -> Vec<IndexModel> {
+    vec![unique_index(
+        "uk_supplier_api_command_receipts_idempotency",
+        doc! {
+            "connection_id": 1,
+            "action": 1,
+            "actor_id": 1,
+            "idempotency_key_hash": 1,
+        },
+    )]
 }
 
 /// 返回 `supplier_api_capability` 的能力声明唯一约束索引。
@@ -88,7 +152,10 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 mod tests {
     use mongodb::bson::doc;
 
-    use super::{supplier_api_capability_indexes, supplier_api_connection_indexes};
+    use super::{
+        business_confirmation_indexes, command_receipt_indexes, health_check_run_indexes,
+        supplier_api_capability_indexes, supplier_api_connection_indexes,
+    };
 
     #[test]
     fn connection_code_index_is_globally_unique() {
@@ -132,5 +199,24 @@ mod tests {
             doc! { "connection_id": 1, "capability_code": 1 }
         );
         assert_eq!(capability_index.options.as_ref().unwrap().unique, Some(true));
+    }
+
+    #[test]
+    fn governance_fact_indexes_are_unique_and_queryable() {
+        let confirmations = business_confirmation_indexes();
+        assert!(confirmations.iter().any(|index| {
+            index.keys == doc! { "connection_id": 1, "operation_id": 1 }
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+        let health = health_check_run_indexes();
+        assert!(health.iter().any(|index| index.keys
+            == doc! {
+                "connection_id": 1, "created_at": -1, "id": -1
+            }));
+        let receipts = command_receipt_indexes();
+        assert_eq!(
+            receipts[0].options.as_ref().and_then(|options| options.unique),
+            Some(true)
+        );
     }
 }

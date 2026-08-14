@@ -42,6 +42,7 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { cn } from "@/lib/utils"
 import {
     buildProcessHref,
@@ -54,7 +55,9 @@ import {
     deriveWorkItemsFreshness,
     greetingForNow,
 } from "@/features/workspace/lib/freshness"
+import { canOpenWorkItemHandler } from "@/features/workspace/lib/navigation-eligibility"
 import { useWorkspaceDashboardQuery } from "@/features/workspace/hooks/queries"
+import { writeW02FocusId } from "@/features/unified-task-queue/queue-url"
 import {
     buildGroupAllHref,
     buildTaskQueueHref,
@@ -66,7 +69,12 @@ import {
     urlStateFromMetricKey,
     type WorkspaceUrlState,
 } from "@/features/workspace/lib/url-state"
-import { actionLabelForWorkItemType, goToWorkspaceLabel } from "@/lib/ui-text"
+import {
+    actionLabelForWorkItemType,
+    goToWorkspaceLabel,
+    responsibilityText,
+    sequentialText,
+} from "@/lib/ui-text"
 import type {
     WorkspaceMetricKey,
     WorkspaceTaskGroup,
@@ -82,7 +90,10 @@ function responsiblePartyLabel(item: WorkspaceWorkItem): string {
     if (item.ownerUserLabel) {
         return `${item.ownerRoleLabel} · ${item.ownerUserLabel}`
     }
-    return `${item.ownerRoleLabel} · 待认领`
+    if (item.assignmentMode === "POOL") {
+        return `${item.ownerRoleLabel} · ${responsibilityText.poolAvailable}`
+    }
+    return `${item.ownerRoleLabel} · ${item.ownerOrganizationLabel}`
 }
 
 function processBlocker(item: WorkspaceWorkItem): string | undefined {
@@ -90,9 +101,9 @@ function processBlocker(item: WorkspaceWorkItem): string | undefined {
 }
 
 function canProcess(item: WorkspaceWorkItem): boolean {
-    return (
-        item.allowedActions.includes("PROCESS") &&
-        !item.actionBlockers.some((b) => b.action === "PROCESS")
+    return canOpenWorkItemHandler(
+        item.allowedActions,
+        item.actionBlockers.some((blocker) => blocker.action === "PROCESS"),
     )
 }
 
@@ -125,13 +136,15 @@ function WorkspaceHomeSkeleton() {
 
 function TaskGroupSection({
     group,
+    scope,
     focusStableNumber,
     onOpenTask,
     groupAllHref,
 }: {
     group: WorkspaceTaskGroup
+    scope: WorkspaceUrlState["scope"]
     focusStableNumber?: string
-    onOpenTask: (item: WorkspaceWorkItem) => void
+    onOpenTask: (item: WorkspaceWorkItem, intent: "PROCESS" | "VIEW") => void
     groupAllHref: string
 }) {
     const [open, setOpen] = React.useState(group.defaultExpanded)
@@ -177,7 +190,7 @@ function TaskGroupSection({
                             const processOk = canProcess(item)
                             const viewOk = canView(item)
                             const blocker = processBlocker(item)
-                            const processHref = buildProcessHref(item)
+                            const processHref = buildProcessHref(item, scope)
                             const viewHref = buildViewHref(item)
                             const isFocused =
                                 focusStableNumber === item.stableNumber
@@ -231,6 +244,7 @@ function TaskGroupSection({
                                                                 onClick={() =>
                                                                     onOpenTask(
                                                                         item,
+                                                                        "PROCESS",
                                                                     )
                                                                 }
                                                             />
@@ -266,6 +280,7 @@ function TaskGroupSection({
                                                                 onClick={() =>
                                                                     onOpenTask(
                                                                         item,
+                                                                        "VIEW",
                                                                     )
                                                                 }
                                                             />
@@ -322,19 +337,25 @@ export function WorkspaceHomePage() {
         [urlState],
     )
 
-    const dashboardQuery = useWorkspaceDashboardQuery(queryInput)
+    const accountProfileQuery = useAccountProfileQuery()
+    const dashboardQuery = useWorkspaceDashboardQuery(
+        queryInput,
+        accountProfileQuery.data,
+    )
     const view = dashboardQuery.data
     const refreshing =
-        dashboardQuery.isFetching && !dashboardQuery.isPending && !!view
+        (accountProfileQuery.isFetching || dashboardQuery.isFetching) &&
+        !dashboardQuery.isPending &&
+        !!view
 
     const [focusedStableNumber, setFocusedStableNumber] = React.useState<
         string | null
     >(null)
 
     const activeMetric = metricKeyFromUrlState(urlState)
-    // scope 也是激活筛选：团队待认领无任务时走「当前筛选无结果」空态（D17）
+    // scope 也是激活筛选：团队待处理无任务时走「当前筛选无结果」空态（D17）
     const hasActiveFilter = Boolean(
-        urlState.scope === "role_pool" || urlState.due || urlState.family,
+        urlState.scope === "team" || urlState.due || urlState.family,
     )
 
     // 筛选/指标变更恒 replace，不膨胀历史（P2）；scope 默认值省略，URL 最小化
@@ -358,23 +379,29 @@ export function WorkspaceHomePage() {
     const clearFilters = React.useCallback(() => {
         sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
         setFocusedStableNumber(null)
-        replaceUrl({
-            scope: urlState.scope,
-        })
-    }, [replaceUrl, urlState.scope])
+        replaceUrl({ scope: "mine" })
+    }, [replaceUrl])
 
-    const onOpenTask = React.useCallback((item: WorkspaceWorkItem) => {
-        // Persist focus in sessionStorage so a return from the target page
-        // restores the exact task row without leaking internal ids into the URL.
-        sessionStorage.setItem(HOME_FOCUS_SESSION_KEY, item.stableNumber)
-    }, [])
+    const onOpenTask = React.useCallback(
+        (item: WorkspaceWorkItem, intent: "PROCESS" | "VIEW") => {
+            // Persist focus so a return restores the row without putting the
+            // internal task identity in the URL.
+            sessionStorage.setItem(HOME_FOCUS_SESSION_KEY, item.stableNumber)
+            if (intent === "PROCESS" && item.destinationWorkspaceId !== "W18") {
+                writeW02FocusId(item.workItemId)
+            }
+        },
+        [],
+    )
 
     const refresh = React.useCallback(() => {
-        void dashboardQuery.refetch()
-    }, [dashboardQuery])
+        void accountProfileQuery.refetch().then((profileResult) => {
+            if (profileResult.isSuccess) void dashboardQuery.refetch()
+        })
+    }, [accountProfileQuery, dashboardQuery])
 
     const onScopeChange = React.useCallback(
-        (scope: "mine" | "role_pool") => {
+        (scope: "mine" | "team") => {
             if (scope === urlState.scope) return
             sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
             setFocusedStableNumber(null)
@@ -399,8 +426,27 @@ export function WorkspaceHomePage() {
         }
     }, [view])
 
-    if (dashboardQuery.isPending && !view) {
+    if ((accountProfileQuery.isPending || dashboardQuery.isPending) && !view) {
         return <WorkspaceHomeSkeleton />
+    }
+
+    if (accountProfileQuery.isError) {
+        return (
+            <PageScaffold>
+                <BusinessFailureState
+                    error={accountProfileQuery.error}
+                    action={
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={refresh}
+                        >
+                            重试
+                        </Button>
+                    }
+                />
+            </PageScaffold>
+        )
     }
 
     if (dashboardQuery.isError && !view) {
@@ -528,11 +574,11 @@ export function WorkspaceHomePage() {
                             </button>
                             <button
                                 type="button"
-                                aria-pressed={urlState.scope === "role_pool"}
-                                onClick={() => onScopeChange("role_pool")}
+                                aria-pressed={urlState.scope === "team"}
+                                onClick={() => onScopeChange("team")}
                                 className={cn(
                                     "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    urlState.scope === "role_pool"
+                                    urlState.scope === "team"
                                         ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
                                         : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                                 )}
@@ -541,7 +587,7 @@ export function WorkspaceHomePage() {
                                     className="size-3.5 shrink-0"
                                     aria-hidden="true"
                                 />
-                                团队待认领
+                                {sequentialText.teamPending}
                             </button>
                         </div>
                         <PageActions
@@ -731,6 +777,7 @@ export function WorkspaceHomePage() {
                                         <div key={group.family} role="listitem">
                                             <TaskGroupSection
                                                 group={group}
+                                                scope={urlState.scope}
                                                 focusStableNumber={
                                                     focusedStableNumber ??
                                                     undefined

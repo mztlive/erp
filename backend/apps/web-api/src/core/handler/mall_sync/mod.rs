@@ -10,14 +10,16 @@ use axum::{
 use services::{
     audit::AuditActor,
     mall_sync::{
-        CompleteMallSalesSyncJobRequest, CreateMallSalesReconciliationJobRequest,
-        CreateMallSalesSyncJobRequest, CreateMasterMappingTaskRequest, IngestMallSalesOrderSnapshotsRequest,
-        IngestMallSalesOrderSnapshotsResult, MallSalesOrderSnapshotListParams, MallSalesOrderSnapshotView,
-        MallSalesReconciliationItemListParams, MallSalesReconciliationItemView,
-        MallSalesReconciliationJobListParams, MallSalesReconciliationJobView, MallSalesSyncCursorView,
-        MallSalesSyncJobListParams, MallSalesSyncJobView, MallSyncService, MasterMappingTaskListParams,
-        MasterMappingTaskView, PageView, ResolveMallSalesReconciliationItemRequest,
-        ResolveMasterMappingTaskRequest,
+        CompleteMallSalesSyncJobRequest, ConfirmMappingCommand, ConfirmMappingResult,
+        CreateMallSalesReconciliationJobRequest, CreateMasterMappingTaskRequest, GovernanceActionResult,
+        IngestMallSalesOrderSnapshotsRequest, IngestMallSalesOrderSnapshotsResult,
+        MallSalesOrderSnapshotListParams, MallSalesOrderSnapshotView, MallSalesReconciliationItemListParams,
+        MallSalesReconciliationItemView, MallSalesReconciliationJobListParams,
+        MallSalesReconciliationJobView, MallSalesSyncCursorView, MallSalesSyncJobListParams,
+        MallSalesSyncJobView, MallSyncService, MasterMappingTaskDetailParams, MasterMappingTaskListParams,
+        MasterMappingTaskView, PageView, ReapplyMallSnapshotCommand, ReapplyOperationView,
+        RequestSourceFixCommand, RequestSourceFixResult, ResolveMallSalesReconciliationItemRequest,
+        TriggerMallSyncCommand,
     },
 };
 
@@ -57,22 +59,22 @@ pub async fn mall_sales_sync_job_list(
     resource = "mall_sales_sync_job",
     action = "create"
 )]
-/// 创建同步作业（来源商城经 D01 校验；同一商城只允许一个运行中的增量任务）。
+/// 按阶段强判别命令触发同步作业。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
+/// * `command` - 人工、调度、重试或核对触发命令
 ///
 /// # 返回
 /// 返回新建同步作业的响应视图。
 pub async fn mall_sales_sync_job_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Json(req): Json<CreateMallSalesSyncJobRequest>,
+    Json(command): Json<TriggerMallSyncCommand>,
 ) -> Result<MallSalesSyncJobView> {
     let view = MallSyncService::new(state.db())
-        .create_sync_job(req, &actor)
+        .trigger_sync_job(command, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -339,13 +341,34 @@ pub async fn mall_sales_reconciliation_item_resolve(
 /// 返回契约形状的分页视图。
 pub async fn master_mapping_task_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<MasterMappingTaskListParams>,
 ) -> Result<PageView<MasterMappingTaskView>> {
     let page = MallSyncService::new(state.db())
-        .mapping_task_list(&params)
+        .mapping_task_list(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "商城同步与映射",
+    group_desc = "商城卡券销售单同步作业、快照、核对与映射任务管理",
+    desc = "查询映射任务详情",
+    resource = "master_mapping_task",
+    action = "detail"
+)]
+/// 查询当前 actor 的映射任务、正式责任、候选、谱系和领域动作投影。
+pub async fn master_mapping_task_detail(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Query(params): Query<MasterMappingTaskDetailParams>,
+) -> Result<MasterMappingTaskView> {
+    let view = MallSyncService::new(state.db())
+        .mapping_task_detail(&id, &params, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(
@@ -379,11 +402,11 @@ pub async fn master_mapping_task_create(
 #[permission_macros::permission(
     group = "商城同步与映射",
     group_desc = "商城卡券销售单同步作业、快照、核对与映射任务管理",
-    desc = "处理映射任务",
+    desc = "确认映射目标",
     resource = "master_mapping_task",
-    action = "resolve"
+    action = "confirm"
 )]
-/// 处理映射任务（已解决或无法处理；已终态重复提交按幂等返回）。
+/// 按固定映射注册表确认规范目标，并原子完成谱系、映射任务和正式任务。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -393,17 +416,83 @@ pub async fn master_mapping_task_create(
 ///
 /// # 返回
 /// 返回处理后的映射任务视图。
-pub async fn master_mapping_task_resolve(
+pub async fn master_mapping_task_confirm(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<ResolveMasterMappingTaskRequest>,
-) -> Result<MasterMappingTaskView> {
-    let view = MallSyncService::new(state.db())
-        .resolve_mapping_task(&id, req, &actor)
+    Json(command): Json<ConfirmMappingCommand>,
+) -> Result<ConfirmMappingResult> {
+    let result = MallSyncService::new(state.db())
+        .confirm_mapping_task(&id, command, &actor)
         .await?;
 
-    Ok(ApiResponse::ok_with_data(view))
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "商城同步与映射",
+    group_desc = "商城卡券销售单同步作业、快照、核对与映射任务管理",
+    desc = "请求来源系统修复映射证据",
+    resource = "master_mapping_task",
+    action = "request_source_fix"
+)]
+/// 追加来源修复证据并保持正式任务开放。
+///
+/// # 返回
+/// 返回新增证据标识与当前正式任务版本。
+pub async fn master_mapping_task_request_source_fix(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(command): Json<RequestSourceFixCommand>,
+) -> Result<RequestSourceFixResult> {
+    let result = MallSyncService::new(state.db())
+        .request_mapping_source_fix(&id, command, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "商城同步与映射",
+    group_desc = "商城卡券销售单同步作业、快照、核对与映射任务管理",
+    desc = "重新归集商城快照",
+    resource = "master_mapping_task",
+    action = "reapply"
+)]
+/// 创建或幂等返回独立重新归集操作。
+///
+/// # 返回
+/// 返回可按 operation ID 继续查询的正式操作结果。
+pub async fn master_mapping_task_reapply(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(command): Json<ReapplyMallSnapshotCommand>,
+) -> Result<GovernanceActionResult> {
+    let result = MallSyncService::new(state.db())
+        .reapply_mapping_task(&id, command, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "商城同步与映射",
+    group_desc = "商城卡券销售单同步作业、快照、核对与映射任务管理",
+    desc = "查询重新归集操作结果",
+    resource = "master_mapping_task",
+    action = "detail"
+)]
+/// 按独立 operation ID 查询重新归集状态与正式结果。
+pub async fn master_mapping_task_reapply_operation_detail(
+    State(state): State<AppState>,
+    Path((id, operation_id)): Path<(String, String)>,
+) -> Result<ReapplyOperationView> {
+    let result = MallSyncService::new(state.db())
+        .reapply_operation_detail(&id, &operation_id)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
 }
 
 /// 水位游标查询参数（`source_system_id` 来源商城）。

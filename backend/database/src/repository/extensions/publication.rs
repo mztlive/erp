@@ -7,7 +7,7 @@
 
 use entities::publication::{
     ProductPublication, ProductPublicationDelivery, ProductPublicationRevision,
-    ProductPublicationRevisionMedia,
+    ProductPublicationRevisionMedia, SystemSafetyPauseOperation,
 };
 use mongodb::Database;
 
@@ -26,6 +26,8 @@ pub trait PublicationExt {
     const PRODUCT_PUBLICATION_REVISION_MEDIA: &'static str = "product_publication_revision_media";
     /// `product_publication_delivery` 集合名。
     const PRODUCT_PUBLICATION_DELIVERIES: &'static str = "product_publication_deliveries";
+    /// `system_safety_pause_operation` 不可变证据集合名。
+    const SYSTEM_SAFETY_PAUSE_OPERATIONS: &'static str = "system_safety_pause_operations";
 
     /// 发布列表筛选条件类型（定义见 `repository::publication`）。
     type ProductPublicationFilter;
@@ -57,6 +59,12 @@ pub trait PublicationExt {
     /// 返回 `Repository<'_, entities::publication::ProductPublicationDelivery>`。
     fn product_publication_deliveries(&self) -> Repository<'_, ProductPublicationDelivery>;
 
+    /// 获取系统安全暂停不可变操作集合。
+    ///
+    /// # 返回
+    /// 返回 `Repository<'_, entities::publication::SystemSafetyPauseOperation>`。
+    fn system_safety_pause_operations(&self) -> Repository<'_, SystemSafetyPauseOperation>;
+
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
@@ -82,6 +90,10 @@ impl PublicationExt for Database {
 
     fn product_publication_deliveries(&self) -> Repository<'_, ProductPublicationDelivery> {
         Repository::new(self, Self::PRODUCT_PUBLICATION_DELIVERIES)
+    }
+
+    fn system_safety_pause_operations(&self) -> Repository<'_, SystemSafetyPauseOperation> {
+        Repository::new(self, Self::SYSTEM_SAFETY_PAUSE_OPERATIONS)
     }
 
     fn publication(&self) -> PublicationRepository<'_> {

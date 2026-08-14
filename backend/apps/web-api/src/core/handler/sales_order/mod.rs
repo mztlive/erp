@@ -10,7 +10,8 @@ use axum::{
 use services::{
     audit::AuditActor,
     sales_order::{
-        CreateSalesOrderRequest, PageView, SalesOrderDetailView, SalesOrderListParams, SalesOrderService,
+        CreateSalesOrderRequest, PageView, ResolveProcurementRejectionCommand,
+        ResolveProcurementRejectionResult, SalesOrderDetailView, SalesOrderListParams, SalesOrderService,
         SalesOrderView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
         VoidSalesOrderRequest, WorkingCopyView,
     },
@@ -48,6 +49,26 @@ pub async fn sales_order_list(
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "处置采购驳回",
+    resource = "sales_order",
+    action = "resolve_procurement_rejection"
+)]
+/// 以固定三路强类型命令处置采购驳回。
+pub async fn sales_order_resolve_procurement_rejection(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(command): Json<ResolveProcurementRejectionCommand>,
+) -> Result<ResolveProcurementRejectionResult> {
+    let result = SalesOrderService::new(state.db())
+        .resolve_procurement_rejection(&id, command, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
 }
 
 #[permission_macros::permission(
@@ -98,9 +119,12 @@ pub async fn sales_order_create(
 /// 返回详情视图。
 pub async fn sales_order_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderService::new(state.db()).sales_order_detail(&id).await?;
+    let view = SalesOrderService::with_rbac(state.db(), state.rbac())
+        .sales_order_detail(&id, Some(&actor))
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

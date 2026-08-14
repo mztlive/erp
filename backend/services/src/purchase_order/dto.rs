@@ -18,11 +18,13 @@ use entities::purchase_order::{
     FulfillmentResponsibility, ProgressStatus, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
     PurchaseType,
 };
+use entities::work_item::{AssignmentMode, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use crate::work_item::{ProcessingState, WorkItemAllowedAction};
 
 /// 采购单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase_no"];
@@ -298,6 +300,58 @@ pub struct PurchaseChangeSummaryView {
     pub created_at: u64,
 }
 
+/// 采购单详情中的财务审核责任事实。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PurchaseReviewWorkItemView {
+    /// 待办稳定身份。
+    pub work_item_id: String,
+    /// 固定任务类型。
+    pub work_item_type: WorkItemType,
+    /// 待办自身的乐观锁版本。
+    pub task_version: u64,
+    /// 锁定的不可变采购提交版本。
+    pub subject_version: String,
+    /// 待办生命周期状态。
+    pub status: WorkItemStatus,
+    /// 责任分派模式。
+    pub assignment_mode: AssignmentMode,
+    /// 责任角色。
+    pub owner_role: String,
+    /// 责任组织。
+    pub owner_organization_id: String,
+    /// 当前个人责任人；责任池未开始处理时为空。
+    pub owner_user_id: Option<String>,
+    /// 当前处理状态；当前非审批步骤待办固定为 `READY`。
+    pub processing_state: ProcessingState,
+    /// 服务端处理阻断摘要。
+    pub action_blockers: Vec<PurchaseActionBlockerView>,
+    /// 仅由通用任务责任协议执行的动作。
+    pub responsibility_actions: Vec<WorkItemAllowedAction>,
+    /// 仅由 W08 强类型审核命令执行的领域动作。
+    pub domain_allowed_actions: Vec<PurchaseReviewDomainAction>,
+}
+
+/// 采购财务审核工作面允许提交的领域决定。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PurchaseReviewDomainAction {
+    /// 提交审核通过决定。
+    Approve,
+    /// 提交审核驳回决定。
+    Reject,
+}
+
+/// 采购工作面可安全展示的动作阻断摘要。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PurchaseActionBlockerView {
+    /// 被阻断的动作代码。
+    pub action: String,
+    /// 结构化阻断码。
+    pub code: String,
+    /// 面向用户的安全说明。
+    pub message: String,
+}
+
 /// 采购单对象中心视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseOrderCenterView {
@@ -345,6 +399,8 @@ pub struct PurchaseOrderCenterView {
     pub allocations: Vec<PurchaseSalesAllocationView>,
     /// 本采购单的变更单列表。
     pub changes: Vec<PurchaseChangeSummaryView>,
+    /// 当前开放的财务审核责任；无待审提交或任务已终结时为空。
+    pub review_work_item: Option<PurchaseReviewWorkItemView>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
 }
@@ -504,6 +560,7 @@ pub struct SubmitPurchaseOrderRequest {
     pub expected_lock_version: u64,
     /// 幂等键（重复提交只产生一条正式提交）。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(length(max = 128, message = "幂等键过长"))]
     pub idempotency_key: String,
 }
 
@@ -520,50 +577,115 @@ pub struct SubmitPurchaseOrderResult {
     pub submission_no: String,
     /// 审核待办。
     pub work_item_id: String,
+    /// 审核待办自身的乐观锁版本。
+    pub task_version: u64,
+    /// 待办锁定的不可变采购提交版本。
+    pub subject_version: String,
     /// 新乐观锁版本。
     pub lock_version: u64,
     /// 业务引用。
     pub reference: String,
 }
 
-/// 财务审核通过请求（§8.1.4：提交 + 审核待办 + 采购对象版本三重锁定）。
+/// 采购财务审核决定类型。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PurchaseOrderReviewDecisionResult {
+    /// 审核通过并形成正式采购版本、应付与成本事实。
+    Approved,
+    /// 审核驳回并把采购对象恢复为可编辑草稿。
+    Rejected,
+}
+
+impl PurchaseOrderReviewDecisionResult {
+    /// 返回稳定协议代码。
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Approved => "APPROVED",
+            Self::Rejected => "REJECTED",
+        }
+    }
+}
+
+/// W08 财务审核的完整领域决定。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ApprovePurchaseOrderRequest {
+#[serde(deny_unknown_fields)]
+pub struct PurchaseOrderReviewDecisionCommand {
+    /// 路径必须指向的采购单。
+    #[validate(custom(function = "non_blank", message = "采购单ID不能为空"))]
+    #[validate(length(max = 128, message = "采购单ID过长"))]
+    pub purchase_order_id: String,
     /// 待审核的不可变提交。
     #[validate(custom(function = "non_blank", message = "提交ID不能为空"))]
+    #[validate(length(max = 128, message = "提交ID过长"))]
     pub submission_id: String,
-    /// 审核待办（提交时创建，W02 引用）。
-    #[validate(custom(function = "non_blank", message = "审核待办ID不能为空"))]
-    pub work_item_id: String,
     /// 期望的采购单乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub expected_lock_version: u64,
+    pub expected_purchase_order_lock_version: u64,
+    /// 唯一审核结论分支。
+    pub review_result: PurchaseOrderReviewDecisionResult,
+    /// 驳回原因；仅 `REJECTED` 分支必填，`APPROVED` 分支禁止携带。
+    #[validate(length(max = 64, message = "驳回原因代码过长"))]
+    pub reason_code: Option<String>,
     /// 补充说明。
+    #[validate(length(max = 512, message = "补充说明过长"))]
     pub comment: Option<String>,
 }
 
-/// 财务审核驳回请求。
+impl PurchaseOrderReviewDecisionCommand {
+    /// 校验审核结论分支专属字段。
+    pub(crate) fn validate_branch(&self) -> Result<()> {
+        match (self.review_result, self.reason_code.as_deref()) {
+            (PurchaseOrderReviewDecisionResult::Approved, None) => Ok(()),
+            (PurchaseOrderReviewDecisionResult::Approved, Some(_)) => {
+                Err(Error::ValidationError("审核通过分支不得携带驳回原因".to_string()))
+            }
+            (PurchaseOrderReviewDecisionResult::Rejected, Some(reason)) if !reason.trim().is_empty() => {
+                Ok(())
+            }
+            (PurchaseOrderReviewDecisionResult::Rejected, _) => Err(Error::ValidationError(
+                "审核驳回分支必须携带结构化原因代码".to_string(),
+            )),
+        }
+    }
+}
+
+/// W08 唯一采购财务审核命令。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct RejectPurchaseOrderRequest {
-    /// 待审核的不可变提交。
-    #[validate(custom(function = "non_blank", message = "提交ID不能为空"))]
-    pub submission_id: String,
-    /// 审核待办。
+#[serde(deny_unknown_fields)]
+pub struct ReviewPurchaseOrderCommand {
+    /// 当前正式审核待办。
     #[validate(custom(function = "non_blank", message = "审核待办ID不能为空"))]
+    #[validate(length(max = 128, message = "审核待办ID过长"))]
     pub work_item_id: String,
-    /// 期望的采购单乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub expected_lock_version: u64,
-    /// 结构化驳回原因代码（成本/税率、费用、付款条件、供应商资料、分配错误、其它）。
-    #[validate(custom(function = "non_blank", message = "驳回原因代码不能为空"))]
-    pub reason_code: String,
-    /// 补充说明。
-    pub comment: Option<String>,
+    /// 最近一次查询返回的不透明任务版本。
+    #[validate(custom(function = "non_blank", message = "待办版本不能为空"))]
+    #[validate(length(max = 20, message = "待办版本过长"))]
+    pub expected_task_version: String,
+    /// 待办冻结的不可变采购提交版本。
+    #[validate(custom(function = "non_blank", message = "提交版本不能为空"))]
+    #[validate(length(max = 128, message = "提交版本过长"))]
+    pub expected_subject_version: String,
+    /// 完整领域决定；审核结论不得出现在命令顶层或 URL 路径中。
+    #[validate(nested)]
+    pub decision: PurchaseOrderReviewDecisionCommand,
+    /// 幂等键（同一键重试不得重复形成审核事实）。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(length(max = 128, message = "幂等键过长"))]
+    pub idempotency_key: String,
 }
 
 /// 财务审核结果（通过/驳回共用形状）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseReviewResult {
+    /// 已完成的审核待办。
+    pub work_item_id: String,
+    /// 待办终态，固定为 `COMPLETED`。
+    pub work_item_status: String,
+    /// 完成后的待办版本。
+    pub task_version: String,
+    /// 本次审核锁定的不可变采购提交版本。
+    pub subject_version: String,
     /// 审核结论（`APPROVED`/`REJECTED`）。
     pub review_result: String,
     /// 通过时形成的生效版本。
@@ -714,7 +836,10 @@ pub struct PurchaseChangeOrderView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, PurchaseOrderListParams, SortDir};
+    use super::{
+        normalize_sort, PurchaseOrderListParams, PurchaseOrderReviewDecisionResult,
+        ReviewPurchaseOrderCommand, SortDir,
+    };
     use entities::purchase_order::PurchaseOrderStatus;
     use serde_json::json;
     use validator::Validate;
@@ -787,5 +912,75 @@ mod tests {
         }))
         .unwrap();
         assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn review_command_accepts_only_nested_decision_wire() {
+        let command: ReviewPurchaseOrderCommand = serde_json::from_value(json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "2",
+            "expected_subject_version": "submission-1",
+            "decision": {
+                "purchase_order_id": "po-1",
+                "submission_id": "submission-1",
+                "expected_purchase_order_lock_version": 3,
+                "review_result": "REJECTED",
+                "reason_code": "COST_TAX"
+            },
+            "idempotency_key": "idem-1"
+        }))
+        .unwrap();
+
+        assert_eq!(
+            command.decision.review_result,
+            PurchaseOrderReviewDecisionResult::Rejected
+        );
+        assert!(command.validate().is_ok());
+        assert!(command.decision.validate_branch().is_ok());
+
+        let legacy = json!({
+            "submission_id": "submission-1",
+            "work_item_id": "wi-1",
+            "expected_task_version": 2,
+            "expected_subject_version": "submission-1",
+            "expected_lock_version": 3,
+            "reason_code": "COST_TAX",
+            "idempotency_key": "idem-1"
+        });
+        assert!(serde_json::from_value::<ReviewPurchaseOrderCommand>(legacy).is_err());
+    }
+
+    #[test]
+    fn review_decision_rejects_branch_field_drift() {
+        let approved_with_reason: ReviewPurchaseOrderCommand = serde_json::from_value(json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "2",
+            "expected_subject_version": "submission-1",
+            "decision": {
+                "purchase_order_id": "po-1",
+                "submission_id": "submission-1",
+                "expected_purchase_order_lock_version": 3,
+                "review_result": "APPROVED",
+                "reason_code": "OTHER"
+            },
+            "idempotency_key": "idem-1"
+        }))
+        .unwrap();
+        assert!(approved_with_reason.decision.validate_branch().is_err());
+
+        let rejected_without_reason: ReviewPurchaseOrderCommand = serde_json::from_value(json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "2",
+            "expected_subject_version": "submission-1",
+            "decision": {
+                "purchase_order_id": "po-1",
+                "submission_id": "submission-1",
+                "expected_purchase_order_lock_version": 3,
+                "review_result": "REJECTED"
+            },
+            "idempotency_key": "idem-2"
+        }))
+        .unwrap();
+        assert!(rejected_without_reason.decision.validate_branch().is_err());
     }
 }

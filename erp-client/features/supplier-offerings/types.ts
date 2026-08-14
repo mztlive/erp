@@ -1,5 +1,7 @@
 /** 公司 SKU 的供应商供给合同。 */
 
+import type { WorkItemProjection } from "@/features/work-items/types"
+
 export type OfferingSourceType = "MANUAL" | "EXCEL" | "API"
 export type OfferingStatus = "ACTIVE" | "PAUSED" | "STOPPED"
 export type AvailabilityStatus =
@@ -65,6 +67,16 @@ export type SupplierOfferingListQuery = Readonly<{
     page?: number
     pageSize?: number
 }>
+
+/** W22 安全暂停在 W21 的唯一已注册任务投影。 */
+export type SupplierSupplyExceptionWorkItem = WorkItemProjection &
+    Readonly<{
+        workItemType: "BUSINESS_EXCEPTION"
+        handlerKey: "supplier_supply_exception"
+        destinationWorkspaceId: "W21"
+        status: "OPEN"
+        businessObjectType: "SUPPLIER_OFFERING"
+    }>
 
 type SupplierOfferingTermsInput = Readonly<{
     dropship_supply_price_gross: string

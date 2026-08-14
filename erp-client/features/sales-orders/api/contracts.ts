@@ -2,6 +2,7 @@ import type {
     SalesOrderListItem,
     SalesOrderOrigin,
 } from "@/features/sales-orders/types"
+import type { ApprovalRuntimeViewDto } from "@/features/work-items/types"
 
 // ─── 导出视图类型（保持 queries 契约） ───────────────────────────────────────
 
@@ -156,6 +157,8 @@ export type BackendWorkingCopy = {
     business_remark?: string | null
     voucher_category_sku_id?: string | null
     voucher_expiry_at?: number | null
+    target_mall_id?: string | null
+    receivable_due_date?: string | null
     gross_amount: string
     net_amount: string
     tax_amount: string
@@ -178,6 +181,10 @@ export type BackendSubmission = {
     business_remark?: string | null
     voucher_category_sku_id?: string | null
     voucher_expiry_at?: number | null
+    target_mall_id?: string | null
+    customer_external_identity?: string | null
+    voucher_category_external_identity?: string | null
+    receivable_due_date?: string | null
     gross_amount: string
     net_amount: string
     tax_amount: string
@@ -208,6 +215,26 @@ export type BackendOpenProcurementRejection = {
     handled_by?: string | null
     handled_by_name?: string | null
     handled_at?: number | null
+    allowed_actions: Array<
+        | "RESUBMIT_CHANGED_TERMS"
+        | "REQUEST_LOW_MARGIN_ACCEPTANCE"
+        | "VOID_AFTER_REJECTION"
+    >
+}
+
+/** 销售单详情内嵌的活动低毛利上级确认。 */
+export type BackendActiveLowMarginManagerConfirmation = {
+    confirmation_id: string
+    work_item_id: string
+    task_version: string | number
+    subject_version: string
+    low_margin_submission_id: string
+    rejected_procurement_confirmation_id: string
+    acceptance_reason: string
+    evidence_reference_ids: string[]
+    owner_user?: { id: string; display_name: string } | null
+    allowed_actions: Array<"START_PROCESSING" | "APPROVE" | "REJECT">
+    action_blockers: Array<{ code: string; message: string }>
 }
 
 export type BackendSalesOrderDetail = {
@@ -239,6 +266,41 @@ export type BackendSalesOrderDetail = {
     can_start_sales_change_order: boolean
     change_order_blocker?: string | null
     open_procurement_rejection?: BackendOpenProcurementRejection | null
+    active_card_sales_approval?: BackendActiveCardSalesApproval | null
+    active_low_margin_manager_confirmation?: BackendActiveLowMarginManagerConfirmation | null
+}
+
+/** 销售单中心内嵌的唯一活动卡券审批投影。 */
+export type BackendActiveCardSalesApproval = {
+    approval_instance_id: string
+    instance_version: string | number
+    approval_step_instance_id: string
+    step_version: string | number
+    work_item_id?: string | null
+    task_version?: string | number | null
+    work_item_type?:
+        | "CARD_SALES_MANAGER_APPROVAL"
+        | "CARD_SALES_OPERATION_APPROVAL"
+        | null
+    subject_version: string
+    work_item_status?: "OPEN" | "COMPLETED" | "CLOSED" | null
+    processing_state: "READY" | "APPROVAL_BLOCKED"
+    processing_blocker?: { code: string; message: string } | null
+    assignment_mode?: "DIRECT" | "POOL" | null
+    owner_user?: { id: string; display_name: string } | null
+    sales_order_submission_id: string
+    submission_no: number
+    frozen_submission_summary: string
+    expected_review_status: "PENDING_SALES_LEAD" | "PENDING_OPERATIONS"
+    allowed_actions: Array<
+        "START_PROCESSING" | "APPROVE" | "REJECT" | "TERMINATE" | "CANCEL"
+    >
+    action_blockers: Array<{
+        action: string
+        code?: string
+        reason?: string
+        message?: string
+    }>
 }
 
 export type BackendContractDetail = {
@@ -281,17 +343,6 @@ export type BackendPartyContact = {
     status: string
 }
 
-export type BackendSalesOrderReview = {
-    id: string
-    sales_order_id: string
-    submission_id: string
-    review_stage: string
-    status: string
-    reviewer_id?: string | null
-    reviewed_at?: number | null
-    created_at: number
-}
-
 export type BackendProcurementConfirmation = {
     id: string
     sales_order_id: string
@@ -313,20 +364,6 @@ export type BackendSalesChangeOrder = {
     created_at: number
 }
 
-export type BackendWorkItem = {
-    id: string
-    work_item_type: string
-    business_object_type: string
-    business_object_id: string
-    subject_version?: string | null
-    status: string
-    owner_role?: string | null
-    owner_user_id?: string | null
-    version: number
-    impact_summary?: string | null
-    created_at: number
-}
-
 export type BackendBackgroundJob = {
     id: string
     job_no?: string
@@ -337,7 +374,10 @@ export type BackendBackgroundJob = {
 }
 
 export type ProcurementResolutionOutcome = {
-    outcome: "CHANGED_TERMS_RESUBMITTED" | "VOIDED_AFTER_PROCUREMENT_REJECTION"
+    outcome:
+        | "CHANGED_TERMS_RESUBMITTED"
+        | "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
+        | "VOIDED_AFTER_PROCUREMENT_REJECTION"
     reference: string
     detail: string
     newSubmissionNo?: number
@@ -347,15 +387,145 @@ export type ProcurementResolutionOutcome = {
     primaryStatusLabel?: string
 }
 
-export type CardApprovalCompleteResult = {
-    outcome:
-        | "MANAGER_APPROVED"
-        | "OPERATIONS_APPROVED_AND_EFFECTIVE"
-        | "REJECTED_TO_SALES"
-    reference: string
-    detail: string
-    nextWorkItemId?: string
-    primaryStatusLabel?: string
+export type BackendProcurementRejectionResolutionResult =
+    | {
+          operation_id: string
+          status: "COMMITTED"
+          committed_at: number
+          outcome: "CHANGED_TERMS_RESUBMITTED"
+          sales_order_id: string
+          new_submission_id: string
+          new_submission_no: number
+          workflow_action_id: string
+          new_procurement_confirmation_id: string
+          new_procurement_work_item_id: string
+      }
+    | {
+          operation_id: string
+          status: "COMMITTED"
+          committed_at: number
+          outcome: "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
+          sales_order_id: string
+          new_submission_id: string
+          new_submission_no: number
+          workflow_action_id: string
+          low_margin_confirmation_id: string
+          low_margin_manager_work_item_id: string
+      }
+    | {
+          operation_id: string
+          status: "COMMITTED"
+          committed_at: number
+          outcome: "VOIDED_AFTER_PROCUREMENT_REJECTION"
+          sales_order_id: string
+          workflow_action_id: string
+      }
+
+export type LowMarginManagerDecisionOutcome =
+    | {
+          outcome: "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
+          salesOrderId: string
+          lowMarginSubmissionId: string
+          salesOrderReviewId: string
+          workflowActionId: string
+          newProcurementConfirmationId: string
+          newProcurementWorkItemId: string
+      }
+    | {
+          outcome: "LOW_MARGIN_REJECTED_TO_SALES"
+          salesOrderId: string
+          lowMarginSubmissionId: string
+          salesOrderReviewId: string
+          workflowActionId: string
+      }
+
+export type BackendLowMarginManagerDecisionResult = {
+    work_item_id: string
+    work_item_status: "COMPLETED"
+    business_result:
+        | {
+              outcome: "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
+              sales_order_id: string
+              low_margin_submission_id: string
+              sales_order_review_id: string
+              workflow_action_id: string
+              new_procurement_confirmation_id: string
+              new_procurement_work_item_id: string
+          }
+        | {
+              outcome: "LOW_MARGIN_REJECTED_TO_SALES"
+              sales_order_id: string
+              low_margin_submission_id: string
+              sales_order_review_id: string
+              workflow_action_id: string
+          }
+}
+
+export type CardSalesApprovalBusinessResult =
+    | {
+          outcome: "MANAGER_APPROVED"
+          sales_order_id: string
+          sales_order_review_id: string
+          workflow_action_id: string
+          sales_order_commercial_status: "PENDING_OPERATIONS"
+          next_work_item_id?: string | null
+          next_work_item_status?: "OPEN" | null
+      }
+    | {
+          outcome: "OPERATIONS_APPROVED_AND_EFFECTIVE"
+          sales_order_id: string
+          sales_order_review_id: string
+          workflow_action_id: string
+          sales_order_commercial_status: "EFFECTIVE"
+          sales_order_revision_id: string
+          receivable_account_id: string
+          execution_projection_operation_id: string
+      }
+    | {
+          outcome: "REJECTED_TO_SALES"
+          sales_order_id: string
+          sales_order_review_id: string
+          workflow_action_id: string
+          sales_order_commercial_status: string
+      }
+    | {
+          outcome: "TERMINATED"
+          sales_order_id: string
+          sales_order_submission_id: string
+          submission_status: "SUPERSEDED"
+          workflow_action_id: string
+          sales_order_commercial_status: "DRAFT"
+      }
+
+export type SubmitCardSalesApprovalDecisionResult = {
+    approval_instance_status:
+        | "RUNNING"
+        | "APPROVED"
+        | "REJECTED"
+        | "TERMINATED"
+        | "BLOCKED"
+    work_item_id: string
+    work_item_status: "COMPLETED"
+    business_result: CardSalesApprovalBusinessResult
+    approval: ApprovalRuntimeViewDto
+}
+
+export type CancelCardSalesApprovalResult = {
+    approval_instance_status: "CANCELLED"
+    work_item_id?: string | null
+    work_item_status?: "CLOSED" | null
+    business_result: {
+        outcome: "CANCELLED_TO_EDITABLE_DRAFT"
+        sales_order_id: string
+        sales_order_version: string
+        sales_order_commercial_status: "DRAFT"
+        sales_order_review_status: "NOT_SUBMITTED"
+        sales_order_submission_id: string
+        submission_version: string
+        submission_status: "SUPERSEDED"
+        workflow_action_id: string
+    }
+    approval: ApprovalRuntimeViewDto
 }
 
 export type ExportJobResult = {

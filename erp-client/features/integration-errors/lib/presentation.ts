@@ -6,10 +6,7 @@ export const INTEGRATION_ACTION_LABEL: Readonly<Record<string, string>> = {
     ADD_EVIDENCE: "补充证据",
     LINK_COMPENSATION: "关联补偿",
     REATTRIBUTE: "重新归集",
-    TRANSFER: "转交",
     RESOLVE: "处理完成",
-    DEFER: "先跳过",
-    SKIP: "跳过当前项",
     CLOSE_DUPLICATE: "关闭重复",
     CLOSE_MISROUTED: "关闭错误路由",
     CONFIRM_NO_ERROR: "确认无误",
@@ -28,12 +25,7 @@ export function integrationStatusTone(
     ) {
         return "success"
     }
-    if (
-        code === "CLOSED" ||
-        code === "HELD" ||
-        code === "SKIPPED" ||
-        item.status.label.includes("已跳过")
-    ) {
+    if (code === "CLOSED") {
         return "neutral"
     }
     if (

@@ -8,7 +8,8 @@ use entities::ids::{FileAssetId, ProductCategoryId, SkuId, SkuRevisionId, Source
 use entities::money::{Amount, Quantity, Rate};
 use entities::publication::{
     MediaRole, ProductCapability, ProductPublication, ProductPublicationRevision, ProductPublicationStatus,
-    PublicationDeliveryStatus, SaleStatus,
+    PublicationDeliveryStatus, SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType,
+    SaleStatus, SystemSafetyPauseOperation,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -260,14 +261,34 @@ pub struct ProductPublicationDeliveryView {
     pub publication_revision_id: String,
     /// 目标商城。
     pub target_mall_id: String,
+    /// 跨全部尝试保持不变的消息键。
+    pub message_key: String,
     /// 投递状态。
     pub delivery_status: PublicationDeliveryStatus,
     /// 发送次数。
     pub attempt_count: u32,
+    /// 最近真实发送时间。
+    pub last_attempt_at: Option<i64>,
+    /// 下次受控处理时间。
+    pub next_attempt_at: Option<i64>,
+    /// 商城确认时间。
+    pub mall_ack_at: Option<i64>,
     /// 商城确认版本。
     pub mall_version: Option<String>,
+    /// 稳定错误分类。
+    pub error_class: Option<entities::integration_ops::ErrorClass>,
     /// 错误码。
     pub error_code: Option<String>,
+    /// 脱敏错误摘要。
+    pub error_summary: Option<String>,
+    /// 原消息信封。
+    pub inbox_message_id: Option<String>,
+    /// W29 错误对象。
+    pub error_task_id: Option<String>,
+    /// W29 正式待办。
+    pub work_item_id: Option<String>,
+    /// 服务端按当前投递事实开放的动作。
+    pub allowed_actions: Vec<String>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -289,6 +310,339 @@ pub struct PublicationDeliveryResultView {
     pub mall_version: Option<String>,
     /// 发布主表乐观锁版本（确认后推进为商城生效）。
     pub publication_version: u64,
+}
+
+/// W22 发布投递强类型对象动作。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PublicationDeliveryAction {
+    /// 查询原消息的商城最终结果。
+    QueryResult,
+    /// 沿原消息身份安排受控重试。
+    Retry,
+    /// 升级为 W29 正式错误对象与待办。
+    Escalate,
+}
+
+impl PublicationDeliveryAction {
+    /// 返回协议稳定动作代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::QueryResult => "QUERY_RESULT",
+            Self::Retry => "RETRY",
+            Self::Escalate => "ESCALATE",
+        }
+    }
+}
+
+/// W22 发布投递强命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct PublicationDeliveryCommand {
+    /// 稳定发布身份。
+    #[validate(custom(function = "non_blank", message = "发布ID不能为空"))]
+    pub publication_id: String,
+    /// 不可变发布修订。
+    #[validate(custom(function = "non_blank", message = "发布修订ID不能为空"))]
+    pub publication_revision_id: String,
+    /// 固定投递身份。
+    #[validate(custom(function = "non_blank", message = "投递ID不能为空"))]
+    pub delivery_id: String,
+    /// 强类型对象动作。
+    pub action: PublicationDeliveryAction,
+    /// 查询所得投递版本。
+    pub expected_object_version: u64,
+    /// 调用方幂等请求身份；不会原文写入审计。
+    #[validate(length(max = 128, message = "请求ID过长"))]
+    #[validate(custom(function = "non_blank", message = "请求ID不能为空"))]
+    pub request_id: String,
+}
+
+/// W22 投递强动作结果分类。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PublicationDeliveryActionResult {
+    /// 商城权威确认。
+    Acked,
+    /// 商城明确失败，或调用前失败关闭。
+    Failed,
+    /// 最终结果仍未知。
+    StillUnknown,
+    /// 已沿原身份排入受控重试。
+    RetryScheduled,
+    /// 已创建或复用 W29 错误对象与待办。
+    Escalated,
+}
+
+/// W22 投递对象动作正式结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PublicationDeliveryActionResultView {
+    /// 稳定操作编号。
+    pub operation_id: String,
+    /// 固定投递 ID。
+    pub delivery_id: String,
+    /// 动作结果。
+    pub result: PublicationDeliveryActionResult,
+    /// W29 正式待办。
+    pub work_item_id: Option<String>,
+    /// W29 错误对象。
+    pub error_task_id: Option<String>,
+    /// 结果形成时间。
+    pub occurred_at: i64,
+    /// 服务端下一步。
+    pub next_action: Option<String>,
+}
+
+/// W22 有界待发送处理请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessPublicationDeliveriesRequest {
+    /// 单批上限。
+    #[validate(range(min = 1, max = 100, message = "单批处理数必须在1-100之间"))]
+    pub limit: Option<u32>,
+}
+
+/// W22 有界待发送处理结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProcessPublicationDeliveriesResult {
+    /// 扫描候选数量。
+    pub scanned: u32,
+    /// 商城确认数量。
+    pub acked: u32,
+    /// 明确失败数量。
+    pub failed: u32,
+    /// 结果未知数量。
+    pub still_unknown: u32,
+    /// CAS 未取得或状态变化数量。
+    pub skipped: u32,
+    /// 逐项正式结果。
+    pub items: Vec<PublicationDeliveryActionResultView>,
+}
+
+/// 可信目录/供给服务传给 W22 的系统安全暂停触发。
+///
+/// 本类型不用于浏览器反序列化；`affected_publication_ids` 刻意不存在，影响集只能
+/// 由服务端在调用方事务内按当前在售事实冻结。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SystemSafetyPauseTrigger {
+    /// 固定安全原因。
+    pub cause: SafetyPauseCause,
+    /// 可信来源对象类型。
+    pub source_object_type: SafetyPauseSourceObjectType,
+    /// 可信来源对象 ID。
+    pub source_object_id: String,
+    /// 服务端来源事实版本。
+    pub source_version: String,
+    /// 来源事实发生时间。
+    pub occurred_at: entities::common::time::Instant,
+    /// 调用链幂等键。
+    pub idempotency_key: String,
+}
+
+impl SystemSafetyPauseTrigger {
+    /// 校验强类型触发边界；未知原因/来源与空身份一律失败关闭。
+    ///
+    /// # 错误
+    /// 触发不是已注册常量或稳定身份为空时返回验证错误。
+    pub(crate) fn validate_contract(&self) -> Result<()> {
+        if self.cause == SafetyPauseCause::Unknown {
+            return Err(Error::ValidationError(
+                "UNKNOWN 安全暂停原因未注册，必须失败关闭".to_string(),
+            ));
+        }
+        if self.source_object_type == SafetyPauseSourceObjectType::Unknown {
+            return Err(Error::ValidationError(
+                "UNKNOWN 安全暂停来源对象未注册，必须失败关闭".to_string(),
+            ));
+        }
+        if self.source_object_id.trim().is_empty()
+            || self.source_version.trim().is_empty()
+            || self.idempotency_key.trim().is_empty()
+        {
+            return Err(Error::ValidationError(
+                "安全暂停来源对象、来源版本和幂等键均不能为空".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// 安全暂停子结果中的不可变证据种类。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SafetyPauseArtifactKindView {
+    /// 本实现固定形成新的暂停发布修订。
+    Revision,
+}
+
+/// 已冻结的单个发布子结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SafetyPauseAffectedPublicationView {
+    /// 稳定发布 ID。
+    pub publication_id: String,
+    /// 证据种类，固定为 `REVISION`。
+    pub pause_artifact_kind: SafetyPauseArtifactKindView,
+    /// 不可变暂停修订 ID。
+    pub pause_revision_id: String,
+    /// 指向暂停修订的投递 ID。
+    pub delivery_id: String,
+}
+
+/// `SUPPLIER_STOPPED` 的唯一正式任务引用。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SafetyPauseFollowUpWorkItemView {
+    /// 任务 ID。
+    pub work_item_id: String,
+    /// 任务乐观锁版本；按 W22 合同返回稳定字符串。
+    pub task_version: String,
+    /// 固定任务类型。
+    pub work_item_type: String,
+    /// 与触发来源一致的业务对象类型。
+    pub business_object_type: String,
+    /// 与触发来源一致的业务对象 ID。
+    pub business_object_id: String,
+    /// 任务实际冻结的来源版本。
+    pub subject_version: String,
+    /// 固定路由 W21 的 handler key。
+    pub handler_key: String,
+}
+
+/// 非供应停止原因的强类型 blocker。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SafetyPauseFollowUpBlockerView {
+    /// 稳定 blocker 代码。
+    pub code: String,
+    /// 业务说明。
+    pub message: String,
+    /// 不可变证据引用。
+    pub evidence_reference: String,
+}
+
+/// 已提交操作的互斥后续分支。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum KnownSafetyPauseFollowUpView {
+    /// 仅 `SUPPLIER_STOPPED` 可返回。
+    WorkItem {
+        /// 唯一正式任务。
+        follow_up_work_item: SafetyPauseFollowUpWorkItemView,
+    },
+    /// 所有其它原因只能返回 blocker。
+    Blocker {
+        /// 强类型后续 blocker。
+        follow_up_blocker: SafetyPauseFollowUpBlockerView,
+    },
+}
+
+/// 已提交或幂等重放的安全暂停事实。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KnownSystemSafetyPauseOperationView {
+    /// 不可变操作 ID。
+    pub operation_id: String,
+    /// 固定安全原因。
+    pub cause: SafetyPauseCause,
+    /// 来源对象类型。
+    pub source_object_type: SafetyPauseSourceObjectType,
+    /// 来源对象 ID。
+    pub source_object_id: String,
+    /// 来源事实版本。
+    pub source_version: String,
+    /// 本地供给效果，固定为暂停。
+    pub availability_effect: String,
+    /// 首次冻结的完整非空影响集。
+    pub affected_publications: Vec<SafetyPauseAffectedPublicationView>,
+    /// 本地提交时间（秒级时间戳）。
+    pub committed_at: i64,
+    /// 与原因互斥匹配的后续任务或 blocker。
+    #[serde(flatten)]
+    pub follow_up: KnownSafetyPauseFollowUpView,
+}
+
+/// 结果未知时的失败关闭视图。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UnknownSystemSafetyPauseOperationView {
+    /// 客户端/调用方可跟踪的操作 ID。
+    pub operation_id: String,
+    /// 固定安全原因。
+    pub cause: SafetyPauseCause,
+    /// 来源对象类型。
+    pub source_object_type: SafetyPauseSourceObjectType,
+    /// 来源对象 ID。
+    pub source_object_id: String,
+    /// 来源事实版本。
+    pub source_version: String,
+    /// 原幂等键；只能以该键查询，不得创建新操作。
+    pub original_idempotency_key: String,
+    /// 固定失败关闭效果。
+    pub availability_effect: String,
+}
+
+/// W22 系统安全暂停操作唯一响应结构。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "result_status", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SystemSafetyPauseOperationView {
+    /// 首次本地事务提交成功。
+    Committed(KnownSystemSafetyPauseOperationView),
+    /// 相同来源事件的幂等重放；影响集与首次提交完全相同。
+    AlreadySafe(KnownSystemSafetyPauseOperationView),
+    /// 提交终态暂时无法确认；不得携带影响集、任务或 blocker。
+    Unknown(UnknownSystemSafetyPauseOperationView),
+}
+
+impl SystemSafetyPauseOperationView {
+    /// 从已落库事实构造首次提交视图。
+    pub(crate) fn committed(operation: SystemSafetyPauseOperation) -> Self {
+        Self::Committed(known_safety_pause_view(operation))
+    }
+
+    /// 从已落库事实构造幂等重放视图。
+    pub(crate) fn already_safe(operation: SystemSafetyPauseOperation) -> Self {
+        Self::AlreadySafe(known_safety_pause_view(operation))
+    }
+}
+
+fn known_safety_pause_view(operation: SystemSafetyPauseOperation) -> KnownSystemSafetyPauseOperationView {
+    let affected_publications = operation
+        .affected_publications
+        .into_iter()
+        .map(|item| SafetyPauseAffectedPublicationView {
+            publication_id: item.publication_id.to_string(),
+            pause_artifact_kind: SafetyPauseArtifactKindView::Revision,
+            pause_revision_id: item.pause_revision_id.to_string(),
+            delivery_id: item.delivery_id.to_string(),
+        })
+        .collect();
+    let follow_up = match operation.follow_up {
+        SafetyPauseFollowUp::WorkItem(item) => KnownSafetyPauseFollowUpView::WorkItem {
+            follow_up_work_item: SafetyPauseFollowUpWorkItemView {
+                work_item_id: item.work_item_id,
+                task_version: item.task_version.to_string(),
+                work_item_type: "BUSINESS_EXCEPTION".to_string(),
+                business_object_type: item.business_object_type,
+                business_object_id: item.business_object_id,
+                subject_version: item.subject_version,
+                handler_key: item.handler_key,
+            },
+        },
+        SafetyPauseFollowUp::Blocker(blocker) => KnownSafetyPauseFollowUpView::Blocker {
+            follow_up_blocker: SafetyPauseFollowUpBlockerView {
+                code: blocker.code.as_str().to_string(),
+                message: blocker.message,
+                evidence_reference: blocker.evidence_reference,
+            },
+        },
+    };
+    KnownSystemSafetyPauseOperationView {
+        operation_id: operation.base.id,
+        cause: operation.cause,
+        source_object_type: operation.source_object_type,
+        source_object_id: operation.source_object_id,
+        source_version: operation.source_version,
+        availability_effect: "PAUSED".to_string(),
+        affected_publications,
+        committed_at: operation.committed_at.unix_secs(),
+        follow_up,
+    }
 }
 
 /// 商品发布列表查询参数（分页参数与筛选字段扁平传递）。
@@ -474,9 +828,12 @@ impl From<ProductPublication> for ProductPublicationView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, publication_content_hash, ProductPublicationListParams, SortDir};
+    use super::{
+        normalize_sort, publication_content_hash, ProductPublicationListParams, SortDir,
+        SystemSafetyPauseTrigger,
+    };
     use entities::ids::{ProductPublicationId, SkuId, SourceSystemId};
-    use entities::publication::ProductPublicationStatus;
+    use entities::publication::{ProductPublicationStatus, SafetyPauseCause, SafetyPauseSourceObjectType};
     use std::str::FromStr;
 
     #[test]
@@ -542,5 +899,28 @@ mod tests {
         let second = publication_content_hash(&revision);
         assert_eq!(first, second, "指纹必须确定");
         assert!(first.len() <= 128);
+    }
+
+    #[test]
+    fn trigger_rejects_unknown_and_blank_source_identity() {
+        let unknown = SystemSafetyPauseTrigger {
+            cause: SafetyPauseCause::Unknown,
+            source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
+            source_object_id: "offering-1".to_string(),
+            source_version: "availability:2".to_string(),
+            occurred_at: entities::common::time::Instant::from_unix_secs(1),
+            idempotency_key: "event-1".to_string(),
+        };
+        assert!(unknown.validate_contract().is_err());
+
+        let blank = SystemSafetyPauseTrigger {
+            cause: SafetyPauseCause::SupplyUnavailable,
+            source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
+            source_object_id: " ".to_string(),
+            source_version: "availability:2".to_string(),
+            occurred_at: entities::common::time::Instant::from_unix_secs(1),
+            idempotency_key: "event-1".to_string(),
+        };
+        assert!(blank.validate_contract().is_err());
     }
 }

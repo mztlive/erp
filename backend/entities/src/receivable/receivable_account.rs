@@ -143,6 +143,10 @@ pub struct ReceivableAccountUpdate {
     pub reviewed_at: Option<Instant>,
     /// 最近复核证据引用；与 `reviewed_by` 成对出现。
     pub review_evidence_reference: Option<String>,
+    /// 变更后的应收含税总额；只允许权威差额事实与它在同一事务内提交。
+    pub gross_total: Option<Amount>,
+    /// 变更后的可开票含税总额；与 `gross_total` 共同重算开放额度。
+    pub invoiceable_total: Option<Amount>,
 }
 
 /// 应收往来子账实体（稳定主表，数据模型 §6.8）。
@@ -293,6 +297,14 @@ impl ReceivableAccount {
     /// 当复核三件套与复核状态不一致或文本超长时返回错误。
     pub fn update(&mut self, update: ReceivableAccountUpdate, updated_by: impl Into<String>) -> Result<()> {
         let review_status = update.review_status.unwrap_or(self.review_status);
+        let gross_total = update.gross_total.unwrap_or(self.gross_total);
+        let invoiceable_total = update.invoiceable_total.unwrap_or(self.invoiceable_total);
+        let (open_total, open_invoiceable_total) = validate_totals(
+            gross_total,
+            self.settled_total,
+            invoiceable_total,
+            self.invoiced_total,
+        )?;
         let (reviewed_by, reviewed_at, evidence) = if update.reviewed_by.is_none()
             && update.reviewed_at.is_none()
             && update.review_evidence_reference.is_none()
@@ -311,6 +323,11 @@ impl ReceivableAccount {
             )?
         };
         self.review_status = review_status;
+        self.gross_total = gross_total;
+        self.invoiceable_total = invoiceable_total;
+        self.open_total = open_total;
+        self.open_invoiceable_total = open_invoiceable_total;
+        self.stable.status = derive_status(open_total, self.settled_total);
         self.reviewed_by = reviewed_by;
         self.reviewed_at = reviewed_at;
         self.review_evidence_reference = evidence;
@@ -602,6 +619,8 @@ mod tests {
                     reviewed_by: Some(" reviewer-2 ".to_string()),
                     reviewed_at: Some(Instant::from_unix_secs(1_700_000_100)),
                     review_evidence_reference: Some(" evid-2 ".to_string()),
+                    gross_total: None,
+                    invoiceable_total: None,
                 },
                 "admin-2",
             )
@@ -619,6 +638,8 @@ mod tests {
                     reviewed_by: Some("reviewer-3".to_string()),
                     reviewed_at: Some(Instant::from_unix_secs(1_700_000_200)),
                     review_evidence_reference: None,
+                    gross_total: None,
+                    invoiceable_total: None,
                 },
                 "admin-3",
             )

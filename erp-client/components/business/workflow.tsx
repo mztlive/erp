@@ -501,17 +501,13 @@ function EditorPresence({
     )
 }
 
-export {
-    BatchImpactPreview,
-    ConflictResolutionDialog,
-    EditorPresence,
-}
+export { BatchImpactPreview, ConflictResolutionDialog, EditorPresence }
 
 export {
     FormalActionConfirmDialog,
     SequentialProcessBar,
     type FormalActionConfirmDialogProps,
-    type SequentialLeaseStatus,
+    type ResponsibilityStatus,
     type SequentialProcessBarProps,
     type WorkflowStatus,
 } from "@/components/business/workflow-actions"

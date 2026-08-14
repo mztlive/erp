@@ -2,8 +2,7 @@
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::supplier_fulfillment` 的 DTO，禁止重复定义同构类型、
-//! 禁止直连数据库。供应商网关由 handler 按默认模拟网关构造（真实 Connector
-//! 接入点见 `SimulatedSupplierGateway` 文档）。
+//! 禁止直连数据库。未注入受控生产 Connector 时固定失败关闭，不得伪造外部成功。
 
 use std::sync::Arc;
 
@@ -15,9 +14,12 @@ use services::{
     audit::AuditActor,
     supplier_fulfillment::{
         PageView, PlaceFulfillmentOrderRequest, RecordRefundResultRequest, RecordSupplierRejectRequest,
-        SimulatedSupplierGateway, SubmitActionResultView, SubmitAfterSalesActionRequest,
+        SubmitActionResultView, SubmitAfterSalesActionRequest, SupplierFulfillmentOrderDetailParams,
         SupplierFulfillmentOrderDetailView, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView,
-        SupplierFulfillmentService, SupplierOrderStatusHistoryView, SupplierRefundFactView,
+        SupplierFulfillmentService, SupplierOrderInvestigationResultView,
+        SupplierOrderObjectInvestigationCommand, SupplierOrderStatusHistoryView,
+        SupplierOrderTaskCompletionCommand, SupplierOrderTaskCompletionResultView,
+        SupplierOrderTaskInvestigationCommand, SupplierRefundFactView, UnavailableSupplierGateway,
     },
 };
 
@@ -63,16 +65,80 @@ pub async fn supplier_fulfillment_order_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `id` - 供应商子订单 ID
+/// * `params` - W26 正式任务入口参数
 ///
 /// # 返回
 /// 返回订单详情视图（订单 + 明细 + 状态历史 + 动作 + 退款事实）。
 pub async fn supplier_fulfillment_order_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
+    Query(params): Query<SupplierFulfillmentOrderDetailParams>,
 ) -> Result<SupplierFulfillmentOrderDetailView> {
     let view = SupplierFulfillmentService::new(state.db(), default_gateway())
-        .supplier_fulfillment_order_detail(&id)
+        .supplier_fulfillment_order_detail(&id, &params, &actor, state.rbac())
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商订单",
+    group_desc = "供应商履约订单、动作与退款事实管理",
+    desc = "从订单入口调查供应商原动作结果",
+    resource = "supplier_fulfillment_order",
+    action = "investigate"
+)]
+/// 从普通订单入口查询原结果或执行已证明安全的重放。
+pub async fn supplier_fulfillment_order_investigation(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(command): Json<SupplierOrderObjectInvestigationCommand>,
+) -> Result<SupplierOrderInvestigationResultView> {
+    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+        .investigate_order(command, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商订单",
+    group_desc = "供应商履约订单、动作与退款事实管理",
+    desc = "从正式任务调查供应商原动作结果",
+    resource = "supplier_fulfillment_order",
+    action = "investigate"
+)]
+/// 从 W26 正式任务入口查询原结果或执行已证明安全的重放。
+pub async fn supplier_fulfillment_order_task_investigation(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(command): Json<SupplierOrderTaskInvestigationCommand>,
+) -> Result<SupplierOrderInvestigationResultView> {
+    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+        .investigate_order_task(command, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商订单",
+    group_desc = "供应商履约订单、动作与退款事实管理",
+    desc = "根据已验证结果完成供应商履约任务",
+    resource = "supplier_fulfillment_order",
+    action = "complete"
+)]
+/// 以服务端可验证终态证据完成 W26 正式任务。
+pub async fn supplier_fulfillment_order_task_completion(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(command): Json<SupplierOrderTaskCompletionCommand>,
+) -> Result<SupplierOrderTaskCompletionResultView> {
+    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+        .complete_order_task(command, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -232,5 +298,5 @@ pub async fn supplier_refund_fact_post(
 /// # 返回
 /// 返回线程安全的网关实例。
 fn default_gateway() -> Arc<dyn services::supplier_fulfillment::SupplierGateway> {
-    Arc::new(SimulatedSupplierGateway::new())
+    Arc::new(UnavailableSupplierGateway)
 }

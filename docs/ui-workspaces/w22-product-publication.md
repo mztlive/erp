@@ -65,7 +65,7 @@
 
 - 安全暂停由供给领域事件触发，不是运营页面按钮，也不等待运营、采购或管理员开始处理任务。触发范围固定为：供给关系 `STOPPED`、可供数量为零、明确不可供、可供数据超过服务端新鲜度阈值，以及供货价、进项税率、费用、MOQ、区域或商品能力变化尚未确认。
 - 安全暂停以“来源对象 + 暂停原因 + 来源版本”作为事件级幂等身份，先冻结全部受影响在售发布集合；同一领域事务为每个发布写本地暂停、不可变暂停修订/动作和 `product_publication_delivery`。若触发原因为 `SUPPLIER_STOPPED`，整个来源事件再只创建一个正式后续 `work_item`，各发布子结果引用同一任务；其它原因只固定记录与 cause 匹配的 follow-up blocker 与证据，不伪造任务。重复事件返回原操作和原子结果，如有任务则返回原任务。
-- 仅 `SUPPLIER_STOPPED` 后续任务复用已注册 `work_item_type=BUSINESS_EXCEPTION`，业务对象是触发暂停的 `SUPPLIER_EXTERNAL_PRODUCT` 或 `SUPPLIER_OFFERING`，并由服务端固定 handler 路由 W21。零库存、不可供、过期、成本/关键供给变化等正常核对在权威注册表增加固定类型前保持 W21 实施 blocker，不得借用 `BUSINESS_EXCEPTION`。商城投递结果未知则另由已注册 `INTEGRATION_RESULT_UNKNOWN` 进入 W29。
+- 仅 `SUPPLIER_STOPPED` 后续任务复用已注册 `work_item_type=BUSINESS_EXCEPTION`，业务对象固定为触发暂停的 `SUPPLIER_OFFERING`，并由服务端固定 handler 路由 W21。供应商入站原始商品只作为来源证据，不建立 `SUPPLIER_EXTERNAL_PRODUCT` 主档或任务对象。零库存、不可供、过期、成本/关键供给变化等正常核对在权威注册表增加固定类型前保持 W21 实施 blocker，不得借用 `BUSINESS_EXCEPTION`。商城投递结果未知则另由已注册 `INTEGRATION_RESULT_UNKNOWN` 进入 W29。
 - 已注册人工任务仅用于核对来源、固定影响和准备替代候选证据，禁止选定替代供给或发起恢复发布。任务尚无个人责任人、处理失败或被转交，以及其它原因尚无注册任务，均不得把商品恢复为可下单。
 - 只允许系统安全暂停和人工暂停；禁止任何从安全暂停转为 `ON_SALE` 的提交，服务端必须返回 `RECOVERY_RESPONSIBILITY_UNCONFIRMED`。不得把“采购确认 → 运营发布”当作固定交接链路。库存重新出现、来源恢复可用或候选供给已就绪均不得自动解除暂停。
 
@@ -253,7 +253,7 @@ type SafetyPauseFollowUpWorkItemRef = {
   workItemId: string
   taskVersion: string
   workItemType: "BUSINESS_EXCEPTION"
-  businessObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+  businessObjectType: "SUPPLIER_OFFERING"
   businessObjectId: string
   subjectVersion: string
   handlerKey: string // 服务端固定注册并路由 W21
@@ -294,7 +294,7 @@ type SafetyPauseAffectedPublicationView =
 type KnownSafetyPauseOperationBase = {
   operationId: string
   resultStatus: "COMMITTED" | "ALREADY_SAFE"
-  sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+  sourceObjectType: "SUPPLIER_OFFERING"
   sourceObjectId: string
   sourceVersion: string
   availabilityEffect: "PAUSED"
@@ -322,7 +322,7 @@ type SystemSafetyPauseOperationView =
       operationId: string
       resultStatus: "UNKNOWN"
       cause: SafetyPauseCause
-      sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+      sourceObjectType: "SUPPLIER_OFFERING"
       sourceObjectId: string
       sourceVersion: string
       originalIdempotencyKey: string
@@ -538,7 +538,7 @@ type PublishRevisionResult = {
 // 领域事件消费者使用；前端只读操作结果，不发起此命令。
 type SystemSafetyPauseTrigger = {
   cause: SafetyPauseCause
-  sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+  sourceObjectType: "SUPPLIER_OFFERING"
   sourceObjectId: string
   sourceVersion: string
   affectedPublicationIds: string[] // 服务端冻结的完整在售影响集合

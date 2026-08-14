@@ -17,6 +17,9 @@ use crate::Result;
 
 /// `sales_order_review` 集合名。
 pub(crate) const SALES_ORDER_REVIEWS: &str = <mongodb::Database as SalesReviewExt>::SALES_ORDER_REVIEWS;
+/// `low_margin_manager_confirmation` 集合名。
+pub(crate) const LOW_MARGIN_MANAGER_CONFIRMATIONS: &str =
+    <mongodb::Database as SalesReviewExt>::LOW_MARGIN_MANAGER_CONFIRMATIONS;
 /// `procurement_confirmation` 集合名。
 pub(crate) const PROCUREMENT_CONFIRMATIONS: &str =
     <mongodb::Database as SalesReviewExt>::PROCUREMENT_CONFIRMATIONS;
@@ -37,9 +40,8 @@ pub(crate) const SALES_CHANGE_REVIEWS: &str = <mongodb::Database as SalesReviewE
 /// 创建本域集合的幂等命名索引。
 ///
 /// 逐条落地数据模型 §6.5「必需约束与索引」：
-/// - 审批/复核「待处理按责任角色、创建时间」：责任角色即审批阶段
-///   （销售领导/运营/低毛利上级，W05），索引建在 `status + review_stage +
-///   created_at`；
+/// - `sales_order_review` 只保存正式决定，历史按决定、阶段与审批时间查询；审批
+///   等待和当前步骤由 D03 审批实例承担；
 /// - 采购二次确认「同一销售提交仅一个有效确认批次」使用**部分唯一索引**
 ///   （仅 `PENDING` 参与唯一）：已决策的批次永久保留为历史。回滚方式：
 ///   先删除该部分唯一索引、用应用层查重过渡，再由数据修复任务收敛数据后重建；
@@ -56,6 +58,12 @@ pub(crate) const SALES_CHANGE_REVIEWS: &str = <mongodb::Database as SalesReviewE
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SALES_ORDER_REVIEWS, sales_order_review_indexes()).await?;
+    create_indexes(
+        db,
+        LOW_MARGIN_MANAGER_CONFIRMATIONS,
+        low_margin_manager_confirmation_indexes(),
+    )
+    .await?;
     create_indexes(db, PROCUREMENT_CONFIRMATIONS, procurement_confirmation_indexes()).await?;
     create_indexes(
         db,
@@ -75,6 +83,20 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
+/// 返回低毛利申请按新提交唯一、按销售单查询的索引。
+fn low_margin_manager_confirmation_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index(
+            "uk_low_margin_confirmations_submission",
+            doc! { "low_margin_submission_id": 1 },
+        ),
+        named_index(
+            "idx_low_margin_confirmations_order_status_created",
+            doc! { "sales_order_id": 1, "status": 1, "created_at": -1 },
+        ),
+    ]
+}
+
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection)
@@ -83,7 +105,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
     Ok(())
 }
 
-/// 返回 `sales_order_review` 的审批唯一约束与待处理队列索引。
+/// 返回 `sales_order_review` 的审批决定唯一约束与历史查询索引。
 fn sales_order_review_indexes() -> Vec<IndexModel> {
     vec![
         unique_index(
@@ -91,8 +113,8 @@ fn sales_order_review_indexes() -> Vec<IndexModel> {
             doc! { "submission_id": 1, "review_stage": 1 },
         ),
         named_index(
-            "idx_sales_order_reviews_pending_role_created",
-            doc! { "status": 1, "review_stage": 1, "created_at": -1 },
+            "idx_sales_order_reviews_decision_stage_reviewed",
+            doc! { "status": 1, "review_stage": 1, "reviewed_at": -1 },
         ),
     ]
 }
@@ -213,8 +235,8 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        procurement_confirmation_indexes, sales_change_order_indexes, sales_change_review_indexes,
-        sales_order_review_indexes,
+        low_margin_manager_confirmation_indexes, procurement_confirmation_indexes,
+        sales_change_order_indexes, sales_change_review_indexes, sales_order_review_indexes,
     };
 
     #[test]
@@ -233,7 +255,7 @@ mod tests {
 
         assert!(indexes
             .iter()
-            .any(|index| { index.keys == doc! { "status": 1, "review_stage": 1, "created_at": -1 } }));
+            .any(|index| { index.keys == doc! { "status": 1, "review_stage": 1, "reviewed_at": -1 } }));
     }
 
     #[test]
@@ -254,6 +276,22 @@ mod tests {
             options.partial_filter_expression.as_ref().unwrap(),
             &doc! { "status": "PENDING" }
         );
+    }
+
+    #[test]
+    fn low_margin_confirmation_is_permanently_unique_per_submission() {
+        let indexes = low_margin_manager_confirmation_indexes();
+        let identity = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_low_margin_confirmations_submission")
+            })
+            .unwrap();
+        assert_eq!(identity.keys, doc! { "low_margin_submission_id": 1 });
+        let options = identity.options.as_ref().unwrap();
+        assert_eq!(options.unique, Some(true));
+        assert!(options.partial_filter_expression.is_none());
     }
 
     #[test]

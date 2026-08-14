@@ -41,6 +41,30 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-fulfillment-orders/investigations",
+            with_permission(
+                post(supplier_fulfillment::supplier_fulfillment_order_investigation),
+                rbac,
+                supplier_fulfillment::supplier_fulfillment_order_investigation_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-fulfillment-orders/task-investigations",
+            with_permission(
+                post(supplier_fulfillment::supplier_fulfillment_order_task_investigation),
+                rbac,
+                supplier_fulfillment::supplier_fulfillment_order_task_investigation_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-fulfillment-orders/task-completions",
+            with_permission(
+                post(supplier_fulfillment::supplier_fulfillment_order_task_completion),
+                rbac,
+                supplier_fulfillment::supplier_fulfillment_order_task_completion_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-fulfillment-orders/{id}",
             with_permission(
                 get(supplier_fulfillment::supplier_fulfillment_order_detail),

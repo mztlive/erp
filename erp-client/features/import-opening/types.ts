@@ -50,6 +50,36 @@ export type ConfirmationScope =
 
 type ConfirmationResult = "PENDING" | "CONFIRMED" | "REJECTED" | "INVALIDATED"
 
+export type ImportConfirmationAllowedAction =
+    | "VIEW"
+    | "PROCESS"
+    | "START_PROCESSING"
+    | "RELEASE_TO_TEAM"
+    | "REASSIGN"
+    | "CLOSE"
+    | "CONFIRM_SCOPE"
+    | "RETURN_FOR_FIX"
+
+export type ImportExecutionAction =
+    | "START_APPLY"
+    | "CANCEL_PENDING"
+    | "RETRY_FAILED"
+
+export type ImportExecutionResult = Readonly<{
+    action: ImportExecutionAction
+    resultStatus: "STARTED" | "CANCELLED" | "RETRY_PREPARED" | "UNKNOWN"
+    batchId: string
+    batchStatus: string
+    batchVersion: string
+    trialVersion?: string
+    backgroundJobId: string
+    backgroundJobStatus: string
+    backgroundJobVersion: string
+    affectedItems: number
+    nextStep: "MONITOR_PROGRESS" | "REVIEW_RESULT" | "START_APPLY"
+    auditReceipt: string
+}>
+
 export type IssueRowStatus =
     | "PENDING_MAPPING"
     | "CONFLICT"
@@ -181,17 +211,6 @@ export const RETENTION_LABEL: Record<RetentionClass, string> = {
     EXPORT_TEMP: "导出结果 · 保留 7 天",
 }
 
-/** 权威模型尚未登记时的固定实施 blocker 文案 */
-export const WORK_ITEM_TYPE_BLOCKER = {
-    message:
-        "导入业务确认/退回任务尚未配置；配置前不得启用业务确认入口，也不得借用异常入口伪装正常必经确认。",
-    requiredRegistration: [
-        "确认与退回任务配置",
-        "责任归属配置",
-        "队列展示配置",
-    ] as const,
-}
-
 type SafeFileAssetView = Readonly<{
     assetId: string
     fileName: string
@@ -204,6 +223,7 @@ type SafeFileAssetView = Readonly<{
 }>
 
 export type ImportConfirmationView = Readonly<{
+    confirmationId: string
     scope: ConfirmationScope
     result: ConfirmationResult
     confirmedByLabel?: string
@@ -211,6 +231,25 @@ export type ImportConfirmationView = Readonly<{
     trialVersion: string
     comment?: string
     inViewerResponsibility: boolean
+    focused: boolean
+    workItem?: Readonly<{
+        workItemId: string
+        taskVersion: string
+        subjectVersion: string
+        status: "OPEN" | "COMPLETED" | "CLOSED"
+        assignmentMode: "DIRECT" | "POOL"
+        ownerUserId?: string
+        processingState: "READY" | "APPROVAL_BLOCKED"
+        allowedActions: readonly ImportConfirmationAllowedAction[]
+        actionBlockers: readonly string[]
+    }>
+}>
+
+export type ImportBatchDetailContext = Readonly<{
+    batchId: string
+    workItemId?: string
+    confirmationScope?: ConfirmationScope
+    queueContextId?: string
 }>
 
 type BackgroundJobView = Readonly<{
@@ -302,7 +341,10 @@ export type ImportBatchView = Readonly<{
         objectCode: ImportObjectCode
         message: string
     }[]
-    allowedActions: readonly string[]
+    allowedActions: readonly (
+        | ImportConfirmationAllowedAction
+        | ImportExecutionAction
+    )[]
     actionBlockers: readonly {
         action: string
         code: string

@@ -24,10 +24,12 @@ import {
     OptionCombobox,
     PageHeader,
     PageScaffold,
+    SequentialProcessBar,
     StatusTrackSummary,
     surfaceInsetClassName,
     surfacePanelClassName,
 } from "@/components/business"
+import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -73,25 +75,29 @@ import { cn } from "@/lib/utils"
 import {
     useAddNoteMutation,
     useAfterSalesActionMutation,
-    useDeferOrderTaskMutation,
+    useCompleteOrderTaskMutation,
     useQueryResultMutation,
     useReplayOrderMutation,
     useRevealAddressMutation,
     useSupplierOrderDetailQuery,
 } from "@/features/supplier-orders/hooks/queries"
-import type { OrderSection } from "@/features/supplier-orders/types"
+import type {
+    OrderSection,
+    SupplierOrderDetailView,
+} from "@/features/supplier-orders/types"
 import {
     CANCEL_STATUS_LABEL,
-    DEFER_REASON_OPTIONS,
     FULFILLMENT_STATUS_LABEL,
-    LEASE_DISPOSITION_LABEL,
     REFUND_STATUS_LABEL,
+    RELEASE_REASON_OPTIONS,
     SECTION_LABEL,
     SECTIONS,
     WORK_ITEM_STATUS_LABEL,
     WORK_ITEM_TYPE_LABEL,
     codeVersion,
 } from "@/features/supplier-orders/types"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 
 function resolveSection(raw?: string | null): OrderSection {
     if (raw && (SECTIONS as string[]).includes(raw)) return raw as OrderSection
@@ -102,10 +108,26 @@ const noteSchema = z.object({
     comment: z.string().trim().min(2, "请填写协同说明"),
 })
 
-const deferSchema = z.object({
+const releaseSchema = z.object({
     reasonCode: z.string().min(1, "请选择原因"),
     comment: z.string(),
 })
+
+function responsibilityOf(
+    workItem: SupplierOrderDetailView["workItem"],
+    currentUserId?: string,
+): ResponsibilityStatus {
+    if (!workItem) return "blocked"
+    if (workItem.workItemStatus === "COMPLETED") return "completed"
+    if (workItem.workItemStatus === "CLOSED") return "closed"
+    if (workItem.processingState === "APPROVAL_BLOCKED") return "blocked"
+    if (workItem.assignmentMode === "POOL" && !workItem.ownerUser) {
+        return "pool_available"
+    }
+    return workItem.ownerUser?.id === currentUserId
+        ? "assigned_to_me"
+        : "assigned_to_other"
+}
 
 export function SupplierOrderCenterPage({
     supplierOrderId,
@@ -126,10 +148,13 @@ export function SupplierOrderCenterPage({
 
     const query = useSupplierOrderDetailQuery({
         orderId: supplierOrderId,
+        workItemId,
     })
+    const profileQuery = useAccountProfileQuery()
+    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const queryResultMutation = useQueryResultMutation()
     const replayMutation = useReplayOrderMutation()
-    const deferMutation = useDeferOrderTaskMutation()
+    const completeTaskMutation = useCompleteOrderTaskMutation()
     const afterSalesMutation = useAfterSalesActionMutation()
     const revealMutation = useRevealAddressMutation()
     const noteMutation = useAddNoteMutation()
@@ -142,7 +167,11 @@ export function SupplierOrderCenterPage({
         facts?: { label: string; value: React.ReactNode }[]
     } | null>(null)
     const [replayOpen, setReplayOpen] = React.useState(false)
-    const [deferOpen, setDeferOpen] = React.useState(false)
+    const [releaseOpen, setReleaseOpen] = React.useState(false)
+    const [completeOpen, setCompleteOpen] = React.useState(false)
+    const [latestInvestigation, setLatestInvestigation] = React.useState<
+        NonNullable<SupplierOrderDetailView["lastInvestigation"]> | undefined
+    >()
     const [afterSalesConfirm, setAfterSalesConfirm] = React.useState<{
         requestId: string
         requestNo: string
@@ -150,8 +179,23 @@ export function SupplierOrderCenterPage({
         action: "CANCEL" | "REFUND"
     } | null>(null)
     const titleRef = React.useRef<HTMLSpanElement>(null)
+    const commandIdentities = React.useRef(
+        new Map<string, { operationId: string; idempotencyKey: string }>(),
+    )
 
     const detail = query.data
+
+    function commandIdentity(kind: string, objectId: string) {
+        const key = `${kind}:${objectId}`
+        const existing = commandIdentities.current.get(key)
+        if (existing) return { key, ...existing }
+        const identity = {
+            operationId: `w26:${kind}:${crypto.randomUUID()}`,
+            idempotencyKey: `w26:${kind}:${crypto.randomUUID()}`,
+        }
+        commandIdentities.current.set(key, identity)
+        return { key, ...identity }
+    }
 
     const noteForm = useAppForm({
         defaultValues: { comment: "" },
@@ -181,63 +225,47 @@ export function SupplierOrderCenterPage({
         },
     })
 
-    const deferForm = useAppForm({
+    const releaseForm = useAppForm({
         defaultValues: { reasonCode: "WAITING_SUPPLIER", comment: "" },
-        validators: { onChange: deferSchema },
+        validators: { onChange: releaseSchema },
         onSubmit: async ({ value }) => {
             if (!detail?.workItem) return
-            const res = await deferMutation.mutateAsync({
-                orderId: supplierOrderId,
+            const identity = commandIdentity(
+                "release-to-team",
+                detail.workItem.workItemId,
+            )
+            const res = await responsibilityMutation.mutateAsync({
+                kind: "RELEASE_TO_TEAM",
                 workItemId: detail.workItem.workItemId,
-                expectedSubjectHash: detail.workItem.subjectHash,
-                reasonCode: value.reasonCode,
-                comment: value.comment || undefined,
-                queueContextId: "queue-w26",
-                idempotencyKey: `defer-${detail.workItem.workItemId}-${Date.now()}`,
+                expectedTaskVersion: detail.workItem.taskVersion,
+                reason: value.comment.trim()
+                    ? `${value.reasonCode}: ${value.comment.trim()}`
+                    : value.reasonCode,
+                idempotencyKey: identity.idempotencyKey,
             })
-            setDeferOpen(false)
+            commandIdentities.current.delete(identity.key)
+            setReleaseOpen(false)
+            releaseForm.reset()
+            await query.refetch()
             setResult({
-                status:
-                    res.status === "succeeded"
-                        ? "succeeded"
-                        : res.status === "blocked"
-                          ? "blocked"
-                          : "rejected",
-                title:
-                    res.status === "succeeded"
-                        ? "本轮已跳过"
-                        : res.status === "blocked"
-                          ? "跳过被阻断"
-                          : "跳过未成功",
-                description: res.message,
-                reference: res.reference,
-                facts: res.data
-                    ? [
-                          {
-                              label: "任务状态",
-                              value:
-                                  WORK_ITEM_STATUS_LABEL[
-                                      res.data.workItemStatus
-                                  ] ?? res.data.workItemStatus,
-                          },
-                          {
-                              label: "处理状态",
-                              value:
-                                  LEASE_DISPOSITION_LABEL[
-                                      res.data.leaseDisposition
-                                  ] ?? res.data.leaseDisposition,
-                          },
-                          {
-                              label: "原因",
-                              value:
-                                  DEFER_REASON_OPTIONS.find(
-                                      (o) => o.value === res.data?.reasonCode,
-                                  )?.label ??
-                                  res.data?.reasonCode ??
-                                  "—",
-                          },
-                      ]
-                    : undefined,
+                status: "succeeded",
+                title: "任务已退回团队",
+                description:
+                    "个人责任已退回团队；任务保持待处理，可由团队重新开始处理。",
+                reference: res.id,
+                facts: [
+                    {
+                        label: "任务状态",
+                        value: WORK_ITEM_STATUS_LABEL[res.status],
+                    },
+                    {
+                        label: "原因",
+                        value:
+                            RELEASE_REASON_OPTIONS.find(
+                                (option) => option.value === value.reasonCode,
+                            )?.label ?? value.reasonCode,
+                    },
+                ],
             })
         },
     })
@@ -265,6 +293,28 @@ export function SupplierOrderCenterPage({
 
     async function handleQueryResult() {
         if (!detail) return
+        if (workItemId && !detail.workItem) {
+            setResult({
+                status: "blocked",
+                title: "正式任务不可处理",
+                description:
+                    detail.workItemBlocker?.message ??
+                    "未查询到正式任务，禁止改走订单直接动作。",
+            })
+            return
+        }
+        if (
+            detail.workItem &&
+            responsibilityOf(detail.workItem, profileQuery.data?.userid) !==
+                "assigned_to_me"
+        ) {
+            setResult({
+                status: "blocked",
+                title: "当前没有处理权",
+                description: "请先开始处理，或刷新查看当前处理人。",
+            })
+            return
+        }
         if (!detail.allowedActions.includes("QUERY_RESULT")) {
             const blocker = detail.actionBlockers.find(
                 (b) => b.action === "QUERY_RESULT",
@@ -292,16 +342,39 @@ export function SupplierOrderCenterPage({
             return
         }
         try {
-            const res = await queryResultMutation.mutateAsync({
-                orderId: supplierOrderId,
-                expectedLockVersion: detail.order.lockVersion,
-                targetSupplierActionId: detail.placeActionId,
-                operationId: `op-query-${Date.now()}`,
-                idempotencyKey: `query-center-${supplierOrderId}-${Date.now()}`,
-                workItemId: detail.workItem?.workItemId ?? workItemId,
-                expectedSubjectHash: detail.workItem?.subjectHash,
-                expectedSubjectVersion: detail.workItem?.subjectVersion,
-            })
+            const identity = commandIdentity("query", supplierOrderId)
+            const res = await queryResultMutation.mutateAsync(
+                detail.workItem
+                    ? {
+                          commandKind: "TASK",
+                          workItemId: detail.workItem.workItemId,
+                          expectedTaskVersion: detail.workItem.taskVersion,
+                          expectedSubjectVersion:
+                              detail.workItem.subjectVersion,
+                          action: {
+                              type: "QUERY_RESULT",
+                              orderId: supplierOrderId,
+                              expectedOrderLockVersion:
+                                  detail.order.lockVersion,
+                              targetSupplierActionId: detail.placeActionId,
+                              operationId: identity.operationId,
+                          },
+                          idempotencyKey: identity.idempotencyKey,
+                      }
+                    : {
+                          commandKind: "OBJECT",
+                          orderId: supplierOrderId,
+                          expectedLockVersion: detail.order.lockVersion,
+                          action: "QUERY_RESULT",
+                          targetSupplierActionId: detail.placeActionId,
+                          operationId: identity.operationId,
+                          idempotencyKey: identity.idempotencyKey,
+                      },
+            )
+            if (res.status !== "unknown") {
+                commandIdentities.current.delete(identity.key)
+            }
+            if (res.data) setLatestInvestigation(res.data.evidence)
             setResult({
                 status:
                     res.status === "succeeded"
@@ -357,17 +430,64 @@ export function SupplierOrderCenterPage({
 
     async function handleReplay() {
         if (!detail) return
-        try {
-            const res = await replayMutation.mutateAsync({
-                orderId: supplierOrderId,
-                expectedLockVersion: detail.order.lockVersion,
-                targetSupplierActionId: detail.placeActionId,
-                operationId: `op-replay-${Date.now()}`,
-                idempotencyKey: `replay-center-${supplierOrderId}-${Date.now()}`,
-                workItemId: detail.workItem?.workItemId ?? workItemId,
-                expectedSubjectHash: detail.workItem?.subjectHash,
-                expectedSubjectVersion: detail.workItem?.subjectVersion,
+        if (workItemId && !detail.workItem) {
+            setReplayOpen(false)
+            setResult({
+                status: "blocked",
+                title: "正式任务不可处理",
+                description:
+                    detail.workItemBlocker?.message ??
+                    "未查询到正式任务，禁止改走订单直接动作。",
             })
+            return
+        }
+        if (
+            detail.workItem &&
+            responsibilityOf(detail.workItem, profileQuery.data?.userid) !==
+                "assigned_to_me"
+        ) {
+            setReplayOpen(false)
+            setResult({
+                status: "blocked",
+                title: "当前没有处理权",
+                description: "请先开始处理，或刷新查看当前处理人。",
+            })
+            return
+        }
+        try {
+            const identity = commandIdentity("replay", supplierOrderId)
+            const res = await replayMutation.mutateAsync(
+                detail.workItem
+                    ? {
+                          commandKind: "TASK",
+                          workItemId: detail.workItem.workItemId,
+                          expectedTaskVersion: detail.workItem.taskVersion,
+                          expectedSubjectVersion:
+                              detail.workItem.subjectVersion,
+                          action: {
+                              type: "REPLAY",
+                              orderId: supplierOrderId,
+                              expectedOrderLockVersion:
+                                  detail.order.lockVersion,
+                              targetSupplierActionId: detail.placeActionId,
+                              operationId: identity.operationId,
+                          },
+                          idempotencyKey: identity.idempotencyKey,
+                      }
+                    : {
+                          commandKind: "OBJECT",
+                          orderId: supplierOrderId,
+                          expectedLockVersion: detail.order.lockVersion,
+                          action: "REPLAY",
+                          targetSupplierActionId: detail.placeActionId,
+                          operationId: identity.operationId,
+                          idempotencyKey: identity.idempotencyKey,
+                      },
+            )
+            if (res.status !== "unknown") {
+                commandIdentities.current.delete(identity.key)
+            }
+            if (res.data) setLatestInvestigation(res.data.evidence)
             setReplayOpen(false)
             setResult({
                 status:
@@ -490,6 +610,101 @@ export function SupplierOrderCenterPage({
         }
     }
 
+    async function handleStartProcessing() {
+        if (!detail?.workItem) return
+        const identity = commandIdentity(
+            "start-processing",
+            detail.workItem.workItemId,
+        )
+        try {
+            const response = await responsibilityMutation.mutateAsync({
+                kind: "START_PROCESSING",
+                workItemId: detail.workItem.workItemId,
+                expectedTaskVersion: detail.workItem.taskVersion,
+                idempotencyKey: identity.idempotencyKey,
+            })
+            commandIdentities.current.delete(identity.key)
+            await query.refetch()
+            setResult({
+                status: "succeeded",
+                title: "已开始处理",
+                description: "正式任务已建立当前用户个人责任。",
+                reference: response.id,
+            })
+        } catch (error) {
+            setResult({
+                status: "rejected",
+                title: "开始处理未完成",
+                description: getErrorMessage(error, "开始处理失败，请刷新任务"),
+            })
+        }
+    }
+
+    async function handleCompleteTask() {
+        const workItem = detail?.workItem
+        const evidence = detail?.lastInvestigation ?? latestInvestigation
+        if (
+            !detail ||
+            !workItem ||
+            evidence?.outcome !== "VERIFIED_TERMINAL" ||
+            !evidence.verifiedSupplierActionResultId ||
+            !evidence.verifiedResolution
+        ) {
+            setCompleteOpen(false)
+            setResult({
+                status: "blocked",
+                title: "尚不能完成任务",
+                description:
+                    "可验证处理结果、供应商动作记录或固定结论尚未齐备，任务保持待处理。",
+            })
+            return
+        }
+        const identity = commandIdentity("complete", workItem.workItemId)
+        try {
+            const response = await completeTaskMutation.mutateAsync({
+                workItemId: workItem.workItemId,
+                expectedTaskVersion: workItem.taskVersion,
+                expectedSubjectVersion: workItem.subjectVersion,
+                decision: {
+                    type: "CONFIRM_VERIFIED_TERMINAL_RESULT",
+                    orderId: detail.order.id,
+                    expectedOrderLockVersion: detail.order.lockVersion,
+                    verifiedSupplierActionResultId:
+                        evidence.verifiedSupplierActionResultId,
+                    resolution: evidence.verifiedResolution,
+                },
+                idempotencyKey: identity.idempotencyKey,
+            })
+            if (response.status !== "unknown") {
+                commandIdentities.current.delete(identity.key)
+            }
+            setCompleteOpen(false)
+            await query.refetch()
+            setResult({
+                status:
+                    response.status === "succeeded"
+                        ? "succeeded"
+                        : response.status === "blocked"
+                          ? "blocked"
+                          : response.status === "unknown"
+                            ? "unknown"
+                            : "rejected",
+                title:
+                    response.status === "succeeded"
+                        ? "任务已完成"
+                        : "任务未完成",
+                description: response.message,
+                reference: response.reference,
+            })
+        } catch (error) {
+            setResult({
+                status: "rejected",
+                title: "任务完成未提交",
+                description: getErrorMessage(error, "提交失败，请刷新后重试"),
+            })
+        }
+    }
+
     if (query.isPending) {
         return (
             <PageScaffold>
@@ -541,6 +756,20 @@ export function SupplierOrderCenterPage({
     }
 
     const o = detail.order
+    const responsibilityStatus = responsibilityOf(
+        detail.workItem,
+        profileQuery.data?.userid,
+    )
+    const completionEvidence = detail.lastInvestigation ?? latestInvestigation
+    const canCompleteTask =
+        responsibilityStatus === "assigned_to_me" &&
+        detail.workItem?.workItemStatus === "OPEN" &&
+        detail.allowedActions.includes("CONFIRM_VERIFIED_TERMINAL_RESULT") &&
+        completionEvidence?.outcome === "VERIFIED_TERMINAL" &&
+        Boolean(
+            completionEvidence.verifiedSupplierActionResultId &&
+            completionEvidence.verifiedResolution,
+        )
     const canQuery = detail.allowedActions.includes("QUERY_RESULT")
     const canReplay = detail.allowedActions.includes("REPLAY")
     const canReveal = detail.allowedActions.includes("REVEAL_ADDRESS")
@@ -693,33 +922,6 @@ export function SupplierOrderCenterPage({
                                 安全重发
                             </GuardedBusinessAction>
                         ) : null}
-                        {detail.workItem &&
-                        detail.allowedActions.includes("DEFER") ? (
-                            detail.workItem.held ? (
-                                <>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        disabled
-                                    >
-                                        本轮已跳过
-                                    </Button>
-                                    <span className="self-center text-xs text-muted-foreground">
-                                        任务仍待处理，可稍后继续
-                                    </span>
-                                </>
-                            ) : (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setDeferOpen(true)}
-                                >
-                                    先跳过
-                                </Button>
-                            )
-                        ) : null}
                         {detail.allowedActions.includes("ESCALATE_W29") ? (
                             <Button
                                 type="button"
@@ -748,6 +950,50 @@ export function SupplierOrderCenterPage({
                     </div>
                 }
             />
+
+            {detail.workItemBlocker ? (
+                <Alert variant="warning">
+                    <AlertTitle>正式任务入口已阻断</AlertTitle>
+                    <AlertDescription>
+                        {detail.workItemBlocker.message}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            {detail.workItem ? (
+                <div className="space-y-2">
+                    <SequentialProcessBar
+                        current={1}
+                        total={1}
+                        responsibilityStatus={responsibilityStatus}
+                        processLabel="确认处理结果并完成任务"
+                        processDisabled={!canCompleteTask}
+                        showProcessNext={false}
+                        pending={
+                            responsibilityMutation.isPending ||
+                            completeTaskMutation.isPending
+                        }
+                        onBack={() => router.push("/workspace/tasks")}
+                        onStartProcessing={() => void handleStartProcessing()}
+                        onProcess={() => setCompleteOpen(true)}
+                        onProcessNext={() => undefined}
+                    />
+                    {responsibilityStatus === "assigned_to_me" &&
+                    detail.workItem.allowedTaskActions.includes(
+                        "RELEASE_TO_TEAM",
+                    ) ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={responsibilityMutation.isPending}
+                            onClick={() => setReleaseOpen(true)}
+                        >
+                            退回团队
+                        </Button>
+                    ) : null}
+                </div>
+            ) : null}
 
             <StatusTrackSummary
                 variant="table"
@@ -831,9 +1077,12 @@ export function SupplierOrderCenterPage({
                             {WORK_ITEM_TYPE_LABEL[detail.workItem.workItemType]}
                         </CardTitle>
                         <CardDescription className="text-xs">
-                            关联订单 {o.orderNo}
-                            {detail.workItem.held
-                                ? " · 本轮已跳过，任务仍待处理"
+                            关联订单 {o.orderNo} · 责任模式{" "}
+                            {detail.workItem.assignmentMode === "POOL"
+                                ? "团队池"
+                                : "直接分派"}
+                            {detail.workItem.ownerUser
+                                ? ` · 当前处理人 ${detail.workItem.ownerUser.displayName}`
                                 : ""}
                         </CardDescription>
                     </CardHeader>
@@ -845,7 +1094,7 @@ export function SupplierOrderCenterPage({
                                 label={
                                     WORK_ITEM_STATUS_LABEL[
                                         detail.workItem.workItemStatus
-                                    ] ?? detail.workItem.workItemStatus
+                                    ]
                                 }
                                 tone={
                                     detail.workItem.workItemStatus ===
@@ -855,7 +1104,9 @@ export function SupplierOrderCenterPage({
                                 }
                             />
                         </span>
-                        <span>完成动作须另行确认处理结果</span>
+                        <span>
+                            查询原结果和再次提交不会完成任务；只有确认处理结果才会完成
+                        </span>
                     </CardContent>
                 </Card>
             ) : null}
@@ -1653,24 +1904,24 @@ export function SupplierOrderCenterPage({
                 onConfirm={() => handleReplay()}
             />
 
-            <AlertDialog open={deferOpen} onOpenChange={setDeferOpen}>
+            <AlertDialog open={releaseOpen} onOpenChange={setReleaseOpen}>
                 <AlertDialogContent className="sm:max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>先跳过本轮</AlertDialogTitle>
+                        <AlertDialogTitle>退回团队</AlertDialogTitle>
                         <AlertDialogDescription>
-                            非终结动作：任务不完成、不转交、不会暂停，可稍后继续处理。
+                            清空当前个人责任并保持正式任务开放；不会写入暂停状态，也不会完成任务。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <form
                         className="space-y-3"
                         onSubmit={(e) => {
                             e.preventDefault()
-                            void deferForm.handleSubmit()
+                            void releaseForm.handleSubmit()
                         }}
                     >
                         <div className="space-y-1">
                             <Label>原因</Label>
-                            <deferForm.AppField
+                            <releaseForm.AppField
                                 name="reasonCode"
                                 children={(field) => (
                                     <OptionCombobox
@@ -1680,7 +1931,7 @@ export function SupplierOrderCenterPage({
                                                 v ?? field.state.value,
                                             )
                                         }
-                                        options={DEFER_REASON_OPTIONS.map(
+                                        options={RELEASE_REASON_OPTIONS.map(
                                             (opt) => ({
                                                 value: opt.value,
                                                 label: opt.label,
@@ -1696,7 +1947,7 @@ export function SupplierOrderCenterPage({
                         </div>
                         <div className="space-y-1">
                             <Label>说明（可选）</Label>
-                            <deferForm.AppField
+                            <releaseForm.AppField
                                 name="comment"
                                 children={(field) => (
                                     <Textarea
@@ -1712,17 +1963,38 @@ export function SupplierOrderCenterPage({
                         <AlertDialogFooter>
                             <AlertDialogCancel
                                 type="button"
-                                onClick={() => setDeferOpen(false)}
+                                onClick={() => setReleaseOpen(false)}
                             >
                                 取消
                             </AlertDialogCancel>
-                            <deferForm.AppForm>
-                                <deferForm.SubmitButton label="确认跳过" />
-                            </deferForm.AppForm>
+                            <releaseForm.AppForm>
+                                <releaseForm.SubmitButton label="确认退回团队" />
+                            </releaseForm.AppForm>
                         </AlertDialogFooter>
                     </form>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <FormalActionConfirmDialog
+                open={completeOpen}
+                onOpenChange={setCompleteOpen}
+                actionLabel="完成正式任务"
+                title="确认处理结果并完成任务"
+                description="提交时将重新核对供应商动作结果、订单数据和当前处理权；任一不一致都保持原任务待处理。"
+                fromStatus={{
+                    label: o.fulfillmentLabel,
+                    tone: o.fulfillmentTone,
+                }}
+                toStatus={{ label: "任务已完成", tone: "success" }}
+                lockedFields={[
+                    `订单 ${o.orderNo}`,
+                    `任务版本 ${detail.workItem?.taskVersion ?? "—"}`,
+                    `处理凭证 ${completionEvidence?.verifiedSupplierActionResultId ?? "—"}`,
+                ]}
+                effects={["保存已核实的业务结果", "一并完成当前任务"]}
+                pending={completeTaskMutation.isPending}
+                onConfirm={handleCompleteTask}
+            />
 
             <FormalActionConfirmDialog
                 open={Boolean(afterSalesConfirm)}

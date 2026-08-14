@@ -4,6 +4,12 @@
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"
+import type {
+    AssignmentMode,
+    WorkItemAllowedAction,
+    WorkItemProcessingState,
+    WorkItemStatus,
+} from "@/features/work-items/types"
 
 export type SettlementView =
     | "pending"
@@ -157,13 +163,18 @@ type SettlementItemView = {
     serviceFeeGross: string
     refundGross: string
     erpAmountGross: string
+    erpAmountNet: string
+    erpTaxAmount: string
     supplierBillLineGross?: string
+    supplierBillLineNet?: string
+    supplierBillLineTax?: string
     /** 只读：页面不得改写 */
     readOnly: true
 }
 
 type DifferenceEvidence = {
     evidenceId: string
+    referenceIds: string[]
     kind: "PROCUREMENT_OPINION" | "SUPPLIER_CONFIRM" | "TICKET" | "ATTACHMENT"
     label: string
     comment?: string
@@ -275,7 +286,7 @@ export type SettlementDetailView = {
         subjectHash?: string
         sourceAsOf: string
         sourceSnapshotAt: string
-        sourceSnapshotHash: string
+        sourceSnapshotHash?: string
     }
     totals: SettlementTotalsView
     items: SettlementItemView[]
@@ -290,10 +301,22 @@ export type SettlementDetailView = {
     payable?: PayableLinkView
     workItem?: {
         workItemId: string
+        taskVersion: string
         workItemType: "SUPPLIER_SETTLEMENT_REVIEW"
+        businessObjectType: "SUPPLIER_SETTLEMENT_STATEMENT"
+        businessObjectId: string
         subjectVersion: string
-        subjectHash: string
-        claimedBy?: ActorView
+        assignmentMode: AssignmentMode
+        processingState: WorkItemProcessingState
+        ownerUser?: { id: string; displayName: string }
+        status: WorkItemStatus
+        allowedTaskActions: readonly WorkItemAllowedAction[]
+        actionBlockers: readonly string[]
+    }
+    workItemBlocker?: ActionBlocker
+    reviewSubmissionPolicy?: {
+        refreshCutoffPolicyId: string
+        version: string
     }
     auditEvents: AuditEventView[]
     allowedActions: string[]
@@ -345,6 +368,7 @@ export type AppendEvidenceInput = {
     statementId: string
     differenceId: string
     expectedDifferenceVersion: number
+    evidenceReferenceIds: string[]
     opinionCode?: string
     comment?: string
     requestId: string
@@ -358,6 +382,7 @@ export type ResolveDifferenceInput = {
     expectedDifferenceVersion: number
     resolution: DifferenceResolution
     reasonCode: string
+    evidenceReferenceIds: string[]
     operationId: string
     idempotencyKey: string
 }
@@ -366,6 +391,8 @@ export type SubmitReviewInput = {
     statementId: string
     expectedLockVersion: number
     subjectHash: string
+    refreshCutoffPolicyId: string
+    expectedRefreshCutoffPolicyVersion: string
     operationId: string
     idempotencyKey: string
     comment?: string
@@ -374,6 +401,7 @@ export type SubmitReviewInput = {
 export type ReviewDecisionInput = {
     statementId: string
     workItemId: string
+    expectedTaskVersion: string
     expectedSubjectVersion: string
     expectedLockVersion: number
     action: "REJECT" | "CONFIRM"
@@ -381,7 +409,6 @@ export type ReviewDecisionInput = {
     idempotencyKey: string
     reasonCode?: string
     comment?: string
-    forceUnknown?: boolean
 }
 
 export const STATUS_LABEL: Record<SettlementStatus, string> = {

@@ -35,23 +35,23 @@ function parseView(raw: string | null): MallSyncViewName {
     return "overview"
 }
 
-type SessionLease = {
-    workItemId: string
-    subjectVersion: string
-}
-
 const confirmSchema = z.object({
     evidenceNote: z.string().trim().min(4, "请填写至少 4 个字的确认依据"),
 })
 
-const deferSchema = z.object({
+const sourceFixSchema = z.object({
     reasonCode: z.enum([
-        "WAITING_SOURCE",
-        "NEED_CLARIFICATION",
-        "WAITING_MASTER_DATA",
+        "SOURCE_FIELD_MISSING",
+        "SOURCE_FIELD_CONFLICT",
+        "SOURCE_EVIDENCE_REQUIRED",
         "OTHER",
     ]),
-    note: z.string(),
+    note: z.string().trim().min(4, "请填写至少 4 个字的修复说明"),
+    requestedEvidence: z.string().trim().min(1, "请填写需要补充的来源证据"),
+})
+
+const releaseSchema = z.object({
+    reason: z.string().trim().min(4, "请填写至少 4 个字的退回原因"),
 })
 
 const pullSchema = z.object({
@@ -66,11 +66,11 @@ const incrementalSchema = z.object({
 export {
     ALL_OBJECT_PARAMS,
     confirmSchema,
-    deferSchema,
     incrementalSchema,
     parseView,
     pullSchema,
+    releaseSchema,
+    sourceFixSchema,
     VIEW_OBJECT_PARAMS,
     VIEWS,
 }
-export type { SessionLease }

@@ -34,19 +34,27 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/sales-order-reviews/{id}/approve",
+            "/sales-order-reviews/decisions",
             with_permission(
-                post(sales_review::sales_order_review_approve),
+                post(sales_review::sales_order_review_decide),
                 rbac,
-                sales_review::sales_order_review_approve_permission_key(),
+                sales_review::sales_order_review_decide_permission_key(),
             ),
         )
         .route(
-            "/sales-order-reviews/{id}/reject",
+            "/sales-order-reviews/low-margin-decisions",
             with_permission(
-                post(sales_review::sales_order_review_reject),
+                post(sales_review::low_margin_manager_confirmation_decide),
                 rbac,
-                sales_review::sales_order_review_reject_permission_key(),
+                sales_review::low_margin_manager_confirmation_decide_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-order-reviews/cancellations",
+            with_permission(
+                post(sales_review::sales_order_review_cancel),
+                rbac,
+                sales_review::sales_order_review_cancel_permission_key(),
             ),
         )
         // 采购二次确认（W07）
@@ -83,19 +91,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/procurement-confirmations/{id}/approve",
+            "/procurement-confirmations/{id}/decisions",
             with_permission(
-                post(sales_review::procurement_confirmation_approve),
+                post(sales_review::procurement_confirmation_complete),
                 rbac,
-                sales_review::procurement_confirmation_approve_permission_key(),
-            ),
-        )
-        .route(
-            "/procurement-confirmations/{id}/reject",
-            with_permission(
-                post(sales_review::procurement_confirmation_reject),
-                rbac,
-                sales_review::procurement_confirmation_reject_permission_key(),
+                sales_review::procurement_confirmation_complete_permission_key(),
             ),
         )
         // 销售变更单（W05 变更轨）

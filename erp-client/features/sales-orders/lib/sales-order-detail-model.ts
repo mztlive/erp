@@ -12,7 +12,11 @@ export type NavSectionId =
     | "collaboration"
     | "versions"
 
-export type WorkSectionId = "procurement-rejection" | "approval" | "acceptance"
+export type WorkSectionId =
+    | "procurement-rejection"
+    | "approval"
+    | "acceptance"
+    | "change-review"
 
 export type FocusTaskId = WorkSectionId | "versions"
 
@@ -114,7 +118,8 @@ export function isWorkSection(section?: string): section is WorkSectionId {
     return (
         section === "procurement-rejection" ||
         section === "approval" ||
-        section === "acceptance"
+        section === "acceptance" ||
+        section === "change-review"
     )
 }
 
@@ -132,6 +137,7 @@ export function resolveNavSection(
         case "acceptance":
             return "fulfillment"
         case "procurement-rejection":
+        case "change-review":
             return "overview"
         case "receivable":
             return "receivable"
@@ -173,13 +179,19 @@ export function resolveFocusTask(
             tone: "warning",
         }
     }
-    if (order.activeCardSalesApproval) {
+    if (order.activeCardSalesApproval || order.cardApprovalProjectionBlocker) {
         return {
             id: "approval",
-            title: "卡券销售等审批",
-            description: "审批通过后本单才会生效。",
-            actionLabel: "去审批",
-            tone: "info",
+            title: order.cardApprovalProjectionBlocker
+                ? "卡券审批信息未就绪"
+                : "卡券销售等审批",
+            description:
+                order.cardApprovalProjectionBlocker ??
+                "审批通过后本单才会生效。",
+            actionLabel: order.cardApprovalProjectionBlocker
+                ? "查看阻断原因"
+                : "去审批",
+            tone: order.cardApprovalProjectionBlocker ? "warning" : "info",
         }
     }
     if (canAccept) {

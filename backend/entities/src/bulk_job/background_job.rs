@@ -428,6 +428,45 @@ impl BackgroundJob {
         Ok(())
     }
 
+    /// 仅将上一轮失败项重新准备为待执行。
+    ///
+    /// 该操作只适用于明确的可重试结果态：失败、部分成功，
+    /// 或“完成但含失败项”的兼容记录。已取消任务不可重新打开。
+    /// 保留已成功与已跳过计数，
+    /// 仅从已处理数中扣除失败项并清零失败计数；未处理项保持未处理。
+    ///
+    /// # 参数
+    /// * `failed_item_count` - 由领域行事实重验得到的失败项数
+    /// * `at` - 重新准备时刻
+    ///
+    /// # 返回
+    /// 准备成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当任务不在可重试结果态、没有失败项，或领域失败项计数
+    /// 与任务计数不一致时返回错误。
+    pub fn prepare_failed_retry(&mut self, failed_item_count: u64, at: Instant) -> Result<()> {
+        let retryable = matches!(self.status, JobStatus::PartiallySucceeded | JobStatus::Failed)
+            || (self.status == JobStatus::Succeeded && self.failed_count > 0);
+        if !retryable {
+            return Err(Error::from("当前任务状态不允许重试失败项"));
+        }
+        if failed_item_count == 0 || self.failed_count != failed_item_count {
+            return Err(Error::from("领域失败项与后台任务计数不一致"));
+        }
+        self.processed_count = self
+            .processed_count
+            .checked_sub(failed_item_count)
+            .ok_or_else(|| Error::from("失败项数超过已处理数"))?;
+        self.failed_count = 0;
+        self.status = JobStatus::Pending;
+        self.started_at = None;
+        self.finished_at = None;
+        self.last_progress_at = Some(at);
+        self.error_summary = None;
+        Ok(())
+    }
+
     /// 更新结果文件与下载到期时间。
     ///
     /// 更新复用创建校验；关键字段（编号、类型、发起人、请求身份、目标总数）
@@ -563,6 +602,62 @@ mod tests {
         let mut cancelled = BackgroundJob::new(BackgroundJobId::new("job-2"), data()).unwrap();
         cancelled.cancel(Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert_eq!(cancelled.status, JobStatus::Cancelled);
+    }
+
+    /// 失败项重试仅回退失败计数，保留已成功/跳过结果。
+    #[test]
+    fn prepare_failed_retry_preserves_committed_results() {
+        let mut job = BackgroundJob::new(BackgroundJobId::new("job-retry"), data()).unwrap();
+        job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        job.record_progress(2, 1, 2, Instant::from_unix_secs(1_700_000_100))
+            .unwrap();
+        job.mark_partially_succeeded().unwrap();
+        job.mark_succeeded(Instant::from_unix_secs(1_700_000_200))
+            .unwrap();
+
+        job.prepare_failed_retry(2, Instant::from_unix_secs(1_700_000_300))
+            .unwrap();
+
+        assert_eq!(job.status, JobStatus::Pending);
+        assert_eq!(job.processed_count, 3);
+        assert_eq!(job.success_count, 2);
+        assert_eq!(job.skipped_count, 1);
+        assert_eq!(job.failed_count, 0);
+        assert!(job.finished_at.is_none());
+    }
+
+    /// 失败项计数不一致时失败关闭，不修改任务。
+    #[test]
+    fn prepare_failed_retry_rejects_mismatched_count() {
+        let mut job = BackgroundJob::new(BackgroundJobId::new("job-retry"), data()).unwrap();
+        job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        job.record_progress(2, 1, 2, Instant::from_unix_secs(1_700_000_100))
+            .unwrap();
+        job.mark_partially_succeeded().unwrap();
+
+        assert!(job
+            .prepare_failed_retry(1, Instant::from_unix_secs(1_700_000_200))
+            .is_err());
+        assert_eq!(job.status, JobStatus::PartiallySucceeded);
+        assert_eq!(job.processed_count, 5);
+        assert_eq!(job.failed_count, 2);
+    }
+
+    /// 已取消任务不得通过失败重试重新打开未执行项。
+    #[test]
+    fn prepare_failed_retry_rejects_cancelled_job() {
+        let mut job = BackgroundJob::new(BackgroundJobId::new("job-cancelled"), data()).unwrap();
+        job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
+        job.record_progress(1, 0, 1, Instant::from_unix_secs(1_700_000_100))
+            .unwrap();
+        job.cancel(Instant::from_unix_secs(1_700_000_200)).unwrap();
+
+        assert!(job
+            .prepare_failed_retry(1, Instant::from_unix_secs(1_700_000_300))
+            .is_err());
+        assert_eq!(job.status, JobStatus::Cancelled);
+        assert_eq!(job.processed_count, 2);
+        assert_eq!(job.failed_count, 1);
     }
 
     /// 状态机：非法迁移被拒（终态回退、跳步、未处理完即成功）。

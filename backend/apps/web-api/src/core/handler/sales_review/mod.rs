@@ -3,6 +3,8 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::sales_review` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
+use std::sync::Arc;
+
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
@@ -10,15 +12,38 @@ use axum::{
 use services::{
     audit::AuditActor,
     sales_review::{
-        ApproveProcurementConfirmationRequest, ChangeReviewDecisionRequest, CreateSalesChangeOrderRequest,
-        PageView, ProcurementConfirmationDecisionView, ProcurementConfirmationDetailView,
+        CancelCardSalesApprovalCommand, CancelCardSalesApprovalResult, CardSalesApprovalActionPort,
+        ChangeReviewDecisionRequest, CompleteLowMarginManagerConfirmationCommand,
+        CompleteLowMarginManagerConfirmationResult, CompleteProcurementConfirmationCommand,
+        CompleteProcurementConfirmationResult, CreateSalesChangeOrderRequest, PageView,
+        ProcurementConfirmationDetailParams, ProcurementConfirmationDetailView,
         ProcurementConfirmationListParams, ProcurementConfirmationView, ProcurementRecommendationView,
-        RejectProcurementConfirmationRequest, ReviewDecisionRequest, SalesChangeOrderDetailView,
-        SalesChangeOrderListParams, SalesChangeOrderView, SalesOrderReviewListParams, SalesOrderReviewView,
-        SalesReviewService, SaveProcurementConfirmationLinesRequest, SubmitSalesChangeRequest,
-        VoidSalesChangeOrderRequest,
+        SalesChangeOrderDetailView, SalesChangeOrderListParams, SalesChangeOrderView,
+        SalesOrderReviewListParams, SalesOrderReviewView, SalesReviewService,
+        SaveProcurementConfirmationLinesRequest, SaveProcurementConfirmationResult,
+        SubmitCardSalesApprovalDecisionCommand, SubmitCardSalesApprovalDecisionResult,
+        SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
     },
 };
+
+#[permission_macros::permission(
+    group = "销售复核",
+    group_desc = "销售审批与采购二次确认（W05/W07）管理",
+    desc = "完成低毛利上级确认",
+    resource = "sales_order_review",
+    action = "low_margin_decide"
+)]
+/// 提交 `LOW_MARGIN_MANAGER_CONFIRMATION` 的唯一强类型决定。
+pub async fn low_margin_manager_confirmation_decide(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(command): Json<CompleteLowMarginManagerConfirmationCommand>,
+) -> Result<CompleteLowMarginManagerConfirmationResult> {
+    let result = SalesReviewService::new(state.db())
+        .complete_low_margin_manager_confirmation(command, &actor, state.rbac())
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
 
 use crate::{
     app_state::AppState,
@@ -54,28 +79,33 @@ pub async fn sales_order_review_list(
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "通过卡券销售审批",
+    desc = "提交卡券销售审批决定",
     resource = "sales_order_review",
-    action = "approve"
+    action = "decide"
 )]
-/// 通过卡券销售审批（销售领导 → 待运营；运营 → 生效事务）。
+/// 提交卡券销售当前活动步骤的唯一正式决定。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 审批记录 ID
-/// * `req` - 决策请求（意见可空）
+/// * `command` - W05 强类型决定信封
 ///
 /// # 返回
-/// 返回审批记录视图。
-pub async fn sales_order_review_approve(
+/// 返回审批运行状态与服务端重读的正式业务结果。
+pub async fn sales_order_review_decide(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<ReviewDecisionRequest>,
-) -> Result<SalesOrderReviewView> {
-    let view = SalesReviewService::new(state.db())
-        .approve_sales_order_review(&id, req, &actor)
+    Json(command): Json<SubmitCardSalesApprovalDecisionCommand>,
+) -> Result<SubmitCardSalesApprovalDecisionResult> {
+    let db = state.db();
+    let (runtime_command, guard) = command.into_runtime_command(actor.id().to_string())?;
+    let runtime = state.approval_runtime(Arc::new(CardSalesApprovalActionPort::for_decision(
+        db.clone(),
+        guard.clone(),
+    )));
+    let approval = runtime.submit_decision(runtime_command).await?;
+    let view = SalesReviewService::new(db)
+        .card_sales_decision_result(approval, &guard)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -84,28 +114,31 @@ pub async fn sales_order_review_approve(
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "驳回卡券销售审批",
-    resource = "sales_order_review",
-    action = "reject"
+    desc = "撤回本人提交的卡券销售审批",
+    resource = "sales_order",
+    action = "cancel_approval"
 )]
-/// 驳回卡券销售审批（销售单回草稿，提交标记驳回）。
+/// 撤回尚未形成不可逆决定的卡券销售审批并恢复销售草稿。
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 审批记录 ID
-/// * `req` - 决策请求（驳回原因必填）
+/// * `actor` - 已通过鉴权的提交人身份
+/// * `command` - W05 强类型撤回信封
 ///
 /// # 返回
-/// 返回审批记录视图。
-pub async fn sales_order_review_reject(
+/// 返回最新审批实例、步骤、可选关闭待办和销售业务结果。
+pub async fn sales_order_review_cancel(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<ReviewDecisionRequest>,
-) -> Result<SalesOrderReviewView> {
-    let view = SalesReviewService::new(state.db())
-        .reject_sales_order_review(&id, req, &actor)
+    Json(command): Json<CancelCardSalesApprovalCommand>,
+) -> Result<CancelCardSalesApprovalResult> {
+    let db = state.db();
+    let actor_id = actor.id().to_string();
+    let (runtime_command, guard) = command.into_runtime_command(actor_id)?;
+    let runtime = state.approval_runtime(Arc::new(CardSalesApprovalActionPort::new(db.clone())));
+    let approval = runtime.cancel_approval(runtime_command).await?;
+    let view = SalesReviewService::new(db)
+        .card_sales_cancel_result(approval, &guard)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -148,16 +181,20 @@ pub async fn procurement_confirmation_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `id` - 确认批次 ID
+/// * `params` - 正式任务入口参数
 ///
 /// # 返回
 /// 返回详情视图。
 pub async fn procurement_confirmation_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
+    Query(params): Query<ProcurementConfirmationDetailParams>,
 ) -> Result<ProcurementConfirmationDetailView> {
     let view = SalesReviewService::new(state.db())
-        .procurement_confirmation_detail(&id)
+        .procurement_confirmation_detail(&id, &params, &actor, state.rbac())
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -205,13 +242,13 @@ pub async fn procurement_confirmation_recommendation(
 /// * `req` - 保存请求（含期望版本与分行清单）
 ///
 /// # 返回
-/// 返回保存后的详情视图。
+/// 返回新的采购确认编辑版本与待办活动版本。
 pub async fn procurement_confirmation_save_lines(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SaveProcurementConfirmationLinesRequest>,
-) -> Result<ProcurementConfirmationDetailView> {
+) -> Result<SaveProcurementConfirmationResult> {
     let view = SalesReviewService::new(state.db())
         .save_procurement_confirmation_lines(&id, req, &actor)
         .await?;
@@ -222,58 +259,28 @@ pub async fn procurement_confirmation_save_lines(
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "采购确认通过",
+    desc = "完成采购确认",
     resource = "procurement_confirmation",
-    action = "approve"
+    action = "complete"
 )]
-/// 采购确认通过（§8.1.1 单事务：版本 + 销售状态 + 应收 + 待办 + 审计原子生效）。
+/// 以唯一强命令完成采购确认通过或驳回。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 确认批次 ID
-/// * `req` - 通过请求（幂等键）
+/// * `command` - 嵌套正式决定、版本和幂等键
 ///
 /// # 返回
-/// 返回决策结果视图（含生效版本与应收子账）。
-pub async fn procurement_confirmation_approve(
+/// 返回已完成待办与真实业务结果；本动作不创建采购单。
+pub async fn procurement_confirmation_complete(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<ApproveProcurementConfirmationRequest>,
-) -> Result<ProcurementConfirmationDecisionView> {
+    Json(command): Json<CompleteProcurementConfirmationCommand>,
+) -> Result<CompleteProcurementConfirmationResult> {
     let view = SalesReviewService::new(state.db())
-        .approve_procurement_confirmation(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "销售复核",
-    group_desc = "销售审批与采购二次确认（W05/W07）管理",
-    desc = "采购确认驳回",
-    resource = "procurement_confirmation",
-    action = "reject"
-)]
-/// 采购确认驳回（销售单回到销售可处理草稿）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 确认批次 ID
-/// * `req` - 驳回请求（原因代码必填）
-///
-/// # 返回
-/// 返回决策结果视图。
-pub async fn procurement_confirmation_reject(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<RejectProcurementConfirmationRequest>,
-) -> Result<ProcurementConfirmationDecisionView> {
-    let view = SalesReviewService::new(state.db())
-        .reject_procurement_confirmation(&id, req, &actor)
+        .complete_procurement_confirmation(&id, command, &actor, state.rbac())
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

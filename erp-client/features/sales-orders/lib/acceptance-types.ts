@@ -139,9 +139,8 @@ export type CustomerAcceptanceWorkspaceView = {
         actionBlockers: Array<{ action: string; code: string; message: string }>
         fieldVisibility: Record<string, "full" | "masked" | "hidden">
     }
-    /** Q2 未注册时永远不返回 workItem/lease */
+    /** 验收工作项处理器未注册时永远不返回工作项。 */
     workItem: null
-    lease: null
     /** 直接带 workItemId 时的配置阻断（fail-closed） */
     workItemConfigBlocker: string | null
 }

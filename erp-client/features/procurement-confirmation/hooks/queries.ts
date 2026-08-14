@@ -4,9 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { unifiedQueueKeys } from "@/features/unified-task-queue/queries"
 import {
-    claimProcurementWorkItem,
     completeProcurementDecision,
-    deferProcurementConfirmation,
     fetchProcurementQueue,
     fetchProcurementRecommendation,
     fetchProcurementSupplyOptions,
@@ -60,18 +58,6 @@ export function useProcurementConfirmationQuery(filters: QueueFilters) {
     })
 }
 
-export function useClaimProcurementMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: claimProcurementWorkItem,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({
-                queryKey: procurementConfirmKeys.all,
-            })
-        },
-    })
-}
-
 export function useSaveProcurementConfirmationMutation() {
     const queryClient = useQueryClient()
     return useMutation({
@@ -94,23 +80,6 @@ export function useCompleteProcurementMutation() {
                     queryKey: procurementConfirmKeys.all,
                 })
                 // 同一终态存储也作用于 W02 采购确认族：同步角标与队列视图
-                await queryClient.invalidateQueries({
-                    queryKey: unifiedQueueKeys.all,
-                })
-            }
-        },
-    })
-}
-
-export function useDeferProcurementMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: deferProcurementConfirmation,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: procurementConfirmKeys.all,
-                })
                 await queryClient.invalidateQueries({
                     queryKey: unifiedQueueKeys.all,
                 })

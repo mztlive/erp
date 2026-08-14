@@ -242,8 +242,22 @@ pub struct SupplierApiConnection {
     pub environment: ConnectionEnvironment,
     /// 地址配置引用。
     pub endpoint_reference: String,
+    /// 地址配置引用是否已由权威引用注册表确认绑定。
+    pub endpoint_reference_bound: bool,
     /// 密钥管理系统引用（不保存明文密钥）。
     pub credential_reference: Option<String>,
+    /// 密钥引用是否已由权威引用注册表确认绑定。
+    pub credential_reference_bound: bool,
+    /// 业务资料不透明引用；正文由业务资料注册表持有。
+    pub business_profile_reference: Option<String>,
+    /// 业务负责人账号。
+    pub business_owner_id: Option<String>,
+    /// 技术负责人账号。
+    pub technical_owner_id: Option<String>,
+    /// 技术配置版本；环境、引用或能力配置变更时递增。
+    pub technical_config_version: u64,
+    /// 最近成功健康证据所验证的技术配置版本。
+    pub last_healthy_technical_config_version: Option<u64>,
     /// 限流策略。
     pub rate_limit_policy: Option<RateLimitPolicy>,
     /// 最近健康检查时间（与 `last_health_result` 成对出现）。
@@ -264,7 +278,14 @@ impl PartialEq for SupplierApiConnection {
             && self.connection_code == other.connection_code
             && self.environment == other.environment
             && self.endpoint_reference == other.endpoint_reference
+            && self.endpoint_reference_bound == other.endpoint_reference_bound
             && self.credential_reference == other.credential_reference
+            && self.credential_reference_bound == other.credential_reference_bound
+            && self.business_profile_reference == other.business_profile_reference
+            && self.business_owner_id == other.business_owner_id
+            && self.technical_owner_id == other.technical_owner_id
+            && self.technical_config_version == other.technical_config_version
+            && self.last_healthy_technical_config_version == other.last_healthy_technical_config_version
             && self.rate_limit_policy == other.rate_limit_policy
             && self.last_health_at == other.last_health_at
             && self.last_health_result == other.last_health_result
@@ -300,12 +321,12 @@ impl SupplierApiConnection {
             CODE_MAX_LEN,
             "连接代码过长",
         )?;
-        let endpoint_reference = normalize_required_text(
-            data.endpoint_reference,
-            "地址配置引用不能为空",
+        let endpoint_reference = normalize_optional_text(
+            Some(data.endpoint_reference),
+            "地址配置引用",
             ENDPOINT_REFERENCE_MAX_LEN,
-            "地址配置引用过长",
-        )?;
+        )?
+        .unwrap_or_default();
         let credential_reference = normalize_optional_text(
             data.credential_reference,
             "密钥引用",
@@ -318,8 +339,15 @@ impl SupplierApiConnection {
             supplier_id: data.supplier_id,
             connection_code,
             environment: data.environment,
+            endpoint_reference_bound: !endpoint_reference.is_empty(),
             endpoint_reference,
+            credential_reference_bound: credential_reference.is_some(),
             credential_reference,
+            business_profile_reference: None,
+            business_owner_id: None,
+            technical_owner_id: None,
+            technical_config_version: 1,
+            last_healthy_technical_config_version: None,
             rate_limit_policy: data.rate_limit_policy,
             last_health_at: None,
             last_health_result: None,
@@ -345,14 +373,106 @@ impl SupplierApiConnection {
         update: SupplierApiConnectionUpdate,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        self.apply_environment(update.environment);
-        self.apply_endpoint_reference(update.endpoint_reference)?;
-        self.apply_credential_reference(update.credential_reference)?;
+        let environment_changed = self.apply_environment(update.environment);
+        let endpoint_changed = self.apply_endpoint_reference(update.endpoint_reference)?;
+        let credential_changed = self.apply_credential_reference(update.credential_reference)?;
         self.apply_rate_limit_policy(update.rate_limit_policy);
         self.apply_health(update.last_health_at, update.last_health_result)?;
         self.apply_status(update.status);
+        if environment_changed || endpoint_changed || credential_changed {
+            self.bump_technical_config_version()?;
+        }
         self.stable.touch(updated_by);
         Ok(())
+    }
+
+    /// 绑定已由权威注册表解析的地址引用。
+    ///
+    /// # Errors
+    /// 引用为空、过长或技术配置版本溢出时返回错误。
+    pub fn bind_endpoint_reference(
+        &mut self,
+        reference: String,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        if self.apply_endpoint_reference(Some(reference))? {
+            self.bump_technical_config_version()?;
+        }
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 绑定已由权威注册表解析的密钥引用。
+    ///
+    /// # Errors
+    /// 引用为空、过长或技术配置版本溢出时返回错误。
+    pub fn bind_credential_reference(
+        &mut self,
+        reference: String,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        if self.apply_credential_reference(Some(reference))? {
+            self.bump_technical_config_version()?;
+        }
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 绑定业务资料注册表返回的不透明引用。
+    ///
+    /// # Errors
+    /// 引用为空或过长时返回错误。
+    pub fn update_business_profile(
+        &mut self,
+        reference: String,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        self.business_profile_reference = Some(normalize_required_text(
+            reference,
+            "业务资料引用不能为空",
+            ENDPOINT_REFERENCE_MAX_LEN,
+            "业务资料引用过长",
+        )?);
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 记录一次业务能力确认触及连接版本，但不修改能力启停状态。
+    pub fn touch_business_confirmation(&mut self, updated_by: impl Into<String>) {
+        self.stable.touch(updated_by);
+    }
+
+    /// 记录能力配置变更并使旧技术健康证据失效。
+    ///
+    /// # Errors
+    /// 技术配置版本溢出时返回错误。
+    pub fn record_capability_configuration(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        self.bump_technical_config_version()?;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 启用连接。
+    pub fn enable(&mut self, updated_by: impl Into<String>) {
+        self.stable.status = SupplierApiConnectionStatus::Active;
+        self.stable.touch(updated_by);
+    }
+
+    /// 停用连接；历史连接身份与业务事实保持不变。
+    pub fn disable(&mut self, updated_by: impl Into<String>) {
+        self.stable.status = SupplierApiConnectionStatus::Disabled;
+        self.stable.touch(updated_by);
+    }
+
+    /// 判断地址与密钥引用是否都已经由权威注册表绑定。
+    pub fn technical_references_ready(&self) -> bool {
+        self.endpoint_reference_bound && self.credential_reference_bound
+    }
+
+    /// 判断当前技术配置是否已有成功健康证据。
+    pub fn current_technical_config_is_healthy(&self) -> bool {
+        self.last_health_result == Some(HealthCheckResult::Healthy)
+            && self.last_healthy_technical_config_version == Some(self.technical_config_version)
     }
 
     /// 记录一次健康检查结果。
@@ -365,6 +485,9 @@ impl SupplierApiConnection {
     pub fn record_health(&mut self, result: HealthCheckResult, at: Instant) {
         self.last_health_result = Some(result);
         self.last_health_at = Some(at);
+        if result == HealthCheckResult::Healthy {
+            self.last_healthy_technical_config_version = Some(self.technical_config_version);
+        }
     }
 
     /// 判断连接是否处于启用状态。
@@ -379,10 +502,13 @@ impl SupplierApiConnection {
     ///
     /// # 参数
     /// * `environment` - 可选连接环境
-    fn apply_environment(&mut self, environment: Option<ConnectionEnvironment>) {
+    fn apply_environment(&mut self, environment: Option<ConnectionEnvironment>) -> bool {
         if let Some(environment) = environment {
+            let changed = self.environment != environment;
             self.environment = environment;
+            return changed;
         }
+        false
     }
 
     /// 应用地址配置引用更新。
@@ -392,16 +518,20 @@ impl SupplierApiConnection {
     ///
     /// # 错误
     /// 当地址配置引用为空或超长时返回错误。
-    fn apply_endpoint_reference(&mut self, endpoint_reference: Option<String>) -> Result<()> {
+    fn apply_endpoint_reference(&mut self, endpoint_reference: Option<String>) -> Result<bool> {
         if let Some(endpoint_reference) = endpoint_reference {
-            self.endpoint_reference = normalize_required_text(
+            let endpoint_reference = normalize_required_text(
                 endpoint_reference,
                 "地址配置引用不能为空",
                 ENDPOINT_REFERENCE_MAX_LEN,
                 "地址配置引用过长",
             )?;
+            let changed = self.endpoint_reference != endpoint_reference || !self.endpoint_reference_bound;
+            self.endpoint_reference = endpoint_reference;
+            self.endpoint_reference_bound = true;
+            return Ok(changed);
         }
-        Ok(())
+        Ok(false)
     }
 
     /// 应用密钥管理系统引用更新。
@@ -411,15 +541,21 @@ impl SupplierApiConnection {
     ///
     /// # 错误
     /// 当密钥引用超长时返回错误。
-    fn apply_credential_reference(&mut self, credential_reference: Option<String>) -> Result<()> {
+    fn apply_credential_reference(&mut self, credential_reference: Option<String>) -> Result<bool> {
         if let Some(credential_reference) = credential_reference {
-            self.credential_reference = normalize_optional_text(
+            let credential_reference = normalize_optional_text(
                 Some(credential_reference),
                 "密钥引用",
                 CREDENTIAL_REFERENCE_MAX_LEN,
-            )?;
+            )?
+            .ok_or_else(|| Error::from("密钥引用不能为空"))?;
+            let changed = self.credential_reference.as_deref() != Some(credential_reference.as_str())
+                || !self.credential_reference_bound;
+            self.credential_reference = Some(credential_reference);
+            self.credential_reference_bound = true;
+            return Ok(changed);
         }
-        Ok(())
+        Ok(false)
     }
 
     /// 应用限流策略更新。
@@ -463,6 +599,15 @@ impl SupplierApiConnection {
         if let Some(status) = status {
             self.stable.status = status;
         }
+    }
+
+    fn bump_technical_config_version(&mut self) -> Result<()> {
+        self.technical_config_version = self
+            .technical_config_version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("技术配置版本溢出"))?;
+        self.last_healthy_technical_config_version = None;
+        Ok(())
     }
 }
 
@@ -532,17 +677,16 @@ mod tests {
     }
 
     #[test]
-    fn connection_new_rejects_blank_endpoint_and_overlong_credential_reference() {
+    fn connection_new_allows_missing_endpoint_but_rejects_overlong_credential_reference() {
         let blank_endpoint = SupplierApiConnectionData {
             endpoint_reference: "  ".to_string(),
             ..connection_data()
         };
-        assert!(SupplierApiConnection::new(
-            SupplierApiConnectionId::new("conn-4"),
-            blank_endpoint,
-            "admin-1"
-        )
-        .is_err());
+        let connection =
+            SupplierApiConnection::new(SupplierApiConnectionId::new("conn-4"), blank_endpoint, "admin-1")
+                .unwrap();
+        assert!(!connection.endpoint_reference_bound);
+        assert!(connection.endpoint_reference.is_empty());
 
         let overlong_credential = SupplierApiConnectionData {
             credential_reference: Some("k".repeat(257)),
@@ -625,6 +769,28 @@ mod tests {
         assert_eq!(connection.last_health_result, Some(HealthCheckResult::Failed));
         assert_eq!(connection.last_health_at.unwrap().unix_secs(), 1_700_000_000);
         assert!(connection.is_active(), "健康检查结果不自动改变启停状态");
+        assert!(!connection.current_technical_config_is_healthy());
+
+        connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(1_700_000_001));
+        assert!(connection.current_technical_config_is_healthy());
+    }
+
+    #[test]
+    fn binding_reference_invalidates_old_health_evidence() {
+        let mut connection = SupplierApiConnection::new(
+            SupplierApiConnectionId::new("conn-1"),
+            connection_data(),
+            "admin-1",
+        )
+        .unwrap();
+        connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(1));
+        assert!(connection.current_technical_config_is_healthy());
+
+        connection
+            .bind_credential_reference("kms://prod/new".to_string(), "operator-1")
+            .unwrap();
+        assert_eq!(connection.technical_config_version, 2);
+        assert!(!connection.current_technical_config_is_healthy());
     }
 
     #[test]

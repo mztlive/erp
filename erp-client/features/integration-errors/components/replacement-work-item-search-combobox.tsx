@@ -22,7 +22,7 @@ export function ReplacementWorkItemSearchCombobox({
         view: "mine",
         mode: "errors",
         environment: "all",
-        owner: "all",
+        owner: "assigned",
     })
     const options = (query.data?.items ?? [])
         .filter(

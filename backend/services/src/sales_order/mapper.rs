@@ -100,6 +100,7 @@ pub(super) fn build_working_copy(
             business_type: order.business_type,
             customer_id: order.customer_id.clone(),
             contract_id: order.contract_id.clone(),
+            contract_revision_id: draft.requested_contract_revision_id.clone(),
             settlement_party_id: order.settlement_party_id.clone(),
             snapshot,
             project_name: draft.project_name.clone(),
@@ -108,6 +109,8 @@ pub(super) fn build_working_copy(
             voucher_expiry_at: draft
                 .voucher_expiry_at
                 .map(|secs| Instant::from_unix_secs(secs as i64)),
+            target_mall_id: draft.target_mall_id.clone(),
+            receivable_due_date: draft.receivable_due_date,
             gross_amount: gross,
             net_amount: net,
             tax_amount: tax,
@@ -244,6 +247,8 @@ pub(super) fn draft_hash(id: &str, version: u32) -> String {
 /// * `lines` - 工作副本行
 /// * `submission_no` - 提交序号
 /// * `actor` - 提交人
+/// * `customer_external_identity` - 服务端解析的商城客户身份
+/// * `voucher_category_external_identity` - 服务端解析的商城卡券类目身份
 ///
 /// # 返回
 /// 返回提交快照实体。
@@ -255,6 +260,8 @@ pub(super) fn build_submission(
     lines: &[SalesOrderWorkingCopyLine],
     submission_no: u32,
     actor: &AuditActor,
+    customer_external_identity: Option<&str>,
+    voucher_category_external_identity: Option<&str>,
 ) -> Result<SalesOrderSubmission> {
     let (gross, net, tax) = line_totals(lines);
     // 提交头 `validate_line_list` 需要行摘要；行实体另集存储，但创建数据必须非空。
@@ -281,7 +288,7 @@ pub(super) fn build_submission(
             working_copy_version: working_copy.draft_version,
             business_type: working_copy.business_type,
             customer_id: working_copy.customer_id.clone(),
-            contract_revision_id: None,
+            contract_revision_id: working_copy.contract_revision_id.clone(),
             settlement_party_id: working_copy.settlement_party_id.clone(),
             snapshot: entities::sales_order::HeaderSnapshotData {
                 customer_name: working_copy.customer_snapshot.customer_name.clone(),
@@ -302,6 +309,10 @@ pub(super) fn build_submission(
             business_remark: working_copy.business_remark.clone(),
             voucher_category_sku_id: working_copy.voucher_category_sku_id.clone(),
             voucher_expiry_at: working_copy.voucher_expiry_at,
+            target_mall_id: working_copy.target_mall_id.clone(),
+            customer_external_identity: customer_external_identity.map(str::to_string),
+            voucher_category_external_identity: voucher_category_external_identity.map(str::to_string),
+            receivable_due_date: working_copy.receivable_due_date,
             gross_amount: gross,
             net_amount: net,
             tax_amount: tax,
@@ -486,6 +497,10 @@ pub(super) fn submission_view(
         voucher_expiry_at: submission
             .voucher_expiry_at
             .map(|instant| instant.unix_secs() as u64),
+        target_mall_id: submission.target_mall_id.as_ref().map(ToString::to_string),
+        customer_external_identity: submission.customer_external_identity.clone(),
+        voucher_category_external_identity: submission.voucher_category_external_identity.clone(),
+        receivable_due_date: submission.receivable_due_date,
         gross_amount: submission.gross_amount,
         net_amount: submission.net_amount,
         tax_amount: submission.tax_amount,

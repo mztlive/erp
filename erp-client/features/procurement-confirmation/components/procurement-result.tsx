@@ -81,7 +81,7 @@ export function ProcurementOutcomeFeedback({
                     <span className="text-muted-foreground">
                         {finishedResult.status === "rejected"
                             ? "销售可在销售单选择三条固定出路"
-                            : "已自动生成采购单草稿，可直接核对并提交"}
+                            : "已形成采购创建依据，后续建单将另行执行"}
                     </span>
                     <div className="ml-auto flex flex-wrap items-center gap-2">
                         <Button
@@ -187,15 +187,10 @@ export function buildProcurementResultFacts(
             },
             { label: "处理结果", value: "销售单已生效" },
             {
-                label: "采购单草稿",
-                value:
-                    outcome.purchaseOrders.length > 0
-                        ? outcome.purchaseOrders
-                              .map((order) => order.purchaseNo)
-                              .join("、")
-                        : "未生成，请联系管理员核查",
+                label: "采购创建依据",
+                value: outcome.procurementCreationBasisId,
             },
-            { label: "下一环节", value: "核对采购单草稿并提交" },
+            { label: "下一环节", value: "按创建依据进入采购建单" },
         ]
     }
     if (outcome.kind === "REJECTED_TO_SALES") {
@@ -209,19 +204,15 @@ export function buildProcurementResultFacts(
                 label: "驳回原因",
                 value: `${REJECT_REASON_LABEL[outcome.rejectReasonCode]} · ${outcome.comment}`,
             },
-            { label: "销售下一步", value: "改品/改价后重提，或作废" },
+            {
+                label: "销售下一步",
+                value: "改品/改价后重提、申请低毛利上级确认，或作废",
+            },
         ]
     }
     return [
-        {
-            label: "任务状态",
-            value:
-                outcome.workItemStatus === "IN_PROGRESS" ? "处理中" : "待处理",
-        },
-        {
-            label: "处理状态",
-            value: outcome.leaseDisposition === "RELEASED" ? "已结束" : "保留",
-        },
+        { label: "任务状态", value: "开放" },
+        { label: "责任状态", value: "已退回团队" },
     ]
 }
 
@@ -252,25 +243,9 @@ export function ProcurementResultActions({
                     查看详情
                 </Button>
             ) : null}
-            {lastResult.outcome?.kind === "APPROVED_AND_SALES_EFFECTIVE"
-                ? lastResult.outcome.purchaseOrders.map((order) => (
-                      <Button
-                          key={order.purchaseOrderId}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          render={
-                              <Link
-                                  href={`/procurement/orders/${order.purchaseOrderId}`}
-                              />
-                          }
-                      >
-                          查看采购单 · {order.purchaseNo}
-                      </Button>
-                  ))
-                : null}
-            {lastResult.stayOnItem !== false ||
-            lastResult.status === "blocked" ? (
+            {lastResult.status !== "unknown" &&
+            (lastResult.stayOnItem !== false ||
+                lastResult.status === "blocked") ? (
                 <Button type="button" size="sm" onClick={onNext}>
                     打开下一条
                     <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />

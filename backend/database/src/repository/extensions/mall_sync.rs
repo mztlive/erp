@@ -7,7 +7,7 @@
 
 use entities::mall_sync::{
     MallSalesOrderSnapshot, MallSalesReconciliationItem, MallSalesReconciliationJob, MallSalesSyncCursor,
-    MallSalesSyncJob, MasterMappingTask,
+    MallSalesSyncJob, MallSnapshotReapplyOperation, MasterMappingTask,
 };
 use mongodb::Database;
 
@@ -31,6 +31,8 @@ pub trait MallSyncExt {
     const MALL_SALES_RECONCILIATION_ITEMS: &'static str = "mall_sales_reconciliation_items";
     /// `master_mapping_task` 集合名。
     const MASTER_MAPPING_TASKS: &'static str = "master_mapping_tasks";
+    /// `mall_snapshot_reapply_operation` 集合名。
+    const MALL_SNAPSHOT_REAPPLY_OPERATIONS: &'static str = "mall_snapshot_reapply_operations";
 
     /// 同步作业列表筛选条件类型（定义见 `repository::mall_sync`）。
     type MallSalesSyncJobFilter;
@@ -83,6 +85,9 @@ pub trait MallSyncExt {
     /// 返回 `Repository<'_, entities::mall_sync::MasterMappingTask>`。
     fn master_mapping_tasks(&self) -> Repository<'_, MasterMappingTask>;
 
+    /// 获取商城快照重新归集操作 Repository。
+    fn mall_snapshot_reapply_operations(&self) -> Repository<'_, MallSnapshotReapplyOperation>;
+
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
@@ -119,6 +124,10 @@ impl MallSyncExt for Database {
 
     fn master_mapping_tasks(&self) -> Repository<'_, MasterMappingTask> {
         Repository::new(self, Self::MASTER_MAPPING_TASKS)
+    }
+
+    fn mall_snapshot_reapply_operations(&self) -> Repository<'_, MallSnapshotReapplyOperation> {
+        Repository::new(self, Self::MALL_SNAPSHOT_REAPPLY_OPERATIONS)
     }
 
     fn mall_sync(&self) -> MallSyncRepository<'_> {

@@ -1,6 +1,12 @@
 /** W08 采购单 · 客户端契约类型（对齐工作面文档 §5/§8）。 */
 
 import type { StatusTone } from "@/components/ui/status-badge"
+import type {
+    AssignmentMode,
+    WorkItemAllowedAction,
+    WorkItemProcessingState,
+    WorkItemStatus,
+} from "@/features/work-items"
 
 export type PurchaseType = "PHYSICAL" | "VIRTUAL" | "SERVICE"
 
@@ -19,6 +25,8 @@ export type PurchaseOrderStatus =
     | "VOID"
 
 export type PurchaseReviewStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED"
+
+export type PurchaseReviewDomainAction = "APPROVE" | "REJECT"
 
 export type PaymentGateState = "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
 
@@ -211,9 +219,18 @@ export type PurchaseOrderCenterView = Readonly<{
     /** 审核任务（仅待审核且存在提交时） */
     reviewWorkItem?: {
         workItemId: string
-        subjectHash: string
+        workItemType: "PURCHASE_ORDER_REVIEW"
+        taskVersion: string
         subjectVersion: string
-        submittedBy: string
+        status: WorkItemStatus
+        assignmentMode: AssignmentMode
+        ownerRole: string
+        ownerOrganizationId: string
+        ownerUserId?: string
+        processingState: WorkItemProcessingState
+        responsibilityActions: readonly WorkItemAllowedAction[]
+        domainAllowedActions: readonly PurchaseReviewDomainAction[]
+        actionBlockers: readonly ActionBlocker[]
     }
 }>
 
@@ -269,14 +286,31 @@ export type SubmitPurchaseOrderInput = {
     idempotencyKey: string
 }
 
+export type SubmitPurchaseOrderPayload = Omit<
+    SubmitPurchaseOrderInput,
+    "idempotencyKey"
+>
+
 export type ReviewPurchaseOrderInput = {
-    purchaseOrderId: string
-    submissionId: string
     workItemId: string
-    expectedLockVersion: number
-    reviewResult: "APPROVED" | "REJECTED"
-    reasonCode?: string
-    comment?: string
+    expectedTaskVersion: string
+    expectedSubjectVersion: string
+    decision:
+        | {
+              purchaseOrderId: string
+              submissionId: string
+              expectedPurchaseOrderLockVersion: number
+              reviewResult: "APPROVED"
+              comment?: string
+          }
+        | {
+              purchaseOrderId: string
+              submissionId: string
+              expectedPurchaseOrderLockVersion: number
+              reviewResult: "REJECTED"
+              reasonCode: string
+              comment?: string
+          }
     idempotencyKey: string
 }
 

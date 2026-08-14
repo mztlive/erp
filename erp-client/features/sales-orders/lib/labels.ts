@@ -53,13 +53,10 @@ export function stageOwnerDisplay(order: SalesOrderListItem): string {
     const ownerRole = order.primaryStatus.ownerRole
     if (ownerRole) {
         const roleLabel = STAGE_OWNER_ROLE_LABEL[ownerRole] ?? ownerRole
-        const name = personDisplayName(
-            order.primaryStatus.ownerUserName,
-            "",
-        )
+        const name = personDisplayName(order.primaryStatus.ownerUserName, "")
         if (name && name !== roleLabel) return `${roleLabel} · ${name}`
         if (order.primaryStatus.ownerUserName) return roleLabel
-        return `${roleLabel} · 待认领`
+        return `${roleLabel} · 团队待处理`
     }
     if (order.primaryStatus.code === "awaiting_sales") {
         const name = personDisplayName(order.ownerName, "")
@@ -101,7 +98,7 @@ export const PROCUREMENT_REJECT_REASON_LABEL: Record<string, string> = {
 
 /** 卡券审批任务类型文案。 */
 export const CARD_APPROVAL_TYPE_LABEL: Record<
-    CardSalesApproval["workItemType"],
+    NonNullable<CardSalesApproval["workItemType"]>,
     string
 > = {
     CARD_SALES_MANAGER_APPROVAL: "卡券销售领导审批",

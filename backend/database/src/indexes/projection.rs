@@ -95,9 +95,13 @@ fn sales_order_projection_delivery_indexes() -> Vec<IndexModel> {
             "uk_sales_order_projection_deliveries_revision_mall",
             doc! { "projection_revision_id": 1, "target_mall_id": 1 },
         ),
+        unique_index(
+            "uk_sales_order_projection_deliveries_message_key",
+            doc! { "message_key": 1 },
+        ),
         named_index(
-            "idx_sales_order_projection_deliveries_status",
-            doc! { "status": 1 },
+            "idx_sales_order_projection_deliveries_processable",
+            doc! { "status": 1, "next_attempt_at": 1, "created_at": 1 },
         ),
     ]
 }
@@ -165,9 +169,15 @@ mod tests {
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
         assert!(indexes.iter().any(|index| {
-            index.keys == doc! { "status": 1 }
+            index.keys == doc! { "status": 1, "next_attempt_at": 1, "created_at": 1 }
                 && index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("idx_sales_order_projection_deliveries_status")
+                    == Some("idx_sales_order_projection_deliveries_processable")
+        }));
+        assert!(indexes.iter().any(|index| {
+            index.keys == doc! { "message_key": 1 }
+                && index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_sales_order_projection_deliveries_message_key")
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
     }
 }

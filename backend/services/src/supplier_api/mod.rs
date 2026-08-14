@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use database::{
     AccessControlExt, IntegrationOpsExt, NoTransaction, SupplierApiExt, SupplierExt, Transactional,
+    WorkItemExt,
 };
 use entities::ids::{
     InboxMessageId, IntegrationErrorTaskId, SourceSystemId, SupplierApiCapabilityId, SupplierApiConnectionId,
@@ -35,15 +36,22 @@ use validator::Validate;
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use crate::iam::SharedRbacService;
+use crate::integration_ops::{error_owner_role, error_work_item};
 use crate::supplier_api::dto::SortDir;
 
 mod dto;
+mod governance;
 
 pub use self::dto::{
-    CapabilityItemRequest, CreateSupplierApiConnectionRequest, HealthCheckRequest, HealthCheckView, PageView,
-    RateLimitPolicyRequest, ReplaceCapabilitiesRequest, SupplierApiCapabilityListParams,
+    CapabilityItemRequest, ConfirmBusinessCapabilityRequirementCommand,
+    ConfirmBusinessCapabilityRequirementResult, CreateSupplierApiConnectionRequest, HealthCheckRequest,
+    HealthCheckView, PageView, RateLimitPolicyRequest, RelatedImpactView, ReplaceCapabilitiesRequest,
+    SafeReferenceView, SafeReferencesView, SupplierActionBlockerView, SupplierApiCapabilityListParams,
     SupplierApiCapabilityView, SupplierApiConnectionDetailView, SupplierApiConnectionListParams,
-    SupplierApiConnectionView, UpdateSupplierApiConnectionRequest,
+    SupplierApiConnectionView, SupplierCapabilityChange, SupplierConnectionCommand,
+    SupplierConnectionCommandResult, SupplierConnectionJobView, SupplierHealthCheckRunView,
+    UpdateSupplierApiConnectionRequest, UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
 };
 
 /// 连接列表筛选条件类型（经 `SupplierApiExt` 关联类型跨 crate 可达）。
@@ -83,6 +91,88 @@ pub trait SupplierApiGateway: Send + Sync {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>,
     >;
+
+    /// 执行一次目录同步；实现必须保持来源幂等，并且只能写入 W21 正式供给链路。
+    fn catalog_sync<'a>(
+        &'a self,
+        connection: &'a SupplierApiConnection,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            Err(ClassifiedError {
+                class: ErrorClass::TransientFailure,
+                code: "CATALOG_SYNC_ADAPTER_UNAVAILABLE".to_string(),
+                summary: format!("连接 {} 未注入目录同步适配器", connection.connection_code),
+            })
+        })
+    }
+}
+
+/// 不透明引用种类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SupplierReferenceKind {
+    BusinessProfile,
+    Endpoint,
+    Credential,
+}
+
+/// 权威引用注册表解析结果。
+///
+/// `internal_reference` 只能写入后端配置实体，不得进入列表、详情、审计消息或日志。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedSupplierReference {
+    pub internal_reference: String,
+}
+
+/// 服务端不透明引用注册表端口。
+pub trait SupplierReferenceRegistry: Send + Sync {
+    /// 判断当前进程是否已注入权威注册表。
+    fn is_available(&self) -> bool;
+
+    /// 解析服务端签发的短时引用；实现必须校验种类、环境、用途和有效期。
+    fn resolve<'a>(
+        &'a self,
+        kind: SupplierReferenceKind,
+        payload_reference: &'a str,
+        environment: entities::supplier_api::ConnectionEnvironment,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = std::result::Result<ResolvedSupplierReference, ClassifiedError>>
+                + Send
+                + 'a,
+        >,
+    >;
+}
+
+/// 未注入引用注册表时的默认失败关闭实现。
+pub struct UnavailableSupplierReferenceRegistry;
+
+impl SupplierReferenceRegistry for UnavailableSupplierReferenceRegistry {
+    fn is_available(&self) -> bool {
+        false
+    }
+
+    fn resolve<'a>(
+        &'a self,
+        _kind: SupplierReferenceKind,
+        _payload_reference: &'a str,
+        _environment: entities::supplier_api::ConnectionEnvironment,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = std::result::Result<ResolvedSupplierReference, ClassifiedError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async {
+            Err(ClassifiedError {
+                class: ErrorClass::AuthSignature,
+                code: "REFERENCE_REGISTRY_UNAVAILABLE".to_string(),
+                summary: "未注入权威引用注册表，引用绑定已失败关闭".to_string(),
+            })
+        })
+    }
 }
 
 /// 默认网关：端点引用不可解析时失败关闭（可观测降级）。
@@ -119,6 +209,8 @@ impl SupplierApiGateway for UnavailableSupplierApiGateway {
 pub struct SupplierApiService {
     db: Database,
     gateway: Arc<dyn SupplierApiGateway>,
+    reference_registry: Arc<dyn SupplierReferenceRegistry>,
+    rbac: Option<SharedRbacService>,
 }
 
 impl SupplierApiService {
@@ -131,7 +223,24 @@ impl SupplierApiService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database, gateway: Arc<dyn SupplierApiGateway>) -> Self {
-        Self { db, gateway }
+        Self {
+            db,
+            gateway,
+            reference_registry: Arc::new(UnavailableSupplierReferenceRegistry),
+            rbac: None,
+        }
+    }
+
+    /// 注入当前应用的权威 RBAC，用于动作投影与命令内二次鉴权。
+    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
+        self.rbac = Some(rbac);
+        self
+    }
+
+    /// 注入服务端不透明引用注册表。
+    pub fn with_reference_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
+        self.reference_registry = registry;
+        self
     }
 
     /// 创建供应商 API 连接及其能力声明（跨集合事务写入）。
@@ -158,6 +267,22 @@ impl SupplierApiService {
         actor: &AuditActor,
     ) -> Result<SupplierApiConnectionView> {
         req.validate()?;
+        if req.endpoint_reference.is_some() || req.credential_reference.is_some() {
+            return Err(Error::ValidationError(
+                "创建连接只建立身份；技术引用必须通过不透明引用绑定命令提交".to_string(),
+            ));
+        }
+        if req
+            .status
+            .is_some_and(|status| status != SupplierApiConnectionStatus::Disabled)
+        {
+            return Err(Error::ValidationError("新连接必须从停用状态开始".to_string()));
+        }
+        if !req.capabilities.is_empty() {
+            return Err(Error::ValidationError(
+                "初始能力必须通过独立能力配置命令提交".to_string(),
+            ));
+        }
         self.db
             .supplier_accounts()
             .find_by_id(&req.supplier_id, &mut NoTransaction)
@@ -171,13 +296,13 @@ impl SupplierApiService {
                 supplier_id: req.supplier_id,
                 connection_code: req.connection_code,
                 environment: req.environment,
-                endpoint_reference: req.endpoint_reference,
-                credential_reference: req.credential_reference,
+                endpoint_reference: String::new(),
+                credential_reference: None,
                 rate_limit_policy: req
                     .rate_limit_policy
                     .map(RateLimitPolicyRequest::into_policy)
                     .transpose()?,
-                status: req.status.unwrap_or(SupplierApiConnectionStatus::Active),
+                status: SupplierApiConnectionStatus::Disabled,
             },
             actor.id(),
         )?;
@@ -252,6 +377,31 @@ impl SupplierApiService {
                 rate_limit_policy: None,
                 last_health_at: row.last_health_at.map(|at| at as u64),
                 last_health_result: row.last_health_result,
+                safe_references: SafeReferencesView {
+                    endpoint: SafeReferenceView {
+                        state: if row.endpoint_reference_bound {
+                            "BOUND"
+                        } else {
+                            "MISSING"
+                        },
+                        alias: None,
+                        version: None,
+                        visible: false,
+                    },
+                    credential: SafeReferenceView {
+                        state: if row.credential_reference_bound {
+                            "BOUND"
+                        } else {
+                            "MISSING"
+                        },
+                        alias: None,
+                        version: None,
+                        visible: false,
+                    },
+                },
+                technical_config_version: row.technical_config_version,
+                allowed_actions: Vec::new(),
+                action_blockers: Vec::new(),
                 version: row.version,
                 created_at: row.created_at,
             })
@@ -301,8 +451,22 @@ impl SupplierApiService {
                     status: capability.status,
                     version: capability.base.version,
                     created_at: capability.base.created_at,
+                    constraint_summary: capability.constraint_snapshot,
+                    business_requirement: None,
+                    business_confirmation_version: None,
+                    technically_verified: false,
+                    verified_at: None,
+                    allowed_actions: Vec::new(),
+                    action_blockers: Vec::new(),
                 })
                 .collect(),
+            health_records: Vec::new(),
+            health_check_types: vec![
+                entities::supplier_api::SupplierHealthCheckType::Connectivity,
+                entities::supplier_api::SupplierHealthCheckType::Authentication,
+                entities::supplier_api::SupplierHealthCheckType::CapabilityMetadata,
+            ],
+            related_impact: RelatedImpactView::default(),
             connection: connection.into(),
         })
     }
@@ -448,6 +612,13 @@ impl SupplierApiService {
                 status: capability.status,
                 version: capability.base.version,
                 created_at: capability.base.created_at,
+                constraint_summary: capability.constraint_snapshot,
+                business_requirement: None,
+                business_confirmation_version: None,
+                technically_verified: false,
+                verified_at: None,
+                allowed_actions: Vec::new(),
+                action_blockers: Vec::new(),
             })
             .collect())
     }
@@ -492,6 +663,13 @@ impl SupplierApiService {
                 status: row.status,
                 version: row.version,
                 created_at: row.created_at,
+                constraint_summary: None,
+                business_requirement: None,
+                business_confirmation_version: None,
+                technically_verified: false,
+                verified_at: None,
+                allowed_actions: Vec::new(),
+                action_blockers: Vec::new(),
             })
             .collect();
 
@@ -685,14 +863,20 @@ impl SupplierApiService {
                 message_id: Some(message.base.id.clone().into()),
                 business_object_id: None,
                 error_class: error.class,
-                owner_role: Some("integration_ops".to_string()),
+                owner_role: Some(error_owner_role(error.class).to_string()),
                 owner_user_id: None,
             },
         )?;
+        let work_item = error_work_item(&task)?;
         let audit = actor.clone().resource_log(
             "supplier_api_connection.health_check.failed",
             "supplier_api_connection",
             id.to_string(),
+        )?;
+        let work_item_audit = actor.clone().resource_log(
+            "integration_error_task.work_item.create",
+            "work_item",
+            work_item.base.id.clone(),
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
@@ -705,10 +889,12 @@ impl SupplierApiService {
                     db.integration_ops()
                         .create_error_task_with_message_failure(&task, &mut message, session)
                         .await?;
+                    db.work_items().create(&work_item, session).await?;
                     db.supplier_api_connections()
                         .update(&mut connection_tx, session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&work_item_audit, session).await?;
                     Ok::<SupplierApiConnection, crate::errors::Error>(connection_tx)
                 })
             })

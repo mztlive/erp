@@ -1450,7 +1450,7 @@ export function ExecutionProjectionsPage() {
                                     </div>
                                 ) : null}
                                 <p className="mt-3 text-xs text-muted-foreground">
-                                    本页不支持领取、转交或完成处理任务。
+                                    本页不建立处理责任，也不支持转交或完成处理任务。
                                 </p>
                             </DocumentSection>
                         ) : null}
@@ -1528,7 +1528,7 @@ export function ExecutionProjectionsPage() {
                           : pendingAction?.kind === "ESCALATE"
                             ? [
                                   "创建或复用接口错误待办（不会重复建单）",
-                                  "本页只返回入口，不领取/完成任务",
+                                  "本页只返回入口，不建立处理责任或完成任务",
                               ]
                             : pendingAction?.kind === "BULK_RETRY"
                               ? [

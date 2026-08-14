@@ -495,6 +495,7 @@ pub(super) fn build_receivable_delta(
     Option<(
         entities::receivable::ReceivableAccount,
         entities::receivable::ReceivableEntry,
+        bool,
     )>,
 > {
     let new_gross = revision_gross(revision)?;
@@ -502,6 +503,7 @@ pub(super) fn build_receivable_delta(
     if delta.is_zero() {
         return Ok(None);
     }
+    let account_existed = existing_account.is_some();
     let account = match existing_account {
         Some(account) => account,
         None => build_receivable_account(order, revision),
@@ -526,5 +528,5 @@ pub(super) fn build_receivable_delta(
         },
     )
     .map_err(Error::Logic)?;
-    Ok(Some((account, entry)))
+    Ok(Some((account, entry, account_existed)))
 }

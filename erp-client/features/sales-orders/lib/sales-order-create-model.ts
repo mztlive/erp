@@ -144,6 +144,8 @@ const createSalesOrderSchema = z
             ),
         paymentTerms: z.string().trim().min(1, "请选择付款条件"),
         fulfillmentDeadline: z.string().min(1, "请选择履约期限"),
+        targetMallId: z.string(),
+        receivableDueDate: z.string(),
         taxRatePercent: decimalInput("税率", 6).refine(
             (value) => decimalAtMost(value, "100", 6),
             "税率不能超过 100%",
@@ -152,14 +154,13 @@ const createSalesOrderSchema = z
         lineItems: z.array(draftLineSchema).min(1, "至少需要一条销售明细"),
     })
     .superRefine((value, context) => {
-        if (!value.contractId) {
+        if (!value.contractId.trim()) {
             context.addIssue({
                 code: "custom",
                 path: ["contractId"],
                 message: "请选择已有有效合同",
             })
-        }
-        if (
+        } else if (
             !value.requestedContractRevisionId ||
             !value.contractRevisionLabel
         ) {
@@ -168,26 +169,44 @@ const createSalesOrderSchema = z
                 path: ["contractId"],
                 message: "正在同步合同信息，请稍后再提交",
             })
-        }
-        if (!value.customerName.trim()) {
-            context.addIssue({
-                code: "custom",
-                path: ["customerName"],
-                message: "正在同步客户信息，请稍后再提交",
-            })
-        }
-        if (!value.settlementEntity.trim()) {
-            context.addIssue({
-                code: "custom",
-                path: ["settlementEntity"],
-                message: "正在同步结算主体信息，请稍后再提交",
-            })
+        } else {
+            if (!value.customerName.trim()) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["customerName"],
+                    message: "正在同步客户信息，请稍后再提交",
+                })
+            }
+            if (!value.settlementEntity.trim()) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["settlementEntity"],
+                    message: "正在同步结算主体信息，请稍后再提交",
+                })
+            }
         }
         if (value.nature === "card_voucher" && value.lineItems.length !== 1) {
             context.addIssue({
                 code: "custom",
                 path: ["lineItems"],
                 message: "卡券销售单必须恰好只有一条明细",
+            })
+        }
+        if (value.nature === "card_voucher" && !value.targetMallId.trim()) {
+            context.addIssue({
+                code: "custom",
+                path: ["targetMallId"],
+                message: "请选择目标商城",
+            })
+        }
+        if (
+            value.nature === "card_voucher" &&
+            !value.receivableDueDate.trim()
+        ) {
+            context.addIssue({
+                code: "custom",
+                path: ["receivableDueDate"],
+                message: "请选择应收到期日",
             })
         }
         value.lineItems.forEach((line, index) => {
@@ -260,12 +279,14 @@ const draftSalesOrderSchema = z
         welfareScene: z.string(),
         paymentTerms: z.string(),
         fulfillmentDeadline: z.string(),
+        targetMallId: z.string(),
+        receivableDueDate: z.string(),
         taxRatePercent: z.string(),
         remark: z.string(),
         lineItems: z.array(draftRowSchema).min(1, "至少需要一条销售明细"),
     })
     .superRefine((value, context) => {
-        if (!value.contractId) {
+        if (!value.contractId.trim()) {
             context.addIssue({
                 code: "custom",
                 path: ["contractId"],
@@ -274,15 +295,71 @@ const draftSalesOrderSchema = z
         }
     })
 
+/** 合同字段提交校验。未选合同时给出可读错误；已选则交给整单 schema 检查修订同步。 */
+export function validateSalesOrderContractId(
+    contractId: string,
+): string | undefined {
+    if (!contractId.trim()) return "请选择已有有效合同"
+    return undefined
+}
+
+export type SalesOrderFormFieldErrors = {
+    fields: Record<string, StandardSchemaV1Issue[]>
+}
+
+/**
+ * 将 Zod issue.path 转成 TanStack Form 字段名（如 `lineItems[0].sku`）。
+ * 必须返回 `{ fields }`：直接丢回 issue 数组会被当成整表错误，字段上看不到。
+ */
+function fieldErrorsFromZodIssues(
+    issues: readonly z.core.$ZodIssue[],
+    formValue: CreateSalesOrderFormValues,
+): Record<string, StandardSchemaV1Issue[]> {
+    const fields: Record<string, StandardSchemaV1Issue[]> = {}
+    for (const issue of issues) {
+        const path = tanstackFieldPath(issue.path, formValue)
+        if (!path) continue
+        const list = fields[path] ?? []
+        list.push({ message: issue.message, path: issue.path })
+        fields[path] = list
+    }
+    return fields
+}
+
+function tanstackFieldPath(path: readonly PropertyKey[], formValue: unknown) {
+    let current = formValue
+    let result = ""
+    for (let index = 0; index < path.length; index += 1) {
+        const segment = path[index]
+        if (segment === undefined) continue
+        const key =
+            typeof segment === "object" && segment !== null && "key" in segment
+                ? (segment as { key: PropertyKey }).key
+                : segment
+        const asNumber = Number(key)
+        if (Array.isArray(current) && !Number.isNaN(asNumber)) {
+            result += `[${asNumber}]`
+        } else {
+            result += (result ? "." : "") + String(key)
+        }
+        if (typeof current === "object" && current !== null) {
+            current = (current as Record<PropertyKey, unknown>)[key]
+        } else {
+            current = undefined
+        }
+    }
+    return result
+}
+
 export function validateSalesOrderForm(
     value: CreateSalesOrderFormValues,
     intent: SalesOrderCreateIntent,
-): StandardSchemaV1Issue[] | undefined {
+): SalesOrderFormFieldErrors | undefined {
     const schema =
         intent === "SAVE_DRAFT" ? draftSalesOrderSchema : createSalesOrderSchema
     const result = schema.safeParse(value)
     if (result.success) return undefined
-    return result.error.issues as unknown as StandardSchemaV1Issue[]
+    return { fields: fieldErrorsFromZodIssues(result.error.issues, value) }
 }
 
 export const NATURE_OPTIONS = [
@@ -297,7 +374,9 @@ export const CARD_FORM_OPTIONS = [
 
 let draftLineSequence = 0
 
-export function createEmptyLine(nature: SalesOrderNature): SalesOrderDraftLineInput {
+export function createEmptyLine(
+    nature: SalesOrderNature,
+): SalesOrderDraftLineInput {
     draftLineSequence += 1
     return {
         rowKey: `draft-line-${draftLineSequence}`,

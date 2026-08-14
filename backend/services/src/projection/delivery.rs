@@ -1,50 +1,54 @@
-use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, ProjectionExt, Transactional};
+//! W23 执行投影投递、原结果查询、受控重试与 W29 升级。
+
+use database::repository::{ProjectionDeliveryEscalation, ProjectionDeliveryFailure};
+use database::{
+    AccessControlExt, IntegrationOpsExt, NoTransaction, ProjectionExt, Transactional, WorkItemExt,
+};
+use entities::common::time::Instant;
 use entities::ids::{
-    InboxMessageId, IntegrationErrorTaskId, SalesOrderProjectionDeliveryId, SalesOrderProjectionId,
-    SalesOrderProjectionRevisionId,
+    InboxMessageId, IntegrationErrorTaskId, SalesOrderProjectionId, SalesOrderProjectionRevisionId,
 };
 use entities::integration_ops::{
-    InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
+    ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
     IntegrationErrorTaskData, MessageType,
 };
 use entities::projection::{
     ProjectionDeliveryStatus, SalesOrderProjection, SalesOrderProjectionDelivery,
-    SalesOrderProjectionDeliveryData, SalesOrderProjectionRevision, SalesOrderProjectionUpdate,
+    SalesOrderProjectionRevision, SalesOrderProjectionUpdate,
 };
-use id_generator::next_id;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
-use crate::projection::connector::{ClassifiedError, DeliverAck};
-use crate::projection::dto::{DeliverProjectionRevisionRequest, ProjectionDeliveryResultView};
+use crate::integration_ops::{error_owner_role, error_work_item};
+use crate::projection::connector::{ClassifiedError, DeliverAck, QueryProjectionResult};
+use crate::projection::dto::{
+    DeliverProjectionRevisionRequest, ProcessProjectionDeliveriesRequest, ProcessProjectionDeliveriesResult,
+    ProjectionDeliveryAction, ProjectionDeliveryActionResult, ProjectionDeliveryCommand,
+    ProjectionDeliveryResultView,
+};
 use crate::projection::service::ProjectionService;
 
+const RETRY_DELAY_SECONDS: i64 = 60;
+
+struct ProjectionSuccessSettlement<'a> {
+    projection: SalesOrderProjection,
+    revision: SalesOrderProjectionRevision,
+    delivery: SalesOrderProjectionDelivery,
+    message: InboxMessage,
+    ack: DeliverAck,
+    operation_id: String,
+    command_action: &'static str,
+    actor: &'a AuditActor,
+}
+
 impl ProjectionService {
-    /// 下发投影版本到目标商城（外部 HTTP 调用在事务之外完成）。
+    /// 处理指定投影修订的既有待发送记录。
     ///
-    /// 流程（二期专属，P3 §3/§7）：
-    /// 1. 事务 1：落 `inbox_message`（`Received`）+ 审计；
-    /// 2. 事务外：经 [`crate::projection::MallConnector`] 尝试下发；
-    /// 3. 事务 2：成功 → 下发记录 `Confirmed` + 投影 `current_acked_revision_id`
-    ///    推进 + `inbox_message` 置 `Processed`；失败 → 下发记录 `Failed`
-    ///    （错误码/摘要）+ `inbox_message` 置 `Failed` + `integration_error_task`。
-    ///
-    /// 幂等：`(projection_revision_id, target_mall_id)` 唯一索引承接——已确认的
-    /// 下发重复提交直接返回既有结果；未确认的重复下发返回 409。
-    ///
-    /// # 参数
-    /// * `projection_id` - 所属投影稳定身份
-    /// * `revision_no` - 修订序号
-    /// * `req` - 下发请求（含幂等键）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回下发结果视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 投影或投影版本不存在
-    /// * `ConflictError` - 该版本已在下发中
+    /// 本入口不创建投递；创建投影或修订时已经原子预建固定 `PENDING_SEND`
+    /// 记录。请求只负责以 CAS 取得该记录并推进一次真实外部调用。
     pub async fn deliver_revision(
         &self,
         projection_id: &str,
@@ -53,7 +57,795 @@ impl ProjectionService {
         actor: &AuditActor,
     ) -> Result<ProjectionDeliveryResultView> {
         req.validate()?;
-        let mut projection = self
+        let (projection, revision, delivery) =
+            self.load_revision_delivery(projection_id, revision_no).await?;
+        let operation_id = operation_id(actor.id(), "SEND", &delivery.base.id, &req.idempotency_key);
+        if let Some(result) = self
+            .replay_operation(&operation_id, &delivery.base.id, "SEND", actor)
+            .await?
+        {
+            return Ok(result);
+        }
+        if let Some(result) = terminal_or_inflight_result(&delivery, operation_id.clone()) {
+            return self
+                .record_existing_result(
+                    result,
+                    "sales_order_projection_delivery.send_observed",
+                    "SEND",
+                    actor,
+                )
+                .await;
+        }
+        if !delivery.is_send_ready(Instant::now()) {
+            return Err(Error::ConflictError(
+                "投递尚未到受控处理时间，请查询当前状态".to_string(),
+            ));
+        }
+        self.process_delivery(projection, revision, delivery, operation_id, "SEND", actor)
+            .await
+    }
+
+    /// 执行 `QUERY_RESULT / RETRY / ESCALATE` 投递对象强命令。
+    ///
+    /// 同一请求 ID 的重复提交返回原结果；请求 ID 复用到不同命令时返回冲突。
+    pub async fn apply_delivery_command(
+        &self,
+        path_delivery_id: &str,
+        command: ProjectionDeliveryCommand,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        command.validate()?;
+        ensure_command_identity(path_delivery_id, &command)?;
+        let operation_id = operation_id(
+            actor.id(),
+            command.action.as_str(),
+            path_delivery_id,
+            &command.request_id,
+        );
+        if let Some(result) = self
+            .replay_operation(&operation_id, path_delivery_id, command.action.as_str(), actor)
+            .await?
+        {
+            return Ok(result);
+        }
+
+        let result = match command.action {
+            ProjectionDeliveryAction::QueryResult => {
+                self.query_delivery_result(&command, &operation_id, actor).await
+            }
+            ProjectionDeliveryAction::Retry => self.retry_delivery(&command, &operation_id, actor).await,
+            ProjectionDeliveryAction::Escalate => {
+                self.escalate_delivery(&command, &operation_id, actor).await
+            }
+        };
+        match result {
+            Ok(result) => Ok(result),
+            Err(error) => match self
+                .replay_operation(&operation_id, path_delivery_id, command.action.as_str(), actor)
+                .await?
+            {
+                Some(result) => Ok(result),
+                None => Err(error),
+            },
+        }
+    }
+
+    /// 以有界批次处理 `PENDING_SEND` 与到期 `RETRYING` 记录。
+    ///
+    /// 每条记录仍通过相同 CAS 取得路径；并发 worker 只会有一个成功调用外部连接器。
+    pub async fn process_pending_deliveries(
+        &self,
+        req: ProcessProjectionDeliveriesRequest,
+        actor: &AuditActor,
+    ) -> Result<ProcessProjectionDeliveriesResult> {
+        req.validate()?;
+        let now = Instant::now();
+        let rows = self
+            .db
+            .sales_order_projection_deliveries()
+            .list_processable_deliveries(now, req.limit.unwrap_or(50), &mut NoTransaction)
+            .await?;
+        let scanned = rows.len() as u32;
+        let mut result = ProcessProjectionDeliveriesResult {
+            scanned,
+            acked: 0,
+            failed: 0,
+            still_unknown: 0,
+            skipped: 0,
+            items: Vec::with_capacity(rows.len()),
+        };
+        for delivery in rows {
+            let operation_id = operation_id("system", "PROCESS", &delivery.base.id, &delivery.message_key);
+            match self
+                .process_delivery_by_identity(delivery, operation_id, actor)
+                .await
+            {
+                Ok(item) => {
+                    match item.result {
+                        ProjectionDeliveryActionResult::Acked => result.acked += 1,
+                        ProjectionDeliveryActionResult::Failed => result.failed += 1,
+                        ProjectionDeliveryActionResult::StillUnknown => result.still_unknown += 1,
+                        ProjectionDeliveryActionResult::RetryScheduled
+                        | ProjectionDeliveryActionResult::Escalated => result.skipped += 1,
+                    }
+                    result.items.push(item);
+                }
+                Err(Error::ConflictError(_)) => result.skipped += 1,
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(result)
+    }
+
+    async fn process_delivery_by_identity(
+        &self,
+        delivery: SalesOrderProjectionDelivery,
+        operation_id: String,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        let revision = self
+            .db
+            .sales_order_projection_revisions()
+            .find_by_id(delivery.projection_revision_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("投递关联的投影修订不存在".to_string()))?;
+        let projection = self
+            .db
+            .sales_order_projections()
+            .find_by_id(revision.projection_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("投递关联的稳定投影不存在".to_string()))?;
+        self.process_delivery(projection, revision, delivery, operation_id, "PROCESS", actor)
+            .await
+    }
+
+    async fn process_delivery(
+        &self,
+        projection: SalesOrderProjection,
+        revision: SalesOrderProjectionRevision,
+        delivery: SalesOrderProjectionDelivery,
+        operation_id: String,
+        command_action: &'static str,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        ensure_delivery_relation(&projection, &revision, &delivery)?;
+        let message = self.ensure_message(&delivery).await?;
+        let now = Instant::now();
+        let claimed = self
+            .db
+            .sales_order_projection_deliveries()
+            .claim_for_send(
+                &delivery.base.id,
+                delivery.base.version,
+                &InboxMessageId::new(message.base.id.clone()),
+                now,
+                &mut NoTransaction,
+            )
+            .await?;
+        let Some(claimed) = claimed else {
+            let current = self.current_delivery(&delivery.base.id).await?;
+            return terminal_or_inflight_result(&current, operation_id)
+                .ok_or_else(|| Error::ConflictError("投递已由其他处理器取得，请刷新".to_string()));
+        };
+
+        match self
+            .connector
+            .deliver_projection(&revision, &projection.target_mall_id)
+            .await
+        {
+            Ok(ack) => {
+                self.settle_success(ProjectionSuccessSettlement {
+                    projection,
+                    revision,
+                    delivery: claimed,
+                    message,
+                    ack,
+                    operation_id,
+                    command_action,
+                    actor,
+                })
+                .await
+            }
+            Err(error) if is_unknown_error(&error) => {
+                self.settle_failure(
+                    claimed,
+                    message,
+                    unknown_error(error),
+                    operation_id,
+                    command_action,
+                    actor,
+                )
+                .await
+            }
+            Err(error) => {
+                self.settle_failure(claimed, message, error, operation_id, command_action, actor)
+                    .await
+            }
+        }
+    }
+
+    async fn ensure_message(&self, delivery: &SalesOrderProjectionDelivery) -> Result<InboxMessage> {
+        let id = delivery
+            .inbox_message_id
+            .clone()
+            .unwrap_or_else(|| InboxMessageId::new(stable_entity_id("pmsg", &delivery.message_key)));
+        let message = InboxMessage::new(
+            id,
+            InboxMessageData {
+                source_system_id: delivery.target_mall_id.clone(),
+                source_event_id: delivery.message_key.clone(),
+                message_type: MessageType::MallActionRequest,
+                business_fact_key: delivery.message_key.clone(),
+                payload_schema_version: "projection-delivery-v1".to_string(),
+                payload_reference: Some(delivery.projection_revision_id.to_string()),
+                status: InboxMessageStatus::Received,
+                source_sent_at: None,
+                received_at: Instant::now(),
+                processed_at: None,
+            },
+        )?;
+        match self
+            .db
+            .inbox_messages()
+            .create(&message, &mut NoTransaction)
+            .await
+        {
+            Ok(()) => Ok(message),
+            Err(database::Error::DuplicateKey(_)) => self
+                .db
+                .inbox_messages()
+                .find_by_business_fact_key(
+                    MessageType::MallActionRequest,
+                    &delivery.message_key,
+                    &mut NoTransaction,
+                )
+                .await?
+                .ok_or_else(|| Error::ConflictError("投递消息唯一键冲突但无法读取原消息".to_string())),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    async fn settle_success(
+        &self,
+        settlement: ProjectionSuccessSettlement<'_>,
+    ) -> Result<ProjectionDeliveryResultView> {
+        let ProjectionSuccessSettlement {
+            mut projection,
+            revision,
+            delivery,
+            mut message,
+            ack,
+            operation_id,
+            command_action,
+            actor,
+        } = settlement;
+        let at = Instant::now();
+        message.update(InboxMessageUpdate {
+            status: Some(InboxMessageStatus::Processed),
+            processed_at: Some(at),
+        })?;
+        let advance = self.should_advance_projection(&projection, &revision).await?;
+        if advance {
+            projection.update(SalesOrderProjectionUpdate {
+                current_acked_revision_id: Some(revision.base.id.clone().into()),
+            })?;
+        }
+        let result = action_result(
+            operation_id.clone(),
+            delivery.base.id.clone(),
+            ProjectionDeliveryActionResult::Acked,
+            None,
+            None,
+            at,
+        );
+        let audit = operation_audit(
+            actor,
+            operation_id.clone(),
+            "sales_order_projection_delivery.acked",
+            &delivery.base.id,
+            command_action,
+            &result,
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let baseline = ack.mall_execution_baseline.clone();
+        let delivery_id = delivery.base.id.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let updated = db
+                        .sales_order_projection_deliveries()
+                        .confirm_delivery(&delivery_id, delivery.base.version, &baseline, at, session)
+                        .await?;
+                    if updated.is_none() {
+                        return Err(crate::errors::Error::ConflictError(
+                            "投递结果已被其他请求写入".to_string(),
+                        ));
+                    }
+                    if advance {
+                        db.sales_order_projections()
+                            .update(&mut projection, session)
+                            .await?;
+                    }
+                    db.inbox_messages().update(&mut message, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await?;
+        Ok(result)
+    }
+
+    async fn settle_failure(
+        &self,
+        delivery: SalesOrderProjectionDelivery,
+        mut message: InboxMessage,
+        error: ClassifiedError,
+        operation_id: String,
+        command_action: &'static str,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        let at = Instant::now();
+        let unknown = error.class == ErrorClass::ResultUnknown;
+        let status = if unknown {
+            ProjectionDeliveryStatus::ResultUnknown
+        } else {
+            ProjectionDeliveryStatus::Failed
+        };
+        message.update(InboxMessageUpdate {
+            status: Some(if unknown {
+                InboxMessageStatus::Processing
+            } else {
+                InboxMessageStatus::Failed
+            }),
+            processed_at: None,
+        })?;
+        let result = action_result(
+            operation_id.clone(),
+            delivery.base.id.clone(),
+            if unknown {
+                ProjectionDeliveryActionResult::StillUnknown
+            } else {
+                ProjectionDeliveryActionResult::Failed
+            },
+            None,
+            None,
+            at,
+        );
+        let audit = operation_audit(
+            actor,
+            operation_id.clone(),
+            if unknown {
+                "sales_order_projection_delivery.result_unknown"
+            } else {
+                "sales_order_projection_delivery.failed"
+            },
+            &delivery.base.id,
+            command_action,
+            &result,
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let delivery_id = delivery.base.id.clone();
+        let code = error.code.clone();
+        let summary = error.summary.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let updated = db
+                        .sales_order_projection_deliveries()
+                        .fail_delivery(
+                            &delivery_id,
+                            delivery.base.version,
+                            ProjectionDeliveryFailure {
+                                status,
+                                error_class: error.class,
+                                error_code: &code,
+                                error_summary: &summary,
+                                at,
+                            },
+                            session,
+                        )
+                        .await?;
+                    if updated.is_none() {
+                        return Err(crate::errors::Error::ConflictError(
+                            "投递结果已被其他请求写入".to_string(),
+                        ));
+                    }
+                    db.inbox_messages().update(&mut message, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await?;
+        Ok(result)
+    }
+
+    async fn query_delivery_result(
+        &self,
+        command: &ProjectionDeliveryCommand,
+        operation_id: &str,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        let delivery = self.load_command_delivery(command).await?;
+        if delivery.status == ProjectionDeliveryStatus::Confirmed {
+            let result = action_result(
+                operation_id.to_string(),
+                delivery.base.id,
+                ProjectionDeliveryActionResult::Acked,
+                delivery.work_item_id.map(|id| id.to_string()),
+                delivery.error_task_id.map(|id| id.to_string()),
+                Instant::now(),
+            );
+            return self
+                .record_existing_result(
+                    result,
+                    "sales_order_projection_delivery.query_observed",
+                    ProjectionDeliveryAction::QueryResult.as_str(),
+                    actor,
+                )
+                .await;
+        }
+        if !delivery.can_query_result() {
+            return Err(Error::BusinessLogicError(
+                "当前投递状态或错误分类不允许查询原结果".to_string(),
+            ));
+        }
+        let revision = self.load_command_revision(command).await?;
+        let projection = self.load_command_projection(command).await?;
+        let queried = self
+            .connector
+            .query_projection(&revision, &delivery.target_mall_id, &delivery.message_key)
+            .await;
+        match queried {
+            QueryProjectionResult::Confirmed(ack) => {
+                let message = self.load_delivery_message(&delivery).await?;
+                self.settle_success(ProjectionSuccessSettlement {
+                    projection,
+                    revision,
+                    delivery,
+                    message,
+                    ack,
+                    operation_id: operation_id.to_string(),
+                    command_action: ProjectionDeliveryAction::QueryResult.as_str(),
+                    actor,
+                })
+                .await
+            }
+            QueryProjectionResult::Failed(error) => {
+                let message = self.load_delivery_message(&delivery).await?;
+                self.settle_failure(
+                    delivery,
+                    message,
+                    error,
+                    operation_id.to_string(),
+                    ProjectionDeliveryAction::QueryResult.as_str(),
+                    actor,
+                )
+                .await
+            }
+            QueryProjectionResult::StillUnknown => {
+                self.record_still_unknown(delivery, operation_id, actor).await
+            }
+        }
+    }
+
+    async fn should_advance_projection(
+        &self,
+        projection: &SalesOrderProjection,
+        revision: &SalesOrderProjectionRevision,
+    ) -> Result<bool> {
+        let Some(current_id) = projection.current_acked_revision_id.as_ref() else {
+            return Ok(true);
+        };
+        if current_id.as_ref() == revision.base.id.as_str() {
+            return Ok(false);
+        }
+        let current = self
+            .db
+            .sales_order_projection_revisions()
+            .find_by_id(current_id.as_ref(), &mut NoTransaction)
+            .await?;
+        Ok(current.is_none_or(|current| {
+            should_advance_acked_revision(current.revision.revision_no, revision.revision.revision_no)
+        }))
+    }
+
+    async fn record_still_unknown(
+        &self,
+        delivery: SalesOrderProjectionDelivery,
+        operation_id: &str,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        let at = Instant::now();
+        let mut message = self.load_delivery_message(&delivery).await?;
+        message.update(InboxMessageUpdate {
+            status: Some(InboxMessageStatus::Processing),
+            processed_at: None,
+        })?;
+        let result = action_result(
+            operation_id.to_string(),
+            delivery.base.id.clone(),
+            ProjectionDeliveryActionResult::StillUnknown,
+            None,
+            None,
+            at,
+        );
+        let audit = operation_audit(
+            actor,
+            operation_id.to_string(),
+            "sales_order_projection_delivery.query_unknown",
+            &delivery.base.id,
+            ProjectionDeliveryAction::QueryResult.as_str(),
+            &result,
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let delivery_id = delivery.base.id.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let updated = db
+                        .sales_order_projection_deliveries()
+                        .fail_delivery(
+                            &delivery_id,
+                            delivery.base.version,
+                            ProjectionDeliveryFailure {
+                                status: ProjectionDeliveryStatus::ResultUnknown,
+                                error_class: ErrorClass::ResultUnknown,
+                                error_code: "MALL_RESULT_STILL_UNKNOWN",
+                                error_summary: "商城未返回可验证的原投递最终结果",
+                                at,
+                            },
+                            session,
+                        )
+                        .await?;
+                    if updated.is_none() {
+                        return Err(crate::errors::Error::ConflictError(
+                            "查询期间投递结果已变化".to_string(),
+                        ));
+                    }
+                    db.inbox_messages().update(&mut message, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await?;
+        Ok(result)
+    }
+
+    async fn retry_delivery(
+        &self,
+        command: &ProjectionDeliveryCommand,
+        operation_id: &str,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        let delivery = self.load_command_delivery(command).await?;
+        if !delivery.can_retry() {
+            return Err(Error::BusinessLogicError(
+                "当前错误不可重试；结果未知必须先查询，映射差异必须升级 W29".to_string(),
+            ));
+        }
+        let at = Instant::now();
+        let next_attempt_at = Instant::from_unix_secs(at.unix_secs() + RETRY_DELAY_SECONDS);
+        let result = action_result(
+            operation_id.to_string(),
+            delivery.base.id.clone(),
+            ProjectionDeliveryActionResult::RetryScheduled,
+            None,
+            None,
+            at,
+        );
+        let audit = operation_audit(
+            actor,
+            operation_id.to_string(),
+            "sales_order_projection_delivery.retry_schedule",
+            &delivery.base.id,
+            ProjectionDeliveryAction::Retry.as_str(),
+            &result,
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let delivery_id = delivery.base.id.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let updated = db
+                        .sales_order_projection_deliveries()
+                        .schedule_retry(&delivery_id, delivery.base.version, at, next_attempt_at, session)
+                        .await?;
+                    if updated.is_none() {
+                        return Err(crate::errors::Error::ConflictError(
+                            "投递状态或版本已变化".to_string(),
+                        ));
+                    }
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await?;
+        Ok(result)
+    }
+
+    async fn escalate_delivery(
+        &self,
+        command: &ProjectionDeliveryCommand,
+        operation_id: &str,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        let delivery = self.load_command_delivery(command).await?;
+        if delivery.status == ProjectionDeliveryStatus::Manual {
+            let result = action_result(
+                operation_id.to_string(),
+                delivery.base.id,
+                ProjectionDeliveryActionResult::Escalated,
+                delivery.work_item_id.map(|id| id.to_string()),
+                delivery.error_task_id.map(|id| id.to_string()),
+                Instant::now(),
+            );
+            return self
+                .record_existing_result(
+                    result,
+                    "sales_order_projection_delivery.escalate_observed",
+                    ProjectionDeliveryAction::Escalate.as_str(),
+                    actor,
+                )
+                .await;
+        }
+        if !delivery.can_escalate() {
+            return Err(Error::BusinessLogicError(
+                "当前投递状态不允许升级 W29".to_string(),
+            ));
+        }
+        let error_class = delivery.error_class.unwrap_or(ErrorClass::ResultUnknown);
+        let error_code = delivery
+            .error_code
+            .clone()
+            .unwrap_or_else(|| "DELIVERY_RESULT_UNKNOWN".to_string());
+        let error_summary = delivery
+            .error_summary
+            .clone()
+            .unwrap_or_else(|| "投递最终结果尚未取得权威确认".to_string());
+        let task = IntegrationErrorTask::new(
+            IntegrationErrorTaskId::new(stable_entity_id("w29err", &delivery.message_key)),
+            IntegrationErrorTaskData {
+                message_id: delivery.inbox_message_id.clone(),
+                business_object_id: Some(delivery.base.id.clone()),
+                error_class,
+                owner_role: Some(error_owner_role(error_class).to_string()),
+                owner_user_id: None,
+            },
+        )?;
+        let work_item = error_work_item(&task)?;
+        let at = Instant::now();
+        let result = action_result(
+            operation_id.to_string(),
+            delivery.base.id.clone(),
+            ProjectionDeliveryActionResult::Escalated,
+            Some(work_item.base.id.clone()),
+            Some(task.base.id.clone()),
+            at,
+        );
+        let audit = operation_audit(
+            actor,
+            operation_id.to_string(),
+            "sales_order_projection_delivery.escalate",
+            &delivery.base.id,
+            ProjectionDeliveryAction::Escalate.as_str(),
+            &result,
+        )?;
+        let work_item_audit = actor.clone().resource_log(
+            "integration_error_task.work_item.create",
+            "work_item",
+            work_item.base.id.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let delivery_id = delivery.base.id.clone();
+        let task_id = task.base.id.clone();
+        let work_item_id = work_item.base.id.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.integration_error_tasks().create(&task, session).await?;
+                    db.work_items().create(&work_item, session).await?;
+                    let updated = db
+                        .sales_order_projection_deliveries()
+                        .escalate_delivery(
+                            &delivery_id,
+                            delivery.base.version,
+                            ProjectionDeliveryEscalation {
+                                error_class,
+                                error_code: &error_code,
+                                error_summary: &error_summary,
+                                error_task_id: &task_id.clone().into(),
+                                work_item_id: &work_item_id.clone().into(),
+                                at,
+                            },
+                            session,
+                        )
+                        .await?;
+                    if updated.is_none() {
+                        return Err(crate::errors::Error::ConflictError(
+                            "升级期间投递状态已变化".to_string(),
+                        ));
+                    }
+                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&work_item_audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await?;
+        Ok(result)
+    }
+
+    async fn record_existing_result(
+        &self,
+        result: ProjectionDeliveryResultView,
+        audit_action: &str,
+        command_action: &str,
+        actor: &AuditActor,
+    ) -> Result<ProjectionDeliveryResultView> {
+        let audit = operation_audit(
+            actor,
+            result.operation_id.clone(),
+            audit_action,
+            &result.delivery_id,
+            command_action,
+            &result,
+        )?;
+        match self.db.audit_logs().create(&audit, &mut NoTransaction).await {
+            Ok(()) => Ok(result),
+            Err(database::Error::DuplicateKey(_)) => self
+                .replay_operation(&result.operation_id, &result.delivery_id, command_action, actor)
+                .await?
+                .ok_or_else(|| Error::ConflictError("幂等回执冲突且无法读取".to_string())),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    async fn replay_operation(
+        &self,
+        operation_id: &str,
+        delivery_id: &str,
+        command_action: &str,
+        actor: &AuditActor,
+    ) -> Result<Option<ProjectionDeliveryResultView>> {
+        let Some(audit) = self
+            .db
+            .audit_logs()
+            .find_by_id(operation_id, &mut NoTransaction)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let receipt = audit
+            .message
+            .as_deref()
+            .and_then(|message| serde_json::from_str::<DeliveryReceipt>(message).ok())
+            .ok_or_else(|| Error::ConflictError("请求ID对应的幂等回执无效".to_string()))?;
+        if audit.actor_id != actor.id()
+            || audit.resource_type != "sales_order_projection_delivery"
+            || audit.resource_id.as_deref() != Some(delivery_id)
+            || receipt.command_action != command_action
+        {
+            return Err(Error::ConflictError("请求ID已用于不同投递命令".to_string()));
+        }
+        Ok(Some(
+            receipt.into_result(operation_id.to_string(), delivery_id.to_string()),
+        ))
+    }
+
+    async fn load_revision_delivery(
+        &self,
+        projection_id: &str,
+        revision_no: u32,
+    ) -> Result<(
+        SalesOrderProjection,
+        SalesOrderProjectionRevision,
+        SalesOrderProjectionDelivery,
+    )> {
+        let projection = self
             .db
             .sales_order_projections()
             .find_by_id(projection_id, &mut NoTransaction)
@@ -69,271 +861,298 @@ impl ProjectionService {
             )
             .await?
             .ok_or_else(|| Error::NotFound("投影版本不存在".to_string()))?;
-        let target_mall_id = projection.target_mall_id.clone();
-        let existing = self
+        let delivery = self
             .db
             .sales_order_projection_deliveries()
             .find_delivery_by_revision_and_mall(
                 &SalesOrderProjectionRevisionId::new(revision.base.id.clone()),
-                &target_mall_id,
+                &projection.target_mall_id,
                 &mut NoTransaction,
             )
-            .await?;
-        if let Some(existing) = existing {
-            return self.idempotent_delivery_result(existing, projection);
-        }
+            .await?
+            .ok_or_else(|| Error::NotFound("投影版本缺少固定投递记录".to_string()))?;
+        Ok((projection, revision, delivery))
+    }
 
-        let message = InboxMessage::new(
-            InboxMessageId::new(next_id()),
-            InboxMessageData {
-                source_system_id: target_mall_id.clone(),
-                source_event_id: format!(
-                    "projection_delivery:{}:{}:{}",
-                    revision.base.id, target_mall_id, req.idempotency_key
-                ),
-                message_type: MessageType::MallActionRequest,
-                business_fact_key: format!("projection_delivery:{}:{}", revision.base.id, target_mall_id),
-                payload_schema_version: "v1".to_string(),
-                payload_reference: Some(revision.content_hash.clone()),
-                status: InboxMessageStatus::Received,
-                source_sent_at: None,
-                received_at: entities::common::time::Instant::now(),
-                processed_at: None,
-            },
-        )?;
-        let audit = actor.clone().resource_log(
-            "sales_order_projection_delivery.deliver",
-            "sales_order_projection_delivery",
-            revision.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let message_tx = message.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.inbox_messages().create(&message_tx, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
-
-        let now = entities::common::time::Instant::now();
-        match self
-            .connector
-            .deliver_projection(&revision, &target_mall_id)
-            .await
+    async fn load_command_delivery(
+        &self,
+        command: &ProjectionDeliveryCommand,
+    ) -> Result<SalesOrderProjectionDelivery> {
+        let delivery = self.current_delivery(&command.delivery_id).await?;
+        if delivery.base.version != command.expected_object_version
+            || delivery.projection_revision_id.to_string() != command.projection_revision_id
         {
-            Ok(ack) => {
-                self.settle_delivery_success(&mut projection, revision, message, now, ack, actor)
-                    .await
-            }
-            Err(error) => {
-                self.settle_delivery_failure(&mut projection, revision, message, now, error, actor)
-                    .await
-            }
+            return Err(Error::ConflictError("投递对象版本或修订身份已变化".to_string()));
+        }
+        Ok(delivery)
+    }
+
+    async fn load_command_revision(
+        &self,
+        command: &ProjectionDeliveryCommand,
+    ) -> Result<SalesOrderProjectionRevision> {
+        let revision = self
+            .db
+            .sales_order_projection_revisions()
+            .find_by_id(&command.projection_revision_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("投影修订不存在".to_string()))?;
+        if revision.projection_id.to_string() != command.projection_id {
+            return Err(Error::ConflictError("投影修订不属于命令投影".to_string()));
+        }
+        Ok(revision)
+    }
+
+    async fn load_command_projection(
+        &self,
+        command: &ProjectionDeliveryCommand,
+    ) -> Result<SalesOrderProjection> {
+        self.db
+            .sales_order_projections()
+            .find_by_id(&command.projection_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("执行投影不存在".to_string()))
+    }
+
+    async fn current_delivery(&self, id: &str) -> Result<SalesOrderProjectionDelivery> {
+        self.db
+            .sales_order_projection_deliveries()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("投递不存在".to_string()))
+    }
+
+    async fn load_delivery_message(&self, delivery: &SalesOrderProjectionDelivery) -> Result<InboxMessage> {
+        let message_id = delivery
+            .inbox_message_id
+            .as_ref()
+            .ok_or_else(|| Error::ConflictError("投递尚未形成原消息身份".to_string()))?;
+        self.db
+            .inbox_messages()
+            .find_by_id(message_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("原投递消息不存在".to_string()))
+    }
+}
+
+fn ensure_command_identity(path_delivery_id: &str, command: &ProjectionDeliveryCommand) -> Result<()> {
+    if command.delivery_id != path_delivery_id {
+        return Err(Error::ValidationError("路径投递ID与命令不一致".to_string()));
+    }
+    Ok(())
+}
+
+fn ensure_delivery_relation(
+    projection: &SalesOrderProjection,
+    revision: &SalesOrderProjectionRevision,
+    delivery: &SalesOrderProjectionDelivery,
+) -> Result<()> {
+    if revision.projection_id.to_string() != projection.base.id
+        || delivery.projection_revision_id.to_string() != revision.base.id
+        || delivery.target_mall_id != projection.target_mall_id
+    {
+        return Err(Error::ConflictError("投影、修订与固定投递身份不一致".to_string()));
+    }
+    Ok(())
+}
+
+fn is_unknown_error(error: &ClassifiedError) -> bool {
+    error.class == ErrorClass::ResultUnknown
+        || error.code.contains("TIMEOUT")
+        || error.code.contains("OUTCOME_UNKNOWN")
+}
+
+fn unknown_error(error: ClassifiedError) -> ClassifiedError {
+    ClassifiedError {
+        class: ErrorClass::ResultUnknown,
+        code: error.code,
+        summary: error.summary,
+    }
+}
+
+fn terminal_or_inflight_result(
+    delivery: &SalesOrderProjectionDelivery,
+    operation_id: String,
+) -> Option<ProjectionDeliveryResultView> {
+    match delivery.status {
+        ProjectionDeliveryStatus::Confirmed
+        | ProjectionDeliveryStatus::Failed
+        | ProjectionDeliveryStatus::ResultUnknown
+        | ProjectionDeliveryStatus::Manual
+        | ProjectionDeliveryStatus::Sending => {
+            Some(delivery_result_from_fact(operation_id, delivery.clone()))
+        }
+        ProjectionDeliveryStatus::PendingSend | ProjectionDeliveryStatus::Retrying => None,
+    }
+}
+
+fn delivery_result_from_fact(
+    operation_id: String,
+    delivery: SalesOrderProjectionDelivery,
+) -> ProjectionDeliveryResultView {
+    let result = match delivery.status {
+        ProjectionDeliveryStatus::Confirmed => ProjectionDeliveryActionResult::Acked,
+        ProjectionDeliveryStatus::Failed => ProjectionDeliveryActionResult::Failed,
+        ProjectionDeliveryStatus::Manual => ProjectionDeliveryActionResult::Escalated,
+        ProjectionDeliveryStatus::Sending | ProjectionDeliveryStatus::ResultUnknown => {
+            ProjectionDeliveryActionResult::StillUnknown
+        }
+        ProjectionDeliveryStatus::PendingSend | ProjectionDeliveryStatus::Retrying => {
+            ProjectionDeliveryActionResult::RetryScheduled
+        }
+    };
+    action_result(
+        operation_id,
+        delivery.base.id,
+        result,
+        delivery.work_item_id.map(|id| id.to_string()),
+        delivery.error_task_id.map(|id| id.to_string()),
+        Instant::now(),
+    )
+}
+
+fn action_result(
+    operation_id: String,
+    delivery_id: String,
+    result: ProjectionDeliveryActionResult,
+    work_item_id: Option<String>,
+    error_task_id: Option<String>,
+    occurred_at: Instant,
+) -> ProjectionDeliveryResultView {
+    let next_action = next_action_for(result);
+    ProjectionDeliveryResultView {
+        operation_id,
+        delivery_id,
+        result,
+        work_item_id,
+        error_task_id,
+        occurred_at: occurred_at.unix_secs(),
+        next_action,
+    }
+}
+
+fn next_action_for(result: ProjectionDeliveryActionResult) -> Option<String> {
+    match result {
+        ProjectionDeliveryActionResult::Acked => None,
+        ProjectionDeliveryActionResult::Failed => Some("按服务端 allowedActions 继续处理".to_string()),
+        ProjectionDeliveryActionResult::StillUnknown => Some("继续查询原结果或升级到 W29".to_string()),
+        ProjectionDeliveryActionResult::RetryScheduled => {
+            Some(format!("将在 {} 秒后沿原消息键重试", RETRY_DELAY_SECONDS))
+        }
+        ProjectionDeliveryActionResult::Escalated => Some("OPEN_W29".to_string()),
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct DeliveryReceipt {
+    #[serde(rename = "c")]
+    command_action: String,
+    #[serde(rename = "r")]
+    result: ProjectionDeliveryActionResult,
+    #[serde(rename = "w", skip_serializing_if = "Option::is_none")]
+    work_item_id: Option<String>,
+    #[serde(rename = "e", skip_serializing_if = "Option::is_none")]
+    error_task_id: Option<String>,
+    #[serde(rename = "t")]
+    occurred_at: i64,
+}
+
+impl DeliveryReceipt {
+    fn from_result(command_action: &str, result: &ProjectionDeliveryResultView) -> Self {
+        Self {
+            command_action: command_action.to_string(),
+            result: result.result,
+            work_item_id: result.work_item_id.clone(),
+            error_task_id: result.error_task_id.clone(),
+            occurred_at: result.occurred_at,
         }
     }
 
-    /// 已存在下发记录的幂等返回（已确认直接返回既有结果，未确认返回冲突）。
-    ///
-    /// # 参数
-    /// * `existing` - 既有下发记录
-    /// * `projection` - 所属投影
-    ///
-    /// # 返回
-    /// 返回下发结果视图。
-    ///
-    /// # 错误
-    /// 下发尚未确认时返回 `ConflictError`。
-    fn idempotent_delivery_result(
-        &self,
-        existing: SalesOrderProjectionDelivery,
-        projection: SalesOrderProjection,
-    ) -> Result<ProjectionDeliveryResultView> {
-        if existing.status != ProjectionDeliveryStatus::Confirmed {
-            return Err(Error::ConflictError(
-                "该版本已在下发中，请查询下发状态".to_string(),
-            ));
+    fn into_result(self, operation_id: String, delivery_id: String) -> ProjectionDeliveryResultView {
+        ProjectionDeliveryResultView {
+            operation_id,
+            delivery_id,
+            result: self.result,
+            work_item_id: self.work_item_id,
+            error_task_id: self.error_task_id,
+            occurred_at: self.occurred_at,
+            next_action: next_action_for(self.result),
         }
-        Ok(ProjectionDeliveryResultView {
-            delivery_id: existing.base.id,
-            delivery_status: existing.status,
-            inbox_message_id: String::new(),
-            error_task_id: None,
-            mall_execution_baseline: existing.mall_execution_baseline,
-            projection_version: projection.base.version,
-        })
+    }
+}
+
+fn operation_audit(
+    actor: &AuditActor,
+    id: String,
+    action: &str,
+    delivery_id: &str,
+    command_action: &str,
+    result: &ProjectionDeliveryResultView,
+) -> Result<entities::AuditLog> {
+    let receipt = serde_json::to_string(&DeliveryReceipt::from_result(command_action, result))
+        .map_err(|error| Error::Internal(format!("序列化投递幂等回执失败: {error}")))?;
+    actor.clone().resource_log_with_id(
+        id,
+        action,
+        "sales_order_projection_delivery",
+        delivery_id.to_string(),
+        Some(receipt),
+    )
+}
+
+fn operation_id(actor_id: &str, action: &str, delivery_id: &str, request_id: &str) -> String {
+    stable_entity_id(
+        "w23op",
+        &format!("{actor_id}|{action}|{delivery_id}|{request_id}"),
+    )
+}
+
+fn stable_entity_id(prefix: &str, identity: &str) -> String {
+    format!("{prefix}_{:x}", Sha256::digest(identity.as_bytes()))
+}
+
+fn should_advance_acked_revision(current_revision_no: u32, incoming_revision_no: u32) -> bool {
+    incoming_revision_no >= current_revision_no
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{operation_id, should_advance_acked_revision, stable_entity_id, unknown_error};
+    use crate::projection::ClassifiedError;
+    use entities::integration_ops::ErrorClass;
+
+    #[test]
+    fn operation_identity_is_stable_without_exposing_raw_request_id() {
+        let first = operation_id("actor-1", "RETRY", "delivery-1", "secret-request-key");
+        let second = operation_id("actor-1", "RETRY", "delivery-1", "secret-request-key");
+        assert_eq!(first, second);
+        assert!(!first.contains("secret-request-key"));
+        assert!(first.starts_with("w23op_"));
     }
 
-    /// 把成功下发落库（事务 2：下发记录 + 投影确认版本推进 + 消息已处理）。
-    ///
-    /// # 参数
-    /// * `projection` - 待推进的投影实体
-    /// * `revision` - 已下发的投影版本
-    /// * `message` - 待置 `Processed` 的消息
-    /// * `at` - 下发时间
-    /// * `ack` - 商城确认
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回下发结果视图。
-    ///
-    /// # 错误
-    /// 乐观锁冲突或 MongoDB 写入失败时返回错误。
-    async fn settle_delivery_success(
-        &self,
-        projection: &mut SalesOrderProjection,
-        revision: SalesOrderProjectionRevision,
-        mut message: InboxMessage,
-        at: entities::common::time::Instant,
-        ack: DeliverAck,
-        actor: &AuditActor,
-    ) -> Result<ProjectionDeliveryResultView> {
-        let delivery = SalesOrderProjectionDelivery::new(
-            SalesOrderProjectionDeliveryId::new(next_id()),
-            SalesOrderProjectionDeliveryData {
-                projection_revision_id: revision.base.id.clone().into(),
-                target_mall_id: projection.target_mall_id.clone(),
-                status: ProjectionDeliveryStatus::Confirmed,
-                attempt_count: 1,
-                next_attempt_at: None,
-                mall_ack_at: Some(at),
-                mall_execution_baseline: Some(ack.mall_execution_baseline.clone()),
-                error_code: None,
-                error_summary: None,
-            },
-        )?;
-        projection.update(SalesOrderProjectionUpdate {
-            current_acked_revision_id: Some(revision.base.id.clone().into()),
-        })?;
-        message.update(InboxMessageUpdate {
-            status: Some(InboxMessageStatus::Processed),
-            processed_at: Some(at),
-        })?;
-        let audit = actor.clone().resource_log(
-            "sales_order_projection_delivery.acked",
-            "sales_order_projection_delivery",
-            delivery.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let delivery_id = delivery.base.id.clone();
-        let projection_version = projection.base.version;
-        let inbox_id = message.base.id.clone();
-        let mut projection_tx = projection.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.sales_order_projection_deliveries()
-                        .create(&delivery, session)
-                        .await?;
-                    db.sales_order_projections()
-                        .update(&mut projection_tx, session)
-                        .await?;
-                    db.inbox_messages().update(&mut message, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
-
-        Ok(ProjectionDeliveryResultView {
-            delivery_id,
-            delivery_status: ProjectionDeliveryStatus::Confirmed,
-            inbox_message_id: inbox_id,
-            error_task_id: None,
-            mall_execution_baseline: Some(ack.mall_execution_baseline),
-            projection_version,
-        })
+    #[test]
+    fn timeout_error_is_preserved_but_classified_as_result_unknown() {
+        let error = unknown_error(ClassifiedError {
+            class: ErrorClass::TransientFailure,
+            code: "MALL_TIMEOUT".to_string(),
+            summary: "请求超时".to_string(),
+        });
+        assert_eq!(error.class, ErrorClass::ResultUnknown);
+        assert_eq!(error.code, "MALL_TIMEOUT");
     }
 
-    /// 把失败下发落库（事务 2：下发记录失败 + 消息失败 + 错误任务）。
-    ///
-    /// # 参数
-    /// * `projection` - 所属投影实体（确认版本不推进）
-    /// * `revision` - 下发失败的投影版本
-    /// * `message` - 待置 `Failed` 的消息
-    /// * `at` - 下发时间
-    /// * `error` - 分类错误
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回下发结果视图（含错误任务 ID）。
-    ///
-    /// # 错误
-    /// 乐观锁冲突或 MongoDB 写入失败时返回错误。
-    async fn settle_delivery_failure(
-        &self,
-        projection: &mut SalesOrderProjection,
-        revision: SalesOrderProjectionRevision,
-        mut message: InboxMessage,
-        at: entities::common::time::Instant,
-        error: ClassifiedError,
-        actor: &AuditActor,
-    ) -> Result<ProjectionDeliveryResultView> {
-        let delivery = SalesOrderProjectionDelivery::new(
-            SalesOrderProjectionDeliveryId::new(next_id()),
-            SalesOrderProjectionDeliveryData {
-                projection_revision_id: revision.base.id.clone().into(),
-                target_mall_id: projection.target_mall_id.clone(),
-                status: ProjectionDeliveryStatus::Failed,
-                attempt_count: 1,
-                next_attempt_at: None,
-                mall_ack_at: None,
-                mall_execution_baseline: None,
-                error_code: Some(error.code.clone()),
-                error_summary: Some(error.summary.clone()),
-            },
-        )?;
-        message.update(InboxMessageUpdate {
-            status: Some(InboxMessageStatus::Failed),
-            processed_at: Some(at),
-        })?;
-        let task = IntegrationErrorTask::new(
-            IntegrationErrorTaskId::new(next_id()),
-            IntegrationErrorTaskData {
-                message_id: Some(message.base.id.clone().into()),
-                business_object_id: None,
-                error_class: error.class,
-                owner_role: Some("integration_ops".to_string()),
-                owner_user_id: None,
-            },
-        )?;
-        let audit = actor.clone().resource_log(
-            "sales_order_projection_delivery.failed",
-            "sales_order_projection_delivery",
-            delivery.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let delivery_id = delivery.base.id.clone();
-        let task_id = task.base.id.clone();
-        let inbox_id = message.base.id.clone();
-        let projection_version = projection.base.version;
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.sales_order_projection_deliveries()
-                        .create(&delivery, session)
-                        .await?;
-                    db.integration_ops()
-                        .create_error_task_with_message_failure(&task, &mut message, session)
-                        .await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
+    #[test]
+    fn stable_w29_identity_is_deterministic() {
+        assert_eq!(
+            stable_entity_id("w29err", "projection_delivery:r1:m1"),
+            stable_entity_id("w29err", "projection_delivery:r1:m1")
+        );
+    }
 
-        Ok(ProjectionDeliveryResultView {
-            delivery_id,
-            delivery_status: ProjectionDeliveryStatus::Failed,
-            inbox_message_id: inbox_id,
-            error_task_id: Some(task_id),
-            mall_execution_baseline: None,
-            projection_version,
-        })
+    #[test]
+    fn delayed_old_ack_never_moves_the_projection_pointer_backwards() {
+        assert!(!should_advance_acked_revision(7, 6));
+        assert!(should_advance_acked_revision(7, 7));
+        assert!(should_advance_acked_revision(7, 8));
     }
 }

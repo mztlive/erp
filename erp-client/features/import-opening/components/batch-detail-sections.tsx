@@ -3,12 +3,15 @@
 import * as React from "react"
 import Link from "next/link"
 import { ExternalLinkIcon, TriangleAlertIcon } from "lucide-react"
+import { z } from "zod"
 
 import {
     BackgroundJobProgress,
     BatchOperationResult,
     BusinessEmptyState,
+    BusinessFailureState,
     BusinessStatusBadge,
+    FormalActionConfirmDialog,
     FormalActionResult,
     ImportIssueTable,
     MetricItem,
@@ -16,6 +19,7 @@ import {
     OptionCombobox,
     surfacePanelClassName,
 } from "@/components/business"
+import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,14 +29,30 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Fact } from "@/features/import-opening/components/batch-facts"
-import { useImportIssuesQuery } from "@/features/import-opening/hooks/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import {
+    useImportConfirmationOperations,
+    useImportExecutionOperations,
+    useImportIssuesQuery,
+} from "@/features/import-opening/hooks/queries"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import type {
     BatchSection,
     ImportBatchView,
+    ImportConfirmationView,
+    ImportExecutionAction,
     ImportIssueCode,
     ImportObjectCode,
     IssueRowStatus,
@@ -43,9 +63,9 @@ import {
     OBJECT_CODE_LABEL,
     RETENTION_LABEL,
     ROW_STATUS_LABEL,
-    WORK_ITEM_TYPE_BLOCKER,
 } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
+import { hasPermission } from "@/lib/permissions"
 import { versionText } from "@/lib/ui-text"
 
 function formatBytes(n: number) {
@@ -490,6 +510,204 @@ export function TrialSection({
     )
 }
 
+const RETURN_REASON_OPTIONS = [
+    { value: "DATA_MISMATCH", label: "试算数据与业务事实不一致" },
+    { value: "RULE_MISMATCH", label: "导入口径或规则不一致" },
+    { value: "MISSING_EVIDENCE", label: "缺少必要核对依据" },
+    { value: "OTHER", label: "其它需修复问题" },
+] as const
+
+const returnForFixSchema = z.object({
+    reasonCode: z.string().trim().min(1, "请选择退回原因"),
+    comment: z.string().trim().min(3, "请填写至少 3 个字的修复说明"),
+})
+
+/** 采集退回原因；提交失败时保留输入并保持对话框打开。 */
+function ReturnForFixDialog({
+    confirmation,
+    pending,
+    onSubmit,
+    onCancel,
+}: {
+    confirmation: ImportConfirmationView
+    pending: boolean
+    onSubmit: (value: { reasonCode: string; comment: string }) => Promise<void>
+    onCancel: () => void
+}) {
+    const form = useAppForm({
+        defaultValues: { reasonCode: "DATA_MISMATCH", comment: "" },
+        validators: { onChange: returnForFixSchema },
+        onSubmit: async ({ value }) => onSubmit(value),
+    })
+    return (
+        <Dialog
+            open
+            onOpenChange={(open) => {
+                if (!open && !pending) onCancel()
+            }}
+        >
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>
+                        退回{CONFIRMATION_SCOPE_LABEL[confirmation.scope]}修复
+                    </DialogTitle>
+                    <DialogDescription>
+                        本次试算会形成已退回结论并完成当前任务；修复并重新试算后，系统才会创建新任务。
+                    </DialogDescription>
+                </DialogHeader>
+                <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        void form.handleSubmit()
+                    }}
+                >
+                    <form.AppField
+                        name="reasonCode"
+                        children={(field) => (
+                            <field.SelectField
+                                label="退回原因"
+                                options={RETURN_REASON_OPTIONS}
+                                allowClear={false}
+                            />
+                        )}
+                    />
+                    <form.AppField
+                        name="comment"
+                        children={(field) => (
+                            <field.TextareaField
+                                label="修复说明"
+                                rows={4}
+                                placeholder="说明需要修复的数据、口径或依据"
+                            />
+                        )}
+                    />
+                    <DialogFooter>
+                        <DialogClose
+                            render={<Button type="button" variant="outline" />}
+                        >
+                            返回核对
+                        </DialogClose>
+                        <form.AppForm>
+                            <form.SubmitButton
+                                label="确认退回修复"
+                                pendingLabel="正在提交"
+                                disabled={pending}
+                            />
+                        </form.AppForm>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+const CANCEL_PENDING_REASON_OPTIONS = [
+    { value: "OPERATOR_CANCELLED", label: "操作人终止本批未应用项" },
+    { value: "DATA_SCOPE_CHANGED", label: "导入数据范围已变化" },
+    { value: "BUSINESS_WINDOW_CLOSED", label: "业务执行窗口已关闭" },
+    { value: "OTHER", label: "其它终止原因" },
+] as const
+
+const cancelPendingSchema = z.object({
+    reasonCode: z.string().trim().min(1, "请选择取消原因"),
+    comment: z.string().trim().max(1024, "操作说明不能超过 1024 个字符"),
+})
+
+/** 采集取消未应用项原因；已形成的业务事实不会被本动作回滚。 */
+function CancelPendingDialog({
+    pending,
+    onSubmit,
+    onCancel,
+}: {
+    pending: boolean
+    onSubmit: (value: { reasonCode: string; comment: string }) => Promise<void>
+    onCancel: () => void
+}) {
+    const form = useAppForm({
+        defaultValues: { reasonCode: "OPERATOR_CANCELLED", comment: "" },
+        validators: { onChange: cancelPendingSchema },
+        onSubmit: async ({ value }) => onSubmit(value),
+    })
+    return (
+        <Dialog
+            open
+            onOpenChange={(open) => {
+                if (!open && !pending) onCancel()
+            }}
+        >
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>取消尚未应用项</DialogTitle>
+                    <DialogDescription>
+                        系统只停止本批尚未应用的项；已成功、已跳过及已形成的业务事实保持不变。
+                    </DialogDescription>
+                </DialogHeader>
+                <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        void form.handleSubmit()
+                    }}
+                >
+                    <form.AppField
+                        name="reasonCode"
+                        children={(field) => (
+                            <field.SelectField
+                                label="取消原因"
+                                options={CANCEL_PENDING_REASON_OPTIONS}
+                                allowClear={false}
+                            />
+                        )}
+                    />
+                    <form.AppField
+                        name="comment"
+                        children={(field) => (
+                            <field.TextareaField
+                                label="操作说明（可选）"
+                                rows={4}
+                                placeholder="补充取消范围或业务窗口信息"
+                            />
+                        )}
+                    />
+                    <DialogFooter>
+                        <DialogClose
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={pending}
+                                />
+                            }
+                        >
+                            返回
+                        </DialogClose>
+                        <form.AppForm>
+                            <form.SubmitButton
+                                label="确认取消未应用项"
+                                pendingLabel="正在取消"
+                                disabled={pending}
+                            />
+                        </form.AppForm>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+/** 返回同一命令载荷在当前页面生命周期内复用的幂等键。 */
+function commandIdempotencyKey(
+    keys: Map<string, string>,
+    identity: string,
+): string {
+    const existing = keys.get(identity)
+    if (existing) return existing
+    const key = `w18:${crypto.randomUUID()}`
+    keys.set(identity, key)
+    return key
+}
+
 export function ConfirmSection({
     batch,
     workItemTypeMissing,
@@ -499,61 +717,134 @@ export function ConfirmSection({
     workItemTypeMissing: boolean
     confirmBlocked: ImportBatchView["actionBlockers"]
 }) {
+    const operations = useImportConfirmationOperations()
+    const [confirming, setConfirming] = React.useState<ImportConfirmationView>()
+    const [returning, setReturning] = React.useState<ImportConfirmationView>()
+    const idempotencyKeys = React.useRef(new Map<string, string>())
+
+    const startProcessing = React.useCallback(
+        async (confirmation: ImportConfirmationView) => {
+            const task = confirmation.workItem
+            if (!task) return
+            operations.resetError()
+            await operations.startProcessing({
+                workItemId: task.workItemId,
+                expectedTaskVersion: task.taskVersion,
+                idempotencyKey: commandIdempotencyKey(
+                    idempotencyKeys.current,
+                    `${task.workItemId}:START_PROCESSING:${task.taskVersion}`,
+                ),
+            })
+        },
+        [operations],
+    )
+
+    const complete = React.useCallback(
+        async (
+            confirmation: ImportConfirmationView,
+            action: "CONFIRM_SCOPE" | "RETURN_FOR_FIX",
+            reasonCode?: string,
+            comment?: string,
+        ) => {
+            const task = confirmation.workItem
+            if (!task) return
+            operations.resetError()
+            const payloadIdentity = [
+                task.workItemId,
+                action,
+                task.taskVersion,
+                batch.version,
+                confirmation.trialVersion,
+                reasonCode ?? "",
+                comment ?? "",
+            ].join(":")
+            await operations.completeConfirmation({
+                batchId: batch.batchId,
+                batchVersion: batch.version,
+                trialVersion: confirmation.trialVersion,
+                confirmationScope: confirmation.scope,
+                workItemId: task.workItemId,
+                taskVersion: task.taskVersion,
+                subjectVersion: task.subjectVersion,
+                action,
+                reasonCode,
+                comment,
+                idempotencyKey: commandIdempotencyKey(
+                    idempotencyKeys.current,
+                    payloadIdentity,
+                ),
+            })
+        },
+        [batch.batchId, batch.version, operations],
+    )
+
     return (
         <div className="space-y-4">
             {workItemTypeMissing ? (
                 <FormalActionResult
                     status="blocked"
-                    title="业务确认入口暂不可用"
-                    description={WORK_ITEM_TYPE_BLOCKER.message}
-                    facts={[
-                        {
-                            label: "待配置项",
-                            value: WORK_ITEM_TYPE_BLOCKER.requiredRegistration.join(
-                                "、",
-                            ),
-                        },
-                        {
-                            label: "禁止项",
-                            value: "不得借用异常通道充当必经确认；不得上线页面私有任务类型",
-                        },
-                    ]}
+                    title="责任确认任务不完整"
+                    description="当前试算缺少已登记的责任确认任务，不能提交确认或退回。请联系管理员重新生成确认任务。"
+                />
+            ) : null}
+
+            {operations.error ? (
+                <BusinessFailureState
+                    title="责任确认未完成"
+                    error={operations.error}
                 />
             ) : null}
 
             <div className="grid gap-3 md:grid-cols-2">
-                {batch.confirmations.map((c) => {
-                    const canAttempt =
-                        c.inViewerResponsibility &&
+                {batch.confirmations.map((confirmation) => {
+                    const task = confirmation.workItem
+                    const actions = task?.allowedActions ?? []
+                    const canStart =
                         !workItemTypeMissing &&
-                        c.result === "PENDING"
+                        confirmation.result === "PENDING" &&
+                        actions.includes("START_PROCESSING")
+                    const canConfirm =
+                        !workItemTypeMissing &&
+                        confirmation.result === "PENDING" &&
+                        actions.includes("CONFIRM_SCOPE") &&
+                        actions.includes("RETURN_FOR_FIX")
                     return (
                         <Card
-                            key={c.scope}
+                            key={confirmation.confirmationId}
                             size="sm"
-                            className={surfacePanelClassName}
+                            className={`${surfacePanelClassName} ${confirmation.focused ? "ring-2 ring-primary/40" : ""}`}
                         >
                             <CardHeader className="border-b border-border/30">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <CardTitle className="text-base">
-                                        {CONFIRMATION_SCOPE_LABEL[c.scope]}
+                                        {
+                                            CONFIRMATION_SCOPE_LABEL[
+                                                confirmation.scope
+                                            ]
+                                        }
                                     </CardTitle>
                                     <BusinessStatusBadge
                                         context="detail"
                                         label={
-                                            c.result === "CONFIRMED"
+                                            confirmation.result === "CONFIRMED"
                                                 ? "已确认"
-                                                : c.result === "REJECTED"
+                                                : confirmation.result ===
+                                                    "REJECTED"
                                                   ? "已退回"
-                                                  : c.result === "INVALIDATED"
+                                                  : confirmation.result ===
+                                                      "INVALIDATED"
                                                     ? "已失效"
-                                                    : "待确认"
+                                                    : canStart
+                                                      ? "团队待处理"
+                                                      : "待确认"
                                         }
                                         tone={
-                                            c.result === "CONFIRMED"
+                                            confirmation.result === "CONFIRMED"
                                                 ? "success"
-                                                : c.result === "REJECTED" ||
-                                                    c.result === "INVALIDATED"
+                                                : confirmation.result ===
+                                                        "REJECTED" ||
+                                                    confirmation.result ===
+                                                        "INVALIDATED"
                                                   ? "destructive"
                                                   : "warning"
                                         }
@@ -562,46 +853,57 @@ export function ConfirmSection({
                                 <CardDescription>
                                     试算版本{" "}
                                     <span className="num font-mono">
-                                        {c.trialVersion}
+                                        {confirmation.trialVersion}
                                     </span>
-                                    {c.inViewerResponsibility
-                                        ? " · 属于当前角色责任范围"
-                                        : " · 非当前角色责任范围"}
+                                    {confirmation.focused
+                                        ? " · 当前待处理入口"
+                                        : confirmation.inViewerResponsibility
+                                          ? " · 由本人负责"
+                                          : " · 只读"}
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3 pt-4 text-sm">
-                                {c.confirmedByLabel ? (
+                                {confirmation.confirmedByLabel ? (
                                     <p>
-                                        确认人 {c.confirmedByLabel}
-                                        {c.confirmedAt
-                                            ? ` · ${formatDateTime(c.confirmedAt, "dateStyle", "passthrough")}`
+                                        确认人 {confirmation.confirmedByLabel}
+                                        {confirmation.confirmedAt
+                                            ? ` · ${formatDateTime(confirmation.confirmedAt, "dateStyle", "passthrough")}`
                                             : ""}
                                     </p>
                                 ) : null}
-                                {c.comment ? (
+                                {confirmation.comment ? (
                                     <p className="text-muted-foreground">
-                                        {c.comment}
+                                        {confirmation.comment}
                                     </p>
                                 ) : null}
                                 <div className="flex flex-wrap gap-2">
-                                    {workItemTypeMissing ? (
+                                    {canStart ? (
                                         <Button
                                             type="button"
                                             size="sm"
-                                            variant="outline"
-                                            render={
-                                                <Link href="/workspace/tasks" />
+                                            disabled={operations.isStarting}
+                                            onClick={() =>
+                                                void startProcessing(
+                                                    confirmation,
+                                                )
                                             }
                                         >
-                                            去待办队列处理
-                                            <ExternalLinkIcon className="size-4" />
+                                            {operations.isStarting
+                                                ? "正在开始"
+                                                : "开始处理"}
                                         </Button>
-                                    ) : (
+                                    ) : null}
+                                    {canConfirm ? (
                                         <>
                                             <Button
                                                 type="button"
                                                 size="sm"
-                                                disabled={!canAttempt}
+                                                disabled={
+                                                    operations.isCompleting
+                                                }
+                                                onClick={() =>
+                                                    setConfirming(confirmation)
+                                                }
                                             >
                                                 确认本范围
                                             </Button>
@@ -609,22 +911,26 @@ export function ConfirmSection({
                                                 type="button"
                                                 size="sm"
                                                 variant="outline"
-                                                disabled={!canAttempt}
+                                                disabled={
+                                                    operations.isCompleting
+                                                }
+                                                onClick={() =>
+                                                    setReturning(confirmation)
+                                                }
                                             >
                                                 退回修复
                                             </Button>
                                         </>
-                                    )}
+                                    ) : null}
                                 </div>
-                                {!canAttempt ? (
+                                {!canStart && !canConfirm ? (
                                     <p className="text-xs text-muted-foreground">
                                         {workItemTypeMissing
-                                            ? "确认与退回任务尚未配置，入口暂不可用"
-                                            : !c.inViewerResponsibility
-                                              ? "非本人责任范围，只读"
-                                              : c.result !== "PENDING"
-                                                ? "本范围已有结论或已失效"
-                                                : "当前不可操作"}
+                                            ? "当前确认任务不完整，入口已阻断"
+                                            : confirmation.result !== "PENDING"
+                                              ? "本范围已有正式结论或已失效"
+                                              : (task?.actionBlockers[0] ??
+                                                "当前范围不由本人处理")}
                                     </p>
                                 ) : null}
                             </CardContent>
@@ -635,12 +941,221 @@ export function ConfirmSection({
 
             {confirmBlocked.length > 0 ? (
                 <ul className="space-y-1 text-sm text-muted-foreground">
-                    {confirmBlocked.map((b) => (
-                        <li key={`${b.action}-${b.code}`}>{b.message}</li>
+                    {confirmBlocked.map((blocker) => (
+                        <li key={`${blocker.action}-${blocker.code}`}>
+                            {blocker.message}
+                        </li>
                     ))}
                 </ul>
             ) : null}
+
+            {confirming ? (
+                <FormalActionConfirmDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setConfirming(undefined)
+                    }}
+                    title={`确认${CONFIRMATION_SCOPE_LABEL[confirming.scope]}`}
+                    actionLabel="确认本范围"
+                    description="系统将记录本范围正式确认事实，并在同一操作中完成当前任务。"
+                    fromStatus={{ label: "待确认", tone: "warning" }}
+                    toStatus={{ label: "已确认", tone: "success" }}
+                    effects={["记录责任范围确认结论", "完成当前处理任务"]}
+                    irreversibleEffects={[
+                        "结论写入审计，试算变化后由新任务重新确认",
+                    ]}
+                    pending={operations.isCompleting}
+                    onConfirm={() => complete(confirming, "CONFIRM_SCOPE")}
+                />
+            ) : null}
+
+            {returning ? (
+                <ReturnForFixDialog
+                    confirmation={returning}
+                    pending={operations.isCompleting}
+                    onCancel={() => setReturning(undefined)}
+                    onSubmit={async ({ reasonCode, comment }) => {
+                        await complete(
+                            returning,
+                            "RETURN_FOR_FIX",
+                            reasonCode,
+                            comment,
+                        )
+                        setReturning(undefined)
+                    }}
+                />
+            ) : null}
         </div>
+    )
+}
+
+/** 独立提交应用、取消未应用项与重新准备失败项。 */
+export function ImportExecutionActions({
+    batch,
+    onGoSection,
+}: {
+    batch: ImportBatchView
+    onGoSection: (section: BatchSection) => void
+}) {
+    const operations = useImportExecutionOperations()
+    const profileQuery = useAccountProfileQuery()
+    const [confirming, setConfirming] = React.useState<
+        "START_APPLY" | "RETRY_FAILED"
+    >()
+    const [cancelling, setCancelling] = React.useState(false)
+    const idempotencyKeys = React.useRef(new Map<string, string>())
+    const canExecute = hasPermission(
+        profileQuery.data?.permissions,
+        "legacy_import_batch:execute",
+    )
+    const canStart = canExecute && batch.allowedActions.includes("START_APPLY")
+    const canCancel =
+        canExecute && batch.allowedActions.includes("CANCEL_PENDING")
+    const canRetry = canExecute && batch.allowedActions.includes("RETRY_FAILED")
+    const visible = canStart || canCancel || canRetry
+
+    const execute = React.useCallback(
+        async (
+            action: ImportExecutionAction,
+            reasonCode?: string,
+            comment?: string,
+        ) => {
+            operations.resetError()
+            const identity = [
+                batch.batchId,
+                action,
+                batch.version,
+                batch.trialVersion,
+                reasonCode ?? "",
+                comment ?? "",
+            ].join(":")
+            const result = await operations.execute({
+                batchId: batch.batchId,
+                expectedBatchVersion: batch.version,
+                expectedTrialVersion:
+                    batch.trialVersion === "0" ? undefined : batch.trialVersion,
+                action,
+                reasonCode,
+                comment: comment?.trim() || undefined,
+                requestId: commandIdempotencyKey(
+                    idempotencyKeys.current,
+                    identity,
+                ),
+            })
+            setConfirming(undefined)
+            setCancelling(false)
+            if (result.nextStep === "MONITOR_PROGRESS") {
+                onGoSection("progress")
+            } else if (result.nextStep === "REVIEW_RESULT") {
+                onGoSection("result")
+            } else {
+                onGoSection("confirm")
+            }
+        },
+        [batch, onGoSection, operations],
+    )
+
+    if (!visible) return null
+
+    return (
+        <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30">
+                <CardTitle>导入执行</CardTitle>
+                <CardDescription>
+                    责任确认只形成待应用状态；只有“提交应用”会启动后台任务。取消和失败项重试均保留已形成的业务事实。
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4">
+                {operations.error ? (
+                    <BusinessFailureState
+                        title="导入执行命令未完成"
+                        error={operations.error}
+                    />
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                    {canStart ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            disabled={operations.isExecuting}
+                            onClick={() => setConfirming("START_APPLY")}
+                        >
+                            提交应用
+                        </Button>
+                    ) : null}
+                    {canCancel ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={operations.isExecuting}
+                            onClick={() => setCancelling(true)}
+                        >
+                            取消未应用项
+                        </Button>
+                    ) : null}
+                    {canRetry ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            disabled={operations.isExecuting}
+                            onClick={() => setConfirming("RETRY_FAILED")}
+                        >
+                            重新准备失败项
+                        </Button>
+                    ) : null}
+                </div>
+            </CardContent>
+
+            {confirming === "START_APPLY" ? (
+                <FormalActionConfirmDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setConfirming(undefined)
+                    }}
+                    title="提交导入应用"
+                    actionLabel="确认提交应用"
+                    description="系统将再次核验批次和试算版本，随后把批次推进为导入中并启动后台任务。"
+                    fromStatus={{ label: "待应用", tone: "success" }}
+                    toStatus={{ label: "导入中", tone: "info" }}
+                    effects={["启动关联后台任务", "只处理当前仍待应用的项"]}
+                    irreversibleEffects={["已形成的业务对象不会由本批自动回滚"]}
+                    pending={operations.isExecuting}
+                    onConfirm={() => execute("START_APPLY")}
+                />
+            ) : null}
+
+            {confirming === "RETRY_FAILED" ? (
+                <FormalActionConfirmDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setConfirming(undefined)
+                    }}
+                    title="重新准备失败项"
+                    actionLabel="确认重新准备"
+                    description="系统只把上一轮失败行重新准备为待应用，不会在本动作中启动后台任务。"
+                    fromStatus={{ label: "失败结果", tone: "destructive" }}
+                    toStatus={{ label: "待应用", tone: "success" }}
+                    effects={[
+                        "保留已成功与已跳过结果",
+                        "仅清理失败行的上次失败诊断",
+                    ]}
+                    irreversibleEffects={["准备完成后仍需再次点击“提交应用”"]}
+                    pending={operations.isExecuting}
+                    onConfirm={() => execute("RETRY_FAILED")}
+                />
+            ) : null}
+
+            {cancelling ? (
+                <CancelPendingDialog
+                    pending={operations.isExecuting}
+                    onCancel={() => setCancelling(false)}
+                    onSubmit={async ({ reasonCode, comment }) => {
+                        await execute("CANCEL_PENDING", reasonCode, comment)
+                    }}
+                />
+            ) : null}
+        </Card>
     )
 }
 

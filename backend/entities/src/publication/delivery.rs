@@ -1,9 +1,7 @@
 //! `product_publication_delivery`：发布投递记录（数据模型 §6.15，页面 W22）。
 //!
-//! 投递状态是普通记录字段：§7.7 规定投递的人工处理状态由
-//! `integration_error_task.status` 表达，不另设消息投递状态机，因此本实体
-//! 不实现 [`crate::common::state::DocumentState`]；`delivery_status` 按字典
-//! 实现固定枚举，并通过成对/状态一致性校验保证记录完整。
+//! 投递记录持有跨全部尝试不变的消息身份，并以显式状态迁移约束发送、结果未知、
+//! 重试与转人工。W29 任务状态只表达人工处理进度，不得替代商城投递事实。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -11,8 +9,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{ProductPublicationDeliveryId, ProductPublicationRevisionId, SourceSystemId};
-use crate::validation::normalize_optional_text;
+use crate::ids::{
+    InboxMessageId, IntegrationErrorTaskId, ProductPublicationDeliveryId, ProductPublicationRevisionId,
+    SourceSystemId, WorkItemId,
+};
+use crate::integration_ops::ErrorClass;
+use crate::validation::{normalize_optional_text, normalize_required_text};
+
+/// 稳定消息键最大长度。
+const MESSAGE_KEY_MAX_LEN: usize = 256;
 
 /// 商城确认版本最大长度。
 const MALL_VERSION_MAX_LEN: usize = 128;
@@ -21,16 +26,19 @@ const ERROR_CODE_MAX_LEN: usize = 128;
 /// 错误摘要最大长度。
 const ERROR_SUMMARY_MAX_LEN: usize = 1024;
 
-/// 发布投递状态（数据模型 §6.15：待发送、重试中、已确认、失败、转人工；
-/// 固定枚举，不设状态机）。
+/// 发布投递状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PublicationDeliveryStatus {
     /// 待发送。
     #[default]
     PendingSend,
+    /// 发送中，最终结果尚未落库。
+    Sending,
     /// 重试中。
     Retrying,
+    /// 外部请求可能已受理，但最终结果尚无法确认。
+    ResultUnknown,
     /// 已确认。
     Confirmed,
     /// 失败。
@@ -47,7 +55,9 @@ impl PublicationDeliveryStatus {
     pub fn label(&self) -> &'static str {
         match self {
             Self::PendingSend => "待发送",
+            Self::Sending => "发送中",
             Self::Retrying => "重试中",
+            Self::ResultUnknown => "结果未知",
             Self::Confirmed => "已确认",
             Self::Failed => "失败",
             Self::Manual => "转人工",
@@ -61,10 +71,30 @@ impl PublicationDeliveryStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PendingSend => "pending_send",
+            Self::Sending => "sending",
             Self::Retrying => "retrying",
+            Self::ResultUnknown => "result_unknown",
             Self::Confirmed => "confirmed",
             Self::Failed => "failed",
             Self::Manual => "manual",
+        }
+    }
+
+    /// 判断当前状态是否可以进入目标状态。
+    pub fn can_transition_to(self, target: Self) -> bool {
+        if self == target {
+            return true;
+        }
+        match self {
+            Self::PendingSend => target == Self::Sending,
+            Self::Sending => matches!(
+                target,
+                Self::Confirmed | Self::Failed | Self::ResultUnknown | Self::Manual
+            ),
+            Self::Retrying => matches!(target, Self::Sending | Self::Manual),
+            Self::ResultUnknown => matches!(target, Self::Confirmed | Self::Failed | Self::Manual),
+            Self::Failed => matches!(target, Self::Retrying | Self::Manual),
+            Self::Confirmed | Self::Manual => false,
         }
     }
 }
@@ -82,10 +112,14 @@ pub struct ProductPublicationDeliveryData {
     pub attempt_count: u32,
     /// 最近发送时间；与 `attempt_count` 必须成对出现。
     pub last_attempt_at: Option<Instant>,
+    /// 下次受控处理时间；只允许重试中记录持有。
+    pub next_attempt_at: Option<Instant>,
     /// 商城确认时间；与 `mall_version` 必须成对出现。
     pub mall_ack_at: Option<Instant>,
     /// 商城确认版本；与 `mall_ack_at` 必须成对出现。
     pub mall_version: Option<String>,
+    /// 错误码；与 `error_summary` 必须成对出现。
+    pub error_class: Option<ErrorClass>,
     /// 错误码；与 `error_summary` 必须成对出现。
     pub error_code: Option<String>,
     /// 错误摘要；与 `error_code` 必须成对出现。
@@ -100,15 +134,25 @@ pub struct ProductPublicationDeliveryUpdate {
     /// 发送次数；`None` 表示不修改。
     pub attempt_count: Option<u32>,
     /// 最近发送时间；`None` 表示不修改。
-    pub last_attempt_at: Option<Instant>,
+    pub last_attempt_at: Option<Option<Instant>>,
+    /// 下次受控处理时间；外层 `None` 表示不修改。
+    pub next_attempt_at: Option<Option<Instant>>,
     /// 商城确认时间；`None` 表示不修改。
-    pub mall_ack_at: Option<Instant>,
+    pub mall_ack_at: Option<Option<Instant>>,
     /// 商城确认版本；`None` 表示不修改。
-    pub mall_version: Option<String>,
+    pub mall_version: Option<Option<String>>,
+    /// 错误分类；外层 `None` 表示不修改。
+    pub error_class: Option<Option<ErrorClass>>,
     /// 错误码；`None` 表示不修改。
-    pub error_code: Option<String>,
+    pub error_code: Option<Option<String>>,
     /// 错误摘要；`None` 表示不修改。
-    pub error_summary: Option<String>,
+    pub error_summary: Option<Option<String>>,
+    /// 原消息信封；外层 `None` 表示不修改。
+    pub inbox_message_id: Option<Option<InboxMessageId>>,
+    /// W29 错误对象；外层 `None` 表示不修改。
+    pub error_task_id: Option<Option<IntegrationErrorTaskId>>,
+    /// W29 正式待办；外层 `None` 表示不修改。
+    pub work_item_id: Option<Option<WorkItemId>>,
 }
 
 /// 发布投递实体（数据模型 §6.15）。
@@ -124,20 +168,32 @@ pub struct ProductPublicationDelivery {
     pub publication_revision_id: ProductPublicationRevisionId,
     /// 目标商城（来源系统，类型 MALL）。
     pub target_mall_id: SourceSystemId,
+    /// 跨全部尝试保持不变的外部消息身份。
+    pub message_key: String,
     /// 投递状态。
     pub delivery_status: PublicationDeliveryStatus,
     /// 发送次数。
     pub attempt_count: u32,
     /// 最近发送时间。
     pub last_attempt_at: Option<Instant>,
+    /// 下次受控处理时间。
+    pub next_attempt_at: Option<Instant>,
     /// 商城确认时间。
     pub mall_ack_at: Option<Instant>,
     /// 商城确认版本。
     pub mall_version: Option<String>,
+    /// 最近失败或结果未知的错误分类。
+    pub error_class: Option<ErrorClass>,
     /// 错误码。
     pub error_code: Option<String>,
     /// 错误摘要。
     pub error_summary: Option<String>,
+    /// 承接稳定消息身份的信封。
+    pub inbox_message_id: Option<InboxMessageId>,
+    /// 升级后的 W29 错误对象。
+    pub error_task_id: Option<IntegrationErrorTaskId>,
+    /// 升级后的正式待办。
+    pub work_item_id: Option<WorkItemId>,
 }
 
 impl ProductPublicationDelivery {
@@ -158,30 +214,49 @@ impl ProductPublicationDelivery {
     /// # 错误
     /// 当文本超长或上述记录不变式被违反时返回错误。
     pub fn new(id: ProductPublicationDeliveryId, data: ProductPublicationDeliveryData) -> Result<Self> {
+        let message_key = normalize_required_text(
+            format!(
+                "publication_delivery:{}:{}",
+                data.publication_revision_id, data.target_mall_id
+            ),
+            "投递消息键不能为空",
+            MESSAGE_KEY_MAX_LEN,
+            "投递消息键过长",
+        )?;
         let mall_version = normalize_optional_text(data.mall_version, "商城版本", MALL_VERSION_MAX_LEN)?;
         let error_code = normalize_optional_text(data.error_code, "错误码", ERROR_CODE_MAX_LEN)?;
         let error_summary = normalize_optional_text(data.error_summary, "错误摘要", ERROR_SUMMARY_MAX_LEN)?;
-        validate_send_state(
-            data.delivery_status,
-            data.attempt_count,
-            data.last_attempt_at,
-            data.mall_ack_at,
-            mall_version.as_deref(),
-            error_code.as_deref(),
-            error_summary.as_deref(),
-        )?;
+        validate_send_state(&PublicationDeliveryState {
+            status: data.delivery_status,
+            attempt_count: data.attempt_count,
+            last_attempt_at: data.last_attempt_at,
+            next_attempt_at: data.next_attempt_at,
+            mall_ack_at: data.mall_ack_at,
+            mall_version: mall_version.as_deref(),
+            error_class: data.error_class,
+            error_code: error_code.as_deref(),
+            error_summary: error_summary.as_deref(),
+            error_task_id: None,
+            work_item_id: None,
+        })?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             publication_revision_id: data.publication_revision_id,
             target_mall_id: data.target_mall_id,
+            message_key,
             delivery_status: data.delivery_status,
             attempt_count: data.attempt_count,
             last_attempt_at: data.last_attempt_at,
+            next_attempt_at: data.next_attempt_at,
             mall_ack_at: data.mall_ack_at,
             mall_version,
+            error_class: data.error_class,
             error_code,
             error_summary,
+            inbox_message_id: None,
+            error_task_id: None,
+            work_item_id: None,
         })
     }
 
@@ -201,33 +276,93 @@ impl ProductPublicationDelivery {
     /// 当更新字段校验失败或合并后违反记录不变式时返回错误。
     pub fn update(&mut self, update: ProductPublicationDeliveryUpdate) -> Result<()> {
         let delivery_status = update.delivery_status.unwrap_or(self.delivery_status);
+        if !self.delivery_status.can_transition_to(delivery_status) {
+            return Err(Error::from("非法的发布投递状态迁移"));
+        }
         let attempt_count = update.attempt_count.unwrap_or(self.attempt_count);
-        let last_attempt_at = update.last_attempt_at.or(self.last_attempt_at);
-        let mall_ack_at = update.mall_ack_at.or(self.mall_ack_at);
-        let mall_version = normalize_optional_text(update.mall_version, "商城版本", MALL_VERSION_MAX_LEN)?
-            .or_else(|| self.mall_version.clone());
-        let error_code = normalize_optional_text(update.error_code, "错误码", ERROR_CODE_MAX_LEN)?
-            .or_else(|| self.error_code.clone());
-        let error_summary = normalize_optional_text(update.error_summary, "错误摘要", ERROR_SUMMARY_MAX_LEN)?
-            .or_else(|| self.error_summary.clone());
-        validate_send_state(
-            delivery_status,
+        let last_attempt_at = update.last_attempt_at.unwrap_or(self.last_attempt_at);
+        let next_attempt_at = update.next_attempt_at.unwrap_or(self.next_attempt_at);
+        let mall_ack_at = update.mall_ack_at.unwrap_or(self.mall_ack_at);
+        let mall_version = match update.mall_version {
+            Some(value) => normalize_optional_text(value, "商城版本", MALL_VERSION_MAX_LEN)?,
+            None => self.mall_version.clone(),
+        };
+        let error_class = update.error_class.unwrap_or(self.error_class);
+        let error_code = match update.error_code {
+            Some(value) => normalize_optional_text(value, "错误码", ERROR_CODE_MAX_LEN)?,
+            None => self.error_code.clone(),
+        };
+        let error_summary = match update.error_summary {
+            Some(value) => normalize_optional_text(value, "错误摘要", ERROR_SUMMARY_MAX_LEN)?,
+            None => self.error_summary.clone(),
+        };
+        let inbox_message_id = update
+            .inbox_message_id
+            .unwrap_or_else(|| self.inbox_message_id.clone());
+        let error_task_id = update.error_task_id.unwrap_or_else(|| self.error_task_id.clone());
+        let work_item_id = update.work_item_id.unwrap_or_else(|| self.work_item_id.clone());
+        validate_send_state(&PublicationDeliveryState {
+            status: delivery_status,
             attempt_count,
             last_attempt_at,
+            next_attempt_at,
             mall_ack_at,
-            mall_version.as_deref(),
-            error_code.as_deref(),
-            error_summary.as_deref(),
-        )?;
+            mall_version: mall_version.as_deref(),
+            error_class,
+            error_code: error_code.as_deref(),
+            error_summary: error_summary.as_deref(),
+            error_task_id: error_task_id.as_ref(),
+            work_item_id: work_item_id.as_ref(),
+        })?;
 
         self.delivery_status = delivery_status;
         self.attempt_count = attempt_count;
         self.last_attempt_at = last_attempt_at;
+        self.next_attempt_at = next_attempt_at;
         self.mall_ack_at = mall_ack_at;
         self.mall_version = mall_version;
+        self.error_class = error_class;
         self.error_code = error_code;
         self.error_summary = error_summary;
+        self.inbox_message_id = inbox_message_id;
+        self.error_task_id = error_task_id;
+        self.work_item_id = work_item_id;
         Ok(())
+    }
+
+    /// 判断该投递是否可由受控发送入口原子取得。
+    pub fn is_send_ready(&self, now: Instant) -> bool {
+        self.delivery_status == PublicationDeliveryStatus::PendingSend
+            || (self.delivery_status == PublicationDeliveryStatus::Retrying
+                && self
+                    .next_attempt_at
+                    .is_some_and(|at| at.unix_secs() <= now.unix_secs()))
+    }
+
+    /// 判断当前事实是否允许查询原请求结果。
+    pub fn can_query_result(&self) -> bool {
+        matches!(
+            self.delivery_status,
+            PublicationDeliveryStatus::Sending
+                | PublicationDeliveryStatus::ResultUnknown
+                | PublicationDeliveryStatus::Failed
+        ) && self.error_class != Some(ErrorClass::MappingError)
+    }
+
+    /// 判断当前事实是否允许沿原消息身份安排重试。
+    pub fn can_retry(&self) -> bool {
+        self.delivery_status == PublicationDeliveryStatus::Failed
+            && self.error_class.is_some_and(|class| class.can_auto_retry())
+    }
+
+    /// 判断当前事实是否允许升级 W29。
+    pub fn can_escalate(&self) -> bool {
+        matches!(
+            self.delivery_status,
+            PublicationDeliveryStatus::Sending
+                | PublicationDeliveryStatus::ResultUnknown
+                | PublicationDeliveryStatus::Failed
+        )
     }
 }
 
@@ -245,40 +380,73 @@ impl ProductPublicationDelivery {
 /// # 错误
 /// 当发送计数与时间不配对、成对字段只有一边出现或状态与结果字段不一致时
 /// 返回错误。
-fn validate_send_state(
+struct PublicationDeliveryState<'a> {
     status: PublicationDeliveryStatus,
     attempt_count: u32,
     last_attempt_at: Option<Instant>,
+    next_attempt_at: Option<Instant>,
     mall_ack_at: Option<Instant>,
-    mall_version: Option<&str>,
-    error_code: Option<&str>,
-    error_summary: Option<&str>,
-) -> Result<()> {
-    if (attempt_count == 0) != last_attempt_at.is_none() {
+    mall_version: Option<&'a str>,
+    error_class: Option<ErrorClass>,
+    error_code: Option<&'a str>,
+    error_summary: Option<&'a str>,
+    error_task_id: Option<&'a IntegrationErrorTaskId>,
+    work_item_id: Option<&'a WorkItemId>,
+}
+
+fn validate_send_state(state: &PublicationDeliveryState<'_>) -> Result<()> {
+    if (state.attempt_count == 0) != state.last_attempt_at.is_none() {
         return Err(Error::from("发送次数为零时必须没有最近发送时间"));
     }
-    if mall_ack_at.is_some() != mall_version.is_some() {
+    if state.status == PublicationDeliveryStatus::PendingSend && state.attempt_count != 0 {
+        return Err(Error::from("待发送记录的发送次数必须为零"));
+    }
+    if state.status != PublicationDeliveryStatus::PendingSend && state.attempt_count == 0 {
+        return Err(Error::from("已开始处理的投递必须至少记录一次发送"));
+    }
+    if (state.status == PublicationDeliveryStatus::Retrying) != state.next_attempt_at.is_some() {
+        return Err(Error::from("只有重试中记录必须安排下一次处理时间"));
+    }
+    if state.mall_ack_at.is_some() != state.mall_version.is_some() {
         return Err(Error::from("商城确认时间与商城版本必须同时提供或同时省略"));
     }
-    if error_code.is_some() != error_summary.is_some() {
-        return Err(Error::from("错误码与错误摘要必须同时提供或同时省略"));
+    if state.error_class.is_some() != state.error_code.is_some()
+        || state.error_code.is_some() != state.error_summary.is_some()
+    {
+        return Err(Error::from("错误分类、错误码与错误摘要必须同时提供或同时省略"));
     }
-    if status == PublicationDeliveryStatus::Confirmed && mall_ack_at.is_none() {
+    if state.status == PublicationDeliveryStatus::Confirmed && state.mall_ack_at.is_none() {
         return Err(Error::from("已确认投递必须记录商城确认信息"));
     }
-    if status == PublicationDeliveryStatus::Failed && error_code.is_none() {
-        return Err(Error::from("失败投递必须记录错误信息"));
+    if matches!(
+        state.status,
+        PublicationDeliveryStatus::Failed
+            | PublicationDeliveryStatus::ResultUnknown
+            | PublicationDeliveryStatus::Retrying
+            | PublicationDeliveryStatus::Manual
+    ) && state.error_code.is_none()
+    {
+        return Err(Error::from("失败、结果未知、重试或转人工投递必须记录错误信息"));
     }
-    if mall_ack_at.is_some() && status != PublicationDeliveryStatus::Confirmed {
+    if state.status == PublicationDeliveryStatus::ResultUnknown
+        && state.error_class != Some(ErrorClass::ResultUnknown)
+    {
+        return Err(Error::from("结果未知投递必须使用结果未知错误分类"));
+    }
+    if state.mall_ack_at.is_some() && state.status != PublicationDeliveryStatus::Confirmed {
         return Err(Error::from("只有已确认投递才能记录商城确认信息"));
     }
-    if error_code.is_some()
-        && !matches!(
-            status,
-            PublicationDeliveryStatus::Failed | PublicationDeliveryStatus::Manual
-        )
-    {
-        return Err(Error::from("只有失败或转人工投递才能记录错误信息"));
+    if state.status == PublicationDeliveryStatus::Confirmed && state.error_code.is_some() {
+        return Err(Error::from("已确认投递不得保留错误信息"));
+    }
+    if state.error_task_id.is_some() != state.work_item_id.is_some() {
+        return Err(Error::from("W29 错误对象与正式待办必须同时关联或同时为空"));
+    }
+    if state.status == PublicationDeliveryStatus::Manual && state.error_task_id.is_none() {
+        return Err(Error::from("转人工投递必须关联 W29 错误对象与正式待办"));
+    }
+    if state.status != PublicationDeliveryStatus::Manual && state.error_task_id.is_some() {
+        return Err(Error::from("只有转人工投递才能关联 W29 错误对象与正式待办"));
     }
     Ok(())
 }
@@ -291,6 +459,7 @@ mod tests {
     };
     use crate::common::time::Instant;
     use crate::ids::{ProductPublicationDeliveryId, ProductPublicationRevisionId, SourceSystemId};
+    use crate::integration_ops::ErrorClass;
 
     fn delivery_data() -> ProductPublicationDeliveryData {
         ProductPublicationDeliveryData {
@@ -299,8 +468,10 @@ mod tests {
             delivery_status: PublicationDeliveryStatus::PendingSend,
             attempt_count: 0,
             last_attempt_at: None,
+            next_attempt_at: None,
             mall_ack_at: None,
             mall_version: None,
+            error_class: None,
             error_code: None,
             error_summary: None,
         }
@@ -345,6 +516,7 @@ mod tests {
             mall_version: None,
             error_code: Some(" 500 ".to_string()),
             error_summary: Some(" 商城超时 ".to_string()),
+            error_class: Some(ErrorClass::TransientFailure),
             ..delivery_data()
         };
         let delivery =
@@ -367,6 +539,7 @@ mod tests {
         let overlong_summary = ProductPublicationDeliveryData {
             error_code: Some("500".to_string()),
             error_summary: Some("s".repeat(1025)),
+            error_class: Some(ErrorClass::TransientFailure),
             ..delivery_data()
         };
         assert!(ProductPublicationDelivery::new(
@@ -458,6 +631,7 @@ mod tests {
             mall_version: None,
             error_code: Some("500".to_string()),
             error_summary: Some("超时".to_string()),
+            error_class: Some(ErrorClass::TransientFailure),
             ..delivery_data()
         };
         assert!(ProductPublicationDelivery::new(
@@ -475,13 +649,13 @@ mod tests {
 
         delivery
             .update(ProductPublicationDeliveryUpdate {
-                delivery_status: Some(PublicationDeliveryStatus::Retrying),
+                delivery_status: Some(PublicationDeliveryStatus::Sending),
                 attempt_count: Some(1),
-                last_attempt_at: Some(Instant::from_unix_secs(1_700_000_000)),
+                last_attempt_at: Some(Some(Instant::from_unix_secs(1_700_000_000))),
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(delivery.delivery_status, PublicationDeliveryStatus::Retrying);
+        assert_eq!(delivery.delivery_status, PublicationDeliveryStatus::Sending);
         assert_eq!(delivery.attempt_count, 1);
         assert_eq!(delivery.last_attempt_at.unwrap().unix_secs(), 1_700_000_000);
 
@@ -495,7 +669,7 @@ mod tests {
         assert!(delivery.update(invalid).is_err(), "合并后仍缺商城确认信息");
         assert_eq!(
             delivery.delivery_status,
-            PublicationDeliveryStatus::Retrying,
+            PublicationDeliveryStatus::Sending,
             "失败更新不改变实体"
         );
     }

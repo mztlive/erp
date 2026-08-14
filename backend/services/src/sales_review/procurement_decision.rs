@@ -2,15 +2,15 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt,
+    AccessControlExt, DocumentRegistryExt, Executor, ReceivableExt, SalesOrderExt, SalesReviewExt,
     SupplierExt, SupplierOfferingExt, Transactional, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
+use entities::document_registry::{DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionType};
+use entities::ids::{BusinessDocumentId, WorkflowActionId};
 use entities::money::Quantity;
 use entities::sales_order::{LineType, RevisionSource, SalesOrder, SalesOrderSubmissionLine};
-use entities::sales_review::{
-    ProcurementConfirmation, ProcurementConfirmationLine, ProcurementConfirmationStatus,
-};
+use entities::sales_review::ProcurementConfirmationLine;
 use entities::supplier::{CapabilityCode, CapabilityStatus};
 use entities::supplier_offering::{
     OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
@@ -18,145 +18,187 @@ use entities::supplier_offering::{
 use validator::Validate;
 
 use super::formalization::{build_receivable_account, build_receivable_entry, build_revision};
+use super::procurement_confirmation::{
+    command_audit_id, command_fingerprint, ensure_command_confirmation_id, ensure_pending_confirmation,
+    ensure_procurement_confirmation_actor_eligible, ensure_submission_identity,
+    load_procurement_confirmation_work_item, parse_task_version, ProcurementConfirmationTaskGuard,
+    DECISION_COMMAND_ACTION,
+};
 use super::{
-    ApproveProcurementConfirmationRequest, GeneratedPurchaseOrderView, ProcurementConfirmationDecisionView,
-    RejectProcurementConfirmationRequest, SalesReviewService,
+    CompleteProcurementConfirmationCommand, CompleteProcurementConfirmationResult,
+    ProcurementConfirmationBusinessResult, ProcurementConfirmationDecision, ProcurementSalesResolution,
+    SalesReviewService,
 };
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use crate::iam::SharedRbacService;
+use crate::work_item::WorkItemService;
 
 impl SalesReviewService {
-    /// 采购确认通过（§8.1.1 单事务不变量）。
-    ///
-    /// 校验采购确认覆盖全部需外采明细（§6.5 跨行断言）后，在**单个事务**内：
-    /// 锁定提交并形成不可变销售版本与版本行、更新销售单当前版本与状态
-    /// （`EFFECTIVE` + 审核轨 `APPROVED`）、形成应收往来子账与原始应收分录、
-    /// 完成采购确认待办、按供应商与履约方式生成采购单草稿、写审计。重复通过幂等返回既有结果。
-    ///
-    /// # 参数
-    /// * `id` - 确认批次 ID
-    /// * `req` - 通过请求（幂等键）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回决策结果视图（含生效版本与应收子账）。
+    /// 执行 W07 唯一采购确认完成命令。
     ///
     /// # 错误
-    /// * `NotFound` - 确认批次/提交/销售单不存在
-    /// * `ValidationError` - 覆盖不足或行字段组缺失
-    /// * `ConflictError` - 状态机/乐观锁/唯一索引冲突
-    pub async fn approve_procurement_confirmation(
+    /// 命令分支、对象身份、任务/对象版本或当前访问事实不满足时失败关闭。
+    pub async fn complete_procurement_confirmation(
         &self,
         id: &str,
-        req: ApproveProcurementConfirmationRequest,
+        command: CompleteProcurementConfirmationCommand,
         actor: &AuditActor,
-    ) -> Result<ProcurementConfirmationDecisionView> {
-        req.validate()?;
-        let confirmation = self
-            .db
-            .procurement_confirmations()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("采购确认不存在".to_string()))?;
-        if confirmation.stable.status == ProcurementConfirmationStatus::Approved {
-            return self
-                .procurement_decision_idempotent(&confirmation, ProcurementConfirmationStatus::Approved)
-                .await;
+        rbac: SharedRbacService,
+    ) -> Result<CompleteProcurementConfirmationResult> {
+        command.validate()?;
+        command.decision.validate_branch()?;
+        ensure_command_confirmation_id(id, command.decision.confirmation_id())?;
+        if matches!(
+            &command.decision,
+            ProcurementConfirmationDecision::Approved { .. }
+        ) {
+            self.complete_approved_procurement_confirmation(id, command, actor, rbac)
+                .await
+        } else {
+            self.complete_rejected_procurement_confirmation(id, command, actor, rbac)
+                .await
         }
-        if confirmation.stable.status != ProcurementConfirmationStatus::Pending {
-            return Err(Error::ConflictError("采购确认已处理，不允许重复决策".to_string()));
+    }
+
+    /// 以 W07 唯一强类型完成命令通过采购确认。
+    ///
+    /// 单事务重验命令身份、任务/确认版本、当前责任、资格和岗位分离，形成销售
+    /// 正式版本、应收、采购创建依据语义、追加式工作流动作及审计收据，并完成原
+    /// 待办。本入口不创建 PurchaseOrder 或后继任务。
+    ///
+    /// # 错误
+    /// 任一身份、状态、版本或准入事实漂移时整体回滚并返回稳定业务错误。
+    async fn complete_approved_procurement_confirmation(
+        &self,
+        id: &str,
+        req: CompleteProcurementConfirmationCommand,
+        actor: &AuditActor,
+        rbac: SharedRbacService,
+    ) -> Result<CompleteProcurementConfirmationResult> {
+        let expected_task_version = parse_task_version(&req.expected_task_version)?;
+        let fingerprint = command_fingerprint(DECISION_COMMAND_ACTION, id, actor.id(), &req)?;
+        let audit_id = command_audit_id(DECISION_COMMAND_ACTION, actor.id(), &req.idempotency_key);
+        if let Some(receipt) = self.replay_decision_command(&audit_id, id, &fingerprint).await? {
+            return receipt.into_result(&req.work_item_id);
         }
 
-        let submission = self
-            .db
-            .sales_order_submissions()
-            .find_by_id(&confirmation.submission_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售提交不存在".to_string()))?;
-        let submission_lines = self
-            .db
-            .sales_order_submission_lines()
-            .list_lines_by_submissions(
-                std::slice::from_ref(&confirmation.submission_id),
-                &mut NoTransaction,
-            )
-            .await?;
-        let confirmation_lines = self
-            .db
-            .procurement_confirmation_lines()
-            .list_lines_by_confirmation(&confirmation.base.id.clone().into(), &mut NoTransaction)
-            .await?;
-        self.ensure_confirmation_sources(&confirmation_lines, &submission_lines)
-            .await?;
-        ensure_confirmation_coverage(&submission_lines, &confirmation_lines)?;
-        let order = self
-            .db
-            .sales_orders()
-            .find_by_id(&confirmation.sales_order_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        ensure_order_awaiting_confirmation(&order)?;
-        let purchase_drafts = crate::purchase_order::draft::build_automatic_purchase_drafts(
-            &self.db,
-            &confirmation.sales_order_id,
-            &confirmation_lines,
-            actor.id(),
-        )
-        .await?;
-        let purchase_order_views = purchase_drafts
-            .iter()
-            .map(|draft| GeneratedPurchaseOrderView {
-                purchase_order_id: draft.order.base.id.clone(),
-                purchase_no: draft.order.purchase_no.clone(),
-            })
-            .collect::<Vec<_>>();
-        let purchase_audits = purchase_drafts
-            .iter()
-            .map(|draft| {
-                actor.clone().resource_log(
-                    "purchase_order.auto_create",
-                    "purchase_order",
-                    draft.order.base.id.clone(),
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let now = Instant::now();
-        let revision = build_revision(
-            &order,
-            &submission,
-            &submission_lines,
-            RevisionSource::ErpApproval,
-            now,
-            actor,
-        )?;
-        let mut order_for_tx = order.clone();
-        order_for_tx.approve(now, actor.id())?;
-        order_for_tx.attach_revision(&revision.revision.base.id, actor.id());
-
-        let account = build_receivable_account(&order_for_tx, &revision);
-        let entry = build_receivable_entry(&account, &revision, now)?;
-        let mut confirmation_for_tx = confirmation.clone();
-        confirmation_for_tx.approve(actor.id(), now)?;
-        let mut work_item = self
-            .complete_work_item("procurement_confirmation", id, actor, now)
-            .await?;
-
-        let audit = actor.clone().resource_log(
-            "procurement_confirmation.approve",
-            "sales_order",
-            confirmation.sales_order_id.to_string(),
-        )?;
-        let revision_id = revision.revision.base.id.clone();
-        let account_id = account.base.id.clone();
         let db = self.db.clone();
         let client = db.client().clone();
-        client
+        let command = req.clone();
+        let actor_owned = actor.clone();
+        let actor_id = actor.id().to_string();
+        let confirmation_id = id.to_string();
+        let audit_id_for_tx = audit_id.clone();
+        let fingerprint_for_tx = fingerprint.clone();
+        let rbac_for_tx = rbac.clone();
+        let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    let mut confirmation = db
+                        .procurement_confirmations()
+                        .find_by_id(&confirmation_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("采购确认不存在".to_string()))?;
+                    ensure_pending_confirmation(&confirmation)?;
+                    if confirmation.base.version != command.decision.expected_confirmation_edit_version() {
+                        return Err(Error::ConflictError(
+                            "采购确认工作数据已变化，请刷新后重试".to_string(),
+                        ));
+                    }
+                    ensure_submission_identity(
+                        &confirmation,
+                        command.decision.submission_id(),
+                        &command.expected_subject_version,
+                    )?;
+                    let mut work_item = load_procurement_confirmation_work_item(
+                        &db,
+                        ProcurementConfirmationTaskGuard::new(
+                            &confirmation_id,
+                            &confirmation.submission_id,
+                            &command.work_item_id,
+                            expected_task_version,
+                            &command.expected_subject_version,
+                            &actor_id,
+                        ),
+                        session,
+                    )
+                    .await?;
+                    WorkItemService::new(db.clone(), rbac_for_tx)
+                        .ensure_domain_decision_access(&actor_owned, &work_item, session)
+                        .await?;
+                    let mut submission = db
+                        .sales_order_submissions()
+                        .find_by_id(&confirmation.submission_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售提交不存在".to_string()))?;
+                    ensure_procurement_confirmation_actor_eligible(
+                        &db,
+                        &work_item,
+                        &submission.submitted_by,
+                        &actor_id,
+                        session,
+                    )
+                    .await?;
+                    let submission_lines = db
+                        .sales_order_submission_lines()
+                        .list_lines_by_submissions(std::slice::from_ref(&confirmation.submission_id), session)
+                        .await?;
+                    let confirmation_lines = db
+                        .procurement_confirmation_lines()
+                        .list_lines_by_confirmation(&confirmation.base.id.clone().into(), session)
+                        .await?;
+                    SalesReviewService::new(db.clone())
+                        .ensure_confirmation_sources(&confirmation_lines, &submission_lines, session)
+                        .await?;
+                    ensure_confirmation_coverage(&submission_lines, &confirmation_lines)?;
+                    let mut order = db
+                        .sales_orders()
+                        .find_by_id(&confirmation.sales_order_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+                    ensure_order_awaiting_confirmation(&order)?;
+                    let mut document = db
+                        .business_documents()
+                        .find_by_id(&order.base.id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售单业务单据注册不存在".to_string()))?;
+                    ensure_unformalized_sales_document(&document, &order)?;
+
+                    let now = Instant::now();
+                    let revision = build_revision(
+                        &order,
+                        &submission,
+                        &submission_lines,
+                        RevisionSource::ErpApproval,
+                        now,
+                        &actor_owned,
+                    )?;
+                    let from_status = order.commercial_status.as_str().to_string();
+                    order.approve(now, &actor_id)?;
+                    order.attach_revision(revision.revision.base.id.clone(), &actor_id);
+                    submission.approve(&actor_id)?;
+                    document.formalize(now);
+                    confirmation.approve(&actor_id, now)?;
+                    work_item.record_activity(&actor_id, now)?;
+                    work_item.complete_by_domain_command(&actor_id, now)?;
+                    let account = build_receivable_account(&order, &revision);
+                    let entry = build_receivable_entry(&account, &revision, now)?;
+                    let workflow = WorkflowAction::new(
+                        WorkflowActionId::new(id_generator::next_id()),
+                        WorkflowActionData {
+                            document_id: BusinessDocumentId::new(order.base.id.clone()),
+                            action_type: WorkflowActionType::Approve,
+                            from_status,
+                            to_status: order.commercial_status.as_str().to_string(),
+                            actor_id: actor_id.clone(),
+                            actor_role: work_item.owner_role.clone(),
+                            comment: Some("采购二次确认通过".to_string()),
+                        },
+                    )?;
                     db.sales_order()
                         .formalize_submission(
-                            &mut order_for_tx,
+                            &mut order,
                             &revision.revision,
                             &revision.lines,
                             &revision.goods_lines,
@@ -164,198 +206,234 @@ impl SalesReviewService {
                             session,
                         )
                         .await?;
+                    db.sales_order_submissions()
+                        .update(&mut submission, session)
+                        .await?;
                     db.receivable()
                         .create_receivable_with_entry(&account, &entry, session)
                         .await?;
                     db.procurement_confirmations()
-                        .update(&mut confirmation_for_tx, session)
+                        .update(&mut confirmation, session)
                         .await?;
+                    db.business_documents().update(&mut document, session).await?;
+                    db.workflow_actions().create(&workflow, session).await?;
                     db.work_items().update(&mut work_item, session).await?;
-                    for draft in &purchase_drafts {
-                        db.purchase_orders().create(&draft.order, session).await?;
-                        db.purchase_order_submissions()
-                            .create(&draft.submission, session)
-                            .await?;
-                        for line in &draft.lines {
-                            db.purchase_order_submission_lines().create(line, session).await?;
-                        }
-                    }
-                    for purchase_audit in &purchase_audits {
-                        db.audit_logs().create(purchase_audit, session).await?;
-                    }
+                    let receipt = DecisionCommandReceipt::Approved {
+                        confirmation_id: confirmation.base.id.clone(),
+                        sales_order_id: confirmation.sales_order_id.to_string(),
+                        submission_id: confirmation.submission_id.to_string(),
+                        sales_order_revision_id: revision.revision.base.id.clone(),
+                        receivable_account_id: account.base.id.clone(),
+                    };
+                    let audit = actor_owned.resource_log_with_id(
+                        audit_id_for_tx,
+                        DECISION_COMMAND_ACTION,
+                        "procurement_confirmation",
+                        confirmation_id,
+                        Some(decision_receipt_message(&fingerprint_for_tx, &receipt)),
+                    )?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
+                    Ok::<DecisionCommandReceipt, crate::errors::Error>(receipt)
                 })
             })
-            .await?;
+            .await;
 
-        Ok(ProcurementConfirmationDecisionView {
-            confirmation_id: confirmation.base.id,
-            sales_order_id: confirmation.sales_order_id.to_string(),
-            status: ProcurementConfirmationStatus::Approved,
-            revision_id: Some(revision_id),
-            receivable_account_id: Some(account_id),
-            purchase_orders: purchase_order_views,
-            handled_at: now.unix_secs() as u64,
-            reference: format!("PC-OK-{}", order.order_no),
-        })
+        let receipt = match transaction_result {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                if let Some(receipt) = self.replay_decision_command(&audit_id, id, &fingerprint).await? {
+                    return receipt.into_result(&req.work_item_id);
+                }
+                return Err(error);
+            }
+        };
+        receipt.into_result(&req.work_item_id)
     }
 
-    /// 采购确认驳回（销售单回到销售可处理草稿，不把「驳回」混入已生效状态）。
+    /// 以 W07 唯一强类型完成命令驳回采购确认。
     ///
-    /// # 参数
-    /// * `id` - 确认批次 ID
-    /// * `req` - 驳回请求（原因代码必填）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回决策结果视图。
+    /// 单事务追加正式驳回事实和 `workflow_action`、退回销售草稿并完成原待办；
+    /// 不创建后继任务，只返回三条固定销售出路。
     ///
     /// # 错误
-    /// * `NotFound` - 确认批次/销售单不存在
-    /// * `ConflictError` - 确认批次已处理
-    pub async fn reject_procurement_confirmation(
+    /// 任一身份、状态、版本、责任、资格或岗位分离事实漂移时整体回滚。
+    async fn complete_rejected_procurement_confirmation(
         &self,
         id: &str,
-        req: RejectProcurementConfirmationRequest,
+        req: CompleteProcurementConfirmationCommand,
         actor: &AuditActor,
-    ) -> Result<ProcurementConfirmationDecisionView> {
-        req.validate()?;
-        let confirmation = self
-            .db
-            .procurement_confirmations()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("采购确认不存在".to_string()))?;
-        if confirmation.stable.status == ProcurementConfirmationStatus::Rejected {
-            return self
-                .procurement_decision_idempotent(&confirmation, ProcurementConfirmationStatus::Rejected)
-                .await;
+        rbac: SharedRbacService,
+    ) -> Result<CompleteProcurementConfirmationResult> {
+        let (reject_reason_code, reject_comment) = req
+            .decision
+            .rejection()
+            .ok_or_else(|| Error::ValidationError("采购确认驳回命令分支非法".to_string()))?;
+        let reject_comment = reject_comment.to_string();
+        let expected_task_version = parse_task_version(&req.expected_task_version)?;
+        let fingerprint = command_fingerprint(DECISION_COMMAND_ACTION, id, actor.id(), &req)?;
+        let audit_id = command_audit_id(DECISION_COMMAND_ACTION, actor.id(), &req.idempotency_key);
+        if let Some(receipt) = self.replay_decision_command(&audit_id, id, &fingerprint).await? {
+            return receipt.into_result(&req.work_item_id);
         }
-        if confirmation.stable.status != ProcurementConfirmationStatus::Pending {
-            return Err(Error::ConflictError("采购确认已处理，不允许重复决策".to_string()));
-        }
-        let mut order = self
-            .db
-            .sales_orders()
-            .find_by_id(&confirmation.sales_order_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        let order_no = order.order_no.clone();
-        let mut submission = self
-            .db
-            .sales_order_submissions()
-            .find_by_id(&confirmation.submission_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售提交不存在".to_string()))?;
-
-        let now = Instant::now();
-        let mut confirmation_for_tx = confirmation.clone();
-        confirmation_for_tx.reject(actor.id(), now, req.reject_reason_code)?;
-        order.return_to_draft(actor.id())?;
-        submission.reject(actor.id())?;
-        let mut work_item = self
-            .complete_work_item("procurement_confirmation", id, actor, now)
-            .await?;
-        let audit = actor.clone().resource_log(
-            "procurement_confirmation.reject",
-            "sales_order",
-            confirmation.sales_order_id.to_string(),
-        )?;
-
         let db = self.db.clone();
         let client = db.client().clone();
-        client
+        let command = req.clone();
+        let actor_owned = actor.clone();
+        let actor_id = actor.id().to_string();
+        let confirmation_id = id.to_string();
+        let audit_id_for_tx = audit_id.clone();
+        let fingerprint_for_tx = fingerprint.clone();
+        let rbac_for_tx = rbac.clone();
+        let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    let mut confirmation = db
+                        .procurement_confirmations()
+                        .find_by_id(&confirmation_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("采购确认不存在".to_string()))?;
+                    ensure_pending_confirmation(&confirmation)?;
+                    if confirmation.base.version != command.decision.expected_confirmation_edit_version() {
+                        return Err(Error::ConflictError(
+                            "采购确认工作数据已变化，请刷新后重试".to_string(),
+                        ));
+                    }
+                    ensure_submission_identity(
+                        &confirmation,
+                        command.decision.submission_id(),
+                        &command.expected_subject_version,
+                    )?;
+                    let mut work_item = load_procurement_confirmation_work_item(
+                        &db,
+                        ProcurementConfirmationTaskGuard::new(
+                            &confirmation_id,
+                            &confirmation.submission_id,
+                            &command.work_item_id,
+                            expected_task_version,
+                            &command.expected_subject_version,
+                            &actor_id,
+                        ),
+                        session,
+                    )
+                    .await?;
+                    WorkItemService::new(db.clone(), rbac_for_tx)
+                        .ensure_domain_decision_access(&actor_owned, &work_item, session)
+                        .await?;
+                    let mut submission = db
+                        .sales_order_submissions()
+                        .find_by_id(&confirmation.submission_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售提交不存在".to_string()))?;
+                    ensure_procurement_confirmation_actor_eligible(
+                        &db,
+                        &work_item,
+                        &submission.submitted_by,
+                        &actor_id,
+                        session,
+                    )
+                    .await?;
+                    let mut order = db
+                        .sales_orders()
+                        .find_by_id(&confirmation.sales_order_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+                    ensure_order_awaiting_confirmation(&order)?;
+                    let document = db
+                        .business_documents()
+                        .find_by_id(&order.base.id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售单业务单据注册不存在".to_string()))?;
+                    ensure_unformalized_sales_document(&document, &order)?;
+
+                    let now = Instant::now();
+                    let from_status = order.commercial_status.as_str().to_string();
+                    confirmation.reject(&actor_id, now, reject_reason_code, Some(reject_comment.clone()))?;
+                    order.return_to_draft(&actor_id)?;
+                    submission.reject(&actor_id)?;
+                    work_item.record_activity(&actor_id, now)?;
+                    work_item.complete_by_domain_command(&actor_id, now)?;
+                    let workflow = WorkflowAction::new(
+                        WorkflowActionId::new(id_generator::next_id()),
+                        WorkflowActionData {
+                            document_id: BusinessDocumentId::new(order.base.id.clone()),
+                            action_type: WorkflowActionType::Reject,
+                            from_status,
+                            to_status: order.commercial_status.as_str().to_string(),
+                            actor_id: actor_id.clone(),
+                            actor_role: work_item.owner_role.clone(),
+                            comment: rejection_workflow_comment(reject_reason_code, &reject_comment)?,
+                        },
+                    )?;
                     db.procurement_confirmations()
-                        .update(&mut confirmation_for_tx, session)
+                        .update(&mut confirmation, session)
                         .await?;
                     db.sales_orders().update(&mut order, session).await?;
                     db.sales_order_submissions()
                         .update(&mut submission, session)
                         .await?;
+                    db.workflow_actions().create(&workflow, session).await?;
                     db.work_items().update(&mut work_item, session).await?;
+                    let receipt = DecisionCommandReceipt::Rejected {
+                        confirmation_id: confirmation.base.id.clone(),
+                        sales_order_id: confirmation.sales_order_id.to_string(),
+                        submission_id: confirmation.submission_id.to_string(),
+                        workflow_action_id: workflow.base.id.clone(),
+                    };
+                    let audit = actor_owned.resource_log_with_id(
+                        audit_id_for_tx,
+                        DECISION_COMMAND_ACTION,
+                        "procurement_confirmation",
+                        confirmation_id,
+                        Some(decision_receipt_message(&fingerprint_for_tx, &receipt)),
+                    )?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
+                    Ok::<DecisionCommandReceipt, crate::errors::Error>(receipt)
                 })
             })
-            .await?;
+            .await;
 
-        Ok(ProcurementConfirmationDecisionView {
-            confirmation_id: confirmation.base.id,
-            sales_order_id: confirmation.sales_order_id.to_string(),
-            status: ProcurementConfirmationStatus::Rejected,
-            revision_id: None,
-            receivable_account_id: None,
-            purchase_orders: Vec::new(),
-            handled_at: now.unix_secs() as u64,
-            reference: format!("PC-REJ-{order_no}"),
-        })
+        let receipt = match transaction_result {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                if let Some(receipt) = self.replay_decision_command(&audit_id, id, &fingerprint).await? {
+                    return receipt.into_result(&req.work_item_id);
+                }
+                return Err(error);
+            }
+        };
+        receipt.into_result(&req.work_item_id)
     }
 
-    /// 采购确认决策幂等回查（已处理批次重复决策返回既有结果）。
-    ///
-    /// # 参数
-    /// * `confirmation` - 已处理的确认批次
-    /// * `status` - 既有结论
-    ///
-    /// # 返回
-    /// 返回决策结果视图。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回错误。
-    async fn procurement_decision_idempotent(
+    /// 按稳定审计收据严格重放已提交的 W07 正式决定。
+    async fn replay_decision_command(
         &self,
-        confirmation: &ProcurementConfirmation,
-        status: ProcurementConfirmationStatus,
-    ) -> Result<ProcurementConfirmationDecisionView> {
-        let order = self
+        audit_id: &str,
+        confirmation_id: &str,
+        expected_fingerprint: &str,
+    ) -> Result<Option<DecisionCommandReceipt>> {
+        let Some(audit) = self
             .db
-            .sales_orders()
-            .find_by_id(&confirmation.sales_order_id, &mut NoTransaction)
-            .await?;
-        let revision_id = order
-            .as_ref()
-            .and_then(|order| order.stable.current_revision_id.clone());
-        let account = self
-            .db
-            .receivable_accounts()
-            .find_one_by_field(
-                "sales_order_id",
-                confirmation.sales_order_id.to_string(),
-                &mut NoTransaction,
-            )
-            .await?;
-        let purchase_orders = self
-            .db
-            .purchase_orders()
-            .find_many(
-                mongodb::bson::doc! {
-                    "sales_order_id": confirmation.sales_order_id.to_string(),
-                },
-                &mut NoTransaction,
-            )
+            .audit_logs()
+            .find_by_id(audit_id, &mut database::NoTransaction)
             .await?
-            .into_iter()
-            .map(|order| GeneratedPurchaseOrderView {
-                purchase_order_id: order.base.id,
-                purchase_no: order.purchase_no,
-            })
-            .collect();
-        Ok(ProcurementConfirmationDecisionView {
-            confirmation_id: confirmation.base.id.clone(),
-            sales_order_id: confirmation.sales_order_id.to_string(),
-            status,
-            revision_id,
-            receivable_account_id: account.map(|account| account.base.id),
-            purchase_orders,
-            handled_at: confirmation
-                .handled_at
-                .map(|instant| instant.unix_secs() as u64)
-                .unwrap_or(0),
-            reference: "PC-DONE".to_string(),
-        })
+        else {
+            return Ok(None);
+        };
+        if audit.action != DECISION_COMMAND_ACTION
+            || audit.resource_type != "procurement_confirmation"
+            || audit.resource_id.as_deref() != Some(confirmation_id)
+            || !audit.success
+        {
+            return Err(Error::Internal("采购确认决定幂等收据身份非法".to_string()));
+        }
+        let receipt = parse_decision_receipt(
+            audit
+                .message
+                .as_deref()
+                .ok_or_else(|| Error::Internal("采购确认决定幂等收据为空".to_string()))?,
+            expected_fingerprint,
+        )?;
+        Ok(Some(receipt))
     }
 
     /// 重新校验确认行引用的供给修订与能力修订仍是当前有效版本。
@@ -372,13 +450,15 @@ impl SalesReviewService {
         &self,
         lines: &[ProcurementConfirmationLine],
         submission_lines: &[SalesOrderSubmissionLine],
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let today = BusinessDate::today();
         let zero = Quantity::from_str("0").expect("静态零值必须合法");
         let mut quantities_by_revision: HashMap<String, (Option<Quantity>, Quantity)> = HashMap::new();
         let mut resolved = Vec::with_capacity(lines.len());
         for line in lines {
-            let (offering, revision, availability) = self.current_confirmation_offering(line).await?;
+            let (offering, revision, availability) =
+                self.current_confirmation_offering(line, executor).await?;
             ensure_confirmation_line_sku(line, &offering, submission_lines)?;
             let total = quantities_by_revision
                 .entry(revision.base.id.clone())
@@ -399,7 +479,7 @@ impl SalesReviewService {
                 submission_lines,
                 today,
             )?;
-            self.ensure_confirmation_capability(line, today).await?;
+            self.ensure_confirmation_capability(line, today, executor).await?;
         }
         ensure_confirmation_capacity(&quantities_by_revision)?;
         Ok(())
@@ -409,6 +489,7 @@ impl SalesReviewService {
     async fn current_confirmation_offering(
         &self,
         line: &ProcurementConfirmationLine,
+        executor: &mut dyn Executor,
     ) -> Result<(
         SupplierOffering,
         SupplierOfferingRevision,
@@ -421,13 +502,13 @@ impl SalesReviewService {
         let revision = self
             .db
             .supplier_offering_revisions()
-            .find_by_id(revision_id, &mut NoTransaction)
+            .find_by_id(revision_id, executor)
             .await?
             .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行供给版本不存在", line.line_no)))?;
         let offering = self
             .db
             .supplier_offerings()
-            .find_by_id(&revision.supplier_offering_id, &mut NoTransaction)
+            .find_by_id(&revision.supplier_offering_id, executor)
             .await?
             .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行供给不存在", line.line_no)))?;
         let is_current = offering.stable.current_revision_id.as_deref() == Some(revision_id.as_ref());
@@ -443,7 +524,7 @@ impl SalesReviewService {
         let availability = self
             .db
             .supplier_offering_availabilities()
-            .find_by_offering_id(&revision.supplier_offering_id, &mut NoTransaction)
+            .find_by_offering_id(&revision.supplier_offering_id, executor)
             .await?
             .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行可供状态不存在", line.line_no)))?;
         Ok((offering, revision, availability))
@@ -454,17 +535,18 @@ impl SalesReviewService {
         &self,
         line: &ProcurementConfirmationLine,
         today: BusinessDate,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let revision = self
             .db
             .supplier_capability_revisions()
-            .find_by_id(&line.supplier_capability_revision_id, &mut NoTransaction)
+            .find_by_id(&line.supplier_capability_revision_id, executor)
             .await?
             .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行能力版本不存在", line.line_no)))?;
         let capability = self
             .db
             .supplier_capabilities()
-            .find_by_supplier_and_code(&line.supplier_id, revision.capability_code, &mut NoTransaction)
+            .find_by_supplier_and_code(&line.supplier_id, revision.capability_code, executor)
             .await?
             .ok_or_else(|| {
                 Error::ValidationError(format!("采购确认第 {} 行供应商能力不存在", line.line_no))
@@ -486,18 +568,175 @@ impl SalesReviewService {
                 line.line_no
             )));
         }
-        crate::supplier::eligibility::ensure_capability_qualified(
-            &self.db,
-            &line.supplier_id,
-            &line.supplier_capability_revision_id,
-            today,
-        )
-        .await
-        .map_err(|error| {
-            Error::BusinessLogicError(format!("采购确认第 {} 行资质校验失败：{error}", line.line_no))
-        })?;
+        let supplier = self
+            .db
+            .supplier_accounts()
+            .find_by_id(&line.supplier_id, executor)
+            .await?
+            .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行供应商不存在", line.line_no)))?;
+        if !supplier.is_active() {
+            return Err(Error::BusinessLogicError(format!(
+                "采购确认第 {} 行供应商已停用",
+                line.line_no
+            )));
+        }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DecisionCommandReceipt {
+    Approved {
+        confirmation_id: String,
+        sales_order_id: String,
+        submission_id: String,
+        sales_order_revision_id: String,
+        receivable_account_id: String,
+    },
+    Rejected {
+        confirmation_id: String,
+        sales_order_id: String,
+        submission_id: String,
+        workflow_action_id: String,
+    },
+}
+
+impl DecisionCommandReceipt {
+    fn into_result(self, work_item_id: &str) -> Result<CompleteProcurementConfirmationResult> {
+        let business_result = match self {
+            Self::Approved {
+                confirmation_id,
+                sales_order_id,
+                submission_id,
+                sales_order_revision_id,
+                receivable_account_id,
+            } => ProcurementConfirmationBusinessResult::ApprovedAndSalesEffective {
+                procurement_confirmation_id: confirmation_id.clone(),
+                sales_order_id,
+                submission_id,
+                sales_order_revision_id,
+                receivable_account_id,
+                procurement_creation_basis_id: confirmation_id,
+            },
+            Self::Rejected {
+                confirmation_id,
+                sales_order_id,
+                submission_id,
+                workflow_action_id,
+            } => ProcurementConfirmationBusinessResult::RejectedToSales {
+                procurement_confirmation_id: confirmation_id,
+                sales_order_id,
+                rejected_submission_id: submission_id,
+                workflow_action_id,
+                next_sales_resolutions: [
+                    ProcurementSalesResolution::ResubmitChangedTerms,
+                    ProcurementSalesResolution::RequestLowMarginAcceptance,
+                    ProcurementSalesResolution::VoidAfterRejection,
+                ],
+            },
+        };
+        Ok(CompleteProcurementConfirmationResult {
+            work_item_id: work_item_id.to_string(),
+            work_item_status: entities::work_item::WorkItemStatus::Completed,
+            business_result,
+        })
+    }
+}
+
+fn ensure_unformalized_sales_document(
+    document: &entities::document_registry::BusinessDocument,
+    order: &SalesOrder,
+) -> Result<()> {
+    if document.document_type != DocumentType::SalesOrder
+        || document.document_no != order.order_no
+        || document.formalized_at.is_some()
+    {
+        return Err(Error::ConflictError(
+            "销售单业务单据注册与待正式化对象不一致".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn rejection_workflow_comment(
+    reason_code: entities::sales_review::ProcurementRejectReasonCode,
+    comment: &str,
+) -> Result<Option<String>> {
+    let mut value = format!("reason={}", reason_code.as_str());
+    value.push_str("; ");
+    value.push_str(comment.trim());
+    if value.chars().count() > 512 {
+        return Err(Error::ValidationError(
+            "采购确认驳回工作流意见不能超过512个字符".to_string(),
+        ));
+    }
+    Ok(Some(value))
+}
+
+fn decision_receipt_message(fingerprint: &str, receipt: &DecisionCommandReceipt) -> String {
+    match receipt {
+        DecisionCommandReceipt::Approved {
+            confirmation_id,
+            sales_order_id,
+            submission_id,
+            sales_order_revision_id,
+            receivable_account_id,
+        } => format!(
+            "fp={fingerprint};approved={confirmation_id}|{sales_order_id}|{submission_id}|{sales_order_revision_id}|{receivable_account_id}"
+        ),
+        DecisionCommandReceipt::Rejected {
+            confirmation_id,
+            sales_order_id,
+            submission_id,
+            workflow_action_id,
+        } => {
+            format!(
+                "fp={fingerprint};rejected={confirmation_id}|{sales_order_id}|{submission_id}|{workflow_action_id}"
+            )
+        }
+    }
+}
+
+fn parse_decision_receipt(message: &str, expected_fingerprint: &str) -> Result<DecisionCommandReceipt> {
+    let value = message
+        .strip_prefix("fp=")
+        .ok_or_else(|| Error::Internal("采购确认决定幂等收据格式非法".to_string()))?;
+    let (fingerprint, result) = value
+        .split_once(';')
+        .ok_or_else(|| Error::Internal("采购确认决定幂等收据结果缺失".to_string()))?;
+    if fingerprint != expected_fingerprint {
+        return Err(Error::ConflictError(
+            "幂等键已用于不同的采购确认决定命令".to_string(),
+        ));
+    }
+    if let Some(value) = result.strip_prefix("approved=") {
+        let fields = value.split('|').collect::<Vec<_>>();
+        let [confirmation_id, sales_order_id, submission_id, sales_order_revision_id, receivable_account_id] =
+            fields.as_slice()
+        else {
+            return Err(Error::Internal("采购确认通过收据结果非法".to_string()));
+        };
+        return Ok(DecisionCommandReceipt::Approved {
+            confirmation_id: (*confirmation_id).to_string(),
+            sales_order_id: (*sales_order_id).to_string(),
+            submission_id: (*submission_id).to_string(),
+            sales_order_revision_id: (*sales_order_revision_id).to_string(),
+            receivable_account_id: (*receivable_account_id).to_string(),
+        });
+    }
+    if let Some(value) = result.strip_prefix("rejected=") {
+        let fields = value.split('|').collect::<Vec<_>>();
+        let [confirmation_id, sales_order_id, submission_id, workflow_action_id] = fields.as_slice() else {
+            return Err(Error::Internal("采购确认驳回收据结果非法".to_string()));
+        };
+        return Ok(DecisionCommandReceipt::Rejected {
+            confirmation_id: (*confirmation_id).to_string(),
+            sales_order_id: (*sales_order_id).to_string(),
+            submission_id: (*submission_id).to_string(),
+            workflow_action_id: (*workflow_action_id).to_string(),
+        });
+    }
+    Err(Error::Internal("采购确认决定收据结论非法".to_string()))
 }
 
 /// 校验确认分行选择的供给属于对应销售提交商品。
@@ -646,7 +885,7 @@ fn ensure_confirmation_coverage(
 /// # 错误
 /// 状态非法时返回 `ValidationError`。
 fn ensure_order_awaiting_confirmation(order: &SalesOrder) -> Result<()> {
-    if order.stable.status != entities::sales_order::CommercialStatus::PendingReview
+    if order.commercial_status != entities::sales_order::CommercialStatus::PendingReview
         || order.review_status != entities::sales_order::ReviewStatus::PendingProcurementConfirmation
     {
         return Err(Error::ValidationError(
@@ -654,4 +893,74 @@ fn ensure_order_awaiting_confirmation(order: &SalesOrder) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::{parse_decision_receipt, DecisionCommandReceipt};
+
+    #[test]
+    fn decision_receipt_rejects_same_key_with_different_payload() {
+        let receipt = parse_decision_receipt(
+            "fp=abc;approved=confirmation-1|sales-1|submission-1|revision-1|account-1",
+            "abc",
+        )
+        .unwrap();
+        assert_eq!(
+            receipt,
+            DecisionCommandReceipt::Approved {
+                confirmation_id: "confirmation-1".to_string(),
+                sales_order_id: "sales-1".to_string(),
+                submission_id: "submission-1".to_string(),
+                sales_order_revision_id: "revision-1".to_string(),
+                receivable_account_id: "account-1".to_string(),
+            }
+        );
+        assert!(parse_decision_receipt(
+            "fp=abc;approved=confirmation-1|sales-1|submission-1|revision-1|account-1",
+            "other"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn rejected_result_has_fixed_resolutions_and_no_successor_task() {
+        let result = DecisionCommandReceipt::Rejected {
+            confirmation_id: "confirmation-1".to_string(),
+            sales_order_id: "sales-1".to_string(),
+            submission_id: "submission-1".to_string(),
+            workflow_action_id: "workflow-1".to_string(),
+        }
+        .into_result("work-1")
+        .unwrap();
+        let value = serde_json::to_value(result).unwrap();
+        let business = value.get("business_result").and_then(Value::as_object).unwrap();
+
+        assert_eq!(value["work_item_status"], "COMPLETED");
+        assert_eq!(business["outcome"], "REJECTED_TO_SALES");
+        assert_eq!(business["next_sales_resolutions"].as_array().unwrap().len(), 3);
+        assert!(!business.contains_key("successor_work_item_id"));
+    }
+
+    #[test]
+    fn approved_result_exposes_confirmation_as_creation_basis() {
+        let result = DecisionCommandReceipt::Approved {
+            confirmation_id: "confirmation-1".to_string(),
+            sales_order_id: "sales-1".to_string(),
+            submission_id: "submission-1".to_string(),
+            sales_order_revision_id: "revision-1".to_string(),
+            receivable_account_id: "account-1".to_string(),
+        }
+        .into_result("work-1")
+        .unwrap();
+        let value = serde_json::to_value(result).unwrap();
+
+        assert_eq!(
+            value["business_result"]["procurement_creation_basis_id"],
+            "confirmation-1"
+        );
+        assert!(value["business_result"].get("purchase_orders").is_none());
+    }
 }

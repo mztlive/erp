@@ -11,7 +11,7 @@ import {
     ListChecksIcon,
     LoaderCircleIcon,
     LockIcon,
-    RefreshCwIcon,
+    PlayIcon,
     ShieldAlertIcon,
     ShieldCheckIcon,
     TriangleAlertIcon,
@@ -35,7 +35,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { getErrorMessage } from "@/lib/api/errors"
-import { leaseText, sequentialText } from "@/lib/ui-text"
+import { responsibilityText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 export type ControllableDialogProps = {
@@ -135,7 +135,7 @@ function WorkflowDetailList({
                 <Icon aria-hidden="true" className="size-4" />
                 {title}
             </h3>
-            <ul className="mt-3 space-y-2 text-sm" role="list">
+            <ul className="mt-3 space-y-2 text-sm">
                 {items.map((item, index) => (
                     <li
                         key={index}
@@ -334,41 +334,47 @@ function FormalActionConfirmDialog({
     )
 }
 
-export type SequentialLeaseStatus =
-    | "unclaimed"
-    | "active"
-    | "renewing"
-    | "lost"
-    | "released"
+export type ResponsibilityStatus =
+    | "pool_available"
+    | "assigned_to_me"
+    | "assigned_to_other"
+    | "blocked"
+    | "completed"
+    | "closed"
 
-const sequentialLeaseStatus = {
-    unclaimed: {
-        label: leaseText.unclaimed,
-        tone: "neutral",
+const responsibilityStatusMeta = {
+    pool_available: {
+        label: responsibilityText.poolAvailable,
+        tone: "info",
         icon: CircleDashedIcon,
     },
-    active: {
-        label: leaseText.active,
+    assigned_to_me: {
+        label: responsibilityText.assignedToMe,
         tone: "success",
         icon: ShieldCheckIcon,
     },
-    renewing: {
-        label: leaseText.renewing,
-        tone: "info",
-        icon: RefreshCwIcon,
+    assigned_to_other: {
+        label: responsibilityText.assignedToOther,
+        tone: "neutral",
+        icon: UsersRoundIcon,
     },
-    lost: {
-        label: leaseText.lost,
-        tone: "destructive",
+    blocked: {
+        label: responsibilityText.blocked,
+        tone: "warning",
         icon: ShieldAlertIcon,
     },
-    released: {
-        label: leaseText.released,
+    completed: {
+        label: responsibilityText.completed,
+        tone: "success",
+        icon: CircleCheckIcon,
+    },
+    closed: {
+        label: responsibilityText.closed,
         tone: "neutral",
         icon: CircleDashedIcon,
     },
 } satisfies Record<
-    SequentialLeaseStatus,
+    ResponsibilityStatus,
     { label: string; tone: StatusTone; icon: LucideIcon }
 >
 
@@ -378,15 +384,15 @@ export type SequentialProcessBarProps = Omit<
 > & {
     current: number
     total: number
-    leaseStatus: SequentialLeaseStatus
-    leaseStatusLabel?: string
+    responsibilityStatus: ResponsibilityStatus
+    responsibilityStatusLabel?: string
     processLabel?: string
     processNextLabel?: string
     pending?: boolean
     processDisabled?: boolean
     /**
-     * 与 `processDisabled` 独立：只读翻页场景（未领取也能看下一条）传 `false`。
-     * 默认跟随 `processDisabled`，保持既有「需要领取才能处理」行为。
+     * 与 `processDisabled` 独立：只读翻页场景也可继续浏览。
+     * 默认跟随 `processDisabled`。
      */
     processNextDisabled?: boolean
     /**
@@ -394,65 +400,62 @@ export type SequentialProcessBarProps = Omit<
      * 必须传与行为一致的文案（按钮说动作，不说机制）。
      */
     backLabel?: string
-    /** 首次领取按钮文案（从未领取过）；默认「领取任务」。 */
-    claimLabel?: string
-    /** 处理权丢失后的重新领取按钮文案；默认「重新领取」。 */
-    reclaimLabel?: string
+    /** 责任池任务形成个人责任时的动作文案。 */
+    startProcessingLabel?: string
     /** 主动作会离开当前页面（如跳转专用处理器）时置 false，避免两个同义按钮。 */
     showProcessNext?: boolean
     /**
      * 只读角色（如销售/财务查看进度）置 false：
-     * 不渲染主动作与「重新领取」，避免展示一排点不动的按钮。
+     * 不渲染业务主动作与“开始处理”。
      */
     showProcess?: boolean
     /**
-     * 插入状态徽章区（位置/租约之后），例如先款条件结果徽章。
+     * 插入状态徽章区（位置/责任之后），例如先款条件结果徽章。
      * 不改变默认布局；各工作面按需传入。
      */
     statusExtras?: React.ReactNode
     onBack: () => void
     onProcess: () => void
     onProcessNext: () => void
-    onReclaim: () => void
+    onStartProcessing?: () => void
 }
 
-/** 连续审核/确认页的队列位置、租约状态和处理动作。 */
+/** 连续审核/确认页的队列位置、当前责任和处理动作。 */
 function SequentialProcessBar({
     current,
     total,
-    leaseStatus,
-    leaseStatusLabel,
+    responsibilityStatus,
+    responsibilityStatusLabel,
     processLabel = "处理当前任务",
     processNextLabel = "处理并打开下一条",
     pending = false,
     processDisabled = false,
     processNextDisabled,
     backLabel = "返回队列",
-    claimLabel = sequentialText.claim,
-    reclaimLabel = sequentialText.reclaim,
+    startProcessingLabel = responsibilityText.start,
     showProcessNext = true,
     showProcess = true,
     statusExtras,
     onBack,
     onProcess,
     onProcessNext,
-    onReclaim,
+    onStartProcessing,
     className,
     ...props
 }: SequentialProcessBarProps) {
-    const lease = sequentialLeaseStatus[leaseStatus]
-    const canProcess = leaseStatus === "active" && !pending && !processDisabled
+    const responsibility = responsibilityStatusMeta[responsibilityStatus]
+    const canProcess =
+        responsibilityStatus === "assigned_to_me" &&
+        !pending &&
+        !processDisabled
     const canProcessNext =
         processNextDisabled !== undefined
             ? !pending && !processNextDisabled
             : canProcess
-    const canReclaim =
-        showProcess && (leaseStatus === "unclaimed" || leaseStatus === "lost")
-    const isFirstClaim = leaseStatus === "unclaimed"
-    const claimButtonLabel = isFirstClaim ? claimLabel : reclaimLabel
-    const claimPendingLabel = isFirstClaim
-        ? sequentialText.claiming
-        : sequentialText.reclaiming
+    const canStartProcessing =
+        showProcess &&
+        responsibilityStatus === "pool_available" &&
+        onStartProcessing !== undefined
 
     return (
         <section
@@ -474,14 +477,14 @@ function SequentialProcessBar({
                     label={`第 ${current.toLocaleString("zh-CN")} / ${total.toLocaleString("zh-CN")} 条`}
                 />
                 <StatusBadge
-                    tone={lease.tone}
-                    icon={lease.icon}
-                    label={leaseStatusLabel ?? lease.label}
+                    tone={responsibility.tone}
+                    icon={responsibility.icon}
+                    label={responsibilityStatusLabel ?? responsibility.label}
                 />
                 {statusExtras}
-                {leaseStatus === "lost" ? (
+                {responsibilityStatus === "assigned_to_other" ? (
                     <span className="text-sm text-destructive">
-                        当前输入会保留，重新领取后才能提交。
+                        {responsibilityText.changed}
                     </span>
                 ) : null}
             </div>
@@ -500,12 +503,12 @@ function SequentialProcessBar({
                     {backLabel}
                 </Button>
 
-                {canReclaim ? (
+                {canStartProcessing ? (
                     <Button
                         type="button"
                         variant="secondary"
                         disabled={pending}
-                        onClick={onReclaim}
+                        onClick={onStartProcessing}
                     >
                         {pending ? (
                             <LoaderCircleIcon
@@ -514,12 +517,14 @@ function SequentialProcessBar({
                                 className="animate-spin"
                             />
                         ) : (
-                            <RefreshCwIcon
+                            <PlayIcon
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />
                         )}
-                        {pending ? claimPendingLabel : claimButtonLabel}
+                        {pending
+                            ? responsibilityText.starting
+                            : startProcessingLabel}
                     </Button>
                 ) : null}
 
@@ -572,7 +577,4 @@ function SequentialProcessBar({
     )
 }
 
-export {
-    FormalActionConfirmDialog,
-    SequentialProcessBar,
-}
+export { FormalActionConfirmDialog, SequentialProcessBar }

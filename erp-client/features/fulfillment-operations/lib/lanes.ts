@@ -49,7 +49,7 @@ const FULFILLMENT_LANES: Record<
  *
  * 用于没声明岗位的跨页深链。
  * **不要**在这两种情况下退回「收货与发货」—— 那会在最显眼的位置，
- * 对着一条电子交付任务写「收货与发货」。中性短名与 `lib/ui-text.ts` 的 W09 一致。
+ * 对着一张电子交付单据写「收货与发货」。中性短名与 `lib/ui-text.ts` 的 W09 一致。
  */
 const FULFILLMENT_NEUTRAL_HEADER: FulfillmentLaneHeader = {
     label: "履约处理",
@@ -66,7 +66,7 @@ function parseLaneParam(raw: string | null): FulfillmentLane | null {
  *
  * 返回 null 表示「这次进来没有确定的岗位」：从别处深链而来源并不知道
  * 该落哪个岗位。此时页头走 `FULFILLMENT_NEUTRAL_HEADER`，且不把 lane
- * 写回 URL —— 写回等于替用户认领一个他没选的岗位。
+ * 写回 URL —— 写回等于替用户选择一个尚未确认的岗位。
  */
 export function resolveLane(laneRaw: string | null): FulfillmentLane | null {
     return parseLaneParam(laneRaw)

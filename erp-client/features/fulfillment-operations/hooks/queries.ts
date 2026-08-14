@@ -3,8 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
-    claimFulfillmentWorkItem,
-    deferFulfillmentOperation,
     fetchFulfillmentQueue,
     postFulfillmentOperation,
     resolveUnknownFulfillmentResult,
@@ -28,28 +26,15 @@ export function useFulfillmentQueueQuery(filters: FulfillmentQueueFilters) {
     })
 }
 
-/** 角标计数：W09 岗位通道「仅我的」待处理数。 */
+/** 角标计数：当前岗位可处理的草稿单据数。 */
 export function useFulfillmentCountQuery(lane: FulfillmentLane) {
     return useQuery({
         queryKey: fulfillmentKeys.counts(lane),
         queryFn: async () => {
             const view = await fetchFulfillmentQueue({
                 role: lane,
-                scope: "mine",
             })
             return { pending: view.context.total }
-        },
-    })
-}
-
-export function useClaimFulfillmentMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: claimFulfillmentWorkItem,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({
-                queryKey: fulfillmentKeys.all,
-            })
         },
     })
 }
@@ -72,20 +57,6 @@ export function usePostFulfillmentMutation() {
         mutationFn: postFulfillmentOperation,
         onSuccess: async (result) => {
             // 仅在明确成功后失效；unknown 时不触碰缓存中的库存/队列假设
-            if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: fulfillmentKeys.all,
-                })
-            }
-        },
-    })
-}
-
-export function useDeferFulfillmentMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: deferFulfillmentOperation,
-        onSuccess: async (result) => {
             if (result.status === "succeeded") {
                 await queryClient.invalidateQueries({
                     queryKey: fulfillmentKeys.all,

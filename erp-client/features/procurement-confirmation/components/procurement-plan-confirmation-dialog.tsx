@@ -148,8 +148,8 @@ export function ProcurementPlanConfirmationDialog({
                         <Alert variant="success">
                             <CircleCheckIcon aria-hidden="true" />
                             <AlertTitle>
-                                当前方案将生成 {currentPlanSummary.orderCount}{" "}
-                                张采购单
+                                当前方案预计形成 {currentPlanSummary.orderCount}{" "}
+                                组采购创建依据
                             </AlertTitle>
                             <AlertDescription>
                                 当前采购含税{" "}
@@ -621,7 +621,7 @@ export function ProcurementPlanConfirmationDialog({
 
                             {clientBlocking.length > 0 ? (
                                 <ValidationSummary
-                                    title="生成采购单前需要补齐"
+                                    title="确认采购创建依据前需要补齐"
                                     issues={clientBlocking}
                                 />
                             ) : null}
@@ -630,7 +630,7 @@ export function ProcurementPlanConfirmationDialog({
                         {recommendation.warnings.length > 0 ? (
                             <Alert variant="warning">
                                 <TriangleAlertIcon aria-hidden="true" />
-                                <AlertTitle>生成前请确认</AlertTitle>
+                                <AlertTitle>确认前请核对</AlertTitle>
                                 <AlertDescription>
                                     {recommendation.warnings
                                         .map((item) => item.message)
@@ -672,10 +672,10 @@ export function ProcurementPlanConfirmationDialog({
                             aria-hidden="true"
                         />
                         {isSubmitting
-                            ? "正在生成采购单…"
+                            ? "正在确认采购创建依据…"
                             : advanceAfterConfirm
-                              ? "保存调整、生成采购单并打开下一条"
-                              : "保存调整并生成采购单"}
+                              ? "保存调整、确认并打开下一条"
+                              : "保存调整并确认"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

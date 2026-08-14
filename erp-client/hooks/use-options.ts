@@ -56,10 +56,11 @@ export function useOwnerOptionsQuery() {
  * 任务转交候选查询（账号列表，与负责人同源），供转交任务选人使用。
  * @returns useQuery 结果（data 为转交候选列表）。
  */
-export function useTeamOptionsQuery() {
+export function useTeamOptionsQuery(enabled = true) {
     return useQuery({
         queryKey: optionKeys.team,
         queryFn: fetchTeamOptions,
+        enabled,
         staleTime: OPTIONS_STALE_TIME,
     })
 }

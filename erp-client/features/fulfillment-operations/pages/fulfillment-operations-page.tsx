@@ -7,7 +7,7 @@ import {
     ArrowRightIcon,
     CircleCheckIcon,
     EyeIcon,
-    PauseIcon,
+    SkipForwardIcon,
     SaveIcon,
     Undo2Icon,
 } from "lucide-react"
@@ -39,7 +39,6 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
-    DeferOutcome,
     FulfillmentDraft,
     FulfillmentFormalOutcome,
     FulfillmentOperationType,
@@ -47,7 +46,6 @@ import type {
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import {
     CORRECTION_NOTICE,
-    DEFER_REASON_LABEL,
     NOT_ACCEPTANCE_NOTICE,
     OPERATION_ACTION_LABEL,
     OPERATION_CLEARED_LABEL,
@@ -57,11 +55,8 @@ import {
     OPERATION_TYPE_SHORT,
     SLUG_TO_TYPE,
     TYPE_SLUG,
-    WORK_ITEM_STATUS_LABEL,
 } from "@/features/fulfillment-operations/types"
 import {
-    useClaimFulfillmentMutation,
-    useDeferFulfillmentMutation,
     useFulfillmentQueueQuery,
     usePostFulfillmentMutation,
     useResolveUnknownFulfillmentMutation,
@@ -95,18 +90,18 @@ import {
 } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import { FulfillmentQueueList } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-list"
 import { FulfillmentQueueToolbar } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-toolbar"
-import {
-    FulfillmentDeferDialog,
-    type DeferSubmitValue,
-} from "@/features/fulfillment-operations/components/fulfillment-defer-dialog"
 import { freshnessText, resultText, workspaceLabel } from "@/lib/ui-text"
 import type { WorkspaceId } from "@/lib/workspace-registry"
 
-type SessionLease = {
-    workItemId: string
-}
+type ResultState = SharedResultState<FulfillmentFormalOutcome>
 
-type ResultState = SharedResultState<FulfillmentFormalOutcome | DeferOutcome>
+function createIdempotencyKey(
+    operationId: string,
+    documentVersion: number,
+    action: "save" | "post",
+): string {
+    return `w09:${operationId}:${documentVersion}:${action}:${crypto.randomUUID()}`
+}
 
 export function FulfillmentOperationsPage() {
     const router = useRouter()
@@ -117,8 +112,6 @@ export function FulfillmentOperationsPage() {
     const header = laneHeader(lane)
     // 队列按岗位通道取角色（仓储/采购经办）；无岗位深链回落默认角色
     const roleValue = lane ?? DEFAULT_FULFILLMENT_ROLE
-    const scope: "mine" | "role_pool" =
-        searchParams.get("scope") === "role_pool" ? "role_pool" : "mine"
     const operationTypes = parseTypeParam(searchParams.get("type"))
     const warehouseId = searchParams.get("warehouseId") ?? undefined
     const q = searchParams.get("q") ?? undefined
@@ -126,12 +119,8 @@ export function FulfillmentOperationsPage() {
     const gate = parseGateParam(searchParams.get("gate"))
     const salesOrderId = searchParams.get("salesOrderId") ?? undefined
     const purchaseOrderId = searchParams.get("purchaseOrderId") ?? undefined
-    const currentWorkItemId = searchParams.get("currentWorkItemId") ?? undefined
-    /** 队列上下文里的岗位段；无岗位时用 any，避免拼出 "queue:W09:null:…" */
-    const laneKey = lane ?? "any"
-    const queueContextId =
-        searchParams.get("queueContextId") ??
-        `queue:W09:${laneKey}:${roleValue}:${scope}`
+    const currentOperationId =
+        searchParams.get("currentOperationId") ?? undefined
     const returnTo = searchParams.get("returnTo") ?? undefined
     const fromWorkspace = searchParams.get("from") ?? undefined
 
@@ -147,7 +136,6 @@ export function FulfillmentOperationsPage() {
     const filters = React.useMemo(
         (): import("@/features/fulfillment-operations/api").FulfillmentQueueFilters => ({
             role: roleValue,
-            scope,
             operationTypes,
             warehouseId,
             q,
@@ -155,12 +143,10 @@ export function FulfillmentOperationsPage() {
             gate,
             salesOrderId,
             purchaseOrderId,
-            currentWorkItemId,
-            queueContextId,
+            currentOperationId,
         }),
         [
             roleValue,
-            scope,
             operationTypes,
             warehouseId,
             q,
@@ -168,84 +154,74 @@ export function FulfillmentOperationsPage() {
             gate,
             salesOrderId,
             purchaseOrderId,
-            currentWorkItemId,
-            queueContextId,
+            currentOperationId,
         ],
     )
 
     const queueQuery = useFulfillmentQueueQuery(filters)
-    const claimMutation = useClaimFulfillmentMutation()
     const saveMutation = useSaveFulfillmentMutation()
     const postMutation = usePostFulfillmentMutation()
-    const deferMutation = useDeferFulfillmentMutation()
     const resolveUnknownMutation = useResolveUnknownFulfillmentMutation()
 
     const view = queueQuery.data
-    const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
+    const operations = React.useMemo(
+        () => view?.operations ?? [],
+        [view?.operations],
+    )
     const context = view?.context
     const canExecute = context?.canExecute ?? true
     const visibleTypes =
         context?.visibleTypes ?? FULFILLMENT_ROLES[roleValue].types
-    const task =
-        tasks.find((t) => t.workItemId === currentWorkItemId) ??
+    const operation =
+        operations.find((t) => t.operationId === currentOperationId) ??
         view?.current ??
-        tasks[0]
-    const currentIndex = task
+        operations[0]
+    const currentIndex = operation
         ? Math.max(
               0,
-              tasks.findIndex((t) => t.workItemId === task.workItemId),
+              operations.findIndex(
+                  (t) => t.operationId === operation.operationId,
+              ),
           )
         : 0
-    const completed = Boolean(view) && tasks.length === 0
+    const completed = Boolean(view) && operations.length === 0
 
     const [draft, setDraft] = React.useState<FulfillmentDraft | null>(null)
     const [dirty, setDirty] = React.useState(false)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
-    const [deferOpen, setDeferOpen] = React.useState(false)
     const [lastResult, setLastResult] = React.useState<ResultState>(null)
     const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
     const [actionError, setActionError] = React.useState<string | null>(null)
     const [saveMessage, setSaveMessage] = React.useState<string | null>(null)
     const headingRef = React.useRef<HTMLHeadingElement>(null)
     const resultRef = React.useRef<HTMLDivElement>(null)
-    const leaseRef = React.useRef<SessionLease | null>(null)
-    const [leaseEpoch, setLeaseEpoch] = React.useState(0)
 
     React.useEffect(() => {
-        if (!task) {
+        if (!operation) {
             setDraft(null)
             setDirty(false)
             return
         }
-        setDraft(cloneDraft(task.draft))
+        setDraft(cloneDraft(operation.draft))
         setDirty(false)
         setActionError(null)
         setSaveMessage(null)
-    }, [task])
+    }, [operation])
 
     React.useEffect(() => {
         if (queueQuery.isPending || !view) return
         const hasLane = searchParams.has("lane")
-        const hasScope = searchParams.has("scope")
-        const hasItem = searchParams.has("currentWorkItemId")
-        const hasCtx = searchParams.has("queueContextId")
+        const hasItem = searchParams.has("currentOperationId")
         // 没有确定岗位（只读角色 / 未声明岗位的深链）就不写 lane，
-        // 否则等于替用户认领一个他没选的岗位，侧栏还会跟着高亮错的入口。
+        // 否则侧栏会高亮到用户没有选择的岗位入口。
         const laneSettled = hasLane || lane === null
-        if (
-            laneSettled &&
-            hasScope &&
-            hasCtx &&
-            (hasItem || tasks.length === 0)
-        ) {
+        if (laneSettled && (hasItem || operations.length === 0)) {
             return
         }
         const params = new URLSearchParams(searchParams.toString())
         if (!hasLane && lane) params.set("lane", lane)
-        if (!hasScope) params.set("scope", scope)
-        if (!hasCtx) params.set("queueContextId", queueContextId)
-        if (!hasItem && task) {
-            params.set("currentWorkItemId", task.workItemId)
+        if (!hasItem && operation) {
+            params.set("currentOperationId", operation.operationId)
         }
         const qs = params.toString()
         router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
@@ -254,51 +230,23 @@ export function FulfillmentOperationsPage() {
         view,
         searchParams,
         lane,
-        scope,
-        queueContextId,
-        task,
-        tasks.length,
+        operation,
+        operations.length,
         pathname,
         router,
     ])
-
-    React.useEffect(() => {
-        if (!task) return
-        // 只读角色不占用别人的处理权
-        if (!canExecute) return
-        if (leaseRef.current?.workItemId === task.workItemId) return
-        if (claimMutation.isPending) return
-        let cancelled = false
-        void claimMutation
-            .mutateAsync(task.workItemId)
-            .then((lease) => {
-                if (cancelled) return
-                leaseRef.current = {
-                    workItemId: lease.workItemId,
-                }
-                setLeaseEpoch((n) => n + 1)
-            })
-            .catch((error) => {
-                if (cancelled) return
-                setActionError(getErrorMessage(error, "任务领取失败，请重试"))
-            })
-        return () => {
-            cancelled = true
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅任务切换时接手
-    }, [task?.workItemId, canExecute])
 
     React.useEffect(() => {
         if (lastResult) {
             resultRef.current?.focus()
             return
         }
-        if (!task) return
+        if (!operation) return
         // 可执行角色直接落到第一个要填的框并全选，省一次鼠标；
         // 标题挂了 aria-live，换条时仍会播报，不靠抢焦点来通知。
         if (canExecute) {
             const el = document.getElementById(
-                FIRST_INPUT_ID[task.operationType],
+                FIRST_INPUT_ID[operation.operationType],
             ) as HTMLInputElement | HTMLTextAreaElement | null
             if (el) {
                 el.focus()
@@ -307,7 +255,7 @@ export function FulfillmentOperationsPage() {
             }
         }
         headingRef.current?.focus()
-    }, [task, lastResult, canExecute])
+    }, [operation, lastResult, canExecute])
 
     const replaceUrl = React.useCallback(
         (patch: Record<string, string | null | undefined>) => {
@@ -324,12 +272,12 @@ export function FulfillmentOperationsPage() {
         [pathname, router, searchParams],
     )
 
-    const goToWorkItem = React.useCallback(
-        (workItemId: string | undefined | null, keepResult?: boolean) => {
+    const goToOperation = React.useCallback(
+        (operationId: string | undefined | null, keepResult?: boolean) => {
             if (!keepResult) setLastResult(null)
             setActionError(null)
             replaceUrl({
-                currentWorkItemId: workItemId ?? null,
+                currentOperationId: operationId ?? null,
             })
         },
         [replaceUrl],
@@ -338,46 +286,31 @@ export function FulfillmentOperationsPage() {
     const neighborId = React.useCallback(
         (delta: number) => {
             const idx = currentIndex + delta
-            return tasks[idx]?.workItemId
+            return operations[idx]?.operationId
         },
-        [currentIndex, tasks],
+        [currentIndex, operations],
     )
 
-    const activeLease =
-        leaseRef.current?.workItemId === task?.workItemId
-            ? leaseRef.current
-            : null
-    void leaseEpoch
-
-    const validationIssues = task && draft ? clientValidation(task, draft) : []
+    const validationIssues =
+        operation && draft ? clientValidation(operation, draft) : []
     const canPost =
         canExecute &&
-        Boolean(task && draft) &&
+        Boolean(operation && draft) &&
         validationIssues.length === 0 &&
         !(
-            task?.gate.state === "BLOCKED" &&
-            task.operationType !== "WAREHOUSE_SHIP"
+            operation?.gate.state === "BLOCKED" &&
+            operation.operationType !== "WAREHOUSE_SHIP"
         ) &&
-        !task?.actionBlockers.some((b) => b.action === "POST")
+        !operation?.actionBlockers.some((b) => b.action === "POST")
 
     const formalPending =
         postMutation.isPending ||
-        deferMutation.isPending ||
-        claimMutation.isPending
-
-    const ensureLease = React.useCallback(async () => {
-        if (!task) throw new Error("无当前任务")
-        if (leaseRef.current?.workItemId === task.workItemId) {
-            return leaseRef.current
-        }
-        const lease = await claimMutation.mutateAsync(task.workItemId)
-        const session: SessionLease = {
-            workItemId: lease.workItemId,
-        }
-        leaseRef.current = session
-        setLeaseEpoch((n) => n + 1)
-        return session
-    }, [claimMutation, task])
+        saveMutation.isPending ||
+        resolveUnknownMutation.isPending
+    const supportsSave =
+        draft?.type === "RECEIPT" ||
+        draft?.type === "WAREHOUSE_SHIP" ||
+        draft?.type === "SUPPLIER_DIRECT"
 
     const updateDraft = React.useCallback((next: FulfillmentDraft) => {
         setDraft(next)
@@ -386,20 +319,29 @@ export function FulfillmentOperationsPage() {
 
     /** 回到最近一次保存的草稿；多处「请先保存或放弃」提示都指向这里 */
     const handleDiscard = React.useCallback(() => {
-        if (!task) return
-        setDraft(cloneDraft(task.draft))
+        if (!operation) return
+        setDraft(cloneDraft(operation.draft))
         setDirty(false)
         setActionError(null)
         setSaveMessage(null)
-    }, [task])
+    }, [operation])
 
     const handleSave = React.useCallback(async (): Promise<boolean> => {
-        if (!task || !draft) return false
+        if (!operation || !draft) return false
+        if (!supportsSave) {
+            setActionError("这类履约单据没有草稿保存命令，请直接确认")
+            return false
+        }
         try {
-            await ensureLease()
             await saveMutation.mutateAsync({
-                workItemId: task.workItemId,
-                expectedEditVersion: task.editVersion,
+                operationId: operation.operationId,
+                expectedDocumentVersion: operation.editVersion,
+                expectedSourceVersion: operation.sourceVersion,
+                idempotencyKey: createIdempotencyKey(
+                    operation.operationId,
+                    operation.editVersion,
+                    "save",
+                ),
                 draft,
             })
             setDirty(false)
@@ -410,7 +352,7 @@ export function FulfillmentOperationsPage() {
             setActionError(getErrorMessage(error, "保存失败"))
             return false
         }
-    }, [draft, ensureLease, saveMutation, task])
+    }, [draft, saveMutation, supportsSave, operation])
 
     const advanceIfNeeded = React.useCallback(
         (
@@ -422,28 +364,35 @@ export function FulfillmentOperationsPage() {
             const nextId =
                 preferredNext ??
                 neighborId(1) ??
-                tasks.find((t) => t.workItemId !== task?.workItemId)?.workItemId
-            leaseRef.current = null
-            setLeaseEpoch((n) => n + 1)
-            if (nextId) goToWorkItem(nextId, keepResult)
-            else replaceUrl({ currentWorkItemId: null })
+                operations.find((t) => t.operationId !== operation?.operationId)
+                    ?.operationId
+            if (nextId) goToOperation(nextId, keepResult)
+            else replaceUrl({ currentOperationId: null })
         },
-        [goToWorkItem, neighborId, replaceUrl, task?.workItemId, tasks],
+        [
+            goToOperation,
+            neighborId,
+            replaceUrl,
+            operation?.operationId,
+            operations,
+        ],
     )
 
     const handlePost = React.useCallback(async () => {
-        if (!task || !draft) return
+        if (!operation || !draft) return
         setActionError(null)
         try {
-            await ensureLease()
             const nextId = neighborId(1)
             const response = await postMutation.mutateAsync({
-                workItemId: task.workItemId,
-                expectedSubjectVersion: task.sourceVersion,
-                expectedSourceVersion: task.sourceVersion,
-                expectedEditVersion: task.editVersion,
+                operationId: operation.operationId,
+                expectedSourceVersion: operation.sourceVersion,
+                expectedDocumentVersion: operation.editVersion,
+                idempotencyKey: createIdempotencyKey(
+                    operation.operationId,
+                    operation.editVersion,
+                    "post",
+                ),
                 draft,
-                nextWorkItemId: nextId,
             })
             setConfirmOpen(false)
 
@@ -461,9 +410,6 @@ export function FulfillmentOperationsPage() {
                 setActionError(response.message)
                 return
             }
-            if (response.outcome.kind !== "POSTED") return
-            leaseRef.current = null
-            setLeaseEpoch((n) => n + 1)
             setLastResult({
                 status: "succeeded",
                 title: OPERATION_DONE_LABEL[response.outcome.operationType],
@@ -475,86 +421,37 @@ export function FulfillmentOperationsPage() {
                 stayOnItem: !autoNext,
             })
             if (autoNext) {
-                advanceIfNeeded(true, response.outcome.nextWorkItemId, true)
+                advanceIfNeeded(true, nextId, true)
             }
         } catch (error) {
             setActionError(getErrorMessage(error, "没能提交成功"))
         }
-    }, [
-        advanceIfNeeded,
-        autoNext,
-        draft,
-        ensureLease,
-        neighborId,
-        postMutation,
-        task,
-    ])
+    }, [advanceIfNeeded, autoNext, draft, neighborId, postMutation, operation])
 
-    const handleDefer = React.useCallback(
-        async (value: DeferSubmitValue) => {
-            if (!task) return
-            setActionError(null)
-            try {
-                // 兜底保存失败就中止跳过，避免刚填的内容静默丢失
-                if (dirty) {
-                    const saved = await handleSave()
-                    if (!saved) {
-                        setActionError("草稿还没保存成功，先保存再跳过。")
-                        return
-                    }
-                }
-                await ensureLease()
-                const nextId = neighborId(1)
-                const response = await deferMutation.mutateAsync({
-                    workItemId: task.workItemId,
-                    queueContextId,
-                    reasonCode: value.reasonCode,
-                    reasonNote: value.reasonNote?.trim() || undefined,
-                    nextWorkItemId: nextId,
-                })
-                setDeferOpen(false)
-                if (
-                    response.status !== "succeeded" ||
-                    response.outcome.kind !== "DEFERRED"
-                ) {
-                    if (response.status === "failed")
-                        setActionError(response.message)
-                    return
-                }
-                leaseRef.current = null
-                setLeaseEpoch((n) => n + 1)
-                setLastResult({
-                    status: "blocked",
-                    title: "已跳过这一条",
-                    description: `原因：${DEFER_REASON_LABEL[response.outcome.reasonCode]}${
-                        response.outcome.reasonNote
-                            ? ` · ${response.outcome.reasonNote}`
-                            : ""
-                    }。任务仍在待处理队列；本次处理已结束并进入下一条。`,
-                    reference: response.outcome.reference,
-                    outcome: response.outcome,
-                })
-                if (nextId) goToWorkItem(nextId, true)
-            } catch (error) {
-                setActionError(getErrorMessage(error, "没能跳过"))
-            }
-        },
-        [
-            deferMutation,
-            dirty,
-            ensureLease,
-            goToWorkItem,
-            handleSave,
-            neighborId,
-            queueContextId,
-            task,
-        ],
-    )
+    const handleSkip = React.useCallback(() => {
+        if (dirty) {
+            setActionError("有未保存修改，请先保存或放弃后再切换")
+            return
+        }
+        const nextId = neighborId(1)
+        if (!nextId) {
+            setActionError("当前已是最后一条单据")
+            return
+        }
+        goToOperation(nextId)
+    }, [dirty, goToOperation, neighborId])
 
     const handleResolveUnknown = React.useCallback(async () => {
-        if (!task || !draft) return
+        if (!operation || !draft) return
         const response = await resolveUnknownMutation.mutateAsync({
-            workItemId: task.workItemId,
+            operationId: operation.operationId,
+            idempotencyKey:
+                lastResult?.pendingIdempotencyKey ??
+                createIdempotencyKey(
+                    operation.operationId,
+                    operation.editVersion,
+                    "post",
+                ),
         })
         if (response.status === "unknown") {
             setLastResult({
@@ -579,9 +476,16 @@ export function FulfillmentOperationsPage() {
                 outcome: response.outcome,
                 stayOnItem: !autoNext,
             })
-            if (autoNext) advanceIfNeeded(true, response.outcome.nextWorkItemId)
+            if (autoNext) advanceIfNeeded(true)
         }
-    }, [advanceIfNeeded, autoNext, draft, resolveUnknownMutation, task])
+    }, [
+        advanceIfNeeded,
+        autoNext,
+        draft,
+        lastResult?.pendingIdempotencyKey,
+        resolveUnknownMutation,
+        operation,
+    ])
 
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
@@ -598,8 +502,7 @@ export function FulfillmentOperationsPage() {
                 event.key.toLowerCase() === "s"
             ) {
                 event.preventDefault()
-                // 只读角色按 Ctrl+S 不能触发保存 —— 那会去抢处理权
-                if (canExecute) void handleSave()
+                if (canExecute && supportsSave) void handleSave()
                 return
             }
             if (
@@ -608,7 +511,6 @@ export function FulfillmentOperationsPage() {
                 !inField
             ) {
                 event.preventDefault()
-                // 与底部主按钮同条件：处理权由 handlePost 内的 ensureLease 兜底补领
                 if (canPost && !formalPending) setConfirmOpen(true)
                 return
             }
@@ -632,7 +534,7 @@ export function FulfillmentOperationsPage() {
                     return
                 }
                 const next = neighborId(1)
-                if (next) goToWorkItem(next)
+                if (next) goToOperation(next)
             }
             if (event.key === "k" || event.key === "ArrowUp") {
                 event.preventDefault()
@@ -641,7 +543,7 @@ export function FulfillmentOperationsPage() {
                     return
                 }
                 const prev = neighborId(-1)
-                if (prev) goToWorkItem(prev)
+                if (prev) goToOperation(prev)
             }
         }
         window.addEventListener("keydown", onKey)
@@ -650,10 +552,11 @@ export function FulfillmentOperationsPage() {
         canPost,
         dirty,
         formalPending,
-        goToWorkItem,
+        goToOperation,
         handleSave,
         neighborId,
         canExecute,
+        supportsSave,
     ])
 
     const setTypeFilter = React.useCallback(
@@ -665,11 +568,10 @@ export function FulfillmentOperationsPage() {
             setLastResult(null)
             replaceUrl({
                 type: next === "all" ? null : TYPE_SLUG[next],
-                currentWorkItemId: null,
-                queueContextId: `queue:W09:${laneKey}:${roleValue}:${scope}:${next === "all" ? "all" : TYPE_SLUG[next]}`,
+                currentOperationId: null,
             })
         },
-        [dirty, laneKey, replaceUrl, roleValue, scope],
+        [dirty, replaceUrl],
     )
 
     /** 空态出口：类型、单号、仓库、到期、门禁和来源对象筛选一次清干净 */
@@ -687,10 +589,9 @@ export function FulfillmentOperationsPage() {
             gate: null,
             salesOrderId: null,
             purchaseOrderId: null,
-            currentWorkItemId: null,
-            queueContextId: `queue:W09:${laneKey}:${roleValue}:${scope}:all`,
+            currentOperationId: null,
         })
-    }, [dirty, laneKey, replaceUrl, roleValue, scope])
+    }, [dirty, replaceUrl])
 
     const handlePatch = React.useCallback(
         (patch: Record<string, string | null | undefined>) => {
@@ -704,37 +605,33 @@ export function FulfillmentOperationsPage() {
         [dirty, replaceUrl],
     )
 
-    const leaseStatus = !task
-        ? "unclaimed"
-        : lastResult?.status === "unknown"
-          ? "active"
-          : activeLease
-            ? "active"
-            : "unclaimed"
-
-    const leaseLabel = !canExecute
+    const responsibilityStatus =
+        operation?.gate.state === "BLOCKED"
+            ? "blocked"
+            : canExecute
+              ? "assigned_to_me"
+              : "assigned_to_other"
+    const responsibilityStatusLabel = !canExecute
         ? "只能查看"
-        : activeLease
-          ? "你正在处理这一条"
-          : claimMutation.isPending
-            ? "正在接手…"
-            : "点「确认」即可接手"
+        : operation?.gate.state === "BLOCKED"
+          ? "业务条件未满足"
+          : "当前岗位可处理"
 
     /** 只读角色看到的一句话：谁在处理、什么时候要交 */
-    const readOnlyNote = task
-        ? `你只能查看。这条由 ${task.responsibleLabel} 处理，${
-              task.overdue
-                  ? `原定 ${task.dueLabel}，已超期`
-                  : `预计 ${task.dueLabel} 前完成`
+    const readOnlyNote = operation
+        ? `你只能查看。这条由 ${operation.responsibleLabel} 处理，${
+              operation.overdue
+                  ? `原定 ${operation.dueLabel}，已超期`
+                  : `预计 ${operation.dueLabel} 前完成`
           }。`
-        : "你只能查看这些任务的进度。"
+        : "你只能查看这些单据的进度。"
 
     const activeTypeSlug = typeParamValue(operationTypes)
     const sourceReturnHref =
         returnTo ??
-        (fromWorkspace === "W05" && task
-            ? `/sales/orders/${task.source.salesOrderId}`
-            : fromWorkspace === "W08" && task?.source.purchaseOrderId
+        (fromWorkspace === "W05" && operation
+            ? `/sales/orders/${operation.source.salesOrderId}`
+            : fromWorkspace === "W08" && operation?.source.purchaseOrderId
               ? `/procurement/orders`
               : fromWorkspace === "W10"
                 ? `/inventory`
@@ -753,7 +650,7 @@ export function FulfillmentOperationsPage() {
         )
     }
 
-    // 查询失败必须与「没有符合条件的任务」区分：系统故障 ≠ 没活干
+    // 查询失败必须与「没有符合条件的单据」区分：系统故障 ≠ 没活干
     if (queueQuery.isError) {
         return (
             <PageScaffold>
@@ -802,7 +699,7 @@ export function FulfillmentOperationsPage() {
                             className="text-xs text-muted-foreground"
                             aria-live="polite"
                         >
-                            {context?.filterSummary ?? "仅我的"} · 待处理{" "}
+                            {context?.filterSummary ?? "全部类型"} · 待处理{" "}
                             {context?.total ?? 0}
                         </span>
                     </div>
@@ -819,10 +716,10 @@ export function FulfillmentOperationsPage() {
                             ? workspaceLabel(fromWorkspace as WorkspaceId)
                             : "关联页面"}
                         进来的
-                        {task
-                            ? ` · 已经定位到 ${task.source.salesOrderNo}${
-                                  task.source.purchaseNo
-                                      ? ` / ${task.source.purchaseNo}`
+                        {operation
+                            ? ` · 已经定位到 ${operation.source.salesOrderNo}${
+                                  operation.source.purchaseNo
+                                      ? ` / ${operation.source.purchaseNo}`
                                       : ""
                               }`
                             : ""}
@@ -847,46 +744,6 @@ export function FulfillmentOperationsPage() {
                 )}
             >
                 <div className="flex flex-wrap items-center gap-2">
-                    {context?.viewerLabel ? (
-                        <div
-                            role="group"
-                            aria-label="看谁的任务"
-                            className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                        >
-                            {(
-                                [
-                                    { value: "mine" as const, label: "仅我的" },
-                                    {
-                                        value: "role_pool" as const,
-                                        label: "全组",
-                                    },
-                                ] as const
-                            ).map((opt) => (
-                                <button
-                                    key={opt.value}
-                                    type="button"
-                                    aria-pressed={scope === opt.value}
-                                    onClick={() =>
-                                        handlePatch({
-                                            scope:
-                                                opt.value === "mine"
-                                                    ? null
-                                                    : opt.value,
-                                            currentWorkItemId: null,
-                                        })
-                                    }
-                                    className={cn(
-                                        "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                        scope === opt.value
-                                            ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                            : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                    )}
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
-                        </div>
-                    ) : null}
                     <ToggleGroup
                         value={[
                             activeTypeSlug === "all" ? "all" : activeTypeSlug,
@@ -923,17 +780,17 @@ export function FulfillmentOperationsPage() {
                     salesOrderId={salesOrderId}
                     purchaseOrderId={purchaseOrderId}
                     salesOrderNo={
-                        tasks.find(
+                        operations.find(
                             (t) => t.source.salesOrderId === salesOrderId,
                         )?.source.salesOrderNo
                     }
                     purchaseNo={
-                        tasks.find(
+                        operations.find(
                             (t) => t.source.purchaseOrderId === purchaseOrderId,
                         )?.source.purchaseNo
                     }
                     autoNext={autoNext}
-                    total={context?.total ?? tasks.length}
+                    total={context?.total ?? operations.length}
                     showAutoNext={canExecute}
                     type={activeTypeSlug}
                     onPatch={handlePatch}
@@ -970,32 +827,9 @@ export function FulfillmentOperationsPage() {
                         }
                         reference={lastResult.reference}
                         facts={
-                            lastResult.outcome?.kind === "POSTED"
+                            lastResult.outcome
                                 ? buildPostedFacts(lastResult.outcome)
-                                : lastResult.outcome?.kind === "DEFERRED"
-                                  ? [
-                                        {
-                                            label: "跳过原因",
-                                            value: DEFER_REASON_LABEL[
-                                                lastResult.outcome.reasonCode
-                                            ],
-                                        },
-                                        {
-                                            label: "任务状态",
-                                            value:
-                                                WORK_ITEM_STATUS_LABEL[
-                                                    lastResult.outcome
-                                                        .workItemStatus
-                                                ] ??
-                                                lastResult.outcome
-                                                    .workItemStatus,
-                                        },
-                                        {
-                                            label: "处理状态",
-                                            value: "这次先放着，之后还会回到你的列表",
-                                        },
-                                    ]
-                                  : undefined
+                                : undefined
                         }
                         actions={
                             <div className="flex flex-wrap gap-2">
@@ -1035,14 +869,9 @@ export function FulfillmentOperationsPage() {
                                         size="sm"
                                         onClick={() => {
                                             const next =
-                                                (lastResult.outcome &&
-                                                    "nextWorkItemId" in
-                                                        lastResult.outcome &&
-                                                    lastResult.outcome
-                                                        .nextWorkItemId) ||
                                                 neighborId(1) ||
-                                                tasks[0]?.workItemId
-                                            goToWorkItem(next)
+                                                operations[0]?.operationId
+                                            goToOperation(next)
                                         }}
                                     >
                                         下一条
@@ -1087,44 +916,49 @@ export function FulfillmentOperationsPage() {
                         </div>
                     }
                 />
-            ) : task && draft ? (
+            ) : operation && draft ? (
                 <div className="grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]">
                     <FulfillmentQueueList
-                        tasks={tasks}
+                        operations={operations}
                         currentIndex={currentIndex}
                         position={context?.position ?? currentIndex + 1}
-                        total={context?.total ?? tasks.length}
-                        onSelect={(workItemId) => {
-                            if (dirty && workItemId !== task.workItemId) {
+                        total={context?.total ?? operations.length}
+                        onSelect={(operationId) => {
+                            if (
+                                dirty &&
+                                operationId !== operation.operationId
+                            ) {
                                 setActionError(
                                     "有未保存修改，请先保存或放弃后再切换",
                                 )
                                 return
                             }
-                            goToWorkItem(workItemId)
+                            goToOperation(operationId)
                         }}
                     />
 
                     <div className="min-w-0 space-y-3">
                         <SequentialProcessBar
                             current={context?.position ?? currentIndex + 1}
-                            total={context?.total ?? tasks.length}
-                            leaseStatus={canExecute ? leaseStatus : "active"}
-                            leaseStatusLabel={leaseLabel}
+                            total={context?.total ?? operations.length}
+                            responsibilityStatus={responsibilityStatus}
+                            responsibilityStatusLabel={
+                                responsibilityStatusLabel
+                            }
                             showProcess={canExecute}
                             processLabel={
-                                OPERATION_ACTION_LABEL[task.operationType]
+                                OPERATION_ACTION_LABEL[operation.operationType]
                             }
                             // 没有独立的「并下一项」路径：两个 handler 同义，第二个按钮名不副实
                             showProcessNext={false}
                             processDisabled={formalPending || !canPost}
                             statusExtras={
-                                task.gate.state !== "NOT_APPLICABLE" ? (
+                                operation.gate.state !== "NOT_APPLICABLE" ? (
                                     <PrepaymentGate
                                         id="prepayment-gate"
                                         presentation="badge"
                                         copy={
-                                            task.operationType ===
+                                            operation.operationType ===
                                             "WAREHOUSE_SHIP"
                                                 ? {
                                                       title: "发货条件",
@@ -1146,7 +980,7 @@ export function FulfillmentOperationsPage() {
                                                       allowedBody:
                                                           "货款已经够了，这一单可以继续。",
                                                       blockedBody:
-                                                          "差额补齐之前，仓发任务暂时不能确认发货。",
+                                                          "差额补齐之前，仓发单据暂时不能确认发货。",
                                                   }
                                                 : {
                                                       title: "先款条件",
@@ -1174,25 +1008,28 @@ export function FulfillmentOperationsPage() {
                                         condition={{
                                             kind: "amount",
                                             required:
-                                                task.gate.requiredAmount ?? "—",
-                                            description: task.gate.message,
+                                                operation.gate.requiredAmount ??
+                                                "—",
+                                            description: operation.gate.message,
                                         }}
                                         allocated={
-                                            task.gate.effectivePaidAmount ?? "—"
+                                            operation.gate
+                                                .effectivePaidAmount ?? "—"
                                         }
                                         gap={
-                                            task.gate.state === "BLOCKED" &&
-                                            task.gate.requiredAmount &&
-                                            task.gate.effectivePaidAmount
+                                            operation.gate.state ===
+                                                "BLOCKED" &&
+                                            operation.gate.requiredAmount &&
+                                            operation.gate.effectivePaidAmount
                                                 ? String(
                                                       Math.max(
                                                           0,
                                                           Number(
-                                                              task.gate
+                                                              operation.gate
                                                                   .requiredAmount,
                                                           ) -
                                                               Number(
-                                                                  task.gate
+                                                                  operation.gate
                                                                       .effectivePaidAmount,
                                                               ),
                                                       ),
@@ -1206,17 +1043,18 @@ export function FulfillmentOperationsPage() {
                                                 "",
                                         }}
                                         allowed={
-                                            task.gate.state === "SATISFIED"
+                                            operation.gate.state === "SATISFIED"
                                         }
                                         paymentAction={
-                                            task.gate.state === "BLOCKED" ? (
+                                            operation.gate.state ===
+                                            "BLOCKED" ? (
                                                 <Button
                                                     type="button"
                                                     size="sm"
                                                     variant="outline"
                                                     render={
                                                         <Link
-                                                            href={`/finance/supplier-accounts?from=W09&purchaseOrderId=${task.source.purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(
+                                                            href={`/finance/supplier-accounts?from=W09&purchaseOrderId=${operation.source.purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(
                                                                 `${pathname}?${searchParams.toString()}`,
                                                             )}`}
                                                         />
@@ -1233,12 +1071,12 @@ export function FulfillmentOperationsPage() {
                                         id="prepayment-gate"
                                         tone="neutral"
                                         label={
-                                            task.operationType ===
+                                            operation.operationType ===
                                             "WAREHOUSE_SHIP"
                                                 ? "发货条件：无先款要求"
                                                 : "无先款要求"
                                         }
-                                        description={task.gate.message}
+                                        description={operation.gate.message}
                                     />
                                 )
                             }
@@ -1250,13 +1088,6 @@ export function FulfillmentOperationsPage() {
                             backLabel="返回"
                             onProcess={() => setConfirmOpen(true)}
                             onProcessNext={() => setConfirmOpen(true)}
-                            onReclaim={() => {
-                                void ensureLease().catch((e) =>
-                                    setActionError(
-                                        getErrorMessage(e, "没能接手这一条"),
-                                    ),
-                                )
-                            }}
                         />
 
                         <button
@@ -1286,33 +1117,25 @@ export function FulfillmentOperationsPage() {
                                         >
                                             {
                                                 OPERATION_TYPE_LABEL[
-                                                    task.operationType
+                                                    operation.operationType
                                                 ]
                                             }{" "}
-                                            · {task.source.salesOrderNo}
+                                            · {operation.source.salesOrderNo}
                                         </CardTitle>
                                         <CardDescription>
-                                            {task.source.customerLabel}
-                                            {task.source.purchaseNo
-                                                ? ` · 采购 ${task.source.purchaseNo}`
+                                            {operation.source.customerLabel}
+                                            {operation.source.purchaseNo
+                                                ? ` · 采购 ${operation.source.purchaseNo}`
                                                 : ""}
-                                            {task.source.supplierLabel
-                                                ? ` · ${task.source.supplierLabel}`
+                                            {operation.source.supplierLabel
+                                                ? ` · ${operation.source.supplierLabel}`
                                                 : ""}
                                         </CardDescription>
                                     </div>
                                     <BusinessStatusBadge
                                         context="list"
-                                        label={
-                                            task.held
-                                                ? "已跳过"
-                                                : task.statusLabel
-                                        }
-                                        tone={
-                                            task.held
-                                                ? "warning"
-                                                : task.statusTone
-                                        }
+                                        label={operation.statusLabel}
+                                        tone={operation.statusTone}
                                     />
                                 </div>
                             </CardHeader>
@@ -1322,27 +1145,28 @@ export function FulfillmentOperationsPage() {
                                         {[
                                             {
                                                 label: "销售单",
-                                                value: task.source.salesOrderNo,
-                                                href: `/sales/orders/${task.source.salesOrderId}?from=W09&returnTo=${encodeURIComponent(
+                                                value: operation.source
+                                                    .salesOrderNo,
+                                                href: `/sales/orders/${operation.source.salesOrderId}?from=W09&returnTo=${encodeURIComponent(
                                                     `${pathname}?${searchParams.toString()}`,
                                                 )}`,
                                             },
                                             {
                                                 label: "采购单",
                                                 value:
-                                                    task.source.purchaseNo ??
-                                                    "—",
+                                                    operation.source
+                                                        .purchaseNo ?? "—",
                                             },
                                             {
                                                 label: "仓库",
                                                 value:
-                                                    task.source
+                                                    operation.source
                                                         .warehouseLabel ??
                                                     "不涉及仓库",
                                             },
                                             {
                                                 label: "还剩多少",
-                                                value: task.lines
+                                                value: operation.lines
                                                     .map(
                                                         (l) =>
                                                             `${l.itemName} ${l.remainingQuantity}${l.unitCode}`,
@@ -1353,12 +1177,12 @@ export function FulfillmentOperationsPage() {
                                             {
                                                 label: "供应商",
                                                 value:
-                                                    task.source.supplierLabel ??
-                                                    "—",
+                                                    operation.source
+                                                        .supplierLabel ?? "—",
                                             },
                                             {
                                                 label: "客户",
-                                                value: task.source
+                                                value: operation.source
                                                     .customerLabel,
                                             },
                                         ].map((field) => (
@@ -1395,7 +1219,7 @@ export function FulfillmentOperationsPage() {
                                 <Separator />
 
                                 <FulfillmentDraftForm
-                                    task={task}
+                                    operation={operation}
                                     draft={draft}
                                     onChange={updateDraft}
                                     disabled={
@@ -1424,9 +1248,9 @@ export function FulfillmentOperationsPage() {
                                             type="button"
                                             variant="ghost"
                                             disabled={formalPending}
-                                            onClick={() => setDeferOpen(true)}
+                                            onClick={handleSkip}
                                         >
-                                            <PauseIcon data-icon="inline-start" />
+                                            <SkipForwardIcon data-icon="inline-start" />
                                             先跳过
                                         </Button>
                                         <Button
@@ -1442,7 +1266,11 @@ export function FulfillmentOperationsPage() {
                                             type="button"
                                             variant="secondary"
                                             className="rounded-lg shadow-none"
-                                            disabled={formalPending || !dirty}
+                                            disabled={
+                                                formalPending ||
+                                                !dirty ||
+                                                !supportsSave
+                                            }
                                             onClick={() => void handleSave()}
                                         >
                                             <SaveIcon data-icon="inline-start" />
@@ -1455,9 +1283,9 @@ export function FulfillmentOperationsPage() {
                                         >
                                             <CircleCheckIcon data-icon="inline-start" />
                                             {autoNext
-                                                ? `${OPERATION_ACTION_LABEL[task.operationType]}并下一条`
+                                                ? `${OPERATION_ACTION_LABEL[operation.operationType]}并下一条`
                                                 : OPERATION_ACTION_LABEL[
-                                                      task.operationType
+                                                      operation.operationType
                                                   ]}
                                         </Button>
                                     </div>
@@ -1478,7 +1306,7 @@ export function FulfillmentOperationsPage() {
                                             className="rounded-lg shadow-none"
                                             render={
                                                 <Link
-                                                    href={`/sales/orders/${task.source.salesOrderId}?from=W09&returnTo=${encodeURIComponent(
+                                                    href={`/sales/orders/${operation.source.salesOrderId}?from=W09&returnTo=${encodeURIComponent(
                                                         `${pathname}?${searchParams.toString()}`,
                                                     )}`}
                                                 />
@@ -1497,7 +1325,7 @@ export function FulfillmentOperationsPage() {
                 <BusinessEmptyState
                     kind="no-scope"
                     className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                    title="你没有这类任务的权限"
+                    title="你没有这类单据的权限"
                     description={`${context?.roleLabel ?? FULFILLMENT_ROLES[roleValue].label}能处理的是：${visibleTypes
                         .map((t) => OPERATION_TYPE_SHORT[t])
                         .join("、")}。`}
@@ -1516,7 +1344,7 @@ export function FulfillmentOperationsPage() {
                 <BusinessEmptyState
                     kind="filter"
                     className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                    title="没有符合条件的任务"
+                    title="没有符合条件的单据"
                     description={context?.filterSummary ?? "换个类型或单号试试"}
                     action={
                         <Button
@@ -1535,39 +1363,38 @@ export function FulfillmentOperationsPage() {
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}
                 title={
-                    task
-                        ? OPERATION_CONFIRM_TITLE[task.operationType]
+                    operation
+                        ? OPERATION_CONFIRM_TITLE[operation.operationType]
                         : "确认？"
                 }
                 description="没确认成功之前，库存和留货都不会动。"
                 actionLabel={
-                    task ? OPERATION_ACTION_LABEL[task.operationType] : "确认"
+                    operation
+                        ? OPERATION_ACTION_LABEL[operation.operationType]
+                        : "确认"
                 }
                 confirmLabel={
-                    task ? OPERATION_ACTION_LABEL[task.operationType] : "确认"
+                    operation
+                        ? OPERATION_ACTION_LABEL[operation.operationType]
+                        : "确认"
                 }
                 fromStatus={{ label: "待确认", tone: "warning" }}
                 toStatus={{
-                    label: task
-                        ? OPERATION_DONE_LABEL[task.operationType]
+                    label: operation
+                        ? OPERATION_DONE_LABEL[operation.operationType]
                         : "已完成",
                     tone: "success",
                 }}
-                lockedFields={["来源单据、版本和留货", "任务类型"]}
-                effects={task && draft ? impactPreview(task, draft) : []}
+                lockedFields={["来源单据、版本和留货", "单据类型"]}
+                effects={
+                    operation && draft ? impactPreview(operation, draft) : []
+                }
                 irreversibleEffects={[CORRECTION_NOTICE]}
                 nextDepartment="做完之后由销售登记客户验收"
                 pending={postMutation.isPending}
                 onConfirm={async () => {
                     await handlePost()
                 }}
-            />
-
-            <FulfillmentDeferDialog
-                open={deferOpen}
-                onOpenChange={setDeferOpen}
-                pending={deferMutation.isPending}
-                onSubmit={handleDefer}
             />
         </PageScaffold>
     )

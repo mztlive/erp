@@ -82,15 +82,13 @@ impl DocumentState for ProcurementConfirmationStatus {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ProcurementRejectReasonCode {
     /// 无法履约。
-    CannotFulfill,
+    Unfulfillable,
     /// 成本上涨。
     CostIncrease,
     /// 交期不满足。
-    DeliveryNotMet,
+    DeliveryUnmet,
     /// 资质失效。
-    QualificationExpired,
-    /// 其他。
-    Other,
+    QualificationInvalid,
 }
 
 impl ProcurementRejectReasonCode {
@@ -100,11 +98,10 @@ impl ProcurementRejectReasonCode {
     /// 返回面向用户的中文标签。
     pub fn label(&self) -> &'static str {
         match self {
-            Self::CannotFulfill => "无法履约",
+            Self::Unfulfillable => "无法履约",
             Self::CostIncrease => "成本上涨",
-            Self::DeliveryNotMet => "交期不满足",
-            Self::QualificationExpired => "资质失效",
-            Self::Other => "其他",
+            Self::DeliveryUnmet => "交期不满足",
+            Self::QualificationInvalid => "资质失效",
         }
     }
 
@@ -114,11 +111,10 @@ impl ProcurementRejectReasonCode {
     /// 返回用于持久化与查询的稳定字符串。
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::CannotFulfill => "CANNOT_FULFILL",
+            Self::Unfulfillable => "UNFULFILLABLE",
             Self::CostIncrease => "COST_INCREASE",
-            Self::DeliveryNotMet => "DELIVERY_NOT_MET",
-            Self::QualificationExpired => "QUALIFICATION_EXPIRED",
-            Self::Other => "OTHER",
+            Self::DeliveryUnmet => "DELIVERY_UNMET",
+            Self::QualificationInvalid => "QUALIFICATION_INVALID",
         }
     }
 }
@@ -235,6 +231,21 @@ impl ProcurementConfirmation {
         Ok(())
     }
 
+    /// 记录一次待处理确认工作数据编辑。
+    ///
+    /// 分行保存在独立集合，本方法只保护确认仍为 `Pending` 并更新领域修改人；
+    /// 持久化仓储在同一事务递增确认编辑版本。
+    ///
+    /// # 错误
+    /// 确认已进入终态，或操作人为空、过长时返回错误。
+    pub fn record_edit(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        ensure_transition(self.stable.status, ProcurementConfirmationStatus::Pending)?;
+        let updated_by =
+            normalize_required_text(updated_by.into(), "编辑人不能为空", HANDLER_MAX_LEN, "编辑人过长")?;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
     /// 通过采购确认（`Pending → Approved`）。
     ///
     /// 处理人与时间必须成对提供；「确认数量覆盖承诺数量」属于跨行断言（§6.5），
@@ -259,6 +270,7 @@ impl ProcurementConfirmation {
     /// * `handled_by` - 采购处理人
     /// * `handled_at` - 处理时间
     /// * `reject_reason_code` - 驳回原因代码
+    /// * `comment` - 可选补充说明
     ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
@@ -270,11 +282,14 @@ impl ProcurementConfirmation {
         handled_by: impl Into<String>,
         handled_at: Instant,
         reject_reason_code: ProcurementRejectReasonCode,
+        comment: Option<String>,
     ) -> Result<()> {
         ensure_transition(self.stable.status, ProcurementConfirmationStatus::Rejected)?;
         let handled_by =
             normalize_required_text(handled_by.into(), "处理人不能为空", HANDLER_MAX_LEN, "处理人过长")?;
+        let comment = normalize_optional_text(comment, "补充说明", COMMENT_MAX_LEN)?;
         self.reject_reason_code = Some(reject_reason_code);
+        self.comment = comment;
         self.stable.status = ProcurementConfirmationStatus::Rejected;
         self.handled_by = Some(handled_by.clone());
         self.handled_at = Some(handled_at);
@@ -478,14 +493,16 @@ mod tests {
             .reject(
                 "procurement-2",
                 Instant::from_unix_secs(1_800_000_100),
-                ProcurementRejectReasonCode::DeliveryNotMet,
+                ProcurementRejectReasonCode::DeliveryUnmet,
+                Some(" 交期无法满足 ".to_string()),
             )
             .unwrap();
         assert_eq!(rejected.stable.status(), ProcurementConfirmationStatus::Rejected);
         assert_eq!(
             rejected.reject_reason_code,
-            Some(ProcurementRejectReasonCode::DeliveryNotMet)
+            Some(ProcurementRejectReasonCode::DeliveryUnmet)
         );
+        assert_eq!(rejected.comment.as_deref(), Some("交期无法满足"));
 
         // 终态逐边定向断言
         assert!(rejected
@@ -516,6 +533,21 @@ mod tests {
         assert!(
             confirmation.update(data(), "procurement-1").is_err(),
             "已通过不可再更新"
+        );
+        assert!(confirmation.record_edit("procurement-1").is_err());
+    }
+
+    #[test]
+    fn record_edit_updates_domain_actor_only_while_pending() {
+        let mut confirmation =
+            ProcurementConfirmation::new(ProcurementConfirmationId::new("pc-1"), data(), "system-1").unwrap();
+
+        confirmation.record_edit(" procurement-1 ").unwrap();
+
+        assert_eq!(confirmation.stable.updated_by, "procurement-1");
+        assert_eq!(
+            confirmation.stable.status(),
+            ProcurementConfirmationStatus::Pending
         );
     }
 

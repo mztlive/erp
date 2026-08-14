@@ -555,7 +555,7 @@ export function OverviewPanel({
     order: SalesOrderDetailView
     showApproval: boolean
     onApprovalResult?: (result: {
-        status: "succeeded" | "blocked" | "rejected"
+        status: "succeeded" | "blocked" | "rejected" | "unknown"
         title: string
         description: string
         reference: string
@@ -572,6 +572,15 @@ export function OverviewPanel({
                     approval={order.activeCardSalesApproval}
                     onResult={onApprovalResult}
                 />
+            ) : null}
+
+            {showApproval && order.cardApprovalProjectionBlocker ? (
+                <Alert variant="destructive">
+                    <AlertTitle>审批信息未就绪</AlertTitle>
+                    <AlertDescription>
+                        {order.cardApprovalProjectionBlocker}
+                    </AlertDescription>
+                </Alert>
             ) : null}
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 xl:grid-cols-3">

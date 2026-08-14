@@ -13,5 +13,7 @@ pub use errors::{Error, Result};
 pub use executor::{Executor, NoTransaction};
 pub use indexes::ensure_indexes;
 pub use repository::extensions::*;
-pub use repository::{Repository, SkuRow, SupplierOfferingRow};
+pub use repository::{
+    Repository, SkuRow, StartProcessingEligibility, StartProcessingOutcome, SupplierOfferingRow, WorkItemRow,
+};
 pub use transaction::Transactional;

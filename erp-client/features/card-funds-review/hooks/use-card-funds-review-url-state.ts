@@ -10,9 +10,9 @@ import type {
 } from "@/features/card-funds-review/types"
 
 export function useCardFundsReviewUrlState(): {
-    scope: "mine" | "role_pool"
+    scope: "mine" | "team" | "history"
     type: "all" | "opening" | "delta"
-    status: "pending" | "held"
+    status: "OPEN" | "COMPLETED" | "CLOSED"
     due: "all" | "today" | "overdue"
     q: string | undefined
     currentWorkItemId: string | undefined
@@ -30,14 +30,20 @@ export function useCardFundsReviewUrlState(): {
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
-    const scope: "mine" | "role_pool" =
-        searchParams.get("scope") === "role_pool" ? "role_pool" : "mine"
+    const scope: "mine" | "team" | "history" =
+        searchParams.get("scope") === "team"
+            ? "team"
+            : searchParams.get("scope") === "history"
+              ? "history"
+              : "mine"
     const typeParam = searchParams.get("type")
     const type: "all" | "opening" | "delta" =
         typeParam === "opening" || typeParam === "delta" ? typeParam : "all"
     const statusParam = searchParams.get("status")
-    const status: "pending" | "held" =
-        statusParam === "held" ? "held" : "pending"
+    const status: "OPEN" | "COMPLETED" | "CLOSED" =
+        statusParam === "COMPLETED" || statusParam === "CLOSED"
+            ? statusParam
+            : "OPEN"
     const dueParam = searchParams.get("due")
     const due: "all" | "today" | "overdue" =
         dueParam === "today" || dueParam === "overdue" ? dueParam : "all"
@@ -127,7 +133,7 @@ export function useCardFundsReviewDefaultUrlSync(args: {
     view: CardFundsReviewQueueView | undefined
     task: CardFundsReviewItemView | undefined
     taskCount: number
-    scope: "mine" | "role_pool"
+    scope: "mine" | "team" | "history"
     type: "all" | "opening" | "delta"
     queueContextId: string
 }): void {

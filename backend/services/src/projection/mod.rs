@@ -23,11 +23,15 @@ mod query;
 mod revision;
 mod service;
 
-pub use self::connector::{ClassifiedError, DeliverAck, MallConnector, UnavailableMallConnector};
+pub use self::connector::{
+    ClassifiedError, DeliverAck, MallConnector, QueryProjectionResult, UnavailableMallConnector,
+};
 pub(crate) use self::dto::projection_content_hash;
 pub use self::dto::{
     CreateSalesOrderProjectionRequest, CreateSalesOrderProjectionRevisionRequest,
-    DeliverProjectionRevisionRequest, PageView, ProjectionDeliveryResultView,
+    DeliverProjectionRevisionRequest, PageView, ProcessProjectionDeliveriesRequest,
+    ProcessProjectionDeliveriesResult, ProjectionActionBlockerView, ProjectionDeliveryAction,
+    ProjectionDeliveryActionResult, ProjectionDeliveryCommand, ProjectionDeliveryResultView,
     SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView, SalesOrderProjectionListParams,
     SalesOrderProjectionRevisionView, SalesOrderProjectionView,
 };

@@ -7,17 +7,17 @@ import { Label } from "@/components/ui/label"
 import type {
     FulfillmentDraft,
     FulfillmentResultCode,
-    FulfillmentTask,
+    FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 import { RESULT_OPTIONS } from "@/features/fulfillment-operations/types"
 
 export function FulfillmentElectronicForm({
-    task,
+    operation,
     draft,
     onChange,
     disabled,
 }: {
-    task: FulfillmentTask
+    operation: FulfillmentOperation
     draft: Extract<FulfillmentDraft, { type: "ELECTRONIC" }>
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
@@ -64,7 +64,7 @@ export function FulfillmentElectronicForm({
                 </div>
             </div>
             {draft.lines.map((line, i) => {
-                const src = task.lines.find(
+                const src = operation.lines.find(
                     (l) => l.salesOrderLineId === line.salesOrderLineId,
                 )
                 return (
@@ -74,7 +74,7 @@ export function FulfillmentElectronicForm({
                     >
                         <p className="text-sm font-medium">{src?.itemName}</p>
                         <p className="text-xs text-muted-foreground">
-                            对应 {task.source.salesOrderNo}
+                            对应 {operation.source.salesOrderNo}
                         </p>
                         <div className="space-y-1.5">
                             <Label htmlFor={`el-qty-${i}`}>交付数量</Label>

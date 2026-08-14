@@ -7,16 +7,16 @@ import { Label } from "@/components/ui/label"
 import { CARRIER_OPTIONS } from "@/lib/business-options"
 import type {
     FulfillmentDraft,
-    FulfillmentTask,
+    FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 
 export function FulfillmentShipForm({
-    task,
+    operation,
     draft,
     onChange,
     disabled,
 }: {
-    task: FulfillmentTask
+    operation: FulfillmentOperation
     draft: Extract<FulfillmentDraft, { type: "WAREHOUSE_SHIP" }>
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
@@ -66,7 +66,7 @@ export function FulfillmentShipForm({
                 </div>
             </div>
             {draft.lines.map((line, i) => {
-                const src = task.lines.find(
+                const src = operation.lines.find(
                     (l) => l.salesOrderLineId === line.salesOrderLineId,
                 )
                 return (
@@ -76,7 +76,7 @@ export function FulfillmentShipForm({
                     >
                         <p className="text-sm font-medium">{src?.itemName}</p>
                         <p className="text-xs text-muted-foreground">
-                            已为 {task.source.salesOrderNo} 留货{" "}
+                            已为 {operation.source.salesOrderNo} 留货{" "}
                             <span className="num">{src?.reservedQuantity}</span>
                             {src?.unitCode} · 仓库现有{" "}
                             <span className="num">{src?.availableOnHand}</span>

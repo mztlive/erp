@@ -222,8 +222,8 @@ export type AccessImpactPreview = Readonly<{
         after: string
         note?: string
     }[]
-    /** 服务端返回：是否因 Q1 复核策略未固化而阻断 */
-    reviewPolicyBlocker?: ActionBlocker
+    /** 服务端未明确允许对象级直达时的结构化提交阻断。 */
+    submissionBlocker?: ActionBlocker
 }>
 
 export type AccessChangeOutcome =
@@ -281,8 +281,8 @@ export type AccessListView = Readonly<{
     auditCoverageTo?: string
     allowedActions: readonly string[]
     actionBlockers: readonly ActionBlocker[]
-    /** Q1：本工作面不接收 work_item，无领取/完成入口 */
-    workItemSupport: "DISABLED_Q1"
+    /** 本工作面只提交权限对象命令，不承载任务处理。 */
+    workItemSupport: "DISABLED"
 }>
 
 export type AccessChangeCommand =

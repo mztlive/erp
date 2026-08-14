@@ -2,12 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import {
-    CircleCheckIcon,
-    PauseIcon,
-    TriangleAlertIcon,
-    XIcon,
-} from "lucide-react"
+import { CircleCheckIcon, TriangleAlertIcon, XIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -46,24 +41,21 @@ import type {
 } from "@/features/card-funds-review/types"
 import {
     APPROVE_CONCLUSION_LABEL,
-    REJECT_FOLLOW_UP_COLLABORATION,
     REVIEW_TYPE_LABEL,
     WORK_ITEM_TYPE_LABEL,
 } from "@/features/card-funds-review/types"
 import {
     useCardFundsReviewQueueQuery,
-    useClaimCardFundsMutation,
     useCompleteCardFundsMutation,
-    useHoldCardFundsMutation,
     useRegisterInvoiceMutation,
     useRegisterReceiptMutation,
-    useSaveCardFundsEvidenceMutation,
 } from "../hooks/queries"
+import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import {
     useCardFundsReviewDefaultUrlSync,
     useCardFundsReviewUrlState,
 } from "../hooks/use-card-funds-review-url-state"
-import { freshnessText, openWorkspaceLabel, versionText } from "@/lib/ui-text"
+import { freshnessText, openWorkspaceLabel } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import { CardFundsAllocationEditor } from "../components/card-funds-allocation-editor"
@@ -76,18 +68,13 @@ import type { RejectReviewValue } from "../components/reject-review-dialog"
 import { ReviewChainPanel } from "../components/review-chain-panel"
 import { formatMoney, moneyStrSafe, shortHash } from "../lib/presentation"
 
-type SessionLease = {
-    workItemId: string
-    subjectVersion: string
-}
-
 type ResultState = SharedResultState<FormalOutcome>
 
 type ConfirmMode =
     | { kind: "approve"; conclusion: ApproveConclusion; advance: boolean }
     | { kind: "zero"; advance: boolean }
     | { kind: "reject" }
-    | { kind: "hold" }
+    | { kind: "release" }
     | null
 
 export function CardFundsReviewPage() {
@@ -123,12 +110,10 @@ export function CardFundsReviewPage() {
     )
 
     const queueQuery = useCardFundsReviewQueueQuery(filters)
-    const claimMutation = useClaimCardFundsMutation()
+    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const completeMutation = useCompleteCardFundsMutation()
-    const holdMutation = useHoldCardFundsMutation()
     const registerReceiptMutation = useRegisterReceiptMutation()
     const registerInvoiceMutation = useRegisterInvoiceMutation()
-    const saveEvidenceMutation = useSaveCardFundsEvidenceMutation()
 
     const view = queueQuery.data
     const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
@@ -182,9 +167,6 @@ export function CardFundsReviewPage() {
     const [allocLines, setAllocLines] = React.useState<AllocationDraftLine[]>(
         [],
     )
-    const [evidenceSavedAt, setEvidenceSavedAt] = React.useState<string | null>(
-        null,
-    )
     const [evidenceDirty, setEvidenceDirty] = React.useState(false)
     const [pendingNav, setPendingNav] = React.useState<number | null>(null)
     const [keyHint, setKeyHint] = React.useState<string | null>(null)
@@ -193,8 +175,6 @@ export function CardFundsReviewPage() {
 
     const headingRef = React.useRef<HTMLHeadingElement>(null)
     const resultRef = React.useRef<HTMLDivElement>(null)
-    const leaseRef = React.useRef<SessionLease | null>(null)
-    const [leaseEpoch, setLeaseEpoch] = React.useState(0)
 
     React.useEffect(() => {
         if (!task) return
@@ -216,41 +196,8 @@ export function CardFundsReviewPage() {
             taxAmount: "",
         })
         setAllocLines([])
-        setEvidenceSavedAt(null)
         setEvidenceDirty(false)
     }, [task])
-
-    // 自动领取（含登记票款后版本刷新：任务 subjectVersion 变化时重新领取）
-    React.useEffect(() => {
-        if (!task) return
-        const held = leaseRef.current
-        if (
-            held?.workItemId === task.workItem.workItemId &&
-            held.subjectVersion === task.workItem.subjectVersion
-        ) {
-            return
-        }
-        if (claimMutation.isPending) return
-        let cancelled = false
-        void claimMutation
-            .mutateAsync(task.workItem.workItemId)
-            .then((lease) => {
-                if (cancelled) return
-                leaseRef.current = {
-                    workItemId: lease.workItemId,
-                    subjectVersion: lease.subjectVersion,
-                }
-                setLeaseEpoch((n) => n + 1)
-            })
-            .catch((error) => {
-                if (cancelled) return
-                setActionError(getErrorMessage(error, "任务领取失败，请重试"))
-            })
-        return () => {
-            cancelled = true
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅任务或版本变化时领取
-    }, [task?.workItem.workItemId, task?.workItem.subjectVersion])
 
     // 焦点：结果区 / 对象标题；位置播报由 SequentialProcessBar aria-live
     React.useEffect(() => {
@@ -276,7 +223,7 @@ export function CardFundsReviewPage() {
     // 清除筛选：清 type/status/due/q + 焦点，保留 scope/queueContextId（P4）。
     // type 不写默认值「all」，遵循 URL 最小化（默认值省略语义，D18）
     const hasActiveQueueFilters = Boolean(
-        q || status === "held" || due !== "all" || type !== "all",
+        q || status !== "OPEN" || due !== "all" || type !== "all",
     )
 
     const clearFilters = React.useCallback(() => {
@@ -298,44 +245,15 @@ export function CardFundsReviewPage() {
         [currentIndex, tasks],
     )
 
-    const activeLease =
-        leaseRef.current?.workItemId === task?.workItem.workItemId
-            ? leaseRef.current
-            : null
-    void leaseEpoch
-
-    const leaseStatus: "active" | "unclaimed" | "lost" | "expiring" =
-        activeLease ? "active" : "unclaimed"
-    const leaseLabel = activeLease ? "已领取" : "未领取"
-
-    const ensureLease = React.useCallback(async () => {
-        if (!task) throw new Error("无当前任务")
-        const held = leaseRef.current
-        if (held?.workItemId === task.workItem.workItemId) {
-            // 登记回款/发票后任务版本已刷新：继续用旧版本提交会被阻断，须重新领取
-            if (held.subjectVersion === task.workItem.subjectVersion) {
-                return held
+    const assertAllowed = React.useCallback(
+        (action: (typeof task.workItem.allowedActions)[number]) => {
+            if (!task) throw new Error("无当前任务")
+            if (!task.workItem.allowedActions.includes(action)) {
+                throw new Error("当前责任或业务版本已变化，请刷新后再处理")
             }
-            const lease = await claimMutation.mutateAsync(
-                task.workItem.workItemId,
-            )
-            const session: SessionLease = {
-                workItemId: lease.workItemId,
-                subjectVersion: lease.subjectVersion,
-            }
-            leaseRef.current = session
-            setLeaseEpoch((n) => n + 1)
-            return session
-        }
-        const lease = await claimMutation.mutateAsync(task.workItem.workItemId)
-        const session: SessionLease = {
-            workItemId: lease.workItemId,
-            subjectVersion: lease.subjectVersion,
-        }
-        leaseRef.current = session
-        setLeaseEpoch((n) => n + 1)
-        return session
-    }, [claimMutation, task])
+        },
+        [task],
+    )
 
     const buildDecisionBase = React.useCallback(
         (reviewResult: "APPROVED" | "REJECTED") => {
@@ -346,6 +264,22 @@ export function CardFundsReviewPage() {
             const evidenceReferences = evidenceRef.trim()
                 ? [evidenceRef.trim()]
                 : []
+            if (
+                !task.reviewChain.chainVersion ||
+                task.reviewChain.nextReviewNo <= 0 ||
+                !task.currentSalesOrderRevisionId ||
+                !task.fundsFactVersion
+            ) {
+                throw new Error(
+                    "复核记录、销售版本或票款记录不完整，已禁止提交",
+                )
+            }
+            if (
+                evidenceDocumentIds.length === 0 &&
+                evidenceReferences.length === 0
+            ) {
+                throw new Error("正式复核必须提供凭证编号或证据说明")
+            }
             return {
                 receivableAccountId: task.account.id,
                 expectedAccountSeq: task.account.accountSeq,
@@ -359,7 +293,6 @@ export function CardFundsReviewPage() {
                 evidenceDocumentIds,
                 evidenceReferences,
                 comment: comment.trim() || undefined,
-                expectedSubjectHash: task.workItem.subjectHash,
                 reviewResult,
             }
         },
@@ -375,8 +308,6 @@ export function CardFundsReviewPage() {
                 tasks.find(
                     (t) => t.workItem.workItemId !== task?.workItem.workItemId,
                 )?.workItem.workItemId
-            leaseRef.current = null
-            setLeaseEpoch((n) => n + 1)
             if (nextId) goToWorkItem(nextId)
             else replaceUrl({ currentWorkItemId: null, queueContextId })
         },
@@ -396,7 +327,11 @@ export function CardFundsReviewPage() {
             if (!task) return
             setActionError(null)
             try {
-                const lease = await ensureLease()
+                assertAllowed(
+                    conclusion === "NO_HISTORY_FROM_ZERO"
+                        ? "CONFIRM_ZERO"
+                        : "APPROVE",
+                )
                 const base = buildDecisionBase("APPROVED")
                 const decision: CardFundsReviewDecision = {
                     ...base,
@@ -405,8 +340,10 @@ export function CardFundsReviewPage() {
                 }
                 const response = await completeMutation.mutateAsync({
                     workItemId: task.workItem.workItemId,
-                    expectedSubjectVersion: lease.subjectVersion,
+                    expectedTaskVersion: task.workItem.taskVersion,
+                    expectedSubjectVersion: task.workItem.subjectVersion,
                     decision,
+                    idempotencyKey: `w13:${task.workItem.workItemId}:${task.workItem.taskVersion}:approve:${conclusion}`,
                 })
                 setConfirmMode(null)
 
@@ -415,17 +352,22 @@ export function CardFundsReviewPage() {
                         setActionError(response.message)
                         throw new Error(response.message)
                     }
+                    setLastResult({
+                        status: "unknown",
+                        title: "复核结果待确认",
+                        description: response.message,
+                        reference: response.idempotencyKey,
+                        stayOnItem: true,
+                    })
                     return
                 }
                 if (response.outcome.kind !== "APPROVED") return
                 const biz = response.outcome.business
-                leaseRef.current = null
-                setLeaseEpoch((n) => n + 1)
                 setLastResult({
                     status: "succeeded",
                     title: `复核通过 · 复核号 ${biz.reviewNo}`,
                     description: `${APPROVE_CONCLUSION_LABEL[biz.conclusion as ApproveConclusion]} · ${advance && autoNext ? "自动下一项" : "手动继续"}`,
-                    reference: biz.reference,
+                    reference: biz.operationId,
                     outcome: response.outcome,
                     stayOnItem: !(advance && autoNext),
                 })
@@ -442,7 +384,7 @@ export function CardFundsReviewPage() {
             autoNext,
             buildDecisionBase,
             completeMutation,
-            ensureLease,
+            assertAllowed,
             task,
         ],
     )
@@ -452,7 +394,7 @@ export function CardFundsReviewPage() {
             if (!task) return
             setActionError(null)
             try {
-                const lease = await ensureLease()
+                assertAllowed("REJECT")
                 const base = buildDecisionBase("REJECTED")
                 const decision: CardFundsReviewDecision = {
                     ...base,
@@ -460,36 +402,38 @@ export function CardFundsReviewPage() {
                     conclusion: "REJECTED",
                     reasonCode: value.reasonCode,
                     comment: value.comment.trim(),
-                    evidenceDocumentIds:
-                        base.evidenceDocumentIds.length > 0
-                            ? base.evidenceDocumentIds
-                            : ["doc_reject_note"],
-                    evidenceReferences:
-                        base.evidenceReferences.length > 0
-                            ? base.evidenceReferences
-                            : [`驳回说明:${value.comment.trim().slice(0, 40)}`],
+                    evidenceDocumentIds: base.evidenceDocumentIds,
+                    evidenceReferences: base.evidenceReferences,
                 }
                 const response = await completeMutation.mutateAsync({
                     workItemId: task.workItem.workItemId,
-                    expectedSubjectVersion: lease.subjectVersion,
+                    expectedTaskVersion: task.workItem.taskVersion,
+                    expectedSubjectVersion: task.workItem.subjectVersion,
                     decision,
+                    idempotencyKey: `w13:${task.workItem.workItemId}:${task.workItem.taskVersion}:reject`,
                 })
                 setConfirmMode(null)
                 if (response.status !== "succeeded") {
                     if (response.status === "failed") {
                         setActionError(response.message)
+                    } else {
+                        setLastResult({
+                            status: "unknown",
+                            title: "驳回结果待确认",
+                            description: response.message,
+                            reference: response.idempotencyKey,
+                            stayOnItem: true,
+                        })
                     }
                     return
                 }
                 if (response.outcome.kind !== "REJECTED") return
                 const biz = response.outcome.business
-                leaseRef.current = null
-                setLeaseEpoch((n) => n + 1)
                 setLastResult({
                     status: "rejected",
                     title: `已驳回 · 复核号 ${biz.reviewNo}`,
-                    description: `${REJECT_FOLLOW_UP_COLLABORATION}`,
-                    reference: biz.reference,
+                    description: biz.followUpConfiguration.collaborationMessage,
+                    reference: biz.operationId,
                     outcome: response.outcome,
                     stayOnItem: !autoNext,
                 })
@@ -505,46 +449,46 @@ export function CardFundsReviewPage() {
             autoNext,
             buildDecisionBase,
             completeMutation,
-            ensureLease,
+            assertAllowed,
             task,
         ],
     )
 
-    const handleHold = React.useCallback(async () => {
+    const handleReleaseToTeam = React.useCallback(async () => {
         if (!task) return
         setActionError(null)
         try {
-            const lease = await ensureLease()
-            const response = await holdMutation.mutateAsync({
+            assertAllowed("RELEASE_TO_TEAM")
+            const response = await responsibilityMutation.mutateAsync({
+                kind: "RELEASE_TO_TEAM",
                 workItemId: task.workItem.workItemId,
-                expectedSubjectVersion: lease.subjectVersion,
-                reasonCode: "NEED_MORE_EVIDENCE",
-                note: comment.trim() || "跳过：待补充票款证据",
-                nextWorkItemId: neighborId(1),
+                expectedTaskVersion: task.workItem.taskVersion,
+                reason: comment.trim() || "待团队补充票款证据",
+                idempotencyKey: `w13:${task.workItem.workItemId}:${task.workItem.taskVersion}:release`,
             })
             setConfirmMode(null)
-            if (
-                response.status !== "succeeded" ||
-                response.outcome.kind !== "HELD"
-            ) {
-                if (response.status === "failed")
-                    setActionError(response.message)
-                return
+            if (response.status !== "OPEN") {
+                throw new Error("退回团队后任务未保持开放")
             }
-            leaseRef.current = null
-            setLeaseEpoch((n) => n + 1)
+            const released: FormalOutcome = {
+                kind: "RELEASED_TO_TEAM",
+                workItemId: response.id,
+                workItemStatus: "OPEN",
+                taskVersion: String(response.task_version),
+                reference: response.id,
+            }
             setLastResult({
                 status: "blocked",
-                title: "当前项已跳过 · 仍在待处理列表",
-                description: response.outcome.resumeHint,
-                reference: response.outcome.reference,
-                outcome: response.outcome,
+                title: "当前项已退回团队",
+                description:
+                    "原任务保持待处理，未形成复核记录；个人责任已退回团队。",
+                reference: released.reference,
+                outcome: released,
             })
-            // 暂挂不自动移动；结果面板给出可见反馈，用户按「下一项」或 j/k 继续
         } catch (error) {
-            setActionError(getErrorMessage(error, "跳过失败"))
+            setActionError(getErrorMessage(error, "退回团队失败"))
         }
-    }, [comment, ensureLease, holdMutation, neighborId, task])
+    }, [assertAllowed, comment, responsibilityMutation, task])
 
     const openAllocation = React.useCallback(
         (mode: "receipt" | "invoice") => {
@@ -569,10 +513,10 @@ export function CardFundsReviewPage() {
         if (!task) return
         setActionError(null)
         try {
-            const lease = await ensureLease()
+            assertAllowed("REGISTER_RECEIPT")
             const result = await registerReceiptMutation.mutateAsync({
                 workItemId: task.workItem.workItemId,
-                expectedSubjectVersion: lease.subjectVersion,
+                expectedSubjectVersion: task.workItem.subjectVersion,
                 receiptNo:
                     receiptForm.receiptNo.trim() ||
                     `SK-${Date.now().toString(36).toUpperCase()}`,
@@ -590,16 +534,12 @@ export function CardFundsReviewPage() {
                 reference: result.fundsFactVersion,
                 stayOnItem: true,
             })
-            // 租约仍有效但 subject 已变：刷新 lease 展示
-            leaseRef.current = {
-                ...lease,
-            }
         } catch (error) {
             setActionError(getErrorMessage(error, "登记回款失败"))
         }
     }, [
         allocLines,
-        ensureLease,
+        assertAllowed,
         evidenceRef,
         receiptForm,
         registerReceiptMutation,
@@ -610,7 +550,7 @@ export function CardFundsReviewPage() {
         if (!task) return
         setActionError(null)
         try {
-            const lease = await ensureLease()
+            assertAllowed("REGISTER_INVOICE")
             const gross = invoiceForm.grossAmount
             const net =
                 invoiceForm.netAmount || moneyStrSafe(Number(gross) / 1.13)
@@ -619,7 +559,7 @@ export function CardFundsReviewPage() {
                 moneyStrSafe(Number(gross) - Number(net))
             const result = await registerInvoiceMutation.mutateAsync({
                 workItemId: task.workItem.workItemId,
-                expectedSubjectVersion: lease.subjectVersion,
+                expectedSubjectVersion: task.workItem.subjectVersion,
                 invoiceNo:
                     invoiceForm.invoiceNo.trim() ||
                     `FP-${Date.now().toString(36).toUpperCase()}`,
@@ -643,48 +583,14 @@ export function CardFundsReviewPage() {
         }
     }, [
         allocLines,
-        ensureLease,
+        assertAllowed,
         evidenceRef,
         invoiceForm,
         registerInvoiceMutation,
         task,
     ])
 
-    const saveEvidence = React.useCallback(async () => {
-        if (!task) return
-        try {
-            const lease = await ensureLease()
-            await saveEvidenceMutation.mutateAsync({
-                workItemId: task.workItem.workItemId,
-                expectedSubjectVersion: lease.subjectVersion,
-                evidenceDocumentIds: evidenceDocId.trim()
-                    ? [evidenceDocId.trim()]
-                    : [],
-                evidenceReferences: evidenceRef.trim()
-                    ? [evidenceRef.trim()]
-                    : [],
-                comment: comment.trim() || undefined,
-            })
-            setEvidenceSavedAt(
-                new Date().toLocaleString("zh-CN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                }),
-            )
-            setEvidenceDirty(false)
-        } catch (error) {
-            setActionError(getErrorMessage(error, "保存证据失败"))
-        }
-    }, [
-        comment,
-        ensureLease,
-        evidenceDocId,
-        evidenceRef,
-        saveEvidenceMutation,
-        task,
-    ])
-
-    // 键盘：j/k 导航；⌘↵ 打开正式确认（未领取时给出提示）
+    // 键盘：j/k 导航；⌘↵ 仅在服务端允许正式决定时打开确认
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null
@@ -701,10 +607,10 @@ export function CardFundsReviewPage() {
                 !inField
             ) {
                 event.preventDefault()
-                if (activeLease && task) {
+                if (task?.workItem.allowedActions.includes("APPROVE")) {
                     if (!evidenceOk) {
                         setKeyHint(
-                            "请先填写凭证编号或证据说明并保存证据，再通过复核。",
+                            "请先填写凭证编号或证据说明；证据将随正式决定一并提交。",
                         )
                         window.setTimeout(() => setKeyHint(null), 3000)
                         return
@@ -723,7 +629,7 @@ export function CardFundsReviewPage() {
                               },
                     )
                 } else if (task) {
-                    setKeyHint("任务尚未领取，无法提交；请先点击「领取任务」。")
+                    setKeyHint("当前责任或任务状态不允许提交，请刷新后重试。")
                     window.setTimeout(() => setKeyHint(null), 3000)
                 }
                 return
@@ -753,7 +659,7 @@ export function CardFundsReviewPage() {
         window.addEventListener("keydown", onKey)
         return () => window.removeEventListener("keydown", onKey)
     }, [
-        activeLease,
+        task?.workItem.allowedActions,
         autoNext,
         evidenceDirty,
         evidenceOk,
@@ -764,10 +670,56 @@ export function CardFundsReviewPage() {
 
     const formalPending =
         completeMutation.isPending ||
-        holdMutation.isPending ||
-        claimMutation.isPending
+        responsibilityMutation.isPending ||
+        lastResult?.status === "unknown"
+
+    const responsibilityStatus = task
+        ? task.workItem.workItemStatus === "COMPLETED"
+            ? ("completed" as const)
+            : task.workItem.workItemStatus === "CLOSED"
+              ? ("closed" as const)
+              : task.workItem.allowedActions.includes("START_PROCESSING")
+                ? ("pool_available" as const)
+                : task.workItem.allowedActions.some((action) =>
+                        [
+                            "APPROVE",
+                            "REJECT",
+                            "CONFIRM_ZERO",
+                            "RELEASE_TO_TEAM",
+                        ].includes(action),
+                    )
+                  ? ("assigned_to_me" as const)
+                  : task.workItem.actionBlockers.length > 0
+                    ? ("blocked" as const)
+                    : task.workItem.ownerUser
+                      ? ("assigned_to_other" as const)
+                      : ("blocked" as const)
+        : ("blocked" as const)
+
+    const startProcessing = React.useCallback(async () => {
+        if (!task) return
+        setActionError(null)
+        try {
+            assertAllowed("START_PROCESSING")
+            await responsibilityMutation.mutateAsync({
+                kind: "START_PROCESSING",
+                workItemId: task.workItem.workItemId,
+                expectedTaskVersion: task.workItem.taskVersion,
+                idempotencyKey: `w13:${task.workItem.workItemId}:${task.workItem.taskVersion}:start`,
+            })
+            replaceUrl({
+                scope: null,
+                queueContextId: null,
+                currentWorkItemId: task.workItem.workItemId,
+            })
+            await queueQuery.refetch()
+        } catch (error) {
+            setActionError(getErrorMessage(error, "开始处理失败"))
+        }
+    }, [assertAllowed, queueQuery, replaceUrl, responsibilityMutation, task])
 
     const canConfirmZero =
+        task?.workItem.allowedActions.includes("CONFIRM_ZERO") &&
         task?.reviewType === "OPENING" &&
         Number(task.account.settledTotal) === 0 &&
         Number(task.account.invoicedTotal) === 0
@@ -879,6 +831,7 @@ export function CardFundsReviewPage() {
                             <div className="flex flex-wrap gap-2">
                                 <Button
                                     type="button"
+                                    disabled={lastResult.status === "unknown"}
                                     onClick={() => {
                                         const next =
                                             context?.nextWorkItemId ??
@@ -958,13 +911,17 @@ export function CardFundsReviewPage() {
                     <SequentialProcessBar
                         current={context?.position ?? currentIndex + 1}
                         total={context?.total ?? tasks.length}
-                        leaseStatus={leaseStatus}
-                        leaseStatusLabel={leaseLabel}
+                        responsibilityStatus={responsibilityStatus}
+                        responsibilityStatusLabel={
+                            task.workItem.ownerUser
+                                ? `处理人：${task.workItem.ownerUser.displayName}`
+                                : undefined
+                        }
                         processLabel="复核通过"
                         processNextLabel="通过并打开下一条"
                         processDisabled={
                             formalPending ||
-                            Boolean(lastResult?.status === "unknown")
+                            !task.workItem.allowedActions.includes("APPROVE")
                         }
                         pending={formalPending}
                         backLabel="返回工作台"
@@ -972,7 +929,7 @@ export function CardFundsReviewPage() {
                         onProcess={() => {
                             if (!evidenceOk) {
                                 setActionError(
-                                    "请先填写凭证编号或证据说明并保存证据，再通过复核。",
+                                    "请先填写凭证编号或证据说明；证据将随正式决定一并提交。",
                                 )
                                 return
                             }
@@ -985,7 +942,7 @@ export function CardFundsReviewPage() {
                         onProcessNext={() => {
                             if (!evidenceOk) {
                                 setActionError(
-                                    "请先填写凭证编号或证据说明并保存证据，再通过复核。",
+                                    "请先填写凭证编号或证据说明；证据将随正式决定一并提交。",
                                 )
                                 return
                             }
@@ -995,14 +952,38 @@ export function CardFundsReviewPage() {
                                 advance: true,
                             })
                         }}
-                        onReclaim={() => {
-                            void ensureLease().catch((error) => {
-                                setActionError(
-                                    getErrorMessage(error, "领取失败"),
-                                )
-                            })
-                        }}
+                        onStartProcessing={
+                            task.workItem.allowedActions.includes(
+                                "START_PROCESSING",
+                            )
+                                ? () => void startProcessing()
+                                : undefined
+                        }
                     />
+
+                    {task.workItem.workItemStatus === "OPEN" &&
+                    !task.workItem.allowedActions.some((action) =>
+                        [
+                            "START_PROCESSING",
+                            "APPROVE",
+                            "REJECT",
+                            "CONFIRM_ZERO",
+                            "REGISTER_RECEIPT",
+                            "REGISTER_INVOICE",
+                            "RELEASE_TO_TEAM",
+                        ].includes(action),
+                    ) ? (
+                        <Alert variant="destructive">
+                            <TriangleAlertIcon aria-hidden="true" />
+                            <AlertTitle>票款复核处理器未就绪</AlertTitle>
+                            <AlertDescription>
+                                当前没有可执行的复核动作。为避免处理结果不完整，当前入口仅供查看。
+                                {task.workItem.actionBlockers[0]
+                                    ? ` ${task.workItem.actionBlockers[0].message}`
+                                    : ""}
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
 
                     <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,64fr)_minmax(17rem,36fr)]">
                         <div className="min-w-0 space-y-4">
@@ -1040,13 +1021,6 @@ export function CardFundsReviewPage() {
                                                 ]
                                             }
                                         </Badge>
-                                        {task.workItem.held ? (
-                                            <BusinessStatusBadge
-                                                context="list"
-                                                label="已跳过 · 仍在待处理列表"
-                                                tone="warning"
-                                            />
-                                        ) : null}
                                     </div>
                                     <CardDescription>
                                         数据版本 r{task.salesOrder.revisionNo} ·
@@ -1113,6 +1087,11 @@ export function CardFundsReviewPage() {
                                             <Input
                                                 id="ev-doc"
                                                 value={evidenceDocId}
+                                                disabled={
+                                                    task.workItem
+                                                        .workItemStatus !==
+                                                    "OPEN"
+                                                }
                                                 onChange={(e) => {
                                                     setEvidenceDocId(
                                                         e.target.value,
@@ -1129,6 +1108,11 @@ export function CardFundsReviewPage() {
                                             <Input
                                                 id="ev-ref"
                                                 value={evidenceRef}
+                                                disabled={
+                                                    task.workItem
+                                                        .workItemStatus !==
+                                                    "OPEN"
+                                                }
                                                 onChange={(e) => {
                                                     setEvidenceRef(
                                                         e.target.value,
@@ -1144,7 +1128,7 @@ export function CardFundsReviewPage() {
                                             className="text-xs text-destructive"
                                             role="alert"
                                         >
-                                            完成复核前须至少填写一项凭证编号或证据说明（保存证据后生效）。
+                                            完成复核前须至少填写一项凭证编号或证据说明；提交时将与复核结论一并保存。
                                         </p>
                                     ) : null}
                                     <div className="space-y-1.5">
@@ -1152,6 +1136,10 @@ export function CardFundsReviewPage() {
                                         <Textarea
                                             id="ev-comment"
                                             value={comment}
+                                            disabled={
+                                                task.workItem.workItemStatus !==
+                                                "OPEN"
+                                            }
                                             onChange={(e) => {
                                                 setComment(e.target.value)
                                                 setEvidenceDirty(true)
@@ -1160,28 +1148,6 @@ export function CardFundsReviewPage() {
                                         />
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={
-                                                saveEvidenceMutation.isPending ||
-                                                formalPending
-                                            }
-                                            onClick={() => void saveEvidence()}
-                                        >
-                                            {saveEvidenceMutation.isPending
-                                                ? "正在保存…"
-                                                : "保存证据"}
-                                        </Button>
-                                        {evidenceSavedAt ? (
-                                            <span
-                                                className="text-xs text-muted-foreground"
-                                                aria-live="polite"
-                                            >
-                                                证据已保存（{evidenceSavedAt}）
-                                            </span>
-                                        ) : null}
                                         {keyHint ? (
                                             <span
                                                 className="text-xs text-destructive"
@@ -1200,7 +1166,7 @@ export function CardFundsReviewPage() {
                                                 title={
                                                     evidenceOk
                                                         ? undefined
-                                                        : "须先填写并保存凭证编号或证据说明"
+                                                        : "须先填写凭证编号或证据说明"
                                                 }
                                                 onClick={() =>
                                                     setConfirmMode({
@@ -1216,12 +1182,16 @@ export function CardFundsReviewPage() {
                                         <Button
                                             type="button"
                                             disabled={
-                                                formalPending || !evidenceOk
+                                                formalPending ||
+                                                !evidenceOk ||
+                                                !task.workItem.allowedActions.includes(
+                                                    "APPROVE",
+                                                )
                                             }
                                             title={
                                                 evidenceOk
                                                     ? undefined
-                                                    : "须先填写并保存凭证编号或证据说明"
+                                                    : "须先填写凭证编号或证据说明"
                                             }
                                             onClick={() =>
                                                 setConfirmMode({
@@ -1237,7 +1207,13 @@ export function CardFundsReviewPage() {
                                         <Button
                                             type="button"
                                             variant="destructive"
-                                            disabled={formalPending}
+                                            disabled={
+                                                formalPending ||
+                                                !evidenceOk ||
+                                                !task.workItem.allowedActions.includes(
+                                                    "REJECT",
+                                                )
+                                            }
                                             onClick={() =>
                                                 setConfirmMode({
                                                     kind: "reject",
@@ -1250,13 +1226,19 @@ export function CardFundsReviewPage() {
                                         <Button
                                             type="button"
                                             variant="outline"
-                                            disabled={formalPending}
+                                            disabled={
+                                                formalPending ||
+                                                !task.workItem.allowedActions.includes(
+                                                    "RELEASE_TO_TEAM",
+                                                )
+                                            }
                                             onClick={() =>
-                                                setConfirmMode({ kind: "hold" })
+                                                setConfirmMode({
+                                                    kind: "release",
+                                                })
                                             }
                                         >
-                                            <PauseIcon data-icon="inline-start" />
-                                            先跳过
+                                            退回团队
                                         </Button>
                                     </div>
                                 </CardContent>
@@ -1309,7 +1291,7 @@ export function CardFundsReviewPage() {
                 description={
                     confirmMode?.kind === "zero"
                         ? `将提交「期初净额为零、无历史票款」结论：销售单 ${task?.salesOrder.orderNo ?? ""}、应收子账 #${task?.account.accountSeq ?? ""}（${task?.account.customerName ?? ""}）。不创建 0 元回款/发票。须证据完整；提交时将核对数据版本。`
-                        : `将提交「复核通过并核对票款记录」。复核类型 ${task ? REVIEW_TYPE_LABEL[task.reviewType] : ""}，当前数据版本 ${task ? shortHash(task.workItem.subjectHash) : ""}。`
+                        : `将提交「复核通过并核对票款记录」。复核类型 ${task ? REVIEW_TYPE_LABEL[task.reviewType] : ""}，当前数据版本 ${task ? shortHash(task.workItem.subjectVersion) : ""}。`
                 }
                 actionLabel={
                     confirmMode?.kind === "zero" ? "从 0 起并完成" : "复核通过"
@@ -1366,26 +1348,26 @@ export function CardFundsReviewPage() {
             />
 
             <FormalActionConfirmDialog
-                open={confirmMode?.kind === "hold"}
+                open={confirmMode?.kind === "release"}
                 onOpenChange={(open) => {
                     if (!open) setConfirmMode(null)
                 }}
-                title="先跳过当前复核任务"
-                description="跳过当前任务后，任务仍保留在待处理列表与「已跳过」范围；不生成复核记录。可手动浏览下一项。"
-                actionLabel="先跳过"
-                confirmLabel="确认跳过"
+                title="退回团队继续安排"
+                description="退回后原任务保持开放，只清除当前个人责任；不生成复核记录。"
+                actionLabel="退回团队"
+                confirmLabel="确认退回团队"
                 fromStatus={{ label: "处理中", tone: "info" }}
                 toStatus={{
-                    label: "已跳过（仍在待处理列表）",
+                    label: "团队待处理",
                     tone: "warning",
                 }}
                 effects={[
-                    "任务保留在待处理列表",
+                    "原任务保持开放",
+                    "清除当前个人责任",
                     "不生成复核记录",
-                    "不自动切换下一项，结果面板提示后手动继续",
                 ]}
-                pending={holdMutation.isPending}
-                onConfirm={() => void handleHold()}
+                pending={responsibilityMutation.isPending}
+                onConfirm={() => void handleReleaseToTeam()}
             />
 
             <RejectReviewDialog
@@ -1424,19 +1406,11 @@ function buildResultFacts(
     outcome?: FormalOutcome,
 ): { label: string; value: React.ReactNode }[] {
     if (!outcome) return []
-    if (outcome.kind === "HELD") {
+    if (outcome.kind === "RELEASED_TO_TEAM") {
         return [
-            {
-                label: "任务状态",
-                value:
-                    outcome.workItemStatus === "IN_PROGRESS"
-                        ? "处理中"
-                        : outcome.workItemStatus === "PENDING"
-                          ? "待处理"
-                          : "已处理",
-            },
-            { label: "跳过时间", value: outcome.heldAt },
-            { label: "恢复提示", value: outcome.resumeHint },
+            { label: "任务状态", value: "开放" },
+            { label: "责任状态", value: "已退回团队" },
+            { label: "任务版本", value: outcome.taskVersion },
         ]
     }
     const biz = outcome.business
@@ -1457,14 +1431,7 @@ function buildResultFacts(
                 hour12: false,
             }),
         },
-        {
-            label: versionText.dataVersion,
-            value: (
-                <span className="font-mono text-xs">
-                    {shortHash(biz.subjectHash)}
-                </span>
-            ),
-        },
+        { label: "操作号", value: biz.operationId },
     ]
     return facts
 }

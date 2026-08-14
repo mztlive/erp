@@ -20,6 +20,10 @@ import {
 } from "@/components/business"
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/api/errors"
+import {
+    classifyFormalCommandError,
+    FormalCommandKeyLedger,
+} from "@/lib/formal-command"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
@@ -32,12 +36,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
 import { useContractCenterQuery } from "@/features/contracts/queries"
 import type { UploadContractPdfResult } from "@/features/contracts/types"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     ContractSearchCombobox,
+    MallSearchCombobox,
     SellableSkuSearchCombobox,
     VoucherCategorySearchCombobox,
     entitySelectorKeys,
@@ -49,6 +55,11 @@ import {
     useSubmitSalesOrderMutation,
 } from "@/features/sales-orders/hooks/queries"
 import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders"
+import type {
+    ResolveProcurementRejectionPayload,
+    SubmitSalesOrderInput,
+} from "@/features/sales-orders/api/sales-orders"
+import { prepareProcurementRejectionResolution } from "@/features/sales-orders/api/sales-orders"
 import {
     calculateTotals,
     CARD_FORM_OPTIONS,
@@ -59,6 +70,7 @@ import {
     errorMessage,
     hasMeaningfulLines,
     NATURE_OPTIONS,
+    validateSalesOrderContractId,
     validateSalesOrderForm,
 } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
@@ -68,16 +80,48 @@ import type {
     SalesOrderDraftLineInput,
     SalesOrderNature,
 } from "@/features/sales-orders/types"
+import { localOrderNo } from "@/features/sales-orders/api/mappers"
 
 export type SalesOrderEditorPurpose = "create" | "draft" | "resubmit"
 
 export type SalesOrderEditorResult = {
-    status: "succeeded" | "blocked"
+    status: "succeeded" | "blocked" | "unknown"
     title: string
     description: string
     reference: string
     nextResponsible?: string
 }
+
+const parseEvidenceReferenceIds = (value: string): string[] =>
+    Array.from(
+        new Set(
+            value
+                .split(/[\s,，;；]+/)
+                .map((item) => item.trim())
+                .filter(Boolean),
+        ),
+    )
+
+const HEADER_VALIDATION_FIELDS = [
+    { name: "contractId", label: "有效合同", targetId: "contractId" },
+    { name: "ownerName", label: "负责销售", targetId: "ownerName" },
+    { name: "welfareScene", label: "福利场景", targetId: "welfareScene" },
+    { name: "paymentTerms", label: "付款条件", targetId: "paymentTerms" },
+    {
+        name: "fulfillmentDeadline",
+        label: "履约期限",
+        targetId: "fulfillmentDeadline",
+    },
+    { name: "targetMallId", label: "目标商城", targetId: "targetMallId" },
+    {
+        name: "receivableDueDate",
+        label: "应收到期日",
+        targetId: "receivableDueDate",
+    },
+    { name: "taxRatePercent", label: "税率", targetId: "taxRatePercent" },
+    { name: "customerName", label: "客户", targetId: "contractId" },
+    { name: "settlementEntity", label: "结算主体", targetId: "contractId" },
+] as const
 
 export function SalesOrderCreateForm({
     initialCustomerId = "",
@@ -89,6 +133,7 @@ export function SalesOrderCreateForm({
     chrome = "page",
     onResult,
     onSubmitted,
+    commandLedger: commandLedgerProp,
 }: {
     initialCustomerId?: string
     initialContractId?: string
@@ -101,6 +146,7 @@ export function SalesOrderCreateForm({
     chrome?: "page" | "none"
     onResult?: (result: SalesOrderEditorResult) => void
     onSubmitted?: (salesOrderId: string) => void
+    commandLedger?: FormalCommandKeyLedger
 }) {
     const router = useRouter()
     const queryClient = useQueryClient()
@@ -108,8 +154,21 @@ export function SalesOrderCreateForm({
     const saveDraftMutation = useSaveSalesOrderDraftMutation()
     const submitMutation = useSubmitSalesOrderMutation()
     const resubmitMutation = useResolveProcurementRejectionMutation()
+    const commandScope = initialDraft?.salesOrderId ?? "new-sales-order"
+    const commandLedgerRef = React.useRef<{
+        scope: string
+        ledger: FormalCommandKeyLedger
+    } | null>(null)
+    if (commandLedgerRef.current?.scope !== commandScope) {
+        commandLedgerRef.current = {
+            scope: commandScope,
+            ledger: new FormalCommandKeyLedger(),
+        }
+    }
+    const commandLedger = commandLedgerProp ?? commandLedgerRef.current.ledger
     const natureLocked = purpose !== "create"
     const [resubmitConfirmOpen, setResubmitConfirmOpen] = React.useState(false)
+    const [resubmitEvidence, setResubmitEvidence] = React.useState("")
     const profileQuery = useAccountProfileQuery()
     const [selectedContractId, setSelectedContractId] = React.useState(
         initialDraft?.contractId || initialContractId,
@@ -120,6 +179,10 @@ export function SalesOrderCreateForm({
     const contractQuery = useContractCenterQuery(selectedContractId)
     /** 继续编辑场景下，合同派生 effect 首次运行时不要覆盖已从草稿带回的付款条件。 */
     const skipPaymentTermsResetRef = React.useRef(initialDraft != null)
+    const [formalFailure, setFormalFailure] = React.useState<{
+        unknown: boolean
+        description: string
+    } | null>(null)
 
     /** 继续编辑场景：草稿在后端的身份与乐观锁版本，保存草稿从"新建"切到"更新"。 */
     const [draftIdentity, setDraftIdentity] = React.useState<{
@@ -158,6 +221,8 @@ export function SalesOrderCreateForm({
             welfareScene: initialDraft?.welfareScene ?? "",
             paymentTerms: initialDraft?.paymentTerms ?? "",
             fulfillmentDeadline: initialDraft?.fulfillmentDeadline ?? "",
+            targetMallId: initialDraft?.targetMallId ?? "",
+            receivableDueDate: initialDraft?.receivableDueDate ?? "",
             taxRatePercent:
                 initialDraft?.taxRatePercent ??
                 (nature === "card_voucher" ? "6.00" : "13.00"),
@@ -183,10 +248,6 @@ export function SalesOrderCreateForm({
                 validateSalesOrderForm(value, submitIntentRef.current),
         },
         onSubmit: async ({ value }) => {
-            const idempotencyKey =
-                typeof crypto !== "undefined" && "randomUUID" in crypto
-                    ? crypto.randomUUID()
-                    : `so-create-${Date.now()}`
             const draftContent = {
                 nature: value.nature,
                 ownerUserId: value.ownerUserId,
@@ -195,6 +256,8 @@ export function SalesOrderCreateForm({
                 paymentTerms:
                     paymentTermLabel(value.paymentTerms) || value.paymentTerms,
                 fulfillmentDeadline: value.fulfillmentDeadline,
+                targetMallId: value.targetMallId,
+                receivableDueDate: value.receivableDueDate,
                 taxRatePercent: value.taxRatePercent,
                 remark: value.remark,
                 lineItems: value.lineItems,
@@ -202,37 +265,93 @@ export function SalesOrderCreateForm({
 
             // 已经落过库的草稿：后续保存/提交都基于既有记录续接，不再新建。
             if (draftIdentity) {
-                const saved = await saveDraftMutation.mutateAsync({
-                    ...draftContent,
-                    salesOrderId: draftIdentity.salesOrderId,
-                    version: draftIdentity.version,
-                    contract: {
-                        contractId: value.contractId,
-                        requestedContractRevisionId:
-                            value.requestedContractRevisionId,
-                    },
-                })
-                setDraftIdentity({
-                    salesOrderId: draftIdentity.salesOrderId,
-                    documentNumber: draftIdentity.documentNumber,
-                    version: saved.version,
-                })
-                if (submitIntentRef.current === "SAVE_DRAFT") {
+                if (
+                    purpose === "resubmit" &&
+                    commandLedger.peek("procurement-rejection-resolution")
+                ) {
+                    setResubmitConfirmOpen(true)
+                    return
+                }
+
+                let command =
+                    commandLedger.peek<
+                        Omit<SubmitSalesOrderInput, "idempotencyKey">
+                    >("submit-existing")
+                if (submitIntentRef.current === "SAVE_DRAFT" && !command) {
+                    const saved = await saveDraftMutation.mutateAsync({
+                        ...draftContent,
+                        salesOrderId: draftIdentity.salesOrderId,
+                        version: draftIdentity.version,
+                        contract: {
+                            contractId: value.contractId,
+                            requestedContractRevisionId:
+                                value.requestedContractRevisionId,
+                        },
+                    })
+                    setDraftIdentity({
+                        salesOrderId: draftIdentity.salesOrderId,
+                        documentNumber: draftIdentity.documentNumber,
+                        version: saved.version,
+                    })
                     setDraftSaved({
                         documentNumber: draftIdentity.documentNumber,
                         savedAt: new Date(),
                     })
                     return
                 }
-                if (purpose === "resubmit") {
-                    setResubmitConfirmOpen(true)
-                    return
+
+                if (!command) {
+                    const saved = await saveDraftMutation.mutateAsync({
+                        ...draftContent,
+                        salesOrderId: draftIdentity.salesOrderId,
+                        version: draftIdentity.version,
+                        contract: {
+                            contractId: value.contractId,
+                            requestedContractRevisionId:
+                                value.requestedContractRevisionId,
+                        },
+                    })
+                    setDraftIdentity({
+                        salesOrderId: draftIdentity.salesOrderId,
+                        documentNumber: draftIdentity.documentNumber,
+                        version: saved.version,
+                    })
+                    if (purpose === "resubmit") {
+                        setResubmitConfirmOpen(true)
+                        return
+                    }
+                    command = commandLedger.acquire(
+                        "submit-existing",
+                        `sales:${draftIdentity.salesOrderId}:submit`,
+                        {
+                            salesOrderId: draftIdentity.salesOrderId,
+                            version: saved.version,
+                        },
+                    )
                 }
-                await submitMutation.mutateAsync({
-                    salesOrderId: draftIdentity.salesOrderId,
-                    version: saved.version,
-                    idempotencyKey,
-                })
+                if (!command) return
+                try {
+                    await submitMutation.mutateAsync({
+                        ...command.payload,
+                        idempotencyKey: command.idempotencyKey,
+                    })
+                    commandLedger.settle("submit-existing", "succeeded")
+                    setFormalFailure(null)
+                } catch (error) {
+                    const settlement = classifyFormalCommandError(error)
+                    commandLedger.settle("submit-existing", settlement)
+                    setFormalFailure({
+                        unknown: settlement === "unknown",
+                        description:
+                            settlement === "unknown"
+                                ? "当前输入已保留，请使用本次操作重试；确认前不要再次提交。"
+                                : getErrorMessage(
+                                      error,
+                                      "提交未完成，请重试。",
+                                  ),
+                    })
+                    throw error
+                }
                 form.reset()
                 onSubmitted?.(draftIdentity.salesOrderId)
                 if (!onSubmitted) {
@@ -241,18 +360,44 @@ export function SalesOrderCreateForm({
                 return
             }
 
-            const command: CreateSalesOrderInput = {
-                contract: {
-                    contractId: value.contractId,
-                    requestedContractRevisionId:
-                        value.requestedContractRevisionId,
-                },
-                ...draftContent,
-                intent: submitIntentRef.current,
-                idempotencyKey,
+            let command =
+                commandLedger.peek<
+                    Omit<CreateSalesOrderInput, "idempotencyKey">
+                >("create")
+            if (!command) {
+                command = commandLedger.acquire("create", "sales:create", {
+                    orderNo: localOrderNo(),
+                    contract: {
+                        contractId: value.contractId,
+                        requestedContractRevisionId:
+                            value.requestedContractRevisionId,
+                    },
+                    ...draftContent,
+                    intent: submitIntentRef.current,
+                })
             }
-            const result = await createMutation.mutateAsync(command)
-            if (submitIntentRef.current === "SAVE_DRAFT") {
+            if (!command) return
+            let result
+            try {
+                result = await createMutation.mutateAsync({
+                    ...command.payload,
+                    idempotencyKey: command.idempotencyKey,
+                })
+                commandLedger.settle("create", "succeeded")
+                setFormalFailure(null)
+            } catch (error) {
+                const settlement = classifyFormalCommandError(error)
+                commandLedger.settle("create", settlement)
+                setFormalFailure({
+                    unknown: settlement === "unknown",
+                    description:
+                        settlement === "unknown"
+                            ? "当前整单输入已保留，请使用本次操作重试；确认前不要再次创建。"
+                            : getErrorMessage(error, "销售单未创建，请重试。"),
+                })
+                throw error
+            }
+            if (command.payload.intent === "SAVE_DRAFT") {
                 setDraftIdentity({
                     salesOrderId: result.salesOrderId,
                     documentNumber: result.documentNumber,
@@ -380,6 +525,8 @@ export function SalesOrderCreateForm({
                 "taxRatePercent",
                 nature === "card_voucher" ? "6.00" : "13.00",
             )
+            form.setFieldValue("targetMallId", "")
+            form.setFieldValue("receivableDueDate", "")
             form.setFieldValue("lineItems", [createEmptyLine(nature)])
             setDraftSaved(null)
         },
@@ -398,6 +545,22 @@ export function SalesOrderCreateForm({
             }))
     })
 
+    /** 提交失败后汇总单据头错误，避免只拦提交却看不到原因。 */
+    const headerIssues = useSelector(form.store, (state) => {
+        if (state.submissionAttempts === 0) return []
+        return HEADER_VALIDATION_FIELDS.flatMap((field) => {
+            const meta = state.fieldMeta[field.name]
+            return toFieldErrors(meta?.errors ?? [])
+                .filter((error) => Boolean(error?.message))
+                .map((error, index) => ({
+                    id: `${field.name}-${index}`,
+                    label: field.label,
+                    message: error!.message!,
+                    targetId: field.targetId,
+                }))
+        })
+    })
+
     const editor = (
         <>
             {profileQuery.isError ? (
@@ -413,7 +576,21 @@ export function SalesOrderCreateForm({
                 </Alert>
             ) : null}
 
-            {createMutation.isError ? (
+            {formalFailure ? (
+                <Alert
+                    variant={formalFailure.unknown ? "warning" : "destructive"}
+                >
+                    <CircleAlertIcon aria-hidden="true" />
+                    <AlertTitle>
+                        {formalFailure.unknown
+                            ? "处理结果待确认"
+                            : "操作未完成"}
+                    </AlertTitle>
+                    <AlertDescription>
+                        {formalFailure.description}
+                    </AlertDescription>
+                </Alert>
+            ) : createMutation.isError ? (
                 <Alert variant="destructive">
                     <CircleAlertIcon aria-hidden="true" />
                     <AlertTitle>销售单未创建</AlertTitle>
@@ -472,7 +649,15 @@ export function SalesOrderCreateForm({
                                         settlementEntity,
                                     }) => (
                                         <div className="space-y-3">
-                                            <form.AppField name="contractId">
+                                            <form.AppField
+                                                name="contractId"
+                                                validators={{
+                                                    onSubmit: ({ value }) =>
+                                                        validateSalesOrderContractId(
+                                                            value,
+                                                        ),
+                                                }}
+                                            >
                                                 {(field) => {
                                                     const isInvalid =
                                                         field.state.meta
@@ -486,6 +671,8 @@ export function SalesOrderCreateForm({
                                                         )
                                                     return (
                                                         <Field
+                                                            id="contractId"
+                                                            tabIndex={-1}
                                                             data-invalid={
                                                                 isInvalid ||
                                                                 undefined
@@ -713,6 +900,104 @@ export function SalesOrderCreateForm({
                                             <field.DateField label="履约期限" />
                                         )}
                                     </form.AppField>
+                                    <form.Subscribe
+                                        selector={(state) =>
+                                            state.values.nature
+                                        }
+                                    >
+                                        {(nature) =>
+                                            nature === "card_voucher" ? (
+                                                <>
+                                                    <form.AppField
+                                                        name="targetMallId"
+                                                        validators={{
+                                                            onBlur: z
+                                                                .string()
+                                                                .trim()
+                                                                .min(
+                                                                    1,
+                                                                    "请选择目标商城",
+                                                                ),
+                                                        }}
+                                                    >
+                                                        {(field) => {
+                                                            const isInvalid =
+                                                                field.state.meta
+                                                                    .isTouched &&
+                                                                !field.state
+                                                                    .meta
+                                                                    .isValid
+                                                            const errors =
+                                                                toFieldErrors(
+                                                                    field.state
+                                                                        .meta
+                                                                        .errors,
+                                                                )
+                                                            return (
+                                                                <Field
+                                                                    data-invalid={
+                                                                        isInvalid ||
+                                                                        undefined
+                                                                    }
+                                                                >
+                                                                    <FieldLabel htmlFor="targetMallId">
+                                                                        目标商城
+                                                                    </FieldLabel>
+                                                                    <MallSearchCombobox
+                                                                        purpose="form"
+                                                                        value={
+                                                                            field
+                                                                                .state
+                                                                                .value ||
+                                                                            undefined
+                                                                        }
+                                                                        onValueChange={(
+                                                                            id,
+                                                                        ) =>
+                                                                            field.handleChange(
+                                                                                id ??
+                                                                                    "",
+                                                                            )
+                                                                        }
+                                                                        onBlur={
+                                                                            field.handleBlur
+                                                                        }
+                                                                        placeholder="选择执行投影目标商城"
+                                                                        emptyLabel="暂无启用中的商城"
+                                                                    />
+                                                                    {isInvalid ? (
+                                                                        <FieldError
+                                                                            errors={
+                                                                                errors
+                                                                            }
+                                                                        />
+                                                                    ) : null}
+                                                                </Field>
+                                                            )
+                                                        }}
+                                                    </form.AppField>
+                                                    <form.AppField
+                                                        name="receivableDueDate"
+                                                        validators={{
+                                                            onBlur: z
+                                                                .string()
+                                                                .min(
+                                                                    1,
+                                                                    "请选择应收到期日",
+                                                                ),
+                                                        }}
+                                                    >
+                                                        {(field) => (
+                                                            <field.DateField
+                                                                label="应收到期日"
+                                                                description="运营通过后按此日期形成应收；该日期不能早于提交日"
+                                                            />
+                                                        )}
+                                                    </form.AppField>
+                                                </>
+                                            ) : null
+                                        }
+                                    </form.Subscribe>
                                     <form.AppField
                                         name="taxRatePercent"
                                         validators={{
@@ -1286,6 +1571,14 @@ export function SalesOrderCreateForm({
                             </div>
                         </section>
 
+                        {headerIssues.length > 0 ? (
+                            <ValidationSummary
+                                className="border-t border-border/30 px-4 pt-4 md:px-5 lg:px-6"
+                                issues={headerIssues}
+                                title={`单据头共 ${headerIssues.length} 项待处理`}
+                            />
+                        ) : null}
+
                         <form.Subscribe selector={(state) => state.values}>
                             {(values) => {
                                 const totals = calculateTotals(
@@ -1527,6 +1820,30 @@ export function SalesOrderCreateForm({
                 open={resubmitConfirmOpen}
                 onOpenChange={setResubmitConfirmOpen}
                 title="再报给采购"
+                description={
+                    <div className="space-y-2 text-left">
+                        <p>
+                            请登记已上传的客户重新确认依据，再核对本次重提影响。
+                        </p>
+                        <label
+                            className="block space-y-1"
+                            htmlFor="resubmit-customer-evidence-ids"
+                        >
+                            <span className="text-xs font-medium text-foreground">
+                                客户确认依据 ID
+                            </span>
+                            <Input
+                                id="resubmit-customer-evidence-ids"
+                                value={resubmitEvidence}
+                                onChange={(event) =>
+                                    setResubmitEvidence(event.target.value)
+                                }
+                                placeholder="粘贴已登记的文件 ID；多个以逗号分隔"
+                                autoComplete="off"
+                            />
+                        </label>
+                    </div>
+                }
                 actionLabel="重提"
                 confirmLabel="确认再报"
                 fromStatus={{ label: "采购未通过", tone: "warning" }}
@@ -1541,12 +1858,54 @@ export function SalesOrderCreateForm({
                 pending={resubmitMutation.isPending}
                 onConfirm={async () => {
                     if (!draftIdentity) return
-                    try {
-                        const outcome = await resubmitMutation.mutateAsync({
-                            salesOrderId: draftIdentity.salesOrderId,
-                            action: "RESUBMIT_CHANGED_TERMS",
-                            idempotencyKey: `pr-${draftIdentity.salesOrderId}-${Date.now()}`,
+                    const evidenceIds =
+                        parseEvidenceReferenceIds(resubmitEvidence)
+                    if (evidenceIds.length === 0) {
+                        throw new Error("请至少填写一项客户重新确认依据 ID")
+                    }
+                    let command =
+                        commandLedger.peek<ResolveProcurementRejectionPayload>(
+                            "procurement-rejection-resolution",
+                        )
+                    if (
+                        command &&
+                        command.payload.action !== "RESUBMIT_CHANGED_TERMS"
+                    ) {
+                        onResult?.({
+                            status: "unknown",
+                            title: "处理结果待确认",
+                            description:
+                                "另一项处理的结果仍待确认，请先使用原操作重试。",
+                            reference: draftIdentity.documentNumber,
                         })
+                        throw new Error(
+                            "另一项处理的结果仍待确认，请先使用原操作重试。",
+                        )
+                    }
+                    try {
+                        if (!command) {
+                            const payload =
+                                await prepareProcurementRejectionResolution({
+                                    salesOrderId: draftIdentity.salesOrderId,
+                                    action: "RESUBMIT_CHANGED_TERMS",
+                                    customerReconfirmationEvidenceIds:
+                                        evidenceIds,
+                                })
+                            command = commandLedger.acquire(
+                                "procurement-rejection-resolution",
+                                `sales:${draftIdentity.salesOrderId}:procurement-resubmit`,
+                                payload,
+                            )
+                        }
+                        if (!command) return
+                        const outcome = await resubmitMutation.mutateAsync({
+                            ...command.payload,
+                            idempotencyKey: command.idempotencyKey,
+                        })
+                        commandLedger.settle(
+                            "procurement-rejection-resolution",
+                            "succeeded",
+                        )
                         onResult?.({
                             status: "succeeded",
                             title: "已改完并再报给采购",
@@ -1556,12 +1915,27 @@ export function SalesOrderCreateForm({
                         })
                         onSubmitted?.(draftIdentity.salesOrderId)
                     } catch (error) {
+                        const settlement = command
+                            ? classifyFormalCommandError(error)
+                            : "failed"
+                        commandLedger.settle(
+                            "procurement-rejection-resolution",
+                            settlement,
+                        )
                         onResult?.({
-                            status: "blocked",
-                            title: "还不能再报给采购",
+                            status:
+                                settlement === "unknown"
+                                    ? "unknown"
+                                    : "blocked",
+                            title:
+                                settlement === "unknown"
+                                    ? "处理结果待确认"
+                                    : "还不能再报给采购",
                             description: getErrorMessage(
                                 error,
-                                "请确认已改商品或价格后再试。",
+                                settlement === "unknown"
+                                    ? "当前输入已保留，请使用本次操作重试。"
+                                    : "请确认已改商品或价格后再试。",
                             ),
                             reference: draftIdentity.documentNumber,
                         })

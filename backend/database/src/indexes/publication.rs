@@ -25,6 +25,9 @@ pub(crate) const PRODUCT_PUBLICATION_REVISION_MEDIA: &str =
 /// `product_publication_delivery` 集合名。
 pub(crate) const PRODUCT_PUBLICATION_DELIVERIES: &str =
     <mongodb::Database as PublicationExt>::PRODUCT_PUBLICATION_DELIVERIES;
+/// `system_safety_pause_operation` 集合名。
+pub(crate) const SYSTEM_SAFETY_PAUSE_OPERATIONS: &str =
+    <mongodb::Database as PublicationExt>::SYSTEM_SAFETY_PAUSE_OPERATIONS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -59,6 +62,12 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
         db,
         PRODUCT_PUBLICATION_DELIVERIES,
         product_publication_delivery_indexes(),
+    )
+    .await?;
+    create_indexes(
+        db,
+        SYSTEM_SAFETY_PAUSE_OPERATIONS,
+        system_safety_pause_operation_indexes(),
     )
     .await?;
     Ok(())
@@ -105,10 +114,43 @@ fn product_publication_revision_media_indexes() -> Vec<IndexModel> {
 
 /// 返回 `product_publication_delivery` 的投递状态查询索引。
 fn product_publication_delivery_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_product_publication_deliveries_status",
-        doc! { "delivery_status": 1 },
-    )]
+    vec![
+        unique_index(
+            "uk_product_publication_deliveries_revision_mall",
+            doc! { "publication_revision_id": 1, "target_mall_id": 1 },
+        ),
+        unique_index(
+            "uk_product_publication_deliveries_message_key",
+            doc! { "message_key": 1 },
+        ),
+        named_index(
+            "idx_product_publication_deliveries_processable",
+            doc! { "delivery_status": 1, "next_attempt_at": 1, "created_at": 1 },
+        ),
+    ]
+}
+
+/// 返回系统安全暂停的事件级、调用级唯一约束与发布反查索引。
+fn system_safety_pause_operation_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index(
+            "uk_safety_pause_operations_source_cause_version",
+            doc! {
+                "source_object_type": 1,
+                "source_object_id": 1,
+                "cause": 1,
+                "source_version": 1,
+            },
+        ),
+        unique_index(
+            "uk_safety_pause_operations_idempotency_key",
+            doc! { "idempotency_key": 1 },
+        ),
+        named_index(
+            "idx_safety_pause_operations_publication",
+            doc! { "affected_publications.publication_id": 1, "committed_at": -1 },
+        ),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -134,6 +176,7 @@ mod tests {
     use super::{
         product_publication_delivery_indexes, product_publication_indexes,
         product_publication_revision_indexes, product_publication_revision_media_indexes,
+        system_safety_pause_operation_indexes,
     };
 
     #[test]
@@ -197,10 +240,50 @@ mod tests {
     fn delivery_status_index_covers_status_query() {
         let indexes = product_publication_delivery_indexes();
 
+        let unique = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_product_publication_deliveries_revision_mall")
+            })
+            .unwrap();
+        assert_eq!(
+            unique.keys,
+            doc! { "publication_revision_id": 1, "target_mall_id": 1 }
+        );
+        assert_eq!(unique.options.as_ref().unwrap().unique, Some(true));
+
         assert!(indexes.iter().any(|index| {
-            index.keys == doc! { "delivery_status": 1 }
+            index.keys == doc! { "delivery_status": 1, "next_attempt_at": 1, "created_at": 1 }
                 && index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("idx_product_publication_deliveries_status")
+                    == Some("idx_product_publication_deliveries_processable")
         }));
+        assert!(indexes.iter().any(|index| {
+            index.keys == doc! { "message_key": 1 }
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+    }
+
+    #[test]
+    fn safety_pause_event_identity_is_unique() {
+        let indexes = system_safety_pause_operation_indexes();
+        let event = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_safety_pause_operations_source_cause_version")
+            })
+            .unwrap();
+
+        assert_eq!(
+            event.keys,
+            doc! {
+                "source_object_type": 1,
+                "source_object_id": 1,
+                "cause": 1,
+                "source_version": 1,
+            }
+        );
+        assert_eq!(event.options.as_ref().unwrap().unique, Some(true));
     }
 }

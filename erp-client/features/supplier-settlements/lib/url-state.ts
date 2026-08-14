@@ -17,6 +17,9 @@ export type SettlementsUrlState = {
     page: number
     preview?: string
     statementId?: string
+    workItemId?: string
+    queueContextId?: string
+    from?: string
     section: SettlementSection
     returnTo?: string
     /** 差异工作台选中项锚定（刷新/分享不丢上下文） */
@@ -53,6 +56,9 @@ const codec = createUrlStateCodec<SettlementsUrlState>([
     { key: "page", type: "number", defaultValue: 1 },
     { key: "preview", type: "string" },
     { key: "statementId", type: "string", aliases: ["id"] },
+    { key: "workItemId", type: "string" },
+    { key: "queueContextId", type: "string" },
+    { key: "from", type: "string" },
     {
         key: "section",
         type: "enum",

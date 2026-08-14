@@ -16,9 +16,10 @@
 //! - D03 `work_items`：待办派发；
 //! - D02 `audit_logs`：审计。
 //!
-//! 幂等：提交入口按「同一工作副本已形成提交」去重，重复提交返回既有提交
-//! （AGENTS.md 外部依赖容错）；建单按 `order_no` 唯一索引兜底（409）。
+//! 幂等：提交入口先按服务端摘要后的业务幂等键读取事务收据，同键同载荷在
+//! 工作副本版本校验之前返回原提交，同键异载荷冲突；建单按 `order_no` 唯一索引兜底（409）。
 
+use crate::iam::SharedRbacService;
 use mongodb::Database;
 
 mod command;
@@ -26,15 +27,21 @@ mod draft_working_copy;
 mod dto;
 mod mapper;
 mod pricing;
+mod procurement_rejection;
 mod query;
 mod status;
 
 pub use self::dto::{
-    CloseEligibilityView, CreateSalesOrderRequest, OpenProcurementRejectionView, PageView, RevisionView,
+    ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CardSalesApprovalAllowedAction,
+    CloseEligibilityView, CreateSalesOrderRequest, LowMarginManagerAllowedAction,
+    OpenProcurementRejectionView, PageView, ProcurementRejectionAllowedAction, RevisionView,
     SalesOrderCreateIntent, SalesOrderDetailView, SalesOrderDraftLineRequest, SalesOrderDraftRequest,
     SalesOrderLineView, SalesOrderListParams, SalesOrderStageSummary, SalesOrderView,
     SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
     VoidSalesOrderRequest, WorkingCopyView,
+};
+pub use self::procurement_rejection::{
+    ProcurementRejectionBusinessResult, ResolveProcurementRejectionCommand, ResolveProcurementRejectionResult,
 };
 
 /// 销售单服务。
@@ -42,6 +49,7 @@ pub use self::dto::{
 /// 提供销售单建单、草稿保存、提交、作废与查询编排。
 pub struct SalesOrderService {
     db: Database,
+    rbac: Option<SharedRbacService>,
 }
 
 impl SalesOrderService {
@@ -53,6 +61,14 @@ impl SalesOrderService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db }
+        Self { db, rbac: None }
+    }
+
+    /// 创建可计算当前操作人审批动作的销售单服务。
+    ///
+    /// # 返回
+    /// 返回同时绑定数据库和当前应用授权源的服务。
+    pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac: Some(rbac) }
     }
 }

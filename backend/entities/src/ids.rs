@@ -20,6 +20,10 @@
 //! - `workflow_action` → `WorkflowActionId`
 //!
 //! D03 `work_item`：
+//! - `approval_definition` → `ApprovalDefinitionId`
+//! - `approval_step_definition` → `ApprovalStepDefinitionId`
+//! - `approval_instance` → `ApprovalInstanceId`
+//! - `approval_step_instance` → `ApprovalStepInstanceId`
 //! - `work_item` → `WorkItemId`
 //!
 //! D04 `bulk_job`：
@@ -305,6 +309,10 @@ id_type!(DocumentParticipantId);
 id_type!(WorkflowActionId);
 
 // D03 work_item
+id_type!(ApprovalDefinitionId);
+id_type!(ApprovalStepDefinitionId);
+id_type!(ApprovalInstanceId);
+id_type!(ApprovalStepInstanceId);
 id_type!(WorkItemId);
 
 // D04 bulk_job
@@ -383,6 +391,7 @@ id_type!(SalesOrderVoucherLineRevisionId);
 
 // D14 sales_review
 id_type!(SalesOrderReviewId);
+id_type!(LowMarginManagerConfirmationId);
 id_type!(ProcurementConfirmationId);
 id_type!(ProcurementConfirmationLineId);
 id_type!(SalesChangeOrderId);

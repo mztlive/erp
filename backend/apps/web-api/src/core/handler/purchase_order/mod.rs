@@ -10,13 +10,13 @@ use axum::{
 use services::{
     audit::AuditActor,
     purchase_order::{
-        ApprovePurchaseOrderRequest, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
-        CreationBasisView, EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult,
-        PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseChangeSubmitResult,
-        PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService,
-        PurchaseReviewResult, RejectPurchaseOrderRequest, SavePurchaseOrderDraftRequest,
-        SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
-        SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisView,
+        EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
+        PurchaseChangeOrderView, PurchaseChangeSubmitResult, PurchaseOrderCenterView,
+        PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService, PurchaseReviewResult,
+        ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
+        StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
+        SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
     },
 };
 
@@ -62,16 +62,18 @@ pub async fn purchase_order_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前已认证账号，用于服务端计算审核责任动作
 /// * `id` - 采购单 ID
 ///
 /// # 返回
 /// 返回对象中心视图。
 pub async fn purchase_order_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
     let view = PurchaseOrderService::new(state.db())
-        .purchase_order_detail(&id)
+        .purchase_order_detail(&id, actor.id())
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -168,58 +170,28 @@ pub async fn purchase_order_submit(
 #[permission_macros::permission(
     group = "采购单",
     group_desc = "采购单、采购提交与采购变更管理",
-    desc = "采购财务审核通过",
+    desc = "采购财务审核决定",
     resource = "purchase_order",
-    action = "approve"
+    action = "review"
 )]
-/// 采购财务审核通过（§8.1.4：版本 + 应付 + 成本 + 待办原子生效）。
+/// 提交唯一 W08 采购财务审核命令。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 采购单 ID
-/// * `req` - 审核请求（提交 + 待办 + 期望版本）
+/// * `command` - 嵌套领域决定与任务/对象版本
 ///
 /// # 返回
 /// 返回审核结果（版本与应付分录）。
-pub async fn purchase_order_approve(
+pub async fn purchase_order_review(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<ApprovePurchaseOrderRequest>,
+    Json(command): Json<ReviewPurchaseOrderCommand>,
 ) -> Result<PurchaseReviewResult> {
     let view = PurchaseOrderService::new(state.db())
-        .review_approve(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "采购财务审核驳回",
-    resource = "purchase_order",
-    action = "reject"
-)]
-/// 采购财务审核驳回（采购返回可编辑草稿，结构化原因代码必填）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-/// * `req` - 驳回请求
-///
-/// # 返回
-/// 返回审核结果（`REJECTED`）。
-pub async fn purchase_order_reject(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<RejectPurchaseOrderRequest>,
-) -> Result<PurchaseReviewResult> {
-    let view = PurchaseOrderService::new(state.db())
-        .review_reject(&id, req, &actor)
+        .review_purchase_order(&id, command, &actor, state.rbac())
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

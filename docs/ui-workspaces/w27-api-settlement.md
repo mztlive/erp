@@ -387,6 +387,15 @@ type SettlementReviewCommand = {
 }
 ```
 
+来源事实不足时，必须先由受控集成入口登记不可变来源证据批次，再执行草稿命令。来源证据命令必须满足下列约束：
+
+- `POST /admin/supplier-settlement-source-evidence` 只接收供应商、完整期间、期间策略及版本、单调递增 `sourceVersion`、外部账单身份/正式引用，以及逐行订单/履约明细身份、费用/账单 `gross/net/tax` 三元组和正式证据引用；不得接收 ERP 订单成本或退款计算结果。
+- 服务端必须从 D32 不可变履约明细、完成时间、退款事实与退款分配派生订单成本和退款三元组，逐行校验 `orderId + itemId` 归属，并校验周期内所有可枚举完成/退款明细均已纳入；任一缺失、重复、跨供应商、税额恒等失败或无正式引用时整批拒绝。
+- 取消事实尚无可关联正式表时，来源证据命令必须同时提交取消发生时间与正式引用，并与订单取消终态一致；不得从当前投影猜测取消时间。
+- `GET /admin/supplier-settlement-source-evidence?supplier_id&period_start&period_end` 只返回创建草稿所需的最新批次身份、策略版本、水位与摘要，不返回金额明细供浏览器重算。
+- `POST /admin/supplier-settlement-statements` 的 `CREATE` 与 `POST /admin/supplier-settlement-statements/{id}/refreshes` 的 `REFRESH` 只能消费上述不可变批次。客户端不得提交结算金额明细；同一请求恢复不得生成第二张草稿或第二个刷新结果。
+- `POST /admin/supplier-settlement-differences/{id}/evidence` 追加不可变补证；正式差异决定引用的证据必须已通过该命令登记。
+
 - `CREATE` 必须携带服务端当前供应商结算期间策略及版本，并严格选择其返回的完整周期（含时区与边界）；策略缺失、过期或客户端自行拼接期间时 fail-closed，禁止新建草稿。`REFRESH` 必须携带结算单、当前锁版本和上一次 `sourceSnapshotHash`，且不能改供应商或期间。两者从不可变履约/取消/供应商退款历史及外部账单版本生成冻结来源快照；结果未知时按原 `requestId` / 幂等键查询或续跑，不能创建第二张草稿或第二次刷新。
 - `SettlementDifferenceEvidenceCommand` 只供采购或协同角色追加受控证据/意见，不改变差异状态、结算金额和成本。`SettlementDifferenceCommand` 只供财务经办登记正式结论，使用差异自身版本和追加处理记录，不修改左右证据或历史成本。
 - 差异处理结果未知时先按 `operationId` / 幂等键查询同一操作；确认既有操作失败后也必须沿用原键恢复，不能重复追加处理结论。

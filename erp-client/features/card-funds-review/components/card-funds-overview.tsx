@@ -28,10 +28,10 @@ export function CardFundsOverview({ task }: { task: CardFundsReviewItemView }) {
                         label: "当前数据版本",
                         value: (
                             <span className="num font-mono text-sm">
-                                {shortHash(task.workItem.subjectHash)}
+                                {shortHash(task.workItem.subjectVersion)}
                             </span>
                         ),
-                        description: task.workItem.subjectHash,
+                        description: task.workItem.subjectVersion,
                     },
                     {
                         id: "counterparty",

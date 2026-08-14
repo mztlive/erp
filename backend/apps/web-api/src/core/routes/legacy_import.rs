@@ -3,7 +3,8 @@
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/legacy-import-batches`、
 //! `/admin/legacy-import-batches/{id}`、`/admin/legacy-import-batches/{id}/rows`、
 //! `/admin/legacy-import-batches/{id}/apply`、`/admin/legacy-import-confirmations`、
-//! `/admin/legacy-import-confirmations/{id}/decide`；每条路由统一走
+//! `/admin/legacy-import-batches/{id}/commands`、`/admin/legacy-import-confirmations/complete`；
+//! 每条路由统一走
 //! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
 use axum::{
@@ -67,6 +68,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/legacy-import-batches/{id}/commands",
+            with_permission(
+                post(legacy_import::legacy_import_execution_command),
+                rbac,
+                legacy_import::legacy_import_execution_command_permission_key(),
+            ),
+        )
+        .route(
             "/legacy-import-confirmations",
             with_permission(
                 get(legacy_import::legacy_import_confirmation_list),
@@ -83,11 +92,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/legacy-import-confirmations/{id}/decide",
+            "/legacy-import-confirmations/complete",
             with_permission(
-                post(legacy_import::legacy_import_confirmation_decide),
+                post(legacy_import::legacy_import_confirmation_complete),
                 rbac,
-                legacy_import::legacy_import_confirmation_decide_permission_key(),
+                legacy_import::legacy_import_confirmation_complete_permission_key(),
             ),
         )
 }

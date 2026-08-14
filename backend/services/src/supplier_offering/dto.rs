@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
+use crate::publication::SystemSafetyPauseOperationView;
 
 pub(crate) const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "supplier_sku_code", "status"];
 
@@ -315,6 +316,8 @@ pub struct ReviseSupplierOfferingResult {
     pub status: OfferingStatus,
     /// 供给乐观锁版本。
     pub version: u64,
+    /// 同事务触发的安全暂停结果；没有当前在售影响或不构成安全原因时为空。
+    pub safety_pause: Option<SystemSafetyPauseOperationView>,
 }
 
 /// 更新实时可供状态请求。
@@ -349,6 +352,8 @@ pub struct UpdateSupplierOfferingAvailabilityResult {
     pub availability_version: u64,
     /// 来源更新时间。
     pub source_updated_at: i64,
+    /// 同事务触发的安全暂停结果；没有当前在售影响或不构成新安全原因时为空。
+    pub safety_pause: Option<SystemSafetyPauseOperationView>,
 }
 
 #[cfg(test)]

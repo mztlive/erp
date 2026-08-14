@@ -4,7 +4,6 @@ import * as React from "react"
 import Link from "next/link"
 import {
     ArrowLeftIcon,
-    CheckIcon,
     ExternalLinkIcon,
     RefreshCwIcon,
     SendIcon,
@@ -22,9 +21,11 @@ import {
     OptionCombobox,
     PageHeader,
     PageScaffold,
+    SequentialProcessBar,
     surfaceInsetClassName,
     surfacePanelClassName,
 } from "@/components/business"
+import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import type { ResultState } from "@/components/business/feedback"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -44,6 +45,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { CrossEntryBanner } from "@/features/supplier-settlements/components/cross-entry-banner"
@@ -55,7 +57,6 @@ import {
 } from "@/features/supplier-settlements/lib/operations"
 import {
     useAppendEvidenceMutation,
-    useClaimReviewMutation,
     useRefreshTrialMutation,
     useResolveDifferenceMutation,
     useReviewDecisionMutation,
@@ -64,6 +65,7 @@ import {
 } from "@/features/supplier-settlements/hooks/queries"
 import type {
     DifferenceResolution,
+    SettlementDetailView,
     SettlementSection,
 } from "@/features/supplier-settlements/types"
 import {
@@ -78,27 +80,48 @@ import { getErrorMessage } from "@/lib/api/errors"
 import { formatDateTime } from "@/lib/datetime"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useWorkItemResponsibilityMutation } from "@/features/work-items"
+
+function responsibilityOf(
+    workItem: SettlementDetailView["workItem"],
+    currentUserId?: string,
+): ResponsibilityStatus {
+    if (!workItem) return "blocked"
+    if (workItem.status === "COMPLETED") return "completed"
+    if (workItem.status === "CLOSED") return "closed"
+    if (workItem.processingState === "APPROVAL_BLOCKED") return "blocked"
+    if (workItem.assignmentMode === "POOL" && !workItem.ownerUser) {
+        return "pool_available"
+    }
+    return workItem.ownerUser?.id === currentUserId
+        ? "assigned_to_me"
+        : "assigned_to_other"
+}
 
 function SettlementCenter({
     statementId,
+    workItemId,
     urlState,
     patchUrl,
     returnTo,
     onBack,
 }: {
     statementId: string
+    workItemId?: string
     urlState: SettlementsUrlState
     patchUrl: (patch: Partial<SettlementsUrlState>) => void
     returnTo?: string
     onBack: () => void
 }) {
-    const detailQuery = useSettlementDetailQuery(statementId)
+    const detailQuery = useSettlementDetailQuery(statementId, workItemId)
     const refreshMutation = useRefreshTrialMutation()
     const resolveMutation = useResolveDifferenceMutation()
     const evidenceMutation = useAppendEvidenceMutation()
     const submitMutation = useSubmitReviewMutation()
     const decisionMutation = useReviewDecisionMutation()
-    const claimMutation = useClaimReviewMutation()
+    const profileQuery = useAccountProfileQuery()
+    const responsibilityMutation = useWorkItemResponsibilityMutation()
 
     const [result, setResult] = React.useState<ResultState>(null)
     const [resolveOpen, setResolveOpen] = React.useState(false)
@@ -110,11 +133,27 @@ function SettlementCenter({
         React.useState<DifferenceResolution>("ERP_ACCEPTED")
     const [reasonCode, setReasonCode] = React.useState("ACCEPT_BILL")
     const [evidenceComment, setEvidenceComment] = React.useState("")
+    const [evidenceReferenceId, setEvidenceReferenceId] = React.useState("")
     const [rejectReason, setRejectReason] = React.useState("")
     const resultRef = React.useRef<HTMLDivElement | null>(null)
+    const commandIdentities = React.useRef(
+        new Map<string, { operationId: string; idempotencyKey: string }>(),
+    )
 
     const data = detailQuery.data
     const section = urlState.section
+
+    function idempotencyIdentity(kind: string, objectId: string) {
+        const key = `${kind}:${objectId}`
+        const existing = commandIdentities.current.get(key)
+        if (existing) return { key, ...existing }
+        const identity = {
+            operationId: `w27:${kind}:${crypto.randomUUID()}`,
+            idempotencyKey: `w27:${kind}:${crypto.randomUUID()}`,
+        }
+        commandIdentities.current.set(key, identity)
+        return { key, ...identity }
+    }
 
     React.useEffect(() => {
         if (result?.status === "succeeded" || result?.status === "unknown") {
@@ -211,15 +250,26 @@ function SettlementCenter({
     const st = detail.statement
     const allowed = new Set(detail.allowedActions)
     const blockers = detail.actionBlockers
+    const responsibilityStatus = responsibilityOf(
+        detail.workItem,
+        profileQuery.data?.userid,
+    )
     const activeDiff =
         detail.differences.find((d) => d.differenceId === urlState.diff) ??
         detail.differences[0] ??
         null
 
-    const confirmBlocker = blockerOf(blockers, "CONFIRM")
     const submitBlocker = blockerOf(blockers, "SUBMIT_REVIEW")
 
     async function onRefresh() {
+        if (!st.sourceSnapshotHash) {
+            setResult({
+                status: "blocked",
+                title: "刷新试算暂不可用",
+                description: "本次结算的来源依据不完整，不能刷新数据。",
+            })
+            return
+        }
         try {
             const outcome = await refreshMutation.mutateAsync({
                 statementId: st.id,
@@ -240,6 +290,10 @@ function SettlementCenter({
 
     async function onResolve() {
         if (!activeDiff) return
+        const identity = idempotencyIdentity(
+            "resolve-difference",
+            activeDiff.differenceId,
+        )
         try {
             const outcome = await resolveMutation.mutateAsync({
                 statementId: st.id,
@@ -248,9 +302,15 @@ function SettlementCenter({
                 expectedDifferenceVersion: activeDiff.version,
                 resolution,
                 reasonCode,
-                operationId: newKey("op"),
-                idempotencyKey: newKey("resolve"),
+                evidenceReferenceIds: activeDiff.evidence
+                    .map((item) => item.referenceIds)
+                    .flat(),
+                operationId: identity.operationId,
+                idempotencyKey: identity.idempotencyKey,
             })
+            if (outcome.status !== "unknown") {
+                commandIdentities.current.delete(identity.key)
+            }
             setResult(outcomeToResult(outcome))
             if (outcome.status === "succeeded") setResolveOpen(false)
         } catch (error) {
@@ -264,11 +324,20 @@ function SettlementCenter({
 
     async function onEvidence() {
         if (!activeDiff) return
+        if (!evidenceReferenceId.trim()) {
+            setResult({
+                status: "blocked",
+                title: "缺少正式证据引用",
+                description: "请填写工单、附件或供应商确认记录的正式引用。",
+            })
+            return
+        }
         try {
             const outcome = await evidenceMutation.mutateAsync({
                 statementId: st.id,
                 differenceId: activeDiff.differenceId,
                 expectedDifferenceVersion: activeDiff.version,
+                evidenceReferenceIds: [evidenceReferenceId.trim()],
                 opinionCode: "PROCUREMENT_NOTE",
                 comment: evidenceComment,
                 requestId: newKey("req"),
@@ -278,6 +347,7 @@ function SettlementCenter({
             if (outcome.status === "succeeded") {
                 setEvidenceOpen(false)
                 setEvidenceComment("")
+                setEvidenceReferenceId("")
             }
         } catch (error) {
             setResult({
@@ -289,13 +359,30 @@ function SettlementCenter({
     }
 
     async function onSubmitReview() {
+        if (!st.subjectHash || !detail.reviewSubmissionPolicy) {
+            setResult({
+                status: "blocked",
+                title: "提交复核暂不可用",
+                description:
+                    "本次复核的数据版本或截止规则不完整，不能提交复核。",
+            })
+            return
+        }
+        const identity = idempotencyIdentity("submit-review", st.id)
         const outcome = await submitMutation.mutateAsync({
             statementId: st.id,
             expectedLockVersion: st.lockVersion,
-            subjectHash: st.subjectHash ?? `sh_${st.id}`,
-            operationId: newKey("op"),
-            idempotencyKey: newKey("submit"),
+            subjectHash: st.subjectHash,
+            refreshCutoffPolicyId:
+                detail.reviewSubmissionPolicy.refreshCutoffPolicyId,
+            expectedRefreshCutoffPolicyVersion:
+                detail.reviewSubmissionPolicy.version,
+            operationId: identity.operationId,
+            idempotencyKey: identity.idempotencyKey,
         })
+        if (outcome.status !== "unknown") {
+            commandIdentities.current.delete(identity.key)
+        }
         setResult(outcomeToResult(outcome))
         if (outcome.status === "succeeded") {
             setSubmitOpen(false)
@@ -308,19 +395,28 @@ function SettlementCenter({
             setResult({
                 status: "blocked",
                 title: "无复核任务",
-                description: "请先领取任务后再确认",
+                description: "未查询到正式复核任务，禁止按结算单状态直接确认。",
             })
             return
         }
+        if (responsibilityStatus !== "assigned_to_me") return
+        const identity = idempotencyIdentity(
+            "confirm-review",
+            detail.workItem.workItemId,
+        )
         const outcome = await decisionMutation.mutateAsync({
             statementId: st.id,
             workItemId: detail.workItem.workItemId,
+            expectedTaskVersion: detail.workItem.taskVersion,
             expectedSubjectVersion: detail.workItem.subjectVersion,
             expectedLockVersion: st.lockVersion,
             action: "CONFIRM",
-            operationId: newKey("op"),
-            idempotencyKey: newKey("confirm"),
+            operationId: identity.operationId,
+            idempotencyKey: identity.idempotencyKey,
         })
+        if (outcome.status !== "unknown") {
+            commandIdentities.current.delete(identity.key)
+        }
         setResult(outcomeToResult(outcome))
         if (outcome.status === "succeeded") {
             setConfirmOpen(false)
@@ -329,20 +425,59 @@ function SettlementCenter({
     }
 
     async function onReject() {
-        if (!detail.workItem) return
+        if (!detail.workItem || responsibilityStatus !== "assigned_to_me")
+            return
+        const identity = idempotencyIdentity(
+            "reject-review",
+            detail.workItem.workItemId,
+        )
         const outcome = await decisionMutation.mutateAsync({
             statementId: st.id,
             workItemId: detail.workItem.workItemId,
+            expectedTaskVersion: detail.workItem.taskVersion,
             expectedSubjectVersion: detail.workItem.subjectVersion,
             expectedLockVersion: st.lockVersion,
             action: "REJECT",
-            operationId: newKey("op"),
-            idempotencyKey: newKey("reject"),
+            operationId: identity.operationId,
+            idempotencyKey: identity.idempotencyKey,
             reasonCode: rejectReason || "NEEDS_MORE_EVIDENCE",
         })
+        if (outcome.status !== "unknown") {
+            commandIdentities.current.delete(identity.key)
+        }
         setResult(outcomeToResult(outcome))
         if (outcome.status === "rejected" || outcome.status === "succeeded") {
             setRejectOpen(false)
+        }
+    }
+
+    async function onStartProcessing() {
+        if (!detail.workItem) return
+        const identity = idempotencyIdentity(
+            "start-processing",
+            detail.workItem.workItemId,
+        )
+        try {
+            const response = await responsibilityMutation.mutateAsync({
+                kind: "START_PROCESSING",
+                workItemId: detail.workItem.workItemId,
+                expectedTaskVersion: detail.workItem.taskVersion,
+                idempotencyKey: identity.idempotencyKey,
+            })
+            commandIdentities.current.delete(identity.key)
+            await detailQuery.refetch()
+            setResult({
+                status: "succeeded",
+                title: "已开始处理复核",
+                description: "正式任务已建立当前用户个人责任。",
+                reference: response.id,
+            })
+        } catch (error) {
+            setResult({
+                status: "rejected",
+                title: "开始处理未完成",
+                description: getErrorMessage(error, "开始处理失败，请刷新任务"),
+            })
         }
     }
 
@@ -450,44 +585,58 @@ function SettlementCenter({
                                 提交复核
                             </GuardedBusinessAction>
                         ) : null}
-                        {allowed.has("CONFIRM") ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => setConfirmOpen(true)}
-                            >
-                                <CheckIcon className="size-3.5" />
-                                确认结算
-                            </Button>
-                        ) : confirmBlocker ? (
-                            <GuardedBusinessAction
-                                type="button"
-                                size="sm"
-                                disabled
-                                reason={confirmBlocker.message}
-                            >
-                                确认结算
-                            </GuardedBusinessAction>
-                        ) : null}
-                        {allowed.has("REJECT") ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setRejectOpen(true)}
-                            >
-                                驳回
-                            </Button>
-                        ) : null}
                     </div>
                 }
             />
 
+            {detail.workItem ? (
+                <div className="space-y-2">
+                    <SequentialProcessBar
+                        current={1}
+                        total={1}
+                        responsibilityStatus={responsibilityStatus}
+                        processLabel="确认结算"
+                        processDisabled={!allowed.has("CONFIRM")}
+                        showProcessNext={false}
+                        pending={
+                            responsibilityMutation.isPending ||
+                            decisionMutation.isPending
+                        }
+                        onBack={onBack}
+                        onStartProcessing={() => void onStartProcessing()}
+                        onProcess={() => setConfirmOpen(true)}
+                        onProcessNext={() => undefined}
+                    />
+                    {responsibilityStatus === "assigned_to_me" &&
+                    allowed.has("REJECT") ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={decisionMutation.isPending}
+                            onClick={() => setRejectOpen(true)}
+                        >
+                            驳回复核
+                        </Button>
+                    ) : null}
+                </div>
+            ) : detail.workItemBlocker ? (
+                <Alert variant="warning">
+                    <AlertTitle>正式复核任务不可处理</AlertTitle>
+                    <AlertDescription>
+                        {detail.workItemBlocker.message}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
             {blockers.filter(
                 (b) =>
-                    ["CONFIRM", "SUBMIT_REVIEW", "SOD_VIOLATION"].includes(
-                        b.action,
-                    ) ||
+                    [
+                        "CONFIRM",
+                        "REVIEW_DECISION",
+                        "SUBMIT_REVIEW",
+                        "SOD_VIOLATION",
+                    ].includes(b.action) ||
                     b.code === "SOD_VIOLATION" ||
                     b.code === "BLOCKING_DIFFERENCES",
             ).length > 0 ? (
@@ -499,6 +648,7 @@ function SettlementCenter({
                                 .filter(
                                     (b) =>
                                         b.action === "CONFIRM" ||
+                                        b.action === "REVIEW_DECISION" ||
                                         b.action === "SUBMIT_REVIEW" ||
                                         b.code === "SOD_VIOLATION" ||
                                         b.code === "BLOCKING_DIFFERENCES",
@@ -979,61 +1129,14 @@ function SettlementCenter({
                                             {detail.statement.statementNo} ·
                                             供应商{" "}
                                             {detail.statement.supplierName}
-                                            {detail.workItem.claimedBy
-                                                ? ` · 领取人 ${detail.workItem.claimedBy.displayName}`
-                                                : " · 待领取"}
+                                            {detail.workItem.ownerUser
+                                                ? ` · 当前处理人 ${detail.workItem.ownerUser.displayName}`
+                                                : detail.workItem
+                                                        .assignmentMode ===
+                                                    "POOL"
+                                                  ? " · 团队池待开始处理"
+                                                  : " · 尚无个人责任人"}
                                         </AlertDescription>
-                                        {detail.workItem.claimedBy == null &&
-                                        allowed.has("CLAIM_REVIEW") ? (
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={
-                                                    claimMutation.isPending
-                                                }
-                                                onClick={async () => {
-                                                    try {
-                                                        const outcome =
-                                                            await claimMutation.mutateAsync(
-                                                                {
-                                                                    statementId:
-                                                                        st.id,
-                                                                    workItemId:
-                                                                        detail
-                                                                            .workItem!
-                                                                            .workItemId,
-                                                                    expectedSubjectVersion:
-                                                                        detail
-                                                                            .workItem!
-                                                                            .subjectVersion,
-                                                                    idempotencyKey:
-                                                                        newKey(
-                                                                            "claim",
-                                                                        ),
-                                                                },
-                                                            )
-                                                        setResult(
-                                                            outcomeToResult(
-                                                                outcome,
-                                                            ),
-                                                        )
-                                                    } catch (error) {
-                                                        setResult({
-                                                            status: "rejected",
-                                                            title: "领取任务未完成",
-                                                            description:
-                                                                getErrorMessage(
-                                                                    error,
-                                                                    "领取失败，请稍后重试",
-                                                                ),
-                                                        })
-                                                    }
-                                                }}
-                                            >
-                                                领取任务
-                                            </Button>
-                                        ) : null}
                                     </Alert>
                                 ) : null}
                                 {detail.reviewRecords.length === 0 ? (
@@ -1268,6 +1371,17 @@ function SettlementCenter({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-1.5">
+                        <Label htmlFor="ev-reference">正式证据引用</Label>
+                        <Input
+                            id="ev-reference"
+                            value={evidenceReferenceId}
+                            onChange={(e) =>
+                                setEvidenceReferenceId(e.target.value)
+                            }
+                            placeholder="例如 ticket://T-123 或 attachment://..."
+                        />
+                    </div>
+                    <div className="space-y-1.5">
                         <Label htmlFor="ev-comment">业务说明</Label>
                         <Textarea
                             id="ev-comment"
@@ -1286,7 +1400,10 @@ function SettlementCenter({
                         </Button>
                         <Button
                             type="button"
-                            disabled={evidenceMutation.isPending}
+                            disabled={
+                                evidenceMutation.isPending ||
+                                !evidenceReferenceId.trim()
+                            }
                             onClick={() => void onEvidence()}
                         >
                             保存证据

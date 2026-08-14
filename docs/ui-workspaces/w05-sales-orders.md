@@ -626,6 +626,12 @@ type CardSalesApprovalDecision = CardSalesApprovalDecisionBase &
         reasonCode: string
       }
     | {
+        workItemType: "CARD_SALES_MANAGER_APPROVAL"
+        expectedReviewStatus: "PENDING_SALES_LEAD"
+        reviewDecision: "TERMINATE"
+        reasonCode: string
+      }
+    | {
         workItemType: "CARD_SALES_OPERATION_APPROVAL"
         expectedReviewStatus: "PENDING_OPERATIONS"
         reviewDecision: "APPROVE"
@@ -634,6 +640,12 @@ type CardSalesApprovalDecision = CardSalesApprovalDecisionBase &
         workItemType: "CARD_SALES_OPERATION_APPROVAL"
         expectedReviewStatus: "PENDING_OPERATIONS"
         reviewDecision: "REJECT"
+        reasonCode: string
+      }
+    | {
+        workItemType: "CARD_SALES_OPERATION_APPROVAL"
+        expectedReviewStatus: "PENDING_OPERATIONS"
+        reviewDecision: "TERMINATE"
         reasonCode: string
       }
   )
@@ -677,9 +689,17 @@ type CardSalesApprovalBusinessResult =
       workflowActionId: string
       salesOrderCommercialStatus: string
     }
+  | {
+      outcome: "TERMINATED"
+      salesOrderId: string
+      salesOrderSubmissionId: string
+      submissionStatus: "SUPERSEDED"
+      workflowActionId: string
+      salesOrderCommercialStatus: "DRAFT"
+    }
 
 type SubmitCardSalesApprovalDecisionResult = {
-  approvalInstanceStatus: "RUNNING" | "APPROVED" | "REJECTED"
+  approvalInstanceStatus: "RUNNING" | "APPROVED" | "REJECTED" | "TERMINATED"
   workItemId: string
   workItemStatus: "COMPLETED"
   businessResult: CardSalesApprovalBusinessResult
@@ -705,7 +725,7 @@ type SubmitCardSalesApprovalDecisionResult = {
 
 `SubmitCardSalesApprovalDecisionCommand` 调用审批运行时 `submit_decision`：审批实例、步骤和任务身份及其三个期望版本、`expectedSubjectVersion` 位于命令外层，销售单、冻结提交、领域版本和审批结论位于强类型 `decision`。服务端必须校验审批实例、活动步骤、固定任务类型和注册处理器；W05 不根据对象状态自行构造可见动作或下一步骤。
 
-领导或运营作出决定时，当前责任校验、步骤决定、`sales_order_review`、`workflow_action`、任务完成和销售状态迁移必须在同一事务中完成。领导通过由审批运行时激活唯一运营步骤并创建 `POOL` 待办；运营通过还要原子形成首个不可变销售版本、应收和执行投影修订并结束审批实例。驳回结束当前实例且不激活下一步骤；后续销售修改和重新提交必须创建新实例并从领导步骤开始。前端不得只根据 HTTP 成功自行推进流程。
+领导或运营作出决定时，当前责任校验、步骤决定、业务决定事实、`workflow_action`、任务完成和销售状态迁移必须在同一事务中完成。领导通过由审批运行时激活唯一运营步骤并创建 `POOL` 待办；运营通过还要原子形成首个不可变销售版本、应收和执行投影修订并结束审批实例。驳回必须形成 `sales_order_review` 并结束当前实例，不激活下一步骤。终止必须要求原因，将步骤和实例分别置为 `TERMINATED`，把冻结提交置为 `SUPERSEDED` 并恢复销售草稿；终止只形成独立 `TERMINATED` 业务结果和追加式完成动作，不得伪造为 `REJECTED` 或要求存在驳回审核记录。后续销售修改和重新提交必须创建新实例并从领导步骤开始。前端只在服务端 `allowedActions` 返回对应决定时展示入口，不得只根据 HTTP 成功自行推进流程。
 
 ### 8.4 缓存、新鲜度与前端边界
 

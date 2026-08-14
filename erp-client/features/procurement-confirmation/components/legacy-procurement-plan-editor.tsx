@@ -139,7 +139,7 @@ export function LegacyProcurementPlanEditor({
                             : recommendationQuery.isError
                               ? "最低成本方案计算失败"
                               : recommendation?.ready
-                                ? `已组合 ${recommendation.purchaseOrders.length} 张采购单草稿`
+                                ? `已组合 ${recommendation.purchaseOrders.length} 组采购创建建议`
                                 : "当前无法形成完整采购方案"}
                     </AlertTitle>
                     <AlertDescription>

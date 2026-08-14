@@ -5,5 +5,6 @@ export {
     useReviseSupplierOfferingMutation,
     useSupplierOfferingsForSkusQuery,
     useSupplierOfferingsQuery,
+    useSupplierSupplyExceptionWorkItemQuery,
     useUpdateOfferingAvailabilityMutation,
 } from "./hooks/queries"

@@ -29,6 +29,9 @@ pub(crate) const MALL_SALES_RECONCILIATION_ITEMS: &str =
     <mongodb::Database as MallSyncExt>::MALL_SALES_RECONCILIATION_ITEMS;
 /// `master_mapping_task` 集合名。
 pub(crate) const MASTER_MAPPING_TASKS: &str = <mongodb::Database as MallSyncExt>::MASTER_MAPPING_TASKS;
+/// `mall_snapshot_reapply_operation` 集合名。
+pub(crate) const MALL_SNAPSHOT_REAPPLY_OPERATIONS: &str =
+    <mongodb::Database as MallSyncExt>::MALL_SNAPSHOT_REAPPLY_OPERATIONS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -73,6 +76,12 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     )
     .await?;
     create_indexes(db, MASTER_MAPPING_TASKS, master_mapping_task_indexes()).await?;
+    create_indexes(
+        db,
+        MALL_SNAPSHOT_REAPPLY_OPERATIONS,
+        mall_snapshot_reapply_operation_indexes(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -176,6 +185,20 @@ fn master_mapping_task_indexes() -> Vec<IndexModel> {
     ]
 }
 
+/// 返回重新归集操作的幂等与任务时间线索引。
+fn mall_snapshot_reapply_operation_indexes() -> Vec<IndexModel> {
+    vec![
+        unique_index(
+            "uk_mall_snapshot_reapply_operations_task_idempotency",
+            doc! { "mapping_task_id": 1, "idempotency_key_hash": 1 },
+        ),
+        named_index(
+            "idx_mall_snapshot_reapply_operations_task_updated",
+            doc! { "mapping_task_id": 1, "last_updated_at": -1 },
+        ),
+    ]
+}
+
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
     IndexModel::builder()
@@ -216,8 +239,28 @@ mod tests {
 
     use super::{
         mall_sales_order_snapshot_indexes, mall_sales_reconciliation_item_indexes,
-        mall_sales_sync_cursor_indexes, master_mapping_task_indexes,
+        mall_sales_sync_cursor_indexes, mall_snapshot_reapply_operation_indexes, master_mapping_task_indexes,
     };
+
+    #[test]
+    fn reapply_operation_idempotency_is_unique_per_mapping_task() {
+        let indexes = mall_snapshot_reapply_operation_indexes();
+        let index = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_mall_snapshot_reapply_operations_task_idempotency")
+            })
+            .unwrap();
+        assert_eq!(
+            index.keys,
+            doc! { "mapping_task_id": 1, "idempotency_key_hash": 1 }
+        );
+        assert_eq!(
+            index.options.as_ref().and_then(|options| options.unique),
+            Some(true)
+        );
+    }
 
     #[test]
     fn cursor_source_is_globally_unique() {

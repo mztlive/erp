@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type {
     FulfillmentDraft,
     FulfillmentResultCode,
-    FulfillmentTask,
+    FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 import { RESULT_OPTIONS } from "@/features/fulfillment-operations/types"
 
@@ -21,12 +21,12 @@ function nowLocal(): string {
 }
 
 export function FulfillmentServiceForm({
-    task,
+    operation,
     draft,
     onChange,
     disabled,
 }: {
-    task: FulfillmentTask
+    operation: FulfillmentOperation
     draft: Extract<FulfillmentDraft, { type: "SERVICE" }>
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
@@ -131,7 +131,7 @@ export function FulfillmentServiceForm({
                 </div>
             </div>
             {draft.lines.map((line, i) => {
-                const src = task.lines.find(
+                const src = operation.lines.find(
                     (l) => l.salesOrderLineId === line.salesOrderLineId,
                 )
                 return (
@@ -141,7 +141,7 @@ export function FulfillmentServiceForm({
                     >
                         <p className="text-sm font-medium">{src?.itemName}</p>
                         <p className="text-xs text-muted-foreground">
-                            对应 {task.source.salesOrderNo}
+                            对应 {operation.source.salesOrderNo}
                         </p>
                         <div className="space-y-1.5">
                             <Label htmlFor={`svc-qty-${i}`}>服务数量</Label>

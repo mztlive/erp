@@ -1,11 +1,15 @@
-import type { QueueScopeSlug, WorkItemFamily } from "../types"
+import type {
+    QueueScopeSlug,
+    WorkItemFamily,
+} from "@/features/unified-task-queue/types"
 
-const SCOPE_SLUGS: QueueScopeSlug[] = ["mine", "role_pool", "team", "hold"]
+const SCOPE_SLUGS: readonly QueueScopeSlug[] = [
+    "mine",
+    "team",
+    "managed",
+    "history",
+]
 
-/**
- * 当前任务焦点不落地址栏（内部 ID 禁止进 URL），经 sessionStorage 传递，
- * 支持 W01 等来源页的深链聚焦（P2-5 / 内部 ID 清零契约）。
- */
 const W02_FOCUS_SESSION_KEY = "w02.focus-work-item"
 
 export function readW02FocusId(): string | null {
@@ -15,18 +19,14 @@ export function readW02FocusId(): string | null {
 
 export function writeW02FocusId(id: string | null): void {
     if (typeof window === "undefined") return
-    if (id) {
-        window.sessionStorage.setItem(W02_FOCUS_SESSION_KEY, id)
-    } else {
-        window.sessionStorage.removeItem(W02_FOCUS_SESSION_KEY)
-    }
+    if (id) window.sessionStorage.setItem(W02_FOCUS_SESSION_KEY, id)
+    else window.sessionStorage.removeItem(W02_FOCUS_SESSION_KEY)
 }
 
 export function parseScopeSlug(raw: string | null): QueueScopeSlug {
-    if (raw && SCOPE_SLUGS.includes(raw as QueueScopeSlug)) {
-        return raw as QueueScopeSlug
-    }
-    return "mine"
+    return raw && SCOPE_SLUGS.includes(raw as QueueScopeSlug)
+        ? (raw as QueueScopeSlug)
+        : "mine"
 }
 
 export function parseFamily(raw: string | null): WorkItemFamily | undefined {
@@ -34,8 +34,7 @@ export function parseFamily(raw: string | null): WorkItemFamily | undefined {
         raw === "approval" ||
         raw === "finance" ||
         raw === "fulfillment" ||
-        raw === "exception" ||
-        raw === "procurement"
+        raw === "exception"
     ) {
         return raw
     }
@@ -43,8 +42,22 @@ export function parseFamily(raw: string | null): WorkItemFamily | undefined {
 }
 
 export function parseDue(raw: string | null): "today" | "overdue" | undefined {
-    if (raw === "today" || raw === "overdue") return raw
-    return undefined
+    return raw === "today" || raw === "overdue" ? raw : undefined
+}
+
+export function parsePriorities(raw: string | null): number[] | undefined {
+    if (!raw) return undefined
+    const values = raw
+        .split(",")
+        .map(Number)
+        .filter((value) => Number.isInteger(value) && value >= 1 && value <= 4)
+    return values.length > 0 ? [...new Set(values)] : undefined
+}
+
+export function parseSort(
+    raw: string | null,
+): "priority_due" | "due_asc" | "created_desc" {
+    return raw === "due_asc" || raw === "created_desc" ? raw : "priority_due"
 }
 
 export function buildW02SearchParams(options: {
@@ -52,29 +65,45 @@ export function buildW02SearchParams(options: {
     family?: WorkItemFamily | null
     workItemType?: string | null
     due?: "today" | "overdue" | null
+    priorities?: readonly number[] | null
+    historyStatus?: "COMPLETED" | "CLOSED" | null
     q?: string | null
-    converge?: boolean
+    sort?: "priority_due" | "due_asc" | "created_desc" | null
+    queueContextId?: string | null
+    currentWorkItemId?: string | null
+    approvalBlockers?: boolean
 }): string {
     const params = new URLSearchParams()
-    params.set("scope", options.scope)
+    if (options.approvalBlockers) {
+        params.set("view", "approval-blockers")
+    } else {
+        params.set("scope", options.scope)
+    }
     if (options.family) params.set("family", options.family)
     if (options.workItemType) params.set("type", options.workItemType)
     if (options.due) params.set("due", options.due)
+    if (options.priorities?.length) {
+        params.set("priority", options.priorities.join(","))
+    }
+    if (options.scope === "history" && options.historyStatus) {
+        params.set("status", options.historyStatus.toLowerCase())
+    }
     if (options.q?.trim()) params.set("q", options.q.trim())
-    if (options.converge) params.set("converge", "1")
-    const qs = params.toString()
-    return qs ? `?${qs}` : ""
+    if (options.sort) params.set("sort", options.sort)
+    if (options.queueContextId) {
+        params.set("queueContextId", options.queueContextId)
+    }
+    if (options.currentWorkItemId) {
+        params.set("currentWorkItemId", options.currentWorkItemId)
+    }
+    return `?${params.toString()}`
 }
 
 export function scopeLabel(scope: QueueScopeSlug): string {
-    switch (scope) {
-        case "mine":
-            return "我的待办"
-        case "role_pool":
-            return "团队待认领"
-        case "team":
-            return "团队"
-        case "hold":
-            return "已跳过"
-    }
+    return {
+        mine: "我的待办",
+        team: "团队待处理",
+        managed: "团队任务",
+        history: "处理历史",
+    }[scope]
 }

@@ -34,7 +34,10 @@ use validator::Validate;
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use crate::publication::{PublicationService, SystemSafetyPauseTrigger, UnavailableMallConnector};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
+use entities::publication::{SafetyPauseCause, SafetyPauseSourceObjectType};
+use std::sync::Arc;
 
 mod dto;
 
@@ -409,6 +412,20 @@ impl SupplierOfferingService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供给不存在".to_string()))?;
+        let prior_revision = match offering.stable.current_revision_id.as_ref() {
+            Some(revision_id) => Some(
+                self.db
+                    .supplier_offering_revisions()
+                    .find_by_id(revision_id, &mut NoTransaction)
+                    .await?
+                    .ok_or_else(|| {
+                        Error::BusinessLogicError(
+                            "供给当前修订不存在，禁止形成无法判定影响的新版本".to_string(),
+                        )
+                    })?,
+            ),
+            None => None,
+        };
         let current_no = self.current_revision_no(&offering).await?;
         if current_no != req.expected_revision_no {
             return Err(Error::ConflictError(
@@ -422,20 +439,13 @@ impl SupplierOfferingService {
             &req.terms,
         )?;
         let next_status = req.status.unwrap_or(offering.stable.status);
+        let prior_status = offering.stable.status;
         if next_status == OfferingStatus::Active {
             self.ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from)
                 .await?;
         }
         offering.update_status(next_status, actor.id())?;
         offering.stable.current_revision_id = Some(revision.base.id.clone());
-        let result = ReviseSupplierOfferingResult {
-            offering_id: offering.base.id.clone(),
-            revision_id: revision.base.id.clone(),
-            revision_no: next_no,
-            status: next_status,
-            version: offering.base.version + 1,
-        };
-        let command = build_command(&req.idempotency_key, "revise_offering", &fingerprint, &result)?;
         let audit = actor.clone().resource_log_with_message(
             "supplier_offering.revise",
             "supplier_offering",
@@ -444,21 +454,70 @@ impl SupplierOfferingService {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let safety_pause_cause = if next_status == OfferingStatus::Stopped && prior_status != next_status {
+            Some(SafetyPauseCause::SupplierStopped)
+        } else {
+            prior_revision
+                .as_ref()
+                .and_then(|prior| revision_safety_pause_cause(prior, &revision))
+        };
+        let safety_pause = safety_pause_cause.map(|cause| {
+            let source_version = if cause == SafetyPauseCause::SupplierStopped {
+                format!("offering:{}", offering.base.version + 1)
+            } else {
+                format!("revision:{}", revision.base.id)
+            };
+            SystemSafetyPauseTrigger {
+                cause,
+                source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
+                source_object_id: offering.base.id.clone(),
+                source_version: source_version.clone(),
+                occurred_at: Instant::now(),
+                idempotency_key: format!(
+                    "w22:offering:{}:{}:{}",
+                    offering.base.id,
+                    cause.as_str().to_ascii_lowercase(),
+                    source_version
+                ),
+            }
+        });
+        let publication = PublicationService::new(db.clone(), Arc::new(UnavailableMallConnector));
+        let idempotency_key = req.idempotency_key.clone();
+        let fingerprint_for_tx = fingerprint.clone();
+        let offering_id = offering.base.id.clone();
+        let revision_id = revision.base.id.clone();
+        let expected_version = offering.base.version + 1;
         let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.supplier_offering_repository()
                         .append_revision(&mut offering, &revision, session)
                         .await?;
+                    let safety_pause = if let Some(trigger) = safety_pause.as_ref() {
+                        publication
+                            .system_safety_pause_in_transaction(trigger, session)
+                            .await?
+                    } else {
+                        None
+                    };
+                    let result = ReviseSupplierOfferingResult {
+                        offering_id,
+                        revision_id,
+                        revision_no: next_no,
+                        status: next_status,
+                        version: expected_version,
+                        safety_pause,
+                    };
+                    let command =
+                        build_command(&idempotency_key, "revise_offering", &fingerprint_for_tx, &result)?;
                     db.supplier_offering_commands().create(&command, session).await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), Error>(())
+                    Ok::<ReviseSupplierOfferingResult, Error>(result)
                 })
             })
             .await;
-        self.resolve_command_result(
+        self.resolve_written_result(
             transaction_result,
-            result,
             &req.idempotency_key,
             "revise_offering",
             &fingerprint,
@@ -501,6 +560,10 @@ impl SupplierOfferingService {
             .find_by_offering_id(&offering_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供给可供状态不存在".to_string()))?;
+        let prior_safety_pause_cause = availability_safety_pause_cause(
+            availability.availability_status,
+            availability.available_quantity,
+        );
         if req
             .expected_version
             .is_some_and(|version| version != availability.base.version)
@@ -522,18 +585,13 @@ impl SupplierOfferingService {
             source_revision_token: req.source_revision_token,
             updated_by: actor.id().to_string(),
         })?;
-        let result = UpdateSupplierOfferingAvailabilityResult {
-            offering_id: offering_id.to_string(),
-            availability_status: availability.availability_status,
-            availability_version: availability.base.version + 1,
-            source_updated_at: availability.source_updated_at.unix_secs(),
-        };
-        let command = build_command(
-            &req.idempotency_key,
-            "update_offering_availability",
-            &fingerprint,
-            &result,
-        )?;
+        let next_safety_pause_cause = availability_safety_pause_cause(
+            availability.availability_status,
+            availability.available_quantity,
+        );
+        let safety_pause_cause = (next_safety_pause_cause != prior_safety_pause_cause)
+            .then_some(next_safety_pause_cause)
+            .flatten();
         let audit = actor.clone().resource_log_with_message(
             "supplier_offering.availability.update",
             "supplier_offering",
@@ -542,21 +600,60 @@ impl SupplierOfferingService {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let safety_pause = safety_pause_cause.map(|cause| SystemSafetyPauseTrigger {
+            cause,
+            source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
+            source_object_id: offering_id.to_string(),
+            source_version: format!("availability:{}", availability.base.version + 1),
+            occurred_at: source_updated_at,
+            idempotency_key: format!(
+                "w22:offering:{}:{}:{}",
+                offering_id,
+                cause.as_str().to_ascii_lowercase(),
+                availability.base.version + 1
+            ),
+        });
+        let publication = PublicationService::new(db.clone(), Arc::new(UnavailableMallConnector));
+        let idempotency_key = req.idempotency_key.clone();
+        let fingerprint_for_tx = fingerprint.clone();
+        let result_offering_id = offering_id.to_string();
+        let result_status = availability.availability_status;
+        let result_version = availability.base.version + 1;
+        let result_source_updated_at = availability.source_updated_at.unix_secs();
         let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.supplier_offering_availabilities()
                         .update(&mut availability, session)
                         .await?;
+                    let safety_pause = if let Some(trigger) = safety_pause.as_ref() {
+                        publication
+                            .system_safety_pause_in_transaction(trigger, session)
+                            .await?
+                    } else {
+                        None
+                    };
+                    let result = UpdateSupplierOfferingAvailabilityResult {
+                        offering_id: result_offering_id,
+                        availability_status: result_status,
+                        availability_version: result_version,
+                        source_updated_at: result_source_updated_at,
+                        safety_pause,
+                    };
+                    let command = build_command(
+                        &idempotency_key,
+                        "update_offering_availability",
+                        &fingerprint_for_tx,
+                        &result,
+                    )?;
                     db.supplier_offering_commands().create(&command, session).await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), Error>(())
+                    Ok::<UpdateSupplierOfferingAvailabilityResult, Error>(result)
                 })
             })
             .await;
-        self.resolve_command_result(
+        self.resolve_written_result(
             transaction_result,
-            result,
             &req.idempotency_key,
             "update_offering_availability",
             &fingerprint,
@@ -801,6 +898,63 @@ impl SupplierOfferingService {
             },
         }
     }
+
+    async fn resolve_written_result<T>(
+        &self,
+        transaction_result: Result<T>,
+        idempotency_key: &str,
+        operation: &str,
+        fingerprint: &str,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        match transaction_result {
+            Ok(result) => Ok(result),
+            Err(error) => match self.command_record(idempotency_key).await? {
+                Some(command) => replay_command(command, operation, fingerprint),
+                None => Err(error),
+            },
+        }
+    }
+}
+
+fn availability_safety_pause_cause(
+    status: AvailabilityStatus,
+    quantity: Option<Quantity>,
+) -> Option<SafetyPauseCause> {
+    match (status, quantity) {
+        (AvailabilityStatus::Stopped, _) => Some(SafetyPauseCause::SupplierStopped),
+        (AvailabilityStatus::Unavailable, _) => Some(SafetyPauseCause::SupplyUnavailable),
+        (AvailabilityStatus::Stale, _) => Some(SafetyPauseCause::AvailabilityStale),
+        (AvailabilityStatus::Available, Some(quantity)) if quantity.to_decimal().is_zero() => {
+            Some(SafetyPauseCause::ZeroInventory)
+        }
+        _ => None,
+    }
+}
+
+fn revision_safety_pause_cause(
+    prior: &SupplierOfferingRevision,
+    next: &SupplierOfferingRevision,
+) -> Option<SafetyPauseCause> {
+    let critical_changed = prior.bulk_minimum_order_quantity != next.bulk_minimum_order_quantity
+        || prior.supply_region != next.supply_region
+        || prior.product_capabilities != next.product_capabilities
+        || prior.dropship_express != next.dropship_express
+        || prior.valid_from != next.valid_from
+        || prior.valid_to != next.valid_to;
+    if critical_changed {
+        return Some(SafetyPauseCause::CriticalSupplyChangeUnconfirmed);
+    }
+    let cost_changed = prior.dropship_supply_price_gross != next.dropship_supply_price_gross
+        || prior.dropship_supply_price_net != next.dropship_supply_price_net
+        || prior.bulk_supply_price_gross != next.bulk_supply_price_gross
+        || prior.bulk_supply_price_net != next.bulk_supply_price_net
+        || prior.input_tax_rate != next.input_tax_rate
+        || prior.freight_amount != next.freight_amount
+        || prior.service_fee_amount != next.service_fee_amount;
+    cost_changed.then_some(SafetyPauseCause::CostChangeUnconfirmed)
 }
 
 fn typed_id<T>(value: Option<&str>, constructor: impl Fn(String) -> T) -> Option<T> {
@@ -1069,9 +1223,15 @@ fn replay_command<T: DeserializeOwned>(
 mod tests {
     use std::str::FromStr;
 
-    use super::{price_net, typed_id};
+    use super::{availability_safety_pause_cause, price_net, revision_safety_pause_cause, typed_id};
+    use entities::common::time::BusinessDate;
     use entities::ids::SkuId;
-    use entities::money::{Rate, UnitPrice};
+    use entities::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
+    use entities::money::{Amount, Quantity, Rate, UnitPrice};
+    use entities::publication::SafetyPauseCause;
+    use entities::supplier_offering::{
+        AvailabilityStatus, PrefillSourceRefs, SupplierOfferingRevision, SupplierOfferingRevisionData,
+    };
 
     #[test]
     fn blank_filter_ids_are_omitted() {
@@ -1084,5 +1244,74 @@ mod tests {
         let gross = UnitPrice::from_str("11.30").unwrap();
         let rate = Rate::from_str("0.13").unwrap();
         assert_eq!(price_net(gross, rate).to_string(), "9.83");
+    }
+
+    #[test]
+    fn availability_causes_only_registered_safety_pause() {
+        assert_eq!(
+            availability_safety_pause_cause(AvailabilityStatus::Stopped, None),
+            Some(SafetyPauseCause::SupplierStopped)
+        );
+        assert_eq!(
+            availability_safety_pause_cause(
+                AvailabilityStatus::Available,
+                Some(Quantity::from_str("0").unwrap())
+            ),
+            Some(SafetyPauseCause::ZeroInventory)
+        );
+        assert_eq!(
+            availability_safety_pause_cause(
+                AvailabilityStatus::Available,
+                Some(Quantity::from_str("1").unwrap())
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn revision_diff_separates_cost_and_critical_supply_changes() {
+        let prior = offering_revision("10.00", vec!["CN"], vec!["refund"]);
+        let cost = offering_revision("11.00", vec!["CN"], vec!["refund"]);
+        let critical = offering_revision("10.00", vec!["CN", "HK"], vec!["refund"]);
+
+        assert_eq!(
+            revision_safety_pause_cause(&prior, &cost),
+            Some(SafetyPauseCause::CostChangeUnconfirmed)
+        );
+        assert_eq!(
+            revision_safety_pause_cause(&prior, &critical),
+            Some(SafetyPauseCause::CriticalSupplyChangeUnconfirmed)
+        );
+    }
+
+    fn offering_revision(
+        gross: &str,
+        regions: Vec<&str>,
+        capabilities: Vec<&str>,
+    ) -> SupplierOfferingRevision {
+        let gross = UnitPrice::from_str(gross).unwrap();
+        let tax = Rate::from_str("0.00").unwrap();
+        SupplierOfferingRevision::new(
+            SupplierOfferingRevisionId::new("revision-1"),
+            SupplierOfferingRevisionData {
+                supplier_offering_id: SupplierOfferingId::new("offering-1"),
+                revision_no: 1,
+                dropship_supply_price_gross: gross,
+                dropship_supply_price_net: gross,
+                bulk_supply_price_gross: gross,
+                bulk_supply_price_net: gross,
+                input_tax_rate: tax,
+                dropship_express: None,
+                freight_amount: Some(Amount::from_str("0").unwrap()),
+                service_fee_amount: Some(Amount::from_str("0").unwrap()),
+                bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
+                supply_region: regions.into_iter().map(str::to_string).collect(),
+                product_capabilities: capabilities.into_iter().map(str::to_string).collect(),
+                valid_from: BusinessDate::from_str("2026-08-14").unwrap(),
+                valid_to: None,
+                prefill_source_refs: PrefillSourceRefs::default(),
+            },
+        )
+        .unwrap()
     }
 }

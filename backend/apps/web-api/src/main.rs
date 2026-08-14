@@ -90,6 +90,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     let state = AppState::new(db, cfg.clone(), storage);
     database::ensure_transaction_support(&state.db()).await?;
     database::ensure_indexes(&state.db()).await?;
+    services::approval::ensure_approval_definitions(&state.db()).await?;
     services::iam::ensure_root_role(&state.rbac()).await?;
     services::iam::ensure_predefined_roles(&state.rbac()).await?;
 

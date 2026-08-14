@@ -8,7 +8,6 @@ import { apiGet, apiPost } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 import type {
     ConfirmMappingResult,
-    DeferMappingResult,
     MallSnapshotRow,
     MallSyncJobRow,
     MallSyncMetric,
@@ -19,6 +18,7 @@ import type {
     ReapplyResult,
     ReconciliationBatch,
     ReconciliationDifference,
+    RequestSourceFixResult,
     SourceSystemItem,
     SourceSystemListParams,
     SourceSystemPage,
@@ -44,6 +44,11 @@ type BackendJob = {
         | "single_order_backfill"
     range_start?: number | null
     range_end?: number | null
+    external_order_no?: string | null
+    trigger_source: "SCHEDULED" | "MANUAL"
+    trigger_reason?: string | null
+    triggered_by?: string | null
+    source_job_id?: string | null
     started_at: number
     finished_at?: number | null
     status: "running" | "success" | "partial_failure" | "failed"
@@ -89,10 +94,75 @@ type BackendMappingTask = {
         | "unique_line_item"
         | "amount_format"
     status: "pending" | "resolved" | "unresolvable" | "closed"
-    owner_role: string
+    owner_role?: string | null
     owner_user_id?: string | null
     resolution?: string | null
     resolved_at?: number | null
+    owner_routing_state: "MISSING" | "CONFIGURED"
+    work_item?: {
+        work_item_id: string
+        task_version: string
+        work_item_type: "BUSINESS_EXCEPTION"
+        business_object_type: "MASTER_MAPPING_TASK"
+        business_object_id: string
+        subject_version: string
+        status: "OPEN" | "COMPLETED" | "CLOSED"
+        assignment_mode: "DIRECT" | "POOL"
+        owner_user_id?: string | null
+        allowed_actions: Array<
+            "START_PROCESSING" | "RELEASE_TO_TEAM" | "REASSIGN"
+        >
+    } | null
+    external_identity_map_id?: string | null
+    source_evidence: Array<{
+        field: string
+        label: string
+        value: string
+        sensitive: boolean
+    }>
+    candidate_targets: Array<{
+        object_type: string
+        object_id: string
+        stable_no: string
+        label: string
+        current_revision_id: string
+        eligibility: "ELIGIBLE" | "INELIGIBLE"
+        reason: string
+    }>
+    current_targets: Array<{
+        mapping_target_id: string
+        object_type: string
+        object_id: string
+        relation_role: string
+        valid_from: number
+        valid_to?: number | null
+        status: string
+    }>
+    impact_summary: string
+    resolution_history: Array<{
+        action: string
+        result: string
+        handled_by: string
+        handled_at: number
+        evidence_reference?: string | null
+    }>
+    allowed_actions: string[]
+    action_blockers: Array<{
+        action: string
+        code: string
+        message: string
+    }>
+    reapply_operation?: {
+        operation_id: string
+        status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "UNKNOWN"
+        sales_order_id?: string | null
+        sales_order_revision_id?: string | null
+        receivable_result_reference?: string | null
+        failure_code?: string | null
+        failure_message?: string | null
+        last_updated_at: number
+    } | null
+    lock_version: number
     version: number
     created_at: number
 }
@@ -139,28 +209,15 @@ type BackendSourceSystem = {
     name: string
     system_type: "ERP" | "MALL" | "SUPPLIER"
     status: "active" | "disabled"
+    mall_sync_stage?: "FIRST_PHASE_MALL_OWNED" | "ARCHIVED" | null
     created_at: number
     version?: number
-}
-
-type WorkItemView = {
-    id: string
-    work_item_type: string
-    business_object_type: string
-    business_object_id: string
-    subject_version?: string | null
-    status: string
-    owner_role?: string | null
-    owner_user_id?: string | null
-    completion_action: string
-    version: number
 }
 
 // ─── Query input（契约保持） ─────────────────────────────────────────────────
 
 export type MallSyncQueryInput = {
     view: MallSyncViewName
-    policy?: "missing" | "configured"
     sourceUnavailable?: boolean
     q?: string
     jobId?: string
@@ -307,9 +364,16 @@ function mapOwnerRole(
     role: string,
 ): "SALES" | "OPERATIONS" | "FINANCE" | undefined {
     const r = role.trim().toUpperCase()
-    if (r === "SALES" || r === "销售") return "SALES"
-    if (r === "OPERATIONS" || r === "运营" || r === "OPS") return "OPERATIONS"
-    if (r === "FINANCE" || r === "财务") return "FINANCE"
+    if (r === "SALES" || r === "ROLE-SALES" || r === "销售") return "SALES"
+    if (
+        r === "OPERATIONS" ||
+        r === "ROLE-OPERATIONS" ||
+        r === "运营" ||
+        r === "OPS"
+    )
+        return "OPERATIONS"
+    if (r === "FINANCE" || r === "ROLE-FINANCE" || r === "财务")
+        return "FINANCE"
     return undefined
 }
 
@@ -339,7 +403,7 @@ const DIFF_TYPE_LABEL: Record<
     MALL_MISSING: "商城缺失",
     ERP_MISSING: "ERP 缺失",
     STATUS: "状态差异",
-    FINGERPRINT: "内容指纹差异",
+    FINGERPRINT: "内容不一致",
     DUPLICATE: "重复身份",
 }
 
@@ -410,7 +474,10 @@ function toJobRow(job: BackendJob): MallSyncJobRow {
         errorCount: job.error_count,
         startedAt: instantToIso(job.started_at) ?? "",
         finishedAt: instantToIso(job.finished_at ?? undefined),
-        triggeredBy: "系统",
+        triggeredBy:
+            job.trigger_source === "SCHEDULED"
+                ? "系统调度"
+                : (job.triggered_by ?? "授权用户"),
         watermarkAdvanced: st.status === "SUCCEEDED",
         allowedActions: failed ? ["RETRY_FAILED_JOB"] : [],
         actionBlockers: [],
@@ -457,106 +524,139 @@ function toMappingTask(
 ): MappingTaskView {
     const mappingType = mapMappingType(task.mapping_type)
     const st = mapMappingStatus(task.status)
-    const ownerRole = mapOwnerRole(task.owner_role)
+    const ownerRole = task.owner_role
+        ? mapOwnerRole(task.owner_role)
+        : undefined
     const snap = snapById.get(task.source_snapshot_id)
-    const externalOrderNo = snap?.external_order_no ?? "—"
+    const externalOrderNo =
+        task.source_evidence.find(
+            (evidence) => evidence.field === "external_order_no",
+        )?.value ??
+        snap?.external_order_no ??
+        "—"
+    const reapply = task.reapply_operation
+        ? {
+              operationId: task.reapply_operation.operation_id,
+              status: task.reapply_operation.status,
+              statusLabel:
+                  {
+                      QUEUED: "排队中",
+                      RUNNING: "运行中",
+                      SUCCEEDED: "成功",
+                      FAILED: "失败",
+                      UNKNOWN: "结果未知",
+                  }[task.reapply_operation.status] ??
+                  task.reapply_operation.status,
+              lastUpdatedAt:
+                  instantToIso(task.reapply_operation.last_updated_at) ?? "",
+              salesOrderId: task.reapply_operation.sales_order_id ?? undefined,
+              salesOrderRevisionId:
+                  task.reapply_operation.sales_order_revision_id ?? undefined,
+              receivableResultReference:
+                  task.reapply_operation.receivable_result_reference ??
+                  undefined,
+          }
+        : undefined
 
     const typedBase = {
         mappingTaskId: task.id,
         sourceSnapshotId: task.source_snapshot_id,
         externalOrderNo,
+        externalIdentityMapId: task.external_identity_map_id ?? undefined,
         mappingType,
         mappingTypeLabel: MAPPING_TYPE_LABEL[mappingType],
         ...st,
-        sourceEvidence: [
-            {
-                field: "external_order_no",
-                label: "来源单号",
-                value: externalOrderNo,
-            },
-            {
-                field: "mapping_type",
-                label: "映射类型",
-                value: MAPPING_TYPE_LABEL[mappingType],
-            },
-        ],
-        candidateTargets: [] as Array<{
-            objectType: string
-            objectId: string
-            stableNo: string
-            label: string
-            currentRevisionId: string
-            eligibility: "ELIGIBLE" | "INELIGIBLE"
-            reason: string
-        }>,
-        currentTargets: [] as Array<{
-            objectType: string
-            objectId: string
-            stableNo: string
-            label: string
-            relationRole: string
-            validFrom: string
-            validTo?: string
-            status: string
-        }>,
-        impactSummary: task.resolution ?? "待确认 ERP 目标",
-        resolutionHistory: task.resolution
-            ? [
-                  {
-                      action: "RESOLVE",
-                      result: task.resolution,
-                      handledBy: task.owner_role,
-                      handledAt:
-                          instantToIso(task.resolved_at ?? undefined) ?? "",
-                  },
-              ]
-            : [],
-        allowedActions:
-            st.mappingTaskStatus === "PENDING"
-                ? ["CONFIRM_TARGET", "DEFER_MAPPING_TASK"]
-                : st.mappingTaskStatus === "RESOLVED"
-                  ? ["REAPPLY"]
-                  : [],
-        actionBlockers: [
-            {
-                action: "CONFIRM_TARGET",
-                code: "CANDIDATES_NOT_PROVIDED",
-                message:
-                    "后端映射任务未返回候选目标列表；确认时须由调用方提供 targetObjectId（backend_gap）。",
-            },
-        ],
-        lockVersion: task.version,
-        hasConflict: st.mappingTaskStatus === "PENDING",
+        reapplyOperation: reapply,
+        sourceEvidence: task.source_evidence.map((evidence) => ({
+            field: evidence.field,
+            label: evidence.label,
+            value: evidence.value,
+            sensitive: evidence.sensitive,
+        })),
+        candidateTargets: task.candidate_targets.map((candidate) => ({
+            objectType: candidate.object_type,
+            objectId: candidate.object_id,
+            stableNo: candidate.stable_no,
+            label: candidate.label,
+            currentRevisionId: candidate.current_revision_id,
+            eligibility: candidate.eligibility,
+            reason: candidate.reason,
+        })),
+        currentTargets: task.current_targets.map((target) => ({
+            objectType: target.object_type,
+            objectId: target.object_id,
+            stableNo: target.object_id,
+            label: target.object_id,
+            relationRole: target.relation_role,
+            validFrom: instantToIso(target.valid_from) ?? "",
+            validTo: instantToIso(target.valid_to ?? undefined),
+            status: target.status,
+        })),
+        impactSummary: task.impact_summary,
+        resolutionHistory: task.resolution_history.map((history) => ({
+            action: history.action,
+            result: history.result,
+            handledBy: history.handled_by,
+            handledAt: instantToIso(history.handled_at) ?? "",
+            evidenceReference: history.evidence_reference ?? undefined,
+        })),
+        allowedActions: task.allowed_actions,
+        actionBlockers: task.action_blockers,
+        lockVersion: task.lock_version,
+        hasConflict: task.action_blockers.some((blocker) =>
+            blocker.code.includes("CONFLICT"),
+        ),
     }
 
-    if (!ownerRole) {
+    if (
+        task.owner_routing_state !== "CONFIGURED" ||
+        !ownerRole ||
+        !task.work_item ||
+        task.work_item.work_item_type !== "BUSINESS_EXCEPTION" ||
+        task.work_item.business_object_type.toUpperCase() !==
+            "MASTER_MAPPING_TASK" ||
+        task.work_item.business_object_id !== task.id
+    ) {
         return {
             ...typedBase,
             ownerRoutingState: "MISSING" as const,
+            allowedActions: [],
+            candidateTargets: [],
         }
     }
 
+    const workItem = task.work_item
     return {
         ...typedBase,
         ownerRoutingState: "CONFIGURED" as const,
         ownerRole,
         ownerRoleLabel: OWNER_ROLE_LABEL[ownerRole],
-        ownerUserId: task.owner_user_id ?? undefined,
+        ownerUserId: workItem.owner_user_id ?? undefined,
         workItem: {
-            workItemId: `mapping:${task.id}`,
+            workItemId: workItem.work_item_id,
             workItemType: "BUSINESS_EXCEPTION" as const,
             businessObjectType: "MASTER_MAPPING_TASK" as const,
             businessObjectId: task.id,
-            subjectVersion: String(task.version),
-            subjectHash: `v${task.version}`,
-            status:
-                st.mappingTaskStatus === "RESOLVED"
-                    ? ("COMPLETED" as const)
-                    : ("PENDING" as const),
+            subjectVersion: workItem.subject_version,
+            taskVersion: workItem.task_version,
+            status: workItem.status,
             statusLabel:
-                st.mappingTaskStatus === "RESOLVED" ? "已完成" : "待处理",
-            completionAction: "CONFIRM_MAPPING",
-            claimedBy: task.owner_user_id ?? undefined,
+                workItem.status === "COMPLETED"
+                    ? "已完成"
+                    : workItem.status === "CLOSED"
+                      ? "已关闭"
+                      : workItem.owner_user_id
+                        ? "处理中"
+                        : "团队待处理",
+            assignmentMode: workItem.assignment_mode,
+            processingState: "READY" as const,
+            ownerUser: workItem.owner_user_id
+                ? {
+                      id: workItem.owner_user_id,
+                      displayName: workItem.owner_user_id,
+                  }
+                : undefined,
+            allowedActions: workItem.allowed_actions,
         },
     }
 }
@@ -632,6 +732,7 @@ async function resolveMallSourceSystemId(): Promise<{
     code: string
     name: string
     environmentLabel: string
+    stage: OwnershipStage
 } | null> {
     const page = await apiGet<Page<BackendSourceSystem>>(
         "/admin/source-systems",
@@ -649,6 +750,8 @@ async function resolveMallSourceSystemId(): Promise<{
         code: mall.code,
         name: mall.name,
         environmentLabel: mall.status === "active" ? "启用" : "停用",
+        // 阶段未由服务端明确返回时按封存处理，禁止客户端猜测仍可写。
+        stage: mall.mall_sync_stage ?? "ARCHIVED",
     }
 }
 
@@ -676,6 +779,14 @@ export async function fetchMallSyncPage(
                 listParams,
             ),
         ])
+
+    let explicitMappingTask: BackendMappingTask | undefined
+    if (input.mappingTaskId) {
+        explicitMappingTask = await apiGet<BackendMappingTask>(
+            `/admin/master-mapping-tasks/${encodeURIComponent(input.mappingTaskId)}`,
+            input.workItemId ? { work_item_id: input.workItemId } : undefined,
+        )
+    }
 
     let cursor: BackendCursor | null = null
     if (source) {
@@ -705,7 +816,15 @@ export async function fetchMallSyncPage(
     const jobNoById = new Map(jobRows.map((j) => [j.jobId, j.jobNo]))
     let snapshots = snapshotsPage.items.map((s) => toSnapshotRow(s, jobNoById))
     const snapById = new Map(snapshotsPage.items.map((s) => [s.id, s]))
-    let mappingTasks = mappingPage.items.map((t) => toMappingTask(t, snapById))
+    const mappingItems = [...mappingPage.items]
+    if (explicitMappingTask) {
+        const index = mappingItems.findIndex(
+            (task) => task.id === explicitMappingTask.id,
+        )
+        if (index >= 0) mappingItems[index] = explicitMappingTask
+        else mappingItems.push(explicitMappingTask)
+    }
+    let mappingTasks = mappingItems.map((task) => toMappingTask(task, snapById))
 
     // Client-side q filter only when backend has no free-text search for this surface
     if (input.q?.trim()) {
@@ -752,7 +871,7 @@ export async function fetchMallSyncPage(
               )
             : undefined
 
-    const stage: OwnershipStage = "FIRST_PHASE_MALL_OWNED"
+    const stage: OwnershipStage = source?.stage ?? "ARCHIVED"
     const sourceUnavailable = !source
 
     const metrics = buildMetrics(jobRows, mappingTasks, recon, lagSeconds)
@@ -763,23 +882,23 @@ export async function fetchMallSyncPage(
     const selectedSnapshot =
         snapshots.find((s) => s.snapshotId === input.snapshotId) ??
         (input.view === "snapshots" ? snapshots[0] : undefined)
-    let selectedMappingTask =
-        mappingTasks.find((t) => t.mappingTaskId === input.mappingTaskId) ??
-        mappingTasks.find(
-            (t) =>
-                t.ownerRoutingState === "CONFIGURED" &&
-                t.workItem.workItemId === input.workItemId,
-        ) ??
-        (input.view === "mapping" ? mappingTasks[0] : undefined)
-
-    if (input.workItemId && !input.mappingTaskId) {
-        const byWi = mappingTasks.find(
-            (t) =>
-                t.ownerRoutingState === "CONFIGURED" &&
-                t.workItem.workItemId === input.workItemId,
-        )
-        if (byWi) selectedMappingTask = byWi
-    }
+    const selectedMappingTask = input.mappingTaskId
+        ? mappingTasks.find(
+              (task) =>
+                  task.mappingTaskId === input.mappingTaskId &&
+                  (!input.workItemId ||
+                      (task.ownerRoutingState === "CONFIGURED" &&
+                          task.workItem.workItemId === input.workItemId)),
+          )
+        : input.workItemId
+          ? mappingTasks.find(
+                (task) =>
+                    task.ownerRoutingState === "CONFIGURED" &&
+                    task.workItem.workItemId === input.workItemId,
+            )
+          : input.view === "mapping"
+            ? mappingTasks[0]
+            : undefined
 
     const selectedDifference = recon?.differences.find(
         (d) => d.differenceId === input.differenceId,
@@ -807,10 +926,6 @@ export async function fetchMallSyncPage(
                 name: "未配置商城来源",
                 environmentLabel: "—",
             },
-            manualGovernancePolicy: {
-                state: "MISSING",
-                blockerCode: "MANUAL_GOVERNANCE_POLICY_MISSING",
-            },
             ownership: {
                 businessType: "VOUCHER",
                 stage,
@@ -835,7 +950,7 @@ export async function fetchMallSyncPage(
                 : undefined,
             hasSourceScope: Boolean(source),
             scheduledIncrementalNote:
-                "系统定时增量按调度契约独立运行；人工立即增量需治理策略与权限。",
+                "系统定时增量按调度契约独立运行；授权管理员可直接提交带理由的人工增量。",
         },
         jobs: jobRows,
         snapshots,
@@ -854,8 +969,8 @@ export async function fetchMallSyncPage(
 
 export async function triggerManualIncremental(input: {
     reason: string
-    policyConfigured?: boolean
     stage?: OwnershipStage
+    idempotencyKey?: string
 }): Promise<TriggerMallSyncResult> {
     if (!input.reason.trim() || input.reason.trim().length < 4) {
         return {
@@ -872,9 +987,20 @@ export async function triggerManualIncremental(input: {
             message: "未配置可用商城来源系统",
         }
     }
+    if (source.stage !== "FIRST_PHASE_MALL_OWNED") {
+        return {
+            status: "failed",
+            code: "MALL_SYNC_ARCHIVED",
+            message: "W17 已封存为只读历史，不能触发人工增量",
+        }
+    }
     const job = await apiPost<BackendJob>("/admin/mall-sales-sync-jobs", {
+        mode: "INCREMENTAL",
         source_system_id: source.id,
-        job_type: "incremental",
+        execution_stage: source.stage,
+        trigger_source: "MANUAL",
+        reason: input.reason.trim(),
+        idempotency_key: input.idempotencyKey ?? crypto.randomUUID(),
     })
     return {
         status: "succeeded",
@@ -887,8 +1013,8 @@ export async function triggerManualIncremental(input: {
 export async function triggerSingleOrderPull(input: {
     externalOrderNo: string
     reason: string
-    policyConfigured?: boolean
     stage?: OwnershipStage
+    idempotencyKey?: string
 }): Promise<TriggerMallSyncResult> {
     if (!input.externalOrderNo.trim()) {
         return {
@@ -905,16 +1031,27 @@ export async function triggerSingleOrderPull(input: {
             message: "未配置可用商城来源系统",
         }
     }
-    // backend CreateMallSalesSyncJobRequest 无 external_order_no；仅创建 single_order_backfill 作业
+    if (source.stage !== "FIRST_PHASE_MALL_OWNED") {
+        return {
+            status: "failed",
+            code: "MALL_SYNC_ARCHIVED",
+            message: "W17 已封存为只读历史，不能按单号补拉",
+        }
+    }
     const job = await apiPost<BackendJob>("/admin/mall-sales-sync-jobs", {
+        mode: "SINGLE_ORDER",
         source_system_id: source.id,
-        job_type: "single_order_backfill",
+        execution_stage: source.stage,
+        trigger_source: "MANUAL",
+        external_order_no: input.externalOrderNo.trim(),
+        reason: input.reason.trim(),
+        idempotency_key: input.idempotencyKey ?? crypto.randomUUID(),
     })
     return {
         status: "succeeded",
         jobId: job.id,
         jobNo: job.id.slice(0, 12).toUpperCase(),
-        message: `已创建按单补拉作业（来源单号 ${input.externalOrderNo.trim()} 由执行器消费；创建契约未携带单号字段）。`,
+        message: `已沿原来源单号 ${input.externalOrderNo.trim()} 创建按单补拉作业。`,
     }
 }
 
@@ -922,6 +1059,7 @@ export async function retryFailedJob(input: {
     jobId: string
     reason: string
     stage?: OwnershipStage
+    idempotencyKey?: string
 }): Promise<TriggerMallSyncResult> {
     const original = await apiGet<BackendJob>(
         `/admin/mall-sales-sync-jobs/${input.jobId}`,
@@ -933,11 +1071,25 @@ export async function retryFailedJob(input: {
             message: "仅失败/部分失败任务可重试",
         }
     }
+    const source = await resolveMallSourceSystemId()
+    if (
+        !source ||
+        source.id !== original.source_system_id ||
+        source.stage !== "FIRST_PHASE_MALL_OWNED"
+    ) {
+        return {
+            status: "failed",
+            code: "MALL_SYNC_ARCHIVED",
+            message: "来源商城不在一期可写阶段，不能重试普通同步作业",
+        }
+    }
     const job = await apiPost<BackendJob>("/admin/mall-sales-sync-jobs", {
+        mode: "RETRY_FAILED_JOB",
         source_system_id: original.source_system_id,
-        job_type: original.job_type,
-        range_start: original.range_start ?? undefined,
-        range_end: original.range_end ?? undefined,
+        execution_stage: source.stage,
+        failed_job_id: original.id,
+        reason: input.reason.trim(),
+        idempotency_key: input.idempotencyKey ?? crypto.randomUUID(),
     })
     return {
         status: "succeeded",
@@ -947,37 +1099,21 @@ export async function retryFailedJob(input: {
     }
 }
 
-export async function claimMappingWorkItem(input: {
-    workItemId: string
-    subjectVersion: string
-}): Promise<{ workItemId: string; subjectVersion: string }> {
-    // workItemId may be synthetic `mapping:{taskId}` when backend has no linked work_item
-    if (input.workItemId.startsWith("mapping:")) {
-        return {
-            workItemId: input.workItemId,
-            subjectVersion: input.subjectVersion,
-        }
-    }
-    const version = Number(input.subjectVersion)
-    const result = await apiPost<WorkItemView>(
-        `/admin/work-items/${input.workItemId}/claim`,
-        { version: Number.isFinite(version) && version > 0 ? version : 1 },
-    )
-    return {
-        workItemId: result.id,
-        subjectVersion: result.subject_version ?? String(result.version),
-    }
-}
-
 export async function confirmMapping(input: {
     mappingTaskId: string
+    sourceSnapshotId: string
+    externalIdentityMapId?: string
     workItemId: string
+    expectedTaskVersion: string
     expectedSubjectVersion: string
-    expectedLockVersion: number
+    expectedMappingTaskVersion: number
+    mappingOperationId: string
+    targetObjectType: string
     targetObjectId: string
-    targetLabel: string
+    relationRole: string
     evidenceNote: string
-    stage?: OwnershipStage
+    executionStage: "FIRST_PHASE_MALL_OWNED"
+    idempotencyKey: string
 }): Promise<ConfirmMappingResult> {
     if (!input.evidenceNote.trim() || input.evidenceNote.trim().length < 4) {
         return {
@@ -994,74 +1130,168 @@ export async function confirmMapping(input: {
         }
     }
 
-    const resolution = `target=${input.targetObjectId};label=${input.targetLabel};note=${input.evidenceNote.trim()}`
-    await apiPost<BackendMappingTask>(
-        `/admin/master-mapping-tasks/${input.mappingTaskId}/resolve`,
-        { kind: "resolved", resolution },
+    const result = await apiPost<{
+        work_item_id: string
+        work_item_status: "COMPLETED"
+        business_result: {
+            mapping_task_id: string
+            mapping_task_status: "RESOLVED"
+            external_identity_map_id: string
+            mapping_target_id: string
+            recorded_at: string
+        }
+    }>(
+        `/admin/master-mapping-tasks/${encodeURIComponent(input.mappingTaskId)}/confirm`,
+        {
+            work_item_id: input.workItemId,
+            expected_task_version: input.expectedTaskVersion,
+            expected_subject_version: input.expectedSubjectVersion,
+            decision: {
+                mapping_task_id: input.mappingTaskId,
+                source_snapshot_id: input.sourceSnapshotId,
+                external_identity_map_id: input.externalIdentityMapId,
+                expected_mapping_task_version: input.expectedMappingTaskVersion,
+                mapping_operation_id: input.mappingOperationId,
+                execution_stage: input.executionStage,
+                resolution: {
+                    type: "CONFIRM_TARGET",
+                    object_type: input.targetObjectType,
+                    object_id: input.targetObjectId,
+                    relation_role: input.relationRole,
+                },
+                evidence_note: input.evidenceNote.trim(),
+            },
+            idempotency_key: input.idempotencyKey,
+        },
     )
-
-    if (!input.workItemId.startsWith("mapping:")) {
-        const version = Number(input.expectedSubjectVersion)
-        await apiPost(`/admin/work-items/${input.workItemId}/complete`, {
-            version: Number.isFinite(version) && version > 0 ? version : 1,
-        })
-    }
-
-    const recordedAt = new Date().toISOString()
     return {
         status: "succeeded",
-        mappingTaskId: input.mappingTaskId,
-        mappingTaskStatus: "RESOLVED",
-        externalIdentityMapId: `eim_${input.mappingTaskId}`,
-        mappingTargetId: `mtgt_${input.targetObjectId}`,
-        recordedAt,
-        message:
-            "映射已解决。尚未形成销售版本；请使用原数据重新归集（若后端支持）。",
+        mappingTaskId: result.business_result.mapping_task_id,
+        mappingTaskStatus: result.business_result.mapping_task_status,
+        externalIdentityMapId: result.business_result.external_identity_map_id,
+        mappingTargetId: result.business_result.mapping_target_id,
+        recordedAt: result.business_result.recorded_at,
+        message: "映射已确认，当前处理任务已完成。",
     }
 }
 
-export async function deferMapping(input: {
+export async function requestSourceFix(input: {
     mappingTaskId: string
+    sourceSnapshotId: string
     workItemId: string
+    expectedTaskVersion: string
     expectedSubjectVersion: string
+    expectedMappingTaskVersion: number
+    requestOperationId: string
     reasonCode: string
-    note?: string
-    queueContextId: string
-}): Promise<DeferMappingResult> {
-    if (!input.reasonCode) {
-        return {
-            status: "failed",
-            code: "REASON_REQUIRED",
-            message: "跳过须选择结构化原因",
-        }
-    }
-    if (!input.workItemId.startsWith("mapping:")) {
-        const version = Number(input.expectedSubjectVersion)
-        await apiPost(`/admin/work-items/${input.workItemId}/defer`, {
-            version: Number.isFinite(version) && version > 0 ? version : 1,
-            comment: `${input.reasonCode}${input.note ? `: ${input.note}` : ""}`,
-        })
-    }
+    reasonText: string
+    requestedEvidence: string[]
+    idempotencyKey: string
+}): Promise<RequestSourceFixResult> {
+    const result = await apiPost<{
+        work_item_id: string
+        work_item_status: "OPEN"
+        task_version: string | number
+        mapping_task_id: string
+        mapping_task_status: "PENDING"
+        mapping_evidence_entry_id: string
+        recorded_at: string
+    }>(
+        `/admin/master-mapping-tasks/${encodeURIComponent(input.mappingTaskId)}/request-source-fix`,
+        {
+            work_item_id: input.workItemId,
+            expected_task_version: input.expectedTaskVersion,
+            expected_subject_version: input.expectedSubjectVersion,
+            action: {
+                type: "REQUEST_SOURCE_FIX",
+                mapping_task_id: input.mappingTaskId,
+                source_snapshot_id: input.sourceSnapshotId,
+                expected_mapping_task_version: input.expectedMappingTaskVersion,
+                request_operation_id: input.requestOperationId,
+                reason_code: input.reasonCode,
+                reason_text: input.reasonText,
+                requested_evidence: input.requestedEvidence,
+            },
+            idempotency_key: input.idempotencyKey,
+        },
+    )
     return {
         status: "succeeded",
-        mappingTaskId: input.mappingTaskId,
-        mappingTaskStatus: "PENDING",
-        leaseDisposition: "RELEASED",
-        message: "已记录跳过原因。映射任务仍为待处理。",
+        mappingTaskId: result.mapping_task_id,
+        mappingTaskStatus: result.mapping_task_status,
+        workItemStatus: result.work_item_status,
+        taskVersion: String(result.task_version),
+        mappingEvidenceEntryId: result.mapping_evidence_entry_id,
+        recordedAt: result.recorded_at,
+        message: "来源修复说明已记录，当前处理任务保持待处理。",
     }
 }
 
 export async function reapplyMallSnapshot(input: {
     mappingTaskId: string
     sourceSnapshotId: string
-    stage?: OwnershipStage
+    expectedMappingVersion: number
+    operationId: string
+    executionStage: "FIRST_PHASE_MALL_OWNED"
+    idempotencyKey: string
 }): Promise<ReapplyResult> {
-    void input
-    // backend_gap: 无 reapply 专用 HTTP
+    const result = await apiPost<{
+        action_id: string
+        status: "ACCEPTED" | "SUCCEEDED" | "FAILED" | "UNKNOWN"
+        background_job_id?: string | null
+        reapply_operation_status?:
+            | "QUEUED"
+            | "RUNNING"
+            | "SUCCEEDED"
+            | "FAILED"
+            | "UNKNOWN"
+        sales_order_id?: string | null
+        sales_order_revision_id?: string | null
+        receivable_result_reference?: string | null
+    }>(
+        `/admin/master-mapping-tasks/${encodeURIComponent(input.mappingTaskId)}/reapply`,
+        {
+            mapping_task_id: input.mappingTaskId,
+            source_snapshot_id: input.sourceSnapshotId,
+            expected_mapping_version: input.expectedMappingVersion,
+            operation_id: input.operationId,
+            execution_stage: input.executionStage,
+            idempotency_key: input.idempotencyKey,
+        },
+    )
+    if (result.status === "UNKNOWN" || result.status === "ACCEPTED") {
+        return {
+            status: "unknown",
+            reapplyOperationStatus: "UNKNOWN",
+            operationId: result.action_id,
+            message: "重新归集尚无确定结果，请留在当前项查询处理结果。",
+            idempotencyKey: input.idempotencyKey,
+        }
+    }
+    if (
+        result.status === "SUCCEEDED" &&
+        result.sales_order_id &&
+        result.sales_order_revision_id
+    ) {
+        return {
+            status: "succeeded",
+            operationId: result.action_id,
+            reapplyOperationStatus: "SUCCEEDED",
+            salesOrderId: result.sales_order_id,
+            salesOrderNo: result.sales_order_id,
+            salesOrderRevisionId: result.sales_order_revision_id,
+            receivableResultReference:
+                result.receivable_result_reference ?? undefined,
+            message: "原数据已重新归集并形成销售版本。",
+        }
+    }
     return {
         status: "failed",
-        code: "BACKEND_GAP_REAPPLY",
-        message: "后端尚未提供商城快照重新归集接口（mall_sync reapply）。",
+        code: "REAPPLY_FAILED",
+        operationId: result.action_id,
+        reapplyOperationStatus: "FAILED",
+        message:
+            "重新归集已取得明确失败结果；映射结论保持已解决，请查看操作详情。",
     }
 }
 
@@ -1070,11 +1300,54 @@ export async function resolveUnknownReapply(input: {
     operationId: string
     settle?: boolean
 }): Promise<ReapplyResult> {
-    void input
+    const operation = await apiGet<{
+        operation_id: string
+        status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "UNKNOWN"
+        sales_order_id?: string | null
+        sales_order_revision_id?: string | null
+        receivable_result_reference?: string | null
+        failure_code?: string | null
+        failure_message?: string | null
+    }>(
+        `/admin/master-mapping-tasks/${encodeURIComponent(input.mappingTaskId)}/reapply-operations/${encodeURIComponent(input.operationId)}`,
+    )
+    if (
+        operation.status === "SUCCEEDED" &&
+        operation.sales_order_id &&
+        operation.sales_order_revision_id
+    ) {
+        return {
+            status: "succeeded",
+            operationId: operation.operation_id,
+            reapplyOperationStatus: "SUCCEEDED",
+            salesOrderId: operation.sales_order_id,
+            salesOrderNo: operation.sales_order_id,
+            salesOrderRevisionId: operation.sales_order_revision_id,
+            receivableResultReference:
+                operation.receivable_result_reference ?? undefined,
+            message: "重新归集已形成可验证销售版本与应收结果。",
+        }
+    }
+    if (operation.status === "FAILED") {
+        return {
+            status: "failed",
+            code: operation.failure_code ?? "REAPPLY_FAILED",
+            operationId: operation.operation_id,
+            reapplyOperationStatus: "FAILED",
+            message:
+                operation.failure_message ??
+                "重新归集已明确失败，映射结论保持已解决。",
+        }
+    }
     return {
-        status: "failed",
-        code: "BACKEND_GAP_REAPPLY",
-        message: "后端尚未提供重新归集查询/结算接口。",
+        status: "unknown",
+        reapplyOperationStatus: "UNKNOWN",
+        operationId: operation.operation_id,
+        message:
+            operation.status === "UNKNOWN"
+                ? "重新归集结果仍未知，请稍后按同一 operation ID 查询。"
+                : "重新归集仍在排队或运行，请稍后查询。",
+        idempotencyKey: operation.operation_id,
     }
 }
 

@@ -19,12 +19,16 @@ use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
 use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
-use crate::validation::normalize_required_text;
+use crate::validation::{normalize_optional_text, normalize_required_text};
 
 /// 提交序号最大长度。
 const SUBMISSION_NO_MAX_LEN: usize = 64;
 /// 操作人标识最大长度。
 const ACTOR_MAX_LEN: usize = 128;
+/// 结构化审核原因代码最大长度。
+const REVIEW_REASON_CODE_MAX_LEN: usize = 64;
+/// 审核意见最大长度。
+const REVIEW_COMMENT_MAX_LEN: usize = 512;
 
 /// 提交状态（§6.6：草稿、待审核、已通过、已驳回、因重新提交失效）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,6 +44,24 @@ pub enum SubmissionStatus {
     Rejected,
     /// 因重新提交失效。
     Superseded,
+}
+
+/// 财务审核强类型结论。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "review_result", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PurchaseOrderReviewDecision {
+    /// 审核通过；可以记录补充说明，不携带驳回原因代码。
+    Approved {
+        /// 补充说明。
+        comment: Option<String>,
+    },
+    /// 审核驳回；必须记录结构化原因代码。
+    Rejected {
+        /// 结构化驳回原因代码。
+        reason_code: String,
+        /// 补充说明。
+        comment: Option<String>,
+    },
 }
 
 impl SubmissionStatus {
@@ -143,6 +165,14 @@ pub struct PurchaseOrderSubmission {
     pub submitted_at: Option<Instant>,
     /// 提交审计人；与 `submitted_at` 成对出现。
     pub submitted_by: Option<String>,
+    /// 财务审核时间；与 `reviewed_by` 成对出现。
+    pub reviewed_at: Option<Instant>,
+    /// 财务审核人。
+    pub reviewed_by: Option<String>,
+    /// 驳回时的结构化原因代码；通过时为空。
+    pub review_reason_code: Option<String>,
+    /// 审核补充说明。
+    pub review_comment: Option<String>,
 }
 
 impl PurchaseOrderSubmission {
@@ -189,6 +219,10 @@ impl PurchaseOrderSubmission {
             status: SubmissionStatus::Draft,
             submitted_at: None,
             submitted_by: None,
+            reviewed_at: None,
+            reviewed_by: None,
+            review_reason_code: None,
+            review_comment: None,
         })
     }
 
@@ -245,27 +279,57 @@ impl PurchaseOrderSubmission {
         Ok(())
     }
 
-    /// 记录财务审核结论。
+    /// 记录财务审核正式结论与处理审计。
     ///
     /// 只能对待审核提交执行；通过 → `Approved`，驳回 → `Rejected`。
     ///
     /// # 参数
-    /// * `approved` - 是否审核通过
+    /// * `decision` - 强类型审核结论
+    /// * `reviewed_at` - 审核时间
+    /// * `reviewed_by` - 审核人
     ///
     /// # 返回
     /// 记录成功返回 `Ok(())`。
     ///
     /// # 错误
     /// 状态不是待审核时返回错误。
-    pub fn mark_reviewed(&mut self, approved: bool) -> Result<()> {
+    pub fn record_review(
+        &mut self,
+        decision: PurchaseOrderReviewDecision,
+        reviewed_at: Instant,
+        reviewed_by: impl Into<String>,
+    ) -> Result<()> {
         if self.status != SubmissionStatus::Pending {
             return Err(Error::from("只有待审核的提交才能记录审核结论"));
         }
-        self.status = if approved {
-            SubmissionStatus::Approved
-        } else {
-            SubmissionStatus::Rejected
+        let reviewed_by = normalize_required_text(
+            reviewed_by.into(),
+            "审核人不能为空",
+            ACTOR_MAX_LEN,
+            "审核人标识过长",
+        )?;
+        let (status, reason_code, comment) = match decision {
+            PurchaseOrderReviewDecision::Approved { comment } => (
+                SubmissionStatus::Approved,
+                None,
+                normalize_optional_text(comment, "审核说明", REVIEW_COMMENT_MAX_LEN)?,
+            ),
+            PurchaseOrderReviewDecision::Rejected { reason_code, comment } => (
+                SubmissionStatus::Rejected,
+                Some(normalize_required_text(
+                    reason_code,
+                    "驳回原因代码不能为空",
+                    REVIEW_REASON_CODE_MAX_LEN,
+                    "驳回原因代码过长",
+                )?),
+                normalize_optional_text(comment, "审核说明", REVIEW_COMMENT_MAX_LEN)?,
+            ),
         };
+        self.status = status;
+        self.reviewed_at = Some(reviewed_at);
+        self.reviewed_by = Some(reviewed_by);
+        self.review_reason_code = reason_code;
+        self.review_comment = comment;
         Ok(())
     }
 
@@ -537,8 +601,9 @@ fn ensure_header_triple(
 #[cfg(test)]
 mod tests {
     use super::{
-        PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
-        PurchaseOrderSubmissionLineData, PurchaseOrderSubmissionUpdate, SubmissionStatus,
+        PurchaseOrderReviewDecision, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
+        PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, PurchaseOrderSubmissionUpdate,
+        SubmissionStatus,
     };
     use crate::common::time::{BusinessDate, Instant};
     use crate::ids::{
@@ -635,8 +700,19 @@ mod tests {
             "待审核提交冻结"
         );
 
-        submission.mark_reviewed(true).unwrap();
+        submission
+            .record_review(
+                PurchaseOrderReviewDecision::Approved {
+                    comment: Some(" 金额核对无误 ".to_string()),
+                },
+                Instant::from_unix_secs(1_700_000_100),
+                "finance-1",
+            )
+            .unwrap();
         assert_eq!(submission.status, SubmissionStatus::Approved);
+        assert_eq!(submission.reviewed_by.as_deref(), Some("finance-1"));
+        assert_eq!(submission.review_comment.as_deref(), Some("金额核对无误"));
+        assert!(submission.review_reason_code.is_none());
         assert!(submission.mark_superseded().is_err(), "已通过提交不得失效");
 
         let mut rejected =
@@ -644,10 +720,60 @@ mod tests {
         rejected
             .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
             .unwrap();
-        rejected.mark_reviewed(false).unwrap();
+        rejected
+            .record_review(
+                PurchaseOrderReviewDecision::Rejected {
+                    reason_code: " COST_OR_TAX ".to_string(),
+                    comment: Some(" 税率需复核 ".to_string()),
+                },
+                Instant::from_unix_secs(1_700_000_100),
+                "finance-2",
+            )
+            .unwrap();
         assert_eq!(rejected.status, SubmissionStatus::Rejected);
+        assert_eq!(rejected.review_reason_code.as_deref(), Some("COST_OR_TAX"));
+        assert_eq!(rejected.review_comment.as_deref(), Some("税率需复核"));
         rejected.mark_superseded().unwrap();
         assert_eq!(rejected.status, SubmissionStatus::Superseded);
+    }
+
+    #[test]
+    fn rejected_review_requires_structured_reason_and_terminal_review_cannot_repeat() {
+        let mut submission =
+            PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-1"), submission_data()).unwrap();
+        submission
+            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
+            .unwrap();
+
+        assert!(submission
+            .record_review(
+                PurchaseOrderReviewDecision::Rejected {
+                    reason_code: "   ".to_string(),
+                    comment: None,
+                },
+                Instant::from_unix_secs(1_700_000_100),
+                "finance-1",
+            )
+            .is_err());
+        assert_eq!(submission.status, SubmissionStatus::Pending);
+
+        submission
+            .record_review(
+                PurchaseOrderReviewDecision::Rejected {
+                    reason_code: "OTHER".to_string(),
+                    comment: None,
+                },
+                Instant::from_unix_secs(1_700_000_100),
+                "finance-1",
+            )
+            .unwrap();
+        assert!(submission
+            .record_review(
+                PurchaseOrderReviewDecision::Approved { comment: None },
+                Instant::from_unix_secs(1_700_000_200),
+                "finance-1",
+            )
+            .is_err());
     }
 
     #[test]

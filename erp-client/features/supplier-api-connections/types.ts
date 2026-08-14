@@ -89,6 +89,8 @@ export type CapabilityView = {
     businessRequirement?: "REQUIRED" | "NOT_REQUIRED" | "UNCONFIRMED"
     businessRequirementLabel: string
     version: string
+    allowedActions: string[]
+    actionBlockers: ActionBlocker[]
     /** 连接级能力 ≠ 商品级可用 */
     productLevelNote: string
 }
@@ -193,6 +195,10 @@ export type ConnectionCenterView = {
         errorSummary?: string
     }
     healthRecords: HealthRecordView[]
+    /** 服务端固定下发的只读健康检查类型白名单。 */
+    healthCheckTypes: Array<
+        "CONNECTIVITY" | "AUTHENTICATION" | "CAPABILITY_METADATA"
+    >
     catalog: CatalogSyncView
     relatedImpact: RelatedImpactView
     auditEvents: AuditEventView[]

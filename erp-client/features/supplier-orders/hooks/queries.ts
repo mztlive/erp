@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
     addCollaborationNote,
+    completeSupplierOrderTask,
     createSupplierOrderExportJob,
-    deferSupplierOrderTask,
     fetchSupplierOrderDetail,
     fetchSupplierOrders,
     querySupplierResult,
@@ -35,13 +35,18 @@ export function useSupplierOrdersQuery(query: SupplierOrderListQuery) {
 
 export function useSupplierOrderDetailQuery(input: {
     orderId: string
+    workItemId?: string
     enabled?: boolean
 }) {
     return useQuery({
-        queryKey: supplierOrderKeys.detail(input.orderId),
+        queryKey: [
+            ...supplierOrderKeys.detail(input.orderId),
+            input.workItemId ?? null,
+        ],
         queryFn: () =>
             fetchSupplierOrderDetail({
                 orderId: input.orderId,
+                workItemId: input.workItemId,
             }),
         enabled: input.enabled !== false && Boolean(input.orderId),
     })
@@ -78,10 +83,10 @@ export function useReplayOrderMutation() {
     })
 }
 
-export function useDeferOrderTaskMutation() {
+export function useCompleteOrderTaskMutation() {
     const invalidate = useInvalidateOrders()
     return useMutation({
-        mutationFn: deferSupplierOrderTask,
+        mutationFn: completeSupplierOrderTask,
         onSuccess: async (result) => {
             if (result.status === "succeeded") await invalidate()
         },

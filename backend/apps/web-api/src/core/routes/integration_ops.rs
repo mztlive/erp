@@ -1,8 +1,8 @@
 //! 域 D34 `integration_ops` 管理端路由。
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/integration/inbox-messages`、
-//! `/admin/integration/error-tasks`、`/admin/integration/differences`；每条路由统一走
-//! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
+//! `/admin/integration/error-tasks`、`/admin/integration/differences`；人工动作统一使用
+//! `/admin/integration/task-actions` 与 `/admin/integration/task-completions` 强命令。
 
 use axum::{
     routing::{get, post},
@@ -83,51 +83,19 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/integration/error-tasks/{id}/query",
+            "/integration/task-actions",
             with_permission(
-                post(integration_ops::error_task_query),
+                post(integration_ops::integration_task_action),
                 rbac,
-                integration_ops::error_task_query_permission_key(),
+                integration_ops::integration_task_action_permission_key(),
             ),
         )
         .route(
-            "/integration/error-tasks/{id}/replay",
+            "/integration/task-completions",
             with_permission(
-                post(integration_ops::error_task_replay),
+                post(integration_ops::integration_task_completion),
                 rbac,
-                integration_ops::error_task_replay_permission_key(),
-            ),
-        )
-        .route(
-            "/integration/error-tasks/{id}/hold",
-            with_permission(
-                post(integration_ops::error_task_hold),
-                rbac,
-                integration_ops::error_task_hold_permission_key(),
-            ),
-        )
-        .route(
-            "/integration/error-tasks/{id}/transfer",
-            with_permission(
-                post(integration_ops::error_task_transfer),
-                rbac,
-                integration_ops::error_task_transfer_permission_key(),
-            ),
-        )
-        .route(
-            "/integration/error-tasks/{id}/resolve",
-            with_permission(
-                post(integration_ops::error_task_resolve),
-                rbac,
-                integration_ops::error_task_resolve_permission_key(),
-            ),
-        )
-        .route(
-            "/integration/error-tasks/{id}/close",
-            with_permission(
-                post(integration_ops::error_task_close),
-                rbac,
-                integration_ops::error_task_close_permission_key(),
+                integration_ops::integration_task_completion_permission_key(),
             ),
         )
         // 对账差异
@@ -156,19 +124,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/integration/differences/{id}/process",
+            "/integration/differences/{id}/decisions",
             with_permission(
-                post(integration_ops::difference_process),
+                post(integration_ops::difference_decision),
                 rbac,
-                integration_ops::difference_process_permission_key(),
-            ),
-        )
-        .route(
-            "/integration/differences/{id}/resolve",
-            with_permission(
-                post(integration_ops::difference_resolve),
-                rbac,
-                integration_ops::difference_resolve_permission_key(),
+                integration_ops::difference_decision_permission_key(),
             ),
         )
 }

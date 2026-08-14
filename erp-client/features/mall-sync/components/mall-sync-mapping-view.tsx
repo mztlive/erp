@@ -13,6 +13,7 @@ import {
     SequentialProcessBar,
     surfacePanelClassName,
 } from "@/components/business"
+import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,8 +31,6 @@ import type {
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
-type LeaseStatus = "active" | "unclaimed" | "lost" | "released"
-
 type MallSyncMappingViewProps = {
     data: MallSyncPageView | undefined
     mappingTask: MappingTaskView | undefined
@@ -40,14 +39,15 @@ type MallSyncMappingViewProps = {
     onSelectCandidate: (candidateId: string) => void
     confirmFormContent: React.ReactNode
     mappingIndex: { current: number; total: number }
-    leaseStatus: LeaseStatus
+    responsibilityStatus: ResponsibilityStatus
     canConfirmMapping: boolean
+    responsibilityPending: boolean
     reapplyPending: boolean
     onReapply: () => Promise<void>
     onResolveUnknownReapply: () => Promise<void>
     onBackToQueue: () => void
     onConfirm: () => Promise<void>
-    onClaim: () => Promise<void>
+    onStartProcessing: () => Promise<void>
 }
 
 function MallSyncMappingView({
@@ -58,14 +58,15 @@ function MallSyncMappingView({
     onSelectCandidate,
     confirmFormContent,
     mappingIndex,
-    leaseStatus,
+    responsibilityStatus,
     canConfirmMapping,
+    responsibilityPending,
     reapplyPending,
     onReapply,
     onResolveUnknownReapply,
     onBackToQueue,
     onConfirm,
-    onClaim,
+    onStartProcessing,
 }: MallSyncMappingViewProps) {
     return (
         <div className="space-y-4">
@@ -445,11 +446,17 @@ function MallSyncMappingView({
                             <SequentialProcessBar
                                 current={mappingIndex.current}
                                 total={mappingIndex.total}
-                                leaseStatus={leaseStatus}
+                                responsibilityStatus={responsibilityStatus}
+                                responsibilityStatusLabel={
+                                    mappingTask.workItem.ownerUser
+                                        ? `当前处理人：${mappingTask.workItem.ownerUser.displayName}`
+                                        : undefined
+                                }
                                 processLabel="确认映射"
                                 // 没有独立的「并打开下一条」路径：两个 handler 同义
                                 showProcessNext={false}
                                 processDisabled={!canConfirmMapping}
+                                pending={responsibilityPending}
                                 onBack={onBackToQueue}
                                 onProcess={() => {
                                     if (canConfirmMapping) void onConfirm()
@@ -457,7 +464,13 @@ function MallSyncMappingView({
                                 onProcessNext={() => {
                                     if (canConfirmMapping) void onConfirm()
                                 }}
-                                onReclaim={() => void onClaim()}
+                                onStartProcessing={
+                                    mappingTask.workItem.allowedActions.includes(
+                                        "START_PROCESSING",
+                                    )
+                                        ? () => void onStartProcessing()
+                                        : undefined
+                                }
                             />
                         ) : null}
                     </div>

@@ -17,7 +17,7 @@ const RESOURCE_TYPE_MAX_LEN: usize = 64;
 /// 资源ID最大长度。
 const RESOURCE_ID_MAX_LEN: usize = 64;
 /// 消息最大长度。
-const MESSAGE_MAX_LEN: usize = 256;
+const MESSAGE_MAX_LEN: usize = 8192;
 
 /// 审计日志创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

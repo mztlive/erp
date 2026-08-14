@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::stable::StableBase;
 use crate::common::state::{ensure_transition, DocumentState};
-use crate::common::time::Instant;
+use crate::common::time::{BusinessDate, Instant};
 use crate::errors::{Error, Result};
 use crate::ids::{
     ContractRevisionId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId,
-    SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId,
+    SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SourceSystemId,
 };
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -39,6 +39,8 @@ const ITEM_NAME_MAX_LEN: usize = 256;
 const SPEC_MAX_LEN: usize = 256;
 /// 单位快照最大长度。
 const UNIT_MAX_LEN: usize = 64;
+/// 商城外部身份最大长度（与 `external_identity_map.external_id` 一致）。
+const EXTERNAL_IDENTITY_MAX_LEN: usize = 256;
 
 /// 提交状态（数据模型 §6.5：审核中、已通过、已驳回、因重新提交失效）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -121,6 +123,14 @@ pub struct SalesOrderSubmissionData {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限（卡券单必填，非卡券单为空）。
     pub voucher_expiry_at: Option<Instant>,
+    /// 目标商城（卡券单必填，非卡券单为空）。
+    pub target_mall_id: Option<SourceSystemId>,
+    /// 服务端解析并冻结的商城客户身份（卡券单必填）。
+    pub customer_external_identity: Option<String>,
+    /// 服务端解析并冻结的商城卡券类目身份（卡券单必填）。
+    pub voucher_category_external_identity: Option<String>,
+    /// 最终通过时形成应收所使用的到期日（卡券单必填）。
+    pub receivable_due_date: Option<BusinessDate>,
     /// 提交行汇总（含税）。
     pub gross_amount: Amount,
     /// 提交行汇总（不含税）。
@@ -179,6 +189,14 @@ pub struct SalesOrderSubmission {
     pub voucher_category_sku_id: Option<SkuId>,
     /// 卡券履约期限。
     pub voucher_expiry_at: Option<Instant>,
+    /// 卡券执行投影的目标商城。
+    pub target_mall_id: Option<SourceSystemId>,
+    /// 提交时服务端解析并冻结的商城客户身份。
+    pub customer_external_identity: Option<String>,
+    /// 提交时服务端解析并冻结的商城卡券类目身份。
+    pub voucher_category_external_identity: Option<String>,
+    /// 最终通过时形成应收所使用的到期日。
+    pub receivable_due_date: Option<BusinessDate>,
     /// 提交行汇总（含税）。
     pub gross_amount: Amount,
     /// 提交行汇总（不含税）。
@@ -216,6 +234,10 @@ impl PartialEq for SalesOrderSubmission {
             && self.business_remark == other.business_remark
             && self.voucher_category_sku_id == other.voucher_category_sku_id
             && self.voucher_expiry_at == other.voucher_expiry_at
+            && self.target_mall_id == other.target_mall_id
+            && self.customer_external_identity == other.customer_external_identity
+            && self.voucher_category_external_identity == other.voucher_category_external_identity
+            && self.receivable_due_date == other.receivable_due_date
             && self.gross_amount == other.gross_amount
             && self.net_amount == other.net_amount
             && self.tax_amount == other.tax_amount
@@ -259,9 +281,26 @@ impl SalesOrderSubmission {
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
             normalize_optional_text(data.business_remark, "业务备注", BUSINESS_REMARK_MAX_LEN)?;
-        if data.voucher_category_sku_id.is_some() != data.voucher_expiry_at.is_some() {
-            return Err(Error::from("卡券类目与卡券履约期限必须同时提供或同时省略"));
-        }
+        let customer_external_identity = normalize_optional_text(
+            data.customer_external_identity,
+            "商城客户身份",
+            EXTERNAL_IDENTITY_MAX_LEN,
+        )?;
+        let voucher_category_external_identity = normalize_optional_text(
+            data.voucher_category_external_identity,
+            "商城卡券类目身份",
+            EXTERNAL_IDENTITY_MAX_LEN,
+        )?;
+        Self::validate_card_projection_inputs(
+            data.business_type,
+            data.voucher_category_sku_id.as_ref(),
+            data.voucher_expiry_at,
+            data.target_mall_id.as_ref(),
+            customer_external_identity.as_deref(),
+            voucher_category_external_identity.as_deref(),
+            data.receivable_due_date,
+            data.submitted_at,
+        )?;
         validate_amount_triple(data.gross_amount, data.net_amount, data.tax_amount)?;
         let lines = data
             .lines
@@ -294,6 +333,10 @@ impl SalesOrderSubmission {
             business_remark,
             voucher_category_sku_id: data.voucher_category_sku_id,
             voucher_expiry_at: data.voucher_expiry_at,
+            target_mall_id: data.target_mall_id,
+            customer_external_identity,
+            voucher_category_external_identity,
+            receivable_due_date: data.receivable_due_date,
             gross_amount: data.gross_amount,
             net_amount: data.net_amount,
             tax_amount: data.tax_amount,
@@ -359,6 +402,58 @@ impl SalesOrderSubmission {
     /// 非审核中状态时返回 [`Error::InvalidStateTransition`]。
     pub fn mark_superseded(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(SubmissionStatus::Superseded, updated_by)
+    }
+
+    /// 校验卡券提交为最终运营审批冻结了完整且不过期的商城执行输入。
+    ///
+    /// 卡券提交必须同时冻结类目、履约期限、目标商城、两类服务端解析的外部身份和
+    /// 应收到期日；非卡券提交不得携带这些商城投影字段。应收到期日不得早于服务端
+    /// 记录的提交自然日。
+    ///
+    /// # 错误
+    /// 字段组不完整、业务性质不匹配或应收到期日早于提交日时返回错误。
+    #[allow(clippy::too_many_arguments)]
+    fn validate_card_projection_inputs(
+        business_type: BusinessType,
+        voucher_category_sku_id: Option<&SkuId>,
+        voucher_expiry_at: Option<Instant>,
+        target_mall_id: Option<&SourceSystemId>,
+        customer_external_identity: Option<&str>,
+        voucher_category_external_identity: Option<&str>,
+        receivable_due_date: Option<BusinessDate>,
+        submitted_at: Instant,
+    ) -> Result<()> {
+        let all_present = voucher_category_sku_id.is_some()
+            && voucher_expiry_at.is_some()
+            && target_mall_id.is_some()
+            && customer_external_identity.is_some()
+            && voucher_category_external_identity.is_some()
+            && receivable_due_date.is_some();
+        let any_present = voucher_category_sku_id.is_some()
+            || voucher_expiry_at.is_some()
+            || target_mall_id.is_some()
+            || customer_external_identity.is_some()
+            || voucher_category_external_identity.is_some()
+            || receivable_due_date.is_some();
+        match business_type {
+            BusinessType::Voucher if !all_present => {
+                return Err(Error::from(
+                    "卡券提交必须冻结目标商城、客户外部身份、卡券类目外部身份和应收到期日",
+                ));
+            }
+            BusinessType::GoodsService if any_present => {
+                return Err(Error::from("非卡券提交不得携带商城执行投影字段"));
+            }
+            BusinessType::Voucher | BusinessType::GoodsService => {}
+        }
+        let Some(receivable_due_date) = receivable_due_date else {
+            return Ok(());
+        };
+        let submitted_date: BusinessDate = submitted_at.as_utc().date_naive().to_string().parse()?;
+        if receivable_due_date < submitted_date {
+            return Err(Error::from("应收到期日不得早于销售单提交日"));
+        }
+        Ok(())
     }
 
     /// 执行一次固定状态机迁移。
@@ -584,6 +679,24 @@ mod tests {
         }
     }
 
+    fn voucher_line_data(line_no: u32) -> SalesOrderSubmissionLineData {
+        SalesOrderSubmissionLineData {
+            line_type: LineType::Voucher,
+            goods: None,
+            voucher: Some(super::super::types::VoucherLineDraft {
+                face_value: amt("100.00"),
+                card_count: 3,
+                unit_price_gross: price("90.0000"),
+                face_value_total: amt("300.00"),
+                transaction_amount: amt("270.00"),
+                gift_amount: amt("30.00"),
+                gift_rate: None,
+                card_form: super::super::types::CardForm::Electronic,
+            }),
+            ..line_data(line_no)
+        }
+    }
+
     fn header_data() -> SalesOrderSubmissionData {
         SalesOrderSubmissionData {
             sales_order_id: SalesOrderId::new("o-1"),
@@ -607,12 +720,33 @@ mod tests {
             business_remark: Some(" 按合同执行 ".to_string()),
             voucher_category_sku_id: None,
             voucher_expiry_at: None,
+            target_mall_id: None,
+            customer_external_identity: None,
+            voucher_category_external_identity: None,
+            receivable_due_date: None,
             gross_amount: amt("29.97"),
             net_amount: amt("26.07"),
             tax_amount: amt("3.90"),
             submitted_at: Instant::from_unix_secs(1_790_000_000),
             submitted_by: " sales-1 ".to_string(),
             lines: vec![line_data(1)],
+        }
+    }
+
+    fn voucher_header_data() -> SalesOrderSubmissionData {
+        SalesOrderSubmissionData {
+            business_type: BusinessType::Voucher,
+            voucher_category_sku_id: Some(SkuId::new("vcat-1")),
+            voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
+            target_mall_id: Some(SourceSystemId::new("mall-1")),
+            customer_external_identity: Some("mall-customer-1".to_string()),
+            voucher_category_external_identity: Some("mall-voucher-1".to_string()),
+            receivable_due_date: Some(BusinessDate::from_ymd(2026, 10, 31).unwrap()),
+            gross_amount: amt("270.00"),
+            net_amount: amt("238.94"),
+            tax_amount: amt("31.06"),
+            lines: vec![voucher_line_data(1)],
+            ..header_data()
         }
     }
 
@@ -666,55 +800,55 @@ mod tests {
     #[test]
     fn voucher_submission_enforces_single_voucher_line() {
         let voucher_data = SalesOrderSubmissionData {
-            business_type: BusinessType::Voucher,
-            voucher_category_sku_id: Some(SkuId::new("vcat-1")),
-            voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
-            lines: vec![
-                SalesOrderSubmissionLineData {
-                    line_type: LineType::Voucher,
-                    goods: None,
-                    voucher: Some(super::super::types::VoucherLineDraft {
-                        face_value: amt("100.00"),
-                        card_count: 3,
-                        unit_price_gross: price("90.0000"),
-                        face_value_total: amt("300.00"),
-                        transaction_amount: amt("270.00"),
-                        gift_amount: amt("30.00"),
-                        gift_rate: None,
-                        card_form: super::super::types::CardForm::Electronic,
-                    }),
-                    ..line_data(1)
-                },
-                SalesOrderSubmissionLineData {
-                    line_type: LineType::Voucher,
-                    goods: None,
-                    voucher: Some(super::super::types::VoucherLineDraft {
-                        face_value: amt("100.00"),
-                        card_count: 2,
-                        unit_price_gross: price("90.0000"),
-                        face_value_total: amt("200.00"),
-                        transaction_amount: amt("180.00"),
-                        gift_amount: amt("20.00"),
-                        gift_rate: None,
-                        card_form: super::super::types::CardForm::Electronic,
-                    }),
-                    ..line_data(2)
-                },
-            ],
-            ..header_data()
+            lines: vec![voucher_line_data(1), voucher_line_data(2)],
+            ..voucher_header_data()
         };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), voucher_data).is_err());
 
         let goods_line_in_voucher_order = SalesOrderSubmissionData {
-            business_type: BusinessType::Voucher,
-            voucher_category_sku_id: Some(SkuId::new("vcat-1")),
-            voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
-            ..header_data()
+            lines: vec![line_data(1)],
+            ..voucher_header_data()
         };
         assert!(
             SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), goods_line_in_voucher_order)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn voucher_submission_freezes_server_resolved_projection_inputs() {
+        let submission =
+            SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card-1"), voucher_header_data())
+                .unwrap();
+
+        assert_eq!(submission.target_mall_id, Some(SourceSystemId::new("mall-1")));
+        assert_eq!(
+            submission.customer_external_identity.as_deref(),
+            Some("mall-customer-1")
+        );
+        assert_eq!(
+            submission.voucher_category_external_identity.as_deref(),
+            Some("mall-voucher-1")
+        );
+        assert_eq!(
+            submission.receivable_due_date,
+            Some(BusinessDate::from_ymd(2026, 10, 31).unwrap())
+        );
+    }
+
+    #[test]
+    fn voucher_submission_rejects_missing_mapping_and_past_receivable_due_date() {
+        let missing_mapping = SalesOrderSubmissionData {
+            customer_external_identity: None,
+            ..voucher_header_data()
+        };
+        assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card-1"), missing_mapping).is_err());
+
+        let past_due = SalesOrderSubmissionData {
+            receivable_due_date: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
+            ..voucher_header_data()
+        };
+        assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card-2"), past_due).is_err());
     }
 
     #[test]

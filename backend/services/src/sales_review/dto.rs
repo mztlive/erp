@@ -14,11 +14,13 @@ use entities::sales_review::{ProcurementConfirmationStatus, SalesChangeType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::errors::Result;
+use crate::work_item::WorkItemView;
+
+use crate::errors::{Error, Result};
 use crate::query::{page_or_default, page_size_or_default};
 
-/// 审批记录列表允许的排序字段白名单。
-pub(crate) const SALES_ORDER_REVIEW_SORT_FIELDS: &[&str] = &["created_at"];
+/// 审批决定记录列表允许的排序字段白名单。
+pub(crate) const SALES_ORDER_REVIEW_SORT_FIELDS: &[&str] = &["reviewed_at", "created_at"];
 /// 采购确认列表允许的排序字段白名单。
 pub(crate) const PROCUREMENT_CONFIRMATION_SORT_FIELDS: &[&str] = &["created_at"];
 /// 销售变更单列表允许的排序字段白名单。
@@ -127,14 +129,14 @@ pub struct SalesOrderReviewListParams {
     /// 审批阶段筛选。
     pub review_stage: Option<entities::sales_review::SalesReviewStage>,
     /// 审批状态筛选。
-    pub status: Option<entities::sales_review::SalesReviewStatus>,
+    pub status: Option<entities::sales_review::SalesOrderReviewDecision>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
     /// 单页条数（1–100）。
     #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
     pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`）。
+    /// 排序字段（白名单：`reviewed_at`/`created_at`）。
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,
@@ -150,7 +152,7 @@ pub(crate) struct SalesOrderReviewListQuery {
     /// 审批阶段筛选。
     pub review_stage: Option<entities::sales_review::SalesReviewStage>,
     /// 审批状态筛选。
-    pub status: Option<entities::sales_review::SalesReviewStatus>,
+    pub status: Option<entities::sales_review::SalesOrderReviewDecision>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -193,20 +195,13 @@ pub struct SalesOrderReviewView {
     /// 审批阶段。
     pub review_stage: entities::sales_review::SalesReviewStage,
     /// 审批状态。
-    pub status: entities::sales_review::SalesReviewStatus,
+    pub status: entities::sales_review::SalesOrderReviewDecision,
     /// 审批人。
-    pub reviewer_id: Option<String>,
+    pub reviewer_id: String,
     /// 审批时间（秒级时间戳）。
-    pub reviewed_at: Option<u64>,
+    pub reviewed_at: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
-}
-
-/// 审批决策请求（W05 卡券审批轨）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ReviewDecisionRequest {
-    /// 审批意见（通过时可空；驳回必填且非空白）。
-    pub decision_reason: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -272,6 +267,7 @@ impl ProcurementConfirmationListParams {
 
 /// 采购确认分行请求（W07 保存分行草稿）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct ProcurementConfirmationLineRequest {
     /// 行号。
     #[validate(range(min = 1, message = "行号必须为正整数"))]
@@ -290,40 +286,208 @@ pub struct ProcurementConfirmationLineRequest {
     pub input_tax_rate: entities::money::Rate,
     /// 预计交期（`YYYY-MM-DD`）。
     pub expected_delivery_date: entities::common::time::BusinessDate,
-    /// 确认履约方式。
-    pub fulfillment_mode: entities::sales_review::types::FulfillmentMode,
+    /// 确认履约方式（W07 HTTP 稳定代码）。
+    pub fulfillment_mode: ProcurementConfirmationFulfillmentMode,
     /// 使用的能力版本。
     pub supplier_capability_revision_id: entities::ids::SupplierCapabilityRevisionId,
 }
 
-/// 保存采购确认分行请求（乐观锁：携带期望版本）。
+/// W07 HTTP 使用的固定履约方式代码。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProcurementConfirmationFulfillmentMode {
+    /// 公司仓履约。
+    Warehouse,
+    /// 供应商直发。
+    SupplierDirect,
+    /// 电子交付。
+    Electronic,
+    /// 线下服务。
+    Service,
+}
+
+impl From<ProcurementConfirmationFulfillmentMode> for entities::sales_review::types::FulfillmentMode {
+    fn from(value: ProcurementConfirmationFulfillmentMode) -> Self {
+        match value {
+            ProcurementConfirmationFulfillmentMode::Warehouse => Self::CompanyWarehouse,
+            ProcurementConfirmationFulfillmentMode::SupplierDirect => Self::SupplierDirect,
+            ProcurementConfirmationFulfillmentMode::Electronic => Self::ElectronicDelivery,
+            ProcurementConfirmationFulfillmentMode::Service => Self::OfflineService,
+        }
+    }
+}
+
+/// 保存采购确认工作数据的强类型动作。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct SaveProcurementConfirmationLinesRequest {
-    /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
+#[serde(deny_unknown_fields)]
+pub struct SaveProcurementConfirmationAction {
+    /// 路径必须指向的采购确认。
+    #[validate(custom(function = "non_blank", message = "采购确认ID不能为空"))]
+    #[validate(length(max = 128, message = "采购确认ID不能超过128个字符"))]
+    pub confirmation_id: String,
+    /// 当前采购确认冻结的销售提交。
+    #[validate(custom(function = "non_blank", message = "销售提交ID不能为空"))]
+    #[validate(length(max = 128, message = "销售提交ID不能超过128个字符"))]
+    pub submission_id: String,
+    /// 期望的采购确认编辑版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
+    pub expected_edit_version: u64,
     /// 确认分行清单（非空，上限 200 行）。
     #[validate(length(min = 1, max = 200, message = "确认分行数必须在1-200之间"))]
+    #[validate(nested)]
     pub lines: Vec<ProcurementConfirmationLineRequest>,
 }
 
-/// 采购确认通过请求（幂等键）。
+/// 保存采购确认分行的 W07 强类型命令。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ApproveProcurementConfirmationRequest {
-    /// 幂等键（重复通过按「已通过」去重，返回既有结果）。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+#[serde(deny_unknown_fields)]
+pub struct SaveProcurementConfirmationLinesRequest {
+    /// 当前采购确认待办 ID。
+    #[validate(custom(function = "non_blank", message = "待办ID不能为空"))]
+    #[validate(length(max = 128, message = "待办ID不能超过128个字符"))]
+    pub work_item_id: String,
+    /// 查询所得待办版本；Service 严格解析正整数字符串。
+    #[validate(custom(function = "non_blank", message = "待办版本不能为空"))]
+    #[validate(length(max = 20, message = "待办版本不能超过20个字符"))]
+    pub expected_task_version: String,
+    /// 待办冻结的不可变销售提交 ID。
+    #[validate(custom(function = "non_blank", message = "提交版本不能为空"))]
+    #[validate(length(max = 128, message = "提交版本不能超过128个字符"))]
+    pub expected_subject_version: String,
+    /// 本次非终结保存动作。
+    #[validate(nested)]
+    pub action: SaveProcurementConfirmationAction,
+    /// 客户端稳定幂等键。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(length(max = 128, message = "幂等键不能超过128个字符"))]
     pub idempotency_key: String,
 }
 
-/// 采购确认驳回请求（驳回原因代码必填）。
+/// 保存采购确认后的两个服务端版本。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SaveProcurementConfirmationResult {
+    /// 新采购确认编辑版本。
+    pub edit_version: u64,
+    /// 新待办活动版本。
+    pub task_version: String,
+}
+
+/// W07 唯一正式决定；分支只能由嵌套 `review_result` 表达。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    tag = "review_result",
+    rename_all = "SCREAMING_SNAKE_CASE",
+    deny_unknown_fields
+)]
+pub enum ProcurementConfirmationDecision {
+    /// 通过并使销售生效。
+    Approved {
+        /// 路径必须指向的采购确认。
+        confirmation_id: String,
+        /// 当前采购确认冻结的销售提交。
+        submission_id: String,
+        /// 当前采购确认编辑版本。
+        expected_confirmation_edit_version: u64,
+    },
+    /// 驳回并退回销售。
+    Rejected {
+        /// 路径必须指向的采购确认。
+        confirmation_id: String,
+        /// 当前采购确认冻结的销售提交。
+        submission_id: String,
+        /// 当前采购确认编辑版本。
+        expected_confirmation_edit_version: u64,
+        /// 驳回原因代码。
+        reject_reason_code: entities::sales_review::ProcurementRejectReasonCode,
+        /// 必填补充说明。
+        comment: String,
+    },
+}
+
+impl ProcurementConfirmationDecision {
+    /// 返回采购确认 ID。
+    pub(crate) fn confirmation_id(&self) -> &str {
+        match self {
+            Self::Approved { confirmation_id, .. } | Self::Rejected { confirmation_id, .. } => {
+                confirmation_id
+            }
+        }
+    }
+
+    /// 返回冻结的销售提交 ID。
+    pub(crate) fn submission_id(&self) -> &str {
+        match self {
+            Self::Approved { submission_id, .. } | Self::Rejected { submission_id, .. } => submission_id,
+        }
+    }
+
+    /// 返回采购确认编辑版本。
+    pub(crate) fn expected_confirmation_edit_version(&self) -> u64 {
+        match self {
+            Self::Approved {
+                expected_confirmation_edit_version,
+                ..
+            }
+            | Self::Rejected {
+                expected_confirmation_edit_version,
+                ..
+            } => *expected_confirmation_edit_version,
+        }
+    }
+
+    /// 校验两个正式决定分支的共享身份与分支专属字段。
+    pub(crate) fn validate_branch(&self) -> Result<()> {
+        if self.confirmation_id().trim().is_empty() || self.submission_id().trim().is_empty() {
+            return Err(Error::ValidationError(
+                "采购确认ID和销售提交ID不能为空".to_string(),
+            ));
+        }
+        if self.expected_confirmation_edit_version() == 0 {
+            return Err(Error::ValidationError("采购确认版本必须大于 0".to_string()));
+        }
+        if let Self::Rejected { comment, .. } = self {
+            let count = comment.trim().chars().count();
+            if count == 0 || count > 512 {
+                return Err(Error::ValidationError(
+                    "采购确认驳回说明不能为空且不能超过512个字符".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// 返回驳回分支字段；通过分支返回 `None`。
+    pub(crate) fn rejection(&self) -> Option<(entities::sales_review::ProcurementRejectReasonCode, &str)> {
+        match self {
+            Self::Rejected {
+                reject_reason_code,
+                comment,
+                ..
+            } => Some((*reject_reason_code, comment)),
+            Self::Approved { .. } => None,
+        }
+    }
+}
+
+/// W07 唯一采购确认完成命令。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct RejectProcurementConfirmationRequest {
-    /// 驳回原因代码。
-    pub reject_reason_code: entities::sales_review::ProcurementRejectReasonCode,
-    /// 补充说明。
-    pub comment: Option<String>,
-    /// 幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+#[serde(deny_unknown_fields)]
+pub struct CompleteProcurementConfirmationCommand {
+    /// 当前采购确认待办 ID。
+    #[validate(custom(function = "non_blank", message = "待办ID不能为空"))]
+    pub work_item_id: String,
+    /// 查询所得待办版本；Service 严格解析正整数字符串。
+    #[validate(custom(function = "non_blank", message = "待办版本不能为空"))]
+    #[validate(length(max = 20, message = "待办版本不能超过20个字符"))]
+    pub expected_task_version: String,
+    /// 待办冻结的不可变销售提交 ID。
+    #[validate(custom(function = "non_blank", message = "提交版本不能为空"))]
+    pub expected_subject_version: String,
+    /// 唯一嵌套正式决定。
+    pub decision: ProcurementConfirmationDecision,
+    /// 客户端稳定幂等键。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(length(max = 128, message = "幂等键不能超过128个字符"))]
     pub idempotency_key: String,
 }
 
@@ -394,6 +558,56 @@ pub struct ProcurementConfirmationDetailView {
     pub created_at: u64,
     /// 确认分行。
     pub lines: Vec<ProcurementConfirmationLineView>,
+    /// 当前操作人可见的正式任务；对象直接入口为空。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work_item: Option<WorkItemView>,
+    /// W07 领域动作，不得从通用任务动作推导。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_actions: Vec<ProcurementConfirmationAllowedAction>,
+    /// W07 领域动作阻断事实。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub action_blockers: Vec<ProcurementConfirmationActionBlockerView>,
+}
+
+/// W07 详情查询参数。
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ProcurementConfirmationDetailParams {
+    /// 从正式待办进入时必须携带的任务 ID。
+    pub work_item_id: Option<String>,
+}
+
+/// W07 采购确认强类型领域动作。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProcurementConfirmationAllowedAction {
+    /// 保存当前采购工作数据。
+    Save,
+    /// 通过采购确认。
+    Approve,
+    /// 驳回采购确认。
+    Reject,
+}
+
+impl ProcurementConfirmationAllowedAction {
+    /// 返回稳定动作代码。
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Save => "SAVE",
+            Self::Approve => "APPROVE",
+            Self::Reject => "REJECT",
+        }
+    }
+}
+
+/// W07 单个领域动作的服务端阻断事实。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProcurementConfirmationActionBlockerView {
+    /// 被阻断的 W07 动作。
+    pub action: String,
+    /// 稳定阻断码。
+    pub code: String,
+    /// 面向当前处理人的安全说明。
+    pub message: String,
 }
 
 /// 采购推荐中的阻断或提醒。
@@ -488,34 +702,61 @@ pub struct ProcurementRecommendationView {
     pub warnings: Vec<ProcurementRecommendationIssueView>,
 }
 
-/// 采购确认通过时自动生成的采购单草稿。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct GeneratedPurchaseOrderView {
-    /// 采购单主键。
-    pub purchase_order_id: String,
-    /// 面向用户的采购单号。
-    pub purchase_no: String,
+/// 驳回后销售可选择的固定受控出路。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProcurementSalesResolution {
+    /// 修改商品或交易条件后重新提交。
+    ResubmitChangedTerms,
+    /// 申请低毛利受控承接。
+    RequestLowMarginAcceptance,
+    /// 驳回后作废销售单。
+    VoidAfterRejection,
 }
 
-/// 采购确认决策结果视图（通过/驳回统一形状）。
+/// 采购确认的正式业务结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct ProcurementConfirmationDecisionView {
-    /// 确认批次 ID。
-    pub confirmation_id: String,
-    /// 被确认的销售单。
-    pub sales_order_id: String,
-    /// 确认状态。
-    pub status: ProcurementConfirmationStatus,
-    /// 生效版本（通过时产生）。
-    pub revision_id: Option<String>,
-    /// 应收往来子账（通过时产生）。
-    pub receivable_account_id: Option<String>,
-    /// 通过时自动生成的采购单草稿。
-    pub purchase_orders: Vec<GeneratedPurchaseOrderView>,
-    /// 处理时间（秒级时间戳）。
-    pub handled_at: u64,
-    /// 操作号（业务参考）。
-    pub reference: String,
+#[serde(tag = "outcome", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProcurementConfirmationBusinessResult {
+    /// 采购确认通过且销售正式生效。
+    ApprovedAndSalesEffective {
+        /// 采购确认。
+        procurement_confirmation_id: String,
+        /// 销售单。
+        sales_order_id: String,
+        /// 不可变销售提交。
+        submission_id: String,
+        /// 新销售正式版本。
+        sales_order_revision_id: String,
+        /// 新应收往来账户。
+        receivable_account_id: String,
+        /// 可唯一消费的采购创建依据；当前稳定使用采购确认 ID。
+        procurement_creation_basis_id: String,
+    },
+    /// 采购确认驳回并退回销售草稿。
+    RejectedToSales {
+        /// 采购确认。
+        procurement_confirmation_id: String,
+        /// 销售单。
+        sales_order_id: String,
+        /// 被驳回的不可变销售提交。
+        rejected_submission_id: String,
+        /// 本次追加式工作流动作。
+        workflow_action_id: String,
+        /// 固定销售后续出路；本事务不创建后继待办。
+        next_sales_resolutions: [ProcurementSalesResolution; 3],
+    },
+}
+
+/// W07 正式决定完成后的固定响应。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CompleteProcurementConfirmationResult {
+    /// 已完成的原待办。
+    pub work_item_id: String,
+    /// 固定为 `COMPLETED`。
+    pub work_item_status: entities::work_item::WorkItemStatus,
+    /// 服务端重读或事务形成的正式业务结果。
+    pub business_result: ProcurementConfirmationBusinessResult,
 }
 
 // ---------------------------------------------------------------------------
@@ -669,6 +910,15 @@ pub struct SubmitSalesChangeRequest {
 /// 变更复核决策请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ChangeReviewDecisionRequest {
+    /// 当前复核待办。
+    #[validate(custom(function = "non_blank", message = "复核待办ID不能为空"))]
+    pub work_item_id: String,
+    /// 期望的待办乐观锁版本。
+    #[validate(range(min = 1, message = "待办版本必须大于 0"))]
+    pub expected_task_version: u64,
+    /// 期望的不可变销售变更提交版本。
+    #[validate(custom(function = "non_blank", message = "提交版本不能为空"))]
+    pub expected_subject_version: String,
     /// 复核意见（通过时可空；驳回必填且非空白）。
     pub decision_reason: Option<String>,
     /// 幂等键。
@@ -768,5 +1018,72 @@ mod tests {
             serde_json::to_string(&SalesChangeType::Quantity).unwrap(),
             "\"QUANTITY\""
         );
+    }
+
+    #[test]
+    fn w07_save_envelope_uses_nested_action_and_string_task_version() {
+        let command: super::SaveProcurementConfirmationLinesRequest = serde_json::from_value(json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "7",
+            "expected_subject_version": "submission-1",
+            "action": {
+                "confirmation_id": "pc-1",
+                "submission_id": "submission-1",
+                "expected_edit_version": 3,
+                "lines": [{
+                    "line_no": 1,
+                    "sales_order_submission_line_id": "line-1",
+                    "supplier_id": "supplier-1",
+                    "supplier_offering_revision_id": "offering-revision-1",
+                    "confirmed_quantity": "1.000000",
+                    "latest_cost_gross": "10.0000",
+                    "input_tax_rate": "0.130000",
+                    "expected_delivery_date": "2026-08-31",
+                    "fulfillment_mode": "WAREHOUSE",
+                    "supplier_capability_revision_id": "capability-revision-1"
+                }]
+            },
+            "idempotency_key": "save-1"
+        }))
+        .unwrap();
+
+        assert_eq!(command.expected_task_version, "7");
+        assert_eq!(command.action.confirmation_id, "pc-1");
+        assert_eq!(
+            entities::sales_review::types::FulfillmentMode::from(command.action.lines[0].fulfillment_mode),
+            entities::sales_review::types::FulfillmentMode::CompanyWarehouse
+        );
+    }
+
+    #[test]
+    fn w07_decision_envelope_hard_cuts_rejection_reason_codes() {
+        let current = json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "8",
+            "expected_subject_version": "submission-1",
+            "decision": {
+                "review_result": "REJECTED",
+                "confirmation_id": "pc-1",
+                "submission_id": "submission-1",
+                "expected_confirmation_edit_version": 4,
+                "reject_reason_code": "DELIVERY_UNMET",
+                "comment": "无法满足交期"
+            },
+            "idempotency_key": "decision-1"
+        });
+        let command: super::CompleteProcurementConfirmationCommand =
+            serde_json::from_value(current.clone()).unwrap();
+        assert_eq!(
+            command.decision.rejection().map(|value| value.0),
+            Some(entities::sales_review::ProcurementRejectReasonCode::DeliveryUnmet)
+        );
+
+        let mut legacy = current.clone();
+        legacy["decision"]["reject_reason_code"] = json!("DELIVERY_NOT_MET");
+        assert!(serde_json::from_value::<super::CompleteProcurementConfirmationCommand>(legacy).is_err());
+
+        let mut redundant = current;
+        redundant["decision"]["sales_order_id"] = json!("sales-1");
+        assert!(serde_json::from_value::<super::CompleteProcurementConfirmationCommand>(redundant).is_err());
     }
 }

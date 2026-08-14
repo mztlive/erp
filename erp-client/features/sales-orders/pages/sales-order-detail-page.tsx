@@ -22,8 +22,9 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     useResolveProcurementRejectionMutation,
     useSalesOrderDetailQuery,
@@ -31,8 +32,16 @@ import {
     useStartSalesChangeOrderMutation,
 } from "@/features/sales-orders/hooks/queries"
 import { PROCUREMENT_REJECT_REASON_LABEL } from "@/features/sales-orders/lib/labels"
-import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import {
+    prepareProcurementRejectionResolution,
+    prepareStartSalesChangeOrder,
+    type ResolveProcurementRejectionPayload,
+    type SalesOrderDetailView,
+    type StartSalesChangeOrderPayload,
+} from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderCreateForm } from "@/features/sales-orders/components/sales-order-create-form"
+import { LowMarginManagerPanel } from "@/features/sales-orders/components/low-margin-manager-panel"
+import { SalesChangeReviewPanel } from "@/features/sales-orders/components/sales-change-review-panel"
 import { VoidSalesOrderDialog } from "@/features/sales-orders/components/void-sales-order-dialog"
 import {
     CollaborationPanel,
@@ -60,8 +69,20 @@ import {
     type WorkSectionId,
 } from "@/features/sales-orders/lib/sales-order-detail-model"
 import { getErrorPresentation } from "@/lib/api/errors"
-import { hasPermission } from "@/lib/permissions"
+import {
+    classifyFormalCommandError,
+    FormalCommandKeyLedger,
+} from "@/lib/formal-command"
 import { cn } from "@/lib/utils"
+
+const parseEvidenceReferenceIds = (value: string): string[] => [
+    ...new Set(
+        value
+            .split(/[\s,，;；]+/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+    ),
+]
 
 export function SalesOrderDetailPage({
     salesOrderId,
@@ -75,15 +96,35 @@ export function SalesOrderDetailPage({
     const returnTo = searchParams.get("returnTo")
     const fromWorkspace = searchParams.get("from")
     const pageMode = searchParams.get("mode")
+    const focusedWorkItemId = searchParams.get("workItemId")?.trim() ?? ""
+    const queueContextId = searchParams.get("queueContextId")?.trim() ?? ""
+    const workItemReturnTo =
+        returnTo?.trim() ||
+        (queueContextId && focusedWorkItemId
+            ? `/workspace/tasks?queueContextId=${encodeURIComponent(queueContextId)}&currentWorkItemId=${encodeURIComponent(focusedWorkItemId)}`
+            : "/workspace/tasks")
     const query = useSalesOrderDetailQuery(salesOrderId)
-    const profileQuery = useAccountProfileQuery()
     const changeMutation = useStartSalesChangeOrderMutation()
     const voidMutation = useResolveProcurementRejectionMutation()
     const [voidOpen, setVoidOpen] = React.useState(false)
+    const [lowMarginOpen, setLowMarginOpen] = React.useState(false)
+    const [lowMarginReason, setLowMarginReason] = React.useState("")
+    const [lowMarginEvidence, setLowMarginEvidence] = React.useState("")
+    const commandLedgerRef = React.useRef<{
+        salesOrderId: string
+        ledger: FormalCommandKeyLedger
+    } | null>(null)
+    if (commandLedgerRef.current?.salesOrderId !== salesOrderId) {
+        commandLedgerRef.current = {
+            salesOrderId,
+            ledger: new FormalCommandKeyLedger(),
+        }
+    }
+    const commandLedger = commandLedgerRef.current.ledger
 
     const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
     const [result, setResult] = React.useState<{
-        status: "succeeded" | "blocked" | "rejected"
+        status: "succeeded" | "blocked" | "rejected" | "unknown"
         title: string
         description: string
         reference: string
@@ -107,30 +148,23 @@ export function SalesOrderDetailPage({
     })
     const acceptanceExpanded = section === "acceptance"
     const showApproval =
-        Boolean(order?.activeCardSalesApproval) && section === "approval"
-    const granted = profileQuery.data?.permissions
-    const permissionKnown = !profileQuery.isPending
-    const canResubmit = Boolean(
-        order &&
-        rejectionAllowsResubmit(order) &&
-        permissionKnown &&
-        hasPermission(granted, "sales_order:update"),
-    )
-    const canVoid = Boolean(
-        order &&
-        rejectionAllowsVoid(order) &&
-        permissionKnown &&
-        hasPermission(granted, "sales_order:delete"),
+        Boolean(
+            order?.activeCardSalesApproval ||
+            order?.cardApprovalProjectionBlocker,
+        ) && section === "approval"
+    const canResubmit = Boolean(order && rejectionAllowsResubmit(order))
+    const canVoid = Boolean(order && rejectionAllowsVoid(order))
+    const canRequestLowMargin = Boolean(
+        order?.procurementRejection?.allowedActions.includes(
+            "REQUEST_LOW_MARGIN_ACCEPTANCE",
+        ),
     )
     const showEditor = Boolean(
         order &&
         shouldOpenSalesOrderEditor({
             order,
             mode: pageMode,
-            canResubmit:
-                rejectionAllowsResubmit(order) &&
-                (!permissionKnown ||
-                    hasPermission(granted, "sales_order:update")),
+            canResubmit: rejectionAllowsResubmit(order),
         }),
     )
 
@@ -160,7 +194,9 @@ export function SalesOrderDetailPage({
             const workItemId = searchParams.get("workItemId")
             if (
                 workItemId &&
-                (next === "approval" || next === "procurement-rejection")
+                (next === "approval" ||
+                    next === "procurement-rejection" ||
+                    next === "change-review")
             ) {
                 params.set("workItemId", workItemId)
             }
@@ -194,11 +230,11 @@ export function SalesOrderDetailPage({
     }, [replaceOrderHref])
 
     React.useEffect(() => {
-        if (!order || profileQuery.isPending) return
+        if (!order) return
         if (pageMode !== "edit") return
         if (canResubmit || isSalesOrderDraft(order)) return
         replaceOrderHref({ mode: null })
-    }, [canResubmit, order, pageMode, profileQuery.isPending, replaceOrderHref])
+    }, [canResubmit, order, pageMode, replaceOrderHref])
 
     if (query.isPending) {
         return (
@@ -299,13 +335,41 @@ export function SalesOrderDetailPage({
             (focusTask.id === "acceptance" && !acceptanceExpanded))
 
     const handleVoidAfterRejection = async (reason: string) => {
-        try {
-            const outcome = await voidMutation.mutateAsync({
-                salesOrderId: order.id,
-                action: "VOID_AFTER_REJECTION",
-                idempotencyKey: `pr-void-${order.id}-${Date.now()}`,
-                voidReason: reason,
+        let command = commandLedger.peek<ResolveProcurementRejectionPayload>(
+            "procurement-rejection-resolution",
+        )
+        if (command && command.payload.action !== "VOID_AFTER_REJECTION") {
+            setResult({
+                status: "unknown",
+                title: "处理结果待确认",
+                description: "另一项处理的结果仍待确认，请先使用原操作重试。",
+                reference: order.documentNumber,
             })
+            throw new Error("另一项处理的结果仍待确认，请先使用原操作重试。")
+        }
+        try {
+            if (!command) {
+                const payload = await prepareProcurementRejectionResolution({
+                    salesOrderId: order.id,
+                    action: "VOID_AFTER_REJECTION",
+                    voidReasonCode: "SALES_DECISION_NOT_TO_PROCEED",
+                    comment: reason,
+                })
+                command = commandLedger.acquire(
+                    "procurement-rejection-resolution",
+                    `sales:${order.id}:procurement-rejection:void`,
+                    payload,
+                )
+            }
+            if (!command) return
+            const outcome = await voidMutation.mutateAsync({
+                ...command.payload,
+                idempotencyKey: command.idempotencyKey,
+            })
+            commandLedger.settle(
+                "procurement-rejection-resolution",
+                "succeeded",
+            )
             setResult({
                 status: "rejected",
                 title: "本单已作废",
@@ -313,14 +377,96 @@ export function SalesOrderDetailPage({
                 reference: outcome.reference,
             })
         } catch (error) {
+            const settlement = command
+                ? classifyFormalCommandError(error)
+                : "failed"
+            commandLedger.settle("procurement-rejection-resolution", settlement)
             const failure = getErrorPresentation(
                 error,
                 "作废未完成，请刷新后重试。",
             )
             setResult({
-                status: "blocked",
-                title: failure.title,
-                description: failure.description,
+                status: settlement === "unknown" ? "unknown" : "blocked",
+                title:
+                    settlement === "unknown" ? "处理结果待确认" : failure.title,
+                description:
+                    settlement === "unknown"
+                        ? "当前原因已保留，请使用本次操作重试。"
+                        : failure.description,
+                reference: order.documentNumber,
+            })
+            throw error
+        }
+    }
+
+    const handleRequestLowMargin = async () => {
+        const evidenceReferenceIds =
+            parseEvidenceReferenceIds(lowMarginEvidence)
+        if (!lowMarginReason.trim()) throw new Error("请填写低毛利承接理由")
+        if (evidenceReferenceIds.length === 0)
+            throw new Error("请至少填写一项已登记证据 ID")
+        let command = commandLedger.peek<ResolveProcurementRejectionPayload>(
+            "procurement-rejection-resolution",
+        )
+        if (
+            command &&
+            command.payload.action !== "REQUEST_LOW_MARGIN_ACCEPTANCE"
+        ) {
+            setResult({
+                status: "unknown",
+                title: "处理结果待确认",
+                description: "另一项处理的结果仍待确认，请先使用原操作重试。",
+                reference: order.documentNumber,
+            })
+            throw new Error("另一项处理的结果仍待确认，请先使用原操作重试。")
+        }
+        try {
+            if (!command) {
+                const payload = await prepareProcurementRejectionResolution({
+                    salesOrderId: order.id,
+                    action: "REQUEST_LOW_MARGIN_ACCEPTANCE",
+                    lowMarginAcceptanceReason: lowMarginReason.trim(),
+                    evidenceReferenceIds,
+                })
+                command = commandLedger.acquire(
+                    "procurement-rejection-resolution",
+                    `sales:${order.id}:procurement-rejection:low-margin`,
+                    payload,
+                )
+            }
+            if (!command) return
+            const outcome = await voidMutation.mutateAsync({
+                ...command.payload,
+                idempotencyKey: command.idempotencyKey,
+            })
+            commandLedger.settle(
+                "procurement-rejection-resolution",
+                "succeeded",
+            )
+            setResult({
+                status: "succeeded",
+                title: "已申请低毛利承接",
+                description: outcome.detail,
+                reference: outcome.reference,
+                nextResponsible: "销售上级",
+            })
+        } catch (error) {
+            const settlement = command
+                ? classifyFormalCommandError(error)
+                : "failed"
+            commandLedger.settle("procurement-rejection-resolution", settlement)
+            const failure = getErrorPresentation(
+                error,
+                "承接申请未提交，请刷新后重试。",
+            )
+            setResult({
+                status: settlement === "unknown" ? "unknown" : "blocked",
+                title:
+                    settlement === "unknown" ? "处理结果待确认" : failure.title,
+                description:
+                    settlement === "unknown"
+                        ? "当前输入已保留，请使用本次操作重试。"
+                        : failure.description,
                 reference: order.documentNumber,
             })
             throw error
@@ -340,6 +486,7 @@ export function SalesOrderDetailPage({
                 showBackToDetail={openRejection}
                 onBackToDetail={leaveRejectionEdit}
                 canVoidAfterRejection={canVoid}
+                commandLedger={commandLedger}
             />
         )
     }
@@ -426,11 +573,39 @@ export function SalesOrderDetailPage({
                 />
             ) : null}
 
+            {order.activeLowMarginManagerConfirmation ? (
+                <LowMarginManagerPanel
+                    order={order}
+                    confirmation={order.activeLowMarginManagerConfirmation}
+                    onResult={setResult}
+                />
+            ) : null}
+
+            {section === "change-review" && focusedWorkItemId ? (
+                <SalesChangeReviewPanel
+                    salesOrderId={order.id}
+                    changeOrder={order.activeChangeOrder ?? null}
+                    workItemId={focusedWorkItemId}
+                    returnTo={workItemReturnTo}
+                    onResult={setResult}
+                />
+            ) : null}
+
             <SalesOrderIdentityHeader
                 order={order}
                 primaryAction={primaryTaskAction}
                 secondaryActions={
                     <div className="flex flex-wrap items-center gap-2">
+                        {openRejection && canRequestLowMargin ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setLowMarginOpen(true)}
+                            >
+                                申请低毛利承接
+                            </Button>
+                        ) : null}
                         {openRejection && canVoid ? (
                             <Button
                                 type="button"
@@ -589,6 +764,38 @@ export function SalesOrderDetailPage({
             />
 
             <FormalActionConfirmDialog
+                open={lowMarginOpen}
+                onOpenChange={setLowMarginOpen}
+                title="申请低毛利承接"
+                actionLabel="提交承接申请"
+                fromStatus={{ label: "采购未通过", tone: "warning" }}
+                toStatus={{ label: "待销售上级确认", tone: "info" }}
+                description={
+                    <div className="space-y-2 text-left">
+                        <Textarea
+                            value={lowMarginReason}
+                            onChange={(event) =>
+                                setLowMarginReason(event.target.value)
+                            }
+                            placeholder="说明维持原商业条件并由公司承接低毛利的理由"
+                        />
+                        <Input
+                            value={lowMarginEvidence}
+                            onChange={(event) =>
+                                setLowMarginEvidence(event.target.value)
+                            }
+                            placeholder="已登记证据 ID；多个以逗号分隔"
+                        />
+                    </div>
+                }
+                lockedFields={["原商业条件", "被驳回提交"]}
+                effects={["冻结新提交", "创建销售上级低毛利确认待办"]}
+                nextDepartment="销售上级"
+                pending={voidMutation.isPending}
+                onConfirm={handleRequestLowMargin}
+            />
+
+            <FormalActionConfirmDialog
                 open={changeConfirmOpen}
                 onOpenChange={setChangeConfirmOpen}
                 title="发起改单"
@@ -609,12 +816,29 @@ export function SalesOrderDetailPage({
                 ]}
                 nextDepartment={isCard ? "运营与财务" : "采购与财务"}
                 onConfirm={async () => {
+                    let command =
+                        commandLedger.peek<StartSalesChangeOrderPayload>(
+                            "start-change",
+                        )
                     try {
+                        if (!command) {
+                            const payload = await prepareStartSalesChangeOrder({
+                                salesOrderId: order.id,
+                                baseRevisionNo: order.version,
+                                nature: order.nature,
+                            })
+                            command = commandLedger.acquire(
+                                "start-change",
+                                `sales:${order.id}:change`,
+                                payload,
+                            )
+                        }
+                        if (!command) return
                         const change = await changeMutation.mutateAsync({
-                            salesOrderId: order.id,
-                            baseRevisionNo: order.version,
-                            nature: order.nature,
+                            ...command.payload,
+                            idempotencyKey: command.idempotencyKey,
                         })
+                        commandLedger.settle("start-change", "succeeded")
                         setResult({
                             status: "succeeded",
                             title: "改单已创建",
@@ -625,16 +849,30 @@ export function SalesOrderDetailPage({
                                 : "采购与财务",
                         })
                     } catch (error) {
+                        const settlement = command
+                            ? classifyFormalCommandError(error)
+                            : "failed"
+                        commandLedger.settle("start-change", settlement)
                         const failure = getErrorPresentation(
                             error,
                             "改单未创建，请刷新后重试。",
                         )
                         setResult({
-                            status: "blocked",
-                            title: failure.title,
-                            description: failure.description,
+                            status:
+                                settlement === "unknown"
+                                    ? "unknown"
+                                    : "blocked",
+                            title:
+                                settlement === "unknown"
+                                    ? "处理结果待确认"
+                                    : failure.title,
+                            description:
+                                settlement === "unknown"
+                                    ? "请使用本次操作重试；确认前不要重复创建改单。"
+                                    : failure.description,
                             reference: order.documentNumber,
                         })
+                        throw error
                     }
                 }}
             />
@@ -653,6 +891,7 @@ function SalesOrderEditableCenter({
     showBackToDetail = false,
     onBackToDetail,
     canVoidAfterRejection = false,
+    commandLedger,
 }: {
     order: SalesOrderDetailView
     backHref: string
@@ -660,14 +899,14 @@ function SalesOrderEditableCenter({
     fromQueue: boolean
     fromWorkspace: string | null
     result: {
-        status: "succeeded" | "blocked" | "rejected"
+        status: "succeeded" | "blocked" | "rejected" | "unknown"
         title: string
         description: string
         reference: string
         nextResponsible?: string
     } | null
     onResult: (next: {
-        status: "succeeded" | "blocked" | "rejected"
+        status: "succeeded" | "blocked" | "rejected" | "unknown"
         title: string
         description: string
         reference: string
@@ -676,6 +915,7 @@ function SalesOrderEditableCenter({
     showBackToDetail?: boolean
     onBackToDetail?: () => void
     canVoidAfterRejection?: boolean
+    commandLedger: FormalCommandKeyLedger
 }) {
     const resumeQuery = useSalesOrderDraftResumeQuery(order.id)
     const voidMutation = useResolveProcurementRejectionMutation()
@@ -820,6 +1060,7 @@ function SalesOrderEditableCenter({
                     initialNature={resumeQuery.data.nature}
                     initialContractId={resumeQuery.data.contractId}
                     onResult={onResult}
+                    commandLedger={commandLedger}
                 />
             )}
 
@@ -828,13 +1069,50 @@ function SalesOrderEditableCenter({
                 onOpenChange={setVoidOpen}
                 pending={voidMutation.isPending}
                 onConfirm={async (reason) => {
-                    try {
-                        const outcome = await voidMutation.mutateAsync({
-                            salesOrderId: order.id,
-                            action: "VOID_AFTER_REJECTION",
-                            idempotencyKey: `pr-void-${order.id}-${Date.now()}`,
-                            voidReason: reason,
+                    let command =
+                        commandLedger.peek<ResolveProcurementRejectionPayload>(
+                            "procurement-rejection-resolution",
+                        )
+                    if (
+                        command &&
+                        command.payload.action !== "VOID_AFTER_REJECTION"
+                    ) {
+                        onResult({
+                            status: "unknown",
+                            title: "处理结果待确认",
+                            description:
+                                "另一项处理的结果仍待确认，请先使用原操作重试。",
+                            reference: order.documentNumber,
                         })
+                        throw new Error(
+                            "另一项处理的结果仍待确认，请先使用原操作重试。",
+                        )
+                    }
+                    try {
+                        if (!command) {
+                            const payload =
+                                await prepareProcurementRejectionResolution({
+                                    salesOrderId: order.id,
+                                    action: "VOID_AFTER_REJECTION",
+                                    voidReasonCode:
+                                        "SALES_DECISION_NOT_TO_PROCEED",
+                                    comment: reason,
+                                })
+                            command = commandLedger.acquire(
+                                "procurement-rejection-resolution",
+                                `sales:${order.id}:procurement-rejection:void`,
+                                payload,
+                            )
+                        }
+                        if (!command) return
+                        const outcome = await voidMutation.mutateAsync({
+                            ...command.payload,
+                            idempotencyKey: command.idempotencyKey,
+                        })
+                        commandLedger.settle(
+                            "procurement-rejection-resolution",
+                            "succeeded",
+                        )
                         onResult({
                             status: "rejected",
                             title: "本单已作废",
@@ -842,14 +1120,30 @@ function SalesOrderEditableCenter({
                             reference: outcome.reference,
                         })
                     } catch (error) {
+                        const settlement = command
+                            ? classifyFormalCommandError(error)
+                            : "failed"
+                        commandLedger.settle(
+                            "procurement-rejection-resolution",
+                            settlement,
+                        )
                         const failure = getErrorPresentation(
                             error,
                             "作废未完成，请刷新后重试。",
                         )
                         onResult({
-                            status: "blocked",
-                            title: failure.title,
-                            description: failure.description,
+                            status:
+                                settlement === "unknown"
+                                    ? "unknown"
+                                    : "blocked",
+                            title:
+                                settlement === "unknown"
+                                    ? "处理结果待确认"
+                                    : failure.title,
+                            description:
+                                settlement === "unknown"
+                                    ? "当前原因已保留，请使用本次操作重试。"
+                                    : failure.description,
                             reference: order.documentNumber,
                         })
                         throw error

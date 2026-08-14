@@ -1,5 +1,7 @@
 /** W07 采购二次确认 · 客户端契约类型（对齐工作面文档 §8）。 */
 
+import type { AssignmentMode, WorkItemStatus } from "@/features/work-items"
+
 export type FulfillmentMode =
     | "WAREHOUSE"
     | "SUPPLIER_DIRECT"
@@ -63,18 +65,17 @@ type BlockingIssue = Readonly<{
 
 export type ProcurementConfirmationTask = Readonly<{
     workItemId: string
-    /** Server-filterable responsibility boundary for mine vs claimable role pool. */
-    responsibilityScope: "mine" | "role_pool"
-    status: "PENDING" | "IN_PROGRESS" | "COMPLETED"
+    taskVersion: string
+    /** 服务端已按本人或团队责任范围过滤。 */
+    responsibilityScope: "mine" | "team"
+    status: WorkItemStatus
+    assignmentMode: AssignmentMode
+    ownerUser?: { id: string; displayName: string }
     priority: number
     dueAt: string
     impactSummary: string
     subjectVersion: string
     subjectHash: string
-    held?: boolean
-    lease?: {
-        claimedByLabel: string
-    }
     salesSubmission: {
         salesOrderId: string
         salesOrderNo: string
@@ -146,11 +147,6 @@ export type ProcurementQueueView = Readonly<{
     emptyReason?: "NO_TASKS" | "FILTER_NO_RESULT" | "NO_DATA_SCOPE"
 }>
 
-export type WorkItemLease = Readonly<{
-    workItemId: string
-    claimedByLabel: string
-}>
-
 export type ProcurementRecommendation = Readonly<{
     confirmationId: string
     policyVersion: string
@@ -188,10 +184,7 @@ export type FormalOutcome =
           subjectHash: string
           salesOrderRevisionId: string
           receivableAccountId: string
-          purchaseOrders: readonly {
-              purchaseOrderId: string
-              purchaseNo: string
-          }[]
+          procurementCreationBasisId: string
           reference: string
       }
     | {
@@ -204,6 +197,7 @@ export type FormalOutcome =
           workflowActionId: string
           nextSalesResolutions: readonly [
               "RESUBMIT_CHANGED_TERMS",
+              "REQUEST_LOW_MARGIN_ACCEPTANCE",
               "VOID_AFTER_REJECTION",
           ]
           /** 契约：驳回事务不得创建后继任务 */
@@ -213,17 +207,17 @@ export type FormalOutcome =
           comment: string
       }
     | {
-          kind: "DEFERRED"
+          kind: "RELEASED_TO_TEAM"
           workItemId: string
-          workItemStatus: "PENDING" | "IN_PROGRESS"
-          leaseDisposition: "RETAINED" | "RELEASED"
-          nextWorkItemId?: string
+          workItemStatus: "OPEN"
+          taskVersion: string
           reference: string
       }
 
 export type FormalActionResponse =
     | { status: "succeeded"; outcome: FormalOutcome }
     | { status: "failed"; message: string; code: string }
+    | { status: "unknown"; message: string; idempotencyKey: string }
 
 export const FULFILLMENT_MODE_LABEL: Record<FulfillmentMode, string> = {
     WAREHOUSE: "入仓",
@@ -245,6 +239,12 @@ export const NEXT_SALES_RESOLUTION_COPY = [
         title: "改品 / 改价后重提",
         description:
             "销售与客户重新确认后，在销售单冻结新提交与新数据版本，再产生全新采购确认任务。",
+    },
+    {
+        code: "REQUEST_LOW_MARGIN_ACCEPTANCE" as const,
+        title: "照原条件申请低毛利上级确认",
+        description:
+            "由销售发起独立的低毛利上级确认；通过后仍会针对新提交产生全新的采购确认任务，不自动沿用本次结论。",
     },
     {
         code: "VOID_AFTER_REJECTION" as const,

@@ -1,5 +1,7 @@
 /** W13 卡券票款复核 · 客户端契约类型（对齐工作面文档 §5/§8）。 */
 
+import type { AssignmentMode, WorkItemStatus } from "@/features/work-items"
+
 export type ReviewType = "OPENING" | "SYNC_DELTA"
 
 export type WorkItemType = "CARD_FUNDS_REVIEW" | "CARD_FUNDS_DELTA_REVIEW"
@@ -91,20 +93,20 @@ export type AllocationDraftLine = Readonly<{
 export type CardFundsReviewItemView = Readonly<{
     workItem: {
         workItemId: string
+        taskVersion: string
         workItemType: WorkItemType
-        completionAction: string
         subjectVersion: string
-        subjectHash: string
-        workItemStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED"
+        workItemStatus: WorkItemStatus
+        assignmentMode: AssignmentMode
         dueAt?: string
-        claimedBy?: { userId: string; displayName: string }
+        ownerUser?: { id: string; displayName: string }
         allowedActions: readonly (
-            | "CLAIM"
+            | "START_PROCESSING"
             | "CONFIRM_ZERO"
             | "APPROVE"
             | "REJECT"
-            | "HOLD"
-            | "TRANSFER"
+            | "RELEASE_TO_TEAM"
+            | "REASSIGN"
             | "REGISTER_RECEIPT"
             | "REGISTER_INVOICE"
         )[]
@@ -113,7 +115,6 @@ export type CardFundsReviewItemView = Readonly<{
             code: string
             message: string
         }[]
-        held?: boolean
         reason: string
         impact: string
         priority: number
@@ -168,11 +169,10 @@ export type CardFundsReviewQueueQuery = {
     queueContextId?: string
     currentWorkItemId?: string
     type: "all" | "opening" | "delta"
-    scope: "mine" | "role_pool"
+    scope: "mine" | "team" | "history"
     q?: string
     due?: "all" | "today" | "overdue"
-    /** pending = 有效队列；held = 已暂挂子集；completed 不混入正常队列 */
-    status?: "pending" | "held"
+    status?: "OPEN" | "COMPLETED" | "CLOSED"
     sort?: string
     autoNext?: boolean
 }
@@ -194,12 +194,6 @@ export type CardFundsReviewQueueView = Readonly<{
     emptyReason?: "NO_TASKS" | "FILTER_NO_RESULT" | "NO_DATA_SCOPE"
 }>
 
-export type WorkItemLease = Readonly<{
-    workItemId: string
-    claimedByLabel: string
-    subjectVersion: string
-}>
-
 /** 统一动作命令<CardFundsReviewDecision> 的 decision 段 */
 export type CardFundsReviewDecision =
     | {
@@ -217,8 +211,6 @@ export type CardFundsReviewDecision =
           evidenceDocumentIds: string[]
           evidenceReferences: string[]
           comment?: string
-          /** 完成时三方校验：任务信封 / 当前记录 / 提交期望 */
-          expectedSubjectHash: string
       }
     | {
           reviewResult: "REJECTED"
@@ -236,10 +228,17 @@ export type CardFundsReviewDecision =
           evidenceDocumentIds: string[]
           evidenceReferences: string[]
           comment: string
-          expectedSubjectHash: string
       }
 
-type CardFundsReviewBusinessResult = Readonly<{
+export type CompleteCardFundsReviewCommand = Readonly<{
+    workItemId: string
+    expectedTaskVersion: string
+    expectedSubjectVersion: string
+    decision: CardFundsReviewDecision
+    idempotencyKey: string
+}>
+
+type CardFundsReviewBusinessResultBase = Readonly<{
     receivableFundsReviewId: string
     receivableAccountId: string
     reviewNo: number
@@ -247,39 +246,39 @@ type CardFundsReviewBusinessResult = Readonly<{
     workflowActionId: string
     operationId: string
     completedAt: string
-    reviewResult: ReviewResult
-    conclusion: ApproveConclusion | "REJECTED"
-    subjectHash: string
-    reference: string
-    followUpConfiguration?: {
-        status: "BLOCKED"
-        blockerCode: "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED"
-        collaborationMessage: string
-        requiredRegistration: readonly (
-            | "WORK_ITEM_TYPE"
-            | "OWNER_POOL"
-            | "HANDLER_KEY"
-        )[]
-    }
 }>
 
 export type FormalOutcome =
     | {
           kind: "APPROVED"
-          business: CardFundsReviewBusinessResult
+          business: CardFundsReviewBusinessResultBase & {
+              reviewResult: "APPROVED"
+              conclusion: ApproveConclusion
+          }
       }
     | {
           kind: "REJECTED"
-          business: CardFundsReviewBusinessResult
+          business: CardFundsReviewBusinessResultBase & {
+              reviewResult: "REJECTED"
+              conclusion: "REJECTED"
+              followUpConfiguration: {
+                  status: "BLOCKED"
+                  blockerCode: "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED"
+                  collaborationMessage: string
+                  requiredRegistration: readonly (
+                      | "WORK_ITEM_TYPE"
+                      | "OWNER_POOL"
+                      | "HANDLER_KEY"
+                  )[]
+              }
+          }
       }
     | {
-          kind: "HELD"
+          kind: "RELEASED_TO_TEAM"
           workItemId: string
-          workItemStatus: "PENDING" | "IN_PROGRESS"
-          heldAt: string
-          resumeHint: string
+          workItemStatus: "OPEN"
+          taskVersion: string
           reference: string
-          nextWorkItemId?: string
       }
 
 export type FormalActionResponse =

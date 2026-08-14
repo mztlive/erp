@@ -96,6 +96,11 @@ export function SafetyPausePanel({
     const affected = pause.affectedPublications.filter(
         (ap) => affectedPublicationLabels?.[ap.publicationId],
     )
+    // 仅消费服务端按原因返回的责任事实。即使运行时载荷多带字段，非停供原因也不得展示任务入口。
+    const followUpWorkItem =
+        pause.cause === "SUPPLIER_STOPPED" ? pause.followUpWorkItem : undefined
+    const followUpBlocker =
+        pause.cause === "SUPPLIER_STOPPED" ? undefined : pause.followUpBlocker
 
     return (
         <Alert variant="destructive" role="status">
@@ -155,7 +160,7 @@ export function SafetyPausePanel({
                         </div>
                     ) : null}
 
-                    {"followUpWorkItem" in pause && pause.followUpWorkItem ? (
+                    {followUpWorkItem ? (
                         <div className="rounded-md border border-warning/40 bg-warning/5 p-2">
                             <div className="text-xs font-medium">
                                 后续任务（供应商停供唯一）
@@ -167,7 +172,7 @@ export function SafetyPausePanel({
                                     </dt>
                                     <dd>
                                         {WORK_ITEM_TYPE_LABEL[
-                                            pause.followUpWorkItem.workItemType
+                                            followUpWorkItem.workItemType
                                         ] ?? "业务异常"}
                                     </dd>
                                 </div>
@@ -182,7 +187,7 @@ export function SafetyPausePanel({
                                 className="mt-2"
                                 render={
                                     <Link
-                                        href={`/procurement/supplier-offerings?workItemId=${encodeURIComponent(pause.followUpWorkItem.workItemId)}`}
+                                        href={`/procurement/supplier-offerings?workItemId=${encodeURIComponent(followUpWorkItem.workItemId)}`}
                                     />
                                 }
                             >
@@ -191,11 +196,11 @@ export function SafetyPausePanel({
                         </div>
                     ) : null}
 
-                    {"followUpBlocker" in pause && pause.followUpBlocker ? (
+                    {followUpBlocker ? (
                         <div className="rounded-md border border-border bg-muted/40 p-2">
                             <div className="text-xs font-medium">后续说明</div>
                             <p className="mt-1 text-xs">
-                                {pause.followUpBlocker.message}
+                                {followUpBlocker.message}
                             </p>
                         </div>
                     ) : null}

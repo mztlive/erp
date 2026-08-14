@@ -1,6 +1,6 @@
 import { getWorkspaceById, type WorkspaceId } from "@/lib/workspace-registry"
-import { writeW02FocusId } from "@/features/unified-task-queue/queue-url"
 import type { WorkspaceWorkItem } from "@/features/workspace/types"
+import type { WorkspaceUrlState } from "@/features/workspace/lib/url-state"
 
 /**
  * Resolve a safe in-app destination from the local workspace registry.
@@ -37,10 +37,22 @@ export function resolveWorkspaceHref(
  * 任务身份不落地址栏（内部 ID 禁止进 URL）；焦点经 sessionStorage 传给 W02。
  * Specialized W07/W13 handlers are opened from W02, not bypassed from W01.
  */
-export function buildProcessHref(item: WorkspaceWorkItem): string {
-    writeW02FocusId(item.workItemId)
+export function buildProcessHref(
+    item: WorkspaceWorkItem,
+    scope: WorkspaceUrlState["scope"],
+): string {
+    if (item.destinationWorkspaceId === "W18") {
+        return resolveWorkspaceHref("W18", {
+            batchId: item.businessObjectId,
+            section: "confirm",
+            confirmationScope: item.routeContext?.confirmationScope,
+            workItemId: item.workItemId,
+            queueContextId: item.queueContextId,
+        })
+    }
+
     return resolveWorkspaceHref("W02", {
-        scope: "mine",
+        scope,
         family: item.family,
     })
 }

@@ -17,7 +17,9 @@ use entities::sales_review::{
     SalesChangeSubmission, SalesChangeSubmissionData, SalesChangeSubmissionLine,
     SalesChangeSubmissionLineData,
 };
-use entities::work_item::{WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+use entities::work_item::{
+    AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+};
 use id_generator::next_id;
 use validator::Validate;
 
@@ -146,7 +148,7 @@ impl SalesReviewService {
             .find_by_id(&req.sales_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        if order.stable.status != entities::sales_order::CommercialStatus::Effective {
+        if order.commercial_status != entities::sales_order::CommercialStatus::Effective {
             return Err(Error::BusinessLogicError(
                 "只有已生效的销售单才能发起变更".to_string(),
             ));
@@ -156,6 +158,12 @@ impl SalesReviewService {
             .current_revision_id
             .clone()
             .ok_or_else(|| Error::BusinessLogicError("销售单缺少当前版本，无法发起变更".to_string()))?;
+        let base_revision = self
+            .db
+            .sales_order_revisions()
+            .find_by_id(&base_revision_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
         let existing = self
             .db
             .sales_change_orders()
@@ -189,6 +197,11 @@ impl SalesReviewService {
         let working_copy_id = SalesOrderWorkingCopyId::new(next_id());
         let lines = build_change_working_copy_lines(&working_copy_id, &stable_lines, &req.draft.lines)?;
         let (gross, net, tax) = change_line_totals(&lines);
+        if order.business_type == entities::sales_order::BusinessType::Voucher {
+            return Err(Error::BusinessLogicError(
+                "卡券销售变更缺少原正式版本冻结的目标商城或应收到期日，禁止创建变更单".to_string(),
+            ));
+        }
         let working_copy = entities::sales_order::SalesOrderWorkingCopy::new(
             working_copy_id,
             entities::sales_order::SalesOrderWorkingCopyData {
@@ -202,6 +215,10 @@ impl SalesReviewService {
                 business_type: order.business_type,
                 customer_id: order.customer_id.clone(),
                 contract_id: order.contract_id.clone(),
+                contract_revision_id: order
+                    .contract_id
+                    .as_ref()
+                    .and_then(|_| base_revision.contract_revision_id.clone()),
                 settlement_party_id: order.settlement_party_id.clone(),
                 snapshot: change_header_snapshot(&req.draft)?,
                 project_name: req.draft.project_name.clone(),
@@ -211,6 +228,8 @@ impl SalesReviewService {
                     .draft
                     .voucher_expiry_at
                     .map(|secs| Instant::from_unix_secs(secs as i64)),
+                target_mall_id: None,
+                receivable_due_date: None,
                 gross_amount: gross,
                 net_amount: net,
                 tax_amount: tax,
@@ -308,34 +327,42 @@ impl SalesReviewService {
             actor.id(),
         )?;
 
+        let review_stage = if working_copy.business_type == entities::sales_order::BusinessType::GoodsService
+        {
+            SalesChangeReviewStage::ProcurementImpact
+        } else {
+            SalesChangeReviewStage::OperationsImpact
+        };
         let review = SalesChangeReview::new(
             SalesChangeReviewId::new(next_id()),
             SalesChangeReviewData {
                 sales_change_submission_id: submission.base.id.clone().into(),
-                review_stage: if working_copy.business_type
-                    == entities::sales_order::BusinessType::GoodsService
-                {
-                    SalesChangeReviewStage::ProcurementImpact
-                } else {
-                    SalesChangeReviewStage::OperationsImpact
-                },
+                review_stage,
             },
             actor.id(),
         )?;
         let work_item = WorkItem::new(
             WorkItemId::new(next_id()),
             WorkItemData {
-                work_item_type: WorkItemType::ProcurementConfirmation,
+                work_item_type: WorkItemType::SalesChangeImpactReview,
+                approval_step_instance_id: None,
                 business_object_type: "sales_change_review".to_string(),
                 business_object_id: review.base.id.clone(),
-                subject_version: Some(submission.base.id.clone()),
-                owner_role: Some("procurement".to_string()),
+                subject_version: submission.base.id.clone(),
+                assignment_mode: AssignmentMode::Pool,
+                owner_role: match review_stage {
+                    SalesChangeReviewStage::ProcurementImpact => "role-procurement",
+                    SalesChangeReviewStage::OperationsImpact => "role-operations",
+                    SalesChangeReviewStage::FinanceReview => unreachable!("初始影响确认不会直接进入财务复核"),
+                }
+                .to_string(),
+                owner_organization_id: "company".to_string(),
                 owner_user_id: None,
+                assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::High,
                 due_at: None,
                 reason_code: Some("change_impact_dispatched".to_string()),
                 impact_summary: Some("销售变更履约影响确认".to_string()),
-                completion_action: "DECIDE_CHANGE_REVIEW".to_string(),
             },
         )?;
         let audit = actor.clone().resource_log(
@@ -576,7 +603,7 @@ fn build_change_submission(
             working_copy_version: working_copy.draft_version,
             business_type: convert_business_type(working_copy.business_type),
             customer_id: working_copy.customer_id.clone(),
-            contract_revision_id: None,
+            contract_revision_id: working_copy.contract_revision_id.clone(),
             settlement_party_id: working_copy.settlement_party_id.clone(),
             snapshot: entities::sales_review::HeaderSnapshotData {
                 customer_name: working_copy.customer_snapshot.customer_name.clone(),

@@ -11,14 +11,19 @@
 //! 筛选/行类型定义在本文件，经 `ProjectionExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use entities::ids::{SalesOrderId, SalesOrderProjectionRevisionId, SourceSystemId};
+use entities::common::time::Instant;
+use entities::ids::{
+    InboxMessageId, IntegrationErrorTaskId, SalesOrderId, SalesOrderProjectionRevisionId, SourceSystemId,
+    WorkItemId,
+};
+use entities::integration_ops::ErrorClass;
 use entities::money::Amount;
 use entities::projection::{
     CardForm, ProjectionDeliveryStatus, ProjectionSource, SalesOrderProjection, SalesOrderProjectionDelivery,
     SalesOrderProjectionRevision,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
@@ -36,6 +41,38 @@ const SALES_ORDER_PROJECTION_REVISIONS: &str =
 /// `sales_order_projection_delivery` 集合名（单一来源：`ProjectionExt` 关联常量）。
 const SALES_ORDER_PROJECTION_DELIVERIES: &str =
     <mongodb::Database as ProjectionExt>::SALES_ORDER_PROJECTION_DELIVERIES;
+
+/// 执行投影投递失败或结果未知的原子落库参数。
+#[derive(Debug, Clone, Copy)]
+pub struct ProjectionDeliveryFailure<'a> {
+    /// 目标状态。
+    pub status: ProjectionDeliveryStatus,
+    /// 错误分类。
+    pub error_class: ErrorClass,
+    /// 稳定错误码。
+    pub error_code: &'a str,
+    /// 可展示的错误摘要。
+    pub error_summary: &'a str,
+    /// 事实发生时间。
+    pub at: Instant,
+}
+
+/// 执行投影投递升级 W29 的原子落库参数。
+#[derive(Debug, Clone, Copy)]
+pub struct ProjectionDeliveryEscalation<'a> {
+    /// 原投递错误分类。
+    pub error_class: ErrorClass,
+    /// 原投递稳定错误码。
+    pub error_code: &'a str,
+    /// 原投递错误摘要。
+    pub error_summary: &'a str,
+    /// 正式 W29 错误对象。
+    pub error_task_id: &'a IntegrationErrorTaskId,
+    /// 与错误对象配对的正式待办。
+    pub work_item_id: &'a WorkItemId,
+    /// 升级发生时间。
+    pub at: Instant,
+}
 
 /// 投影列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -279,10 +316,24 @@ pub struct SalesOrderProjectionDeliveryRow {
     pub status: ProjectionDeliveryStatus,
     /// 发送次数。
     pub attempt_count: u32,
+    /// 最近发送时间。
+    pub last_attempt_at: Option<i64>,
+    /// 下次受控处理时间。
+    pub next_attempt_at: Option<i64>,
     /// 商城确认时间。
     pub mall_ack_at: Option<i64>,
+    /// 商城执行基线。
+    pub mall_execution_baseline: Option<String>,
+    /// 稳定错误分类。
+    pub error_class: Option<ErrorClass>,
     /// 错误码。
     pub error_code: Option<String>,
+    /// 脱敏错误摘要。
+    pub error_summary: Option<String>,
+    /// W29 错误对象。
+    pub error_task_id: Option<String>,
+    /// W29 正式待办。
+    pub work_item_id: Option<String>,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -399,6 +450,305 @@ impl<'a> Repository<'a, SalesOrderProjectionDelivery> {
         )
         .await
     }
+
+    /// 列出到期且可由受控 worker 处理的投递。
+    ///
+    /// 只返回 `pending_send`，或已到 `next_attempt_at` 的 `retrying` 记录；结果未知
+    /// 与发送中记录不得在后台被盲目重放。
+    pub async fn list_processable_deliveries(
+        &self,
+        at: Instant,
+        limit: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderProjectionDelivery>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "created_at": 1, "id": 1 })
+            .limit(i64::from(limit))
+            .build();
+        mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                "$or": [
+                    { "status": ProjectionDeliveryStatus::PendingSend.as_str() },
+                    {
+                        "status": ProjectionDeliveryStatus::Retrying.as_str(),
+                        "next_attempt_at": { "$lte": at.unix_secs() },
+                    },
+                ],
+            },
+            options,
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 取得一条待发送或到期重试投递。
+    ///
+    /// 命中时保持原投递 ID 和消息键，原子写入消息信封、发送次数、最近发送时间
+    /// 及 `sending` 状态。未命中返回当前事实，由 Service 区分并发、终态与版本冲突。
+    pub async fn claim_for_send(
+        &self,
+        id: &str,
+        expected_version: u64,
+        inbox_message_id: &InboxMessageId,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderProjectionDelivery>> {
+        let expected_version = metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            claim_delivery_filter(id, expected_version, at),
+            claim_delivery_pipeline(inbox_message_id, at),
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 将发送中或结果未知投递落为商城已确认。
+    pub async fn confirm_delivery(
+        &self,
+        id: &str,
+        expected_version: u64,
+        mall_execution_baseline: &str,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderProjectionDelivery>> {
+        let expected_version = metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            result_delivery_filter(id, expected_version),
+            confirmed_delivery_pipeline(mall_execution_baseline, at),
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 记录明确失败或结果未知，保留原投递和消息身份。
+    pub async fn fail_delivery(
+        &self,
+        id: &str,
+        expected_version: u64,
+        failure: ProjectionDeliveryFailure<'_>,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderProjectionDelivery>> {
+        let expected_version = metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            result_delivery_filter(id, expected_version),
+            failed_delivery_pipeline(
+                failure.status,
+                failure.error_class,
+                failure.error_code,
+                failure.error_summary,
+                failure.at,
+            ),
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 安排沿原消息键重试。
+    pub async fn schedule_retry(
+        &self,
+        id: &str,
+        expected_version: u64,
+        at: Instant,
+        next_attempt_at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderProjectionDelivery>> {
+        let expected_version = metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            retry_delivery_filter(id, expected_version),
+            retry_delivery_pipeline(at, next_attempt_at),
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 关联 W29 错误对象和正式待办并转人工。
+    pub async fn escalate_delivery(
+        &self,
+        id: &str,
+        expected_version: u64,
+        escalation: ProjectionDeliveryEscalation<'_>,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderProjectionDelivery>> {
+        let expected_version = metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            escalation_delivery_filter(id, expected_version),
+            escalation_delivery_pipeline(
+                escalation.error_class,
+                escalation.error_code,
+                escalation.error_summary,
+                escalation.error_task_id,
+                escalation.work_item_id,
+                escalation.at,
+            ),
+            executor,
+        )
+        .await
+    }
+}
+
+fn metadata_version(version: u64) -> Result<i64> {
+    i64::try_from(version).map_err(|_| crate::Error::EntityMetadataOutOfRange("version"))
+}
+
+fn claim_delivery_filter(id: &str, expected_version: i64, at: Instant) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "$or": [
+            { "status": ProjectionDeliveryStatus::PendingSend.as_str() },
+            {
+                "status": ProjectionDeliveryStatus::Retrying.as_str(),
+                "next_attempt_at": { "$lte": at.unix_secs() },
+            },
+        ],
+    }
+}
+
+fn claim_delivery_pipeline(inbox_message_id: &InboxMessageId, at: Instant) -> Vec<Document> {
+    let timestamp = at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "status": ProjectionDeliveryStatus::Sending.as_str(),
+            "attempt_count": { "$add": ["$attempt_count", 1_i64] },
+            "last_attempt_at": timestamp,
+            "next_attempt_at": Bson::Null,
+            "inbox_message_id": {
+                "$ifNull": ["$inbox_message_id", inbox_message_id.to_string()]
+            },
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": timestamp,
+        }
+    }]
+}
+
+fn result_delivery_filter(id: &str, expected_version: i64) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "status": {
+            "$in": [
+                ProjectionDeliveryStatus::Sending.as_str(),
+                ProjectionDeliveryStatus::ResultUnknown.as_str(),
+                ProjectionDeliveryStatus::Failed.as_str(),
+            ]
+        },
+    }
+}
+
+fn confirmed_delivery_pipeline(mall_execution_baseline: &str, at: Instant) -> Vec<Document> {
+    let timestamp = at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "status": ProjectionDeliveryStatus::Confirmed.as_str(),
+            "next_attempt_at": Bson::Null,
+            "mall_ack_at": timestamp,
+            "mall_execution_baseline": mall_execution_baseline,
+            "error_class": Bson::Null,
+            "error_code": Bson::Null,
+            "error_summary": Bson::Null,
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": timestamp,
+        }
+    }]
+}
+
+fn failed_delivery_pipeline(
+    status: ProjectionDeliveryStatus,
+    error_class: ErrorClass,
+    error_code: &str,
+    error_summary: &str,
+    at: Instant,
+) -> Vec<Document> {
+    let timestamp = at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "status": status.as_str(),
+            "next_attempt_at": Bson::Null,
+            "mall_ack_at": Bson::Null,
+            "mall_execution_baseline": Bson::Null,
+            "error_class": error_class.as_str(),
+            "error_code": error_code,
+            "error_summary": error_summary,
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": timestamp,
+        }
+    }]
+}
+
+fn retry_delivery_filter(id: &str, expected_version: i64) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "status": ProjectionDeliveryStatus::Failed.as_str(),
+        "error_class": {
+            "$in": [
+                ErrorClass::TransientFailure.as_str(),
+                ErrorClass::RateLimited.as_str(),
+            ]
+        },
+    }
+}
+
+fn retry_delivery_pipeline(at: Instant, next_attempt_at: Instant) -> Vec<Document> {
+    let updated_at = at.unix_secs();
+    let next_attempt_at = next_attempt_at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "status": ProjectionDeliveryStatus::Retrying.as_str(),
+            "next_attempt_at": next_attempt_at,
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": updated_at,
+        }
+    }]
+}
+
+fn escalation_delivery_filter(id: &str, expected_version: i64) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "status": {
+            "$in": [
+                ProjectionDeliveryStatus::Sending.as_str(),
+                ProjectionDeliveryStatus::ResultUnknown.as_str(),
+                ProjectionDeliveryStatus::Failed.as_str(),
+            ]
+        },
+    }
+}
+
+fn escalation_delivery_pipeline(
+    error_class: ErrorClass,
+    error_code: &str,
+    error_summary: &str,
+    error_task_id: &IntegrationErrorTaskId,
+    work_item_id: &WorkItemId,
+    at: Instant,
+) -> Vec<Document> {
+    let timestamp = at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "status": ProjectionDeliveryStatus::Manual.as_str(),
+            "next_attempt_at": Bson::Null,
+            "error_class": error_class.as_str(),
+            "error_code": error_code,
+            "error_summary": error_summary,
+            "error_task_id": error_task_id.to_string(),
+            "work_item_id": work_item_id.to_string(),
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": timestamp,
+        }
+    }]
 }
 
 /// D27 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
@@ -570,8 +920,15 @@ fn sales_order_projection_delivery_projection() -> Document {
         "target_mall_id": 1,
         "status": 1,
         "attempt_count": 1,
+        "last_attempt_at": 1,
+        "next_attempt_at": 1,
         "mall_ack_at": 1,
+        "mall_execution_baseline": 1,
+        "error_class": 1,
         "error_code": 1,
+        "error_summary": 1,
+        "error_task_id": 1,
+        "work_item_id": 1,
         "version": 1,
         "created_at": 1,
     }
@@ -579,7 +936,11 @@ fn sales_order_projection_delivery_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, QueryFilter, SalesOrderProjectionDeliveryFilter, SalesOrderProjectionFilter};
+    use super::{
+        claim_delivery_filter, retry_delivery_pipeline, sort_doc, QueryFilter,
+        SalesOrderProjectionDeliveryFilter, SalesOrderProjectionFilter,
+    };
+    use entities::common::time::Instant;
     use entities::ids::{SalesOrderId, SourceSystemId};
     use entities::projection::ProjectionDeliveryStatus;
     use mongodb::bson::doc;
@@ -630,5 +991,30 @@ mod tests {
             doc! { "created_at": -1 },
             "白名单外字段一律回退默认排序"
         );
+    }
+
+    #[test]
+    fn delivery_claim_filter_cas_only_accepts_pending_or_due_retry() {
+        let filter = claim_delivery_filter("delivery-1", 7, Instant::from_unix_secs(100));
+        assert_eq!(filter.get_str("id").unwrap(), "delivery-1");
+        assert_eq!(filter.get_i64("version").unwrap(), 7);
+        let choices = filter.get_array("$or").unwrap();
+        assert_eq!(choices.len(), 2);
+        assert_eq!(
+            choices[0].as_document().unwrap().get_str("status").unwrap(),
+            "pending_send"
+        );
+        assert_eq!(
+            choices[1].as_document().unwrap().get_str("status").unwrap(),
+            "retrying"
+        );
+    }
+
+    #[test]
+    fn retry_pipeline_separates_schedule_from_update_time() {
+        let pipeline = retry_delivery_pipeline(Instant::from_unix_secs(100), Instant::from_unix_secs(160));
+        let set = pipeline[0].get_document("$set").unwrap();
+        assert_eq!(set.get_i64("updated_at").unwrap(), 100);
+        assert_eq!(set.get_i64("next_attempt_at").unwrap(), 160);
     }
 }

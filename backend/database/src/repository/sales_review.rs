@@ -12,7 +12,7 @@ use entities::sales_review::{
     ProcurementConfirmation, ProcurementConfirmationId, ProcurementConfirmationLine,
     ProcurementConfirmationStatus, SalesChangeOrder, SalesChangeOrderId, SalesChangeOrderStatus,
     SalesChangeSubmission, SalesChangeSubmissionId, SalesChangeSubmissionLine, SalesOrderReview,
-    SalesReviewStage, SalesReviewStatus,
+    SalesOrderReviewDecision, SalesReviewStage,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -49,11 +49,11 @@ pub struct SalesOrderReviewRow {
     /// 审批阶段。
     pub review_stage: SalesReviewStage,
     /// 审批状态。
-    pub status: SalesReviewStatus,
+    pub status: SalesOrderReviewDecision,
     /// 审批人。
-    pub reviewer_id: Option<String>,
+    pub reviewer_id: String,
     /// 审批时间。
-    pub reviewed_at: Option<u64>,
+    pub reviewed_at: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
 }
@@ -68,7 +68,7 @@ pub struct SalesOrderReviewFilter {
     /// 审批阶段；`None` 表示不筛选。
     pub review_stage: Option<SalesReviewStage>,
     /// 审批状态；`None` 表示不筛选。
-    pub status: Option<SalesReviewStatus>,
+    pub status: Option<SalesOrderReviewDecision>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -779,7 +779,7 @@ mod tests {
             submission_id: Some(entities::ids::SalesOrderSubmissionId::new("s-1")),
             sales_order_id: Some(SalesOrderId::new("o-1")),
             review_stage: Some(SalesReviewStage::SalesLeader),
-            status: Some(SalesReviewStatus::Pending),
+            status: Some(SalesOrderReviewDecision::Approved),
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -791,7 +791,7 @@ mod tests {
         assert_eq!(document.get_str("submission_id").unwrap(), "s-1");
         assert_eq!(document.get_str("sales_order_id").unwrap(), "o-1");
         assert_eq!(document.get_str("review_stage").unwrap(), "SALES_LEADER");
-        assert_eq!(document.get_str("status").unwrap(), "PENDING");
+        assert_eq!(document.get_str("status").unwrap(), "APPROVED");
     }
 
     #[test]

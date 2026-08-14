@@ -201,7 +201,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 | --- | --- | --- | --- | --- | --- |
 | 刷新 | 页头 | W01 可访问 | 无 | 更新统计与任务查询；分别展示两类更新时间 | 保留旧数据并提供重试 |
 | 指标过滤 | 指标卡 | 对应指标可见 | 无 | 主区在原页过滤 | 请求失败恢复原列表和原筛选 |
-| 处理任务 | 任务条目主按钮 | `PROCESS` 在 `allowedActions` 中，且无 blocker | W01 不确认业务动作 | 打开对应 M3 / M4 / M5；W02 类目标的任务焦点经 `sessionStorage` 传递（内部 ID 不进地址栏） | 导航失败留在 W01；不提前开始处理或完成任务 |
+| 处理任务 | 任务条目主按钮 | `PROCESS` 或 `START_PROCESSING` 在 `allowedActions` 中，且无 blocker | W01 不确认业务动作 | 打开对应 M3 / M4 / M5；W02 类目标的任务焦点经 `sessionStorage` 传递（内部 ID 不进地址栏） | 导航失败留在 W01；不提前开始处理或完成任务 |
 | 查看对象 | 任务条目次入口 | 有对象查看权限 | 无 | 聚焦或创建对象中心页签 | 无权限时转为明确无权限态 |
 | 查看全部待办 | 主区标题 / 组尾 | 有 W02 权限 | 无 | 打开 W02 并携带当前筛选 | 无 W02 权限时不展示入口 |
 | 打开预警 | 预警条目 | 有目标模块权限 | 无 | 打开负责处理该预警的工作面 | 目标权限已变化时显示无权限态 |
@@ -232,6 +232,10 @@ type TodayWorkspaceQuery = {
   timezone: string
 }
 ```
+
+W01 必须分别调用 `GET /admin/work-items` 读取预览条目、调用
+`GET /admin/work-items/stats` 读取服务端总量指标。两次查询必须使用相同的 `scope`、`family`、`due`
+和 `timezone` 口径；禁止由当前分页条目计算或修正指标总量。
 
 约束：
 
@@ -295,8 +299,12 @@ type WorkspaceWorkItem = {
   ownerUserLabel?: string
   reasonLabel: string
   impactSummary: string
-  allowedActions: Array<"VIEW" | "PROCESS">
-  actionBlockers: Array<{ action: "VIEW" | "PROCESS"; code: string; message: string }>
+  allowedActions: Array<"VIEW" | "PROCESS" | "START_PROCESSING">
+  actionBlockers: Array<{
+    action: "VIEW" | "PROCESS" | "START_PROCESSING"
+    code: string
+    message: string
+  }>
   handlerKey: string
   routeContext?: { confirmationScope?: string }
   destinationWorkspaceId: string
@@ -316,7 +324,8 @@ type WorkspaceWarning = {
 ```
 
 `WorkspaceWorkItem.status` 直接复用 W02 `WorkItemStatus`；每条正式待办都返回 `workItemId` 和 `queueContextId`（数据字段，非 URL 参数）。W01 对 W02 类目标队列把 `workItemId` 写入 `sessionStorage` 作为当前项焦点，不创建新的任务身份或队列上下文别名；W18 不是 W02 队列位置，按其受控 handler 契约原样传递 `workItemId`、`confirmationScope` 与 `queueContextId`。
-`processingState=APPROVAL_BLOCKED` 时 `PROCESS` 不得出现在 `allowedActions`，并通过 `actionBlockers` 展示权限安全说明；该条目保留责任展示，但不计入可立即处理数。
+`START_PROCESSING` 在 W01 仅表示允许打开目标处理器；W01 禁止据此提交责任写命令。目标处理器必须重新读取任务并按 W02 合同执行开始处理。
+`processingState=APPROVAL_BLOCKED` 时 `PROCESS` 与 `START_PROCESSING` 均不得出现在 `allowedActions`，并通过 `actionBlockers` 展示权限安全说明；该条目保留责任展示，但不计入可立即处理数。
 
 ### 8.3 数据新鲜度与计算边界
 

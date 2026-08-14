@@ -22,6 +22,17 @@ pub struct DeliverAck {
     pub mall_execution_baseline: String,
 }
 
+/// 查询原投递身份得到的权威结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryProjectionResult {
+    /// 商城明确确认原投递。
+    Confirmed(DeliverAck),
+    /// 商城明确拒绝或明确未接收原投递。
+    Failed(ClassifiedError),
+    /// 当前仍不能判断原投递是否已生效。
+    StillUnknown,
+}
+
 /// 商城连接器（外部下发调用统一入口）。
 ///
 /// 实现要求（P3 §7、AGENTS.md 外部依赖容错）：统一设置超时（5 秒）、重试上限
@@ -44,6 +55,17 @@ pub trait MallConnector: Send + Sync {
     ) -> Pin<
         Box<dyn std::future::Future<Output = std::result::Result<DeliverAck, ClassifiedError>> + Send + 'a>,
     >;
+
+    /// 按原稳定消息键查询投递最终结果。
+    ///
+    /// 实现不得把连接器不可用、超时或空响应映射为确认；无法取得权威结果时
+    /// 必须返回 [`QueryProjectionResult::StillUnknown`]。
+    fn query_projection<'a>(
+        &'a self,
+        revision: &'a SalesOrderProjectionRevision,
+        target_mall_id: &'a SourceSystemId,
+        message_key: &'a str,
+    ) -> Pin<Box<dyn std::future::Future<Output = QueryProjectionResult> + Send + 'a>>;
 }
 
 /// 默认商城连接器：端点不可解析时失败关闭（可观测降级）。
@@ -76,13 +98,25 @@ impl MallConnector for UnavailableMallConnector {
             })
         })
     }
+
+    /// 默认端点不可解析时保留结果未知，不伪造商城确认。
+    fn query_projection<'a>(
+        &'a self,
+        _revision: &'a SalesOrderProjectionRevision,
+        _target_mall_id: &'a SourceSystemId,
+        _message_key: &'a str,
+    ) -> Pin<Box<dyn std::future::Future<Output = QueryProjectionResult> + Send + 'a>> {
+        Box::pin(async { QueryProjectionResult::StillUnknown })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use entities::integration_ops::ErrorClass;
 
-    use crate::projection::{ClassifiedError, DeliverAck, MallConnector, UnavailableMallConnector};
+    use crate::projection::{
+        ClassifiedError, DeliverAck, MallConnector, QueryProjectionResult, UnavailableMallConnector,
+    };
 
     fn sample_revision() -> entities::projection::SalesOrderProjectionRevision {
         entities::projection::SalesOrderProjectionRevision::new(
@@ -115,6 +149,16 @@ mod tests {
             .expect_err("默认连接器必须失败关闭");
         assert_eq!(error.class, ErrorClass::TransientFailure);
         assert_eq!(error.code, "MALL_ENDPOINT_UNRESOLVED");
+        assert_eq!(
+            connector
+                .query_projection(
+                    &revision,
+                    &entities::ids::SourceSystemId::new("mall-1"),
+                    "projection_delivery:proj-rev-1:mall-1",
+                )
+                .await,
+            QueryProjectionResult::StillUnknown
+        );
     }
 
     #[tokio::test]
@@ -138,6 +182,20 @@ mod tests {
                     })
                 })
             }
+
+            fn query_projection<'a>(
+                &'a self,
+                revision: &'a entities::projection::SalesOrderProjectionRevision,
+                _target_mall_id: &'a entities::ids::SourceSystemId,
+                _message_key: &'a str,
+            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = QueryProjectionResult> + Send + 'a>>
+            {
+                Box::pin(async move {
+                    QueryProjectionResult::Confirmed(DeliverAck {
+                        mall_execution_baseline: format!("bl-{}", revision.base.id),
+                    })
+                })
+            }
         }
         let connector = MockConnector;
         let revision = sample_revision();
@@ -146,5 +204,15 @@ mod tests {
             .await
             .expect("mock 连接器必须成功");
         assert!(ack.mall_execution_baseline.starts_with("bl-proj-rev-1"));
+        assert!(matches!(
+            connector
+                .query_projection(
+                    &revision,
+                    &entities::ids::SourceSystemId::new("mall-1"),
+                    "projection_delivery:proj-rev-1:mall-1",
+                )
+                .await,
+            QueryProjectionResult::Confirmed(_)
+        ));
     }
 }

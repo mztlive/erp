@@ -483,6 +483,8 @@ type ReviewPurchaseOrderCommand = {
 
 `ReviewPurchaseOrderCommand` 是 `PURCHASE_ORDER_REVIEW` 注册的唯一强类型审核命令。W08 要求 `expectedTaskVersion` 对应当前任务版本，`expectedSubjectVersion` 对应不可变采购提交版本；`expectedPurchaseOrderLockVersion` 保护采购聚合当前状态，审核结论只放在 `decision.reviewResult`，不得另传一套顶层审核动作或任务字段。
 
+HTTP 固定为 `POST /admin/purchase-orders/{purchaseOrderId}/review-decisions`。旧 `/review/approve`、`/review/reject` 不保留；路径只定位采购单，审核分支只能由嵌套 `decision.reviewResult` 表达。详情中的任务摘要必须分别返回 `responsibilityActions`（仅 `START_PROCESSING`、`RELEASE_TO_TEAM` 等 W02 责任动作）和 `domainAllowedActions`（仅 `APPROVE`、`REJECT`）；前端禁止从通用任务动作推断采购审核决定。
+
 退回团队直接使用 W02 `WorkItemResponsibilityCommand` 的 `RELEASE_TO_TEAM` 分支，不定义 W08 私有命令。该动作只追加结构化原因，不写采购审核结论、不改变采购对象或完成任务。成功结果清空原任务个人责任并保持 `OPEN`，下一项只采用服务端结果返回的 `nextWorkItemId`。
 
 服务端在当前事务重验权限、岗位分离、当前责任人、提交版本、采购对象版本、采购确认来源、金额与销售分配。通过时原子形成采购正式版本和应付、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`；驳回时必须写入结构化 `reasonCode`（至少覆盖成本/税率、费用、付款条件、供应商资料、分配错误、其它），原子记录该次审核正式 `REJECTED` 事实、恢复采购可编辑状态、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`。采购修改并重新提交时才创建新的审核任务。任一业务写入、工作流动作或任务完成失败均整体回滚，前端不得补发独立“标记完成”。成功响应同时返回正式业务结果与任务完成结果。

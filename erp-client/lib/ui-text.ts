@@ -9,25 +9,22 @@
 
 import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
 
-// ─── 处理权限（内部称租约，禁止对用户说「租约」） ─────────────────────────────
+// ─── 当前责任 ───────────────────────────────────────────────────────────────
 
-export const leaseText = {
-    /** 对齐术语表 §3.2「任务待领取 → 任务待认领」 */
-    unclaimed: "任务待认领",
-    active: "正在处理中",
-    activeDoNotReopen: "正在处理中 · 请勿重复打开",
-    renewing: "处理权限已延期",
-    /** 短状态（徽章） */
-    lost: "操作已失效",
-    /** 带下一步指引 */
-    lostRefresh: "操作已失效，请刷新后重新处理",
-    released: "本次处理已结束",
-    reclaimHint: "领取任务后即可开始处理",
-    reclaimAfterLost: "可领取后处理",
+export const responsibilityText = {
+    poolAvailable: "团队待处理",
+    assignedToMe: "由你处理",
+    assignedToOther: "由其他同事处理",
+    blocked: "当前不可处理",
+    completed: "已完成",
+    closed: "已关闭",
+    start: "开始处理",
+    starting: "正在开始处理",
+    changed: "处理权已变化，请刷新",
+    releaseToTeam: "退回团队",
+    reassign: "转交",
     permissionRevoked: "权限已收回，不能提交",
     permissionRevokedCleared: "权限已收回 · 临时信息已清除",
-    claimedByOther: "此任务已被其他人领取，请稍后再试",
-    reclaimed: "操作已失效，请重新领取",
     editing: "正在编辑中",
     enteringEdit: "正在进入编辑",
     cannotEdit: "无法进入编辑",
@@ -45,15 +42,9 @@ export const sequentialText = {
     process: "处理",
     submitting: "正在提交…",
     submittingResult: "正在提交处理结果…",
-    pendingClaim: "任务待认领",
-    teamUnclaimed: "团队待认领",
+    teamPending: "团队待处理",
     minePending: "待我处理",
     decisionSubmitting: "决定正在提交",
-    /** 首次领取（从未领取过）与失效后重新领取要区分，避免「重新领取」误导。 */
-    claim: "领取任务",
-    claiming: "正在领取",
-    reclaim: "重新领取",
-    reclaiming: "正在重新领取",
 } as const
 
 // ─── 结果反馈（禁止「正式结果 / 幂等键」） ───────────────────────────────────

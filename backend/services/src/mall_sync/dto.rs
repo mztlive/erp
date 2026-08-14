@@ -15,8 +15,12 @@ mod sync_job;
 
 pub use common::{PageParams, PageView, SortDir};
 pub use mapping_task::{
-    CreateMasterMappingTaskRequest, MasterMappingTaskListParams, MasterMappingTaskView,
-    ResolveMasterMappingTaskRequest, ResolveTaskKind,
+    ConfirmMappingBusinessResult, ConfirmMappingCommand, ConfirmMappingResult,
+    CreateMasterMappingTaskRequest, GovernanceActionResult, MappingActionBlockerView,
+    MappingCandidateTargetView, MappingCurrentTargetView, MappingResolutionHistoryView,
+    MappingSourceEvidenceView, MappingTaskWorkItemView, MasterMappingTaskDetailParams,
+    MasterMappingTaskListParams, MasterMappingTaskView, OwnerRoutingState, ReapplyMallSnapshotCommand,
+    ReapplyOperationView, RequestSourceFixCommand, RequestSourceFixResult,
 };
 pub use reconciliation::{
     CreateMallSalesReconciliationJobRequest, MallSalesReconciliationItemListParams,
@@ -28,8 +32,8 @@ pub use snapshot::{
     MallSalesOrderSnapshotListParams, MallSalesOrderSnapshotView, SnapshotItemRequest,
 };
 pub use sync_job::{
-    CompleteMallSalesSyncJobRequest, CreateMallSalesSyncJobRequest, MallSalesSyncCursorView,
-    MallSalesSyncJobListParams, MallSalesSyncJobView, SyncJobOutcome,
+    CompleteMallSalesSyncJobRequest, MallSalesSyncCursorView, MallSalesSyncJobListParams,
+    MallSalesSyncJobView, SyncJobOutcome, TriggerMallSyncCommand,
 };
 
 #[allow(unused_imports)]

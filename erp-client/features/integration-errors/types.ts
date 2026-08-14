@@ -4,8 +4,14 @@
  */
 
 import type { InterfaceErrorClass } from "@/components/business"
+import type {
+    AssignmentMode,
+    WorkItemAllowedAction,
+    WorkItemProcessingState,
+    WorkItemStatus,
+} from "@/features/work-items"
 
-type IntegrationItemType = "ERROR_TASK" | "RECONCILIATION_DIFFERENCE"
+export type IntegrationItemType = "ERROR_TASK" | "RECONCILIATION_DIFFERENCE"
 
 export type IntegrationView =
     | "mine"
@@ -19,15 +25,7 @@ export type IntegrationMode = "all" | "errors"
 
 export type IntegrationEnvironment = "production" | "verification"
 
-export type IntegrationOwnerFilter = "me" | "role_pool" | "claimed" | "all"
-
-type WorkItemStatus =
-    | "UNCLAIMED"
-    | "PENDING"
-    | "IN_PROGRESS"
-    | "COMPLETED"
-    | "CLOSED"
-    | "TRANSFERRED"
+export type IntegrationOwnerFilter = "me" | "team" | "assigned"
 
 export type FundsImpact = "NONE" | "POTENTIAL" | "POSTED"
 
@@ -42,28 +40,19 @@ type ActionOutcome =
     | "REATTRIBUTED"
     | "EVIDENCE_LINKED"
     | "EVIDENCE_ADDED"
-    | "DEFERRED"
-    | "SKIPPED"
-    | "TRANSFERRED"
     | "RESOLVED"
     | "CLOSED_DUPLICATE"
     | "CLOSED_MISROUTED"
     | "CONFIRMED_NO_ERROR"
     | "CONFIRMED_VALID_DIFFERENCE"
 
-type IntegrationActionKind =
-    | "CLAIM"
+export type IntegrationActionKind =
     | "QUERY_ORIGINAL_RESULT"
     | "REPLAY_ORIGINAL"
     | "REATTRIBUTE"
     | "LINK_COMPENSATION"
     | "ADD_EVIDENCE"
-    | "SKIP"
-    | "DEFER"
-    | "TRANSFER"
     | "RESOLVE"
-    | "CLOSE_DUPLICATE"
-    | "CLOSE_MISROUTED"
     | "CONFIRM_NO_ERROR"
     | "CONFIRM_VALID_DIFFERENCE"
 
@@ -74,13 +63,18 @@ export type ControlledEvidenceKind =
     | "COMPENSATION_RESULT"
     | "DISTINCT_REVIEW"
 
-type ControlledTerminalEvidenceRef = {
+export type DirectReconciliationReasonCode =
+    | "SOURCE_CORRECTED_AND_REATTRIBUTED"
+    | "BUSINESS_CONFIRMED_NO_ERROR"
+    | "COMPENSATION_CLOSED"
+
+export type ControlledTerminalEvidenceRef = {
     kind: ControlledEvidenceKind
     recordId: string
     label: string
 }
 
-type ResolutionEvidencePolicyView = {
+export type ResolutionEvidencePolicyView = {
     evidencePolicyId: string
     evidencePolicyVersion: number
     key: { errorType: string; fundsImpact: FundsImpact }
@@ -91,15 +85,15 @@ type ResolutionEvidencePolicyView = {
         | "DISTINCT_FINANCE_REVIEWER"
 }
 
-type RegisteredReconciliationReason = {
-    registeredReasonId: string
+export type RegisteredReconciliationReason = {
+    registeredReasonId: DirectReconciliationReasonCode
     registeredReasonVersion: number
     conclusion: "CONFIRM_NO_ERROR" | "CONFIRM_VALID_DIFFERENCE"
     label: string
     requiredEvidenceKinds: ControlledEvidenceKind[]
 }
 
-type ReconciliationReasonRegistryView = {
+export type ReconciliationReasonRegistryView = {
     reasonRegistryId: string
     reasonRegistryVersion: number
     registeredReasons: RegisteredReconciliationReason[]
@@ -167,16 +161,13 @@ export type IntegrationResolutionItemView = {
     workItem?: {
         workItemId: string
         workItemType: "INTEGRATION_RESULT_UNKNOWN" | "BUSINESS_EXCEPTION"
-        workItemVersion: string
+        taskVersion: string
         status: WorkItemStatus
-        subjectVersion?: string
-        subjectHash: string
-        completionAction: string
-        lease?: {
-            ownerUserId: string
-            subjectVersion?: string
-            ownerDisplayName: string
-        }
+        assignmentMode: AssignmentMode
+        processingState: WorkItemProcessingState
+        subjectVersion: string
+        ownerUser?: { id: string; displayName: string }
+        allowedActions: readonly WorkItemAllowedAction[]
     }
     businessObject: {
         objectType: string
@@ -290,25 +281,20 @@ export type IntegrationFormalResult = {
     facts?: { label: string; value: string }[]
 }
 
-export type ClaimResult = {
-    workItemId: string
-}
-
 export type IntegrationTaskActionInput = {
     itemType: IntegrationItemType
     itemId: string
     workItemId: string
-    expectedSubjectVersion?: string
-    expectedWorkItemVersion: string
+    expectedSubjectVersion: string
+    expectedTaskVersion: string
     kind:
         | "QUERY_ORIGINAL_RESULT"
         | "REPLAY_ORIGINAL"
         | "REATTRIBUTE"
         | "LINK_COMPENSATION"
         | "ADD_EVIDENCE"
-        | "SKIP"
-        | "DEFER"
     operationId: string
+    idempotencyKey: string
     reasonCode?: string
     comment?: string
     evidenceRefs?: ControlledTerminalEvidenceRef[]
@@ -318,9 +304,11 @@ export type IntegrationResolveInput = {
     itemType: IntegrationItemType
     itemId: string
     workItemId: string
-    expectedSubjectVersion?: string
-    expectedWorkItemVersion: string
+    expectedSubjectVersion: string
+    expectedTaskVersion: string
     operationId: string
+    idempotencyKey: string
+    reasonCode: "TERMINAL_EVIDENCE_VERIFIED"
     evidencePolicyId: string
     evidencePolicyVersion: number
     policyKey: { errorType: string; fundsImpact: FundsImpact }
@@ -328,52 +316,29 @@ export type IntegrationResolveInput = {
     comment?: string
 }
 
-export type IntegrationCloseInput = {
-    itemType: IntegrationItemType
-    itemId: string
-    workItemId: string
-    expectedSubjectVersion?: string
-    expectedWorkItemVersion: string
-    operationId: string
-    kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED"
-    reasonCode: string
-    replacementWorkItemId?: string
-    comment?: string
-}
-
-export type IntegrationTransferInput = {
-    itemType: IntegrationItemType
-    itemId: string
-    workItemId: string
-    expectedSubjectVersion?: string
-    expectedWorkItemVersion: string
-    operationId: string
-    targetRole: string
-    targetUserId?: string
-    reasonCode: string
-    comment?: string
-}
-
 export type DirectReconciliationInput = {
     differenceId: string
     expectedDifferenceVersion: string
-    expectedSubjectHash: string
     operationId: string
+    idempotencyKey: string
     decision:
         | {
               kind: "NON_TERMINAL_ACTION"
               action:
                   | "ADD_EVIDENCE"
                   | "QUERY_ORIGINAL_RESULT"
+                  | "REPLAY_ORIGINAL"
+                  | "REATTRIBUTE"
                   | "LINK_COMPENSATION"
               evidenceRefs?: ControlledTerminalEvidenceRef[]
               comment?: string
           }
         | {
               kind: "TERMINAL_CONCLUSION"
+              reasonCode: DirectReconciliationReasonCode
               reasonRegistryId: string
               reasonRegistryVersion: number
-              registeredReasonId: string
+              registeredReasonId: DirectReconciliationReasonCode
               conclusion: "CONFIRM_NO_ERROR" | "CONFIRM_VALID_DIFFERENCE"
               evidenceRefs: ControlledTerminalEvidenceRef[]
               comment?: string
@@ -414,10 +379,9 @@ export const ENV_LABEL: Record<IntegrationEnvironment | "all", string> = {
 }
 
 export const OWNER_LABEL: Record<IntegrationOwnerFilter, string> = {
-    me: "我领取的",
-    role_pool: "团队",
-    claimed: "已领取",
-    all: "全部责任",
+    me: "我的任务",
+    team: "团队待处理",
+    assigned: "已分派",
 }
 
 export const FUNDS_LABEL: Record<FundsImpact, string> = {

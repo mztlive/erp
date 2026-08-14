@@ -15,6 +15,7 @@
 //! `entities/src/common/`。采购二次确认的唯一状态源是本域 `procurement_confirmation`，
 //! 不重复写成 `sales_order_review.review_stage`（§6.5）。
 
+pub mod low_margin_manager_confirmation;
 pub mod procurement_confirmation;
 pub mod sales_change_order;
 pub mod sales_change_review;
@@ -36,7 +37,9 @@ pub use sales_change_submission::{
     SalesChangeSubmission, SalesChangeSubmissionData, SalesChangeSubmissionLine,
     SalesChangeSubmissionLineData,
 };
-pub use sales_order_review::{SalesOrderReview, SalesOrderReviewData, SalesReviewStage, SalesReviewStatus};
+pub use sales_order_review::{
+    SalesOrderReview, SalesOrderReviewData, SalesOrderReviewDecision, SalesReviewStage, SalesReviewStatus,
+};
 pub use snapshot::{
     ContractSnapshot, CustomerSnapshot, HeaderSnapshotData, HeaderSnapshots, InvoiceRequirementSnapshot,
     PaymentTermSnapshot, SettlementPartySnapshot,
@@ -51,6 +54,10 @@ pub use types::{
 
 /// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{
-    ProcurementConfirmationId, ProcurementConfirmationLineId, SalesChangeOrderId, SalesChangeReviewId,
-    SalesChangeSubmissionId, SalesChangeSubmissionLineId, SalesOrderReviewId,
+    LowMarginManagerConfirmationId, ProcurementConfirmationId, ProcurementConfirmationLineId,
+    SalesChangeOrderId, SalesChangeReviewId, SalesChangeSubmissionId, SalesChangeSubmissionLineId,
+    SalesOrderReviewId,
+};
+pub use low_margin_manager_confirmation::{
+    LowMarginManagerConfirmation, LowMarginManagerConfirmationData, LowMarginManagerConfirmationStatus,
 };

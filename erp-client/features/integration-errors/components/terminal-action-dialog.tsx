@@ -3,8 +3,8 @@ import type { IntegrationResolutionItemView } from "../types"
 import { EVIDENCE_KIND_LABEL } from "../types"
 
 export type TerminalConfirm =
-    | { kind: "TRANSFER" }
     | { kind: "CLOSE_DUPLICATE" }
+    | { kind: "CLOSE_MISROUTED" }
     | { kind: "RESOLVE" }
     | { kind: "CONFIRM_NO_ERROR" }
     | { kind: "CONFIRM_VALID_DIFFERENCE" }
@@ -12,14 +12,12 @@ export type TerminalConfirm =
 export function TerminalActionDialog({
     confirm,
     item,
-    transferRole,
     pending,
     onConfirm,
     onCancel,
 }: {
     confirm: TerminalConfirm
     item: IntegrationResolutionItemView
-    transferRole: string
     pending: boolean
     onConfirm: () => void | Promise<void>
     onCancel: () => void
@@ -27,38 +25,20 @@ export function TerminalActionDialog({
     const policy = item.resolutionEvidencePolicy
     const evidenceKinds = policy?.requiredEvidenceKinds ?? []
 
-    if (confirm.kind === "TRANSFER") {
+    if (
+        confirm.kind === "CLOSE_DUPLICATE" ||
+        confirm.kind === "CLOSE_MISROUTED"
+    ) {
+        const duplicate = confirm.kind === "CLOSE_DUPLICATE"
         return (
             <FormalActionConfirmDialog
                 open
                 onOpenChange={(open) => {
                     if (!open) onCancel()
                 }}
-                actionLabel="转交"
-                title="确认转交任务"
-                description="任务将转交给所选角色；转交只变更处理人，不改变任务结论。"
-                fromStatus={{ label: item.status.label, tone: "warning" }}
-                toStatus={{ label: "已转交", tone: "info" }}
-                effects={[
-                    "转交不是解决，任务仍待处理",
-                    `目标角色：${transferRole}`,
-                ]}
-                irreversibleEffects={["转交记录进入处理审计"]}
-                pending={pending}
-                onConfirm={onConfirm}
-            />
-        )
-    }
-    if (confirm.kind === "CLOSE_DUPLICATE") {
-        return (
-            <FormalActionConfirmDialog
-                open
-                onOpenChange={(open) => {
-                    if (!open) onCancel()
-                }}
-                actionLabel="关闭重复"
-                title="确认关闭重复任务"
-                description="仅关闭重复任务本身；不写业务解决结论，不影响业务记录。"
+                actionLabel={duplicate ? "关闭重复" : "关闭误派"}
+                title={duplicate ? "确认关闭重复任务" : "确认关闭误派任务"}
+                description="仅关闭当前处理任务；不写业务解决结论，不影响业务记录。"
                 fromStatus={{ label: item.status.label, tone: "warning" }}
                 toStatus={{ label: "已关闭", tone: "neutral" }}
                 effects={["任务退出待处理队列", "不改变业务记录"]}
@@ -82,7 +62,7 @@ export function TerminalActionDialog({
                 toStatus={{ label: "已完成", tone: "success" }}
                 effects={[
                     evidenceKinds.length > 0
-                        ? `系统将自动登记 ${evidenceKinds.length} 类处理凭证：${evidenceKinds
+                        ? `将校验已关联的 ${evidenceKinds.length} 类处理凭证：${evidenceKinds
                               .map((kind) => EVIDENCE_KIND_LABEL[kind])
                               .join("、")}`
                         : "系统将登记本次处理凭证",

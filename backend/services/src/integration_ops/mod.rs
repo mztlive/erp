@@ -12,16 +12,16 @@
 //! 集成治理核心动作（W29 §7/§8.2，数据模型 §6.21、§7.7）：
 //! - `inbox_message`：登记（消息层/业务事实层幂等由唯一索引保证，服务层不做
 //!   「先查后插」重复性判断）、结果回写（processed / failed+错误任务）；
-//! - `integration_error_task`：查询原结果（QUERY）→ 明确无结果才开放 REPLAY；
-//!   REPLAY 永不接受客户端原幂等键，服务端锁定关联消息的业务事实键；暂挂/跳过
-//!   保留在队列；RESOLVE/CLOSE/TRANSFER 终结当前处理；已解决/已关闭是终态；
-//! - `reconciliation_difference`：查询/人工处理（只追加处理记录）/解决（固定
-//!   原因枚举 + 受控证据，派生终态）。
+//! - `integration_error_task` 与 `reconciliation_difference` 的人工动作统一进入
+//!   `task_decision` 强命令；非终结动作保持任务 `OPEN`，只有可验证终态允许完成；
+//! - 无正式任务的差异只接受 decision-only 直接命令，不得隐式完成或关闭任务；
+//! - 责任开始、退回、转交和关闭只由 W02 责任 API 承担。
 //!
 //! 文件组织（按业务边界拆分；public 方法与 DTO 导出保持不变）：
 //! - `inbox_message.rs`：入站消息登记、列表、详情、结果回写；
-//! - `error_task.rs`：错误任务登记、查询、REPLAY/DEFER/SKIP/TRANSFER/RESOLVE/CLOSE；
-//! - `reconciliation_difference.rs`：差异创建、列表、详情、人工处理、解决；
+//! - `error_task.rs`：错误任务登记、列表与详情；
+//! - `reconciliation_difference.rs`：差异创建、列表与详情；
+//! - `task_decision.rs`：W29 非终结、完成与直接差异决定；
 //! - `transaction.rs`：共享 `run_audited` 事务模板（本域内部）；
 //! - `validation.rs`：共享乐观锁版本校验（本域内部）。
 
@@ -30,20 +30,29 @@ use mongodb::Database;
 
 mod dto;
 mod error_task;
+mod evidence;
 mod inbox_message;
+mod producer;
 mod reconciliation_difference;
+mod task_decision;
 mod transaction;
 mod validation;
 
+pub(crate) use self::producer::{error_owner_role, error_work_item};
+
 pub use self::dto::{
-    CloseErrorTaskRequest, CloseReason, CreateDifferenceRequest, CreateErrorTaskRequest,
-    DifferenceActionView, DifferenceConclusion, DifferenceDetailView, DifferenceListParams,
-    DifferenceProcessAction, DifferenceReasonCode, DifferenceView, ErrorTaskDetailView, ErrorTaskListParams,
-    ErrorTaskView, HoldErrorTaskRequest, HoldKind, InboxMessageListParams, InboxMessageListView,
-    InboxMessageView, PageView, ProcessDifferenceRequest, QueryOriginalResultRequest, QueryOutcome,
-    RegisterInboxMessageRequest, ReplayOriginalRequest, ReplayResultView, ResolutionView,
-    ResolveDifferenceRequest, ResolveErrorTaskRequest, TransferErrorTaskRequest, WriteBackInboxResultRequest,
-    WriteBackOutcome,
+    ActionBlockerView, ControlledEvidenceKind, ControlledEvidenceRef, CreateDifferenceRequest,
+    CreateErrorTaskRequest, DifferenceDetailView, DifferenceListParams, DifferenceReasonCode, DifferenceView,
+    DirectReconciliationCommand, DirectReconciliationConclusion, DirectReconciliationDecision,
+    DirectReconciliationResult, DirectReconciliationStatus, ErrorTaskDetailView, ErrorTaskListParams,
+    ErrorTaskView, EvidencePolicyKey, InboxMessageListParams, InboxMessageListView, InboxMessageView,
+    IntegrationActionOutcome, IntegrationItemType, IntegrationNonTerminalTaskAction,
+    IntegrationResolutionReasonCode, IntegrationTaskActionCommand, IntegrationTaskActionEvidence,
+    IntegrationTaskActionKind, IntegrationTaskActionResult, IntegrationTaskCompletionCommand,
+    IntegrationTaskCompletionDecision, IntegrationTaskCompletionKind, IntegrationTaskCompletionResult,
+    IntegrationWorkItemStatus, PageView, ReconciliationReasonRegistryView, RegisterInboxMessageRequest,
+    RegisteredReconciliationReasonView, ResolutionEvidencePolicyView, ResolutionView, ReviewerSeparation,
+    WriteBackInboxResultRequest, WriteBackOutcome,
 };
 
 /// 入站消息列表筛选条件类型（经 `IntegrationOpsExt` 关联类型跨 crate 可达）。

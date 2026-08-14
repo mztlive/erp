@@ -1,8 +1,4 @@
-//! 域 D03 `work_item` 管理端路由。
-//!
-//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/work-items`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
-//! `#[permission_macros::permission]`。
+//! D03 人工任务责任路由。
 
 use axum::{
     routing::{get, post},
@@ -15,13 +11,11 @@ use crate::{
     core::{handler::work_item, middleware::with_permission},
 };
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 返回只暴露稳定责任接口的管理端路由。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
+/// 返回列表、详情、开始处理、退回团队、转交和关闭路由；不暴露公开创建、
+/// 暂挂或通用完成接口。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
@@ -33,11 +27,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/work-items",
+            "/work-items/stats",
             with_permission(
-                post(work_item::work_item_create),
+                get(work_item::work_item_stats),
                 rbac,
-                work_item::work_item_create_permission_key(),
+                work_item::work_item_stats_permission_key(),
             ),
         )
         .route(
@@ -49,35 +43,27 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/work-items/{id}/claim",
+            "/work-items/{id}/start-processing",
             with_permission(
-                post(work_item::work_item_claim),
+                post(work_item::work_item_start_processing),
                 rbac,
-                work_item::work_item_claim_permission_key(),
+                work_item::work_item_start_processing_permission_key(),
             ),
         )
         .route(
-            "/work-items/{id}/defer",
+            "/work-items/{id}/release-to-team",
             with_permission(
-                post(work_item::work_item_defer),
+                post(work_item::work_item_release_to_team),
                 rbac,
-                work_item::work_item_defer_permission_key(),
+                work_item::work_item_release_to_team_permission_key(),
             ),
         )
         .route(
-            "/work-items/{id}/transfer",
+            "/work-items/{id}/reassign",
             with_permission(
-                post(work_item::work_item_transfer),
+                post(work_item::work_item_reassign),
                 rbac,
-                work_item::work_item_transfer_permission_key(),
-            ),
-        )
-        .route(
-            "/work-items/{id}/complete",
-            with_permission(
-                post(work_item::work_item_complete),
-                rbac,
-                work_item::work_item_complete_permission_key(),
+                work_item::work_item_reassign_permission_key(),
             ),
         )
         .route(

@@ -82,6 +82,31 @@ pub enum SourceSystemStatus {
     Disabled,
 }
 
+/// 商城同步执行阶段（W17）。
+///
+/// 阶段是服务端持久化事实，不允许调用方在写命令中用常量绕过当前阶段。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum MallSyncStage {
+    /// 第一期由商城开单，ERP 只读接收商业事实。
+    FirstPhaseMallOwned,
+    /// 一期入口已封存，W17 仅保留历史查询与证据追溯。
+    Archived,
+}
+
+impl MallSyncStage {
+    /// 返回持久化与协议使用的稳定代码。
+    ///
+    /// # 返回
+    /// 返回 W17 约定的阶段代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FirstPhaseMallOwned => "FIRST_PHASE_MALL_OWNED",
+            Self::Archived => "ARCHIVED",
+        }
+    }
+}
+
 impl SourceSystemStatus {
     /// 返回状态的中文展示名。
     ///
@@ -123,6 +148,10 @@ impl SourceSystemStatus {
 pub enum ExternalObjectType {
     /// 客户。
     Customer,
+    /// 合同。
+    Contract,
+    /// 企业主体；W17 结算主体映射使用该规范对象类型。
+    Party,
     /// 供应商。
     Supplier,
     /// 销售单。
@@ -145,6 +174,8 @@ impl ExternalObjectType {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Customer => "客户",
+            Self::Contract => "合同",
+            Self::Party => "企业主体",
             Self::Supplier => "供应商",
             Self::SalesOrder => "销售单",
             Self::Product => "商品",
@@ -161,6 +192,8 @@ impl ExternalObjectType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Customer => "customer",
+            Self::Contract => "contract",
+            Self::Party => "party",
             Self::Supplier => "supplier",
             Self::SalesOrder => "sales_order",
             Self::Product => "product",
@@ -406,6 +439,8 @@ pub struct SourceSystemData {
     pub name: String,
     /// 启停状态。
     pub status: SourceSystemStatus,
+    /// 商城同步执行阶段；仅 `MALL` 来源必填，其余来源禁止设置。
+    pub mall_sync_stage: Option<MallSyncStage>,
 }
 
 /// 来源系统更新数据。
@@ -415,6 +450,8 @@ pub struct SourceSystemUpdate {
     pub name: Option<String>,
     /// 启停状态；`None` 表示不修改。
     pub status: Option<SourceSystemStatus>,
+    /// 商城同步执行阶段；仅 `MALL` 来源允许修改。
+    pub mall_sync_stage: Option<MallSyncStage>,
 }
 
 /// 来源系统实体（稳定基础资料，数据模型 §6.1）。
@@ -433,6 +470,8 @@ pub struct SourceSystem {
     pub system_type: SourceSystemType,
     /// 显示名称。
     pub name: String,
+    /// 商城同步执行阶段；仅 `MALL` 来源存在。
+    pub mall_sync_stage: Option<MallSyncStage>,
 }
 
 impl PartialEq for SourceSystem {
@@ -446,6 +485,7 @@ impl PartialEq for SourceSystem {
             && self.code == other.code
             && self.system_type == other.system_type
             && self.name == other.name
+            && self.mall_sync_stage == other.mall_sync_stage
     }
 }
 
@@ -467,6 +507,7 @@ impl SourceSystem {
     /// # 错误
     /// 当 code/name 为空、超长或含未规范化空白时返回错误。
     pub fn new(id: SourceSystemId, data: SourceSystemData, created_by: impl Into<String>) -> Result<Self> {
+        ensure_mall_sync_stage(data.system_type, data.mall_sync_stage)?;
         let code = normalize_required_text(
             data.code,
             "来源系统代码不能为空",
@@ -486,6 +527,7 @@ impl SourceSystem {
             code,
             system_type: data.system_type,
             name,
+            mall_sync_stage: data.mall_sync_stage,
         })
     }
 
@@ -505,6 +547,10 @@ impl SourceSystem {
     pub fn update(&mut self, update: SourceSystemUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.apply_name(update.name)?;
         self.apply_status(update.status);
+        if let Some(stage) = update.mall_sync_stage {
+            ensure_mall_sync_stage(self.system_type, Some(stage))?;
+            self.mall_sync_stage = Some(stage);
+        }
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -540,6 +586,19 @@ impl SourceSystem {
         if let Some(status) = status {
             self.stable.status = status;
         }
+    }
+}
+
+/// 校验来源类型与商城同步阶段的一致性。
+fn ensure_mall_sync_stage(
+    system_type: SourceSystemType,
+    mall_sync_stage: Option<MallSyncStage>,
+) -> Result<()> {
+    match (system_type, mall_sync_stage) {
+        (SourceSystemType::Mall, Some(_)) => Ok(()),
+        (SourceSystemType::Mall, None) => Err(Error::from("MALL来源必须明确商城同步执行阶段")),
+        (_, None) => Ok(()),
+        (_, Some(_)) => Err(Error::from("只有MALL来源可以设置商城同步执行阶段")),
     }
 }
 
@@ -635,6 +694,18 @@ impl ExternalIdentityMap {
     /// 返回去除首尾空白后按 UTF-8 编码的字节。
     pub fn external_id_key(external_id: &str) -> ExternalIdKey {
         ExternalIdKey::new(external_id.trim().as_bytes().to_vec())
+    }
+
+    /// 将既有来源身份确认为已映射。
+    ///
+    /// 该方法只推进映射头状态；目标历史由 [`ExternalIdentityTarget`] 追加维护。
+    pub fn confirm_mapping(&mut self, mapped_at: u64, mapped_by: String) -> Result<()> {
+        let mapped_by =
+            normalize_required_text(mapped_by, "映射责任人不能为空", ACTOR_MAX_LEN, "映射责任人过长")?;
+        self.mapping_status = MappingStatus::Mapped;
+        self.mapped_at = Some(mapped_at);
+        self.mapped_by = Some(mapped_by);
+        Ok(())
     }
 }
 
@@ -735,14 +806,31 @@ impl ExternalIdentityTarget {
             approved_by,
         })
     }
+
+    /// 关闭当前有效目标，保留不可覆盖的谱系历史。
+    ///
+    /// # 错误
+    /// 仅有效目标可关闭，且失效时间必须晚于生效时间。
+    pub fn expire(&mut self, valid_to: u64) -> Result<()> {
+        if self.status != TargetStatus::Active {
+            return Err(Error::from("只有有效映射目标可以失效"));
+        }
+        if valid_to <= self.valid_from {
+            return Err(Error::from("映射失效时间必须晚于生效时间"));
+        }
+        self.valid_to = Some(valid_to);
+        self.status = TargetStatus::Expired;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         ExternalIdKey, ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityTarget,
-        ExternalIdentityTargetData, ExternalObjectType, MappingStatus, RelationRole, SourceSystem,
-        SourceSystemData, SourceSystemStatus, SourceSystemType, SourceSystemUpdate, TargetStatus,
+        ExternalIdentityTargetData, ExternalObjectType, MallSyncStage, MappingStatus, RelationRole,
+        SourceSystem, SourceSystemData, SourceSystemStatus, SourceSystemType, SourceSystemUpdate,
+        TargetStatus,
     };
     use crate::ids::{ExternalIdentityMapId, ExternalIdentityTargetId, SourceSystemId};
 
@@ -752,6 +840,7 @@ mod tests {
             system_type: SourceSystemType::Mall,
             name: " 目标商城 ".to_string(),
             status: SourceSystemStatus::Active,
+            mall_sync_stage: Some(MallSyncStage::FirstPhaseMallOwned),
         }
     }
 
@@ -774,6 +863,7 @@ mod tests {
         assert_eq!(system.code, "ERP");
         assert_eq!(system.name, "目标商城");
         assert_eq!(system.system_type, SourceSystemType::Mall);
+        assert_eq!(system.mall_sync_stage, Some(MallSyncStage::FirstPhaseMallOwned));
         assert_eq!(system.stable.status(), SourceSystemStatus::Active);
         assert_eq!(system.stable.created_by, "admin-1");
         assert_eq!(system.stable.updated_by, "admin-1");
@@ -814,6 +904,7 @@ mod tests {
                 SourceSystemUpdate {
                     name: Some(" 新名称 ".to_string()),
                     status: Some(SourceSystemStatus::Disabled),
+                    mall_sync_stage: Some(MallSyncStage::Archived),
                 },
                 "admin-2",
             )
@@ -821,6 +912,7 @@ mod tests {
 
         assert_eq!(system.name, "新名称");
         assert!(!system.is_active());
+        assert_eq!(system.mall_sync_stage, Some(MallSyncStage::Archived));
         assert_eq!(system.stable.updated_by, "admin-2");
         assert_eq!(system.stable.created_by, "admin-1", "touch 不修改创建人");
     }
@@ -835,10 +927,26 @@ mod tests {
                 SourceSystemUpdate {
                     name: Some("   ".to_string()),
                     status: None,
+                    mall_sync_stage: None,
                 },
                 "admin-2",
             )
             .is_err());
+    }
+
+    #[test]
+    fn source_system_requires_explicit_stage_only_for_mall() {
+        let missing_mall_stage = SourceSystemData {
+            mall_sync_stage: None,
+            ..source_system_data()
+        };
+        assert!(SourceSystem::new(SourceSystemId::new("mall-1"), missing_mall_stage, "admin-1",).is_err());
+
+        let erp_with_mall_stage = SourceSystemData {
+            system_type: SourceSystemType::Erp,
+            ..source_system_data()
+        };
+        assert!(SourceSystem::new(SourceSystemId::new("erp-1"), erp_with_mall_stage, "admin-1",).is_err());
     }
 
     #[test]

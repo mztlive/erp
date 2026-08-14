@@ -1,5 +1,6 @@
 import type {
     BatchSection,
+    ConfirmationScope,
     ImportEnvironment,
     ImportIssueCode,
     ImportObjectCode,
@@ -47,12 +48,23 @@ const ROW_STATUS_VALUES = [
     "SKIPPED",
 ] as const
 
+const CONFIRMATION_SCOPE_VALUES = [
+    "SALES",
+    "PROCUREMENT",
+    "OPERATIONS",
+    "WAREHOUSE",
+    "FINANCE",
+] as const
+
 export type ImportOpeningUrlState = {
     environment: ImportEnvironment
     status?: string
     objectType?: ImportObjectCode
     q?: string
     batchId?: string
+    workItemId?: string
+    confirmationScope?: ConfirmationScope
+    queueContextId?: string
     section: BatchSection
     issueCode?: ImportIssueCode
     issueObjectType?: ImportObjectCode
@@ -76,6 +88,13 @@ const codec = createUrlStateCodec<ImportOpeningUrlState>([
     { key: "objectType", type: "enum", values: OBJECT_CODE_VALUES },
     { key: "q", type: "string" },
     { key: "batchId", type: "string", aliases: ["id"] },
+    { key: "workItemId", type: "string" },
+    {
+        key: "confirmationScope",
+        type: "enum",
+        values: CONFIRMATION_SCOPE_VALUES,
+    },
+    { key: "queueContextId", type: "string" },
     {
         key: "section",
         type: "enum",

@@ -15,10 +15,12 @@
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{PayableAccountId, SupplierAccountId, SupplierSettlementItemId};
 use entities::supplier_settlement::{
-    SettlementDifferenceStatus, SettlementDifferenceType, SettlementStatus, SupplierSettlementDifference,
-    SupplierSettlementItem, SupplierSettlementStatement,
+    SettlementDifferenceStatus, SettlementDifferenceType, SettlementReviewResult, SettlementStatus,
+    SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementItem,
+    SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
@@ -36,6 +38,10 @@ const SUPPLIER_SETTLEMENT_STATEMENTS: &str =
 /// `supplier_settlement_item` 集合名（单一来源：`SupplierSettlementExt` 关联常量）。
 const SUPPLIER_SETTLEMENT_ITEMS: &str =
     <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_ITEMS;
+const SUPPLIER_SETTLEMENT_DIFFERENCES: &str =
+    <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCES;
+const SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE: &str =
+    <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE;
 
 /// 结算单列表排序白名单（§6.20 查询索引支持的字段；白名单外一律回退 `created_at`）。
 const STATEMENT_SORT_FIELDS: &[&str] = &["created_at", "period_start", "period_end", "confirmed_at"];
@@ -60,6 +66,12 @@ pub struct SupplierSettlementStatementRow {
     pub period_start: BusinessDate,
     /// 结算期间结束（含）。
     pub period_end: BusinessDate,
+    /// 供应商结算期间策略。
+    pub period_policy_id: String,
+    /// 供应商结算期间策略版本。
+    pub period_policy_version: String,
+    /// 供应商结算期间策略时区。
+    pub period_timezone: String,
     /// 供应商账单号。
     pub external_bill_no: Option<String>,
     /// 供应商账单版本。
@@ -72,10 +84,30 @@ pub struct SupplierSettlementStatementRow {
     pub difference_amount: entities::money::Amount,
     /// 结算状态。
     pub status: SettlementStatus,
+    /// 正式复核主题摘要。
+    pub subject_hash: String,
+    /// 正式来源事实水位。
+    pub source_as_of: Instant,
+    /// 来源快照冻结时间。
+    pub source_snapshot_at: Instant,
+    /// 不可变来源快照摘要。
+    pub source_snapshot_hash: String,
+    /// 提交复核采用的刷新截止策略。
+    pub refresh_cutoff_policy_id: String,
+    /// 刷新截止策略冻结版本。
+    pub refresh_cutoff_policy_version: String,
     /// 经办人。
     pub prepared_by: String,
     /// 复核人。
     pub reviewed_by: Option<String>,
+    /// 最近一次正式复核决定。
+    pub review_result: Option<SettlementReviewResult>,
+    /// 最近一次驳回原因代码。
+    pub review_reason_code: Option<String>,
+    /// 最近一次复核说明。
+    pub review_comment: Option<String>,
+    /// 最近一次正式复核决定时间。
+    pub reviewed_at: Option<Instant>,
     /// 确认时间。
     pub confirmed_at: Option<Instant>,
     /// 确认后形成的应付账户。
@@ -95,6 +127,10 @@ pub struct SupplierSettlementStatementFilter {
     pub supplier_id: Option<SupplierAccountId>,
     /// 结算状态；`None` 表示不筛选。
     pub status: Option<SettlementStatus>,
+    /// 结算期间开始下界（含）。
+    pub period_from: Option<BusinessDate>,
+    /// 结算期间结束上界（含）。
+    pub period_to: Option<BusinessDate>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -103,6 +139,15 @@ pub struct SupplierSettlementStatementFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+/// 与结算单列表同一筛选水位计算的服务端汇总。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SupplierSettlementStatementStatsRow {
+    pub pending_reconciliation_count: i64,
+    pub has_difference_count: i64,
+    pub pending_review_count: i64,
+    pub confirmed_amount: entities::money::Amount,
 }
 
 impl QueryFilter for SupplierSettlementStatementFilter {
@@ -117,6 +162,12 @@ impl QueryFilter for SupplierSettlementStatementFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(period_from) = self.period_from {
+            filter.insert("period_start", doc! { "$gte": period_from.to_string() });
+        }
+        if let Some(period_to) = self.period_to {
+            filter.insert("period_end", doc! { "$lte": period_to.to_string() });
         }
         insert_literal_regex_filter(&mut filter, "statement_no", self.statement_no.as_deref());
         filter
@@ -144,6 +195,8 @@ pub struct SupplierSettlementItemRow {
     pub supplier_fulfillment_order_id: entities::ids::SupplierFulfillmentOrderId,
     /// 供应商履约明细。
     pub supplier_fulfillment_item_id: entities::ids::SupplierFulfillmentItemId,
+    /// 来源快照冻结数量。
+    pub quantity: entities::money::Quantity,
     /// 订单结算金额。
     pub order_amount: entities::money::Amount,
     /// 运费金额。
@@ -152,10 +205,18 @@ pub struct SupplierSettlementItemRow {
     pub service_fee_amount: entities::money::Amount,
     /// 供应商退款金额。
     pub refund_amount: entities::money::Amount,
-    /// ERP 计算金额。
+    /// ERP 计算含税金额。
     pub erp_calculated_amount: entities::money::Amount,
-    /// 供应商账单金额。
+    /// ERP 计算不含税金额。
+    pub erp_calculated_net_amount: entities::money::Amount,
+    /// ERP 计算税额。
+    pub erp_calculated_tax_amount: entities::money::Amount,
+    /// 供应商账单含税金额。
     pub supplier_billed_amount: entities::money::Amount,
+    /// 供应商账单不含税金额。
+    pub supplier_billed_net_amount: entities::money::Amount,
+    /// 供应商账单税额。
+    pub supplier_billed_tax_amount: entities::money::Amount,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -334,6 +395,158 @@ impl<'a> Repository<'a, SupplierSettlementStatement> {
         self.find_one(doc! { "statement_no": statement_no }, executor)
             .await
     }
+
+    /// 按列表完全相同的过滤条件计算跨页状态和确认金额汇总。
+    pub async fn aggregate_supplier_settlement_statement_stats(
+        &self,
+        filter: &SupplierSettlementStatementFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementStatementStatsRow>> {
+        let pipeline = vec![
+            doc! { "$match": filter.to_doc() },
+            doc! {
+                "$group": {
+                    "_id": mongodb::bson::Bson::Null,
+                    "pending_reconciliation_count": {
+                        "$sum": { "$cond": [{ "$eq": ["$status", "PENDING_RECONCILIATION"] }, 1, 0] }
+                    },
+                    "has_difference_count": {
+                        "$sum": { "$cond": [{ "$eq": ["$status", "HAS_DIFFERENCE"] }, 1, 0] }
+                    },
+                    "pending_review_count": {
+                        "$sum": { "$cond": [{ "$eq": ["$status", "PENDING_REVIEW"] }, 1, 0] }
+                    },
+                    "confirmed_amount": {
+                        "$sum": {
+                            "$toDecimal": {
+                                "$cond": [{ "$eq": ["$status", "CONFIRMED"] }, "$erp_amount", "0.00"]
+                            }
+                        }
+                    }
+                }
+            },
+            doc! { "$project": { "_id": 0 } },
+        ];
+        let collection = self.collection();
+        let rows = match executor.session() {
+            Some(session) => {
+                collection
+                    .aggregate(pipeline)
+                    .with_type::<SupplierSettlementStatementStatsRow>()
+                    .session(&mut *session)
+                    .await?
+                    .stream(session)
+                    .try_collect::<Vec<_>>()
+                    .await?
+            }
+            None => {
+                collection
+                    .aggregate(pipeline)
+                    .with_type::<SupplierSettlementStatementStatsRow>()
+                    .await?
+                    .try_collect::<Vec<_>>()
+                    .await?
+            }
+        };
+        Ok(rows.into_iter().next())
+    }
+}
+
+impl<'a> Repository<'a, SupplierSettlementSourceEvidence> {
+    /// 按稳定请求 ID 查找不可变来源证据批次。
+    pub async fn find_by_request_id(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementSourceEvidence>> {
+        self.find_one(doc! { "request_id": request_id }, executor).await
+    }
+
+    /// 读取供应商、周期与策略版本下最新的完整来源证据批次。
+    pub async fn latest_for_period(
+        &self,
+        supplier_id: &SupplierAccountId,
+        period_start: BusinessDate,
+        period_end: BusinessDate,
+        period_policy_id: &str,
+        period_policy_version: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementSourceEvidence>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "source_version": -1, "created_at": -1, "id": -1 })
+            .limit(1)
+            .build();
+        let mut values = mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "supplier_id": supplier_id.to_string(),
+                "period_start": period_start.to_string(),
+                "period_end": period_end.to_string(),
+                "period_policy_id": period_policy_id,
+                "period_policy_version": period_policy_version,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await?;
+        Ok(values.pop())
+    }
+
+    /// 读取供应商与周期下最近登记的完整来源证据，用于创建前服务端预检。
+    pub async fn latest_for_scope(
+        &self,
+        supplier_id: &SupplierAccountId,
+        period_start: BusinessDate,
+        period_end: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementSourceEvidence>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "created_at": -1, "source_version": -1, "id": -1 })
+            .limit(1)
+            .build();
+        let mut values = mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "supplier_id": supplier_id.to_string(),
+                "period_start": period_start.to_string(),
+                "period_end": period_end.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await?;
+        Ok(values.pop())
+    }
+}
+
+impl<'a> Repository<'a, SupplierSettlementDifferenceEvidence> {
+    /// 按稳定请求 ID 查找不可变差异补证。
+    pub async fn find_by_request_id(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierSettlementDifferenceEvidence>> {
+        self.find_one(doc! { "request_id": request_id }, executor).await
+    }
+
+    /// 批量读取差异对应的全部补证，避免详情 N+1。
+    pub async fn find_by_difference_ids(
+        &self,
+        difference_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementDifferenceEvidence>> {
+        if difference_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many_sorted(
+            doc! { "difference_id": { "$in": difference_ids } },
+            doc! { "provided_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
 }
 
 impl<'a> Repository<'a, SupplierSettlementItem> {
@@ -456,6 +669,7 @@ impl<'a> SupplierSettlementRepository<'a> {
         &self,
         statement: &SupplierSettlementStatement,
         items: &[SupplierSettlementItem],
+        differences: &[SupplierSettlementDifference],
         executor: &mut dyn Executor,
     ) -> Result<()> {
         mongo_ops::insert_one(
@@ -474,6 +688,82 @@ impl<'a> SupplierSettlementRepository<'a> {
             executor,
         )
         .await?;
+        if !differences.is_empty() {
+            mongo_ops::insert_many(
+                &self
+                    .db
+                    .collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
+                differences.to_vec(),
+                executor,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// 原子替换尚未提交复核的草稿快照。
+    ///
+    /// 旧明细与差异仅属于可变草稿试算；服务层在事务内重验版本和状态后物理替换，
+    /// 旧差异补证随其草稿差异一并移除，新快照及审计同时可见。已提交复核或终态
+    /// 不得调用。
+    pub async fn replace_draft_snapshot(
+        &self,
+        statement: &mut SupplierSettlementStatement,
+        old_item_ids: &[String],
+        old_difference_ids: &[String],
+        items: &[SupplierSettlementItem],
+        differences: &[SupplierSettlementDifference],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if !old_difference_ids.is_empty() {
+            mongo_ops::delete_many(
+                &self.db.collection::<SupplierSettlementDifferenceEvidence>(
+                    SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE,
+                ),
+                doc! { "difference_id": { "$in": old_difference_ids } },
+                executor,
+            )
+            .await?;
+        }
+        if !old_item_ids.is_empty() {
+            mongo_ops::delete_many(
+                &self
+                    .db
+                    .collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
+                doc! { "statement_item_id": { "$in": old_item_ids } },
+                executor,
+            )
+            .await?;
+        }
+        mongo_ops::delete_many(
+            &self
+                .db
+                .collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
+            doc! { "statement_id": &statement.base.id },
+            executor,
+        )
+        .await?;
+        super::Repository::new(self.db, SUPPLIER_SETTLEMENT_STATEMENTS)
+            .update(statement, executor)
+            .await?;
+        mongo_ops::insert_many(
+            &self
+                .db
+                .collection::<SupplierSettlementItem>(SUPPLIER_SETTLEMENT_ITEMS),
+            items.to_vec(),
+            executor,
+        )
+        .await?;
+        if !differences.is_empty() {
+            mongo_ops::insert_many(
+                &self
+                    .db
+                    .collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),
+                differences.to_vec(),
+                executor,
+            )
+            .await?;
+        }
         Ok(())
     }
 }
@@ -542,14 +832,27 @@ fn supplier_settlement_statement_projection() -> Document {
         "supplier_id": 1,
         "period_start": 1,
         "period_end": 1,
+        "period_policy_id": 1,
+        "period_policy_version": 1,
+        "period_timezone": 1,
         "external_bill_no": 1,
         "external_bill_version": 1,
         "erp_amount": 1,
         "supplier_amount": 1,
         "difference_amount": 1,
         "status": 1,
+        "subject_hash": 1,
+        "source_as_of": 1,
+        "source_snapshot_at": 1,
+        "source_snapshot_hash": 1,
+        "refresh_cutoff_policy_id": 1,
+        "refresh_cutoff_policy_version": 1,
         "prepared_by": 1,
         "reviewed_by": 1,
+        "review_result": 1,
+        "review_reason_code": 1,
+        "review_comment": 1,
+        "reviewed_at": 1,
         "confirmed_at": 1,
         "payable_account_id": 1,
         "version": 1,
@@ -567,12 +870,17 @@ fn supplier_settlement_item_projection() -> Document {
         "statement_id": 1,
         "supplier_fulfillment_order_id": 1,
         "supplier_fulfillment_item_id": 1,
+        "quantity": 1,
         "order_amount": 1,
         "freight_amount": 1,
         "service_fee_amount": 1,
         "refund_amount": 1,
         "erp_calculated_amount": 1,
+        "erp_calculated_net_amount": 1,
+        "erp_calculated_tax_amount": 1,
         "supplier_billed_amount": 1,
+        "supplier_billed_net_amount": 1,
+        "supplier_billed_tax_amount": 1,
         "version": 1,
         "created_at": 1,
     }
@@ -600,7 +908,8 @@ fn supplier_settlement_difference_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        sort_doc, QueryFilter, SupplierSettlementDifferenceFilter, SupplierSettlementStatementFilter,
+        sort_doc, supplier_settlement_statement_projection, QueryFilter, SupplierSettlementDifferenceFilter,
+        SupplierSettlementStatementFilter,
     };
     use entities::ids::SupplierSettlementItemId;
     use entities::supplier_settlement::{SettlementDifferenceStatus, SettlementStatus};
@@ -612,6 +921,8 @@ mod tests {
             statement_no: Some("ST-2026".to_string()),
             supplier_id: None,
             status: Some(SettlementStatus::Confirmed),
+            period_from: None,
+            period_to: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -667,5 +978,24 @@ mod tests {
             sort_doc(&whitelist, Some("confirmed_at"), false),
             doc! { "confirmed_at": -1 }
         );
+    }
+
+    #[test]
+    fn statement_projection_contains_frozen_review_and_audit_facts() {
+        let projection = supplier_settlement_statement_projection();
+        for field in [
+            "subject_hash",
+            "source_as_of",
+            "source_snapshot_at",
+            "source_snapshot_hash",
+            "refresh_cutoff_policy_id",
+            "refresh_cutoff_policy_version",
+            "review_result",
+            "review_reason_code",
+            "review_comment",
+            "reviewed_at",
+        ] {
+            assert_eq!(projection.get_i32(field).unwrap(), 1, "缺少字段 {field}");
+        }
     }
 }

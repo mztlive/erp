@@ -6,7 +6,7 @@
 //! `#[permission_macros::permission]`。
 
 use axum::{
-    routing::{get, post, put},
+    routing::{get, post},
     Router,
 };
 use services::iam::SharedRbacService;
@@ -50,19 +50,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/receivable-accounts/{id}/review",
-            with_permission(
-                put(receivable::receivable_account_review_update),
-                rbac,
-                receivable::receivable_account_review_update_permission_key(),
-            ),
-        )
-        .route(
             "/receivable-funds-reviews",
             with_permission(
-                post(receivable::receivable_funds_review_create),
+                post(receivable::receivable_funds_review_complete),
                 rbac,
-                receivable::receivable_funds_review_create_permission_key(),
+                receivable::receivable_funds_review_complete_permission_key(),
             ),
         )
         .route(

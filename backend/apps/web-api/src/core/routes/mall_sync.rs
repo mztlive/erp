@@ -5,7 +5,7 @@
 //! `/admin/mall-sales-order-snapshots`、`/admin/mall-sales-sync-cursors`、
 //! `/admin/mall-sales-reconciliation-jobs`、`/admin/mall-sales-reconciliation-jobs/{id}/items`、
 //! `/admin/mall-sales-reconciliation-items/{id}/resolve`、`/admin/master-mapping-tasks`、
-//! `/admin/master-mapping-tasks/{id}/resolve`；每条路由统一走
+//! `/admin/master-mapping-tasks/{id}/{confirm|request-source-fix|reapply}`；每条路由统一走
 //! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
 use axum::{
@@ -125,6 +125,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/master-mapping-tasks/{id}",
+            with_permission(
+                get(mall_sync::master_mapping_task_detail),
+                rbac,
+                mall_sync::master_mapping_task_detail_permission_key(),
+            ),
+        )
+        .route(
             "/master-mapping-tasks",
             with_permission(
                 post(mall_sync::master_mapping_task_create),
@@ -133,11 +141,35 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/master-mapping-tasks/{id}/resolve",
+            "/master-mapping-tasks/{id}/confirm",
             with_permission(
-                post(mall_sync::master_mapping_task_resolve),
+                post(mall_sync::master_mapping_task_confirm),
                 rbac,
-                mall_sync::master_mapping_task_resolve_permission_key(),
+                mall_sync::master_mapping_task_confirm_permission_key(),
+            ),
+        )
+        .route(
+            "/master-mapping-tasks/{id}/request-source-fix",
+            with_permission(
+                post(mall_sync::master_mapping_task_request_source_fix),
+                rbac,
+                mall_sync::master_mapping_task_request_source_fix_permission_key(),
+            ),
+        )
+        .route(
+            "/master-mapping-tasks/{id}/reapply",
+            with_permission(
+                post(mall_sync::master_mapping_task_reapply),
+                rbac,
+                mall_sync::master_mapping_task_reapply_permission_key(),
+            ),
+        )
+        .route(
+            "/master-mapping-tasks/{id}/reapply-operations/{operation_id}",
+            with_permission(
+                get(mall_sync::master_mapping_task_reapply_operation_detail),
+                rbac,
+                mall_sync::master_mapping_task_reapply_operation_detail_permission_key(),
             ),
         )
 }

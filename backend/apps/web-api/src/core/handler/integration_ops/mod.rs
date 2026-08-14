@@ -2,8 +2,8 @@
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::integration_ops` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
-//! 权限键 `resource` 用域内对象单数名，`action` 取固定动词表（list/detail/register/
-//! writeback/create/query/replay/hold/transfer/resolve/close/process）。
+//! 权限键 `resource` 用域内对象单数名；人工动作只暴露 W29 强命令，责任迁移和
+//! 关闭由 W02 责任 API 承担。
 
 use axum::{
     extract::{Path, Query, State},
@@ -12,12 +12,12 @@ use axum::{
 use services::{
     audit::AuditActor,
     integration_ops::{
-        CloseErrorTaskRequest, CreateDifferenceRequest, CreateErrorTaskRequest, DifferenceActionView,
-        DifferenceDetailView, DifferenceListParams, DifferenceView, ErrorTaskDetailView, ErrorTaskListParams,
-        ErrorTaskView, HoldErrorTaskRequest, InboxMessageListParams, InboxMessageListView, InboxMessageView,
-        IntegrationOpsService, PageView, ProcessDifferenceRequest, QueryOriginalResultRequest,
-        RegisterInboxMessageRequest, ReplayOriginalRequest, ReplayResultView, ResolveDifferenceRequest,
-        ResolveErrorTaskRequest, TransferErrorTaskRequest, WriteBackInboxResultRequest,
+        CreateDifferenceRequest, CreateErrorTaskRequest, DifferenceDetailView, DifferenceListParams,
+        DifferenceView, DirectReconciliationCommand, DirectReconciliationResult, ErrorTaskDetailView,
+        ErrorTaskListParams, ErrorTaskView, InboxMessageListParams, InboxMessageListView, InboxMessageView,
+        IntegrationOpsService, IntegrationTaskActionCommand, IntegrationTaskActionResult,
+        IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, PageView,
+        RegisterInboxMessageRequest, WriteBackInboxResultRequest,
     },
 };
 
@@ -219,181 +219,39 @@ pub async fn error_task_create(
 #[permission_macros::permission(
     group = "集成治理",
     group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "查询原结果",
-    resource = "integration_error_task",
-    action = "query"
+    desc = "执行集成任务非终结动作",
+    resource = "integration_task",
+    action = "process"
 )]
-/// 查询原结果（结果未知任务的 REPLAY 前置动作；任务保持非终结状态）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 任务 ID
-/// * `req` - 查询请求（含期望版本与查询结果）
-///
-/// # 返回
-/// 返回查询后的任务视图。
-pub async fn error_task_query(
+/// 执行 W29 非终结任务动作；任务保持 `OPEN`。
+pub async fn integration_task_action(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<QueryOriginalResultRequest>,
-) -> Result<ErrorTaskView> {
-    let view = IntegrationOpsService::new(state.db())
-        .query_error_task_result(&id, req, &actor)
+    Json(command): Json<IntegrationTaskActionCommand>,
+) -> Result<IntegrationTaskActionResult> {
+    let result = IntegrationOpsService::new(state.db())
+        .apply_task_action(command, &actor)
         .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
+    Ok(ApiResponse::ok_with_data(result))
 }
 
 #[permission_macros::permission(
     group = "集成治理",
     group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "重放原动作",
-    resource = "integration_error_task",
-    action = "replay"
+    desc = "根据已验证结果完成集成任务",
+    resource = "integration_task",
+    action = "complete"
 )]
-/// 重放原动作（服务端锁定原幂等键，不接受客户端传入原键；任务保持非终结状态）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 任务 ID
-/// * `req` - 重放请求（含期望版本；DTO 拒绝未知字段）
-///
-/// # 返回
-/// 返回重放结果视图（锁定原键摘要 + 锁定标识）。
-pub async fn error_task_replay(
+/// 以 W29 强命令形成领域结论并完成正式任务。
+pub async fn integration_task_completion(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<ReplayOriginalRequest>,
-) -> Result<ReplayResultView> {
-    let view = IntegrationOpsService::new(state.db())
-        .replay_error_task(&id, req, &actor)
+    Json(command): Json<IntegrationTaskCompletionCommand>,
+) -> Result<IntegrationTaskCompletionResult> {
+    let result = IntegrationOpsService::new(state.db())
+        .complete_task(command, &actor)
         .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "暂挂或跳过当前任务",
-    resource = "integration_error_task",
-    action = "hold"
-)]
-/// 暂挂/跳过当前任务（只追加尝试摘要与审计，任务保留在开放队列）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 任务 ID
-/// * `req` - 暂挂/跳过请求（含期望版本）
-///
-/// # 返回
-/// 返回任务视图（状态未变，仍在队列）。
-pub async fn error_task_hold(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<HoldErrorTaskRequest>,
-) -> Result<ErrorTaskView> {
-    let view = IntegrationOpsService::new(state.db())
-        .hold_error_task(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "转交集成错误任务",
-    resource = "integration_error_task",
-    action = "transfer"
-)]
-/// 转交任务（只更新责任人，任务状态不变；转交不是解决）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 任务 ID
-/// * `req` - 转交请求（含期望版本与新责任人）
-///
-/// # 返回
-/// 返回转交后的任务视图。
-pub async fn error_task_transfer(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<TransferErrorTaskRequest>,
-) -> Result<ErrorTaskView> {
-    let view = IntegrationOpsService::new(state.db())
-        .transfer_error_task(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "解决集成错误任务",
-    resource = "integration_error_task",
-    action = "resolve"
-)]
-/// 解决任务（终态：已解决；必须提供非「关闭」解决方式与终态证据）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 任务 ID
-/// * `req` - 解决请求（含期望版本）
-///
-/// # 返回
-/// 返回已解决的任务视图。
-pub async fn error_task_resolve(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<ResolveErrorTaskRequest>,
-) -> Result<ErrorTaskView> {
-    let view = IntegrationOpsService::new(state.db())
-        .resolve_error_task(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "关闭集成错误任务",
-    resource = "integration_error_task",
-    action = "close"
-)]
-/// 关闭任务（终态：已关闭；重复关闭必须关联替代任务，结果未知任务禁止通用关闭）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 任务 ID
-/// * `req` - 关闭请求（含期望版本）
-///
-/// # 返回
-/// 返回已关闭的任务视图。
-pub async fn error_task_close(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<CloseErrorTaskRequest>,
-) -> Result<ErrorTaskView> {
-    let view = IntegrationOpsService::new(state.db())
-        .close_error_task(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
+    Ok(ApiResponse::ok_with_data(result))
 }
 
 #[permission_macros::permission(
@@ -479,59 +337,19 @@ pub async fn difference_create(
 #[permission_macros::permission(
     group = "集成治理",
     group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "人工处理对账差异",
+    desc = "提交无正式任务的对账差异决定",
     resource = "reconciliation_difference",
-    action = "process"
+    action = "decide"
 )]
-/// 人工处理对账差异（领取/处理中/补证，只追加处理记录，不终结差异）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 差异 ID
-/// * `req` - 处理请求（含期望版本）
-///
-/// # 返回
-/// 返回追加的处理记录视图。
-pub async fn difference_process(
+/// 对未关联正式任务的差异提交 decision-only 命令。
+pub async fn difference_decision(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<ProcessDifferenceRequest>,
-) -> Result<DifferenceActionView> {
-    let view = IntegrationOpsService::new(state.db())
-        .process_difference(&id, req, &actor)
+    Json(command): Json<DirectReconciliationCommand>,
+) -> Result<DirectReconciliationResult> {
+    let result = IntegrationOpsService::new(state.db())
+        .decide_difference(&id, command, &actor)
         .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "集成治理",
-    group_desc = "入站消息、错误任务与对账差异（W29）",
-    desc = "解决对账差异",
-    resource = "reconciliation_difference",
-    action = "resolve"
-)]
-/// 解决对账差异（终态结论：确认无误/确认有效差异；固定原因枚举 + 受控证据）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 差异 ID
-/// * `req` - 解决请求（含期望版本）
-///
-/// # 返回
-/// 返回追加的处理记录视图。
-pub async fn difference_resolve(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<ResolveDifferenceRequest>,
-) -> Result<DifferenceActionView> {
-    let view = IntegrationOpsService::new(state.db())
-        .resolve_difference(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
+    Ok(ApiResponse::ok_with_data(result))
 }

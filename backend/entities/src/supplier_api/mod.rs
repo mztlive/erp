@@ -23,6 +23,7 @@
 
 pub mod capability;
 pub mod connection;
+pub mod governance;
 
 pub use capability::{
     SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiCapabilityData, SupplierApiCapabilityStatus,
@@ -31,6 +32,12 @@ pub use capability::{
 pub use connection::{
     ConnectionEnvironment, HealthCheckResult, RateLimitPolicy, SupplierApiConnection,
     SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
+};
+pub use governance::{
+    BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, BusinessCapabilityRequirement,
+    CapabilityVersionSnapshot, SupplierCommandOutcome, SupplierConnectionAction,
+    SupplierConnectionCommandReceipt, SupplierHealthCheckRun, SupplierHealthCheckRunData,
+    SupplierHealthCheckStatus, SupplierHealthCheckType,
 };
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。

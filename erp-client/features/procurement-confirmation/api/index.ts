@@ -7,6 +7,12 @@
 import { apiGet, apiPost, apiPut } from "@/lib/api"
 import type { ApiError } from "@/lib/api"
 import { getErrorMessage } from "@/lib/api/errors"
+import {
+    listWorkItems,
+    mapWorkItemDto,
+    type WorkItemDto,
+    type WorkItemProjection,
+} from "@/features/work-items"
 import type {
     ConfirmationLineDraft,
     CoverageByLine,
@@ -18,11 +24,10 @@ import type {
     ProcurementQueueView,
     RejectReasonCode,
     SubmissionOrigin,
-    WorkItemLease,
 } from "@/features/procurement-confirmation/types"
 
 export type QueueFilters = {
-    scope: "mine" | "role_pool"
+    scope: "mine" | "team"
     due?: "active" | "today" | "overdue"
     sort?: "due_at" | "submitted_at" | "priority"
     orderNo?: string
@@ -37,24 +42,6 @@ type BackendPage<T> = {
     total: number
     page?: number
     page_size?: number
-}
-
-type BackendWorkItem = {
-    id: string
-    work_item_type: string
-    business_object_type: string
-    business_object_id: string
-    subject_version?: string | null
-    status: "UNCLAIMED" | "IN_PROGRESS" | "COMPLETED" | "CLOSED" | string
-    owner_role?: string | null
-    owner_user_id?: string | null
-    priority?: "urgent" | "high" | "normal" | "low" | string
-    due_at?: number | null
-    reason_code?: string | null
-    impact_summary?: string | null
-    completion_action?: string
-    version: number
-    created_at: number
 }
 
 type BackendConfirmationLine = {
@@ -81,20 +68,13 @@ type BackendConfirmationDetail = {
     version: number
     created_at: number
     lines: BackendConfirmationLine[]
-}
-
-type BackendDecisionView = {
-    confirmation_id: string
-    sales_order_id: string
-    status: string
-    revision_id?: string | null
-    receivable_account_id?: string | null
-    purchase_orders?: Array<{
-        purchase_order_id: string
-        purchase_no: string
+    work_item?: WorkItemDto | null
+    allowed_actions?: Array<"SAVE" | "APPROVE" | "REJECT">
+    action_blockers?: Array<{
+        action: "SAVE" | "APPROVE" | "REJECT" | string
+        code: string
+        message: string
     }>
-    handled_at: number
-    reference: string
 }
 
 type BackendSalesOrderDetail = {
@@ -150,11 +130,6 @@ type BackendSalesOrderDetail = {
             gross_amount?: string
         }>
     } | null
-}
-
-type BackendAccountProfile = {
-    userid: string
-    name: string
 }
 
 type BackendSupplierOffering = {
@@ -295,7 +270,8 @@ function secsToIso(secs?: number | null): string {
     return new Date(secs * 1000).toISOString()
 }
 
-function priorityToNumber(p?: string | null): number {
+function priorityToNumber(p?: string | number | null): number {
+    if (typeof p === "number") return p
     switch (p) {
         case "urgent":
             return 100
@@ -307,21 +283,6 @@ function priorityToNumber(p?: string | null): number {
             return 20
         default:
             return 50
-    }
-}
-
-function mapRejectReasonToBackend(code: RejectReasonCode): string {
-    switch (code) {
-        case "UNFULFILLABLE":
-            return "CANNOT_FULFILL"
-        case "COST_INCREASE":
-            return "COST_INCREASE"
-        case "DELIVERY_UNMET":
-            return "DELIVERY_NOT_MET"
-        case "QUALIFICATION_INVALID":
-            return "QUALIFICATION_EXPIRED"
-        default:
-            return "OTHER"
     }
 }
 
@@ -410,23 +371,6 @@ function filterSummary(filters: QueueFilters): string {
     return parts.join(" · ")
 }
 
-function sortTasks(
-    tasks: ProcurementConfirmationTask[],
-    sort: QueueFilters["sort"],
-): ProcurementConfirmationTask[] {
-    const copy = [...tasks]
-    copy.sort((a, b) => {
-        if (sort === "priority") return b.priority - a.priority
-        if (sort === "submitted_at") {
-            return a.salesSubmission.submittedAt.localeCompare(
-                b.salesSubmission.submittedAt,
-            )
-        }
-        return a.dueAt.localeCompare(b.dueAt)
-    })
-    return copy
-}
-
 function emptyCoverageFromLines(
     lines: readonly ConfirmationLineDraft[],
     submissionLineIds: readonly {
@@ -468,38 +412,38 @@ function emptyCoverageFromLines(
 
 async function fetchWorkItemsForQueue(
     filters: QueueFilters,
-    profile: BackendAccountProfile,
-): Promise<BackendWorkItem[]> {
-    const status = filters.scope === "mine" ? "IN_PROGRESS" : "UNCLAIMED"
-    const ownership =
-        filters.scope === "mine"
-            ? { owner_user_id: profile.userid }
-            : { owner_role: "procurement" }
-    const page = await apiGet<BackendPage<BackendWorkItem>>(
-        "/admin/work-items",
-        {
-            work_item_type: "PROCUREMENT_CONFIRMATION",
-            status,
-            ...ownership,
-            page: 1,
-            page_size: 100,
-            sort_by: filters.sort === "due_at" ? "due_at" : "created_at",
-            sort_dir: filters.sort === "due_at" ? "asc" : "desc",
-        },
-    )
-    return page.items ?? []
-}
-
-async function fetchAccountProfile(): Promise<BackendAccountProfile> {
-    return apiGet<BackendAccountProfile>("/account/profile")
+): Promise<WorkItemProjection[]> {
+    const page = await listWorkItems({
+        scope: filters.scope,
+        workItemType: "PROCUREMENT_CONFIRMATION",
+        due:
+            filters.due === "today" || filters.due === "overdue"
+                ? filters.due
+                : undefined,
+        query: filters.orderNo,
+        sort:
+            filters.sort === "priority"
+                ? "priority_due"
+                : filters.sort === "submitted_at"
+                  ? "created_desc"
+                  : "due_asc",
+        queueContextId: filters.queueContextId,
+        currentWorkItemId: filters.currentWorkItemId,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        page: 1,
+        pageSize: 100,
+    })
+    return page.items.map(mapWorkItemDto)
 }
 
 async function fetchConfirmationDetail(
     confirmationId: string,
+    workItemId?: string,
 ): Promise<BackendConfirmationDetail | null> {
     try {
         return await apiGet<BackendConfirmationDetail>(
             `/admin/procurement-confirmations/${encodeURIComponent(confirmationId)}`,
+            { work_item_id: workItemId },
         )
     } catch (error) {
         if (isApiError(error) && error.status === 404) return null
@@ -519,15 +463,10 @@ export async function fetchProcurementRecommendation(
 
 async function fetchSalesOrderDetail(
     salesOrderId: string,
-): Promise<BackendSalesOrderDetail | null> {
-    try {
-        return await apiGet<BackendSalesOrderDetail>(
-            `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`,
-        )
-    } catch {
-        // 跨域只读增强；失败时降级为空摘要（登记缺口）
-        return null
-    }
+): Promise<BackendSalesOrderDetail> {
+    return apiGet<BackendSalesOrderDetail>(
+        `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`,
+    )
 }
 
 /** W02 使用的采购确认业务展示摘要，避免把内部对象 ID 直接展示给用户。 */
@@ -551,7 +490,6 @@ export async function fetchProcurementWorkItemPresentation(
     const detail = await fetchConfirmationDetail(confirmationId)
     if (!detail) return null
     const sales = await fetchSalesOrderDetail(detail.sales_order_id)
-    if (!sales) return null
     const submission = sales.submissions?.find(
         (row) => row.id === detail.submission_id,
     )
@@ -675,53 +613,67 @@ function mapConfirmationLines(
 }
 
 async function projectTask(
-    workItem: BackendWorkItem,
-    profile: BackendAccountProfile,
+    workItem: WorkItemProjection,
+    scope: QueueFilters["scope"],
 ): Promise<ProcurementConfirmationTask | null> {
-    if (workItem.status === "COMPLETED" || workItem.status === "CLOSED") {
+    if (workItem.status !== "OPEN") {
         return null
     }
 
-    const confirmationId = workItem.business_object_id
-    const detail = await fetchConfirmationDetail(confirmationId)
-    if (!detail) return null
+    const confirmationId = workItem.businessObjectId
+    const detail = await fetchConfirmationDetail(
+        confirmationId,
+        workItem.workItemId,
+    )
+    if (!detail) {
+        throw new Error(
+            `任务 ${workItem.workItemId} 绑定的采购确认 ${confirmationId} 不存在；已禁止隐藏任务或继续处理`,
+        )
+    }
+    if (!detail.work_item) {
+        throw new Error(
+            `采购确认 ${confirmationId} 未返回 actor-specific 正式任务；已禁止从队列待办推导领域动作`,
+        )
+    }
+    const projectedWorkItem = mapWorkItemDto(detail.work_item)
+    if (
+        projectedWorkItem.workItemId !== workItem.workItemId ||
+        projectedWorkItem.businessObjectId !== confirmationId
+    ) {
+        throw new Error("服务端返回的 W07 正式任务与队列身份不一致")
+    }
     if (detail.status === "APPROVED" || detail.status === "REJECTED") {
         return null
     }
 
     const sales = await fetchSalesOrderDetail(detail.sales_order_id)
-    const submission =
-        sales?.submissions?.find((s) => s.id === detail.submission_id) ??
-        sales?.submissions?.[0]
+    const submission = sales.submissions?.find(
+        (row) => row.id === detail.submission_id,
+    )
+    if (!submission) {
+        throw new Error(
+            `采购确认 ${detail.id} 未取得其绑定的不可变销售提交 ${detail.submission_id}；已禁止使用其它提交继续处理`,
+        )
+    }
 
     const confLines = mapConfirmationLines(detail.lines ?? [])
 
-    const submissionLines =
-        submission?.lines?.map((line) => ({
-            submissionLineId: line.id,
-            itemName: line.item_name_snapshot ?? `行 ${line.line_no}`,
-            itemSku: line.sku_id ?? "",
-            specification: line.spec_snapshot ?? undefined,
-            committedQuantity: String(line.quantity ?? "0"),
-            unit: line.base_unit_code ?? line.unit_snapshot ?? "",
-            requestedDeliveryDate:
-                secsToIso(line.fulfillment_due_at).slice(0, 10) || "—",
-            unitPriceGross: line.unit_price_gross ?? undefined,
-            fulfillmentMode: line.fulfillment_mode
-                ? mapFulfillmentMode(line.fulfillment_mode)
-                : undefined,
-            salesTaxRate: line.sales_tax_rate ?? undefined,
-            salesAmountGross: String(line.gross_amount ?? "0"),
-        })) ??
-        confLines.map((line) => ({
-            submissionLineId: line.submissionLineId,
-            itemName: "销售明细",
-            itemSku: "",
-            committedQuantity: line.confirmedQuantity,
-            unit: "",
-            requestedDeliveryDate: "",
-            salesAmountGross: "0",
-        }))
+    const submissionLines = submission.lines.map((line) => ({
+        submissionLineId: line.id,
+        itemName: line.item_name_snapshot ?? `行 ${line.line_no}`,
+        itemSku: line.sku_id ?? "",
+        specification: line.spec_snapshot ?? undefined,
+        committedQuantity: String(line.quantity ?? "0"),
+        unit: line.base_unit_code ?? line.unit_snapshot ?? "",
+        requestedDeliveryDate:
+            secsToIso(line.fulfillment_due_at).slice(0, 10) || "—",
+        unitPriceGross: line.unit_price_gross ?? undefined,
+        fulfillmentMode: line.fulfillment_mode
+            ? mapFulfillmentMode(line.fulfillment_mode)
+            : undefined,
+        salesTaxRate: line.sales_tax_rate ?? undefined,
+        salesAmountGross: String(line.gross_amount ?? "0"),
+    }))
 
     const coverage = emptyCoverageFromLines(
         confLines,
@@ -732,58 +684,51 @@ async function projectTask(
         })),
     )
 
-    const status: ProcurementConfirmationTask["status"] =
-        workItem.status === "IN_PROGRESS" ? "IN_PROGRESS" : "PENDING"
-
     const origin: SubmissionOrigin = "INITIAL"
 
     return {
-        workItemId: workItem.id,
-        responsibilityScope:
-            workItem.status === "IN_PROGRESS" ? "mine" : "role_pool",
-        status,
-        priority: priorityToNumber(workItem.priority),
-        dueAt: secsToIso(workItem.due_at) || secsToIso(workItem.created_at),
-        impactSummary: workItem.impact_summary ?? "采购二次确认",
-        subjectVersion:
-            workItem.subject_version ??
-            String(detail.version ?? detail.submission_id),
+        workItemId: projectedWorkItem.workItemId,
+        taskVersion: projectedWorkItem.taskVersion,
+        responsibilityScope: scope,
+        status: projectedWorkItem.status,
+        assignmentMode: projectedWorkItem.assignmentMode,
+        ownerUser: projectedWorkItem.ownerUser,
+        priority: priorityToNumber(projectedWorkItem.priority),
+        dueAt:
+            secsToIso(projectedWorkItem.dueAt) ||
+            secsToIso(projectedWorkItem.createdAt),
+        impactSummary: projectedWorkItem.impactSummary,
+        subjectVersion: projectedWorkItem.subjectVersion,
         subjectHash: detail.submission_id,
-        held: false,
-        lease:
-            workItem.status === "IN_PROGRESS" &&
-            workItem.owner_user_id === profile.userid
-                ? { claimedByLabel: profile.name }
-                : undefined,
         salesSubmission: {
             salesOrderId: detail.sales_order_id,
-            salesOrderNo: sales?.order_no ?? "销售单号不可用",
+            salesOrderNo: sales.order_no,
             submissionId: detail.submission_id,
-            submissionNo: submission?.submission_no ?? 0,
+            submissionNo: submission.submission_no,
             subjectHash: detail.submission_id,
             subjectHashSummary: (detail.submission_id ?? "").slice(0, 12),
             submittedAt:
-                secsToIso(submission?.submitted_at) ||
+                secsToIso(submission.submitted_at) ||
                 secsToIso(detail.created_at),
             submittedByLabel:
-                submission?.submitted_by === sales?.owner_user_id
-                    ? (sales?.owner_user_name ?? "销售提交人")
+                submission.submitted_by === sales.owner_user_id
+                    ? (sales.owner_user_name ?? "销售提交人")
                     : "销售提交人",
-            customerSnapshot: submission?.customer_name ?? "—",
-            contractId: sales?.contract_id ?? undefined,
-            contractSnapshot: submission?.contract_no ?? undefined,
+            customerSnapshot: submission.customer_name,
+            contractId: sales.contract_id ?? undefined,
+            contractSnapshot: submission.contract_no ?? undefined,
             settlementPartySnapshot:
-                submission?.settlement_party_name ?? undefined,
-            paymentTermLabel: submission?.payment_term_name ?? "—",
-            projectName: submission?.project_name ?? undefined,
-            businessRemark: submission?.business_remark ?? undefined,
+                submission.settlement_party_name ?? undefined,
+            paymentTermLabel: submission.payment_term_name,
+            projectName: submission.project_name ?? undefined,
+            businessRemark: submission.business_remark ?? undefined,
             grossAmount: String(
-                submission?.gross_amount ??
-                    sales?.working_copy?.gross_amount ??
+                submission.gross_amount ??
+                    sales.working_copy?.gross_amount ??
                     "0",
             ),
-            netAmount: submission?.net_amount,
-            taxAmount: submission?.tax_amount,
+            netAmount: submission.net_amount,
+            taxAmount: submission.tax_amount,
             origin,
             lines: submissionLines,
         },
@@ -801,14 +746,25 @@ async function projectTask(
             blockingIssues: coverage.blockingIssues,
             warnings: coverage.warnings,
         },
-        allowedActions:
-            workItem.status === "IN_PROGRESS"
-                ? ["SAVE", "APPROVE", "REJECT", "DEFER"]
-                : ["CLAIM"],
-        actionBlockers: [],
-        riskLabel: workItem.status === "IN_PROGRESS" ? "处理中" : "待领取",
-        riskTone: workItem.status === "IN_PROGRESS" ? "info" : "warning",
-        riskDescription: workItem.impact_summary ?? "",
+        allowedActions: [
+            ...projectedWorkItem.allowedActions.filter((action) =>
+                ["START_PROCESSING", "RELEASE_TO_TEAM", "REASSIGN"].includes(
+                    action,
+                ),
+            ),
+            ...(detail.allowed_actions ?? []),
+        ],
+        actionBlockers: [
+            ...(detail.action_blockers ?? []),
+            ...projectedWorkItem.actionBlockers.map((message) => ({
+                action: "PROCESS_TASK",
+                code: "WORK_ITEM_ACTION_BLOCKED",
+                message,
+            })),
+        ],
+        riskLabel: projectedWorkItem.ownerUser ? "处理中" : "团队待处理",
+        riskTone: projectedWorkItem.ownerUser ? "info" : "warning",
+        riskDescription: projectedWorkItem.impactSummary,
     }
 }
 
@@ -817,35 +773,13 @@ async function projectTask(
 export async function fetchProcurementQueue(
     filters: QueueFilters,
 ): Promise<ProcurementQueueView> {
-    const profile = await fetchAccountProfile()
-    const workItems = await fetchWorkItemsForQueue(filters, profile)
+    const workItems = await fetchWorkItemsForQueue(filters)
 
     const projected = (
-        await Promise.all(workItems.map((wi) => projectTask(wi, profile)))
+        await Promise.all(workItems.map((wi) => projectTask(wi, filters.scope)))
     ).filter((t): t is ProcurementConfirmationTask => t != null)
 
-    let tasks = projected
-
-    if (filters.orderNo) {
-        const q = filters.orderNo.trim().toUpperCase()
-        tasks = tasks.filter((t) =>
-            t.salesSubmission.salesOrderNo.toUpperCase().includes(q),
-        )
-    }
-
-    // due 筛选：后端列表无 due 过滤；在已取页内适配（分页准确性缺口）
-    const now = Date.now()
-    const today = new Date().toISOString().slice(0, 10)
-    if (filters.due === "overdue") {
-        tasks = tasks.filter((t) => {
-            if (!t.dueAt) return false
-            return new Date(t.dueAt).getTime() < now
-        })
-    } else if (filters.due === "today") {
-        tasks = tasks.filter((t) => t.dueAt.slice(0, 10) === today)
-    }
-
-    tasks = sortTasks(tasks, filters.sort ?? "due_at")
+    const tasks = projected
 
     const queueContextId =
         filters.queueContextId ??
@@ -890,61 +824,67 @@ export async function fetchProcurementQueue(
     }
 }
 
-export async function claimProcurementWorkItem(
-    workItemId: string,
-): Promise<WorkItemLease> {
-    const [detail, profile] = await Promise.all([
-        apiGet<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(workItemId)}`,
-        ),
-        fetchAccountProfile(),
-    ])
-    const claimed = await apiPost<BackendWorkItem>(
-        `/admin/work-items/${encodeURIComponent(workItemId)}/claim`,
-        { version: detail.version },
-    )
-    return {
-        workItemId,
-        claimedByLabel:
-            claimed.owner_user_id === profile.userid
-                ? profile.name
-                : "当前账号",
-    }
-}
-
 export async function saveProcurementConfirmation(input: {
     workItemId: string
+    expectedTaskVersion: string
+    expectedSubjectVersion: string
     confirmationId: string
     submissionId: string
     expectedEditVersion: number
     lines: ConfirmationLineDraft[]
-}): Promise<{ editVersion: number }> {
+    idempotencyKey: string
+}): Promise<{ editVersion: number; taskVersion: string }> {
     const body = {
-        version: input.expectedEditVersion,
-        lines: input.lines.map((line, index) => ({
-            line_no: index + 1,
-            sales_order_submission_line_id: line.submissionLineId,
-            supplier_id: line.supplierId,
-            supplier_offering_revision_id: line.offeringRevisionId,
-            confirmed_quantity: line.confirmedQuantity,
-            latest_cost_gross: line.latestCostGross,
-            input_tax_rate: line.inputTaxRate,
-            expected_delivery_date: line.expectedDeliveryDate,
-            fulfillment_mode: line.fulfillmentMode,
-            supplier_capability_revision_id: line.capabilityRevisionId,
-        })),
+        work_item_id: input.workItemId,
+        expected_task_version: input.expectedTaskVersion,
+        expected_subject_version: input.expectedSubjectVersion,
+        action: {
+            confirmation_id: input.confirmationId,
+            submission_id: input.submissionId,
+            expected_edit_version: input.expectedEditVersion,
+            lines: input.lines.map((line, index) => ({
+                line_no: index + 1,
+                sales_order_submission_line_id: line.submissionLineId,
+                supplier_id: line.supplierId,
+                supplier_offering_revision_id: line.offeringRevisionId,
+                confirmed_quantity: line.confirmedQuantity,
+                latest_cost_gross: line.latestCostGross,
+                input_tax_rate: line.inputTaxRate,
+                expected_delivery_date: line.expectedDeliveryDate,
+                fulfillment_mode: line.fulfillmentMode,
+                supplier_capability_revision_id: line.capabilityRevisionId,
+            })),
+        },
+        idempotency_key: input.idempotencyKey,
     }
 
-    const detail = await apiPut<BackendConfirmationDetail>(
+    const detail = await apiPut<{
+        edit_version: number
+        task_version: string | number
+    }>(
         `/admin/procurement-confirmations/${encodeURIComponent(input.confirmationId)}/lines`,
         body,
     )
-    return { editVersion: detail.version }
+    if (
+        !Number.isInteger(detail.edit_version) ||
+        (typeof detail.task_version !== "string" &&
+            typeof detail.task_version !== "number")
+    ) {
+        throw new Error(
+            "保存接口未返回新的 editVersion 与 taskVersion；当前处理器尚未满足强类型保存合同",
+        )
+    }
+    return {
+        editVersion: detail.edit_version,
+        taskVersion: String(detail.task_version),
+    }
 }
 
 export async function completeProcurementDecision(input: {
     workItemId: string
+    expectedTaskVersion: string
     expectedSubjectVersion: string
+    idempotencyKey: string
     decision:
         | {
               reviewResult: "APPROVED"
@@ -968,93 +908,138 @@ export async function completeProcurementDecision(input: {
           }
 }): Promise<FormalActionResponse> {
     try {
+        const data = await apiPost<{
+            work_item_id: string
+            work_item_status: "COMPLETED"
+            business_result:
+                | {
+                      outcome: "APPROVED_AND_SALES_EFFECTIVE"
+                      procurement_confirmation_id: string
+                      sales_order_id: string
+                      submission_id: string
+                      sales_order_revision_id: string
+                      receivable_account_id: string
+                      procurement_creation_basis_id: string
+                  }
+                | {
+                      outcome: "REJECTED_TO_SALES"
+                      procurement_confirmation_id: string
+                      sales_order_id: string
+                      rejected_submission_id: string
+                      workflow_action_id: string
+                      next_sales_resolutions: readonly [
+                          "RESUBMIT_CHANGED_TERMS",
+                          "REQUEST_LOW_MARGIN_ACCEPTANCE",
+                          "VOID_AFTER_REJECTION",
+                      ]
+                      successor_work_item_id?: string | null
+                  }
+        }>(
+            `/admin/procurement-confirmations/${encodeURIComponent(input.decision.confirmationId)}/decisions`,
+            {
+                work_item_id: input.workItemId,
+                expected_task_version: input.expectedTaskVersion,
+                expected_subject_version: input.expectedSubjectVersion,
+                decision:
+                    input.decision.reviewResult === "APPROVED"
+                        ? {
+                              review_result: "APPROVED",
+                              confirmation_id: input.decision.confirmationId,
+                              submission_id: input.decision.submissionId,
+                              expected_confirmation_edit_version:
+                                  input.decision
+                                      .expectedConfirmationEditVersion,
+                          }
+                        : {
+                              review_result: "REJECTED",
+                              confirmation_id: input.decision.confirmationId,
+                              submission_id: input.decision.submissionId,
+                              expected_confirmation_edit_version:
+                                  input.decision
+                                      .expectedConfirmationEditVersion,
+                              reject_reason_code:
+                                  input.decision.rejectReasonCode,
+                              comment: input.decision.comment,
+                          },
+                idempotency_key: input.idempotencyKey,
+            },
+        )
         if (input.decision.reviewResult === "APPROVED") {
-            const data = await apiPost<BackendDecisionView>(
-                `/admin/procurement-confirmations/${encodeURIComponent(input.decision.confirmationId)}/approve`,
-                {
-                    idempotency_key: `pc-approve-${input.workItemId}-${input.decision.expectedConfirmationEditVersion}`,
-                },
-            )
+            const business = data.business_result
+            if (
+                data.work_item_status !== "COMPLETED" ||
+                business?.outcome !== "APPROVED_AND_SALES_EFFECTIVE" ||
+                !business.procurement_creation_basis_id
+            ) {
+                return {
+                    status: "failed",
+                    code: "INCOMPLETE_FORMAL_RESULT",
+                    message:
+                        "任务完成记录或采购创建依据不完整；当前结果不能按成功展示",
+                }
+            }
             const outcome: FormalOutcome = {
                 kind: "APPROVED_AND_SALES_EFFECTIVE",
-                procurementConfirmationId: data.confirmation_id,
-                salesOrderId: data.sales_order_id,
+                procurementConfirmationId: business.procurement_confirmation_id,
+                salesOrderId: business.sales_order_id,
                 salesOrderNo: input.decision.salesOrderNo,
-                submissionId: input.decision.submissionId,
+                submissionId: business.submission_id,
                 subjectHash: input.decision.subjectHash,
-                salesOrderRevisionId: data.revision_id ?? "",
-                receivableAccountId: data.receivable_account_id ?? "",
-                purchaseOrders: (data.purchase_orders ?? []).map((order) => ({
-                    purchaseOrderId: order.purchase_order_id,
-                    purchaseNo: order.purchase_no,
-                })),
-                reference: data.reference,
+                salesOrderRevisionId: business.sales_order_revision_id,
+                receivableAccountId: business.receivable_account_id,
+                procurementCreationBasisId:
+                    business.procurement_creation_basis_id,
+                reference: business.procurement_creation_basis_id,
             }
             return { status: "succeeded", outcome }
         }
 
-        const data = await apiPost<BackendDecisionView>(
-            `/admin/procurement-confirmations/${encodeURIComponent(input.decision.confirmationId)}/reject`,
-            {
-                reject_reason_code: mapRejectReasonToBackend(
-                    input.decision.rejectReasonCode,
-                ),
-                comment: input.decision.comment,
-                idempotency_key: `pc-reject-${input.workItemId}-${input.decision.expectedConfirmationEditVersion}`,
-            },
-        )
+        const business = data.business_result
+        if (
+            data.work_item_status !== "COMPLETED" ||
+            business?.outcome !== "REJECTED_TO_SALES" ||
+            business.successor_work_item_id != null ||
+            !business.next_sales_resolutions.includes(
+                "REQUEST_LOW_MARGIN_ACCEPTANCE",
+            )
+        ) {
+            return {
+                status: "failed",
+                code: "INCOMPLETE_FORMAL_RESULT",
+                message:
+                    "驳回结果不完整，或出现了不应存在的后续任务；当前结果不能按成功展示",
+            }
+        }
         const outcome: FormalOutcome = {
             kind: "REJECTED_TO_SALES",
-            procurementConfirmationId: data.confirmation_id,
-            salesOrderId: data.sales_order_id,
+            procurementConfirmationId: business.procurement_confirmation_id,
+            salesOrderId: business.sales_order_id,
             salesOrderNo: input.decision.salesOrderNo,
-            rejectedSubmissionId: input.decision.submissionId,
+            rejectedSubmissionId: business.rejected_submission_id,
             rejectedSubjectHash: input.decision.subjectHash,
-            workflowActionId: data.reference,
+            workflowActionId: business.workflow_action_id,
             nextSalesResolutions: [
                 "RESUBMIT_CHANGED_TERMS",
+                "REQUEST_LOW_MARGIN_ACCEPTANCE",
                 "VOID_AFTER_REJECTION",
             ],
-            reference: data.reference,
+            reference: business.workflow_action_id,
             rejectReasonCode: input.decision.rejectReasonCode,
             comment: input.decision.comment,
         }
         return { status: "succeeded", outcome }
     } catch (error) {
-        return {
-            status: "failed",
-            message: apiErrorMessage(error),
-            code: apiErrorCode(error),
+        if (
+            isApiError(error) &&
+            (error.kind === "Network" || error.kind === "Parse")
+        ) {
+            return {
+                status: "unknown",
+                idempotencyKey: input.idempotencyKey,
+                message:
+                    "请求结果尚未确认；请按操作号查询处理结果，确认前不得再次提交或打开下一项",
+            }
         }
-    }
-}
-
-export async function deferProcurementConfirmation(input: {
-    workItemId: string
-    queueContextId: string
-    nextWorkItemId?: string
-}): Promise<FormalActionResponse> {
-    try {
-        const detail = await apiGet<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(input.workItemId)}`,
-        )
-        await apiPost<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(input.workItemId)}/defer`,
-            {
-                version: detail.version,
-                comment: "采购确认暂挂",
-            },
-        )
-        const outcome: FormalOutcome = {
-            kind: "DEFERRED",
-            workItemId: input.workItemId,
-            workItemStatus: "PENDING",
-            leaseDisposition: "RELEASED",
-            nextWorkItemId: input.nextWorkItemId,
-            reference: `PC-HOLD-${input.workItemId}`,
-        }
-        return { status: "succeeded", outcome }
-    } catch (error) {
         return {
             status: "failed",
             message: apiErrorMessage(error),

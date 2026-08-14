@@ -7,17 +7,17 @@ import { Label } from "@/components/ui/label"
 import { QUALITY_RESULT_OPTIONS } from "@/lib/business-options"
 import type {
     FulfillmentDraft,
-    FulfillmentTask,
+    FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 import { withDerivedQualified } from "@/features/fulfillment-operations/lib/validation"
 
 export function FulfillmentReceiptForm({
-    task,
+    operation,
     draft,
     onChange,
     disabled,
 }: {
-    task: FulfillmentTask
+    operation: FulfillmentOperation
     draft: Extract<FulfillmentDraft, { type: "RECEIPT" }>
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
@@ -42,7 +42,7 @@ export function FulfillmentReceiptForm({
                 </div>
             </div>
             {draft.lines.map((line, i) => {
-                const src = task.lines.find(
+                const src = operation.lines.find(
                     (l) =>
                         l.purchaseRevisionLineId ===
                         line.purchaseRevisionLineId,

@@ -4,7 +4,7 @@
  * 聚合视图在本文件组装；无后端资源时返回空列表并登记 gap，不造业务数据。
  */
 
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api"
+import { apiGet, apiPost } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 import type {
     AccessChangeCommand,
@@ -469,7 +469,7 @@ export async function fetchAccessList(
                 : undefined,
         allowedActions: ["VIEW_EFFECTIVE_ACCESS", "EMERGENCY_REVOKE_USER_ROLE"],
         actionBlockers,
-        workItemSupport: "DISABLED_Q1",
+        workItemSupport: "DISABLED",
     }
 }
 
@@ -606,18 +606,51 @@ export async function fetchAuditEvent(
 
 // ─── 写路径 ──────────────────────────────────────────────────────────────────
 
+function submissionBlockerFor(command: AccessChangeCommand) {
+    if (command.action === "EMERGENCY_REVOKE_USER_ROLE") return undefined
+
+    if (command.subjectType === "USER") {
+        return {
+            action: command.action,
+            code: "USER_ROLE_TIME_POLICY_MISSING",
+            message:
+                "用户角色时间策略尚未配置；当前只允许立即紧急撤权，其它角色变更已阻断。",
+        } as const
+    }
+
+    if (command.subjectType === "FIELD_POLICY") {
+        return {
+            action: command.action,
+            code: "FIELD_POLICY_GRANULARITY_MISSING",
+            message: "字段粒度策略尚未配置，字段访问策略保持只读。",
+        } as const
+    }
+
+    return {
+        action: command.action,
+        code: "REVIEW_POLICY_UNCONFIGURED",
+        message:
+            "本次权限变更尚未取得可直接生效的结论，且双人复核规则未配置；当前变更已阻断。",
+    } as const
+}
+
 export async function previewAccessChange(
     command: AccessChangeCommand,
 ): Promise<AccessImpactPreview> {
     const subjectLabel = "subjectId" in command ? command.subjectId : "—"
+    const submissionBlocker = submissionBlockerFor(command)
     return {
         subjectLabel,
         actionLabel: command.action,
         changeSummary: `预览：${command.action} → ${subjectLabel}`,
         affectedSubjectCount: 1,
-        affectedWorkSurfaceSummary: "权限与审计 / 相关工作台（按后端生效）",
-        riskLevel: "medium",
-        riskSummary: "变更将立即影响授权主体的可访问范围。",
+        affectedWorkSurfaceSummary: submissionBlocker
+            ? "影响预览尚未可用"
+            : "权限与审计 / 相关工作台（按处理结果生效）",
+        riskLevel: submissionBlocker ? "high" : "medium",
+        riskSummary: submissionBlocker
+            ? submissionBlocker.message
+            : "紧急撤权将立即影响该授权主体的可访问范围。",
         riskFlags: [],
         diffs: [
             {
@@ -627,6 +660,7 @@ export async function previewAccessChange(
                 after: command.action,
             },
         ],
+        submissionBlocker,
     }
 }
 
@@ -646,6 +680,16 @@ async function roleAssignmentVersion(
 export async function submitAccessChange(
     command: AccessChangeCommand,
 ): Promise<AccessChangeOutcome> {
+    const submissionBlocker = submissionBlockerFor(command)
+    if (submissionBlocker) {
+        return {
+            outcome: "REJECTED",
+            code: submissionBlocker.code,
+            message: submissionBlocker.message,
+            actionBlockers: [submissionBlocker],
+        }
+    }
+
     if (command.action === "EMERGENCY_REVOKE_USER_ROLE") {
         if (
             command.subjectType !== "USER" ||
@@ -683,135 +727,6 @@ export async function submitAccessChange(
             reference: command.idempotencyKey,
             nextSteps: ["刷新用户授权列表", "核对有效权限解释"],
             message: "已提交紧急撤权。",
-        }
-    }
-
-    if (
-        command.subjectType === "USER" &&
-        (command.action === "ASSIGN_USER_ROLE" ||
-            command.action === "CHANGE_USER_ROLE")
-    ) {
-        if (!("roleId" in command)) {
-            return {
-                outcome: "REJECTED",
-                code: "INVALID_COMMAND",
-                message: "分配角色需要 roleId",
-            }
-        }
-        // 时间策略缺失：fail-closed 拒绝预约类；立即分配仍可调用后端
-        await apiPost("/admin/user-roles", {
-            user_id: command.subjectId,
-            role_id: command.roleId,
-            effective_from: command.effectiveAt
-                ? Math.floor(new Date(command.effectiveAt).getTime() / 1000)
-                : undefined,
-            effective_to: command.expiresAt
-                ? Math.floor(new Date(command.expiresAt).getTime() / 1000)
-                : undefined,
-        })
-        const effectiveAt = instantToIso(Math.floor(Date.now() / 1000)) ?? ""
-        return {
-            outcome: "CONFIRMED",
-            permissionVersion: "pv-live",
-            auditEventId: `ae_${command.idempotencyKey}`,
-            affectedSubjectCount: 1,
-            effectiveAt,
-            reference: command.idempotencyKey,
-            nextSteps: ["刷新用户授权列表"],
-            message: "已提交用户角色分配。",
-        }
-    }
-
-    if (
-        command.subjectType === "USER" &&
-        command.action === "REVOKE_USER_ROLE" &&
-        "roleAssignmentId" in command &&
-        command.roleAssignmentId
-    ) {
-        const version = await roleAssignmentVersion(
-            command.subjectId,
-            command.roleAssignmentId,
-        )
-        if (version == null) {
-            return {
-                outcome: "REJECTED",
-                code: "ROLE_ASSIGNMENT_NOT_FOUND",
-                message: "当前角色绑定不存在或已被其他操作撤销，请刷新后核对。",
-            }
-        }
-        await apiPost(`/admin/user-roles/${command.roleAssignmentId}/revoke`, {
-            version,
-            revoke_reason_code: command.reasonCode,
-            revoke_reason_text: command.comment,
-        })
-        const effectiveAt = instantToIso(Math.floor(Date.now() / 1000)) ?? ""
-        return {
-            outcome: "CONFIRMED",
-            permissionVersion: "pv-live",
-            auditEventId: `ae_${command.idempotencyKey}`,
-            affectedSubjectCount: 1,
-            effectiveAt,
-            reference: command.idempotencyKey,
-            nextSteps: ["刷新用户授权列表"],
-            message: "已提交撤权。",
-        }
-    }
-
-    if (command.subjectType === "DATA_SCOPE" && command.action) {
-        // 简化：仅支持通过 changeSet 删除/新增范围
-        for (const change of command.changeSet ?? []) {
-            if (change.operation === "REMOVE" && change.targetReference) {
-                await apiDelete(`/admin/data-scopes/${change.targetReference}`)
-            }
-        }
-        const effectiveAt = instantToIso(Math.floor(Date.now() / 1000)) ?? ""
-        return {
-            outcome: "CONFIRMED",
-            permissionVersion: "pv-live",
-            auditEventId: `ae_${command.idempotencyKey}`,
-            affectedSubjectCount: 1,
-            effectiveAt,
-            reference: command.idempotencyKey,
-            nextSteps: ["刷新数据范围列表"],
-            message: "已提交数据范围变更。",
-        }
-    }
-
-    if (command.subjectType === "FIELD_POLICY") {
-        return {
-            outcome: "REJECTED",
-            code: "FIELD_POLICY_GRANULARITY_MISSING",
-            message: "字段策略后端资源未交付，禁止提交。",
-            actionBlockers: [
-                {
-                    action: "UPDATE_FIELD_POLICY",
-                    code: "FIELD_POLICY_GRANULARITY_MISSING",
-                    message: "字段粒度策略未配置。",
-                },
-            ],
-        }
-    }
-
-    if (command.subjectType === "ROLE" && "changeSet" in command) {
-        // 权限目录变更：尝试更新 permission 停用/名称（有限）
-        for (const change of command.changeSet) {
-            if (change.operation === "REPLACE" && change.targetReference) {
-                await apiPut(`/admin/permissions/${change.targetReference}`, {
-                    version: 1,
-                    disabled: change.valueReference === "disabled",
-                })
-            }
-        }
-        const effectiveAt = instantToIso(Math.floor(Date.now() / 1000)) ?? ""
-        return {
-            outcome: "CONFIRMED",
-            permissionVersion: "pv-live",
-            auditEventId: `ae_${command.idempotencyKey}`,
-            affectedSubjectCount: 1,
-            effectiveAt,
-            reference: command.idempotencyKey,
-            nextSteps: ["刷新角色权限列表"],
-            message: "已提交角色/权限变更（有限适配）。",
         }
     }
 

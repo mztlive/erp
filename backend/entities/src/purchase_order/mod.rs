@@ -40,8 +40,9 @@ pub use purchase_revision::{
     PurchaseOrderRevisionLineData,
 };
 pub use purchase_submission::{
-    PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
-    PurchaseOrderSubmissionLineData, PurchaseOrderSubmissionUpdate, SubmissionStatus,
+    PurchaseOrderReviewDecision, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
+    PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, PurchaseOrderSubmissionUpdate,
+    SubmissionStatus,
 };
 pub use snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 pub use types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};

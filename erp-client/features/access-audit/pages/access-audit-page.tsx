@@ -98,6 +98,7 @@ export function AccessAuditPage() {
     const objectId = searchParams.get("objectId") ?? undefined
     const resultFilter = searchParams.get("result") ?? undefined
     const traceId = searchParams.get("traceId") ?? undefined
+    const rejectedWorkItemId = searchParams.get("workItemId") ?? undefined
 
     const [searchInput, setSearchInput] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -469,12 +470,12 @@ export function AccessAuditPage() {
 
     const confirmChange = React.useCallback(async () => {
         if (!pendingCommand || !impact) return
-        if (impact.reviewPolicyBlocker) {
+        if (impact.submissionBlocker) {
             applyOutcome({
                 outcome: "REJECTED",
-                code: impact.reviewPolicyBlocker.code,
-                message: impact.reviewPolicyBlocker.message,
-                actionBlockers: [impact.reviewPolicyBlocker],
+                code: impact.submissionBlocker.code,
+                message: impact.submissionBlocker.message,
+                actionBlockers: [impact.submissionBlocker],
             })
             setChangeOpen(false)
             return
@@ -551,6 +552,46 @@ export function AccessAuditPage() {
         setDeletingAccount,
         setDeletingRole,
     })
+
+    if (rejectedWorkItemId) {
+        return (
+            <PageScaffold density="compact">
+                <PageHeader
+                    title="权限与审计"
+                    description="此工作面只处理权限对象配置、解释和审计查询。"
+                />
+                <FormalActionResult
+                    status="blocked"
+                    title="权限复核入口未开放"
+                    description="权限复核任务与专用复核命令尚未注册，不能在权限与审计页面代为确认。"
+                    facts={[
+                        {
+                            label: "阻断原因",
+                            value: "REVIEW_POLICY_UNCONFIGURED",
+                        },
+                    ]}
+                    actions={
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                                patchUrl(
+                                    {
+                                        workItemId: null,
+                                        queueContextId: null,
+                                    },
+                                    { replace: true },
+                                )
+                            }
+                        >
+                            返回权限与审计
+                        </Button>
+                    }
+                />
+            </PageScaffold>
+        )
+    }
+
     if (pageQuery.isPending) {
         return (
             <PageScaffold density="compact">
@@ -1014,12 +1055,12 @@ export function AccessAuditPage() {
                                 }
                                 estimated={impact.affectedSubjectCount}
                                 processable={
-                                    impact.reviewPolicyBlocker
+                                    impact.submissionBlocker
                                         ? 0
                                         : impact.affectedSubjectCount
                                 }
                                 skipped={
-                                    impact.reviewPolicyBlocker
+                                    impact.submissionBlocker
                                         ? impact.affectedSubjectCount
                                         : 0
                                 }
@@ -1030,7 +1071,7 @@ export function AccessAuditPage() {
                                     "完整银行账号",
                                 ]}
                                 skippedReason={
-                                    impact.reviewPolicyBlocker?.message
+                                    impact.submissionBlocker?.message
                                 }
                             />
 
@@ -1060,13 +1101,13 @@ export function AccessAuditPage() {
                                 </AlertDescription>
                             </Alert>
 
-                            {impact.reviewPolicyBlocker ? (
+                            {impact.submissionBlocker ? (
                                 <Alert variant="destructive">
                                     <AlertTitle>
-                                        {impact.reviewPolicyBlocker.code}
+                                        {impact.submissionBlocker.code}
                                     </AlertTitle>
                                     <AlertDescription>
-                                        {impact.reviewPolicyBlocker.message}
+                                        {impact.submissionBlocker.message}
                                     </AlertDescription>
                                 </Alert>
                             ) : null}
@@ -1082,7 +1123,7 @@ export function AccessAuditPage() {
                                 }))}
                             />
 
-                            {!impact.reviewPolicyBlocker ? (
+                            {!impact.submissionBlocker ? (
                                 <form
                                     className="space-y-3"
                                     onSubmit={async (e) => {
@@ -1191,13 +1232,13 @@ export function AccessAuditPage() {
                                         onClick={() => {
                                             applyOutcome({
                                                 outcome: "REJECTED",
-                                                code: impact
-                                                    .reviewPolicyBlocker!.code,
+                                                code: impact.submissionBlocker!
+                                                    .code,
                                                 message:
-                                                    impact.reviewPolicyBlocker!
+                                                    impact.submissionBlocker!
                                                         .message,
                                                 actionBlockers: [
-                                                    impact.reviewPolicyBlocker!,
+                                                    impact.submissionBlocker!,
                                                 ],
                                             })
                                             setChangeOpen(false)

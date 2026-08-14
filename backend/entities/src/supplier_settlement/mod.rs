@@ -12,7 +12,9 @@
 //! 留给 P3。
 
 pub mod difference;
+pub mod evidence;
 pub mod item;
+pub mod source_evidence;
 pub mod statement;
 
 pub use crate::ids::{
@@ -22,8 +24,13 @@ pub use difference::{
     SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
     SupplierSettlementDifferenceData, SupplierSettlementDifferenceUpdate,
 };
+pub use evidence::{SupplierSettlementDifferenceEvidence, SupplierSettlementDifferenceEvidenceData};
 pub use item::{SupplierSettlementItem, SupplierSettlementItemData};
+pub use source_evidence::{
+    SettlementSourceFactType, SupplierSettlementSourceEvidence, SupplierSettlementSourceEvidenceData,
+    SupplierSettlementSourceEvidenceLine,
+};
 pub use statement::{
-    SettlementStatus, SupplierSettlementStatement, SupplierSettlementStatementData,
-    SupplierSettlementStatementUpdate,
+    SettlementReviewDecision, SettlementReviewResult, SettlementStatus, SupplierSettlementSnapshotUpdate,
+    SupplierSettlementStatement, SupplierSettlementStatementData, SupplierSettlementStatementUpdate,
 };

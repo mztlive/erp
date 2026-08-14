@@ -10,11 +10,11 @@ use axum::{
 use services::{
     audit::AuditActor,
     receivable::{
-        AppendFundsReviewRequest, CreateCustomerReceiptRequest, CreateInvoiceRequest,
-        CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView, FundsReviewView,
-        InvoiceListParams, InvoiceView, IssueRedInvoiceRequest, PageView, PostCustomerReceiptRequest,
-        PostInvoiceRequest, ReceivableAccountListParams, ReceivableAccountView, ReceivableService,
-        UpdateReceivableAccountReviewRequest,
+        CardFundsReviewDetailParams, CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult,
+        CreateCustomerReceiptRequest, CreateInvoiceRequest, CreateReceivableAccountRequest,
+        CustomerReceiptListParams, CustomerReceiptView, InvoiceListParams, InvoiceView,
+        IssueRedInvoiceRequest, PageView, PostCustomerReceiptRequest, PostInvoiceRequest,
+        ReceivableAccountListParams, ReceivableAccountView, ReceivableService,
     },
 };
 
@@ -60,16 +60,20 @@ pub async fn receivable_account_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的当前操作人
 /// * `id` - 应收往来子账 ID
+/// * `params` - W13 正式任务入口参数
 ///
 /// # 返回
 /// 返回完整台账视图。
 pub async fn receivable_account_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
+    Query(params): Query<CardFundsReviewDetailParams>,
 ) -> Result<ReceivableAccountView> {
     let view = ReceivableService::new(state.db())
-        .receivable_account_detail(&id)
+        .receivable_account_detail_with_actions(&id, &params, &actor, state.rbac())
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -106,59 +110,29 @@ pub async fn receivable_account_create(
 #[permission_macros::permission(
     group = "客户往来",
     group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
-    desc = "更新应收往来子账复核缓存",
-    resource = "receivable_account",
-    action = "update"
-)]
-/// 更新应收往来子账复核缓存（乐观锁：冲突返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 应收往来子账 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
-/// 返回更新后子账的响应视图。
-pub async fn receivable_account_review_update(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<UpdateReceivableAccountReviewRequest>,
-) -> Result<ReceivableAccountView> {
-    let view = ReceivableService::new(state.db())
-        .update_receivable_account_review(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
-    desc = "追加卡券票款正式复核",
+    desc = "完成卡券票款正式复核",
     resource = "receivable_funds_review",
-    action = "create"
+    action = "complete"
 )]
-/// 追加卡券票款正式复核（W13：复核链尾锁定 + 账户复核缓存同步）。
+/// 以 W13 强类型命令完成卡券票款正式复核。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 复核追加请求
+/// * `command` - 含任务/对象/账户/链/票款事实版本的完整决定
 ///
 /// # 返回
-/// 返回新增复核记录视图。
-pub async fn receivable_funds_review_create(
+/// 返回可严格重放的正式结果。
+pub async fn receivable_funds_review_complete(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Json(req): Json<AppendFundsReviewRequest>,
-) -> Result<FundsReviewView> {
-    let view = ReceivableService::new(state.db())
-        .append_funds_review(req, &actor)
+    Json(command): Json<CompleteCardFundsReviewCommand>,
+) -> Result<CompleteCardFundsReviewResult> {
+    let result = ReceivableService::new(state.db())
+        .complete_card_funds_review(command, &actor)
         .await?;
 
-    Ok(ApiResponse::ok_with_data(view))
+    Ok(ApiResponse::ok_with_data(result))
 }
 
 #[permission_macros::permission(

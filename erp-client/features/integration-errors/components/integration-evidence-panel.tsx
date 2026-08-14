@@ -131,7 +131,7 @@ export function IntegrationEvidencePanel({
                     <Alert variant="warning">
                         <AlertTitle>解决证据规则尚未配置</AlertTitle>
                         <AlertDescription>
-                            处理完成已从可操作范围排除；只允许补证、先跳过或转交。
+                            处理完成已从可操作范围排除；仅展示服务端当前开放的非终结动作与责任动作。
                         </AlertDescription>
                     </Alert>
                 ) : null}

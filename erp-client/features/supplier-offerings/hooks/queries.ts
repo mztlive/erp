@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
     createSupplierOffering,
+    fetchSupplierSupplyExceptionWorkItem,
     fetchSupplierOfferings,
     fetchSupplierOfferingsForSkus,
     reviseSupplierOffering,
@@ -26,6 +27,15 @@ export function useSupplierOfferingsQuery(query: SupplierOfferingListQuery) {
     return useQuery({
         queryKey: supplierOfferingKeys.list(query),
         queryFn: () => fetchSupplierOfferings(query),
+    })
+}
+
+/** 读取并校验 W21 唯一已注册的供应停止任务。 */
+export function useSupplierSupplyExceptionWorkItemQuery(workItemId?: string) {
+    return useQuery({
+        queryKey: [...supplierOfferingKeys.all, "supply-exception", workItemId],
+        queryFn: () => fetchSupplierSupplyExceptionWorkItem(workItemId ?? ""),
+        enabled: Boolean(workItemId),
     })
 }
 

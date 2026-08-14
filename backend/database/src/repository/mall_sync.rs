@@ -15,9 +15,10 @@
 use entities::common::time::Instant;
 use entities::mall_sync::{
     ExternalOrderKey, MallSalesOrderSnapshot, MallSalesReconciliationItem, MallSalesReconciliationJob,
-    MallSalesSyncCursor, MallSalesSyncJob, MallSalesSyncJobStatus, MallSalesSyncJobType, MappingTaskStatus,
-    MappingTaskType, MasterMappingTask, ReconciliationDifferenceType, ReconciliationItemStatus,
-    ReconciliationJobStatus, SnapshotMappingStatus,
+    MallSalesSyncCursor, MallSalesSyncJob, MallSalesSyncJobStatus, MallSalesSyncJobType,
+    MallSnapshotReapplyOperation, MallSyncTriggerSource, MappingTaskStatus, MappingTaskType,
+    MasterMappingTask, ReconciliationDifferenceType, ReconciliationItemStatus, ReconciliationJobStatus,
+    SnapshotMappingStatus,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -49,6 +50,16 @@ pub struct MallSalesSyncJobRow {
     pub range_start: Option<Instant>,
     /// 本次查询时间边界止。
     pub range_end: Option<Instant>,
+    /// 按单补拉的原来源销售单号。
+    pub external_order_no: Option<String>,
+    /// 触发来源。
+    pub trigger_source: MallSyncTriggerSource,
+    /// 人工触发理由。
+    pub trigger_reason: Option<String>,
+    /// 人工触发人。
+    pub triggered_by: Option<String>,
+    /// 失败重试沿用的原作业。
+    pub source_job_id: Option<entities::ids::MallSalesSyncJobId>,
     /// 任务开始时间。
     pub started_at: Instant,
     /// 任务结束时间。
@@ -810,8 +821,8 @@ pub struct MasterMappingTaskRow {
     pub mapping_type: MappingTaskType,
     /// 任务状态。
     pub status: MappingTaskStatus,
-    /// 业务责任角色。
-    pub owner_role: String,
+    /// 业务责任角色；未形成唯一责任路由时为空。
+    pub owner_role: Option<String>,
     /// 业务责任用户 ID。
     pub owner_user_id: Option<String>,
     /// 处理结论。
@@ -978,6 +989,41 @@ impl<'a> Repository<'a, MasterMappingTask> {
     }
 }
 
+impl<'a> Repository<'a, MallSnapshotReapplyOperation> {
+    /// 按映射任务与幂等摘要查询重新归集操作。
+    pub async fn find_reapply_by_idempotency(
+        &self,
+        mapping_task_id: &str,
+        idempotency_key_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<MallSnapshotReapplyOperation>> {
+        self.find_one(
+            doc! {
+                "mapping_task_id": mapping_task_id,
+                "idempotency_key_hash": idempotency_key_hash,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询映射任务最近一次重新归集操作。
+    pub async fn latest_reapply_for_task(
+        &self,
+        mapping_task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<MallSnapshotReapplyOperation>> {
+        let operations = self
+            .find_many_sorted(
+                doc! { "mapping_task_id": mapping_task_id },
+                doc! { "last_updated_at": -1, "created_at": -1 },
+                executor,
+            )
+            .await?;
+        Ok(operations.into_iter().next())
+    }
+}
+
 /// D23 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
@@ -1074,6 +1120,11 @@ fn mall_sales_sync_job_projection() -> Document {
         "job_type": 1,
         "range_start": 1,
         "range_end": 1,
+        "external_order_no": 1,
+        "trigger_source": 1,
+        "trigger_reason": 1,
+        "triggered_by": 1,
+        "source_job_id": 1,
         "started_at": 1,
         "finished_at": 1,
         "status": 1,

@@ -7,8 +7,9 @@ use crate::errors::{Error, Result};
 use crate::projection::dto::SortDir;
 use crate::projection::service::ProjectionService;
 use crate::projection::{
-    PageView, SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView,
-    SalesOrderProjectionListParams, SalesOrderProjectionRevisionView, SalesOrderProjectionView,
+    PageView, ProjectionActionBlockerView, SalesOrderProjectionDeliveryListParams,
+    SalesOrderProjectionDeliveryView, SalesOrderProjectionListParams, SalesOrderProjectionRevisionView,
+    SalesOrderProjectionView,
 };
 
 /// 投影列表筛选条件类型（经 `ProjectionExt` 关联类型跨 crate 可达）。
@@ -156,16 +157,29 @@ impl ProjectionService {
         let items = page
             .items
             .into_iter()
-            .map(|row| SalesOrderProjectionDeliveryView {
-                id: row.id,
-                projection_revision_id: row.projection_revision_id,
-                target_mall_id: row.target_mall_id,
-                status: row.status,
-                attempt_count: row.attempt_count,
-                mall_ack_at: row.mall_ack_at,
-                error_code: row.error_code,
-                version: row.version,
-                created_at: row.created_at,
+            .map(|row| {
+                let (allowed_actions, action_blockers) =
+                    delivery_action_projection(row.status, row.error_class);
+                SalesOrderProjectionDeliveryView {
+                    id: row.id,
+                    projection_revision_id: row.projection_revision_id,
+                    target_mall_id: row.target_mall_id,
+                    status: row.status,
+                    attempt_count: row.attempt_count,
+                    last_attempt_at: row.last_attempt_at,
+                    next_attempt_at: row.next_attempt_at,
+                    mall_ack_at: row.mall_ack_at,
+                    mall_execution_baseline: row.mall_execution_baseline,
+                    error_class: row.error_class,
+                    error_code: row.error_code,
+                    error_summary: row.error_summary,
+                    error_task_id: row.error_task_id,
+                    work_item_id: row.work_item_id,
+                    allowed_actions,
+                    action_blockers,
+                    version: row.version,
+                    created_at: row.created_at,
+                }
             })
             .collect();
 
@@ -175,5 +189,86 @@ impl ProjectionService {
             page: filter.page,
             page_size: filter.page_size,
         })
+    }
+}
+
+fn delivery_action_projection(
+    status: entities::projection::ProjectionDeliveryStatus,
+    error_class: Option<entities::integration_ops::ErrorClass>,
+) -> (Vec<String>, Vec<ProjectionActionBlockerView>) {
+    use entities::integration_ops::ErrorClass;
+    use entities::projection::ProjectionDeliveryStatus;
+
+    if matches!(
+        status,
+        ProjectionDeliveryStatus::Confirmed | ProjectionDeliveryStatus::Manual
+    ) {
+        return (Vec::new(), Vec::new());
+    }
+    if matches!(
+        status,
+        ProjectionDeliveryStatus::PendingSend | ProjectionDeliveryStatus::Retrying
+    ) {
+        return (
+            Vec::new(),
+            vec![ProjectionActionBlockerView {
+                action: "RETRY".to_string(),
+                code: "CONTROLLED_PROCESSING_PENDING".to_string(),
+                message: "投递已进入受控处理队列，禁止重复提交。".to_string(),
+            }],
+        );
+    }
+
+    let mut actions = Vec::new();
+    let mut blockers = Vec::new();
+    if error_class == Some(ErrorClass::MappingError) {
+        blockers.push(ProjectionActionBlockerView {
+            action: "RETRY".to_string(),
+            code: "MAPPING_DIFFERENCE_REQUIRES_ESCALATION".to_string(),
+            message: "映射差异禁止对象级重试，必须升级到 W29。".to_string(),
+        });
+        blockers.push(ProjectionActionBlockerView {
+            action: "QUERY_RESULT".to_string(),
+            code: "MAPPING_DIFFERENCE_REQUIRES_ESCALATION".to_string(),
+            message: "映射差异必须由 W29 核对，不得在 W23 覆盖结果。".to_string(),
+        });
+    } else {
+        actions.push("QUERY_RESULT".to_string());
+    }
+    if status == ProjectionDeliveryStatus::Failed && error_class.is_some_and(|class| class.can_auto_retry()) {
+        actions.push("RETRY".to_string());
+    } else if status == ProjectionDeliveryStatus::Failed && error_class != Some(ErrorClass::MappingError) {
+        blockers.push(ProjectionActionBlockerView {
+            action: "RETRY".to_string(),
+            code: "ERROR_NOT_RETRYABLE".to_string(),
+            message: "当前错误不允许对象级重试。".to_string(),
+        });
+    }
+    actions.push("ESCALATE".to_string());
+    (actions, blockers)
+}
+
+#[cfg(test)]
+mod action_projection_tests {
+    use entities::integration_ops::ErrorClass;
+    use entities::projection::ProjectionDeliveryStatus;
+
+    use super::delivery_action_projection;
+
+    #[test]
+    fn mapping_error_only_allows_escalation() {
+        let (actions, blockers) =
+            delivery_action_projection(ProjectionDeliveryStatus::Failed, Some(ErrorClass::MappingError));
+        assert_eq!(actions, vec!["ESCALATE"]);
+        assert!(blockers.iter().any(|item| item.action == "RETRY"));
+    }
+
+    #[test]
+    fn result_unknown_never_allows_retry() {
+        let (actions, _) = delivery_action_projection(
+            ProjectionDeliveryStatus::ResultUnknown,
+            Some(ErrorClass::ResultUnknown),
+        );
+        assert_eq!(actions, vec!["QUERY_RESULT", "ESCALATE"]);
     }
 }

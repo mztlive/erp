@@ -53,7 +53,6 @@ type MallSyncReadViewsProps = {
     onRetryJob: () => void
     patchUrl: PatchUrl
     firstPhase: boolean
-    policyMissing: boolean
     sealed: boolean
     onPullDifference: (externalOrderNo: string) => void
 }
@@ -73,7 +72,6 @@ function MallSyncReadViews({
     onRetryJob,
     patchUrl,
     firstPhase,
-    policyMissing,
     sealed,
     onPullDifference,
 }: MallSyncReadViewsProps) {
@@ -438,7 +436,7 @@ function MallSyncReadViews({
                                                 }
                                             </p>
                                         ) : null}
-                                        {firstPhase && !policyMissing ? (
+                                        {firstPhase ? (
                                             <Button
                                                 type="button"
                                                 size="sm"

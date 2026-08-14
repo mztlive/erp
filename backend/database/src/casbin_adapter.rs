@@ -5,6 +5,7 @@ use casbin::{error::AdapterError, Adapter, Filter, Model};
 use futures_util::StreamExt;
 use mongodb::{
     bson::{doc, to_document, Document},
+    options::FindOptions,
     ClientSession, Database,
 };
 use serde::{Deserialize, Serialize};
@@ -135,6 +136,42 @@ impl MongoCasbinAdapter {
         }
     }
 
+    fn subject_role_filter(subject: &str) -> Document {
+        doc! {
+            "sec": "g",
+            "ptype": "g",
+            "values.0": subject,
+        }
+    }
+
+    fn role_subject_filter(role_key: &str) -> Document {
+        doc! {
+            "sec": "g",
+            "ptype": "g",
+            "values.1": role_key,
+        }
+    }
+
+    fn subject_role_keys(rules: Vec<CasbinRule>) -> Vec<String> {
+        let mut role_keys = rules
+            .into_iter()
+            .filter_map(|rule| rule.values.get(1).cloned())
+            .collect::<Vec<_>>();
+        role_keys.sort();
+        role_keys.dedup();
+        role_keys
+    }
+
+    fn role_subject_keys(rules: Vec<CasbinRule>) -> Vec<String> {
+        let mut subjects = rules
+            .into_iter()
+            .filter_map(|rule| rule.values.first().cloned())
+            .collect::<Vec<_>>();
+        subjects.sort();
+        subjects.dedup();
+        subjects
+    }
+
     fn role_permission_rules(role_key: &str, permissions: &[(String, String)]) -> Vec<CasbinRule> {
         permissions
             .iter()
@@ -209,6 +246,56 @@ impl MongoCasbinAdapter {
         };
         u64::try_from(state.revision)
             .map_err(|_| crate::Error::EntityMetadataOutOfRange("casbin policy revision"))
+    }
+
+    /// 读取指定主体的 Casbin 角色绑定。
+    ///
+    /// 该方法直接读取持久化的 `g` 规则，并遵循调用方事务快照；不得以 Enforcer
+    /// 缓存替代本查询。返回值只包含规则第二列中的 Casbin 角色键。
+    ///
+    /// # 参数
+    /// * `subject` - Casbin 主体标识
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回已排序、去重的 Casbin 角色键。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn subject_roles(&self, subject: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
+        let rules = mongo_ops::find_many(
+            &self.collection(),
+            Self::subject_role_filter(subject),
+            FindOptions::default(),
+            executor,
+        )
+        .await?;
+        Ok(Self::subject_role_keys(rules))
+    }
+
+    /// 读取绑定指定 Casbin 角色的主体。
+    ///
+    /// 该方法直接读取持久化的 `g` 规则并遵循调用方事务快照。返回值只包含
+    /// 规则第一列中的 Casbin 主体键。
+    ///
+    /// # 参数
+    /// * `role_key` - Casbin 角色键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回已排序、去重的 Casbin 主体键。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn role_subjects(&self, role_key: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
+        let rules = mongo_ops::find_many(
+            &self.collection(),
+            Self::role_subject_filter(role_key),
+            FindOptions::default(),
+            executor,
+        )
+        .await?;
+        Ok(Self::role_subject_keys(rules))
     }
 
     /// 递增 Casbin policy 全局版本。
@@ -606,7 +693,7 @@ impl Adapter for MongoCasbinAdapter {
 mod tests {
     use mongodb::bson::doc;
 
-    use super::MongoCasbinAdapter;
+    use super::{CasbinRule, MongoCasbinAdapter};
 
     #[test]
     fn role_permission_rules_use_role_resource_action_order() {
@@ -642,6 +729,81 @@ mod tests {
                 "values.1": "role:manager",
             }
         );
+    }
+
+    #[test]
+    fn subject_roles_use_group_subject_filter_and_second_value() {
+        assert_eq!(
+            MongoCasbinAdapter::subject_role_filter("user:admin:account-1"),
+            doc! {
+                "sec": "g",
+                "ptype": "g",
+                "values.0": "user:admin:account-1",
+            }
+        );
+
+        let roles = MongoCasbinAdapter::subject_role_keys(vec![
+            CasbinRule::new(
+                "g",
+                "g",
+                vec!["user:admin:account-1".to_string(), "role:sales".to_string()],
+            ),
+            CasbinRule::new(
+                "g",
+                "g",
+                vec!["user:admin:account-1".to_string(), "role:finance".to_string()],
+            ),
+            CasbinRule::new(
+                "g",
+                "g",
+                vec!["user:admin:account-1".to_string(), "role:sales".to_string()],
+            ),
+            CasbinRule::new("g", "g", vec!["user:admin:account-1".to_string()]),
+        ]);
+
+        assert_eq!(roles, ["role:finance", "role:sales"]);
+    }
+
+    #[test]
+    fn role_subjects_use_group_role_filter_and_first_value() {
+        assert_eq!(
+            MongoCasbinAdapter::role_subject_filter("role:role-sales-leader"),
+            doc! {
+                "sec": "g",
+                "ptype": "g",
+                "values.1": "role:role-sales-leader",
+            }
+        );
+
+        let subjects = MongoCasbinAdapter::role_subject_keys(vec![
+            CasbinRule::new(
+                "g",
+                "g",
+                vec![
+                    "user:admin:account-2".to_string(),
+                    "role:role-sales-leader".to_string(),
+                ],
+            ),
+            CasbinRule::new(
+                "g",
+                "g",
+                vec![
+                    "user:admin:account-1".to_string(),
+                    "role:role-sales-leader".to_string(),
+                ],
+            ),
+            CasbinRule::new(
+                "g",
+                "g",
+                vec![
+                    "user:admin:account-2".to_string(),
+                    "role:role-sales-leader".to_string(),
+                ],
+            ),
+            CasbinRule::new("g", "g", Vec::new()),
+        ]);
+
+        assert_eq!(subjects, ["user:admin:account-1", "user:admin:account-2"]);
     }
 
     #[test]

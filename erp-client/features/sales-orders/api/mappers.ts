@@ -1,17 +1,19 @@
 import type { StatusTone } from "@/components/ui/status-badge"
 import type {
+    BackendActiveCardSalesApproval,
+    BackendActiveLowMarginManagerConfirmation,
     BackendCloseEligibility,
     BackendOpenProcurementRejection,
     BackendProcurementConfirmation,
     BackendRevision,
     BackendSalesChangeOrder,
     BackendSalesOrderDetail,
-    BackendSalesOrderReview,
     BackendSalesOrderView,
     BackendWorkingCopyLine,
     SalesOrdersListQuery,
 } from "@/features/sales-orders/api/contracts"
 import type {
+    ActiveLowMarginManagerConfirmation,
     ActionBlocker,
     CardSalesApproval,
     FormalAllowedAction,
@@ -251,6 +253,8 @@ export function mapListItemFromBackend(
         revisions?: SalesOrderRevisionSnapshot[]
         procurementRejection?: ProcurementRejectionResolution | null
         activeCardSalesApproval?: CardSalesApproval | null
+        activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
+        cardApprovalProjectionBlocker?: string | null
         activeChangeOrder?: SalesChangeOrderSummary | null
         customerContact?: string
         closeEligibility?: BackendCloseEligibility
@@ -271,7 +275,10 @@ export function mapListItemFromBackend(
     const fulfillment = mapFulfillment(row.fulfillment_progress)
     const collection = mapCollection(row.collection_progress)
     const invoicing = mapInvoicing(row.invoice_progress)
-    const hasCard = Boolean(extras?.activeCardSalesApproval)
+    const hasCard = Boolean(
+        extras?.activeCardSalesApproval ||
+        extras?.cardApprovalProjectionBlocker,
+    )
     const hasRejection = Boolean(extras?.procurementRejection)
     const { allowed, blockers } = defaultAllowedActions(
         row.commercial_status,
@@ -342,6 +349,10 @@ export function mapListItemFromBackend(
         revisions: extras?.revisions ?? [],
         procurementRejection: extras?.procurementRejection ?? null,
         activeCardSalesApproval: extras?.activeCardSalesApproval ?? null,
+        activeLowMarginManagerConfirmation:
+            extras?.activeLowMarginManagerConfirmation ?? null,
+        cardApprovalProjectionBlocker:
+            extras?.cardApprovalProjectionBlocker ?? null,
         activeChangeOrder: extras?.activeChangeOrder ?? null,
         allowedActions: allowed,
         actionBlockers: blockers,
@@ -458,6 +469,16 @@ export function mapDetailToListItem(
             detail.open_procurement_rejection,
             openRejectionSubmissionNo,
         )
+    const activeCardSalesApproval =
+        extras?.activeCardSalesApproval ??
+        mapActiveCardSalesApproval(detail.active_card_sales_approval)
+    const activeLowMarginManagerConfirmation =
+        mapActiveLowMarginManagerConfirmation(
+            detail.active_low_margin_manager_confirmation,
+        )
+    const approvalProjectionInvalid = Boolean(
+        detail.active_card_sales_approval && !activeCardSalesApproval,
+    )
     return mapListItemFromBackend(
         {
             id: detail.id,
@@ -499,7 +520,16 @@ export function mapDetailToListItem(
             remark: commercial.remark,
             revisions: mapRevisions(detail.revisions),
             procurementRejection,
-            activeCardSalesApproval: extras?.activeCardSalesApproval,
+            activeCardSalesApproval,
+            activeLowMarginManagerConfirmation,
+            cardApprovalProjectionBlocker: approvalProjectionInvalid
+                ? "当前审批进度缺少实例、步骤、任务或业务版本；为避免错批，本页仅供查看。"
+                : detail.business_type === "VOUCHER" &&
+                    (detail.review_status === "PENDING_SALES_LEADER" ||
+                        detail.review_status === "PENDING_OPERATIONS") &&
+                    !detail.active_card_sales_approval
+                  ? "审批仍在进行，但审批进度和任务版本不完整；为避免错批，本页仅供查看。"
+                  : null,
             activeChangeOrder: extras?.activeChangeOrder,
             settlementEntity:
                 commercial.settlementPartyName || detail.settlement_party_id,
@@ -512,33 +542,98 @@ export function mapDetailToListItem(
     )
 }
 
-export function mapReviewToCardApproval(
-    review: BackendSalesOrderReview,
+export function mapActiveCardSalesApproval(
+    approval?: BackendActiveCardSalesApproval | null,
 ): CardSalesApproval | null {
-    if (review.status !== "PENDING") return null
-    const isLeader = review.review_stage === "SALES_LEADER"
-    const isOps = review.review_stage === "OPERATIONS"
-    if (!isLeader && !isOps) return null
+    if (!approval) return null
+    const hasWorkItem = Boolean(
+        approval.work_item_id &&
+        approval.task_version != null &&
+        approval.work_item_type &&
+        approval.work_item_status &&
+        approval.assignment_mode,
+    )
+    if (approval.processing_state === "READY" && !hasWorkItem) {
+        return null
+    }
+    const common = {
+        approvalInstanceId: approval.approval_instance_id,
+        instanceVersion: String(approval.instance_version),
+        approvalStepInstanceId: approval.approval_step_instance_id,
+        stepVersion: String(approval.step_version),
+        processingBlocker: approval.processing_blocker ?? undefined,
+        subjectVersion: approval.subject_version,
+        salesOrderSubmissionId: approval.sales_order_submission_id,
+        submissionNo: approval.submission_no,
+        ownerUser: approval.owner_user
+            ? {
+                  id: approval.owner_user.id,
+                  displayName: approval.owner_user.display_name,
+              }
+            : undefined,
+        frozenSubmissionSummary: approval.frozen_submission_summary,
+        expectedReviewStatus: approval.expected_review_status,
+        actionBlockers: approval.action_blockers.map((blocker) => ({
+            action: blocker.action,
+            reason:
+                blocker.message ??
+                blocker.reason ??
+                blocker.code ??
+                "当前不可执行",
+        })),
+    }
+    if (approval.processing_state === "APPROVAL_BLOCKED") {
+        return {
+            ...common,
+            processingState: "APPROVAL_BLOCKED",
+            workItemId: approval.work_item_id ?? undefined,
+            workItemType: approval.work_item_type ?? undefined,
+            taskVersion:
+                approval.task_version == null
+                    ? undefined
+                    : String(approval.task_version),
+            workItemStatus: approval.work_item_status ?? undefined,
+            assignmentMode: approval.assignment_mode ?? undefined,
+            allowedActions: approval.allowed_actions.filter(
+                (action): action is "CANCEL" => action === "CANCEL",
+            ),
+        }
+    }
     return {
-        workItemId: review.id,
-        workItemType: isLeader
-            ? "CARD_SALES_MANAGER_APPROVAL"
-            : "CARD_SALES_OPERATION_APPROVAL",
-        workItemStatus: review.reviewer_id ? "CLAIMED" : "UNCLAIMED",
-        subjectVersion: review.submission_id,
-        subjectHash: review.submission_id,
-        claimedByLabel: review.reviewer_id ?? undefined,
-        frozenSubmissionSummary: "",
-        expectedReviewStatus: isLeader
-            ? "PENDING_SALES_LEAD"
-            : "PENDING_OPERATIONS",
-        allowedActions: review.reviewer_id ? ["APPROVE", "REJECT"] : ["CLAIM"],
-        actionBlockers: review.reviewer_id
-            ? []
-            : [
-                  { action: "APPROVE", reason: "请先领取后再审批。" },
-                  { action: "REJECT", reason: "请先领取后再审批。" },
-              ],
+        ...common,
+        processingState: "READY",
+        workItemId: approval.work_item_id!,
+        workItemType: approval.work_item_type!,
+        taskVersion: String(approval.task_version!),
+        workItemStatus: approval.work_item_status!,
+        assignmentMode: approval.assignment_mode!,
+        allowedActions: approval.allowed_actions,
+    }
+}
+
+/** 将服务端 actor-specific 低毛利确认投影原样收敛为页面工作面。 */
+export function mapActiveLowMarginManagerConfirmation(
+    confirmation?: BackendActiveLowMarginManagerConfirmation | null,
+): ActiveLowMarginManagerConfirmation | null {
+    if (!confirmation) return null
+    return {
+        confirmationId: confirmation.confirmation_id,
+        workItemId: confirmation.work_item_id,
+        taskVersion: String(confirmation.task_version),
+        subjectVersion: confirmation.subject_version,
+        lowMarginSubmissionId: confirmation.low_margin_submission_id,
+        rejectedProcurementConfirmationId:
+            confirmation.rejected_procurement_confirmation_id,
+        acceptanceReason: confirmation.acceptance_reason,
+        evidenceReferenceIds: confirmation.evidence_reference_ids,
+        ownerUser: confirmation.owner_user
+            ? {
+                  id: confirmation.owner_user.id,
+                  displayName: confirmation.owner_user.display_name,
+              }
+            : undefined,
+        allowedActions: confirmation.allowed_actions,
+        actionBlockers: confirmation.action_blockers,
     }
 }
 
@@ -563,8 +658,12 @@ export function mapRejectedProcurement(
             commercialTermsUnchanged: true,
             diffSummary: [],
         },
-        fixedResolutions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
-        allowedActions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
+        fixedResolutions: [
+            "RESUBMIT_CHANGED_TERMS",
+            "REQUEST_LOW_MARGIN_ACCEPTANCE",
+            "VOID_AFTER_REJECTION",
+        ],
+        allowedActions: [],
         actionBlockers: [],
     }
 }
@@ -595,8 +694,12 @@ export function mapOpenProcurementRejection(
             commercialTermsUnchanged: true,
             diffSummary: [],
         },
-        fixedResolutions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
-        allowedActions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
+        fixedResolutions: [
+            "RESUBMIT_CHANGED_TERMS",
+            "REQUEST_LOW_MARGIN_ACCEPTANCE",
+            "VOID_AFTER_REJECTION",
+        ],
+        allowedActions: open.allowed_actions,
         actionBlockers: [],
     }
 }

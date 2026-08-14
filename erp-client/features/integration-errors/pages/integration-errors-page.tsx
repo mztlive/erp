@@ -3,12 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import {
-    PauseIcon,
-    RefreshCwIcon,
-    SearchIcon,
-    SkipForwardIcon,
-} from "lucide-react"
+import { PauseIcon, RefreshCwIcon, SearchIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
@@ -27,10 +22,10 @@ import {
     type InterfaceErrorClass,
     type InterfaceErrorStatus,
 } from "@/components/business"
-import { TRANSFER_ROLE_OPTIONS } from "@/lib/business-options"
+import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
-import { leaseText, freshnessText } from "@/lib/ui-text"
+import { freshnessText } from "@/lib/ui-text"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -51,24 +46,23 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 import {
-    useClaimIntegrationMutation,
-    useCloseIntegrationMutation,
     useDirectReconciliationMutation,
     useIntegrationActionMutation,
     useIntegrationItemQuery,
     useIntegrationQueueQuery,
     useResolveIntegrationMutation,
-    useTransferIntegrationMutation,
 } from "../hooks/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import { ReplacementWorkItemSearchCombobox } from "../components/replacement-work-item-search-combobox"
 import type {
+    IntegrationActionKind,
     IntegrationFormalResult,
     IntegrationResolutionItemView,
     IntegrationView,
 } from "../types"
 import {
     ENV_LABEL,
-    EVIDENCE_KIND_LABEL,
     ERROR_CLASS_LABEL,
     MODE_LABEL,
     OWNER_LABEL,
@@ -88,12 +82,8 @@ import {
 } from "../components/terminal-action-dialog"
 import { INTEGRATION_ACTION_LABEL } from "../lib/presentation"
 
-type SessionLease = {
-    workItemId: string
-}
-
 function newKey(prefix: string) {
-    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+    return `${prefix}:${crypto.randomUUID()}`
 }
 
 function mapPanelStatus(
@@ -159,55 +149,76 @@ export function IntegrationErrorsPage({
     )
 
     const queueQuery = useIntegrationQueueQuery(query)
-    const claimMutation = useClaimIntegrationMutation()
+    const profileQuery = useAccountProfileQuery()
+    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const actionMutation = useIntegrationActionMutation()
     const resolveMutation = useResolveIntegrationMutation()
-    const closeMutation = useCloseIntegrationMutation()
-    const transferMutation = useTransferIntegrationMutation()
     const directMutation = useDirectReconciliationMutation()
 
     const view = queueQuery.data
     const queueItems = React.useMemo(() => view?.items ?? [], [view?.items])
     const metrics = view?.metrics
 
+    const queueSelection = React.useMemo(() => {
+        if (currentTaskId) {
+            return (
+                queueItems.find(
+                    (candidate) =>
+                        candidate.identity.itemType === "ERROR_TASK" &&
+                        candidate.identity.id === currentTaskId,
+                ) ??
+                queueItems.find(
+                    (candidate) => candidate.identity.id === currentTaskId,
+                )
+            )
+        }
+        if (currentDifferenceId) {
+            return queueItems.find(
+                (candidate) =>
+                    candidate.identity.itemType ===
+                        "RECONCILIATION_DIFFERENCE" &&
+                    candidate.identity.id === currentDifferenceId,
+            )
+        }
+        return queueItems[0]
+    }, [currentDifferenceId, currentTaskId, queueItems])
+
+    const detailTarget = React.useMemo(
+        () =>
+            forcedTaskId
+                ? { itemType: "ERROR_TASK" as const, id: forcedTaskId }
+                : forcedDifferenceId
+                  ? {
+                        itemType: "RECONCILIATION_DIFFERENCE" as const,
+                        id: forcedDifferenceId,
+                    }
+                  : queueSelection
+                    ? {
+                          itemType: queueSelection.identity.itemType,
+                          id: queueSelection.identity.id,
+                      }
+                    : null,
+        [forcedDifferenceId, forcedTaskId, queueSelection],
+    )
+
     const detailItemQuery = useIntegrationItemQuery({
-        itemType: forcedDifferenceId
-            ? "RECONCILIATION_DIFFERENCE"
-            : "ERROR_TASK",
-        id: forcedTaskId ?? forcedDifferenceId ?? "",
-        enabled: Boolean(forcedTaskId || forcedDifferenceId),
+        itemType: detailTarget?.itemType ?? "ERROR_TASK",
+        id: detailTarget?.id ?? "",
+        enabled: detailTarget !== null,
     })
 
     const item: IntegrationResolutionItemView | undefined =
         React.useMemo(() => {
-            if (forcedTaskId || forcedDifferenceId) {
-                return detailItemQuery.data ?? undefined
+            if (
+                detailTarget &&
+                detailItemQuery.data?.identity.itemType ===
+                    detailTarget.itemType &&
+                detailItemQuery.data.identity.id === detailTarget.id
+            ) {
+                return detailItemQuery.data
             }
-            if (currentTaskId) {
-                return (
-                    queueItems.find(
-                        (i) =>
-                            i.identity.itemType === "ERROR_TASK" &&
-                            i.identity.id === currentTaskId,
-                    ) ?? queueItems.find((i) => i.identity.id === currentTaskId)
-                )
-            }
-            if (currentDifferenceId) {
-                return queueItems.find(
-                    (i) =>
-                        i.identity.itemType === "RECONCILIATION_DIFFERENCE" &&
-                        i.identity.id === currentDifferenceId,
-                )
-            }
-            return queueItems[0]
-        }, [
-            forcedTaskId,
-            forcedDifferenceId,
-            detailItemQuery.data,
-            queueItems,
-            currentTaskId,
-            currentDifferenceId,
-        ])
+            return queueSelection
+        }, [detailTarget, detailItemQuery.data, queueSelection])
 
     const items = React.useMemo(
         () => (focusMode && item ? [item] : queueItems),
@@ -241,15 +252,13 @@ export function IntegrationErrorsPage({
     const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const [replacementTaskId, setReplacementTaskId] = React.useState("")
-    const [transferRole, setTransferRole] = React.useState("研发运维")
     const [reconReasonId, setReconReasonId] = React.useState("")
     const [comment, setComment] = React.useState("")
     const [terminalConfirm, setTerminalConfirm] =
         React.useState<TerminalConfirm | null>(null)
 
-    const leaseRef = React.useRef<SessionLease | null>(null)
-    const [activeLease, setActiveLease] = React.useState<SessionLease | null>(
-        null,
+    const commandIdentities = React.useRef(
+        new Map<string, { idempotencyKey: string; operationId: string }>(),
     )
     const resultRef = React.useRef<HTMLDivElement>(null)
     const headingRef = React.useRef<HTMLHeadingElement>(null)
@@ -423,11 +432,8 @@ export function IntegrationErrorsPage({
         setActionError(null)
         setComment("")
         setReplacementTaskId("")
-        if (firstReasonId) {
-            setReconReasonId(firstReasonId)
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on item switch
-    }, [item?.identity.id])
+        setReconReasonId(firstReasonId ?? "")
+    }, [item?.identity.id, firstReasonId])
 
     // URL 搜索变化时回写输入框（浏览器前进/后退同步）
     React.useEffect(() => {
@@ -475,35 +481,6 @@ export function IntegrationErrorsPage({
         return () => window.removeEventListener("keydown", onKey)
     }, [])
 
-    // Auto-claim when work_item present
-    React.useEffect(() => {
-        if (!item?.workItem) return
-        if (leaseRef.current?.workItemId === item.workItem.workItemId) return
-        if (claimMutation.isPending) return
-        let cancelled = false
-        void claimMutation
-            .mutateAsync({
-                workItemId: item.workItem.workItemId,
-                subjectVersion: item.workItem.subjectVersion ?? "v1",
-            })
-            .then((lease) => {
-                if (cancelled) return
-                const session: SessionLease = {
-                    workItemId: lease.workItemId,
-                }
-                leaseRef.current = session
-                setActiveLease(session)
-            })
-            .catch((error) => {
-                if (cancelled) return
-                setActionError(getErrorMessage(error, "任务领取失败，请重试"))
-            })
-        return () => {
-            cancelled = true
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- claim on task switch
-    }, [item?.workItem?.workItemId])
-
     React.useEffect(() => {
         if (lastResult) resultRef.current?.focus()
         else if (item) headingRef.current?.focus()
@@ -541,24 +518,6 @@ export function IntegrationErrorsPage({
         [currentIndex, items],
     )
 
-    const ensureLease = React.useCallback(async (): Promise<SessionLease> => {
-        if (!item?.workItem) throw new Error("当前项无关联任务")
-        const existing = leaseRef.current
-        if (existing && existing.workItemId === item.workItem.workItemId) {
-            return existing
-        }
-        const lease = await claimMutation.mutateAsync({
-            workItemId: item.workItem.workItemId,
-            subjectVersion: item.workItem.subjectVersion ?? "v1",
-        })
-        const session: SessionLease = {
-            workItemId: lease.workItemId,
-        }
-        leaseRef.current = session
-        setActiveLease(session)
-        return session
-    }, [claimMutation, item])
-
     const afterResult = React.useCallback(
         (result: IntegrationFormalResult) => {
             setLastResult(result)
@@ -580,84 +539,145 @@ export function IntegrationErrorsPage({
         [autoNext, focusMode, goToItem, neighbor],
     )
 
+    function commandIdentity(kind: string, objectId: string) {
+        const key = `${kind}:${objectId}`
+        const existing = commandIdentities.current.get(key)
+        if (existing) return { key, ...existing }
+        const identity = {
+            idempotencyKey: newKey(`w29:${kind}:${objectId}`),
+            operationId: newKey(`w29:${kind}`),
+        }
+        commandIdentities.current.set(key, identity)
+        return { key, ...identity }
+    }
+
+    const responsibilityStatus: ResponsibilityStatus = (() => {
+        if (!item?.workItem) {
+            return item?.identity.itemType === "RECONCILIATION_DIFFERENCE"
+                ? "assigned_to_me"
+                : "blocked"
+        }
+        const workItem = item.workItem
+        if (workItem.status === "COMPLETED") return "completed"
+        if (workItem.status === "CLOSED") return "closed"
+        if (workItem.processingState === "APPROVAL_BLOCKED") return "blocked"
+        if (workItem.assignmentMode === "POOL" && !workItem.ownerUser) {
+            return "pool_available"
+        }
+        return workItem.ownerUser?.id === profileQuery.data?.userid
+            ? "assigned_to_me"
+            : "assigned_to_other"
+    })()
+
+    async function handleStartProcessing() {
+        if (!item?.workItem) return
+        const identity = commandIdentity(
+            "start-processing",
+            item.workItem.workItemId,
+        )
+        try {
+            await responsibilityMutation.mutateAsync({
+                kind: "START_PROCESSING",
+                workItemId: item.workItem.workItemId,
+                expectedTaskVersion: item.workItem.taskVersion,
+                idempotencyKey: identity.idempotencyKey,
+            })
+            commandIdentities.current.delete(identity.key)
+            await returnRefresh()
+        } catch (error) {
+            setActionError(getErrorMessage(error, "开始处理失败"))
+        }
+    }
+
+    async function handleReleaseToTeam() {
+        if (!item?.workItem || !comment.trim()) {
+            setActionError("请先填写退回原因")
+            return
+        }
+        const identity = commandIdentity(
+            "release-to-team",
+            item.workItem.workItemId,
+        )
+        try {
+            await responsibilityMutation.mutateAsync({
+                kind: "RELEASE_TO_TEAM",
+                workItemId: item.workItem.workItemId,
+                expectedTaskVersion: item.workItem.taskVersion,
+                reason: comment.trim(),
+                idempotencyKey: identity.idempotencyKey,
+            })
+            commandIdentities.current.delete(identity.key)
+            setLastResult({
+                status: "succeeded",
+                title: "已退回团队",
+                description:
+                    "当前事项仍待处理，个人责任已释放；可继续浏览下一项。",
+                workItemStatus: "OPEN",
+                stayOnItem: false,
+                terminal: false,
+            })
+            await returnRefresh()
+        } catch (error) {
+            setActionError(getErrorMessage(error, "退回团队失败"))
+        }
+    }
+
+    const can = (action: IntegrationActionKind) =>
+        Boolean(item?.allowedActions.includes(action))
+
     const runTaskAction = async (
         kind:
             | "QUERY_ORIGINAL_RESULT"
             | "REPLAY_ORIGINAL"
             | "REATTRIBUTE"
             | "LINK_COMPENSATION"
-            | "ADD_EVIDENCE"
-            | "SKIP"
-            | "DEFER",
+            | "ADD_EVIDENCE",
     ) => {
-        if (!item?.workItem) return
+        if (
+            !item?.workItem ||
+            responsibilityStatus !== "assigned_to_me" ||
+            !can(kind)
+        )
+            return
+        const evidenceRefs =
+            kind === "ADD_EVIDENCE" || kind === "LINK_COMPENSATION"
+                ? item.linkedEvidence
+                : undefined
+        if (
+            (kind === "ADD_EVIDENCE" || kind === "LINK_COMPENSATION") &&
+            evidenceRefs?.length === 0
+        ) {
+            setActionError("请先从受控证据入口关联已有证据")
+            return
+        }
+        const identity = commandIdentity(kind, item.identity.id)
         try {
-            await ensureLease()
             const result = await actionMutation.mutateAsync({
                 itemType: item.identity.itemType,
                 itemId: item.identity.id,
                 workItemId: item.workItem.workItemId,
                 expectedSubjectVersion: item.workItem.subjectVersion,
-                expectedWorkItemVersion: item.workItem.workItemVersion,
+                expectedTaskVersion: item.workItem.taskVersion,
                 kind,
-                operationId: newKey("op"),
+                operationId: identity.operationId,
+                idempotencyKey: identity.idempotencyKey,
                 comment: comment || undefined,
-                evidenceRefs:
-                    kind === "ADD_EVIDENCE" || kind === "LINK_COMPENSATION"
-                        ? [
-                              {
-                                  kind:
-                                      kind === "LINK_COMPENSATION"
-                                          ? "COMPENSATION_RESULT"
-                                          : "BUSINESS_OBJECT_VERIFICATION",
-                                  recordId: newKey("evd"),
-                                  label:
-                                      kind === "LINK_COMPENSATION"
-                                          ? "补偿结果"
-                                          : "业务对象核验",
-                              },
-                          ]
-                        : undefined,
+                evidenceRefs,
             })
-            if (kind === "DEFER") {
-                leaseRef.current = null
-                setActiveLease(null)
+            if (result.status === "succeeded") {
+                commandIdentities.current.delete(identity.key)
             }
             afterResult(result)
-            if (
-                kind === "SKIP" &&
-                !result.stayOnItem &&
-                result.status === "succeeded"
-            ) {
-                const next = neighbor(1)
-                if (next) goToItem(next)
-            }
         } catch (e) {
             setActionError(getErrorMessage(e, "动作失败"))
         }
     }
 
-    const leaseActive =
-        Boolean(item?.workItem) &&
-        activeLease?.workItemId === item?.workItem?.workItemId
-
-    const leaseStatus = !item?.workItem
-        ? item && !item.hasWorkItem
-            ? ("active" as const) // direct recon: no lease needed
-            : ("unclaimed" as const)
-        : leaseActive
-          ? ("active" as const)
-          : ("unclaimed" as const)
-
     const formalPending =
         actionMutation.isPending ||
         resolveMutation.isPending ||
-        closeMutation.isPending ||
-        transferMutation.isPending ||
-        directMutation.isPending
-
-    const can = (action: string) =>
-        Boolean(item?.allowedActions.includes(action as never))
+        directMutation.isPending ||
+        responsibilityMutation.isPending
 
     const reconReason =
         item?.reconciliationReasonRegistry?.registeredReasons.find(
@@ -665,7 +685,7 @@ export function IntegrationErrorsPage({
         )
     const reasonMismatches = (
         conclusion: "CONFIRM_NO_ERROR" | "CONFIRM_VALID_DIFFERENCE",
-    ) => Boolean(reconReason && reconReason.conclusion !== conclusion)
+    ) => !reconReason || reconReason.conclusion !== conclusion
 
     const returnRefresh = () => {
         void queueQuery.refetch()
@@ -797,51 +817,39 @@ export function IntegrationErrorsPage({
             ? item.classification.errorClass
             : null
 
-    async function handleTransfer() {
-        if (!item?.workItem) return
-        try {
-            await ensureLease()
-            const result = await transferMutation.mutateAsync({
-                itemType: item.identity.itemType,
-                itemId: item.identity.id,
-                workItemId: item.workItem.workItemId,
-                expectedSubjectVersion: item.workItem.subjectVersion,
-                expectedWorkItemVersion: item.workItem.workItemVersion,
-                operationId: newKey("op"),
-                targetRole: transferRole,
-                reasonCode: "ROLE_MISMATCH",
-                comment: comment || undefined,
-            })
-            afterResult(result)
-        } catch (e) {
-            setActionError(getErrorMessage(e, "转交失败"))
-            throw e
-        }
-    }
-
     async function handleClose(kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED") {
         if (!item?.workItem) return
         if (kind === "CLOSE_DUPLICATE" && !replacementTaskId) {
             setActionError("请先选择替代任务")
             throw new Error("请先选择替代任务")
         }
+        const identity = commandIdentity(kind, item.workItem.workItemId)
         try {
-            await ensureLease()
-            const result = await closeMutation.mutateAsync({
-                itemType: item.identity.itemType,
-                itemId: item.identity.id,
+            await responsibilityMutation.mutateAsync({
+                kind: "CLOSE",
                 workItemId: item.workItem.workItemId,
-                expectedSubjectVersion: item.workItem.subjectVersion,
-                expectedWorkItemVersion: item.workItem.workItemVersion,
-                operationId: newKey("op"),
-                kind,
+                expectedTaskVersion: item.workItem.taskVersion,
                 reasonCode:
                     kind === "CLOSE_DUPLICATE" ? "DUPLICATE" : "MISROUTED",
                 replacementWorkItemId:
                     kind === "CLOSE_DUPLICATE" ? replacementTaskId : undefined,
                 comment: comment || undefined,
+                idempotencyKey: identity.idempotencyKey,
             })
-            afterResult(result)
+            commandIdentities.current.delete(identity.key)
+            afterResult({
+                status: "succeeded",
+                title:
+                    kind === "CLOSE_DUPLICATE"
+                        ? "已关闭重复任务"
+                        : "已关闭误派",
+                description: "仅关闭当前处理任务；未写入业务解决结论。",
+                workItemStatus: "CLOSED",
+                stayOnItem: false,
+                terminal: true,
+                replacementWorkItemId:
+                    kind === "CLOSE_DUPLICATE" ? replacementTaskId : undefined,
+            })
         } catch (e) {
             setActionError(getErrorMessage(e, "关闭失败"))
             throw e
@@ -849,63 +857,43 @@ export function IntegrationErrorsPage({
     }
 
     async function handleResolve() {
-        if (!item?.workItem || !item.resolutionEvidencePolicy) return
+        if (
+            !item?.workItem ||
+            !item.resolutionEvidencePolicy ||
+            responsibilityStatus !== "assigned_to_me" ||
+            !can("RESOLVE")
+        )
+            return
+        const evidence = item.linkedEvidence
+        const kinds = new Set(evidence.map((entry) => entry.kind))
+        if (
+            item.resolutionEvidencePolicy.requiredEvidenceKinds.some(
+                (kind) => !kinds.has(kind),
+            )
+        ) {
+            setActionError("完成凭证尚未齐备，请先从证据入口完成关联")
+            return
+        }
+        const identity = commandIdentity("resolve", item.identity.id)
         try {
-            await ensureLease()
-            const evidence =
-                item.linkedEvidence.length > 0
-                    ? item.linkedEvidence
-                    : item.resolutionEvidencePolicy.requiredEvidenceKinds.map(
-                          (k) => ({
-                              kind: k,
-                              recordId: newKey("pol"),
-                              label: EVIDENCE_KIND_LABEL[k],
-                          }),
-                      )
-            // ensure all required kinds present for resolve attempt
-            const kinds = new Set(evidence.map((e) => e.kind))
-            for (const k of item.resolutionEvidencePolicy
-                .requiredEvidenceKinds) {
-                if (!kinds.has(k)) {
-                    evidence.push({
-                        kind: k,
-                        recordId: newKey("pol"),
-                        label: EVIDENCE_KIND_LABEL[k],
-                    })
-                }
-            }
-            // pre-link so server gate opens
-            if (!can("RESOLVE")) {
-                await actionMutation.mutateAsync({
-                    itemType: item.identity.itemType,
-                    itemId: item.identity.id,
-                    workItemId: item.workItem.workItemId,
-                    expectedSubjectVersion: item.workItem.subjectVersion,
-                    expectedWorkItemVersion: item.workItem.workItemVersion,
-                    kind: "ADD_EVIDENCE",
-                    operationId: newKey("op"),
-                    evidenceRefs: evidence,
-                })
-            }
-            await ensureLease()
             const result = await resolveMutation.mutateAsync({
                 itemType: item.identity.itemType,
                 itemId: item.identity.id,
                 workItemId: item.workItem.workItemId,
                 expectedSubjectVersion: item.workItem.subjectVersion,
-                expectedWorkItemVersion: item.workItem.workItemVersion,
-                operationId: newKey("op"),
+                expectedTaskVersion: item.workItem.taskVersion,
+                operationId: identity.operationId,
+                idempotencyKey: identity.idempotencyKey,
+                reasonCode: "TERMINAL_EVIDENCE_VERIFIED",
                 evidencePolicyId:
                     item.resolutionEvidencePolicy.evidencePolicyId,
                 evidencePolicyVersion:
                     item.resolutionEvidencePolicy.evidencePolicyVersion,
                 policyKey: item.resolutionEvidencePolicy.key,
-                evidenceRefs: evidence as [
-                    (typeof evidence)[number],
-                    ...(typeof evidence)[number][],
-                ],
+                evidenceRefs: evidence,
                 comment: comment || undefined,
             })
+            commandIdentities.current.delete(identity.key)
             afterResult(result)
         } catch (e) {
             setActionError(getErrorMessage(e, "解决失败"))
@@ -916,45 +904,107 @@ export function IntegrationErrorsPage({
     async function handleDirectTerminal(
         conclusion: "CONFIRM_NO_ERROR" | "CONFIRM_VALID_DIFFERENCE",
     ) {
-        if (!item || item.hasWorkItem) return
+        if (
+            !item ||
+            item.hasWorkItem ||
+            item.identity.itemType !== "RECONCILIATION_DIFFERENCE" ||
+            !can(conclusion)
+        )
+            return
         const reg = item.reconciliationReasonRegistry
         if (!reg) return
-        const reason =
-            reg.registeredReasons.find(
-                (r) => r.registeredReasonId === reconReasonId,
-            ) ?? reg.registeredReasons.find((r) => r.conclusion === conclusion)
+        const reason = reg.registeredReasons.find(
+            (r) => r.registeredReasonId === reconReasonId,
+        )
         if (!reason || reason.conclusion !== conclusion) {
             setActionError("请选择与结论匹配的注册原因")
             return
         }
+        const evidence = item.linkedEvidence
+        const evidenceKinds = new Set(evidence.map((entry) => entry.kind))
+        if (
+            reason.requiredEvidenceKinds.some(
+                (kind) => !evidenceKinds.has(kind),
+            )
+        ) {
+            setActionError("结论所需证据尚未齐备")
+            return
+        }
+        const identity = commandIdentity(conclusion, item.identity.id)
         try {
-            const evidence = reason.requiredEvidenceKinds.map((k) => ({
-                kind: k,
-                recordId: newKey("fin"),
-                label: EVIDENCE_KIND_LABEL[k],
-            }))
             const result = await directMutation.mutateAsync({
                 differenceId: item.identity.id,
                 expectedDifferenceVersion: item.objectVersion,
-                expectedSubjectHash: item.identity.subjectHash,
-                operationId: newKey("op"),
+                operationId: identity.operationId,
+                idempotencyKey: identity.idempotencyKey,
                 decision: {
                     kind: "TERMINAL_CONCLUSION",
+                    reasonCode: reason.registeredReasonId,
                     reasonRegistryId: reg.reasonRegistryId,
                     reasonRegistryVersion: reg.reasonRegistryVersion,
                     registeredReasonId: reason.registeredReasonId,
                     conclusion,
-                    evidenceRefs: evidence as [
-                        (typeof evidence)[number],
-                        ...(typeof evidence)[number][],
-                    ],
+                    evidenceRefs: evidence,
                     comment: comment || undefined,
                 },
             })
+            commandIdentities.current.delete(identity.key)
             afterResult(result)
         } catch (e) {
             setActionError(getErrorMessage(e, "对账确认失败"))
             throw e
+        }
+    }
+
+    async function handleDirectAction(
+        kind:
+            | "QUERY_ORIGINAL_RESULT"
+            | "REPLAY_ORIGINAL"
+            | "REATTRIBUTE"
+            | "LINK_COMPENSATION"
+            | "ADD_EVIDENCE",
+    ) {
+        const needsEvidence =
+            kind === "ADD_EVIDENCE" || kind === "LINK_COMPENSATION"
+        if (
+            !item ||
+            item.hasWorkItem ||
+            item.identity.itemType !== "RECONCILIATION_DIFFERENCE" ||
+            !can(kind) ||
+            (needsEvidence && item.linkedEvidence.length === 0)
+        ) {
+            if (needsEvidence && item?.linkedEvidence.length === 0) {
+                setActionError("请先从受控证据入口关联已有证据")
+            }
+            return
+        }
+        const identity = commandIdentity(`direct-${kind}`, item.identity.id)
+        try {
+            const result = await directMutation.mutateAsync({
+                differenceId: item.identity.id,
+                expectedDifferenceVersion: item.objectVersion,
+                operationId: identity.operationId,
+                idempotencyKey: identity.idempotencyKey,
+                decision: {
+                    kind: "NON_TERMINAL_ACTION",
+                    action: kind,
+                    evidenceRefs: needsEvidence
+                        ? item.linkedEvidence
+                        : undefined,
+                    comment: comment || undefined,
+                },
+            })
+            if (result.status === "succeeded") {
+                commandIdentities.current.delete(identity.key)
+            }
+            afterResult(result)
+        } catch (error) {
+            setActionError(
+                getErrorMessage(
+                    error,
+                    `${INTEGRATION_ACTION_LABEL[kind] ?? kind}失败`,
+                ),
+            )
         }
     }
 
@@ -1342,18 +1392,24 @@ export function IntegrationErrorsPage({
                                 <SequentialProcessBar
                                     current={positionIndex}
                                     total={positionTotal}
-                                    leaseStatus={leaseStatus}
-                                    leaseStatusLabel={
+                                    responsibilityStatus={responsibilityStatus}
+                                    responsibilityStatusLabel={
                                         !item.hasWorkItem
-                                            ? "直接对账（无处理任务）"
-                                            : leaseActive
-                                              ? leaseText.active
-                                              : leaseText.unclaimed
+                                            ? item.identity.itemType ===
+                                              "RECONCILIATION_DIFFERENCE"
+                                                ? "直接对账"
+                                                : "责任未配置"
+                                            : item.workItem?.ownerUser
+                                              ? `当前处理人：${item.workItem.ownerUser.displayName}`
+                                              : undefined
                                     }
                                     processLabel="处理当前"
                                     processNextLabel="下一项"
                                     pending={formalPending}
-                                    processDisabled={leaseStatus !== "active"}
+                                    processDisabled={
+                                        responsibilityStatus !==
+                                        "assigned_to_me"
+                                    }
                                     processNextDisabled={false}
                                     showProcessNext={!focusMode}
                                     onBack={() => {
@@ -1375,55 +1431,44 @@ export function IntegrationErrorsPage({
                                         const next = neighbor(1)
                                         if (next) goToItem(next)
                                     }}
-                                    onReclaim={() => {
-                                        void ensureLease().catch((e) =>
-                                            setActionError(
-                                                getErrorMessage(e, "领取失败"),
-                                            ),
+                                    onStartProcessing={
+                                        item.workItem?.allowedActions.includes(
+                                            "START_PROCESSING",
                                         )
-                                    }}
+                                            ? () => void handleStartProcessing()
+                                            : undefined
+                                    }
                                 />
 
-                                <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="secondary"
-                                        disabled={
-                                            !can("DEFER") ||
-                                            !item.workItem ||
-                                            formalPending
-                                        }
-                                        onClick={() =>
-                                            void runTaskAction("DEFER")
-                                        }
-                                    >
-                                        <PauseIcon
-                                            data-icon="inline-start"
-                                            aria-hidden
-                                        />
-                                        先跳过（保留队列）
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={
-                                            !can("SKIP") ||
-                                            !item.workItem ||
-                                            formalPending
-                                        }
-                                        onClick={() =>
-                                            void runTaskAction("SKIP")
-                                        }
-                                    >
-                                        <SkipForwardIcon
-                                            data-icon="inline-start"
-                                            aria-hidden
-                                        />
-                                        跳过
-                                    </Button>
-                                </div>
+                                {item.workItem?.allowedActions.includes(
+                                    "RELEASE_TO_TEAM",
+                                ) ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="secondary"
+                                            disabled={
+                                                responsibilityStatus !==
+                                                    "assigned_to_me" ||
+                                                formalPending ||
+                                                !comment.trim()
+                                            }
+                                            onClick={() =>
+                                                void handleReleaseToTeam()
+                                            }
+                                        >
+                                            <PauseIcon
+                                                data-icon="inline-start"
+                                                aria-hidden
+                                            />
+                                            退回团队
+                                        </Button>
+                                        <span className="self-center text-xs text-muted-foreground">
+                                            使用下方处理说明作为退回原因
+                                        </span>
+                                    </div>
+                                ) : null}
 
                                 <IntegrationItemSummary
                                     item={item}
@@ -1540,7 +1585,8 @@ export function IntegrationErrorsPage({
                                                 <Button
                                                     type="button"
                                                     disabled={
-                                                        !leaseActive ||
+                                                        responsibilityStatus !==
+                                                            "assigned_to_me" ||
                                                         formalPending
                                                     }
                                                     onClick={() =>
@@ -1558,7 +1604,8 @@ export function IntegrationErrorsPage({
                                                     type="button"
                                                     variant="secondary"
                                                     disabled={
-                                                        !leaseActive ||
+                                                        responsibilityStatus !==
+                                                            "assigned_to_me" ||
                                                         formalPending
                                                     }
                                                     onClick={() =>
@@ -1576,7 +1623,8 @@ export function IntegrationErrorsPage({
                                                     type="button"
                                                     variant="outline"
                                                     disabled={
-                                                        !leaseActive ||
+                                                        responsibilityStatus !==
+                                                            "assigned_to_me" ||
                                                         formalPending
                                                     }
                                                     onClick={() =>
@@ -1594,7 +1642,8 @@ export function IntegrationErrorsPage({
                                                     type="button"
                                                     variant="outline"
                                                     disabled={
-                                                        !leaseActive ||
+                                                        responsibilityStatus !==
+                                                            "assigned_to_me" ||
                                                         formalPending
                                                     }
                                                     onClick={() =>
@@ -1612,7 +1661,8 @@ export function IntegrationErrorsPage({
                                                     type="button"
                                                     variant="outline"
                                                     disabled={
-                                                        !leaseActive ||
+                                                        responsibilityStatus !==
+                                                            "assigned_to_me" ||
                                                         formalPending
                                                     }
                                                     onClick={() =>
@@ -1624,47 +1674,14 @@ export function IntegrationErrorsPage({
                                                     重新归集
                                                 </Button>
                                             ) : null}
-                                            {can("TRANSFER") &&
-                                            item.workItem ? (
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <OptionCombobox
-                                                        value={transferRole}
-                                                        onValueChange={(v) =>
-                                                            setTransferRole(
-                                                                v ?? "研发运维",
-                                                            )
-                                                        }
-                                                        options={
-                                                            TRANSFER_ROLE_OPTIONS
-                                                        }
-                                                        className="w-32"
-                                                        size="sm"
-                                                        allowClear={false}
-                                                        aria-label="转交目标角色"
-                                                        placeholder="目标角色"
-                                                    />
-                                                    <Button
-                                                        type="button"
-                                                        variant="secondary"
-                                                        disabled={
-                                                            !leaseActive ||
-                                                            formalPending
-                                                        }
-                                                        onClick={() =>
-                                                            setTerminalConfirm({
-                                                                kind: "TRANSFER",
-                                                            })
-                                                        }
-                                                    >
-                                                        转交
-                                                    </Button>
-                                                </div>
-                                            ) : null}
-                                            {can("RESOLVE") && item.workItem ? (
+                                            {can("RESOLVE") &&
+                                            item.workItem &&
+                                            item.resolutionEvidencePolicy ? (
                                                 <Button
                                                     type="button"
                                                     disabled={
-                                                        !leaseActive ||
+                                                        responsibilityStatus !==
+                                                            "assigned_to_me" ||
                                                         formalPending
                                                     }
                                                     onClick={() =>
@@ -1676,8 +1693,9 @@ export function IntegrationErrorsPage({
                                                     标记已解决
                                                 </Button>
                                             ) : null}
-                                            {can("CLOSE_DUPLICATE") &&
-                                            item.workItem ? (
+                                            {item.workItem?.allowedActions.includes(
+                                                "CLOSE",
+                                            ) ? (
                                                 <div className="flex w-full flex-wrap items-end gap-2 rounded-lg border p-2">
                                                     <div className="space-y-1">
                                                         <Label className="text-xs">
@@ -1709,7 +1727,6 @@ export function IntegrationErrorsPage({
                                                         type="button"
                                                         size="sm"
                                                         disabled={
-                                                            !leaseActive ||
                                                             formalPending ||
                                                             !replacementTaskId
                                                         }
@@ -1721,12 +1738,27 @@ export function IntegrationErrorsPage({
                                                     >
                                                         关闭重复
                                                     </Button>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        disabled={formalPending}
+                                                        onClick={() =>
+                                                            setTerminalConfirm({
+                                                                kind: "CLOSE_MISROUTED",
+                                                            })
+                                                        }
+                                                    >
+                                                        关闭误派
+                                                    </Button>
                                                 </div>
                                             ) : null}
                                         </div>
 
                                         {/* Direct reconciliation */}
-                                        {!item.hasWorkItem ? (
+                                        {item.identity.itemType ===
+                                            "RECONCILIATION_DIFFERENCE" &&
+                                        !item.hasWorkItem ? (
                                             <div className="space-y-3 rounded-xl border border-dashed p-3">
                                                 <p className="text-sm font-medium">
                                                     直接对账（无关联任务）
@@ -1762,104 +1794,53 @@ export function IntegrationErrorsPage({
                                                             allowClear={false}
                                                         />
                                                         <div className="flex flex-wrap gap-2">
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                disabled={
-                                                                    !can(
-                                                                        "CONFIRM_NO_ERROR",
-                                                                    ) ||
-                                                                    formalPending ||
-                                                                    reasonMismatches(
-                                                                        "CONFIRM_NO_ERROR",
-                                                                    )
-                                                                }
-                                                                onClick={() =>
-                                                                    setTerminalConfirm(
-                                                                        {
-                                                                            kind: "CONFIRM_NO_ERROR",
-                                                                        },
-                                                                    )
-                                                                }
-                                                            >
-                                                                确认无误
-                                                            </Button>
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="secondary"
-                                                                disabled={
-                                                                    !can(
-                                                                        "CONFIRM_VALID_DIFFERENCE",
-                                                                    ) ||
-                                                                    formalPending ||
-                                                                    reasonMismatches(
-                                                                        "CONFIRM_VALID_DIFFERENCE",
-                                                                    )
-                                                                }
-                                                                onClick={() =>
-                                                                    setTerminalConfirm(
-                                                                        {
-                                                                            kind: "CONFIRM_VALID_DIFFERENCE",
-                                                                        },
-                                                                    )
-                                                                }
-                                                            >
-                                                                确认有效差异
-                                                            </Button>
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="outline"
-                                                                disabled={
-                                                                    formalPending
-                                                                }
-                                                                onClick={() => {
-                                                                    void directMutation
-                                                                        .mutateAsync(
+                                                            {can(
+                                                                "CONFIRM_NO_ERROR",
+                                                            ) ? (
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    disabled={
+                                                                        formalPending ||
+                                                                        reasonMismatches(
+                                                                            "CONFIRM_NO_ERROR",
+                                                                        )
+                                                                    }
+                                                                    onClick={() =>
+                                                                        setTerminalConfirm(
                                                                             {
-                                                                                differenceId:
-                                                                                    item
-                                                                                        .identity
-                                                                                        .id,
-                                                                                expectedDifferenceVersion:
-                                                                                    item.objectVersion,
-                                                                                expectedSubjectHash:
-                                                                                    item
-                                                                                        .identity
-                                                                                        .subjectHash,
-                                                                                operationId:
-                                                                                    newKey(
-                                                                                        "op",
-                                                                                    ),
-                                                                                decision:
-                                                                                    {
-                                                                                        kind: "NON_TERMINAL_ACTION",
-                                                                                        action: "ADD_EVIDENCE",
-                                                                                        evidenceRefs:
-                                                                                            [
-                                                                                                {
-                                                                                                    kind: "FINANCIAL_RECONCILIATION",
-                                                                                                    recordId:
-                                                                                                        newKey(
-                                                                                                            "fin",
-                                                                                                        ),
-                                                                                                    label: "补充财务对账证据",
-                                                                                                },
-                                                                                            ],
-                                                                                        comment:
-                                                                                            comment ||
-                                                                                            undefined,
-                                                                                    },
+                                                                                kind: "CONFIRM_NO_ERROR",
                                                                             },
                                                                         )
-                                                                        .then(
-                                                                            afterResult,
+                                                                    }
+                                                                >
+                                                                    确认无误
+                                                                </Button>
+                                                            ) : null}
+                                                            {can(
+                                                                "CONFIRM_VALID_DIFFERENCE",
+                                                            ) ? (
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="secondary"
+                                                                    disabled={
+                                                                        formalPending ||
+                                                                        reasonMismatches(
+                                                                            "CONFIRM_VALID_DIFFERENCE",
                                                                         )
-                                                                }}
-                                                            >
-                                                                补充证据（暂不完成对账）
-                                                            </Button>
+                                                                    }
+                                                                    onClick={() =>
+                                                                        setTerminalConfirm(
+                                                                            {
+                                                                                kind: "CONFIRM_VALID_DIFFERENCE",
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    确认有效差异
+                                                                </Button>
+                                                            ) : null}
                                                         </div>
                                                     </>
                                                 ) : (
@@ -1868,10 +1849,109 @@ export function IntegrationErrorsPage({
                                                             原因注册表未配置
                                                         </AlertTitle>
                                                         <AlertDescription>
-                                                            确认无误/有效差异均禁用；只能补证或转为任务。
+                                                            确认无误/有效差异均禁用；仅展示服务端当前开放的非终结动作。
                                                         </AlertDescription>
                                                     </Alert>
                                                 )}
+                                                <div className="flex flex-wrap gap-2">
+                                                    {can(
+                                                        "QUERY_ORIGINAL_RESULT",
+                                                    ) ? (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={
+                                                                formalPending
+                                                            }
+                                                            onClick={() =>
+                                                                void handleDirectAction(
+                                                                    "QUERY_ORIGINAL_RESULT",
+                                                                )
+                                                            }
+                                                        >
+                                                            查询原结果
+                                                        </Button>
+                                                    ) : null}
+                                                    {can("REPLAY_ORIGINAL") ? (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={
+                                                                formalPending
+                                                            }
+                                                            onClick={() =>
+                                                                void handleDirectAction(
+                                                                    "REPLAY_ORIGINAL",
+                                                                )
+                                                            }
+                                                        >
+                                                            重新提交
+                                                        </Button>
+                                                    ) : null}
+                                                    {can("REATTRIBUTE") ? (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={
+                                                                formalPending
+                                                            }
+                                                            onClick={() =>
+                                                                void handleDirectAction(
+                                                                    "REATTRIBUTE",
+                                                                )
+                                                            }
+                                                        >
+                                                            重新归集
+                                                        </Button>
+                                                    ) : null}
+                                                    {can(
+                                                        "LINK_COMPENSATION",
+                                                    ) ? (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={
+                                                                formalPending ||
+                                                                item
+                                                                    .linkedEvidence
+                                                                    .length ===
+                                                                    0
+                                                            }
+                                                            onClick={() =>
+                                                                void handleDirectAction(
+                                                                    "LINK_COMPENSATION",
+                                                                )
+                                                            }
+                                                        >
+                                                            关联补偿
+                                                        </Button>
+                                                    ) : null}
+                                                    {can("ADD_EVIDENCE") ? (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={
+                                                                formalPending ||
+                                                                item
+                                                                    .linkedEvidence
+                                                                    .length ===
+                                                                    0
+                                                            }
+                                                            onClick={() =>
+                                                                void handleDirectAction(
+                                                                    "ADD_EVIDENCE",
+                                                                )
+                                                            }
+                                                        >
+                                                            补充证据（暂不完成对账）
+                                                        </Button>
+                                                    ) : null}
+                                                </div>
                                             </div>
                                         ) : null}
                                     </CardContent>
@@ -1881,17 +1961,18 @@ export function IntegrationErrorsPage({
                                     <TerminalActionDialog
                                         confirm={terminalConfirm}
                                         item={item}
-                                        transferRole={transferRole}
                                         pending={formalPending}
                                         onConfirm={async () => {
                                             const kind = terminalConfirm.kind
-                                            if (kind === "TRANSFER") {
-                                                await handleTransfer()
-                                            } else if (
-                                                kind === "CLOSE_DUPLICATE"
-                                            ) {
+                                            if (kind === "CLOSE_DUPLICATE") {
                                                 await handleClose(
                                                     "CLOSE_DUPLICATE",
+                                                )
+                                            } else if (
+                                                kind === "CLOSE_MISROUTED"
+                                            ) {
+                                                await handleClose(
+                                                    "CLOSE_MISROUTED",
                                                 )
                                             } else if (kind === "RESOLVE") {
                                                 await handleResolve()

@@ -4,7 +4,7 @@
  * 导出签名保持与 hooks/queries.ts 一致；Page 形状经 mappers.ts 适配为 feature view。
  */
 
-import { apiGet } from "@/lib/api"
+import { apiGet, apiPost } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 import {
     type BackendBatchDetail,
@@ -23,7 +23,10 @@ import {
 import type {
     ImportBatchListQuery,
     ImportBatchListView,
+    ImportBatchDetailContext,
     ImportBatchView,
+    ImportExecutionAction,
+    ImportExecutionResult,
     ImportIssuePage,
     ImportIssueQuery,
 } from "@/features/import-opening/types"
@@ -83,9 +86,9 @@ export async function fetchImportBatchList(
     }
 }
 
-export async function fetchImportBatchDetail(input: {
-    batchId: string
-}): Promise<ImportBatchView | null> {
+export async function fetchImportBatchDetail(
+    input: ImportBatchDetailContext,
+): Promise<ImportBatchView | null> {
     let batch: BackendBatchDetail
     try {
         batch = await apiGet<BackendBatchDetail>(
@@ -105,7 +108,114 @@ export async function fetchImportBatchDetail(input: {
     )
 
     // environment 后端无字段 — 默认 PRODUCTION 展示（缺口见 evidence）
-    return buildBatchView(batch, confPage.items, "PRODUCTION")
+    return buildBatchView(batch, confPage.items, "PRODUCTION", input)
+}
+
+export type CompleteImportConfirmationInput = Readonly<{
+    batchId: string
+    batchVersion: string
+    trialVersion: string
+    confirmationScope: string
+    workItemId: string
+    taskVersion: string
+    subjectVersion: string
+    action: "CONFIRM_SCOPE" | "RETURN_FOR_FIX"
+    reasonCode?: string
+    comment?: string
+    idempotencyKey: string
+}>
+
+/** 从团队责任池建立当前用户责任；返回值由详情查询重新取得。 */
+export async function startImportConfirmationProcessing(input: {
+    workItemId: string
+    expectedTaskVersion: string
+    idempotencyKey: string
+}): Promise<void> {
+    await apiPost(
+        `/admin/work-items/${encodeURIComponent(input.workItemId)}/start-processing`,
+        {
+            expected_task_version: input.expectedTaskVersion,
+            idempotency_key: input.idempotencyKey,
+        },
+    )
+}
+
+/** 提交 W18 唯一强类型业务确认命令；领域事实与任务终态由服务端同事务写入。 */
+export async function completeImportConfirmation(
+    input: CompleteImportConfirmationInput,
+): Promise<void> {
+    await apiPost("/admin/legacy-import-confirmations/complete", {
+        work_item_id: input.workItemId,
+        expected_task_version: input.taskVersion,
+        expected_subject_version: input.subjectVersion,
+        decision: {
+            batch_id: input.batchId,
+            expected_batch_version: input.batchVersion,
+            expected_trial_version: input.trialVersion,
+            confirmation_scope: input.confirmationScope,
+            action: input.action,
+            reason_code: input.reasonCode,
+            comment: input.comment,
+        },
+        idempotency_key: input.idempotencyKey,
+    })
+}
+
+export type ExecuteImportCommandInput = Readonly<{
+    batchId: string
+    expectedBatchVersion: string
+    expectedTrialVersion?: string
+    action: ImportExecutionAction
+    reasonCode?: string
+    comment?: string
+    requestId: string
+}>
+
+type BackendImportExecutionResult = {
+    action: ImportExecutionAction
+    result_status: ImportExecutionResult["resultStatus"]
+    batch_id: string
+    batch_status: string
+    batch_version: string
+    trial_version?: string | null
+    background_job_id: string
+    background_job_status: string
+    background_job_version: string
+    affected_items: number
+    next_step: ImportExecutionResult["nextStep"]
+    audit_receipt: string
+}
+
+/** 执行独立导入应用强命令；业务确认本身不得调用本端点启动后台任务。 */
+export async function executeImportCommand(
+    input: ExecuteImportCommandInput,
+): Promise<ImportExecutionResult> {
+    const result = await apiPost<BackendImportExecutionResult>(
+        `/admin/legacy-import-batches/${encodeURIComponent(input.batchId)}/commands`,
+        {
+            batch_id: input.batchId,
+            expected_batch_version: input.expectedBatchVersion,
+            expected_trial_version: input.expectedTrialVersion,
+            action: input.action,
+            reason_code: input.reasonCode,
+            comment: input.comment,
+            request_id: input.requestId,
+        },
+    )
+    return {
+        action: result.action,
+        resultStatus: result.result_status,
+        batchId: result.batch_id,
+        batchStatus: result.batch_status,
+        batchVersion: result.batch_version,
+        trialVersion: result.trial_version ?? undefined,
+        backgroundJobId: result.background_job_id,
+        backgroundJobStatus: result.background_job_status,
+        backgroundJobVersion: result.background_job_version,
+        affectedItems: result.affected_items,
+        nextStep: result.next_step,
+        auditReceipt: result.audit_receipt,
+    }
 }
 
 export async function fetchImportIssues(

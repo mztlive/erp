@@ -3,7 +3,7 @@
 //! 消息层/业务事实层幂等由唯一索引保证，服务层不做「先查后插」重复性判断；
 //! 所有业务写入与审计日志在同一 MongoDB 事务原子提交（模板见 `super::transaction`）。
 
-use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, SourceRegistryExt};
+use database::{AccessControlExt, IntegrationOpsExt, NoTransaction, SourceRegistryExt, WorkItemExt};
 use entities::common::time::Instant;
 use entities::integration_ops::{
     InboxMessage, InboxMessageData, InboxMessageId, InboxMessageStatus, InboxMessageUpdate,
@@ -13,6 +13,7 @@ use id_generator::next_id;
 use validator::Validate;
 
 use super::dto::SortDir;
+use super::producer::{error_owner_role, error_work_item};
 use super::validation::ensure_version;
 use super::{
     InboxMessageFilter, InboxMessageListParams, InboxMessageListView, InboxMessageView,
@@ -219,16 +220,20 @@ impl IntegrationOpsService {
                     status: Some(InboxMessageStatus::Failed),
                     processed_at: None,
                 })?;
-                let task = IntegrationErrorTask::new(
+                let mut task = IntegrationErrorTask::new(
                     IntegrationErrorTaskId::new(next_id()),
                     IntegrationErrorTaskData {
                         message_id: Some(InboxMessageId::new(message.base.id.clone())),
                         business_object_id: None,
                         error_class,
-                        owner_role: req.owner_role,
-                        owner_user_id: req.owner_user_id,
+                        owner_role: Some(error_owner_role(error_class).to_string()),
+                        owner_user_id: None,
                     },
                 )?;
+                if req.attempt_summary.is_some() {
+                    task.record_attempt(processed_at, req.attempt_summary)?;
+                }
+                let work_item = error_work_item(&task)?;
                 let audit = actor.clone().resource_log(
                     "inbox_message.failed",
                     "inbox_message",
@@ -241,6 +246,7 @@ impl IntegrationOpsService {
                             db.integration_ops()
                                 .create_error_task_with_message_failure(&task, &mut stored, session)
                                 .await?;
+                            db.work_items().create(&work_item, session).await?;
                             db.audit_logs().create(&audit, session).await?;
                             Ok(stored)
                         })

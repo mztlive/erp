@@ -47,6 +47,7 @@ import {
     taxRateValid,
 } from "@/features/purchase-orders/lib/purchase-order-validation"
 import { cn } from "@/lib/utils"
+import { responsibilityText } from "@/lib/ui-text"
 
 export function LinesTable({
     order,
@@ -500,13 +501,25 @@ export function ReviewSurface({
     order,
     reviewForm,
     pending,
+    canApprove,
+    canReject,
+    canStartProcessing,
+    canReleaseToTeam,
     onApprove,
+    onStartProcessing,
+    onReleaseToTeam,
     costMasked,
 }: {
     order: NonNullable<ReturnType<typeof usePurchaseOrderCenterQuery>["data"]>
     reviewForm: ReturnType<typeof useAppForm>
     pending: boolean
+    canApprove: boolean
+    canReject: boolean
+    canStartProcessing: boolean
+    canReleaseToTeam: boolean
     onApprove: () => void
+    onStartProcessing: () => void
+    onReleaseToTeam: () => void
     costMasked: boolean
 }) {
     return (
@@ -518,6 +531,27 @@ export function ReviewSurface({
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
+                <Alert>
+                    <AlertTitle>
+                        {order.reviewWorkItem?.processingState ===
+                        "APPROVAL_BLOCKED"
+                            ? responsibilityText.blocked
+                            : canStartProcessing
+                              ? responsibilityText.poolAvailable
+                              : canApprove || canReject
+                                ? responsibilityText.assignedToMe
+                                : responsibilityText.assignedToOther}
+                    </AlertTitle>
+                    <AlertDescription>
+                        {order.reviewWorkItem?.actionBlockers[0]?.message ??
+                            (canStartProcessing
+                                ? "开始处理成功后才能提交财务决定。"
+                                : canApprove || canReject
+                                  ? "当前责任与提交版本均已确认，可提交允许的审核决定。"
+                                  : "当前页面只读；处理权变化后请刷新。")}
+                    </AlertDescription>
+                </Alert>
+
                 <Alert>
                     <AlertTitle>本次提交内容</AlertTitle>
                     <AlertDescription>
@@ -554,13 +588,32 @@ export function ReviewSurface({
                 <Separator />
 
                 <div className="flex flex-wrap items-end gap-3">
+                    {canStartProcessing ? (
+                        <Button
+                            type="button"
+                            disabled={pending}
+                            onClick={onStartProcessing}
+                        >
+                            {responsibilityText.start}
+                        </Button>
+                    ) : null}
                     <Button
                         type="button"
-                        disabled={pending || !order.reviewWorkItem}
+                        disabled={pending || !canApprove}
                         onClick={onApprove}
                     >
                         通过
                     </Button>
+                    {canReleaseToTeam ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={onReleaseToTeam}
+                        >
+                            {responsibilityText.releaseToTeam}
+                        </Button>
+                    ) : null}
                 </div>
 
                 <form
@@ -610,7 +663,7 @@ export function ReviewSurface({
                     <reviewForm.AppForm>
                         <reviewForm.SubmitButton
                             label={pending ? "提交中…" : "确认驳回"}
-                            disabled={!order.reviewWorkItem}
+                            disabled={!canReject || pending}
                         />
                     </reviewForm.AppForm>
                 </form>

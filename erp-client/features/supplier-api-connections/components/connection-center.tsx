@@ -169,6 +169,14 @@ export function ConnectionCenter({
     const isProd = conn.environment === "PRODUCTION"
     const authFailed = conn.lastHealth?.result === "AUTH_FAILED"
     const resultUnknown = conn.lastHealth?.result === "UNKNOWN"
+    const actionBlocker = (action: string) =>
+        conn.actionBlockers.find((blocker) => blocker.action === action)
+    const canRunHealth = conn.allowedActions.includes("RUN_HEALTH_CHECK")
+    const canEnable = conn.allowedActions.includes("ENABLE")
+    const canDisable = conn.allowedActions.includes("DISABLE")
+    const healthBlocker = actionBlocker("RUN_HEALTH_CHECK")
+    const enableBlocker = actionBlocker("ENABLE")
+    const disableBlocker = actionBlocker("DISABLE")
 
     return (
         <PageScaffold>
@@ -265,34 +273,40 @@ export function ConnectionCenter({
                 ]}
                 primaryAction={
                     <div className="flex flex-wrap gap-2">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={runHealth.isPending}
-                            onClick={() => setConfirmHealthOpen(true)}
-                        >
-                            <RefreshCwIcon
-                                className="size-4"
-                                aria-hidden="true"
-                            />
-                            健康检查
-                        </Button>
-                        {conn.status !== "ENABLED" ? (
+                        {canRunHealth || healthBlocker ? (
                             <Button
                                 type="button"
                                 size="sm"
-                                disabled={enableMut.isPending}
+                                variant="outline"
+                                disabled={!canRunHealth || runHealth.isPending}
+                                title={healthBlocker?.message}
+                                onClick={() => setConfirmHealthOpen(true)}
+                            >
+                                <RefreshCwIcon
+                                    className="size-4"
+                                    aria-hidden="true"
+                                />
+                                健康检查
+                            </Button>
+                        ) : null}
+                        {canEnable || enableBlocker ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={!canEnable || enableMut.isPending}
+                                title={enableBlocker?.message}
                                 onClick={() => setConfirmEnableOpen(true)}
                             >
                                 启用连接
                             </Button>
                         ) : null}
-                        {conn.status === "ENABLED" ? (
+                        {canDisable || disableBlocker ? (
                             <Button
                                 type="button"
                                 size="sm"
                                 variant="destructive"
+                                disabled={!canDisable || disableMut.isPending}
+                                title={disableBlocker?.message}
                                 onClick={() => setDisableOpen(true)}
                             >
                                 停用连接
@@ -431,6 +445,7 @@ export function ConnectionCenter({
                             onSync={async () => {
                                 const outcome = await startCatalog.mutateAsync({
                                     connectionId: conn.connectionId,
+                                    expectedVersion: conn.version,
                                     idempotencyKey:
                                         newIdempotencyKey("catalog"),
                                 })
@@ -535,7 +550,7 @@ export function ConnectionCenter({
                         <Button
                             type="button"
                             variant="destructive"
-                            disabled={disableMut.isPending}
+                            disabled={!canDisable || disableMut.isPending}
                             onClick={async () => {
                                 const outcome = await disableMut.mutateAsync({
                                     connectionId: conn.connectionId,
@@ -613,7 +628,13 @@ export function ConnectionCenter({
                         </Button>
                         <Button
                             type="button"
-                            disabled={!selectedRef || bindCred.isPending}
+                            disabled={
+                                !conn.allowedActions.includes(
+                                    "BIND_CREDENTIAL_REFERENCE",
+                                ) ||
+                                !selectedRef ||
+                                bindCred.isPending
+                            }
                             onClick={async () => {
                                 const outcome = await bindCred.mutateAsync({
                                     connectionId: conn.connectionId,
@@ -695,7 +716,11 @@ export function ConnectionCenter({
                         <Button
                             type="button"
                             disabled={
-                                !selectedEndpointRef || bindEndpoint.isPending
+                                !conn.allowedActions.includes(
+                                    "BIND_ENDPOINT_REFERENCE",
+                                ) ||
+                                !selectedEndpointRef ||
+                                bindEndpoint.isPending
                             }
                             onClick={async () => {
                                 const outcome = await bindEndpoint.mutateAsync({
@@ -745,12 +770,13 @@ export function ConnectionCenter({
                         </Button>
                         <Button
                             type="button"
-                            disabled={runHealth.isPending}
+                            disabled={!canRunHealth || runHealth.isPending}
                             onClick={async () => {
                                 const outcome = await runHealth.mutateAsync({
                                     connectionId: conn.connectionId,
                                     expectedVersion: conn.version,
                                     idempotencyKey: newIdempotencyKey("health"),
+                                    checkType: conn.healthCheckTypes[0]!,
                                 })
                                 applyOutcome(outcome)
                                 setConfirmHealthOpen(false)
@@ -791,7 +817,7 @@ export function ConnectionCenter({
                         </Button>
                         <Button
                             type="button"
-                            disabled={enableMut.isPending}
+                            disabled={!canEnable || enableMut.isPending}
                             onClick={async () => {
                                 const outcome = await enableMut.mutateAsync({
                                     connectionId: conn.connectionId,

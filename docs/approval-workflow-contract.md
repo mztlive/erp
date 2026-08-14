@@ -62,7 +62,7 @@
 | 字段 | 约束 |
 | --- | --- |
 | `definition_key` | 稳定业务编码；同义流程不得另建编码 |
-| `version` | 同一 `definition_key` 内单调递增 |
+| `version` | 同一 `definition_key` 内单调递增；MongoDB 物理字段固定为 `definition_version`，避免与持久化乐观锁 `version` 重名 |
 | `name` | 管理与审计名称 |
 | `runtime_kind` | `INTERNAL` 或 `BPM` |
 | `status` | `DRAFT`、`PUBLISHED`、`RETIRED` |
@@ -95,6 +95,11 @@
 步骤冻结；`PUBLISHED` 和 `RETIRED` 定义及步骤均不可修改。任一校验失败时禁止发布。
 `start_approval` 只能选择 `PUBLISHED` 定义。当前阶段发布由代码和部署清单完成，不提供管理端配置页面。
 
+定义版本升级必须在同一事务内按以下顺序执行：创建并完整校验新版本 `DRAFT`
+及其全部步骤、将当前唯一 `PUBLISHED` 版本退役为 `RETIRED`、再发布新版本。
+禁止先退役旧版本后在事务外补建新版本，也禁止覆盖已发布内容。既有实例继续按启动时冻结的
+`definition_key + definition_version` 读取已退役定义，只有新实例使用新发布版本。
+
 ## 5. 运行实例合同
 
 ### 5.1 审批实例
@@ -107,6 +112,8 @@
 | `runtime_kind` | 从定义复制；运行中不得切换 |
 | `business_object_type` / `business_object_id` | 稳定业务对象身份 |
 | `subject_version` | 被审批的不可变提交或业务版本 |
+| `start_idempotency_key` | 启动命令业务幂等键；同一 `definition_key` 内永久唯一，重复请求必须回读原实例并校验请求事实完全一致 |
+| `owner_organization_id` | 启动时冻结的责任组织；处理人尚未解析、没有待办时仍用于阻塞列表授权过滤和恢复 |
 | `instance_version` | API 对实例持久化乐观锁版本的命名；每次实例写入后递增 |
 | `status` | `RUNNING`、`APPROVED`、`REJECTED`、`TERMINATED`、`CANCELLED`、`BLOCKED` |
 | `current_step_instance_id` | `RUNNING` 或 `BLOCKED` 时指向当前步骤；终态必须为空 |
@@ -114,7 +121,8 @@
 | `blocker_code` / `blocked_at` | 仅 `BLOCKED` 时必填；保存当前结构化阻塞原因和进入时间 |
 | `started_by` / `started_at` / `ended_at` | 运行审计 |
 
-同一业务对象和 `subject_version` 对同一审批定义同时最多存在一个非终态实例。
+同一业务对象和 `subject_version` 对同一审批定义同时最多存在一个非终态实例。启动重试必须先按
+`definition_key + start_idempotency_key` 查询；同键不同业务对象、提交版本或启动人必须返回冲突，不得覆盖原实例。
 
 ### 5.2 步骤实例
 

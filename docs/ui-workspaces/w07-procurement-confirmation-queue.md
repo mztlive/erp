@@ -463,7 +463,9 @@ type CompleteProcurementConfirmationResult = {
 
 `CompleteProcurementConfirmationCommand` 是 `PROCUREMENT_CONFIRMATION` 注册的唯一强类型完成命令。请求携带 `workItemId`、`expectedTaskVersion`、`expectedSubjectVersion` 和 `decision`；其中 `expectedTaskVersion` 对应当前任务版本，`expectedSubjectVersion` 对应不可变销售提交版本，`expectedConfirmationEditVersion` 保护采购确认工作数据版本。W07 不得改用公共任务完成接口。
 
-通过或驳回时，服务端在同一事务重读提交与确认版本，写该次采购确认的正式 `APPROVED` / `REJECTED` 事实及销售生效/退回结果、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`。驳回结果以 `successorWorkItemId?: never` 明确禁止本事务创建后继任务，只返回三条固定销售出路。销售在 W05 完成合法出路后，才可能为新的不可变提交创建全新的采购确认任务。任一部分失败均整体回滚；前端不得在业务请求成功后再补发“完成任务”。
+正式决定端点固定为 `POST /admin/procurement-confirmations/{confirmationId}/decisions`。`APPROVED` 与 `REJECTED` 必须通过同一命令的嵌套 `decision.reviewResult` 区分；系统不得保留 `/approve`、`/reject` 兼容端点，也不得接受客户端重复提交 `salesOrderId` 作为对象身份依据。
+
+通过或驳回时，服务端在同一事务重读当前账号、对象读取权限、数据范围、对象参与事实、提交与确认版本；当前账号仅为 `work_item.ownerUserId` 不构成访问豁免。全部校验通过后，服务端写该次采购确认的正式 `APPROVED` / `REJECTED` 事实及销售生效/退回结果、追加 `workflow_action`，并把当前 `work_item` 置为 `COMPLETED`。驳回结果以 `successorWorkItemId?: never` 明确禁止本事务创建后继任务，只返回三条固定销售出路。销售在 W05 完成合法出路后，才可能为新的不可变提交创建全新的采购确认任务。任一部分失败均整体回滚；前端不得在业务请求成功后再补发“完成任务”。
 
 新 W07 任务的 `resubmissionContext` 由服务端从提交谱系生成。`CHANGED_TERMS_AFTER_REJECTION` 必须关联改品/改价后的新提交；`LOW_MARGIN_MANAGER_APPROVED` 必须同时关联已完成上级确认的受控证据。两种来源都使用本任务的新 `submissionId`，并在提交时重新校验；旧驳回任务或上级任务均不能作为本任务的完成依据。
 

@@ -3,6 +3,12 @@
  * 第一阶段：商城 → ERP 商业记录单向同步；无 ERP 回写商业修改入口。
  */
 
+import type {
+    AssignmentMode,
+    WorkItemAllowedAction,
+    WorkItemStatus,
+} from "@/features/work-items"
+
 export type MallSyncViewName =
     | "overview"
     | "jobs"
@@ -11,20 +17,9 @@ export type MallSyncViewName =
     | "reconciliation"
     | "history"
 
-export type OwnershipStage = "FIRST_PHASE_MALL_OWNED" | "SECOND_PHASE_ERP_OWNED"
+export type OwnershipStage = "FIRST_PHASE_MALL_OWNED" | "ARCHIVED"
 
 export type SyncDirection = "MALL_TO_ERP_COMMERCIAL_FACT" | "SEALED_HISTORY"
-
-type ManualGovernancePolicy =
-    | {
-          state: "MISSING"
-          blockerCode: "MANUAL_GOVERNANCE_POLICY_MISSING"
-      }
-    | {
-          state: "CONFIGURED"
-          policyVersion: string
-          executionMode: "SINGLE_OPERATOR_REASON" | "DUAL_CONTROL_AUTHORIZATION"
-      }
 
 export type MallSyncMetric = {
     key: string
@@ -61,7 +56,6 @@ type MallSyncContext = {
         name: string
         environmentLabel: string
     }
-    manualGovernancePolicy: ManualGovernancePolicy
     ownership: MallSyncOwnership
     freshness: {
         currentWatermark?: string
@@ -125,23 +119,19 @@ export type MallSnapshotRow = {
     whitelistFields: Array<{ field: string; label: string; value: string }>
 }
 
-type MappingTaskWorkItemView = {
+export type MappingTaskWorkItemView = {
     workItemId: string
     workItemType: "BUSINESS_EXCEPTION"
     businessObjectType: "MASTER_MAPPING_TASK"
     businessObjectId: string
     subjectVersion: string
-    subjectHash: string
-    status:
-        | "UNCLAIMED"
-        | "PENDING"
-        | "IN_PROGRESS"
-        | "COMPLETED"
-        | "TRANSFERRED"
-        | "CLOSED"
+    taskVersion: string
+    status: WorkItemStatus
     statusLabel: string
-    completionAction: string
-    claimedBy?: string
+    assignmentMode: AssignmentMode
+    processingState: "READY" | "APPROVAL_BLOCKED"
+    ownerUser?: { id: string; displayName: string }
+    allowedActions: readonly WorkItemAllowedAction[]
 }
 
 type MappingCandidate = {
@@ -334,7 +324,7 @@ export type ReapplyResult =
           operationId: string
           reapplyOperationStatus: "SUCCEEDED"
           salesOrderId: string
-          salesOrderNo: string
+          salesOrderNo?: string
           salesOrderRevisionId: string
           receivableResultReference?: string
           message: string
@@ -343,6 +333,8 @@ export type ReapplyResult =
           status: "failed"
           code: string
           message: string
+          operationId?: string
+          reapplyOperationStatus?: "FAILED"
       }
     | {
           status: "unknown"
@@ -352,13 +344,15 @@ export type ReapplyResult =
           idempotencyKey: string
       }
 
-export type DeferMappingResult =
+export type RequestSourceFixResult =
     | {
           status: "succeeded"
           mappingTaskId: string
           mappingTaskStatus: "PENDING"
-          leaseDisposition: "RETAINED" | "RELEASED"
-          nextQueueCursor?: string
+          workItemStatus: "OPEN"
+          taskVersion: string
+          mappingEvidenceEntryId: string
+          recordedAt: string
           message: string
       }
     | {
@@ -378,7 +372,7 @@ export const VIEW_LABEL: Record<MallSyncViewName, string> = {
 
 export const STAGE_LABEL: Record<OwnershipStage, string> = {
     FIRST_PHASE_MALL_OWNED: "第一阶段 · 商城开单",
-    SECOND_PHASE_ERP_OWNED: "已封存 · ERP 主责",
+    ARCHIVED: "已封存 · ERP 主责",
 }
 
 export const DIRECTION_LABEL: Record<SyncDirection, string> = {
@@ -420,10 +414,10 @@ export const JOB_TYPE_LABEL: Record<MallSyncJobRow["jobType"], string> = {
     RECONCILIATION: "每日核对",
 }
 
-export const DEFER_REASON_OPTIONS = [
-    { value: "WAITING_SOURCE", label: "等待来源修复" },
-    { value: "NEED_CLARIFICATION", label: "需业务澄清" },
-    { value: "WAITING_MASTER_DATA", label: "等待基础资料就绪" },
+export const SOURCE_FIX_REASON_OPTIONS = [
+    { value: "SOURCE_FIELD_MISSING", label: "来源字段缺失" },
+    { value: "SOURCE_FIELD_CONFLICT", label: "来源字段矛盾" },
+    { value: "SOURCE_EVIDENCE_REQUIRED", label: "需补充来源证据" },
     { value: "OTHER", label: "其他" },
 ] as const
 

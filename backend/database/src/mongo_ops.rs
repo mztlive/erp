@@ -7,7 +7,7 @@
 use futures_util::StreamExt;
 use mongodb::{
     bson::{doc, Document},
-    options::FindOptions,
+    options::{FindOptions, ReturnDocument},
     results::{DeleteResult, UpdateResult},
     Collection,
 };
@@ -110,6 +110,42 @@ where
         None => collection.update_one(filter, update).upsert(upsert).await?,
     };
     Ok(result)
+}
+
+/// 按执行器语义执行单文档更新管道，并返回更新后的文档。
+///
+/// 该入口用于必须由 MongoDB 原子计算的写入，例如责任池任务开始处理时同时
+/// 比较版本、抢占当前责任并以 `$ifNull` 保留首次时间。Repository 负责组装
+/// 业务过滤条件和更新管道；事务边界仍由调用方传入的执行器决定。
+///
+/// # 参数
+/// * `collection` - 目标集合
+/// * `filter` - 更新前置条件
+/// * `pipeline` - MongoDB aggregation update pipeline
+/// * `executor` - 数据访问执行器
+///
+/// # 返回值
+/// 返回更新后的文档；条件未命中时返回 `None`。
+///
+/// # 错误
+/// 当 MongoDB 更新或文档反序列化失败时返回错误。
+pub(crate) async fn find_one_and_update_pipeline<T>(
+    collection: &Collection<T>,
+    filter: Document,
+    pipeline: Vec<Document>,
+    executor: &mut dyn Executor,
+) -> Result<Option<T>>
+where
+    T: DeserializeOwned + Send + Sync,
+{
+    let operation = collection
+        .find_one_and_update(filter, pipeline)
+        .return_document(ReturnDocument::After);
+    let document = match executor.session() {
+        Some(session) => operation.session(session).await?,
+        None => operation.await?,
+    };
+    Ok(document)
 }
 
 /// 按执行器语义删除符合条件的全部文档。

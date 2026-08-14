@@ -1,9 +1,8 @@
 //! `sales_order_projection_delivery`：执行投影下发记录（数据模型 §6.16，页面 W23）。
 //!
-//! 投递状态是普通记录字段：§7.7 规定投递的人工处理状态由
-//! `integration_error_task.status` 表达，不另设消息投递状态机，因此本实体
-//! 不实现 [`crate::common::state::DocumentState`]；`status` 按字典实现固定枚举，
-//! 并通过成对/状态一致性校验保证记录完整。
+//! 投递记录持有稳定消息身份，并以显式状态迁移约束发送、结果未知、重试与
+//! 转人工。`integration_error_task.status` 只表达 W29 人工任务处理状态，不得
+//! 代替本对象的外部投递事实。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -11,8 +10,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{SalesOrderProjectionDeliveryId, SalesOrderProjectionRevisionId, SourceSystemId};
-use crate::validation::normalize_optional_text;
+use crate::ids::{
+    InboxMessageId, IntegrationErrorTaskId, SalesOrderProjectionDeliveryId, SalesOrderProjectionRevisionId,
+    SourceSystemId, WorkItemId,
+};
+use crate::integration_ops::ErrorClass;
+use crate::validation::{normalize_optional_text, normalize_required_text};
+
+/// 稳定消息键最大长度。
+const MESSAGE_KEY_MAX_LEN: usize = 256;
 
 /// 商城执行基线最大长度。
 const EXECUTION_BASELINE_MAX_LEN: usize = 256;
@@ -21,8 +27,7 @@ const ERROR_CODE_MAX_LEN: usize = 128;
 /// 错误摘要最大长度。
 const ERROR_SUMMARY_MAX_LEN: usize = 1024;
 
-/// 投影下发状态（数据模型 §6.16：待发送、发送中、重试中、已确认、失败、转人工；
-/// 固定枚举，不设状态机）。
+/// 投影下发状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectionDeliveryStatus {
@@ -33,6 +38,8 @@ pub enum ProjectionDeliveryStatus {
     Sending,
     /// 重试中。
     Retrying,
+    /// 外部请求可能已受理，但最终结果尚无法确认。
+    ResultUnknown,
     /// 已确认。
     Confirmed,
     /// 失败。
@@ -51,6 +58,7 @@ impl ProjectionDeliveryStatus {
             Self::PendingSend => "待发送",
             Self::Sending => "发送中",
             Self::Retrying => "重试中",
+            Self::ResultUnknown => "结果未知",
             Self::Confirmed => "已确认",
             Self::Failed => "失败",
             Self::Manual => "转人工",
@@ -66,9 +74,30 @@ impl ProjectionDeliveryStatus {
             Self::PendingSend => "pending_send",
             Self::Sending => "sending",
             Self::Retrying => "retrying",
+            Self::ResultUnknown => "result_unknown",
             Self::Confirmed => "confirmed",
             Self::Failed => "failed",
             Self::Manual => "manual",
+        }
+    }
+
+    /// 判断当前状态是否可以进入目标状态。
+    ///
+    /// 同状态用于幂等读取；终态确认与已转人工状态不得由普通投递入口回退。
+    pub fn can_transition_to(self, target: Self) -> bool {
+        if self == target {
+            return true;
+        }
+        match self {
+            Self::PendingSend => target == Self::Sending,
+            Self::Sending => matches!(
+                target,
+                Self::Confirmed | Self::Failed | Self::ResultUnknown | Self::Manual
+            ),
+            Self::Retrying => matches!(target, Self::Sending | Self::Manual),
+            Self::ResultUnknown => matches!(target, Self::Confirmed | Self::Failed | Self::Manual),
+            Self::Failed => matches!(target, Self::Retrying | Self::Manual),
+            Self::Confirmed | Self::Manual => false,
         }
     }
 }
@@ -104,15 +133,25 @@ pub struct SalesOrderProjectionDeliveryUpdate {
     /// 发送次数；`None` 表示不修改。
     pub attempt_count: Option<u32>,
     /// 下次重试时间；`None` 表示不修改。
-    pub next_attempt_at: Option<Instant>,
+    pub next_attempt_at: Option<Option<Instant>>,
+    /// 最近发送时间；外层 `None` 表示不修改。
+    pub last_attempt_at: Option<Option<Instant>>,
     /// 商城确认时间；`None` 表示不修改。
-    pub mall_ack_at: Option<Instant>,
+    pub mall_ack_at: Option<Option<Instant>>,
     /// 商城执行基线；`None` 表示不修改。
-    pub mall_execution_baseline: Option<String>,
+    pub mall_execution_baseline: Option<Option<String>>,
+    /// 错误分类；外层 `None` 表示不修改。
+    pub error_class: Option<Option<ErrorClass>>,
     /// 错误码；`None` 表示不修改。
-    pub error_code: Option<String>,
+    pub error_code: Option<Option<String>>,
     /// 错误摘要；`None` 表示不修改。
-    pub error_summary: Option<String>,
+    pub error_summary: Option<Option<String>>,
+    /// 关联消息；外层 `None` 表示不修改。
+    pub inbox_message_id: Option<Option<InboxMessageId>>,
+    /// W29 错误对象；外层 `None` 表示不修改。
+    pub error_task_id: Option<Option<IntegrationErrorTaskId>>,
+    /// W29 正式待办；外层 `None` 表示不修改。
+    pub work_item_id: Option<Option<WorkItemId>>,
 }
 
 /// 执行投影下发实体（数据模型 §6.16）。
@@ -128,20 +167,32 @@ pub struct SalesOrderProjectionDelivery {
     pub projection_revision_id: SalesOrderProjectionRevisionId,
     /// 目标商城（来源系统，类型 MALL）。
     pub target_mall_id: SourceSystemId,
+    /// 跨全部尝试保持不变的外部消息身份。
+    pub message_key: String,
     /// 下发状态。
     pub status: ProjectionDeliveryStatus,
     /// 发送次数。
     pub attempt_count: u32,
+    /// 最近一次真实发送时间。
+    pub last_attempt_at: Option<Instant>,
     /// 下次重试时间。
     pub next_attempt_at: Option<Instant>,
     /// 商城确认时间。
     pub mall_ack_at: Option<Instant>,
     /// 商城执行基线。
     pub mall_execution_baseline: Option<String>,
+    /// 最近失败或结果未知的稳定错误分类。
+    pub error_class: Option<ErrorClass>,
     /// 错误码。
     pub error_code: Option<String>,
     /// 错误摘要。
     pub error_summary: Option<String>,
+    /// 承接稳定消息身份的消息信封。
+    pub inbox_message_id: Option<InboxMessageId>,
+    /// 升级后关联的 W29 错误对象。
+    pub error_task_id: Option<IntegrationErrorTaskId>,
+    /// 升级后关联的正式待办。
+    pub work_item_id: Option<WorkItemId>,
 }
 
 impl SalesOrderProjectionDelivery {
@@ -162,6 +213,15 @@ impl SalesOrderProjectionDelivery {
     /// # 错误
     /// 当文本超长或上述记录不变式被违反时返回错误。
     pub fn new(id: SalesOrderProjectionDeliveryId, data: SalesOrderProjectionDeliveryData) -> Result<Self> {
+        let message_key = normalize_required_text(
+            format!(
+                "projection_delivery:{}:{}",
+                data.projection_revision_id, data.target_mall_id
+            ),
+            "投递消息键不能为空",
+            MESSAGE_KEY_MAX_LEN,
+            "投递消息键过长",
+        )?;
         let mall_execution_baseline = normalize_optional_text(
             data.mall_execution_baseline,
             "商城执行基线",
@@ -169,26 +229,37 @@ impl SalesOrderProjectionDelivery {
         )?;
         let error_code = normalize_optional_text(data.error_code, "错误码", ERROR_CODE_MAX_LEN)?;
         let error_summary = normalize_optional_text(data.error_summary, "错误摘要", ERROR_SUMMARY_MAX_LEN)?;
-        validate_delivery_state(
-            data.status,
-            data.next_attempt_at,
-            data.mall_ack_at,
-            mall_execution_baseline.as_deref(),
-            error_code.as_deref(),
-            error_summary.as_deref(),
-        )?;
+        validate_delivery_state(&ProjectionDeliveryState {
+            status: data.status,
+            attempt_count: data.attempt_count,
+            last_attempt_at: None,
+            next_attempt_at: data.next_attempt_at,
+            mall_ack_at: data.mall_ack_at,
+            mall_execution_baseline: mall_execution_baseline.as_deref(),
+            error_class: None,
+            error_code: error_code.as_deref(),
+            error_summary: error_summary.as_deref(),
+            error_task_id: None,
+            work_item_id: None,
+        })?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             projection_revision_id: data.projection_revision_id,
             target_mall_id: data.target_mall_id,
+            message_key,
             status: data.status,
             attempt_count: data.attempt_count,
+            last_attempt_at: None,
             next_attempt_at: data.next_attempt_at,
             mall_ack_at: data.mall_ack_at,
             mall_execution_baseline,
+            error_class: None,
             error_code,
             error_summary,
+            inbox_message_id: None,
+            error_task_id: None,
+            work_item_id: None,
         })
     }
 
@@ -208,36 +279,93 @@ impl SalesOrderProjectionDelivery {
     /// 当更新字段校验失败或合并后违反记录不变式时返回错误。
     pub fn update(&mut self, update: SalesOrderProjectionDeliveryUpdate) -> Result<()> {
         let status = update.status.unwrap_or(self.status);
+        if !self.status.can_transition_to(status) {
+            return Err(Error::from("非法的投递状态迁移"));
+        }
         let attempt_count = update.attempt_count.unwrap_or(self.attempt_count);
-        let next_attempt_at = update.next_attempt_at.or(self.next_attempt_at);
-        let mall_ack_at = update.mall_ack_at.or(self.mall_ack_at);
-        let mall_execution_baseline = normalize_optional_text(
-            update.mall_execution_baseline,
-            "商城执行基线",
-            EXECUTION_BASELINE_MAX_LEN,
-        )?
-        .or_else(|| self.mall_execution_baseline.clone());
-        let error_code = normalize_optional_text(update.error_code, "错误码", ERROR_CODE_MAX_LEN)?
-            .or_else(|| self.error_code.clone());
-        let error_summary = normalize_optional_text(update.error_summary, "错误摘要", ERROR_SUMMARY_MAX_LEN)?
-            .or_else(|| self.error_summary.clone());
-        validate_delivery_state(
+        let last_attempt_at = update.last_attempt_at.unwrap_or(self.last_attempt_at);
+        let next_attempt_at = update.next_attempt_at.unwrap_or(self.next_attempt_at);
+        let mall_ack_at = update.mall_ack_at.unwrap_or(self.mall_ack_at);
+        let mall_execution_baseline = match update.mall_execution_baseline {
+            Some(value) => normalize_optional_text(value, "商城执行基线", EXECUTION_BASELINE_MAX_LEN)?,
+            None => self.mall_execution_baseline.clone(),
+        };
+        let error_class = update.error_class.unwrap_or(self.error_class);
+        let error_code = match update.error_code {
+            Some(value) => normalize_optional_text(value, "错误码", ERROR_CODE_MAX_LEN)?,
+            None => self.error_code.clone(),
+        };
+        let error_summary = match update.error_summary {
+            Some(value) => normalize_optional_text(value, "错误摘要", ERROR_SUMMARY_MAX_LEN)?,
+            None => self.error_summary.clone(),
+        };
+        let inbox_message_id = update
+            .inbox_message_id
+            .unwrap_or_else(|| self.inbox_message_id.clone());
+        let error_task_id = update.error_task_id.unwrap_or_else(|| self.error_task_id.clone());
+        let work_item_id = update.work_item_id.unwrap_or_else(|| self.work_item_id.clone());
+        validate_delivery_state(&ProjectionDeliveryState {
             status,
+            attempt_count,
+            last_attempt_at,
             next_attempt_at,
             mall_ack_at,
-            mall_execution_baseline.as_deref(),
-            error_code.as_deref(),
-            error_summary.as_deref(),
-        )?;
+            mall_execution_baseline: mall_execution_baseline.as_deref(),
+            error_class,
+            error_code: error_code.as_deref(),
+            error_summary: error_summary.as_deref(),
+            error_task_id: error_task_id.as_ref(),
+            work_item_id: work_item_id.as_ref(),
+        })?;
 
         self.status = status;
         self.attempt_count = attempt_count;
+        self.last_attempt_at = last_attempt_at;
         self.next_attempt_at = next_attempt_at;
         self.mall_ack_at = mall_ack_at;
         self.mall_execution_baseline = mall_execution_baseline;
+        self.error_class = error_class;
         self.error_code = error_code;
         self.error_summary = error_summary;
+        self.inbox_message_id = inbox_message_id;
+        self.error_task_id = error_task_id;
+        self.work_item_id = work_item_id;
         Ok(())
+    }
+
+    /// 判断该投递是否可由受控发送入口原子取得。
+    pub fn is_send_ready(&self, now: Instant) -> bool {
+        self.status == ProjectionDeliveryStatus::PendingSend
+            || (self.status == ProjectionDeliveryStatus::Retrying
+                && self
+                    .next_attempt_at
+                    .is_some_and(|at| at.unix_secs() <= now.unix_secs()))
+    }
+
+    /// 判断当前事实是否允许查询原请求结果。
+    pub fn can_query_result(&self) -> bool {
+        matches!(
+            self.status,
+            ProjectionDeliveryStatus::Sending
+                | ProjectionDeliveryStatus::ResultUnknown
+                | ProjectionDeliveryStatus::Failed
+        ) && self.error_class != Some(ErrorClass::MappingError)
+    }
+
+    /// 判断当前事实是否允许沿原消息身份安排重试。
+    pub fn can_retry(&self) -> bool {
+        self.status == ProjectionDeliveryStatus::Failed
+            && self.error_class.is_some_and(|class| class.can_auto_retry())
+    }
+
+    /// 判断当前事实是否允许升级为 W29 正式人工任务。
+    pub fn can_escalate(&self) -> bool {
+        matches!(
+            self.status,
+            ProjectionDeliveryStatus::Sending
+                | ProjectionDeliveryStatus::ResultUnknown
+                | ProjectionDeliveryStatus::Failed
+        )
     }
 }
 
@@ -253,43 +381,73 @@ impl SalesOrderProjectionDelivery {
 ///
 /// # 错误
 /// 当成对字段只有一边出现或状态与结果字段不一致时返回错误。
-fn validate_delivery_state(
+struct ProjectionDeliveryState<'a> {
     status: ProjectionDeliveryStatus,
+    attempt_count: u32,
+    last_attempt_at: Option<Instant>,
     next_attempt_at: Option<Instant>,
     mall_ack_at: Option<Instant>,
-    mall_execution_baseline: Option<&str>,
-    error_code: Option<&str>,
-    error_summary: Option<&str>,
-) -> Result<()> {
-    if matches!(
-        status,
-        ProjectionDeliveryStatus::PendingSend | ProjectionDeliveryStatus::Sending
-    ) && next_attempt_at.is_some()
-    {
-        return Err(Error::from("待发送或发送中的下发记录不得安排重试时间"));
+    mall_execution_baseline: Option<&'a str>,
+    error_class: Option<ErrorClass>,
+    error_code: Option<&'a str>,
+    error_summary: Option<&'a str>,
+    error_task_id: Option<&'a IntegrationErrorTaskId>,
+    work_item_id: Option<&'a WorkItemId>,
+}
+
+fn validate_delivery_state(state: &ProjectionDeliveryState<'_>) -> Result<()> {
+    if (state.attempt_count == 0) != state.last_attempt_at.is_none() {
+        return Err(Error::from("发送次数与最近发送时间必须同时存在或同时为空"));
     }
-    if mall_ack_at.is_some() != mall_execution_baseline.is_some() {
+    if state.status == ProjectionDeliveryStatus::PendingSend && state.attempt_count != 0 {
+        return Err(Error::from("待发送记录的发送次数必须为零"));
+    }
+    if state.status != ProjectionDeliveryStatus::PendingSend && state.attempt_count == 0 {
+        return Err(Error::from("已开始处理的投递必须至少记录一次发送"));
+    }
+    if (state.status == ProjectionDeliveryStatus::Retrying) != state.next_attempt_at.is_some() {
+        return Err(Error::from("只有重试中记录必须安排下一次处理时间"));
+    }
+    if state.mall_ack_at.is_some() != state.mall_execution_baseline.is_some() {
         return Err(Error::from("商城确认时间与商城执行基线必须同时提供或同时省略"));
     }
-    if error_code.is_some() != error_summary.is_some() {
-        return Err(Error::from("错误码与错误摘要必须同时提供或同时省略"));
+    if state.error_class.is_some() != state.error_code.is_some()
+        || state.error_code.is_some() != state.error_summary.is_some()
+    {
+        return Err(Error::from("错误分类、错误码与错误摘要必须同时提供或同时省略"));
     }
-    if status == ProjectionDeliveryStatus::Confirmed && mall_ack_at.is_none() {
+    if state.status == ProjectionDeliveryStatus::Confirmed && state.mall_ack_at.is_none() {
         return Err(Error::from("已确认下发记录必须记录商城确认信息"));
     }
-    if status == ProjectionDeliveryStatus::Failed && error_code.is_none() {
-        return Err(Error::from("失败下发记录必须记录错误信息"));
+    if matches!(
+        state.status,
+        ProjectionDeliveryStatus::Failed
+            | ProjectionDeliveryStatus::ResultUnknown
+            | ProjectionDeliveryStatus::Retrying
+            | ProjectionDeliveryStatus::Manual
+    ) && state.error_code.is_none()
+    {
+        return Err(Error::from("失败、结果未知、重试或转人工记录必须保留错误信息"));
     }
-    if mall_ack_at.is_some() && status != ProjectionDeliveryStatus::Confirmed {
+    if state.status == ProjectionDeliveryStatus::ResultUnknown
+        && state.error_class != Some(ErrorClass::ResultUnknown)
+    {
+        return Err(Error::from("结果未知记录必须使用结果未知错误分类"));
+    }
+    if state.mall_ack_at.is_some() && state.status != ProjectionDeliveryStatus::Confirmed {
         return Err(Error::from("只有已确认下发记录才能记录商城确认信息"));
     }
-    if error_code.is_some()
-        && !matches!(
-            status,
-            ProjectionDeliveryStatus::Failed | ProjectionDeliveryStatus::Manual
-        )
-    {
-        return Err(Error::from("只有失败或转人工下发记录才能记录错误信息"));
+    if state.status == ProjectionDeliveryStatus::Confirmed && state.error_code.is_some() {
+        return Err(Error::from("已确认记录不得保留错误信息"));
+    }
+    if state.error_task_id.is_some() != state.work_item_id.is_some() {
+        return Err(Error::from("W29 错误对象与正式待办必须同时关联或同时为空"));
+    }
+    if state.status == ProjectionDeliveryStatus::Manual && state.error_task_id.is_none() {
+        return Err(Error::from("转人工记录必须关联 W29 错误对象与正式待办"));
+    }
+    if state.status != ProjectionDeliveryStatus::Manual && state.error_task_id.is_some() {
+        return Err(Error::from("只有转人工记录才能关联 W29 错误对象与正式待办"));
     }
     Ok(())
 }
@@ -301,7 +459,11 @@ mod tests {
         SalesOrderProjectionDeliveryUpdate,
     };
     use crate::common::time::Instant;
-    use crate::ids::{SalesOrderProjectionDeliveryId, SalesOrderProjectionRevisionId, SourceSystemId};
+    use crate::ids::{
+        IntegrationErrorTaskId, SalesOrderProjectionDeliveryId, SalesOrderProjectionRevisionId,
+        SourceSystemId, WorkItemId,
+    };
+    use crate::integration_ops::ErrorClass;
 
     fn delivery_data() -> SalesOrderProjectionDeliveryData {
         SalesOrderProjectionDeliveryData {
@@ -333,27 +495,20 @@ mod tests {
     }
 
     #[test]
-    fn delivery_new_accepts_complete_sending_and_retrying_records() {
+    fn delivery_new_only_accepts_initial_pending_state_and_builds_stable_message_key() {
+        let delivery =
+            SalesOrderProjectionDelivery::new(SalesOrderProjectionDeliveryId::new("del-2"), delivery_data())
+                .unwrap();
+        assert_eq!(delivery.message_key, "projection_delivery:proj-rev-1:mall-1");
+
         let sending = SalesOrderProjectionDeliveryData {
             status: ProjectionDeliveryStatus::Sending,
             attempt_count: 1,
-            next_attempt_at: None,
             ..delivery_data()
         };
-        let delivery =
-            SalesOrderProjectionDelivery::new(SalesOrderProjectionDeliveryId::new("del-2"), sending).unwrap();
-        assert_eq!(delivery.status, ProjectionDeliveryStatus::Sending);
-
-        let retrying = SalesOrderProjectionDeliveryData {
-            status: ProjectionDeliveryStatus::Retrying,
-            attempt_count: 2,
-            next_attempt_at: Some(Instant::from_unix_secs(1_700_000_300)),
-            ..delivery_data()
-        };
-        let delivery =
-            SalesOrderProjectionDelivery::new(SalesOrderProjectionDeliveryId::new("del-3"), retrying)
-                .unwrap();
-        assert_eq!(delivery.next_attempt_at.unwrap().unix_secs(), 1_700_000_300);
+        assert!(
+            SalesOrderProjectionDelivery::new(SalesOrderProjectionDeliveryId::new("del-3"), sending).is_err()
+        );
     }
 
     #[test]
@@ -463,21 +618,28 @@ mod tests {
 
         delivery
             .update(SalesOrderProjectionDeliveryUpdate {
+                status: Some(ProjectionDeliveryStatus::Sending),
+                attempt_count: Some(1),
+                last_attempt_at: Some(Some(Instant::from_unix_secs(1_700_000_000))),
+                ..Default::default()
+            })
+            .unwrap();
+        delivery
+            .update(SalesOrderProjectionDeliveryUpdate {
                 status: Some(ProjectionDeliveryStatus::Failed),
-                attempt_count: Some(2),
-                error_code: Some(" 502 ".to_string()),
-                error_summary: Some(" 商城无响应 ".to_string()),
+                error_class: Some(Some(ErrorClass::TransientFailure)),
+                error_code: Some(Some(" 502 ".to_string())),
+                error_summary: Some(Some(" 商城无响应 ".to_string())),
                 ..Default::default()
             })
             .unwrap();
         assert_eq!(delivery.status, ProjectionDeliveryStatus::Failed);
         assert_eq!(delivery.error_code.as_deref(), Some("502"));
-        assert_eq!(delivery.attempt_count, 2);
+        assert_eq!(delivery.attempt_count, 1);
+        assert!(delivery.can_retry());
 
         let invalid = SalesOrderProjectionDeliveryUpdate {
             status: Some(ProjectionDeliveryStatus::Confirmed),
-            mall_ack_at: None,
-            mall_execution_baseline: None,
             ..Default::default()
         };
         assert!(delivery.update(invalid).is_err(), "合并后仍缺商城确认信息");
@@ -489,6 +651,49 @@ mod tests {
     }
 
     #[test]
+    fn result_unknown_only_allows_query_or_escalate_and_manual_requires_w29_links() {
+        let mut delivery =
+            SalesOrderProjectionDelivery::new(SalesOrderProjectionDeliveryId::new("del-12"), delivery_data())
+                .unwrap();
+        delivery
+            .update(SalesOrderProjectionDeliveryUpdate {
+                status: Some(ProjectionDeliveryStatus::Sending),
+                attempt_count: Some(1),
+                last_attempt_at: Some(Some(Instant::from_unix_secs(1_700_000_000))),
+                ..Default::default()
+            })
+            .unwrap();
+        delivery
+            .update(SalesOrderProjectionDeliveryUpdate {
+                status: Some(ProjectionDeliveryStatus::ResultUnknown),
+                error_class: Some(Some(ErrorClass::ResultUnknown)),
+                error_code: Some(Some("MALL_TIMEOUT".to_string())),
+                error_summary: Some(Some("商城结果待查询".to_string())),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert!(delivery.can_query_result());
+        assert!(!delivery.can_retry());
+        assert!(delivery.can_escalate());
+        assert!(delivery
+            .update(SalesOrderProjectionDeliveryUpdate {
+                status: Some(ProjectionDeliveryStatus::Manual),
+                ..Default::default()
+            })
+            .is_err());
+        delivery
+            .update(SalesOrderProjectionDeliveryUpdate {
+                status: Some(ProjectionDeliveryStatus::Manual),
+                error_task_id: Some(Some(IntegrationErrorTaskId::new("task-1"))),
+                work_item_id: Some(Some(WorkItemId::new("work-1"))),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(delivery.status, ProjectionDeliveryStatus::Manual);
+    }
+
+    #[test]
     fn delivery_status_serializes_with_stable_codes_and_exposes_labels() {
         assert_eq!(
             serde_json::to_string(&ProjectionDeliveryStatus::Sending).unwrap(),
@@ -496,5 +701,9 @@ mod tests {
         );
         assert_eq!(ProjectionDeliveryStatus::Manual.label(), "转人工");
         assert_eq!(ProjectionDeliveryStatus::Retrying.as_str(), "retrying");
+        assert_eq!(
+            serde_json::to_string(&ProjectionDeliveryStatus::ResultUnknown).unwrap(),
+            "\"result_unknown\""
+        );
     }
 }

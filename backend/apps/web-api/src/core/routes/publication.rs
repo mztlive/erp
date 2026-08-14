@@ -1,6 +1,8 @@
 //! 域 D26 `publication` 管理端路由。
 //!
-//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/product-publications`、
+//! 经 `admin.rs` 的 `/admin` nest 后，只暴露已由内部身份策略建立的发布对象；
+//! 当前禁止通过管理端 HTTP 创建稳定发布身份。其余路径为
+//! `/admin/product-publications`、
 //! `/admin/product-publication-revisions/{revision_id}/media`、
 //! `/admin/product-publication-deliveries`；每条路由统一走
 //! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
@@ -31,14 +33,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(publication::product_publication_list),
                 rbac,
                 publication::product_publication_list_permission_key(),
-            ),
-        )
-        .route(
-            "/product-publications",
-            with_permission(
-                post(publication::product_publication_create),
-                rbac,
-                publication::product_publication_create_permission_key(),
             ),
         )
         .route(
@@ -95,6 +89,30 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(publication::product_publication_delivery_list),
                 rbac,
                 publication::product_publication_delivery_list_permission_key(),
+            ),
+        )
+        .route(
+            "/product-publication-deliveries/{delivery_id}/actions",
+            with_permission(
+                post(publication::product_publication_delivery_action),
+                rbac,
+                publication::product_publication_delivery_action_permission_key(),
+            ),
+        )
+        .route(
+            "/product-publication-deliveries/process-pending",
+            with_permission(
+                post(publication::product_publication_delivery_process_pending),
+                rbac,
+                publication::product_publication_delivery_process_pending_permission_key(),
+            ),
+        )
+        .route(
+            "/product-publication-safety-pauses/{idempotency_key}",
+            with_permission(
+                get(publication::product_publication_safety_pause_detail),
+                rbac,
+                publication::product_publication_safety_pause_detail_permission_key(),
             ),
         )
 }

@@ -21,6 +21,7 @@ pub mod mall_sales_reconciliation;
 pub mod mall_sales_sync_cursor;
 pub mod mall_sales_sync_job;
 pub mod master_mapping_task;
+pub mod reapply_operation;
 
 pub use external_order_key::ExternalOrderKey;
 pub use mall_sales_order_snapshot::{
@@ -34,8 +35,12 @@ pub use mall_sales_reconciliation::{
 pub use mall_sales_sync_cursor::MallSalesSyncCursor;
 pub use mall_sales_sync_job::{
     MallSalesSyncJob, MallSalesSyncJobData, MallSalesSyncJobStatus, MallSalesSyncJobType,
+    MallSyncTriggerSource,
 };
 pub use master_mapping_task::{MappingTaskStatus, MappingTaskType, MasterMappingTask, MasterMappingTaskData};
+pub use reapply_operation::{
+    MallSnapshotReapplyOperation, MallSnapshotReapplyOperationData, ReapplyOperationStatus,
+};
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{

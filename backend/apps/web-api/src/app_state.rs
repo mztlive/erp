@@ -1,5 +1,6 @@
 use config::{Config, SafeConfig};
 use mongodb::Database;
+use services::approval::{ApprovalDomainActionPort, ApprovalRuntimePort, InternalApprovalRuntime};
 use services::iam::SharedRbacService;
 use services::party::SensitiveDataCodec;
 use std::sync::Arc;
@@ -71,6 +72,18 @@ impl AppState {
     /// 返回共享 RBAC 服务。
     pub fn rbac(&self) -> SharedRbacService {
         Arc::clone(&self.rbac)
+    }
+
+    /// 返回当前部署选择的稳定审批运行时端口。
+    ///
+    /// 业务 Handler 只依赖 [`ApprovalRuntimePort`]；当前部署固定选择
+    /// INTERNAL 实现。未来引入 BPM 时必须在此处接入受控 dispatcher，禁止
+    /// 各业务 Handler 分别判断 `runtime_kind` 或直接构造具体运行时。
+    pub fn approval_runtime(
+        &self,
+        action_port: Arc<dyn ApprovalDomainActionPort>,
+    ) -> Arc<dyn ApprovalRuntimePort> {
+        Arc::new(InternalApprovalRuntime::new(self.db(), action_port))
     }
 
     /// 返回启动时固定的 S3 存储客户端。

@@ -9,8 +9,8 @@ import type {
     AfterSalesActionInput,
     AfterSalesActionResult,
     CancelStatus,
-    DeferTaskInput,
-    DeferTaskResult,
+    CompleteSupplierOrderTaskInput,
+    CompleteSupplierOrderTaskResult,
     ExportCommand,
     ExportJobResult,
     FormalActionResponse,
@@ -37,6 +37,7 @@ import {
     REFUND_STATUS_LABEL,
     REFUND_STATUS_TONE,
 } from "@/features/supplier-orders/types"
+import { mapWorkItemDto, type WorkItemDto } from "@/features/work-items/types"
 
 const PAYMENT_OCCURRED_NOTICE =
     "商城支付已发生。供应商履约结果独立记录，不得用取消/退款折入履约主状态。"
@@ -114,6 +115,21 @@ type BackendDetail = {
         refund_amount: string
         refunded_at: number
     }>
+    supplier_name?: string | null
+    mall_order_no?: string | null
+    address: {
+        masked?: string | null
+        can_reveal: boolean
+        blocker_code?: string | null
+        blocker_message?: string | null
+    }
+    work_item?: WorkItemDto | null
+    target_supplier_action_id?: string | null
+    last_investigation?: BackendInvestigationResult["evidence"] | null
+    allowed_actions?: Array<
+        "QUERY_RESULT" | "REPLAY" | "CONFIRM_VERIFIED_TERMINAL_RESULT"
+    >
+    action_blockers?: BackendInvestigationResult["action_blockers"]
 }
 
 type BackendSubmitResult = {
@@ -127,6 +143,56 @@ type BackendBackgroundJob = {
     job_no: string
     status: string
     result_expires_at?: number | null
+}
+
+type BackendInvestigationResult = {
+    result_status: "SUCCEEDED" | "UNKNOWN" | "BLOCKED"
+    message: string
+    operation_id: string
+    evidence: {
+        evidence_id: string
+        target_supplier_action_id: string
+        outcome: "VERIFIED_TERMINAL" | "VERIFIED_NO_RESULT" | "RESULT_UNKNOWN"
+        recorded_at: number
+        can_safe_retry: boolean
+        external_order_no?: string | null
+        summary: string
+        verified_supplier_action_result_id?: string | null
+        verified_resolution?:
+            | "ORDER_ACCEPTED"
+            | "ORDER_REJECTED"
+            | "ORDER_COMPLETED"
+            | "CANCELED"
+            | "REFUNDED"
+            | null
+    }
+    order: BackendOrder
+    work_item?: {
+        id: string
+        status: "OPEN"
+        task_version: string | number
+    } | null
+    allowed_actions: string[]
+    action_blockers: Array<{
+        action: string
+        code: string
+        message: string
+        destination_workspace_id?: string | null
+    }>
+}
+
+type BackendTaskCompletionResult = {
+    operation_id: string
+    work_item_id: string
+    work_item_status: "COMPLETED"
+    task_version: string | number
+    order_lock_version: number
+    resolution:
+        | "ORDER_ACCEPTED"
+        | "ORDER_REJECTED"
+        | "ORDER_COMPLETED"
+        | "CANCELED"
+        | "REFUNDED"
 }
 
 // ---------------------------------------------------------------------------
@@ -209,9 +275,9 @@ function mapListRow(o: BackendOrder): SupplierOrderListRow {
         orderId: o.id,
         orderNo: o.fulfillment_order_no,
         mallOrderId: o.mall_order_id,
-        mallOrderNo: o.mall_order_id,
+        mallOrderNo: "",
         supplierId: o.supplier_id,
-        supplierName: o.supplier_id,
+        supplierName: "",
         externalOrderNo: o.external_order_no ?? undefined,
         fulfillmentStatus: fulfillment,
         fulfillmentLabel: FULFILLMENT_STATUS_LABEL[fulfillment],
@@ -227,7 +293,18 @@ function mapListRow(o: BackendOrder): SupplierOrderListRow {
         lastBusinessAt,
         itemCount: 0,
         allowedActions: ["OPEN_CENTER", "NOTE"],
-        actionBlockers: [],
+        actionBlockers: [
+            {
+                action: "VIEW_SUPPLIER_NAME",
+                code: "SUPPLIER_NAME_NOT_PROJECTED_IN_LIST",
+                message: "列表接口未返回权威供应商名称，禁止以 ID 伪装名称",
+            },
+            {
+                action: "VIEW_MALL_ORDER_NO",
+                code: "MALL_ORDER_NO_NOT_PROJECTED_IN_LIST",
+                message: "列表接口未返回权威商城订单号",
+            },
+        ],
         priority: priorityOf(fulfillment),
     }
 }
@@ -280,25 +357,44 @@ function filterSummary(query: SupplierOrderListQuery, total: number): string {
     return parts.join(" · ")
 }
 
+function mapFormalWorkItem(item: ReturnType<typeof mapWorkItemDto>) {
+    return {
+        workItemId: item.workItemId,
+        taskVersion: item.taskVersion,
+        workItemType: item.workItemType as
+            | "INTEGRATION_RESULT_UNKNOWN"
+            | "BUSINESS_EXCEPTION",
+        businessObjectType: "SUPPLIER_FULFILLMENT_ORDER" as const,
+        businessObjectId: item.businessObjectId,
+        subjectVersion: item.subjectVersion,
+        assignmentMode: item.assignmentMode,
+        processingState: item.processingState,
+        ownerUser: item.ownerUser,
+        allowedTaskActions: item.allowedActions,
+        actionBlockers: item.actionBlockers,
+        workItemStatus: item.status,
+    }
+}
+
 function mapDetail(d: BackendDetail): SupplierOrderDetailView {
     const o = d.order
     const fulfillment = asFulfillment(o.fulfillment_status)
     const cancel = asCancel(o.cancel_status)
     const refund = asRefund(o.refund_status)
-    const placeAction =
-        d.actions?.find((a) => a.action_type === "PLACE") ?? d.actions?.[0]
+    const formalTask = d.work_item ? mapWorkItemDto(d.work_item) : undefined
+    const investigation = d.last_investigation
 
     return {
         order: {
             id: o.id,
             orderNo: o.fulfillment_order_no,
             mallOrderId: o.mall_order_id,
-            mallOrderNo: o.mall_order_id,
+            mallOrderNo: d.mall_order_no ?? "",
             paidAt: tsToIso(o.created_at),
             paymentFactKey: "",
             fulfillmentChain: "ERP_AUTOMATED",
             supplierId: o.supplier_id,
-            supplierName: o.supplier_id,
+            supplierName: d.supplier_name ?? "",
             connectionCode: o.connection_id,
             connectionEnvironment: "production",
             supplyVersion: "",
@@ -381,14 +477,38 @@ function mapDetail(d: BackendDetail): SupplierOrderDetailView {
             operationId: a.id,
         })),
         address: {
-            masked: "—",
+            masked: d.address.masked ?? "—",
             phoneMasked: "—",
             recipientMasked: "—",
-            canReveal: true,
+            canReveal: d.address.can_reveal,
         },
-        placeActionId: placeAction?.id ?? "",
-        allowedActions: ["OPEN_CENTER", "NOTE"],
-        actionBlockers: [],
+        workItem: formalTask ? mapFormalWorkItem(formalTask) : undefined,
+        workItemBlocker: undefined,
+        lastInvestigation: investigation
+            ? {
+                  evidenceId: investigation.evidence_id,
+                  targetSupplierActionId:
+                      investigation.target_supplier_action_id,
+                  outcome: investigation.outcome,
+                  outcomeLabel: investigation.outcome,
+                  recordedAt: tsToIso(investigation.recorded_at),
+                  canSafeRetry: investigation.can_safe_retry,
+                  externalOrderNo: investigation.external_order_no ?? undefined,
+                  summary: investigation.summary,
+                  verifiedSupplierActionResultId:
+                      investigation.verified_supplier_action_result_id ??
+                      undefined,
+                  verifiedResolution:
+                      investigation.verified_resolution ?? undefined,
+              }
+            : undefined,
+        placeActionId: d.target_supplier_action_id ?? "",
+        allowedActions: ["OPEN_CENTER", "NOTE", ...(d.allowed_actions ?? [])],
+        actionBlockers: (d.action_blockers ?? []).map((blocker) => ({
+            action: blocker.action,
+            code: blocker.code,
+            message: blocker.message,
+        })),
         freshness: {
             updatedAt: tsToIso(o.created_at),
             state: "fresh",
@@ -459,20 +579,13 @@ export async function fetchSupplierOrders(
 
 export async function fetchSupplierOrderDetail(input: {
     orderId: string
-}): Promise<SupplierOrderDetailView | null> {
-    try {
-        const detail = await apiGet<BackendDetail>(
-            `/admin/supplier-fulfillment-orders/${encodeURIComponent(input.orderId)}`,
-        )
-        return mapDetail(detail)
-    } catch (err) {
-        const status =
-            err && typeof err === "object" && "status" in err
-                ? (err as { status?: number }).status
-                : undefined
-        if (status === 404) return null
-        throw err
-    }
+    workItemId?: string
+}): Promise<SupplierOrderDetailView> {
+    const detail = await apiGet<BackendDetail>(
+        `/admin/supplier-fulfillment-orders/${encodeURIComponent(input.orderId)}`,
+        { work_item_id: input.workItemId },
+    )
+    return mapDetail(detail)
 }
 
 /**
@@ -482,13 +595,9 @@ export async function fetchSupplierOrderDetail(input: {
 export async function querySupplierResult(
     input: QueryResultInput,
 ): Promise<FormalActionResponse<QueryResultData>> {
-    void input
-    return {
-        status: "blocked",
-        message:
-            "查询原结果请进入接口错误与对账中心（W29）。履约订单域未提供独立查询端点。",
-        reference: "W29",
-    }
+    return submitInvestigation(input) as Promise<
+        FormalActionResponse<QueryResultData>
+    >
 }
 
 /**
@@ -497,41 +606,151 @@ export async function querySupplierResult(
 export async function replaySupplierOrder(
     input: ReplayInput,
 ): Promise<FormalActionResponse<ReplayResultData>> {
-    void input
-    return {
-        status: "blocked",
-        message:
-            "安全重发请在接口错误中心按原任务号重放。履约订单域未提供独立重发端点。",
-        reference: "W29",
-    }
+    return submitInvestigation(input) as Promise<
+        FormalActionResponse<ReplayResultData>
+    >
 }
 
-export async function deferSupplierOrderTask(
-    input: DeferTaskInput,
-): Promise<FormalActionResponse<DeferTaskResult>> {
-    if (!input.workItemId) {
-        return { status: "failed", message: "无关联任务，无法跳过" }
+async function submitInvestigation(
+    input: QueryResultInput | ReplayInput,
+): Promise<FormalActionResponse<QueryResultData | ReplayResultData>> {
+    const result =
+        input.commandKind === "TASK"
+            ? await apiPost<BackendInvestigationResult>(
+                  "/admin/supplier-fulfillment-orders/task-investigations",
+                  {
+                      work_item_id: input.workItemId,
+                      expected_task_version: input.expectedTaskVersion,
+                      expected_subject_version: input.expectedSubjectVersion,
+                      action: {
+                          type: input.action.type,
+                          order_id: input.action.orderId,
+                          expected_order_lock_version:
+                              input.action.expectedOrderLockVersion,
+                          target_supplier_action_id:
+                              input.action.targetSupplierActionId,
+                          operation_id: input.action.operationId,
+                      },
+                      idempotency_key: input.idempotencyKey,
+                  },
+              )
+            : await apiPost<BackendInvestigationResult>(
+                  "/admin/supplier-fulfillment-orders/investigations",
+                  {
+                      order_id: input.orderId,
+                      expected_lock_version: input.expectedLockVersion,
+                      action: input.action,
+                      operation_id: input.operationId,
+                      target_supplier_action_id: input.targetSupplierActionId,
+                      idempotency_key: input.idempotencyKey,
+                  },
+              )
+    const evidence = {
+        evidenceId: result.evidence.evidence_id,
+        targetSupplierActionId: result.evidence.target_supplier_action_id,
+        outcome: result.evidence.outcome,
+        outcomeLabel:
+            result.evidence.outcome === "VERIFIED_TERMINAL"
+                ? "处理结果已核实"
+                : result.evidence.outcome === "VERIFIED_NO_RESULT"
+                  ? "已核实无结果"
+                  : "结果仍未知",
+        recordedAt: tsToIso(result.evidence.recorded_at),
+        canSafeRetry: result.evidence.can_safe_retry,
+        externalOrderNo: result.evidence.external_order_no ?? undefined,
+        summary: result.evidence.summary,
+        verifiedSupplierActionResultId:
+            result.evidence.verified_supplier_action_result_id ?? undefined,
+        verifiedResolution: result.evidence.verified_resolution ?? undefined,
     }
-    // version: try parse from expectedSubjectHash trailing digits, fallback 1
-    const versionMatch = input.expectedSubjectHash?.match(/(\d+)$/)
-    const version = versionMatch ? Number(versionMatch[1]) || 1 : 1
+    const common = {
+        status:
+            result.result_status === "SUCCEEDED"
+                ? ("succeeded" as const)
+                : result.result_status === "UNKNOWN"
+                  ? ("unknown" as const)
+                  : ("blocked" as const),
+        message: result.message,
+        reference: result.operation_id,
+        operationId: result.operation_id,
+        data: {
+            evidence,
+            lockVersion: result.order.version,
+            workItemStatus: result.work_item?.status,
+            taskVersion:
+                result.work_item?.task_version == null
+                    ? undefined
+                    : String(result.work_item.task_version),
+            allowedActions: result.allowed_actions,
+            actionBlockers: result.action_blockers.map((blocker) => ({
+                action: blocker.action,
+                code: blocker.code,
+                message: blocker.message,
+                destinationWorkspaceId:
+                    blocker.destination_workspace_id ?? undefined,
+            })),
+        },
+    }
+    if (input.commandKind === "OBJECT" && input.action === "REPLAY") {
+        return {
+            ...common,
+            data: {
+                ...common.data,
+                externalOrderNo: result.order.external_order_no ?? undefined,
+                fulfillmentStatus: asFulfillment(
+                    result.order.fulfillment_status,
+                ),
+            },
+        }
+    }
+    if (input.commandKind === "TASK" && input.action.type === "REPLAY") {
+        return {
+            ...common,
+            data: {
+                ...common.data,
+                externalOrderNo: result.order.external_order_no ?? undefined,
+                fulfillmentStatus: asFulfillment(
+                    result.order.fulfillment_status,
+                ),
+            },
+        }
+    }
+    return common
+}
 
-    await apiPost(
-        `/admin/work-items/${encodeURIComponent(input.workItemId)}/defer`,
+export async function completeSupplierOrderTask(
+    input: CompleteSupplierOrderTaskInput,
+): Promise<FormalActionResponse<CompleteSupplierOrderTaskResult>> {
+    const result = await apiPost<BackendTaskCompletionResult>(
+        "/admin/supplier-fulfillment-orders/task-completions",
         {
-            version,
-            comment: input.comment ?? input.reasonCode,
+            work_item_id: input.workItemId,
+            expected_task_version: input.expectedTaskVersion,
+            expected_subject_version: input.expectedSubjectVersion,
+            decision: {
+                type: input.decision.type,
+                order_id: input.decision.orderId,
+                expected_order_lock_version:
+                    input.decision.expectedOrderLockVersion,
+                verified_supplier_action_result_id:
+                    input.decision.verifiedSupplierActionResultId,
+                resolution: input.decision.resolution,
+            },
+            idempotency_key: input.idempotencyKey,
         },
     )
-
     return {
         status: "succeeded",
-        message: "已记录跳过原因。任务未完成、未转交，仍为待处理。",
+        message: "已根据可验证结果完成任务。",
+        reference: result.operation_id,
+        operationId: result.operation_id,
         data: {
-            reasonCode: input.reasonCode,
-            queueContextId: input.queueContextId,
-            leaseDisposition: "RELEASED",
-            workItemStatus: "PENDING",
+            operationId: result.operation_id,
+            workItemId: result.work_item_id,
+            workItemStatus: result.work_item_status,
+            taskVersion: String(result.task_version),
+            lockVersion: result.order_lock_version,
+            resolution: result.resolution,
         },
     }
 }
@@ -545,6 +764,9 @@ export async function submitAfterSalesAction(
             : `/admin/supplier-fulfillment-orders/${encodeURIComponent(input.orderId)}/refund`
 
     const result = await apiPost<BackendSubmitResult>(path, {
+        expected_lock_version: input.expectedLockVersion,
+        operation_id: input.operationId,
+        idempotency_key: input.idempotencyKey,
         after_sales_request_id: input.afterSalesRequestId,
         lines: [],
         reason_code: input.reasonCode,

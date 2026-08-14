@@ -1,32 +1,26 @@
 /**
- * W09 履约作业 · 真实 HTTP API。
+ * W09 履约单据处理 · 真实 HTTP API。
  *
- * 后端交付的是单据 CRUD（purchase-receipts / deliveries / electronic-deliveries /
- * service-fulfillments）+ work-items 通用动作，没有统一「履约队列投影」接口。
- * 本层：
- * - 队列：以 DRAFT 单据列表拼装 FulfillmentQueueView（缺字段登记 gap，不造业务数）
- * - 确认：create + post/confirm 真实 HTTP
- * - claim/defer：走 /admin/work-items（单据 ID 非 work_item 时降级为本地租约/失败）
+ * 当前服务端提供采购入库、发货、电子交付和服务履约单据接口，尚未注册
+ * W09 专属正式任务。这里仅投影 DRAFT 单据并直达各领域强类型命令；不得把
+ * 单据 ID 冒充 work_item，也不得用客户端责任状态补足缺失的任务合同。
  */
 
 import { apiGet, apiPost, apiPut, type Page } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
 import type {
-    DeferReasonCode,
     FormalActionResponse,
     FulfillmentDraft,
     FulfillmentFormalOutcome,
     FulfillmentOperationType,
     FulfillmentQueueView,
     FulfillmentSourceLine,
-    FulfillmentTask,
-    WorkItemLease,
+    FulfillmentOperation,
+    PostFulfillmentOperationCommand,
+    ResolveFulfillmentOperationCommand,
+    SaveFulfillmentOperationCommand,
 } from "@/features/fulfillment-operations/types"
-import {
-    DEFER_REASON_LABEL,
-    OPERATION_DONE_LABEL,
-    OPERATION_TYPE_SHORT,
-} from "@/features/fulfillment-operations/types"
+import { OPERATION_TYPE_SHORT } from "@/features/fulfillment-operations/types"
 import {
     resolveRole,
     type FulfillmentRole,
@@ -119,24 +113,6 @@ type BackendServiceFulfillment = {
     version: number
 }
 
-type BackendWorkItem = {
-    id: string
-    work_item_type: string
-    business_object_type: string
-    business_object_id: string
-    subject_version?: string | null
-    status: string
-    owner_role?: string | null
-    owner_user_id?: string | null
-    priority: string | number
-    due_at?: number | null
-    reason_code?: string | null
-    impact_summary?: string | null
-    completion_action: string
-    version: number
-    created_at: number
-}
-
 type BackendWarehouse = {
     id: string
     warehouse_code: string
@@ -144,7 +120,6 @@ type BackendWarehouse = {
 
 export type FulfillmentQueueFilters = {
     role: FulfillmentRole
-    scope: "mine" | "role_pool"
     operationTypes?: FulfillmentOperationType[]
     warehouseId?: string
     q?: string
@@ -152,8 +127,7 @@ export type FulfillmentQueueFilters = {
     gate?: "blocked" | "satisfied"
     salesOrderId?: string
     purchaseOrderId?: string
-    currentWorkItemId?: string
-    queueContextId?: string
+    currentOperationId?: string
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -185,48 +159,6 @@ function dueLabelFromIso(iso: string): { dueLabel: string; overdue: boolean } {
     return { dueLabel: day, overdue: false }
 }
 
-function priorityNumber(p: string | number | undefined): number {
-    if (typeof p === "number") return p
-    switch (String(p).toUpperCase()) {
-        case "HIGH":
-        case "URGENT":
-            return 30
-        case "NORMAL":
-            return 20
-        case "LOW":
-            return 10
-        default:
-            return 20
-    }
-}
-
-function resultBackend(code: string): string {
-    switch (code) {
-        case "SUCCESS":
-            return "SUCCESS"
-        case "PARTIAL":
-            return "PARTIAL"
-        case "FAILED":
-            return "FAILED"
-        default:
-            return code
-    }
-}
-
-function isoToUnix(iso: string | undefined): number {
-    if (!iso) return Math.floor(Date.now() / 1000)
-    const t = Date.parse(iso)
-    return Number.isFinite(t)
-        ? Math.floor(t / 1000)
-        : Math.floor(Date.now() / 1000)
-}
-
-function genDocNo(prefix: string): string {
-    const d = new Date()
-    const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`
-    return `${prefix}${ymd}${Math.random().toString(36).slice(2, 6).toUpperCase()}`
-}
-
 function emptySourceLine(
     partial: Partial<FulfillmentSourceLine> & {
         lineId: string
@@ -250,49 +182,44 @@ function emptySourceLine(
     }
 }
 
-function baseTask(
+function baseOperation(
     partial: Omit<
-        FulfillmentTask,
+        FulfillmentOperation,
         | "gate"
-        | "allowedActions"
         | "actionBlockers"
         | "impact"
         | "summary"
         | "statusTone"
         | "statusLabel"
-        | "held"
         | "priority"
         | "dueAt"
         | "dueLabel"
         | "overdue"
         | "responsibleLabel"
         | "sourceVersion"
-        | "subjectHash"
         | "editVersion"
         | "source"
         | "lines"
         | "draft"
     > &
-        Partial<FulfillmentTask> & {
+        Partial<FulfillmentOperation> & {
             operationType: FulfillmentOperationType
-            workItemId: string
+            operationId: string
         },
-): FulfillmentTask {
+): FulfillmentOperation {
     const dueAt = partial.dueAt ?? nowIso()
     const { dueLabel, overdue } = dueLabelFromIso(dueAt)
     return {
-        workItemId: partial.workItemId,
+        operationId: partial.operationId,
         operationType: partial.operationType,
         priority: partial.priority ?? 20,
         dueAt,
         dueLabel: partial.dueLabel ?? dueLabel,
         overdue: partial.overdue ?? overdue,
-        held: partial.held,
         statusLabel: partial.statusLabel ?? "待处理",
         statusTone: partial.statusTone ?? "info",
         responsibleLabel: partial.responsibleLabel ?? "",
         sourceVersion: partial.sourceVersion ?? "1",
-        subjectHash: partial.subjectHash ?? partial.workItemId,
         editVersion: partial.editVersion ?? 1,
         source: partial.source ?? {
             salesOrderId: "",
@@ -308,21 +235,14 @@ function baseTask(
         draft: partial.draft!,
         summary: partial.summary ?? "",
         impact: partial.impact ?? "",
-        allowedActions: partial.allowedActions ?? [
-            "POST",
-            "SAVE",
-            "DEFER",
-            "CLAIM",
-        ],
         actionBlockers: partial.actionBlockers ?? [],
-        lease: partial.lease,
     }
 }
 
-function receiptToTask(r: BackendPurchaseReceipt): FulfillmentTask {
+function receiptToOperation(r: BackendPurchaseReceipt): FulfillmentOperation {
     const dueAt = secsToIso(r.created_at) || nowIso()
-    return baseTask({
-        workItemId: r.id,
+    return baseOperation({
+        operationId: r.id,
         operationType: "RECEIPT",
         editVersion: r.version,
         sourceVersion: String(r.version),
@@ -349,15 +269,15 @@ function receiptToTask(r: BackendPurchaseReceipt): FulfillmentTask {
     })
 }
 
-function deliveryToTask(d: BackendDelivery): FulfillmentTask {
+function deliveryToOperation(d: BackendDelivery): FulfillmentOperation {
     const op: FulfillmentOperationType =
         d.delivery_type === "SUPPLIER_DIRECT"
             ? "SUPPLIER_DIRECT"
             : "WAREHOUSE_SHIP"
     const dueAt = secsToIso(d.created_at) || nowIso()
     if (op === "WAREHOUSE_SHIP") {
-        return baseTask({
-            workItemId: d.id,
+        return baseOperation({
+            operationId: d.id,
             operationType: "WAREHOUSE_SHIP",
             editVersion: d.version,
             sourceVersion: String(d.version),
@@ -384,8 +304,8 @@ function deliveryToTask(d: BackendDelivery): FulfillmentTask {
             },
         })
     }
-    return baseTask({
-        workItemId: d.id,
+    return baseOperation({
+        operationId: d.id,
         operationType: "SUPPLIER_DIRECT",
         editVersion: d.version,
         sourceVersion: String(d.version),
@@ -408,9 +328,11 @@ function deliveryToTask(d: BackendDelivery): FulfillmentTask {
     })
 }
 
-function electronicToTask(e: BackendElectronicDelivery): FulfillmentTask {
-    return baseTask({
-        workItemId: e.id,
+function electronicToOperation(
+    e: BackendElectronicDelivery,
+): FulfillmentOperation {
+    return baseOperation({
+        operationId: e.id,
         operationType: "ELECTRONIC",
         editVersion: e.version,
         sourceVersion: String(e.version),
@@ -452,9 +374,11 @@ function electronicToTask(e: BackendElectronicDelivery): FulfillmentTask {
     })
 }
 
-function serviceToTask(s: BackendServiceFulfillment): FulfillmentTask {
-    return baseTask({
-        workItemId: s.id,
+function serviceToOperation(
+    s: BackendServiceFulfillment,
+): FulfillmentOperation {
+    return baseOperation({
+        operationId: s.id,
         operationType: "SERVICE",
         editVersion: s.version,
         sourceVersion: String(s.version),
@@ -499,13 +423,13 @@ function serviceToTask(s: BackendServiceFulfillment): FulfillmentTask {
     })
 }
 
-async function hydrateTaskDetail(
-    task: FulfillmentTask,
-): Promise<FulfillmentTask> {
+async function hydrateOperationDetail(
+    operation: FulfillmentOperation,
+): Promise<FulfillmentOperation> {
     try {
-        if (task.operationType === "RECEIPT") {
+        if (operation.operationType === "RECEIPT") {
             const detail = await apiGet<BackendPurchaseReceiptDetail>(
-                `/admin/purchase-receipts/${encodeURIComponent(task.workItemId)}`,
+                `/admin/purchase-receipts/${encodeURIComponent(operation.operationId)}`,
             )
             const lines = detail.lines.map((l) =>
                 emptySourceLine({
@@ -524,7 +448,7 @@ async function hydrateTaskDetail(
                 qualityResult: l.quality_result,
             }))
             return {
-                ...task,
+                ...operation,
                 editVersion: detail.receipt.version,
                 sourceVersion: String(detail.receipt.version),
                 lines,
@@ -533,19 +457,19 @@ async function hydrateTaskDetail(
                     warehouseId: detail.receipt.warehouse_id,
                     warehouseLabel: detail.receipt.warehouse_id,
                     occurredAt:
-                        task.draft.type === "RECEIPT"
-                            ? task.draft.occurredAt
+                        operation.draft.type === "RECEIPT"
+                            ? operation.draft.occurredAt
                             : nowIso().slice(0, 16),
                     lines: draftLines,
                 },
             }
         }
         if (
-            task.operationType === "WAREHOUSE_SHIP" ||
-            task.operationType === "SUPPLIER_DIRECT"
+            operation.operationType === "WAREHOUSE_SHIP" ||
+            operation.operationType === "SUPPLIER_DIRECT"
         ) {
             const detail = await apiGet<BackendDeliveryDetail>(
-                `/admin/deliveries/${encodeURIComponent(task.workItemId)}`,
+                `/admin/deliveries/${encodeURIComponent(operation.operationId)}`,
             )
             const lines = detail.lines.map((l) =>
                 emptySourceLine({
@@ -561,9 +485,9 @@ async function hydrateTaskDetail(
                         l.purchase_line_sales_allocation_id ?? undefined,
                 }),
             )
-            if (task.operationType === "WAREHOUSE_SHIP") {
+            if (operation.operationType === "WAREHOUSE_SHIP") {
                 return {
-                    ...task,
+                    ...operation,
                     editVersion: detail.delivery.version,
                     sourceVersion: String(detail.delivery.version),
                     lines,
@@ -583,7 +507,7 @@ async function hydrateTaskDetail(
                 }
             }
             return {
-                ...task,
+                ...operation,
                 editVersion: detail.delivery.version,
                 sourceVersion: String(detail.delivery.version),
                 lines,
@@ -604,7 +528,7 @@ async function hydrateTaskDetail(
     } catch {
         // keep list projection
     }
-    return task
+    return operation
 }
 
 function filterSummary(
@@ -612,9 +536,6 @@ function filterSummary(
     warehouseOptions: FulfillmentQueueView["context"]["warehouseOptions"],
 ): string {
     const parts = [
-        filters.scope === "mine" && resolveRole(filters.role).userLabel
-            ? "仅我的"
-            : "全组",
         filters.operationTypes && filters.operationTypes.length > 0
             ? filters.operationTypes
                   .map((t) => OPERATION_TYPE_SHORT[t])
@@ -637,62 +558,61 @@ function filterSummary(
     return parts.join(" · ")
 }
 
-function matchTask(
-    task: FulfillmentTask,
+function matchOperation(
+    operation: FulfillmentOperation,
     filters: FulfillmentQueueFilters,
     roleTypes: readonly FulfillmentOperationType[],
 ): boolean {
-    if (!roleTypes.includes(task.operationType)) return false
+    if (!roleTypes.includes(operation.operationType)) return false
     if (
         filters.operationTypes &&
         filters.operationTypes.length > 0 &&
-        !filters.operationTypes.includes(task.operationType)
+        !filters.operationTypes.includes(operation.operationType)
     ) {
         return false
     }
     if (filters.warehouseId) {
         if (
-            (task.operationType === "RECEIPT" ||
-                task.operationType === "WAREHOUSE_SHIP") &&
-            task.source.warehouseId !== filters.warehouseId
+            (operation.operationType === "RECEIPT" ||
+                operation.operationType === "WAREHOUSE_SHIP") &&
+            operation.source.warehouseId !== filters.warehouseId
         ) {
             return false
         }
     }
     if (
         filters.salesOrderId &&
-        task.source.salesOrderId !== filters.salesOrderId
+        operation.source.salesOrderId !== filters.salesOrderId
     ) {
         return false
     }
     if (
         filters.purchaseOrderId &&
-        task.source.purchaseOrderId !== filters.purchaseOrderId
+        operation.source.purchaseOrderId !== filters.purchaseOrderId
     ) {
         return false
     }
     if (filters.q) {
         const q = filters.q.trim().toUpperCase()
         const hay = [
-            task.source.salesOrderNo,
-            task.source.purchaseNo ?? "",
-            task.summary,
-            task.workItemId,
+            operation.source.salesOrderNo,
+            operation.source.purchaseNo ?? "",
+            operation.summary,
+            operation.operationId,
         ]
             .join(" ")
             .toUpperCase()
         if (!hay.includes(q)) return false
     }
-    if (filters.due === "overdue" && !task.overdue) return false
+    if (filters.due === "overdue" && !operation.overdue) return false
     if (filters.due === "today") {
         const today = new Date().toISOString().slice(0, 10)
-        if (task.dueAt.slice(0, 10) !== today) return false
+        if (operation.dueAt.slice(0, 10) !== today) return false
     }
-    if (filters.gate === "blocked" && task.gate.state !== "BLOCKED")
+    if (filters.gate === "blocked" && operation.gate.state !== "BLOCKED")
         return false
-    if (filters.gate === "satisfied" && task.gate.state !== "SATISFIED")
+    if (filters.gate === "satisfied" && operation.gate.state !== "SATISFIED")
         return false
-    // scope=mine: backend has no owner on documents — cannot filter; gap
     return true
 }
 
@@ -711,8 +631,6 @@ export async function fetchFulfillmentQueue(
         return {
             preferences: { autoNextDefault: true },
             context: {
-                queueContextId:
-                    filters.queueContextId ?? `queue:W09:${filters.scope}`,
                 position: 0,
                 total: 0,
                 filterSummary: filterSummary(filters, []),
@@ -729,14 +647,14 @@ export async function fetchFulfillmentQueue(
                 count: 0,
                 visible: true,
             })),
-            tasks: [],
+            operations: [],
             emptyReason: "NO_PERMISSION",
         }
     }
 
     // Load draft documents for types visible to role
     const want = new Set(role.types)
-    const tasks: FulfillmentTask[] = []
+    const operations: FulfillmentOperation[] = []
 
     const loaders: Promise<void>[] = []
 
@@ -754,7 +672,8 @@ export async function fetchFulfillmentQueue(
                 },
             )
                 .then((page) => {
-                    for (const r of page.items) tasks.push(receiptToTask(r))
+                    for (const r of page.items)
+                        operations.push(receiptToOperation(r))
                 })
                 .catch((error) => {
                     if (!(isApiError(error) && error.status === 403))
@@ -775,8 +694,8 @@ export async function fetchFulfillmentQueue(
             })
                 .then((page) => {
                     for (const d of page.items) {
-                        const t = deliveryToTask(d)
-                        if (want.has(t.operationType)) tasks.push(t)
+                        const t = deliveryToOperation(d)
+                        if (want.has(t.operationType)) operations.push(t)
                     }
                 })
                 .catch((error) => {
@@ -799,7 +718,8 @@ export async function fetchFulfillmentQueue(
                 },
             )
                 .then((page) => {
-                    for (const e of page.items) tasks.push(electronicToTask(e))
+                    for (const e of page.items)
+                        operations.push(electronicToOperation(e))
                 })
                 .catch((error) => {
                     if (!(isApiError(error) && error.status === 403))
@@ -821,7 +741,8 @@ export async function fetchFulfillmentQueue(
                 },
             )
                 .then((page) => {
-                    for (const s of page.items) tasks.push(serviceToTask(s))
+                    for (const s of page.items)
+                        operations.push(serviceToOperation(s))
                 })
                 .catch((error) => {
                     if (!(isApiError(error) && error.status === 403))
@@ -848,16 +769,18 @@ export async function fetchFulfillmentQueue(
             label: w.warehouse_code,
         }))
     } catch {
-        // fall back to task-derived
+        // fall back to operation-derived
         const seen = new Map<string, string>()
-        for (const t of tasks) {
+        for (const t of operations) {
             const id = t.source.warehouseId
             if (id && !seen.has(id)) seen.set(id, t.source.warehouseLabel ?? id)
         }
         warehouseOptions = [...seen].map(([value, label]) => ({ value, label }))
     }
 
-    const inScope = tasks.filter((t) => role.types.includes(t.operationType))
+    const inScope = operations.filter((t) =>
+        role.types.includes(t.operationType),
+    )
     const metrics = role.types.map((operationType) => ({
         operationType,
         label: `待${OPERATION_TYPE_SHORT[operationType]}`,
@@ -865,7 +788,7 @@ export async function fetchFulfillmentQueue(
         visible: true,
     }))
 
-    let filtered = inScope.filter((t) => matchTask(t, filters, role.types))
+    let filtered = inScope.filter((t) => matchOperation(t, filters, role.types))
     filtered = [...filtered].sort((a, b) => {
         if (a.overdue !== b.overdue) return a.overdue ? -1 : 1
         if (a.priority !== b.priority) return b.priority - a.priority
@@ -874,9 +797,9 @@ export async function fetchFulfillmentQueue(
 
     let position = 0
     let current = filtered[0]
-    if (filters.currentWorkItemId) {
+    if (filters.currentOperationId) {
         const idx = filtered.findIndex(
-            (t) => t.workItemId === filters.currentWorkItemId,
+            (t) => t.operationId === filters.currentOperationId,
         )
         if (idx >= 0) {
             position = idx
@@ -885,15 +808,15 @@ export async function fetchFulfillmentQueue(
     }
 
     if (current) {
-        current = await hydrateTaskDetail(current)
+        current = await hydrateOperationDetail(current)
         filtered = filtered.map((t) =>
-            t.workItemId === current!.workItemId ? current! : t,
+            t.operationId === current!.operationId ? current! : t,
         )
     }
 
     const emptyReason =
         inScope.length === 0
-            ? "NO_TASKS"
+            ? "NO_OPERATIONS"
             : filtered.length === 0
               ? "FILTER_NO_RESULT"
               : undefined
@@ -901,13 +824,11 @@ export async function fetchFulfillmentQueue(
     return {
         preferences: { autoNextDefault: true },
         context: {
-            queueContextId:
-                filters.queueContextId ?? `queue:W09:${filters.scope}`,
             position: filtered.length === 0 ? 0 : position + 1,
             total: filtered.length,
-            currentWorkItemId: current?.workItemId,
-            previousWorkItemId: filtered[position - 1]?.workItemId,
-            nextWorkItemId: filtered[position + 1]?.workItemId,
+            currentOperationId: current?.operationId,
+            previousOperationId: filtered[position - 1]?.operationId,
+            nextOperationId: filtered[position + 1]?.operationId,
             filterSummary: filterSummary(filters, warehouseOptions),
             warehouseOptions,
             visibleTypes: role.types,
@@ -917,54 +838,23 @@ export async function fetchFulfillmentQueue(
             snapshotUpdatedAt: nowIso(),
         },
         metrics,
-        tasks: filtered,
+        operations: filtered,
         current,
         emptyReason,
     }
 }
 
-export async function claimFulfillmentWorkItem(
-    workItemId: string,
-): Promise<WorkItemLease> {
-    // Prefer work-item claim when the id is a real work item
-    try {
-        const wi = await apiGet<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(workItemId)}`,
-        )
-        await apiPost<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(workItemId)}/claim`,
-            { version: wi.version },
-        )
-        return {
-            workItemId,
-            claimedByLabel: "当前用户",
-        }
-    } catch (error) {
-        // Document-backed queue rows are not work_items — claim is local UX only
-        if (
-            isApiError(error) &&
-            (error.status === 404 || error.status === 422)
-        ) {
-            return {
-                workItemId,
-                claimedByLabel: "当前用户",
-            }
-        }
-        throw error
-    }
-}
-
-export async function saveFulfillmentOperation(input: {
-    workItemId: string
-    expectedEditVersion: number
-    draft: FulfillmentDraft
-}): Promise<{ editVersion: number }> {
+export async function saveFulfillmentOperation(
+    input: SaveFulfillmentOperationCommand,
+): Promise<{ editVersion: number }> {
     const draft = input.draft
     if (draft.type === "RECEIPT") {
         const updated = await apiPut<BackendPurchaseReceipt>(
-            `/admin/purchase-receipts/${encodeURIComponent(input.workItemId)}`,
+            `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}`,
             {
-                version: input.expectedEditVersion,
+                version: input.expectedDocumentVersion,
+                expected_source_version: input.expectedSourceVersion,
+                idempotency_key: input.idempotencyKey,
                 warehouse_id: draft.warehouseId || undefined,
             },
         )
@@ -972,54 +862,43 @@ export async function saveFulfillmentOperation(input: {
     }
     if (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") {
         const updated = await apiPut<BackendDelivery>(
-            `/admin/deliveries/${encodeURIComponent(input.workItemId)}`,
+            `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
             {
-                version: input.expectedEditVersion,
+                version: input.expectedDocumentVersion,
+                expected_source_version: input.expectedSourceVersion,
+                idempotency_key: input.idempotencyKey,
                 carrier: draft.carrier || undefined,
                 tracking_no: draft.trackingNo || undefined,
             },
         )
         return { editVersion: updated.version }
     }
-    // ELECTRONIC / SERVICE drafts: backend has no update endpoint for draft body
-    // (create-only + confirm). Keep editVersion bump client-visible as no-op success
-    // with same version — register gap.
-    return { editVersion: input.expectedEditVersion }
+    throw new Error("电子交付与服务履约草稿不支持保存；请直接确认正式单据")
 }
 
 function formalFromReceipt(
     receipt: BackendPurchaseReceipt,
     draft: Extract<FulfillmentDraft, { type: "RECEIPT" }>,
-    workItemId: string,
-    nextWorkItemId?: string,
+    operationId: string,
 ): FulfillmentFormalOutcome {
     return {
         kind: "POSTED",
-        workItemId,
+        operationId,
         factType: "PURCHASE_RECEIPT",
         factId: receipt.id,
         factNo: receipt.receipt_no,
         formalStatus: receipt.status || "POSTED",
-        occurredAt: draft.occurredAt || nowIso(),
+        occurredAt:
+            secsToIso(receipt.posted_at) || draft.occurredAt || nowIso(),
         operationType: "RECEIPT",
-        inventoryDelta: draft.lines
-            .filter((l) => Number(l.qualifiedQuantity) > 0)
-            .map((l) => ({
-                warehouseId: draft.warehouseId,
-                warehouseLabel: draft.warehouseLabel,
-                skuId: l.purchaseRevisionLineId,
-                skuLabel: l.purchaseRevisionLineId,
-                quantity: l.qualifiedQuantity,
-                direction: "INCREASE" as const,
-            })),
+        inventoryDelta: [],
         reservationDelta: [],
         remainingByLine: [],
         acceptanceRequired: false,
         acceptanceNextStep:
             "入库不等于验收。合格的货已入库并按销售单留好；等发货之后，再由销售去登记客户验收。",
-        inventoryImpactSummary: "合格数量入库并留货（以服务端结果为准）。",
+        inventoryImpactSummary: "单据已确认；库存影响以库存台账为准。",
         reference: receipt.receipt_no,
-        nextWorkItemId,
         salesOrderId: "",
         salesOrderNo: "",
     }
@@ -1031,70 +910,48 @@ function formalFromDelivery(
         FulfillmentDraft,
         { type: "WAREHOUSE_SHIP" } | { type: "SUPPLIER_DIRECT" }
     >,
-    workItemId: string,
-    nextWorkItemId?: string,
+    operationId: string,
 ): FulfillmentFormalOutcome {
     const isWh = draft.type === "WAREHOUSE_SHIP"
     return {
         kind: "POSTED",
-        workItemId,
+        operationId,
         factType: "DELIVERY",
         factId: delivery.id,
         factNo: delivery.delivery_no,
         formalStatus: delivery.status || "SHIPPED",
-        occurredAt: (isWh ? draft.shippedAt : draft.shippedAt) || nowIso(),
+        occurredAt:
+            secsToIso(delivery.shipped_at) || draft.shippedAt || nowIso(),
         operationType: draft.type,
-        inventoryDelta: isWh
-            ? draft.lines.map((l) => ({
-                  warehouseId: draft.warehouseId,
-                  warehouseLabel: draft.warehouseLabel,
-                  skuId: l.salesOrderLineId,
-                  skuLabel: l.salesOrderLineId,
-                  quantity: l.quantity,
-                  direction: "DECREASE" as const,
-              }))
-            : [],
-        reservationDelta: isWh
-            ? draft.lines.map((l) => ({
-                  reservationId: l.stockReservationId,
-                  quantity: l.quantity,
-                  action: "CONSUME" as const,
-                  salesOrderLineId: l.salesOrderLineId,
-              }))
-            : [],
+        inventoryDelta: [],
+        reservationDelta: [],
         remainingByLine: [],
         acceptanceRequired: true,
         acceptanceNextStep: isWh
             ? "仓发记录已确认。物流签收不等于客户验收；请销售在客户验收登记。"
             : "供应商直发记录已确认，不影响自有库存。请销售在客户验收登记（物流签收≠验收）。",
         inventoryImpactSummary: isWh
-            ? "用掉了为这单留的货，库存相应减少（不涉及付款）。"
-            : "不动自己仓库的库存，也不动留货。",
+            ? "发货单已确认；库存与留货影响以库存台账为准。"
+            : "供应商直发不影响自有库存。",
         reference: delivery.delivery_no,
-        nextWorkItemId,
         salesOrderId: delivery.sales_order_id,
         salesOrderNo: delivery.sales_order_id,
     }
 }
 
-export async function postFulfillmentOperation(input: {
-    workItemId: string
-    expectedSubjectVersion: string
-    expectedSourceVersion: string
-    expectedEditVersion: number
-    draft: FulfillmentDraft
-    nextWorkItemId?: string
-}): Promise<FormalActionResponse> {
+export async function postFulfillmentOperation(
+    input: PostFulfillmentOperationCommand,
+): Promise<FormalActionResponse> {
     const draft = input.draft
 
     try {
         if (draft.type === "RECEIPT") {
             // Prefer post existing draft document; if not found, create then post
-            const receiptId = input.workItemId
+            const receiptId = input.operationId
             let receipt: BackendPurchaseReceipt | null = null
             try {
                 const detail = await apiGet<BackendPurchaseReceiptDetail>(
-                    `/admin/purchase-receipts/${encodeURIComponent(input.workItemId)}`,
+                    `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}`,
                 )
                 receipt = detail.receipt
             } catch (error) {
@@ -1118,30 +975,34 @@ export async function postFulfillmentOperation(input: {
                 }
             }
 
+            let commandVersion = input.expectedDocumentVersion
             if (
                 receipt.warehouse_id !== draft.warehouseId &&
                 draft.warehouseId
             ) {
-                await apiPut<BackendPurchaseReceipt>(
+                const updated = await apiPut<BackendPurchaseReceipt>(
                     `/admin/purchase-receipts/${encodeURIComponent(receiptId)}`,
                     {
-                        version: receipt.version,
+                        version: input.expectedDocumentVersion,
+                        expected_source_version: input.expectedSourceVersion,
+                        idempotency_key: input.idempotencyKey,
                         warehouse_id: draft.warehouseId,
                     },
                 )
+                commandVersion = updated.version
             }
 
             const posted = await apiPost<BackendPurchaseReceipt>(
                 `/admin/purchase-receipts/${encodeURIComponent(receiptId)}/post`,
+                {
+                    version: commandVersion,
+                    expected_source_version: input.expectedSourceVersion,
+                    idempotency_key: input.idempotencyKey,
+                },
             )
             return {
                 status: "succeeded",
-                outcome: formalFromReceipt(
-                    posted,
-                    draft,
-                    input.workItemId,
-                    input.nextWorkItemId,
-                ),
+                outcome: formalFromReceipt(posted, draft, input.operationId),
             }
         }
 
@@ -1152,7 +1013,7 @@ export async function postFulfillmentOperation(input: {
             let delivery: BackendDelivery | null = null
             try {
                 const detail = await apiGet<BackendDeliveryDetail>(
-                    `/admin/deliveries/${encodeURIComponent(input.workItemId)}`,
+                    `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
                 )
                 delivery = detail.delivery
             } catch (error) {
@@ -1160,86 +1021,34 @@ export async function postFulfillmentOperation(input: {
             }
 
             if (!delivery) {
-                // Create new delivery from draft
-                if (!draft.lines.length) {
-                    return {
-                        status: "failed",
-                        code: "VALIDATION_BLOCKED",
-                        message: "发货明细不能为空",
-                    }
-                }
-                const created = await apiPost<BackendDelivery>(
-                    "/admin/deliveries",
-                    {
-                        delivery_no: genDocNo(
-                            draft.type === "WAREHOUSE_SHIP" ? "FH" : "DF",
-                        ),
-                        delivery_type:
-                            draft.type === "WAREHOUSE_SHIP"
-                                ? "WAREHOUSE_SHIP"
-                                : "SUPPLIER_DIRECT",
-                        sales_order_id:
-                            draft.lines[0]
-                                ?.salesOrderLineId /* wrong — need SO id */ ||
-                            input.workItemId,
-                        purchase_order_id: undefined,
-                        warehouse_id:
-                            draft.type === "WAREHOUSE_SHIP"
-                                ? draft.warehouseId
-                                : undefined,
-                        carrier: draft.carrier,
-                        tracking_no: draft.trackingNo,
-                        lines:
-                            draft.type === "WAREHOUSE_SHIP"
-                                ? draft.lines.map((l) => ({
-                                      sales_order_line_id: l.salesOrderLineId,
-                                      quantity: l.quantity,
-                                      stock_reservation_id:
-                                          l.stockReservationId,
-                                      purchase_line_sales_allocation_id: null,
-                                  }))
-                                : draft.lines.map((l) => ({
-                                      sales_order_line_id: l.salesOrderLineId,
-                                      quantity: l.quantity,
-                                      stock_reservation_id: null,
-                                      purchase_line_sales_allocation_id:
-                                          l.purchaseLineSalesAllocationId,
-                                  })),
-                    },
-                )
-                const posted = await apiPost<BackendDelivery>(
-                    `/admin/deliveries/${encodeURIComponent(created.id)}/post`,
-                )
                 return {
-                    status: "succeeded",
-                    outcome: formalFromDelivery(
-                        posted,
-                        draft,
-                        input.workItemId,
-                        input.nextWorkItemId,
-                    ),
+                    status: "failed",
+                    code: "DOCUMENT_NOT_FOUND",
+                    message: "发货草稿已不存在，请刷新后重新选择单据",
                 }
             }
 
-            await apiPut<BackendDelivery>(
+            const updated = await apiPut<BackendDelivery>(
                 `/admin/deliveries/${encodeURIComponent(delivery.id)}`,
                 {
-                    version: delivery.version,
+                    version: input.expectedDocumentVersion,
+                    expected_source_version: input.expectedSourceVersion,
+                    idempotency_key: input.idempotencyKey,
                     carrier: draft.carrier || undefined,
                     tracking_no: draft.trackingNo || undefined,
                 },
             )
             const posted = await apiPost<BackendDelivery>(
                 `/admin/deliveries/${encodeURIComponent(delivery.id)}/post`,
+                {
+                    version: updated.version,
+                    expected_source_version: input.expectedSourceVersion,
+                    idempotency_key: input.idempotencyKey,
+                },
             )
             return {
                 status: "succeeded",
-                outcome: formalFromDelivery(
-                    posted,
-                    draft,
-                    input.workItemId,
-                    input.nextWorkItemId,
-                ),
+                outcome: formalFromDelivery(posted, draft, input.operationId),
             }
         }
 
@@ -1252,77 +1061,19 @@ export async function postFulfillmentOperation(input: {
                     message: "交付明细不能为空",
                 }
             }
-            // Try confirm existing draft first
-            try {
-                const confirmed = await apiPost<BackendElectronicDelivery>(
-                    `/admin/electronic-deliveries/${encodeURIComponent(input.workItemId)}/confirm`,
-                )
-                return {
-                    status: "succeeded",
-                    outcome: {
-                        kind: "POSTED",
-                        workItemId: input.workItemId,
-                        factType: "ELECTRONIC_DELIVERY",
-                        factId: confirmed.id,
-                        factNo: confirmed.fulfillment_no,
-                        formalStatus:
-                            confirmed.result === "FAILED"
-                                ? "FAILED"
-                                : "CONFIRMED",
-                        occurredAt:
-                            secsToIso(confirmed.occurred_at) || nowIso(),
-                        operationType: "ELECTRONIC",
-                        inventoryDelta: [],
-                        reservationDelta: [],
-                        remainingByLine: [],
-                        acceptanceRequired: confirmed.result !== "FAILED",
-                        acceptanceNextStep:
-                            confirmed.result === "FAILED"
-                                ? "电子交付失败已留痕，不可覆盖；重做须新建记录。不进入客户验收。"
-                                : "电子交付已确认，不影响自有库存。请销售在客户验收登记。",
-                        inventoryImpactSummary: "不影响自有库存。",
-                        reference: confirmed.fulfillment_no,
-                        nextWorkItemId: input.nextWorkItemId,
-                        salesOrderId: "",
-                        salesOrderNo: "",
-                    },
-                }
-            } catch (error) {
-                if (!(isApiError(error) && error.status === 404)) {
-                    if (isApiError(error)) {
-                        return {
-                            status: "failed",
-                            code: String(error.status ?? "ERROR"),
-                            message: error.message,
-                        }
-                    }
-                    throw error
-                }
-            }
-
-            // Create + confirm requires purchase_order_id which draft may lack fully
-            const created = await apiPost<BackendElectronicDelivery>(
-                "/admin/electronic-deliveries",
-                {
-                    fulfillment_no: genDocNo("ED"),
-                    sales_order_line_id: line.salesOrderLineId,
-                    purchase_order_id: "", // will fail validation if empty — surface backend error
-                    purchase_line_sales_allocation_id:
-                        line.purchaseLineSalesAllocationId,
-                    recipient_snapshot: draft.recipientMasked || "masked",
-                    quantity: line.quantity,
-                    result: resultBackend(draft.result),
-                    occurred_at: isoToUnix(draft.occurredAt),
-                },
-            )
             const confirmed = await apiPost<BackendElectronicDelivery>(
-                `/admin/electronic-deliveries/${encodeURIComponent(created.id)}/confirm`,
+                `/admin/electronic-deliveries/${encodeURIComponent(input.operationId)}/confirm`,
+                {
+                    version: input.expectedDocumentVersion,
+                    expected_source_version: input.expectedSourceVersion,
+                    idempotency_key: input.idempotencyKey,
+                },
             )
             return {
                 status: "succeeded",
                 outcome: {
                     kind: "POSTED",
-                    workItemId: input.workItemId,
+                    operationId: input.operationId,
                     factType: "ELECTRONIC_DELIVERY",
                     factId: confirmed.id,
                     factNo: confirmed.fulfillment_no,
@@ -1338,7 +1089,6 @@ export async function postFulfillmentOperation(input: {
                         "电子交付已确认，不影响自有库存。请销售在客户验收登记。",
                     inventoryImpactSummary: "不影响自有库存。",
                     reference: confirmed.fulfillment_no,
-                    nextWorkItemId: input.nextWorkItemId,
                     salesOrderId: "",
                     salesOrderNo: "",
                 },
@@ -1354,76 +1104,19 @@ export async function postFulfillmentOperation(input: {
                 message: "服务明细不能为空",
             }
         }
-        try {
-            const confirmed = await apiPost<BackendServiceFulfillment>(
-                `/admin/service-fulfillments/${encodeURIComponent(input.workItemId)}/confirm`,
-            )
-            return {
-                status: "succeeded",
-                outcome: {
-                    kind: "POSTED",
-                    workItemId: input.workItemId,
-                    factType: "SERVICE_FULFILLMENT",
-                    factId: confirmed.id,
-                    factNo: confirmed.fulfillment_no,
-                    formalStatus:
-                        confirmed.result === "FAILED" ? "FAILED" : "CONFIRMED",
-                    occurredAt: secsToIso(confirmed.occurred_at) || nowIso(),
-                    operationType: "SERVICE",
-                    inventoryDelta: [],
-                    reservationDelta: [],
-                    remainingByLine: [],
-                    acceptanceRequired: confirmed.result !== "FAILED",
-                    acceptanceNextStep:
-                        confirmed.result === "FAILED"
-                            ? "服务失败已留痕，不可覆盖；重做须新建记录。"
-                            : "服务履约已确认。请销售在客户验收登记。",
-                    inventoryImpactSummary: "不影响自有库存。",
-                    reference: confirmed.fulfillment_no,
-                    nextWorkItemId: input.nextWorkItemId,
-                    salesOrderId: "",
-                    salesOrderNo: "",
-                },
-            }
-        } catch (error) {
-            if (!(isApiError(error) && error.status === 404)) {
-                if (isApiError(error)) {
-                    return {
-                        status: "failed",
-                        code: String(error.status ?? "ERROR"),
-                        message: error.message,
-                    }
-                }
-                throw error
-            }
-        }
-
-        const created = await apiPost<BackendServiceFulfillment>(
-            "/admin/service-fulfillments",
-            {
-                fulfillment_no: genDocNo("FW"),
-                sales_order_line_id: line.salesOrderLineId,
-                purchase_order_id: "",
-                purchase_line_sales_allocation_id:
-                    line.purchaseLineSalesAllocationId,
-                recipient_snapshot: "masked",
-                quantity: line.quantity,
-                result: resultBackend(draft.result),
-                service_location: draft.serviceLocation || "—",
-                service_started_at: isoToUnix(draft.startedAt),
-                service_ended_at: isoToUnix(draft.endedAt),
-                completion_note: draft.completionNote,
-                occurred_at: isoToUnix(draft.endedAt || draft.startedAt),
-            },
-        )
         const confirmed = await apiPost<BackendServiceFulfillment>(
-            `/admin/service-fulfillments/${encodeURIComponent(created.id)}/confirm`,
+            `/admin/service-fulfillments/${encodeURIComponent(input.operationId)}/confirm`,
+            {
+                version: input.expectedDocumentVersion,
+                expected_source_version: input.expectedSourceVersion,
+                idempotency_key: input.idempotencyKey,
+            },
         )
         return {
             status: "succeeded",
             outcome: {
                 kind: "POSTED",
-                workItemId: input.workItemId,
+                operationId: input.operationId,
                 factType: "SERVICE_FULFILLMENT",
                 factId: confirmed.id,
                 factNo: confirmed.fulfillment_no,
@@ -1438,7 +1131,6 @@ export async function postFulfillmentOperation(input: {
                 acceptanceNextStep: "服务履约已确认。请销售在客户验收登记。",
                 inventoryImpactSummary: "不影响自有库存。",
                 reference: confirmed.fulfillment_no,
-                nextWorkItemId: input.nextWorkItemId,
                 salesOrderId: "",
                 salesOrderNo: "",
             },
@@ -1453,7 +1145,7 @@ export async function postFulfillmentOperation(input: {
                 return {
                     status: "unknown",
                     message: error.message,
-                    idempotencyKey: `post_${input.workItemId}_${Date.now().toString(36)}`,
+                    idempotencyKey: input.idempotencyKey,
                 }
             }
             if (error.status === 409) {
@@ -1473,84 +1165,22 @@ export async function postFulfillmentOperation(input: {
     }
 }
 
-export async function deferFulfillmentOperation(input: {
-    workItemId: string
-    queueContextId: string
-    reasonCode: DeferReasonCode
-    reasonNote?: string
-    nextWorkItemId?: string
-}): Promise<FormalActionResponse> {
-    if (!input.reasonCode) {
-        return {
-            status: "failed",
-            code: "REASON_REQUIRED",
-            message: "先跳过需要选一个原因",
-        }
-    }
-    const note = `${DEFER_REASON_LABEL[input.reasonCode]}${
-        input.reasonNote ? `: ${input.reasonNote}` : ""
-    }`
-    try {
-        const wi = await apiGet<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(input.workItemId)}`,
-        )
-        await apiPost<BackendWorkItem>(
-            `/admin/work-items/${encodeURIComponent(input.workItemId)}/defer`,
-            {
-                version: wi.version,
-                comment: note,
-            },
-        )
-        return {
-            status: "succeeded",
-            outcome: {
-                kind: "DEFERRED",
-                workItemId: input.workItemId,
-                workItemStatus: "PENDING",
-                leaseDisposition: "RELEASED",
-                reasonCode: input.reasonCode,
-                reasonNote: input.reasonNote,
-                nextWorkItemId: input.nextWorkItemId,
-                reference: `FF-HOLD-${input.workItemId.toUpperCase()}`,
-            },
-        }
-    } catch (error) {
-        if (isApiError(error) && error.status === 404) {
-            // Document-based queue has no work_item defer — surface gap, do not fake success
-            return {
-                status: "failed",
-                code: "BACKEND_GAP",
-                message:
-                    "当前任务不是待办记录，无法在服务端跳过。履约队列工作项类型尚未由后端提供。",
-            }
-        }
-        if (isApiError(error)) {
-            return {
-                status: "failed",
-                code: String(error.status ?? "ERROR"),
-                message: error.message,
-            }
-        }
-        throw error
-    }
-}
-
-export async function resolveUnknownFulfillmentResult(input: {
-    workItemId: string
-}): Promise<FormalActionResponse> {
+export async function resolveUnknownFulfillmentResult(
+    input: ResolveFulfillmentOperationCommand,
+): Promise<FormalActionResponse> {
     // Probe document status for posted outcomes
     const probes: Array<() => Promise<FormalActionResponse | null>> = [
         async () => {
             try {
                 const d = await apiGet<BackendPurchaseReceiptDetail>(
-                    `/admin/purchase-receipts/${encodeURIComponent(input.workItemId)}`,
+                    `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}`,
                 )
                 if (d.receipt.status === "POSTED") {
                     return {
                         status: "succeeded",
                         outcome: {
                             kind: "POSTED",
-                            workItemId: input.workItemId,
+                            operationId: input.operationId,
                             factType: "PURCHASE_RECEIPT",
                             factId: d.receipt.id,
                             factNo: d.receipt.receipt_no,
@@ -1578,7 +1208,7 @@ export async function resolveUnknownFulfillmentResult(input: {
         async () => {
             try {
                 const d = await apiGet<BackendDeliveryDetail>(
-                    `/admin/deliveries/${encodeURIComponent(input.workItemId)}`,
+                    `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
                 )
                 if (
                     d.delivery.status === "SHIPPED" ||
@@ -1588,7 +1218,7 @@ export async function resolveUnknownFulfillmentResult(input: {
                         status: "succeeded",
                         outcome: {
                             kind: "POSTED",
-                            workItemId: input.workItemId,
+                            operationId: input.operationId,
                             factType: "DELIVERY",
                             factId: d.delivery.id,
                             factNo: d.delivery.delivery_no,
@@ -1626,10 +1256,6 @@ export async function resolveUnknownFulfillmentResult(input: {
     return {
         status: "failed",
         code: "NO_PENDING",
-        message: "未找到该任务号对应的处理中请求",
+        message: "未找到该单据对应的处理中请求",
     }
 }
-
-// silence unused in case tree-shaking tools complain about OPERATION_DONE_LABEL in some builds
-void OPERATION_DONE_LABEL
-void priorityNumber

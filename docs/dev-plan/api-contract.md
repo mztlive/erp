@@ -253,6 +253,7 @@ GET /admin/audit-logs?page=1&page_size=50&actor_account=admin01&action=customer.
 
 ```text
 GET /admin/work-items?scope=mine|team|managed|history&...
+GET /admin/work-items/stats?scope=mine|team&family=...&work_item_type=...&due=...&timezone=Asia%2FShanghai
 ```
 
 - `scope=mine`：只返回 `status=OPEN` 且 `owner_user_id=当前用户` 的任务；
@@ -272,6 +273,10 @@ GET /admin/work-items?scope=mine|team|managed|history&...
   只要嵌入可操作任务摘要，都必须返回同一字段；不得用业务对象 `subject_version` 代替。
 - 阻塞步骤保留的开放待办必须返回 `processing_state=APPROVAL_BLOCKED`、权限安全的结构化阻塞摘要和空
   `allowed_actions`；其它可处理任务返回 `processing_state=READY`。
+- `/work-items/stats` 必须复用列表的 JWT、角色、组织、数据范围、对象参与权和责任过滤；不得接受分页、
+  自由检索或客户端责任人条件。响应固定返回 `assigned`、`team`、`due_today`、`overdue`、`exception`、
+  `as_of`；五类计数只统计 `processing_state=READY` 且在相应责任范围内具有 `PROCESS` 或
+  `START_PROCESSING` 动作的开放任务，`APPROVAL_BLOCKED` 任务不得计入可立即处理数。
 
 ### 8.2 建立和调整责任
 
@@ -319,6 +324,12 @@ POST /admin/work-items/{id}/complete
 非审批任务同样由任务类型绑定的强类型领域命令完成。客户端不得提交
 `completion_action`，也不得仅凭 HTTP 2xx 本地推进下一步骤或业务状态。
 
+W08 采购财务审核固定使用
+`POST /admin/purchase-orders/{purchaseOrderId}/review-decisions`，请求体为
+`ReviewPurchaseOrderCommand`；`APPROVED/REJECTED` 只允许出现在嵌套
+`decision.review_result`。详情投影把 W02 `responsibility_actions` 与 W08
+`domain_allowed_actions` 分开返回，禁止把领域决定写入通用任务动作集合。
+
 ### 8.4 阻塞审批管理
 
 | 方法与路径 | 用途 | 关键约束 |
@@ -336,3 +347,63 @@ POST /admin/work-items/{id}/complete
 业务 HTTP 契约不因 `runtime_kind=INTERNAL|BPM` 改变。`external_instance_id`、
 `external_activity_id` 和消息关联键只向具备诊断权限的管理接口展示，不进入普通工作面动作参数。
 接入 BPM 前必须先完成 outbox/inbox、幂等消费、结果查询和人工恢复的独立基础设施修订。
+
+### 8.6 W18 导入责任确认与执行命令
+
+W18 使用两个互不替代的强类型写入口：
+
+```text
+POST /admin/legacy-import-confirmations/complete
+POST /admin/legacy-import-batches/{batch_id}/commands
+```
+
+`CompleteImportBusinessConfirmation` 完成最后一项必要责任确认时，只把批次推进为
+`ready_to_apply`，响应 `next_step=START_APPLY`。该事务不得启动后台任务。
+
+导入执行请求使用 snake_case wire 字段；版本均为十进制字符串，禁止 JSON number：
+
+```json
+{
+  "batch_id": "legacy-import-batch-id",
+  "expected_batch_version": "12",
+  "expected_trial_version": "4",
+  "action": "START_APPLY",
+  "reason_code": null,
+  "comment": null,
+  "request_id": "client-generated-idempotency-id"
+}
+```
+
+请求体 `batch_id` 必须与路径一致，未知字段必须返回 400。`START_APPLY` 与
+`RETRY_FAILED` 必须携带 `expected_trial_version`；`CANCEL_PENDING` 必须携带非空
+`reason_code`。三种动作固定语义如下：
+
+| `action` | 允许状态与效果 | 固定下一步 |
+| --- | --- | --- |
+| `START_APPLY` | 仅允许 `ready_to_apply + pending job`；同事务推进为 `importing + running job` | `MONITOR_PROGRESS` |
+| `CANCEL_PENDING` | 仅取消尚未应用项；保留已形成业务事实和既有结果计数；关联任务进入 `cancelled` | `REVIEW_RESULT` |
+| `RETRY_FAILED` | 仅重置失败行并保留已导入、已跳过和原本未处理行；批次回到 `ready_to_apply`，本动作不启动任务 | `START_APPLY` |
+
+成功响应固定为：
+
+```json
+{
+  "action": "START_APPLY",
+  "result_status": "STARTED",
+  "batch_id": "legacy-import-batch-id",
+  "batch_status": "importing",
+  "batch_version": "13",
+  "trial_version": "4",
+  "background_job_id": "background-job-id",
+  "background_job_status": "running",
+  "background_job_version": "2",
+  "affected_items": 120,
+  "next_step": "MONITOR_PROGRESS",
+  "audit_receipt": "import-execution-command-digest"
+}
+```
+
+同一操作人、批次和 `request_id` 的同载荷重试必须返回同一收据结果，即使后台任务已继续推进；
+同一 `request_id` 复用不同载荷必须返回 409。批次/试算版本过期、后台任务未关联、责任确认未完成
+或状态不符合动作要求时必须失败关闭。`/admin/legacy-import-batches/{id}/apply` 只接收已由
+`START_APPLY` 启动后的后台逐行结果，不是前端“提交应用”入口。

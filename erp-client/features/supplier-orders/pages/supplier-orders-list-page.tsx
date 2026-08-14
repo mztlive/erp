@@ -128,6 +128,21 @@ export function SupplierOrdersListPage() {
     const [exportPreviewOpen, setExportPreviewOpen] = React.useState(false)
     const [pendingExport, setPendingExport] =
         React.useState<ExportCommand | null>(null)
+    const commandIdentities = React.useRef(
+        new Map<string, { operationId: string; idempotencyKey: string }>(),
+    )
+
+    function investigationIdentity(source: string, orderId: string) {
+        const key = `${source}:${orderId}`
+        const existing = commandIdentities.current.get(key)
+        if (existing) return { key, ...existing }
+        const identity = {
+            operationId: `w26:${source}:${crypto.randomUUID()}`,
+            idempotencyKey: `w26:${source}:${crypto.randomUUID()}`,
+        }
+        commandIdentities.current.set(key, identity)
+        return { key, ...identity }
+    }
     const [exportResult, setExportResult] = React.useState<{
         jobId: string
         rowCount: number
@@ -334,24 +349,28 @@ export function SupplierOrdersListPage() {
         const detail = await fetchSupplierOrderDetail({
             orderId: row.orderId,
         })
-        if (!detail) {
+        if (detail.workItem) {
             setActionResult({
-                status: "failed",
-                title: "无法加载订单",
-                description: "未找到供应商订单详情",
+                status: "blocked",
+                title: "请进入正式任务处理",
+                description:
+                    "当前订单已关联正式任务；列表直接入口不得降级提交对象查询命令。",
             })
             return
         }
+        const identity = investigationIdentity("list-query", row.orderId)
         const res = await queryResultMutation.mutateAsync({
+            commandKind: "OBJECT",
             orderId: row.orderId,
             expectedLockVersion: detail.order.lockVersion,
+            action: "QUERY_RESULT",
             targetSupplierActionId: detail.placeActionId,
-            operationId: `op-query-list-${Date.now()}`,
-            idempotencyKey: `query-list-${row.orderId}-${Date.now()}`,
-            workItemId: detail.workItem?.workItemId,
-            expectedSubjectHash: detail.workItem?.subjectHash,
-            expectedSubjectVersion: detail.workItem?.subjectVersion,
+            operationId: identity.operationId,
+            idempotencyKey: identity.idempotencyKey,
         })
+        if (res.status !== "unknown") {
+            commandIdentities.current.delete(identity.key)
+        }
         setActionResult({
             status:
                 res.status === "unknown"
@@ -819,7 +838,7 @@ export function SupplierOrdersListPage() {
                                     allowClear={false}
                                     placeholder="退款·全部"
                                 />
-                                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
                                     支付自
                                     <DatePicker
                                         className="w-[9.5rem]"
@@ -831,8 +850,8 @@ export function SupplierOrdersListPage() {
                                             })
                                         }
                                     />
-                                </label>
-                                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                                </span>
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
                                     至
                                     <DatePicker
                                         className="w-[9.5rem]"
@@ -844,7 +863,7 @@ export function SupplierOrdersListPage() {
                                             })
                                         }
                                     />
-                                </label>
+                                </span>
                             </>
                         }
                         actions={
@@ -1015,34 +1034,39 @@ export function SupplierOrdersListPage() {
                             </Button>
                             {previewQuery.data.allowedActions.includes(
                                 "QUERY_RESULT",
-                            ) ? (
+                            ) && !previewQuery.data.workItem ? (
                                 <Button
                                     type="button"
                                     disabled={queryResultMutation.isPending}
                                     onClick={() => {
+                                        const orderId =
+                                            previewQuery.data!.order.id
+                                        const identity = investigationIdentity(
+                                            "preview-query",
+                                            orderId,
+                                        )
                                         void queryResultMutation
                                             .mutateAsync({
-                                                orderId:
-                                                    previewQuery.data!.order.id,
+                                                commandKind: "OBJECT",
+                                                orderId,
                                                 expectedLockVersion:
                                                     previewQuery.data!.order
                                                         .lockVersion,
+                                                action: "QUERY_RESULT",
                                                 targetSupplierActionId:
                                                     previewQuery.data!
                                                         .placeActionId,
-                                                operationId: `op-query-preview-${Date.now()}`,
-                                                idempotencyKey: `query-preview-${previewQuery.data!.order.id}-${Date.now()}`,
-                                                workItemId:
-                                                    previewQuery.data!.workItem
-                                                        ?.workItemId,
-                                                expectedSubjectHash:
-                                                    previewQuery.data!.workItem
-                                                        ?.subjectHash,
-                                                expectedSubjectVersion:
-                                                    previewQuery.data!.workItem
-                                                        ?.subjectVersion,
+                                                operationId:
+                                                    identity.operationId,
+                                                idempotencyKey:
+                                                    identity.idempotencyKey,
                                             })
                                             .then((res) => {
+                                                if (res.status !== "unknown") {
+                                                    commandIdentities.current.delete(
+                                                        identity.key,
+                                                    )
+                                                }
                                                 setActionResult({
                                                     status:
                                                         res.status === "failed"

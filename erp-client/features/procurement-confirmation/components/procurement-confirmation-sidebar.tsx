@@ -37,7 +37,8 @@ type ProcurementConfirmationSidebarProps = {
     formalPending: boolean
     onReject: () => Promise<void>
     onConfirm: () => Promise<void>
-    onDefer: () => Promise<void>
+    onStartProcessing: () => Promise<void>
+    onReleaseToTeam: () => Promise<void>
     coverage: readonly CoverageByLine[]
     estimatedPurchase: string | undefined
     lineDrafts: readonly ConfirmationLineDraft[]
@@ -52,7 +53,8 @@ export function ProcurementConfirmationSidebar({
     formalPending,
     onReject,
     onConfirm,
-    onDefer,
+    onStartProcessing,
+    onReleaseToTeam,
     coverage,
     estimatedPurchase,
     lineDrafts,
@@ -74,7 +76,7 @@ export function ProcurementConfirmationSidebar({
                         </h2>
                     </CardTitle>
                     <CardDescription>
-                        系统将在你点击确认通过后计算采购方案。
+                        当前责任和可执行动作以任务记录为准。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -102,40 +104,71 @@ export function ProcurementConfirmationSidebar({
                     </dl>
                     <Alert variant="info">
                         <CircleCheckIcon aria-hidden="true" />
-                        <AlertTitle>确认通过不会立即生成采购单</AlertTitle>
+                        <AlertTitle>确认通过只形成采购创建依据</AlertTitle>
                         <AlertDescription>
-                            系统会先展示成本最低的采购组合，只有再次确认该方案后才生成采购单。
+                            本次处理不会创建采购单；后续建单使用本次返回的采购创建依据。
                         </AlertDescription>
                     </Alert>
                     <div
-                        className="grid grid-cols-3 gap-2"
+                        className="grid grid-cols-2 gap-2"
                         role="group"
                         aria-label="本次确认操作"
                     >
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={formalPending}
-                            onClick={() => void onReject()}
-                        >
-                            驳回
-                        </Button>
-                        <Button
-                            type="button"
-                            disabled={formalPending}
-                            onClick={() => void onConfirm()}
-                        >
-                            确认通过
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={formalPending}
-                            onClick={() => void onDefer()}
-                        >
-                            跳过
-                        </Button>
+                        {task.allowedActions.includes("START_PROCESSING") ? (
+                            <Button
+                                type="button"
+                                disabled={formalPending}
+                                onClick={() => void onStartProcessing()}
+                            >
+                                开始处理
+                            </Button>
+                        ) : null}
+                        {task.allowedActions.includes("REJECT") ? (
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                disabled={formalPending}
+                                onClick={() => void onReject()}
+                            >
+                                驳回
+                            </Button>
+                        ) : null}
+                        {task.allowedActions.includes("APPROVE") ? (
+                            <Button
+                                type="button"
+                                disabled={formalPending}
+                                onClick={() => void onConfirm()}
+                            >
+                                确认通过
+                            </Button>
+                        ) : null}
+                        {task.allowedActions.includes("RELEASE_TO_TEAM") ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={formalPending}
+                                onClick={() => void onReleaseToTeam()}
+                            >
+                                退回团队
+                            </Button>
+                        ) : null}
                     </div>
+                    {task.allowedActions.every(
+                        (action) =>
+                            ![
+                                "START_PROCESSING",
+                                "APPROVE",
+                                "REJECT",
+                                "RELEASE_TO_TEAM",
+                            ].includes(action),
+                    ) ? (
+                        <Alert variant="destructive">
+                            <AlertTitle>当前不可处理</AlertTitle>
+                            <AlertDescription>
+                                当前没有可执行的采购确认动作，请刷新任务或联系管理员。
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
                 </CardContent>
             </Card>
 
@@ -213,7 +246,7 @@ export function ProcurementConfirmationSidebar({
                             <Separator />
                             <div className="space-y-2">
                                 <p className="text-xs font-medium text-muted-foreground">
-                                    审批后自动生成
+                                    采购创建依据预览
                                 </p>
                                 <ul className="space-y-2">
                                     {recommendation.purchaseOrders.map(
@@ -242,7 +275,7 @@ export function ProcurementConfirmationSidebar({
                                                         ]
                                                     }{" "}
                                                     · {order.lineCount} 条明细 ·
-                                                    采购单草稿
+                                                    待后续建单
                                                 </p>
                                             </li>
                                         ),

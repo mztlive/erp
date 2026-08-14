@@ -61,19 +61,34 @@ type BackendDelivery = {
     target_mall_id: string
     status: string
     attempt_count: number
+    last_attempt_at?: number | null
+    next_attempt_at?: number | null
     mall_ack_at?: number | null
+    mall_execution_baseline?: string | null
+    error_class?: string | null
     error_code?: string | null
+    error_summary?: string | null
+    error_task_id?: string | null
+    work_item_id?: string | null
+    allowed_actions?: string[]
+    action_blockers?: Array<{ action: string; code: string; message: string }>
     version: number
     created_at: number
 }
 
-type BackendDeliveryResult = {
+type BackendDeliveryActionResult = {
+    operation_id: string
     delivery_id: string
-    delivery_status: string
-    inbox_message_id: string
+    result:
+        | "ACKED"
+        | "FAILED"
+        | "STILL_UNKNOWN"
+        | "RETRY_SCHEDULED"
+        | "ESCALATED"
+    work_item_id?: string | null
     error_task_id?: string | null
-    mall_execution_baseline?: string | null
-    projection_version: number
+    occurred_at: number
+    next_action?: string | null
 }
 
 type SourceSystem = {
@@ -102,6 +117,8 @@ function mapDeliveryStatus(raw: string): DeliveryStatus {
             return "SENDING"
         case "retrying":
             return "RETRYING"
+        case "result_unknown":
+            return "UNKNOWN"
         case "confirmed":
             return "ACKED"
         case "failed":
@@ -303,7 +320,12 @@ function toRow(
     const status = delivery
         ? mapDeliveryStatus(delivery.status)
         : ("PENDING" as DeliveryStatus)
-    const actions = recomputeActions(status)
+    const actions = delivery?.allowed_actions
+        ? {
+              allowedActions: delivery.allowed_actions,
+              actionBlockers: delivery.action_blockers ?? [],
+          }
+        : recomputeActions(status)
     const content = rev
         ? whitelistFromRevision(rev)
         : {
@@ -344,14 +366,18 @@ function toRow(
             statusTone: DELIVERY_STATUS_TONE[status],
             attemptCount: delivery?.attempt_count ?? 0,
             lastAttemptAt: delivery
-                ? secsToIso(delivery.created_at)
+                ? secsToIso(delivery.last_attempt_at ?? delivery.created_at)
+                : undefined,
+            nextAttemptAt: delivery?.next_attempt_at
+                ? secsToIso(delivery.next_attempt_at)
                 : undefined,
             mallAckAt: delivery?.mall_ack_at
                 ? secsToIso(delivery.mall_ack_at)
                 : undefined,
             errorCode: delivery?.error_code ?? undefined,
-            errorSummary: delivery?.error_code ?? undefined,
-            errorTaskId: undefined,
+            errorSummary: delivery?.error_summary ?? undefined,
+            errorTaskId: delivery?.error_task_id ?? undefined,
+            workItemId: delivery?.work_item_id ?? undefined,
         },
         latencyBand: "normal",
         reconciliationStatus: "NONE",
@@ -359,7 +385,7 @@ function toRow(
         ownerLabel: "—",
         allowedActions: actions.allowedActions,
         actionBlockers: actions.actionBlockers,
-        objectVersion: String(proj.version),
+        objectVersion: String(delivery?.version ?? proj.version),
         whitelistPreview: {
             voucherCategoryErpName: content.voucherCategoryErpName,
             faceValue: content.faceValue,
@@ -536,16 +562,41 @@ export async function fetchExecutionProjectionDetail(input: {
                 statusLabel: DELIVERY_STATUS_LABEL[st],
                 statusTone: DELIVERY_STATUS_TONE[st],
                 attemptCount: d.attempt_count,
-                lastAttemptAt: secsToIso(d.created_at),
+                lastAttemptAt: secsToIso(d.last_attempt_at ?? d.created_at),
+                nextAttemptAt: d.next_attempt_at
+                    ? secsToIso(d.next_attempt_at)
+                    : undefined,
                 mallAckAt: d.mall_ack_at ? secsToIso(d.mall_ack_at) : undefined,
+                mallExecutionBaseline: d.mall_execution_baseline ?? undefined,
                 errorCode: d.error_code ?? undefined,
-                errorSummary: d.error_code ?? undefined,
+                errorSummary: d.error_summary ?? undefined,
+                errorTaskId: d.error_task_id ?? undefined,
+                workItemId: d.work_item_id ?? undefined,
             }
         })
 
-    const primaryDelivery = deliveries[0]
+    const selectedDelivery = deliveryPage.items.find(
+        (delivery) => delivery.projection_revision_id === selected?.id,
+    )
+    const primaryDelivery = deliveries.find(
+        (delivery) => delivery.deliveryId === selectedDelivery?.id,
+    )
+    const orderedDeliveries = primaryDelivery
+        ? [
+              primaryDelivery,
+              ...deliveries.filter(
+                  (delivery) =>
+                      delivery.deliveryId !== primaryDelivery.deliveryId,
+              ),
+          ]
+        : deliveries
     const status = primaryDelivery?.status ?? "PENDING"
-    const actions = recomputeActions(status)
+    const actions = selectedDelivery?.allowed_actions
+        ? {
+              allowedActions: selectedDelivery.allowed_actions,
+              actionBlockers: selectedDelivery.action_blockers ?? [],
+          }
+        : recomputeActions(status)
     const content = selected
         ? whitelistFromRevision(selected)
         : {
@@ -625,7 +676,7 @@ export async function fetchExecutionProjectionDetail(input: {
                 isCurrentSelection: r.id === (selected?.id ?? ""),
             }
         }),
-        deliveries,
+        deliveries: orderedDeliveries,
         salesOrderStatus: "—",
         salesOrderStatusTone: "neutral",
         ownerLabel: "—",
@@ -642,7 +693,7 @@ export async function fetchExecutionProjectionDetail(input: {
             voucherExpiryAt: "full",
             contentHash: "full",
         },
-        objectVersion: String(proj.version),
+        objectVersion: String(selectedDelivery?.version ?? proj.version),
         sourceFactsAsOf: asOf,
         projectionUpdatedAt: asOf,
         deliveryStatusUpdatedAt: asOf,
@@ -736,143 +787,37 @@ export type DeliveryCommandInput = {
 export async function submitProjectionDeliveryCommand(
     input: DeliveryCommandInput,
 ): Promise<ProjectionDeliveryCommandResult> {
-    if (input.action === "ESCALATE") {
-        return {
-            operationId: `op_esc_${input.requestId}`,
-            deliveryId: input.deliveryId,
-            projectionId: input.projectionId,
-            salesOrderNo: input.projectionId,
-            result: "ESCALATED",
-            resultLabel: "已转人工",
-            occurredAt: new Date().toISOString(),
-            nextAction: "请到接口错误中心按原任务号处理。",
-            stillUnknown: false,
-            objectVersion: input.expectedObjectVersion,
-        }
-    }
-
-    // QUERY_RESULT / RETRY：按修订号投递或查询投递列表
-    const revisions = await apiGet<BackendRevision[]>(
-        `/admin/sales-order-projections/${encodeURIComponent(input.projectionId)}/revisions`,
-    ).catch(() => [] as BackendRevision[])
-    const latest =
-        revisions.find((r) => r.id === input.projectionRevisionId) ??
-        revisions[0]
-    if (!latest) {
-        return {
-            operationId: `op_${input.action}_${input.requestId}`,
-            deliveryId: input.deliveryId,
-            projectionId: input.projectionId,
-            salesOrderNo: input.projectionId,
-            result: "FAILED",
-            resultLabel: "失败",
-            occurredAt: new Date().toISOString(),
-            nextAction: "无可投递的投影修订",
-            stillUnknown: false,
-            objectVersion: input.expectedObjectVersion,
-        }
-    }
-
-    if (input.action === "QUERY_RESULT") {
-        const deliveryPage = await apiGet<Page<BackendDelivery>>(
-            "/admin/sales-order-projection-deliveries",
-            { page: 1, page_size: 50 },
-        ).catch(() => ({
-            items: [] as BackendDelivery[],
-            total: 0,
-            page: 1,
-            page_size: 50,
-        }))
-        const hit =
-            deliveryPage.items.find((d) => d.id === input.deliveryId) ??
-            deliveryPage.items.find(
-                (d) => d.projection_revision_id === latest.id,
-            )
-        if (!hit) {
-            return {
-                operationId: `op_query_${input.requestId}`,
-                deliveryId: input.deliveryId,
-                projectionId: input.projectionId,
-                salesOrderNo: input.projectionId,
-                result: "STILL_UNKNOWN",
-                resultLabel: "结果未知",
-                occurredAt: new Date().toISOString(),
-                nextAction: "尚无投递记录，请稍后重试查询",
-                stillUnknown: true,
-                objectVersion: input.expectedObjectVersion,
-            }
-        }
-        const st = mapDeliveryStatus(hit.status)
-        if (st === "ACKED") {
-            return {
-                operationId: `op_query_${input.requestId}`,
-                deliveryId: hit.id,
-                projectionId: input.projectionId,
-                salesOrderNo: input.projectionId,
-                result: "ACKED",
-                resultLabel: "已确认",
-                occurredAt: secsToIso(hit.mall_ack_at ?? hit.created_at),
-                nextAction: "无需进一步操作",
-                stillUnknown: false,
-                objectVersion: String(hit.version),
-            }
-        }
-        if (st === "FAILED" || st === "ESCALATED_MANUAL") {
-            return {
-                operationId: `op_query_${input.requestId}`,
-                deliveryId: hit.id,
-                projectionId: input.projectionId,
-                salesOrderNo: input.projectionId,
-                result: "FAILED",
-                resultLabel: DELIVERY_STATUS_LABEL[st],
-                errorTaskId: undefined,
-                occurredAt: secsToIso(hit.created_at),
-                nextAction: "可重试或转人工",
-                stillUnknown: false,
-                objectVersion: String(hit.version),
-            }
-        }
-        return {
-            operationId: `op_query_${input.requestId}`,
-            deliveryId: hit.id,
-            projectionId: input.projectionId,
-            salesOrderNo: input.projectionId,
-            result: "STILL_UNKNOWN",
-            resultLabel: "结果未知",
-            occurredAt: secsToIso(hit.created_at),
-            nextAction: "结果未明确，请继续查询",
-            stillUnknown: true,
-            objectVersion: String(hit.version),
-        }
-    }
-
-    // RETRY
-    const result = await apiPost<BackendDeliveryResult>(
-        `/admin/sales-order-projections/${encodeURIComponent(input.projectionId)}/revisions/${latest.revision_no}/deliver`,
-        { idempotency_key: input.requestId },
+    const result = await apiPost<BackendDeliveryActionResult>(
+        `/admin/sales-order-projection-deliveries/${encodeURIComponent(input.deliveryId)}/actions`,
+        {
+            projection_id: input.projectionId,
+            projection_revision_id: input.projectionRevisionId,
+            delivery_id: input.deliveryId,
+            action: input.action,
+            expected_object_version: Number(input.expectedObjectVersion),
+            request_id: input.requestId,
+        },
     )
-    const st = mapDeliveryStatus(result.delivery_status)
+    const resultLabel: Record<BackendDeliveryActionResult["result"], string> = {
+        ACKED: "已确认",
+        FAILED: "失败",
+        STILL_UNKNOWN: "结果未知",
+        RETRY_SCHEDULED: "已安排重试",
+        ESCALATED: "已转人工",
+    }
     return {
-        operationId: result.inbox_message_id,
+        operationId: result.operation_id,
         deliveryId: result.delivery_id,
         projectionId: input.projectionId,
         salesOrderNo: input.projectionId,
-        result:
-            st === "ACKED"
-                ? "ACKED"
-                : st === "FAILED"
-                  ? "FAILED"
-                  : "RETRY_SCHEDULED",
-        resultLabel:
-            st === "ACKED" ? "已确认" : st === "FAILED" ? "失败" : "已安排重试",
+        result: result.result,
+        resultLabel: resultLabel[result.result],
+        workItemId: result.work_item_id ?? undefined,
         errorTaskId: result.error_task_id ?? undefined,
-        occurredAt: new Date().toISOString(),
-        nextAction:
-            st === "ACKED"
-                ? "无需进一步操作"
-                : "关注投递状态；结果未知时先查询",
-        stillUnknown: false,
-        objectVersion: String(result.projection_version),
+        occurredAt: secsToIso(result.occurred_at),
+        nextAction: result.next_action ?? "无需进一步操作",
+        stillUnknown: result.result === "STILL_UNKNOWN",
+        objectVersion: input.expectedObjectVersion,
     }
 }
 

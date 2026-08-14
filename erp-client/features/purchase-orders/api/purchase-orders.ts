@@ -7,6 +7,7 @@
 import { apiGet, apiPost } from "@/lib/api"
 import type { ApiError } from "@/lib/api"
 import { getErrorMessage } from "@/lib/api/errors"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 import type {
     CreatePurchaseOrderFromBasisInput,
     FormalActionResponse,
@@ -30,6 +31,11 @@ import {
     PO_STATUS_TONE,
     REVIEW_STATUS_LABEL,
 } from "@/features/purchase-orders/types"
+import type {
+    WorkItemAllowedAction,
+    WorkItemProcessingState,
+    WorkItemStatus,
+} from "@/features/work-items"
 
 export type PurchaseOrderListQuery = {
     q?: string
@@ -146,6 +152,25 @@ type BackendCenter = {
         reason: string
         created_at: number
     }>
+    review_work_item?: {
+        work_item_id: string
+        work_item_type: "PURCHASE_ORDER_REVIEW"
+        task_version: string | number
+        subject_version: string
+        status: WorkItemStatus
+        assignment_mode: "DIRECT" | "POOL"
+        owner_role: string
+        owner_organization_id: string
+        owner_user_id?: string | null
+        processing_state: WorkItemProcessingState
+        responsibility_actions: readonly WorkItemAllowedAction[]
+        domain_allowed_actions: readonly ("APPROVE" | "REJECT")[]
+        action_blockers: readonly {
+            action: string
+            code: string
+            message: string
+        }[]
+    } | null
     created_at: number
 }
 
@@ -193,11 +218,17 @@ type BackendSubmitResult = {
     submission_id: string
     submission_no: string
     work_item_id: string
+    task_version: string | number
+    subject_version: string
     lock_version: number
     reference: string
 }
 
 type BackendReviewResult = {
+    work_item_id: string
+    work_item_status: "COMPLETED"
+    task_version: string | number
+    subject_version: string
     review_result: string
     revision_id?: string | null
     revision_no?: number | null
@@ -249,6 +280,24 @@ function apiErrorCode(error: unknown): string {
     if (error.status === 422) return "UNPROCESSABLE"
     if (error.kind === "Validation") return "VALIDATION"
     return error.kind.toUpperCase()
+}
+
+function formalActionFailure<T>(
+    error: unknown,
+    idempotencyKey: string,
+): FormalActionResponse<T> {
+    if (classifyFormalCommandError(error) === "unknown") {
+        return {
+            status: "unknown",
+            message: "处理结果待确认。当前输入已保留，请稍后使用本次操作重试。",
+            idempotencyKey,
+        }
+    }
+    return {
+        status: "failed",
+        message: apiErrorMessage(error),
+        code: apiErrorCode(error),
+    }
 }
 
 function secsToIso(secs?: number | null): string {
@@ -360,7 +409,8 @@ function deriveAllowedActions(status: PurchaseOrderStatus): string[] {
         return [...common, "EDIT", "SUBMIT", "VOID"]
     }
     if (status === "PENDING_REVIEW") {
-        return [...common, "REVIEW"]
+        // 财务审核只能从服务端 review_work_item 责任投影进入。
+        return common
     }
     if (status === "EFFECTIVE" || status === "PARTIAL") {
         return [...common, "FULFILL", "PAY", "START_CHANGE"]
@@ -544,9 +594,41 @@ function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         })),
         workflow: [],
         allowedActions: deriveAllowedActions(status),
-        actionBlockers: [],
+        actionBlockers: center.review_work_item?.action_blockers ?? [],
         fieldVisibility: {},
-        reviewWorkItem: undefined,
+        reviewWorkItem:
+            center.review_work_item?.work_item_type ===
+                "PURCHASE_ORDER_REVIEW" &&
+            center.review_work_item.subject_version &&
+            center.review_work_item.task_version != null &&
+            center.review_work_item.status === "OPEN"
+                ? {
+                      workItemId: center.review_work_item.work_item_id,
+                      workItemType: center.review_work_item.work_item_type,
+                      taskVersion: String(center.review_work_item.task_version),
+                      subjectVersion: center.review_work_item.subject_version,
+                      status: center.review_work_item.status,
+                      assignmentMode: center.review_work_item.assignment_mode,
+                      ownerRole: center.review_work_item.owner_role,
+                      ownerOrganizationId:
+                          center.review_work_item.owner_organization_id,
+                      ownerUserId:
+                          center.review_work_item.owner_user_id ?? undefined,
+                      processingState: center.review_work_item.processing_state,
+                      responsibilityActions:
+                          center.review_work_item.processing_state === "READY"
+                              ? (center.review_work_item
+                                    .responsibility_actions ?? [])
+                              : [],
+                      domainAllowedActions:
+                          center.review_work_item.processing_state === "READY"
+                              ? (center.review_work_item
+                                    .domain_allowed_actions ?? [])
+                              : [],
+                      actionBlockers:
+                          center.review_work_item.action_blockers ?? [],
+                  }
+                : undefined,
     }
 }
 
@@ -862,21 +944,7 @@ export async function savePurchaseOrderDraft(
             reference: data.reference || `SAVED-V${data.lock_version}`,
         }
     } catch (error) {
-        if (isApiError(error) && error.status === 500) {
-            const msg = apiErrorMessage(error)
-            if (msg.includes("无法确认") || msg.includes("未知")) {
-                return {
-                    status: "unknown",
-                    message: msg,
-                    idempotencyKey: input.idempotencyKey,
-                }
-            }
-        }
-        return {
-            status: "failed",
-            message: apiErrorMessage(error),
-            code: apiErrorCode(error),
-        }
+        return formalActionFailure(error, input.idempotencyKey)
     }
 }
 
@@ -888,6 +956,8 @@ export async function submitPurchaseOrderForReview(
         submissionNo: string
         subjectHash: string
         workItemId: string
+        taskVersion: string
+        subjectVersion: string
         purchaseNo: string
         lockVersion: number
     }>
@@ -907,17 +977,15 @@ export async function submitPurchaseOrderForReview(
                 submissionNo: data.submission_no,
                 subjectHash: data.submission_id,
                 workItemId: data.work_item_id,
+                taskVersion: String(data.task_version),
+                subjectVersion: data.subject_version,
                 purchaseNo: data.purchase_no,
                 lockVersion: data.lock_version,
             },
             reference: data.reference || `SUB-${data.submission_no}`,
         }
     } catch (error) {
-        return {
-            status: "failed",
-            message: apiErrorMessage(error),
-            code: apiErrorCode(error),
-        }
+        return formalActionFailure(error, input.idempotencyKey)
     }
 }
 
@@ -934,28 +1002,41 @@ export async function reviewPurchaseOrder(
     }>
 > {
     try {
-        const path =
-            input.reviewResult === "APPROVED"
-                ? `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/review/approve`
-                : `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/review/reject`
-
-        const body =
-            input.reviewResult === "APPROVED"
-                ? {
-                      submission_id: input.submissionId,
-                      work_item_id: input.workItemId,
-                      expected_lock_version: input.expectedLockVersion,
-                      comment: input.comment,
-                  }
-                : {
-                      submission_id: input.submissionId,
-                      work_item_id: input.workItemId,
-                      expected_lock_version: input.expectedLockVersion,
-                      reason_code: input.reasonCode || "OTHER",
-                      comment: input.comment,
-                  }
-
-        const data = await apiPost<BackendReviewResult>(path, body)
+        const decision = input.decision
+        const data = await apiPost<BackendReviewResult>(
+            `/admin/purchase-orders/${encodeURIComponent(decision.purchaseOrderId)}/review-decisions`,
+            {
+                work_item_id: input.workItemId,
+                expected_task_version: input.expectedTaskVersion,
+                expected_subject_version: input.expectedSubjectVersion,
+                decision: {
+                    purchase_order_id: decision.purchaseOrderId,
+                    submission_id: decision.submissionId,
+                    expected_purchase_order_lock_version:
+                        decision.expectedPurchaseOrderLockVersion,
+                    review_result: decision.reviewResult,
+                    reason_code:
+                        decision.reviewResult === "REJECTED"
+                            ? decision.reasonCode
+                            : undefined,
+                    comment: decision.comment,
+                },
+                idempotency_key: input.idempotencyKey,
+            },
+        )
+        if (
+            data.work_item_id !== input.workItemId ||
+            data.work_item_status !== "COMPLETED" ||
+            data.subject_version !== input.expectedSubjectVersion ||
+            data.review_result !== decision.reviewResult
+        ) {
+            return {
+                status: "unknown",
+                message:
+                    "处理结果待确认。返回结果不完整，请使用本次操作重试或刷新确认。",
+                idempotencyKey: input.idempotencyKey,
+            }
+        }
         return {
             status: "succeeded",
             data: {
@@ -970,11 +1051,7 @@ export async function reviewPurchaseOrder(
             reference: data.reference || `REVIEW-V${data.lock_version}`,
         }
     } catch (error) {
-        return {
-            status: "failed",
-            message: apiErrorMessage(error),
-            code: apiErrorCode(error),
-        }
+        return formalActionFailure(error, input.idempotencyKey)
     }
 }
 
@@ -1004,11 +1081,7 @@ export async function startPurchaseChange(input: {
             reference: data.reference || `CHANGE-V${data.base_revision_no}`,
         }
     } catch (error) {
-        return {
-            status: "failed",
-            message: apiErrorMessage(error),
-            code: apiErrorCode(error),
-        }
+        return formalActionFailure(error, input.idempotencyKey)
     }
 }
 
@@ -1051,10 +1124,6 @@ export async function createPurchaseOrderFromBasis(
             reference: data.reference || data.purchase_no,
         }
     } catch (error) {
-        return {
-            status: "failed",
-            message: apiErrorMessage(error),
-            code: apiErrorCode(error),
-        }
+        return formalActionFailure(error, input.idempotencyKey)
     }
 }

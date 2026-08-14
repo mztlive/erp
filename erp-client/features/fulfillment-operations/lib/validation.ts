@@ -7,7 +7,7 @@ import type { ValidationIssue } from "@/components/business"
 import type {
     FulfillmentDraft,
     FulfillmentFormalOutcome,
-    FulfillmentTask,
+    FulfillmentOperation,
     ReceiptDraftLine,
 } from "@/features/fulfillment-operations/types"
 import {
@@ -33,23 +33,23 @@ export function withDerivedQualified(line: ReceiptDraftLine): ReceiptDraftLine {
 }
 
 export function clientValidation(
-    task: FulfillmentTask,
+    operation: FulfillmentOperation,
     draft: FulfillmentDraft,
 ): ValidationIssue[] {
     const issues: ValidationIssue[] = []
-    if (draft.type !== task.operationType) {
+    if (draft.type !== operation.operationType) {
         issues.push({
             id: "type-mismatch",
-            label: "任务类型",
-            message: "这条草稿和当前任务对不上",
+            label: "单据类型",
+            message: "这条草稿和当前单据对不上",
         })
         return issues
     }
-    if (task.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP") {
+    if (operation.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP") {
         issues.push({
             id: "gate",
             label: "先款条件",
-            message: task.gate.message,
+            message: operation.gate.message,
             targetId: "prepayment-gate",
         })
     }
@@ -104,7 +104,7 @@ export function clientValidation(
         }
         draft.lines.forEach((line, i) => {
             const qty = Number(line.quantity)
-            const src = task.lines.find(
+            const src = operation.lines.find(
                 (l) => l.salesOrderLineId === line.salesOrderLineId,
             )
             const cap = Number(
@@ -170,7 +170,7 @@ export function clientValidation(
         }
         draft.lines.forEach((line, i) => {
             const qty = Number(line.quantity)
-            const src = task.lines.find(
+            const src = operation.lines.find(
                 (l) => l.salesOrderLineId === line.salesOrderLineId,
             )
             const cap = Number(src?.remainingQuantity ?? 0)
@@ -306,7 +306,7 @@ export function buildPostedFacts(outcome: FulfillmentFormalOutcome) {
 }
 
 export function impactPreview(
-    task: FulfillmentTask,
+    operation: FulfillmentOperation,
     draft: FulfillmentDraft,
 ): string[] {
     if (draft.type === "RECEIPT") {

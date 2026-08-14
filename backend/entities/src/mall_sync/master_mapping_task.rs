@@ -8,6 +8,7 @@ use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::Result;
 use crate::ids::MallSalesOrderSnapshotId;
+use crate::source_registry::{ExternalObjectType, RelationRole};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
 /// 责任角色最大长度。
@@ -33,6 +34,22 @@ pub enum MappingTaskType {
     UniqueLineItem,
     /// 金额格式。
     AmountFormat,
+}
+
+/// W17 可确认映射类型的固定注册项。
+///
+/// 注册项同时冻结来源身份字段、协议目标类型、ERP 规范对象类型与谱系关系；
+/// 未注册的差异类型只能追加来源修复证据，不能提交 `CONFIRM_TARGET`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MappingTargetRegistration {
+    /// HTTP 命令使用的目标类型代码。
+    pub command_object_type: &'static str,
+    /// 外部身份与内部目标共同使用的对象目录类型。
+    pub object_type: ExternalObjectType,
+    /// 规范化快照内允许承载来源身份的字段，按优先级排列。
+    pub source_identity_fields: &'static [&'static str],
+    /// 固定谱系关系。
+    pub relation_role: RelationRole,
 }
 
 impl MappingTaskType {
@@ -63,6 +80,44 @@ impl MappingTaskType {
             Self::VoucherCategory => "voucher_category",
             Self::UniqueLineItem => "unique_line_item",
             Self::AmountFormat => "amount_format",
+        }
+    }
+
+    /// 返回当前差异类型的固定目标注册项。
+    ///
+    /// `UniqueLineItem` 与 `AmountFormat` 是快照内容校验，不对应独立 ERP
+    /// 规范身份，因此明确返回 `None`，调用方必须失败关闭确认动作。
+    pub fn target_registration(self) -> Option<MappingTargetRegistration> {
+        match self {
+            Self::Customer => Some(MappingTargetRegistration {
+                command_object_type: "CUSTOMER",
+                object_type: ExternalObjectType::Customer,
+                source_identity_fields: &["customer_external_id", "customer_id", "company_id"],
+                relation_role: RelationRole::Primary,
+            }),
+            Self::Contract => Some(MappingTargetRegistration {
+                command_object_type: "CONTRACT",
+                object_type: ExternalObjectType::Contract,
+                source_identity_fields: &["contract_external_id", "contract_no", "contract_id"],
+                relation_role: RelationRole::Primary,
+            }),
+            Self::SettlementEntity => Some(MappingTargetRegistration {
+                command_object_type: "SETTLEMENT_PARTY",
+                object_type: ExternalObjectType::Party,
+                source_identity_fields: &[
+                    "settlement_party_external_id",
+                    "settlement_party_id",
+                    "parent_company_id",
+                ],
+                relation_role: RelationRole::Primary,
+            }),
+            Self::VoucherCategory => Some(MappingTargetRegistration {
+                command_object_type: "VOUCHER_CATEGORY",
+                object_type: ExternalObjectType::VoucherCategory,
+                source_identity_fields: &["voucher_category_external_id", "card_type_id", "category_id"],
+                relation_role: RelationRole::Primary,
+            }),
+            Self::UniqueLineItem | Self::AmountFormat => None,
         }
     }
 }
@@ -128,8 +183,8 @@ pub struct MasterMappingTaskData {
     pub source_snapshot_id: MallSalesOrderSnapshotId,
     /// 映射类型。
     pub mapping_type: MappingTaskType,
-    /// 业务责任角色。
-    pub owner_role: String,
+    /// 业务责任角色；未形成唯一责任路由时为空。
+    pub owner_role: Option<String>,
     /// 业务责任用户 ID（可按角色领办，可为空）。
     pub owner_user_id: Option<String>,
 }
@@ -149,8 +204,8 @@ pub struct MasterMappingTask {
     pub mapping_type: MappingTaskType,
     /// 任务状态。
     pub status: MappingTaskStatus,
-    /// 业务责任角色。
-    pub owner_role: String,
+    /// 业务责任角色；未形成唯一责任路由时为空。
+    pub owner_role: Option<String>,
     /// 业务责任用户 ID。
     pub owner_user_id: Option<String>,
     /// 处理结论。
@@ -162,8 +217,8 @@ pub struct MasterMappingTask {
 impl MasterMappingTask {
     /// 创建映射任务。
     ///
-    /// 完成责任角色与责任用户的校验与规范化（去首尾空白、责任角色非空、
-    /// 长度上限）；任务创建即待处理。
+    /// 完成责任角色与责任用户的校验与规范化；未形成唯一责任路由时角色与
+    /// 用户必须同时为空。任务创建即待处理。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::MasterMappingTaskId`）
@@ -173,11 +228,13 @@ impl MasterMappingTask {
     /// 返回新建的映射任务实体。
     ///
     /// # 错误
-    /// 责任角色为空或超长时返回错误。
+    /// 责任角色/用户超长，或无责任角色却预填责任用户时返回错误。
     pub fn new(id: crate::ids::MasterMappingTaskId, data: MasterMappingTaskData) -> Result<Self> {
-        let owner_role =
-            normalize_required_text(data.owner_role, "责任角色不能为空", ROLE_MAX_LEN, "责任角色过长")?;
+        let owner_role = normalize_optional_text(data.owner_role, "责任角色", ROLE_MAX_LEN)?;
         let owner_user_id = normalize_optional_text(data.owner_user_id, "责任用户", USER_MAX_LEN)?;
+        if owner_role.is_none() && owner_user_id.is_some() {
+            return Err("未配置责任角色时不得预填责任用户".into());
+        }
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -270,7 +327,7 @@ mod tests {
         MasterMappingTaskData {
             source_snapshot_id: MallSalesOrderSnapshotId::new("snap-1"),
             mapping_type: MappingTaskType::Customer,
-            owner_role: " 销售 ".to_string(),
+            owner_role: Some(" 销售 ".to_string()),
             owner_user_id: Some(" user-1 ".to_string()),
         }
     }
@@ -281,7 +338,7 @@ mod tests {
 
         assert_eq!(task.source_snapshot_id, MallSalesOrderSnapshotId::new("snap-1"));
         assert_eq!(task.mapping_type, MappingTaskType::Customer);
-        assert_eq!(task.owner_role, "销售");
+        assert_eq!(task.owner_role.as_deref(), Some("销售"));
         assert_eq!(task.owner_user_id.as_deref(), Some("user-1"));
         assert_eq!(task.status, MappingTaskStatus::Pending);
         assert!(task.resolution.is_none());
@@ -289,17 +346,25 @@ mod tests {
 
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
-        let empty_role = MasterMappingTaskData {
-            owner_role: "   ".to_string(),
+        let unassigned_route = MasterMappingTaskData {
+            owner_role: None,
+            owner_user_id: None,
             ..task_data()
         };
-        assert!(MasterMappingTask::new(MasterMappingTaskId::new("t-2"), empty_role).is_err());
+        let task = MasterMappingTask::new(MasterMappingTaskId::new("t-2"), unassigned_route).unwrap();
+        assert_eq!(task.owner_role, None);
+
+        let user_without_role = MasterMappingTaskData {
+            owner_role: None,
+            ..task_data()
+        };
+        assert!(MasterMappingTask::new(MasterMappingTaskId::new("t-3"), user_without_role).is_err());
 
         let overlong_user = MasterMappingTaskData {
             owner_user_id: Some("u".repeat(USER_MAX_LEN + 1)),
             ..task_data()
         };
-        assert!(MasterMappingTask::new(MasterMappingTaskId::new("t-3"), overlong_user).is_err());
+        assert!(MasterMappingTask::new(MasterMappingTaskId::new("t-4"), overlong_user).is_err());
     }
 
     #[test]
@@ -369,6 +434,12 @@ mod tests {
         );
         assert_eq!(MappingTaskType::VoucherCategory.label(), "卡券类目");
         assert_eq!(MappingTaskStatus::Closed.label(), "关闭");
+        let contract = MappingTaskType::Contract.target_registration().unwrap();
+        assert_eq!(contract.command_object_type, "CONTRACT");
+        assert_eq!(contract.object_type, ExternalObjectType::Contract);
+        assert_eq!(contract.relation_role, RelationRole::Primary);
+        assert!(MappingTaskType::UniqueLineItem.target_registration().is_none());
+        assert!(MappingTaskType::AmountFormat.target_registration().is_none());
     }
 
     #[test]

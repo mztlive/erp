@@ -3,7 +3,7 @@
 import type {
     FulfillmentDraft,
     FulfillmentOperationType,
-    FulfillmentTask,
+    FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 
 /**
@@ -29,12 +29,12 @@ import { FulfillmentShipForm } from "./fulfillment-ship-form"
  * 草稿是可辨识联合，分派后各表单拿到收窄类型，不再各自 narrow。
  */
 export function FulfillmentDraftForm({
-    task,
+    operation,
     draft,
     onChange,
     disabled,
 }: {
-    task: FulfillmentTask
+    operation: FulfillmentOperation
     draft: FulfillmentDraft
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
@@ -43,7 +43,7 @@ export function FulfillmentDraftForm({
         case "RECEIPT":
             return (
                 <FulfillmentReceiptForm
-                    task={task}
+                    operation={operation}
                     draft={draft}
                     onChange={onChange}
                     disabled={disabled}
@@ -52,7 +52,7 @@ export function FulfillmentDraftForm({
         case "WAREHOUSE_SHIP":
             return (
                 <FulfillmentShipForm
-                    task={task}
+                    operation={operation}
                     draft={draft}
                     onChange={onChange}
                     disabled={disabled}
@@ -61,7 +61,7 @@ export function FulfillmentDraftForm({
         case "SUPPLIER_DIRECT":
             return (
                 <FulfillmentDirectForm
-                    task={task}
+                    operation={operation}
                     draft={draft}
                     onChange={onChange}
                     disabled={disabled}
@@ -70,7 +70,7 @@ export function FulfillmentDraftForm({
         case "ELECTRONIC":
             return (
                 <FulfillmentElectronicForm
-                    task={task}
+                    operation={operation}
                     draft={draft}
                     onChange={onChange}
                     disabled={disabled}
@@ -79,7 +79,7 @@ export function FulfillmentDraftForm({
         case "SERVICE":
             return (
                 <FulfillmentServiceForm
-                    task={task}
+                    operation={operation}
                     draft={draft}
                     onChange={onChange}
                     disabled={disabled}

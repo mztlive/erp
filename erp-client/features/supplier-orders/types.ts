@@ -4,6 +4,12 @@
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"
+import type {
+    AssignmentMode,
+    WorkItemAllowedAction,
+    WorkItemProcessingState,
+    WorkItemStatus,
+} from "@/features/work-items/types"
 
 /** 履约主状态：九个正式枚举，不得把取消/退款折入 */
 export type SupplierFulfillmentStatus =
@@ -143,20 +149,10 @@ export const WORK_ITEM_TYPE_LABEL: Record<
 }
 
 /** 任务状态中文映射（枚举原值不上屏） */
-export const WORK_ITEM_STATUS_LABEL: Record<
-    "PENDING" | "IN_PROGRESS" | "COMPLETED" | "TRANSFERRED",
-    string
-> = {
-    PENDING: "待处理",
-    IN_PROGRESS: "处理中",
+export const WORK_ITEM_STATUS_LABEL: Record<WorkItemStatus, string> = {
+    OPEN: "待处理",
     COMPLETED: "已完成",
-    TRANSFERRED: "已转交",
-}
-
-/** 处理权状态中文映射（租约/锁语义不进入界面） */
-export const LEASE_DISPOSITION_LABEL: Record<"RENEWED" | "RELEASED", string> = {
-    RENEWED: "处理权限已延期",
-    RELEASED: "本次处理已结束",
+    CLOSED: "已关闭",
 }
 
 /** 版本代号（SV-/PV- 前缀）转业务口径，如 SV-12 → 12 */
@@ -412,20 +408,23 @@ type InvestigationEvidenceView = {
     canSafeRetry: boolean
     externalOrderNo?: string
     summary: string
+    verifiedSupplierActionResultId?: string
+    verifiedResolution?: SupplierOrderTerminalResolution
 }
 
 type WorkItemView = {
     workItemId: string
+    taskVersion: string
     workItemType: "INTEGRATION_RESULT_UNKNOWN" | "BUSINESS_EXCEPTION"
     businessObjectType: "SUPPLIER_FULFILLMENT_ORDER"
     businessObjectId: string
     subjectVersion: string
-    subjectHash: string
-    completionAction: string
-    allowedTaskActions: string[]
-    workItemStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "TRANSFERRED"
-    claimedBy?: { userId: string; displayName: string }
-    held?: boolean
+    assignmentMode: AssignmentMode
+    processingState: WorkItemProcessingState
+    ownerUser?: { id: string; displayName: string }
+    allowedTaskActions: readonly WorkItemAllowedAction[]
+    actionBlockers: readonly string[]
+    workItemStatus: WorkItemStatus
 }
 
 export type SupplierOrderDetailView = {
@@ -466,6 +465,7 @@ export type SupplierOrderDetailView = {
     actions: SupplierActionView[]
     address: AddressRevealView
     workItem?: WorkItemView
+    workItemBlocker?: ActionBlocker
     lastInvestigation?: InvestigationEvidenceView
     /** 原下单动作 id，查询/重放目标 */
     placeActionId: string
@@ -482,64 +482,95 @@ export type FormalActionResponse<T = unknown> = {
     data?: T
 }
 
-export type QueryResultInput = {
+type SupplierOrderObjectInvestigationCommand = {
+    commandKind: "OBJECT"
     orderId: string
     expectedLockVersion: number
-    targetSupplierActionId: string
+    action: "QUERY_RESULT" | "REPLAY"
     operationId: string
+    targetSupplierActionId: string
     idempotencyKey: string
-    /** 任务入口时必填 */
-    workItemId?: string
-    expectedSubjectVersion?: string
-    expectedSubjectHash?: string
 }
+
+type SupplierOrderTaskInvestigationCommand = {
+    commandKind: "TASK"
+    workItemId: string
+    expectedTaskVersion: string
+    expectedSubjectVersion: string
+    action: {
+        type: "QUERY_RESULT" | "REPLAY"
+        orderId: string
+        expectedOrderLockVersion: number
+        targetSupplierActionId: string
+        operationId: string
+    }
+    idempotencyKey: string
+}
+
+export type QueryResultInput =
+    | (SupplierOrderObjectInvestigationCommand & { action: "QUERY_RESULT" })
+    | (SupplierOrderTaskInvestigationCommand & {
+          action: SupplierOrderTaskInvestigationCommand["action"] & {
+              type: "QUERY_RESULT"
+          }
+      })
 
 export type QueryResultData = {
     evidence: InvestigationEvidenceView
     lockVersion: number
-    workItemStatus?: "PENDING" | "IN_PROGRESS"
-    subjectHash?: string
+    workItemStatus?: "OPEN"
+    taskVersion?: string
     allowedActions: string[]
     actionBlockers: ActionBlocker[]
 }
 
-export type ReplayInput = {
-    orderId: string
-    expectedLockVersion: number
-    targetSupplierActionId: string
-    operationId: string
-    idempotencyKey: string
-    workItemId?: string
-    expectedSubjectVersion?: string
-    expectedSubjectHash?: string
-}
+export type ReplayInput =
+    | (SupplierOrderObjectInvestigationCommand & { action: "REPLAY" })
+    | (SupplierOrderTaskInvestigationCommand & {
+          action: SupplierOrderTaskInvestigationCommand["action"] & {
+              type: "REPLAY"
+          }
+      })
 
 export type ReplayResultData = {
     evidence: InvestigationEvidenceView
     lockVersion: number
-    workItemStatus?: "PENDING" | "IN_PROGRESS"
+    workItemStatus?: "OPEN"
+    taskVersion?: string
     externalOrderNo?: string
     fulfillmentStatus: SupplierFulfillmentStatus
     allowedActions: string[]
     actionBlockers: ActionBlocker[]
 }
 
-export type DeferTaskInput = {
-    orderId: string
+export type SupplierOrderTerminalResolution =
+    | "ORDER_ACCEPTED"
+    | "ORDER_REJECTED"
+    | "ORDER_COMPLETED"
+    | "CANCELED"
+    | "REFUNDED"
+
+export type CompleteSupplierOrderTaskInput = {
     workItemId: string
-    expectedSubjectHash: string
-    reasonCode: string
-    comment?: string
-    queueContextId: string
+    expectedTaskVersion: string
+    expectedSubjectVersion: string
+    decision: {
+        type: "CONFIRM_VERIFIED_TERMINAL_RESULT"
+        orderId: string
+        expectedOrderLockVersion: number
+        verifiedSupplierActionResultId: string
+        resolution: SupplierOrderTerminalResolution
+    }
     idempotencyKey: string
 }
 
-export type DeferTaskResult = {
-    reasonCode: string
-    queueContextId: string
-    leaseDisposition: "RENEWED" | "RELEASED"
-    nextQueueCursor?: string
-    workItemStatus: "PENDING" | "IN_PROGRESS"
+export type CompleteSupplierOrderTaskResult = {
+    operationId: string
+    workItemId: string
+    workItemStatus: "COMPLETED"
+    taskVersion: string
+    lockVersion: number
+    resolution: SupplierOrderTerminalResolution
 }
 
 export type AfterSalesActionInput = {
@@ -578,7 +609,7 @@ export type NoteInput = {
     idempotencyKey: string
 }
 
-export const DEFER_REASON_OPTIONS = [
+export const RELEASE_REASON_OPTIONS = [
     { value: "WAITING_SUPPLIER", label: "等待供应商回复" },
     { value: "WAITING_MALL", label: "等待商城协同" },
     { value: "NEED_CLARIFICATION", label: "需业务澄清" },

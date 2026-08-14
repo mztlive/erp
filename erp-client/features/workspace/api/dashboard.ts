@@ -1,12 +1,18 @@
 /**
  * W01 今日工作台 — 真实 HTTP（D03 work_item + /account/profile）。
- * 工作台汇总投影 / as_of 属 E3；缺省时 freshness 取列表中最新 created_at（服务端字段），
- * 不使用客户端时钟冒充 as_of。
+ * 指标与列表复用同一授权规则；更新时间使用统计接口的 as_of。
  */
 
-import { apiGet } from "@/lib/api"
-import type { Page } from "@/lib/api"
-import type { WorkspaceId } from "@/lib/workspace-registry"
+import type { AccountProfile } from "@/features/auth/api"
+import { isRegisteredHandlerDestination } from "@/features/unified-task-queue/lib/handler-destination"
+import {
+    getWorkItemStats,
+    listWorkItems,
+    type WorkItemStats,
+} from "@/features/work-items/api"
+import { mapWorkItemDto, type WorkItemDto } from "@/features/work-items/types"
+import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
+import { sequentialText } from "@/lib/ui-text"
 
 import type {
     TodayWorkspaceQuery,
@@ -16,36 +22,6 @@ import type {
     WorkspaceTaskGroup,
     WorkspaceWorkItem,
 } from "../types"
-
-/** 后端 work_item 列表行（WorkItemView）。 */
-type WorkItemDto = {
-    id: string
-    work_item_type: string
-    business_object_type: string
-    business_object_id: string
-    subject_version?: string | null
-    status: string
-    owner_role?: string | null
-    owner_user_id?: string | null
-    priority: string
-    due_at?: number | null
-    reason_code?: string | null
-    impact_summary?: string | null
-    completion_action: string
-    completed_at?: number | null
-    completed_by?: string | null
-    close_reason_code?: string | null
-    close_reason_text?: string | null
-    version: number
-    created_at: number
-}
-
-type AccountProfileDto = {
-    userid: string
-    account: string
-    name: string
-    role_ids: string[]
-}
 
 const TEMPORARY_PREVIEW_LIMIT = 5
 
@@ -57,7 +33,6 @@ const FAMILY_META: Record<
     finance: { label: "票款与结算", defaultExpanded: true },
     fulfillment: { label: "履约与库存", defaultExpanded: false },
     exception: { label: "数据治理与异常", defaultExpanded: false },
-    procurement: { label: "采购确认", defaultExpanded: true },
 }
 
 const TYPE_META: Record<
@@ -65,78 +40,75 @@ const TYPE_META: Record<
     {
         label: string
         family: WorkspaceFamilyFilter
-        destination: WorkspaceId
     }
 > = {
     PROCUREMENT_CONFIRMATION: {
         label: "采购二次确认",
-        family: "procurement",
-        destination: "W07",
+        family: "fulfillment",
+    },
+    LOW_MARGIN_MANAGER_CONFIRMATION: {
+        label: "低毛利销售审批",
+        family: "approval",
     },
     PURCHASE_ORDER_REVIEW: {
         label: "采购单财务审核",
         family: "finance",
-        destination: "W08",
+    },
+    SALES_CHANGE_IMPACT_REVIEW: {
+        label: "销售变更履约影响复核",
+        family: "fulfillment",
+    },
+    SALES_CHANGE_FINANCE_REVIEW: {
+        label: "销售变更财务复核",
+        family: "finance",
     },
     CARD_FUNDS_REVIEW: {
         label: "卡券票款复核",
         family: "finance",
-        destination: "W13",
     },
     CARD_FUNDS_DELTA_REVIEW: {
         label: "卡券票款差异复核",
         family: "finance",
-        destination: "W13",
     },
     CARD_SALES_MANAGER_APPROVAL: {
         label: "卡券销售领导审批",
         family: "approval",
-        destination: "W05",
     },
     CARD_SALES_OPERATION_APPROVAL: {
         label: "卡券运营审批",
         family: "approval",
-        destination: "W05",
     },
     OWNERSHIP_MIGRATION_SALES_CONFIRMATION: {
         label: "归属迁移销售确认",
         family: "approval",
-        destination: "W03",
     },
     OWNERSHIP_MIGRATION_FINANCE_CONFIRMATION: {
         label: "归属迁移财务确认",
         family: "finance",
-        destination: "W11",
     },
     INVENTORY_ADJUSTMENT_REVIEW: {
         label: "库存调整复核",
         family: "fulfillment",
-        destination: "W10",
     },
     FINANCE_CORRECTION_REVIEW: {
         label: "财务纠错复核",
         family: "finance",
-        destination: "W11",
     },
     SUPPLIER_SETTLEMENT_REVIEW: {
         label: "供应商结算复核",
         family: "finance",
-        destination: "W27",
     },
     IMPORT_BUSINESS_CONFIRMATION: {
         label: "导入业务确认",
         family: "exception",
-        destination: "W18",
     },
     INTEGRATION_RESULT_UNKNOWN: {
         label: "集成结果未知",
         family: "exception",
-        destination: "W29",
     },
     BUSINESS_EXCEPTION: {
         label: "业务异常",
         family: "exception",
-        destination: "W29",
     },
 }
 
@@ -148,13 +120,51 @@ const PRIORITY_RANK: Record<string, number> = {
 }
 
 const STATUS_LABEL: Record<
-    string,
+    WorkspaceWorkItem["status"],
     { label: string; tone: WorkspaceWorkItem["statusTone"] }
 > = {
-    UNCLAIMED: { label: "待领取", tone: "warning" },
-    IN_PROGRESS: { label: "处理中", tone: "info" },
+    OPEN: { label: "待处理", tone: "info" },
     COMPLETED: { label: "已完成", tone: "success" },
     CLOSED: { label: "已关闭", tone: "neutral" },
+}
+
+const WORKSPACE_IDS = new Set<string>(
+    WORKSPACE_ROUTES.map((workspace) => workspace.id),
+)
+
+function workspaceId(value?: string): WorkspaceId | undefined {
+    return value && WORKSPACE_IDS.has(value)
+        ? (value as WorkspaceId)
+        : undefined
+}
+
+function actionBlockers(dto: WorkItemDto): WorkspaceWorkItem["actionBlockers"] {
+    const messages = (dto.action_blockers ?? []).map((blocker) =>
+        typeof blocker === "string"
+            ? { code: "ACTION_BLOCKED", message: blocker }
+            : blocker,
+    )
+
+    if (dto.processing_blocker) {
+        messages.push(dto.processing_blocker)
+    }
+
+    return messages.map((blocker) => ({
+        action: "PROCESS",
+        code: blocker.code,
+        message: blocker.message,
+    }))
+}
+
+function allowedActions(dto: WorkItemDto): WorkspaceWorkItem["allowedActions"] {
+    if (dto.processing_state === "APPROVAL_BLOCKED") return []
+
+    return (dto.allowed_actions ?? []).filter(
+        (action): action is "VIEW" | "PROCESS" | "START_PROCESSING" =>
+            action === "VIEW" ||
+            action === "PROCESS" ||
+            action === "START_PROCESSING",
+    )
 }
 
 function unixToIso(secs?: number | null): string {
@@ -204,59 +214,78 @@ function dueBucket(
     return "later"
 }
 
-function mapWorkItem(
-    dto: WorkItemDto,
-    timezone: string,
-    scope: TodayWorkspaceQuery["scope"],
-): WorkspaceWorkItem {
+function mapWorkItem(dto: WorkItemDto, timezone: string): WorkspaceWorkItem {
+    const task = mapWorkItemDto(dto)
     const meta = TYPE_META[dto.work_item_type] ?? {
         label: dto.work_item_type,
         family: "exception" as WorkspaceFamilyFilter,
-        destination: "W02" as WorkspaceId,
     }
-    const statusMeta = STATUS_LABEL[dto.status] ?? {
-        label: dto.status,
-        tone: "neutral" as const,
-    }
-    const createdAt = unixToIso(dto.created_at)
-    const dueAt = unixToIso(dto.due_at)
+    const statusMeta = STATUS_LABEL[task.status]
+    const createdAt = unixToIso(task.createdAt)
+    const dueAt = unixToIso(task.dueAt)
     const bucket = dueBucket(dueAt, timezone)
-    const processable =
-        dto.status === "UNCLAIMED" || dto.status === "IN_PROGRESS"
+    const configuredDestination = workspaceId(task.destinationWorkspaceId)
+    const destinationWorkspaceId = configuredDestination ?? "W02"
+    const queueContextId = task.queueContextId
+    const routeContext = task.routeContext
+    const hasRequiredRouting =
+        Boolean(configuredDestination) &&
+        isRegisteredHandlerDestination(
+            task.handlerKey,
+            task.destinationWorkspaceId,
+        ) &&
+        Boolean(queueContextId) &&
+        (destinationWorkspaceId !== "W18" ||
+            Boolean(routeContext?.confirmationScope))
+    const serverAllowedActions = allowedActions(dto)
+    const mappedActionBlockers = actionBlockers(dto)
+    const routeBlocker = hasRequiredRouting
+        ? []
+        : [
+              {
+                  action: "PROCESS" as const,
+                  code: "HANDLER_CONTEXT_MISSING",
+                  message: "任务处理入口尚未配置完整，请刷新或联系管理员。",
+              },
+          ]
 
     return {
-        workItemId: dto.id,
-        workItemType: dto.work_item_type,
+        workItemId: task.workItemId,
+        taskVersion: task.taskVersion,
+        workItemType: task.workItemType,
         workItemTypeLabel: meta.label,
-        businessObjectType: dto.business_object_type,
-        businessObjectId: dto.business_object_id,
-        stableNumber: dto.business_object_id,
-        objectTitle: `${meta.label} · ${dto.business_object_id}`,
-        counterpartyName: dto.business_object_type,
-        status: dto.status,
+        businessObjectType: task.businessObjectType,
+        businessObjectId: task.businessObjectId,
+        subjectVersion: task.subjectVersion,
+        stableNumber: task.businessObjectId,
+        objectTitle:
+            dto.business_object_label ??
+            `${meta.label} · ${task.businessObjectId}`,
+        counterpartyName: task.counterpartyLabel ?? task.businessObjectType,
+        status: task.status,
         statusLabel: statusMeta.label,
         statusTone: statusMeta.tone,
-        priority: PRIORITY_RANK[dto.priority] ?? 3,
+        processingState: task.processingState,
+        assignmentMode: task.assignmentMode,
+        priority:
+            typeof task.priority === "number"
+                ? task.priority
+                : (PRIORITY_RANK[task.priority] ?? 3),
         createdAt,
         dueAt,
-        ownerRoleLabel: dto.owner_role ?? "未分配角色",
-        ownerUserLabel: dto.owner_user_id ?? undefined,
-        reasonLabel: dto.reason_code ?? "—",
-        impactSummary: dto.impact_summary ?? "—",
-        allowedActions: processable
-            ? (["VIEW", "PROCESS"] as const)
-            : (["VIEW"] as const),
-        actionBlockers: processable
-            ? []
-            : [
-                  {
-                      action: "PROCESS",
-                      code: "TERMINAL",
-                      message: "任务已结束，不能继续处理。",
-                  },
-              ],
-        destinationWorkspaceId: meta.destination,
-        queueContextId: `queue:W01:${scope}`,
+        ownerRoleLabel: task.ownerRoleLabel,
+        ownerOrganizationLabel: task.ownerOrganization.displayName,
+        ownerUserLabel: task.ownerUser?.displayName,
+        reasonLabel: task.reasonLabel,
+        impactSummary: task.impactSummary,
+        allowedActions: hasRequiredRouting
+            ? serverAllowedActions
+            : serverAllowedActions.filter((action) => action === "VIEW"),
+        actionBlockers: [...mappedActionBlockers, ...routeBlocker],
+        destinationWorkspaceId,
+        queueContextId,
+        handlerKey: task.handlerKey,
+        routeContext,
         enteredAtLabel: formatRelativeLabel(createdAt, timezone),
         dueAtLabel:
             bucket === "overdue"
@@ -267,39 +296,46 @@ function mapWorkItem(
     }
 }
 
-function buildMetrics(items: readonly WorkspaceWorkItem[]): WorkspaceMetric[] {
-    const mine = items.length
-    const dueToday = items.filter((i) => i.dueBucket === "today").length
-    const overdue = items.filter((i) => i.dueBucket === "overdue").length
-    const exception = items.filter((i) => i.family === "exception").length
+function buildMetrics(
+    stats: WorkItemStats,
+    scope: TodayWorkspaceQuery["scope"],
+): WorkspaceMetric[] {
+    const detail = "当前授权范围"
     return [
         {
             key: "mine",
-            label: "待我处理",
-            count: mine,
+            label:
+                scope === "mine"
+                    ? sequentialText.minePending
+                    : sequentialText.teamPending,
+            count: scope === "mine" ? stats.assigned : stats.team,
             visible: true,
             tone: "info",
+            detail,
         },
         {
             key: "due_today",
             label: "今日到期",
-            count: dueToday,
+            count: stats.due_today,
             visible: true,
             tone: "warning",
+            detail,
         },
         {
             key: "overdue",
             label: "已超期",
-            count: overdue,
+            count: stats.overdue,
             visible: true,
             tone: "destructive",
+            detail,
         },
         {
             key: "exception",
             label: "异常待处理",
-            count: exception,
+            count: stats.exception,
             visible: true,
             tone: "warning",
+            detail,
         },
     ]
 }
@@ -334,44 +370,29 @@ function buildGroups(
  */
 export async function fetchWorkspaceDashboard(
     query: TodayWorkspaceQuery,
+    profile: AccountProfile,
 ): Promise<TodayWorkspaceView> {
-    const profile = await apiGet<AccountProfileDto>("/account/profile")
+    const [page, stats] = await Promise.all([
+        listWorkItems({
+            scope: query.scope,
+            family: query.family,
+            due: query.due,
+            sort: "priority_due",
+            timezone: query.timezone,
+            page: 1,
+            pageSize: 100,
+        }),
+        getWorkItemStats({
+            scope: query.scope,
+            family: query.family,
+            due: query.due,
+            timezone: query.timezone,
+        }),
+    ])
 
-    const listQuery: Record<string, unknown> = {
-        page: 1,
-        page_size: 100,
-        sort_by: "due_at",
-        sort_dir: "asc",
-    }
+    const items = page.items.map((dto) => mapWorkItem(dto, query.timezone))
 
-    if (query.scope === "mine") {
-        listQuery.owner_user_id = profile.userid
-        listQuery.status = "IN_PROGRESS"
-    } else {
-        listQuery.status = "UNCLAIMED"
-    }
-
-    const page = await apiGet<Page<WorkItemDto>>("/admin/work-items", listQuery)
-
-    let items = page.items.map((dto) =>
-        mapWorkItem(dto, query.timezone, query.scope),
-    )
-
-    if (query.due === "today") {
-        items = items.filter((i) => i.dueBucket === "today")
-    } else if (query.due === "overdue") {
-        items = items.filter((i) => i.dueBucket === "overdue")
-    }
-    if (query.family) {
-        items = items.filter((i) => i.family === query.family)
-    }
-
-    // 新鲜度：取服务端 created_at 最大值；无 E3 工作台投影 as_of 时 projection 同源，不造客户端时间。
-    const maxCreated = page.items.reduce(
-        (max, row) => Math.max(max, row.created_at ?? 0),
-        0,
-    )
-    const updatedAt = maxCreated > 0 ? unixToIso(maxCreated) : ""
+    const updatedAt = unixToIso(stats.as_of)
 
     return {
         access: "allowed",
@@ -389,7 +410,7 @@ export async function fetchWorkspaceDashboard(
             projectionUpdatedAt: updatedAt,
             projectionState: updatedAt ? "fresh" : "stale",
         },
-        metrics: buildMetrics(items),
+        metrics: buildMetrics(stats, query.scope),
         groups: buildGroups(items, query.family),
         warnings: [],
         recent: [],

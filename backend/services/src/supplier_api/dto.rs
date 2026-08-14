@@ -8,10 +8,13 @@
 //! 响应中的 `credential_reference` 一律省略。
 
 use entities::supplier_api::{
-    ConnectionEnvironment, HealthCheckResult, RateLimitPolicy, SupplierApiCapabilityCode,
-    SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionStatus,
+    BusinessCapabilityRequirement, ConnectionEnvironment, HealthCheckResult, RateLimitPolicy,
+    SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnection,
+    SupplierApiConnectionStatus, SupplierCommandOutcome, SupplierConnectionAction, SupplierHealthCheckStatus,
+    SupplierHealthCheckType,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use validator::Validate;
 
 use crate::errors::{Error, Result};
@@ -146,8 +149,7 @@ pub struct CreateSupplierApiConnectionRequest {
     /// 连接环境。
     pub environment: ConnectionEnvironment,
     /// 地址配置引用。
-    #[validate(custom(function = "non_blank", message = "地址配置引用不能为空"))]
-    pub endpoint_reference: String,
+    pub endpoint_reference: Option<String>,
     /// 密钥管理系统引用（不保存明文密钥）。
     pub credential_reference: Option<String>,
     /// 限流策略。
@@ -326,6 +328,104 @@ pub struct HealthCheckRequest {
     pub idempotency_key: String,
 }
 
+/// 固定连接治理命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SupplierConnectionCommand {
+    /// 固定动作注册表；未知动作在反序列化阶段拒绝。
+    pub action: SupplierConnectionAction,
+    /// 期望连接版本。
+    #[validate(range(min = 1, message = "连接版本必须大于0"))]
+    pub expected_version: u64,
+    /// 服务端签发并由权威注册表解析的不透明引用。
+    pub payload_reference: Option<String>,
+    /// 固定业务原因代码。
+    pub reason_code: Option<String>,
+    /// 健康检查白名单类型；仅 `RUN_HEALTH_CHECK` 使用。
+    pub check_type: Option<SupplierHealthCheckType>,
+    /// 客户端幂等键；只保存不可逆摘要。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 采购确认业务能力需求命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ConfirmBusinessCapabilityRequirementCommand {
+    pub capability_code: SupplierApiCapabilityCode,
+    pub requirement: BusinessCapabilityRequirement,
+    pub applicability_reference: Option<String>,
+    #[serde(default)]
+    pub evidence_references: Vec<String>,
+    #[validate(custom(function = "non_blank", message = "原因代码不能为空"))]
+    pub reason_code: String,
+    #[validate(range(min = 1, message = "连接版本必须大于0"))]
+    pub expected_connection_version: u64,
+    #[validate(range(min = 1, message = "能力版本必须大于0"))]
+    pub expected_capability_version: u64,
+    #[validate(custom(function = "non_blank", message = "操作ID不能为空"))]
+    pub operation_id: String,
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 单条系统管理员能力配置变化。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SupplierCapabilityChange {
+    pub code: SupplierApiCapabilityCode,
+    pub enabled: bool,
+    pub constraint_snapshot: Option<String>,
+}
+
+/// 系统管理员能力配置强命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct UpdateSupplierCapabilitiesCommand {
+    #[validate(length(min = 1, max = 10, message = "能力变更必须为1到10条"))]
+    pub capability_changes: Vec<SupplierCapabilityChange>,
+    #[validate(range(min = 1, message = "连接版本必须大于0"))]
+    pub expected_connection_version: u64,
+    /// 既有能力必须携带当前版本；新能力使用版本 0。
+    pub expected_capability_versions: BTreeMap<String, u64>,
+    #[validate(custom(function = "non_blank", message = "原因代码不能为空"))]
+    pub reason_code: String,
+    #[validate(custom(function = "non_blank", message = "操作ID不能为空"))]
+    pub operation_id: String,
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 服务端动作阻塞原因。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierActionBlockerView {
+    pub action: String,
+    pub code: String,
+    pub message: String,
+    pub destination_workspace_id: Option<String>,
+}
+
+/// 安全引用投影；永不包含底层引用正文或可访问秘密的 URL。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SafeReferenceView {
+    pub state: &'static str,
+    pub alias: Option<String>,
+    pub version: Option<String>,
+    pub visible: bool,
+}
+
+/// 地址与密钥引用的安全状态集合；不包含底层引用正文。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SafeReferencesView {
+    pub endpoint: SafeReferenceView,
+    pub credential: SafeReferenceView,
+}
+
+/// 连接关联业务影响。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
+pub struct RelatedImpactView {
+    pub active_offerings: u64,
+    pub active_publications: u64,
+    pub open_supplier_orders: u64,
+    pub active_sync_jobs: u64,
+}
+
 /// 连接响应视图（列表与详情共用；`credential_reference` 永不回显）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SupplierApiConnectionView {
@@ -345,6 +445,14 @@ pub struct SupplierApiConnectionView {
     pub last_health_at: Option<u64>,
     /// 最近健康检查结果。
     pub last_health_result: Option<HealthCheckResult>,
+    /// 地址与密钥引用的安全状态；永不回显底层引用。
+    pub safe_references: SafeReferencesView,
+    /// 当前技术配置版本。
+    pub technical_config_version: u64,
+    /// 服务端允许的连接治理动作。
+    pub allowed_actions: Vec<String>,
+    /// 服务端动作阻塞原因。
+    pub action_blockers: Vec<SupplierActionBlockerView>,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -368,6 +476,12 @@ pub struct SupplierApiConnectionDetailView {
     pub connection: SupplierApiConnectionView,
     /// 连接下的能力声明清单。
     pub capabilities: Vec<SupplierApiCapabilityView>,
+    /// 最近健康检查运行记录。
+    pub health_records: Vec<SupplierHealthCheckRunView>,
+    /// 服务端健康检查白名单。
+    pub health_check_types: Vec<SupplierHealthCheckType>,
+    /// 停用前关联业务影响。
+    pub related_impact: RelatedImpactView,
 }
 
 /// 能力响应视图。
@@ -385,6 +499,86 @@ pub struct SupplierApiCapabilityView {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 服务端安全约束摘要。
+    pub constraint_summary: Option<String>,
+    /// 最新采购业务需求确认；没有确认时为 `None`。
+    pub business_requirement: Option<BusinessCapabilityRequirement>,
+    /// 最新确认记录版本。
+    pub business_confirmation_version: Option<u64>,
+    /// 当前能力版本是否已包含在最近成功技术健康证据中。
+    pub technically_verified: bool,
+    /// 最近技术验证时间。
+    pub verified_at: Option<u64>,
+    /// 能力对象允许动作。
+    pub allowed_actions: Vec<String>,
+    /// 能力对象动作阻塞原因。
+    pub action_blockers: Vec<SupplierActionBlockerView>,
+}
+
+/// 后台健康检查运行记录视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierHealthCheckRunView {
+    pub id: String,
+    pub job_id: String,
+    pub check_type: SupplierHealthCheckType,
+    pub status: SupplierHealthCheckStatus,
+    pub technical_config_version: u64,
+    pub requested_by: String,
+    pub started_at: Option<u64>,
+    pub finished_at: Option<u64>,
+    pub latency_ms: Option<u64>,
+    pub error_code: Option<String>,
+    pub error_summary: Option<String>,
+}
+
+/// 后台任务查询视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierConnectionJobView {
+    pub job_id: String,
+    pub job_no: String,
+    pub action: String,
+    pub status: entities::bulk_job::JobStatus,
+    pub total: u64,
+    pub processed: u64,
+    pub succeeded: u64,
+    pub failed: u64,
+    pub error_summary: Option<String>,
+    pub created_at: u64,
+    pub finished_at: Option<u64>,
+}
+
+/// 正式连接治理命令结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierConnectionCommandResult {
+    pub outcome: SupplierCommandOutcome,
+    pub action: SupplierConnectionAction,
+    pub operation_id: String,
+    pub connection_version: u64,
+    pub job_id: Option<String>,
+    pub job_no: Option<String>,
+    pub audit_event_id: String,
+}
+
+/// 采购业务能力确认结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ConfirmBusinessCapabilityRequirementResult {
+    pub outcome: SupplierCommandOutcome,
+    pub operation_id: String,
+    pub confirmation_id: String,
+    pub confirmation_version: u64,
+    pub connection_version: u64,
+    pub capability_version: u64,
+    pub audit_event_id: String,
+}
+
+/// 系统管理员能力配置结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct UpdateSupplierCapabilitiesResult {
+    pub outcome: SupplierCommandOutcome,
+    pub operation_id: String,
+    pub connection_version: u64,
+    pub capabilities: Vec<SupplierApiCapabilityView>,
+    pub audit_event_id: String,
 }
 
 /// 健康检查结果视图。
@@ -423,6 +617,31 @@ impl From<SupplierApiConnection> for SupplierApiConnectionView {
             }),
             last_health_at: connection.last_health_at.map(|at| at.unix_secs() as u64),
             last_health_result: connection.last_health_result,
+            safe_references: SafeReferencesView {
+                endpoint: SafeReferenceView {
+                    state: if connection.endpoint_reference_bound {
+                        "BOUND"
+                    } else {
+                        "MISSING"
+                    },
+                    alias: None,
+                    version: None,
+                    visible: false,
+                },
+                credential: SafeReferenceView {
+                    state: if connection.credential_reference_bound {
+                        "BOUND"
+                    } else {
+                        "MISSING"
+                    },
+                    alias: None,
+                    version: None,
+                    visible: false,
+                },
+            },
+            technical_config_version: connection.technical_config_version,
+            allowed_actions: Vec::new(),
+            action_blockers: Vec::new(),
             version: connection.base.version,
             created_at: connection.base.created_at,
         }
@@ -524,11 +743,29 @@ mod tests {
             rate_limit_policy: None,
             last_health_at: None,
             last_health_result: None,
+            safe_references: super::SafeReferencesView {
+                endpoint: super::SafeReferenceView {
+                    state: "MISSING",
+                    alias: None,
+                    version: None,
+                    visible: false,
+                },
+                credential: super::SafeReferenceView {
+                    state: "BOUND",
+                    alias: None,
+                    version: None,
+                    visible: false,
+                },
+            },
+            technical_config_version: 1,
+            allowed_actions: Vec::new(),
+            action_blockers: Vec::new(),
             version: 1,
             created_at: 1_700_000_000,
         })
         .unwrap();
         assert!(view.get("credential_reference").is_none());
+        assert_eq!(view["safe_references"]["credential"]["state"], "BOUND");
         assert_eq!(view["connection_code"], "CN-1");
     }
 }

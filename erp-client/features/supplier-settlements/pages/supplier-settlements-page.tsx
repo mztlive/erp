@@ -35,6 +35,10 @@ export function SupplierSettlementsPage() {
                 if (next.section !== "overview")
                     params.set("section", next.section)
                 if (next.returnTo) params.set("returnTo", next.returnTo)
+                if (next.workItemId) params.set("workItemId", next.workItemId)
+                if (next.queueContextId)
+                    params.set("queueContextId", next.queueContextId)
+                if (next.from) params.set("from", next.from)
                 const qs = params.toString()
                 router.replace(qs ? `${base}?${qs}` : base, { scroll: false })
                 return
@@ -54,17 +58,27 @@ export function SupplierSettlementsPage() {
     )
 
     if (urlState.statementId) {
+        const taskReturnTo =
+            urlState.from === "W02" &&
+            urlState.workItemId &&
+            urlState.queueContextId
+                ? `/workspace/tasks?queueContextId=${encodeURIComponent(urlState.queueContextId)}&currentWorkItemId=${encodeURIComponent(urlState.workItemId)}`
+                : undefined
         return (
             <SettlementCenter
                 statementId={urlState.statementId}
+                workItemId={urlState.workItemId}
                 urlState={urlState}
                 patchUrl={patchUrl}
-                returnTo={urlState.returnTo}
+                returnTo={urlState.returnTo ?? taskReturnTo}
                 onBack={() =>
                     patchUrl({
                         statementId: undefined,
                         section: "overview",
                         preview: undefined,
+                        workItemId: undefined,
+                        queueContextId: undefined,
+                        from: undefined,
                     })
                 }
             />
@@ -81,6 +95,9 @@ export function SupplierSettlementsPage() {
                     statementId: id,
                     section: "overview",
                     preview: undefined,
+                    workItemId: undefined,
+                    queueContextId: undefined,
+                    from: undefined,
                 })
             }
         />

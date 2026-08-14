@@ -9,8 +9,10 @@
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 use entities::supplier_api::{
-    ConnectionEnvironment, HealthCheckResult, SupplierApiCapability, SupplierApiCapabilityCode,
-    SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionId, SupplierApiConnectionStatus,
+    BusinessCapabilityConfirmation, ConnectionEnvironment, HealthCheckResult, SupplierApiCapability,
+    SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionId,
+    SupplierApiConnectionStatus, SupplierConnectionAction, SupplierConnectionCommandReceipt,
+    SupplierHealthCheckRun,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -47,6 +49,14 @@ pub struct SupplierApiConnectionRow {
     pub last_health_at: Option<i64>,
     /// 最近健康检查结果。
     pub last_health_result: Option<HealthCheckResult>,
+    /// 地址引用是否已由权威注册表确认绑定。
+    pub endpoint_reference_bound: bool,
+    /// 密钥引用是否已由权威注册表确认绑定。
+    pub credential_reference_bound: bool,
+    /// 技术配置版本。
+    pub technical_config_version: u64,
+    /// 最近成功健康证据对应的技术配置版本。
+    pub last_healthy_technical_config_version: Option<u64>,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -320,6 +330,137 @@ impl<'a> Repository<'a, SupplierApiCapability> {
     }
 }
 
+impl<'a> Repository<'a, BusinessCapabilityConfirmation> {
+    /// 按连接、操作人与幂等摘要查找既有业务确认。
+    pub async fn find_business_confirmation_receipt(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        confirmed_by: &str,
+        idempotency_key_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessCapabilityConfirmation>> {
+        self.find_one(
+            doc! {
+                "connection_id": connection_id.to_string(),
+                "confirmed_by": confirmed_by,
+                "idempotency_key_hash": idempotency_key_hash,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询连接下全部追加式业务确认，按最新优先返回。
+    pub async fn find_business_confirmations_by_connection(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BusinessCapabilityConfirmation>> {
+        self.find_many_sorted(
+            doc! { "connection_id": connection_id.to_string() },
+            doc! { "confirmed_at": -1, "id": -1 },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, SupplierHealthCheckRun> {
+    /// 按后台任务 ID 查询健康检查运行记录。
+    pub async fn find_health_run_by_job(
+        &self,
+        job_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierHealthCheckRun>> {
+        self.find_one(doc! { "background_job_id": job_id }, executor)
+            .await
+    }
+
+    /// 按连接、操作人与幂等摘要查询既有健康任务。
+    pub async fn find_health_run_receipt(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        requested_by: &str,
+        idempotency_key_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierHealthCheckRun>> {
+        self.find_one(
+            doc! {
+                "connection_id": connection_id.to_string(),
+                "requested_by": requested_by,
+                "idempotency_key_hash": idempotency_key_hash,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询连接最近的健康运行记录。
+    pub async fn find_health_runs_by_connection(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        limit: i64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierHealthCheckRun>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "created_at": -1, "id": -1 })
+            .limit(limit.clamp(1, 100))
+            .build();
+        mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "connection_id": connection_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, SupplierConnectionCommandReceipt> {
+    /// 按连接、动作、操作人与幂等摘要查询命令回执。
+    pub async fn find_command_receipt(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        action: SupplierConnectionAction,
+        actor_id: &str,
+        idempotency_key_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierConnectionCommandReceipt>> {
+        self.find_one(
+            doc! {
+                "connection_id": connection_id.to_string(),
+                "action": action.as_str(),
+                "actor_id": actor_id,
+                "idempotency_key_hash": idempotency_key_hash,
+            },
+            executor,
+        )
+        .await
+    }
+}
+
+/// 停用连接前由服务端重验的关联业务影响。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SupplierConnectionImpact {
+    pub active_offerings: u64,
+    pub active_publications: u64,
+    pub open_supplier_orders: u64,
+    pub active_sync_jobs: u64,
+}
+
+impl SupplierConnectionImpact {
+    /// 判断是否存在任何必须先处理的活动业务对象。
+    pub fn has_blockers(self) -> bool {
+        self.active_offerings > 0
+            || self.active_publications > 0
+            || self.open_supplier_orders > 0
+            || self.active_sync_jobs > 0
+    }
+}
+
 /// D25 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
@@ -422,6 +563,133 @@ impl<'a> SupplierApiRepository<'a> {
         .await?;
         Ok(())
     }
+
+    /// 汇总连接停用前必须重验的活动业务影响。
+    ///
+    /// 供给、发布、履约订单和目录同步任务都使用各自集合的正式状态；查询不读取
+    /// 地址或密钥引用，也不返回业务对象明细。
+    pub async fn connection_impact(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierConnectionImpact> {
+        let (active_offerings, active_offering_revisions) =
+            self.active_offering_revisions(connection_id, executor).await?;
+        let active_publications = self
+            .active_publication_count(&active_offering_revisions, executor)
+            .await?;
+        let open_supplier_orders = mongo_ops::count_documents(
+            &self.db.collection::<Document>(
+                <Database as super::extensions::SupplierFulfillmentExt>::SUPPLIER_FULFILLMENT_ORDERS,
+            ),
+            doc! {
+                "connection_id": connection_id.to_string(),
+                "fulfillment_status": { "$nin": ["COMPLETED", "REJECTED"] },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await?;
+        let active_sync_jobs = mongo_ops::count_documents(
+            &self
+                .db
+                .collection::<Document>(<Database as super::extensions::BulkJobExt>::BACKGROUND_JOBS),
+            doc! {
+                "domain_job_type": "SUPPLIER_CATALOG_SYNC",
+                "domain_job_id": connection_id.to_string(),
+                "status": { "$in": ["pending", "running", "partially_succeeded"] },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await?;
+        Ok(SupplierConnectionImpact {
+            active_offerings,
+            active_publications,
+            open_supplier_orders,
+            active_sync_jobs,
+        })
+    }
+
+    async fn active_offering_revisions(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<(u64, Vec<String>)> {
+        #[derive(Deserialize)]
+        struct OfferingRevisionRow {
+            current_revision_id: Option<String>,
+        }
+        let collection = self.db.collection::<OfferingRevisionRow>(
+            <Database as super::extensions::SupplierOfferingExt>::SUPPLIER_OFFERINGS,
+        );
+        let rows = mongo_ops::find_many(
+            &collection,
+            doc! {
+                "source_connection_id": connection_id.to_string(),
+                "status": "ACTIVE",
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .projection(doc! { "current_revision_id": 1 })
+                .build(),
+            executor,
+        )
+        .await?;
+        let count = rows.len() as u64;
+        let revision_ids = rows
+            .into_iter()
+            .filter_map(|row| row.current_revision_id)
+            .collect();
+        Ok((count, revision_ids))
+    }
+
+    async fn active_publication_count(
+        &self,
+        offering_revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<u64> {
+        if offering_revision_ids.is_empty() {
+            return Ok(0);
+        }
+        #[derive(Deserialize)]
+        struct PublicationRevisionRow {
+            product_publication_id: String,
+        }
+        let revisions = mongo_ops::find_many(
+            &self.db.collection::<PublicationRevisionRow>(
+                <Database as super::extensions::PublicationExt>::PRODUCT_PUBLICATION_REVISIONS,
+            ),
+            doc! {
+                "supplier_offering_revision_id": { "$in": offering_revision_ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .projection(doc! { "product_publication_id": 1 })
+                .build(),
+            executor,
+        )
+        .await?;
+        let publication_ids: Vec<String> = revisions
+            .into_iter()
+            .map(|row| row.product_publication_id)
+            .collect();
+        if publication_ids.is_empty() {
+            return Ok(0);
+        }
+        mongo_ops::count_documents(
+            &self.db.collection::<Document>(
+                <Database as super::extensions::PublicationExt>::PRODUCT_PUBLICATIONS,
+            ),
+            doc! {
+                "id": { "$in": publication_ids },
+                "status": "mall_effective",
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 构建排序文档（排序字段白名单收敛）。
@@ -455,6 +723,10 @@ fn supplier_api_connection_projection() -> Document {
         "status": 1,
         "last_health_at": 1,
         "last_health_result": 1,
+        "endpoint_reference_bound": 1,
+        "credential_reference_bound": 1,
+        "technical_config_version": 1,
+        "last_healthy_technical_config_version": 1,
         "version": 1,
         "created_at": 1,
     }

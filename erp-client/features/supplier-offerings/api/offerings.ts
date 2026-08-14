@@ -1,12 +1,63 @@
 import { apiGet, apiPost } from "@/lib/api/client"
+import {
+    mapWorkItemDto,
+    type WorkItemAllowedAction,
+    type WorkItemDto,
+} from "@/features/work-items/types"
 
 import type {
     CreateSupplierOfferingInput,
     ReviseSupplierOfferingInput,
     SupplierOfferingListQuery,
     SupplierOfferingPage,
+    SupplierSupplyExceptionWorkItem,
     UpdateOfferingAvailabilityInput,
 } from "@/features/supplier-offerings/types"
+
+const SUPPLY_EXCEPTION_ALLOWED_ACTIONS: ReadonlySet<WorkItemAllowedAction> =
+    new Set([
+        "VIEW",
+        "PROCESS",
+        "START_PROCESSING",
+        "RELEASE_TO_TEAM",
+        "REASSIGN",
+    ])
+
+/**
+ * 读取 W21 供应停止任务，对未注册路由、对象或终态动作失败关闭。
+ */
+export async function fetchSupplierSupplyExceptionWorkItem(
+    workItemId: string,
+): Promise<SupplierSupplyExceptionWorkItem> {
+    const normalizedId = workItemId.trim()
+    if (!normalizedId) throw new Error("任务标识不能为空")
+
+    const dto = await apiGet<WorkItemDto>(
+        `/admin/work-items/${encodeURIComponent(normalizedId)}`,
+    )
+    const task = mapWorkItemDto(dto)
+    const unsupportedActions = task.allowedActions.filter(
+        (action) => !SUPPLY_EXCEPTION_ALLOWED_ACTIONS.has(action),
+    )
+
+    if (
+        task.workItemId !== normalizedId ||
+        task.workItemType !== "BUSINESS_EXCEPTION" ||
+        task.handlerKey !== "supplier_supply_exception" ||
+        task.destinationWorkspaceId !== "W21" ||
+        task.status !== "OPEN" ||
+        task.businessObjectType !== "SUPPLIER_OFFERING" ||
+        task.reasonCode !== "SUPPLIER_STOPPED" ||
+        !task.businessObjectId.trim() ||
+        !task.subjectVersion.trim() ||
+        !task.taskVersion.trim() ||
+        unsupportedActions.length > 0
+    ) {
+        throw new Error("当前任务不符合供应停止核对合同，已阻止处理。")
+    }
+
+    return task as SupplierSupplyExceptionWorkItem
+}
 
 export function fetchSupplierOfferings(
     query: SupplierOfferingListQuery,

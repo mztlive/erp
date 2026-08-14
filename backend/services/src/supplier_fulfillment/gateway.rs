@@ -4,18 +4,17 @@
 //! 调用网关；结果经 `inbox_message` + `integration_error_task` 承接。本模块定义
 //! 网关 trait 与结果分类，禁止在事务闭包内触发网关。
 //!
-//! 本批次不实现真实 HTTP Connector（二期 Supplier Connector 属于 D25 能力扩展，
-//! 见 erp-phase-2.md §6.2），由 [`SimulatedSupplierGateway`] 按连接地址配置
-//! 模拟结果分类：`sim://reject` / `sim://timeout` / `sim://temporary-failure` /
-//! `sim://auth-signature`，其余视为接单成功。真实网关接入时以同 trait 实现即可，
-//! 接口形状不变。
+//! 生产默认使用失败关闭网关；[`SimulatedSupplierGateway`] 只允许明确
+//! `sim://` 地址在测试中产生模拟结果。任何普通 URL 都不得被伪造为供应商成功。
 
 use entities::integration_ops::ErrorClass;
 use entities::supplier_api::SupplierApiConnection;
 use entities::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
+use serde::{Deserialize, Serialize};
 
 /// 网关对一次供应商动作请求的处理结果分类（错误分类对齐 §6.21）。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DispatchOutcome {
     /// 成功：返回供应商请求号与（下单动作的）外部订单号。
     Succeeded {
@@ -43,6 +42,26 @@ pub enum DispatchOutcome {
     },
 }
 
+/// 对原供应商动作进行结果调查后的可证明结论。
+///
+/// “查询请求本身成功”不属于业务终态；适配器只有在供应商明确证明原请求没有
+/// 形成结果时才能返回 [`Self::VerifiedNoResult`]，其余情况一律失败关闭为
+/// [`Self::ResultUnknown`]。已落库的业务终态由 Service 在调用网关前独立复验。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InvestigationOutcome {
+    /// 供应商明确证明原请求没有形成结果，可沿原供应商幂等键重放。
+    VerifiedNoResult {
+        /// 权限安全的查询证据摘要。
+        summary: String,
+    },
+    /// 供应商没有返回足以证明原结果的证据。
+    ResultUnknown {
+        /// 权限安全的查询证据摘要。
+        summary: String,
+    },
+}
+
 /// 供应商网关：向 API 供应商发起下单/取消/退款请求并返回分类结果。
 ///
 /// 实现必须自带超时、重试上限与错误分类（AGENTS.md 外部依赖容错）；
@@ -63,12 +82,56 @@ pub trait SupplierGateway: Send + Sync {
         order: &'a SupplierFulfillmentOrder,
         connection: &'a SupplierApiConnection,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = DispatchOutcome> + Send + 'a>>;
+
+    /// 查询原供应商动作结果，不把传输成功误判成业务成功。
+    ///
+    /// 实现必须使用原动作身份查询，不得创建新订单或改用新供应商幂等键。只有
+    /// 外部系统明确返回“原请求未形成结果”时才能开放安全重放。
+    fn investigate<'a>(
+        &'a self,
+        target_action: &'a SupplierOrderAction,
+        order: &'a SupplierFulfillmentOrder,
+        connection: &'a SupplierApiConnection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = InvestigationOutcome> + Send + 'a>>;
+}
+
+/// 未配置生产 Connector 时的失败关闭网关。
+#[derive(Debug, Default)]
+pub struct UnavailableSupplierGateway;
+
+impl SupplierGateway for UnavailableSupplierGateway {
+    fn dispatch<'a>(
+        &'a self,
+        _action: &'a SupplierOrderAction,
+        _order: &'a SupplierFulfillmentOrder,
+        _connection: &'a SupplierApiConnection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = DispatchOutcome> + Send + 'a>> {
+        Box::pin(async {
+            DispatchOutcome::Failed {
+                error_class: ErrorClass::CapabilityGap,
+                summary: "供应商连接器未配置，未发送外部请求".to_string(),
+            }
+        })
+    }
+
+    fn investigate<'a>(
+        &'a self,
+        _target_action: &'a SupplierOrderAction,
+        _order: &'a SupplierFulfillmentOrder,
+        _connection: &'a SupplierApiConnection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = InvestigationOutcome> + Send + 'a>> {
+        Box::pin(async {
+            InvestigationOutcome::ResultUnknown {
+                summary: "供应商连接器未配置，无法验证原请求结果".to_string(),
+            }
+        })
+    }
 }
 
 /// 模拟供应商网关：按连接地址配置模拟结果分类，供本批次接口与测试使用。
 ///
 /// `endpoint_reference` 以 `sim://` 前缀开头的已知取值模拟对应结果，
-/// 其余取值一律模拟接单成功（`Succeeded`，外部订单号 `EXT-{订单号}`）。
+/// 其余取值一律失败关闭，禁止把真实 URL 当成模拟成功。
 /// 该网关不发任何网络请求，测试可借此注入失败路径验证降级。
 #[derive(Debug, Default)]
 pub struct SimulatedSupplierGateway;
@@ -91,6 +154,15 @@ impl SupplierGateway for SimulatedSupplierGateway {
         connection: &'a SupplierApiConnection,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = DispatchOutcome> + Send + 'a>> {
         Box::pin(async move { simulate_outcome(action, order, connection) })
+    }
+
+    fn investigate<'a>(
+        &'a self,
+        target_action: &'a SupplierOrderAction,
+        order: &'a SupplierFulfillmentOrder,
+        connection: &'a SupplierApiConnection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = InvestigationOutcome> + Send + 'a>> {
+        Box::pin(async move { simulate_investigation(target_action, order, connection) })
     }
 }
 
@@ -116,6 +188,9 @@ fn simulate_outcome(
         Some("timeout") => DispatchOutcome::ResultUnknown {
             summary: "请求超时，结果未知（模拟）".to_string(),
         },
+        Some("query-no-result") => DispatchOutcome::ResultUnknown {
+            summary: "请求结果未知，需查询原结果（模拟）".to_string(),
+        },
         Some("temporary-failure") => DispatchOutcome::Failed {
             error_class: ErrorClass::TransientFailure,
             summary: "供应商接口临时不可用（模拟）".to_string(),
@@ -124,18 +199,41 @@ fn simulate_outcome(
             error_class: ErrorClass::AuthSignature,
             summary: "鉴权或签名校验失败（模拟）".to_string(),
         },
-        _ => DispatchOutcome::Succeeded {
+        Some("success") => DispatchOutcome::Succeeded {
             external_request_id: format!("SIM-REQ-{}", order.fulfillment_order_no),
             external_order_no: (action.action_type
                 == entities::supplier_fulfillment::SupplierOrderActionType::Place)
                 .then(|| format!("EXT-{}", order.fulfillment_order_no)),
+        },
+        _ => DispatchOutcome::Failed {
+            error_class: ErrorClass::CapabilityGap,
+            summary: "未配置可执行的供应商连接器，未发送外部请求".to_string(),
+        },
+    }
+}
+
+/// 按连接地址模拟对原动作的只读结果查询。
+///
+/// 默认值必须保持结果未知；仅显式 `sim://query-no-result` 返回“明确无结果”，
+/// 防止把普通连接或一次成功 HTTP 查询误判为可安全重放。
+fn simulate_investigation(
+    _target_action: &SupplierOrderAction,
+    _order: &SupplierFulfillmentOrder,
+    connection: &SupplierApiConnection,
+) -> InvestigationOutcome {
+    match connection.endpoint_reference.trim().strip_prefix("sim://") {
+        Some("query-no-result") => InvestigationOutcome::VerifiedNoResult {
+            summary: "供应商明确返回原请求未形成结果（模拟）".to_string(),
+        },
+        _ => InvestigationOutcome::ResultUnknown {
+            summary: "供应商未返回足以证明原请求结果的证据".to_string(),
         },
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{simulate_outcome, DispatchOutcome};
+    use super::{simulate_investigation, simulate_outcome, DispatchOutcome, InvestigationOutcome};
     use entities::common::time::Instant;
     use entities::ids::{MallOrderId, SupplierAccountId, SupplierApiConnectionId};
     use entities::supplier_api::{
@@ -211,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn default_endpoint_simulates_accepted_place() {
+    fn ordinary_endpoint_never_simulates_accepted_place() {
         let order = sample_order();
         let action = sample_action(SupplierOrderActionType::Place);
         let outcome = simulate_outcome(
@@ -221,9 +319,10 @@ mod tests {
         );
         assert!(matches!(
             outcome,
-            DispatchOutcome::Succeeded {
-                external_order_no: Some(no), ..
-            } if no == "EXT-FO-2026-001"
+            DispatchOutcome::Failed {
+                error_class: entities::integration_ops::ErrorClass::CapabilityGap,
+                ..
+            }
         ));
     }
 
@@ -249,14 +348,45 @@ mod tests {
     }
 
     #[test]
+    fn successful_query_transport_is_not_a_verified_business_result() {
+        let order = sample_order();
+        let action = sample_action(SupplierOrderActionType::Place);
+
+        assert!(matches!(
+            simulate_investigation(
+                &action,
+                &order,
+                &sample_connection("https://supplier.example.com/api")
+            ),
+            InvestigationOutcome::ResultUnknown { .. }
+        ));
+        assert!(matches!(
+            simulate_investigation(&action, &order, &sample_connection("sim://query-no-result")),
+            InvestigationOutcome::VerifiedNoResult { .. }
+        ));
+    }
+
+    #[test]
+    fn query_no_result_scenario_starts_unknown_before_proving_no_result() {
+        let order = sample_order();
+        let action = sample_action(SupplierOrderActionType::Place);
+        let connection = sample_connection("sim://query-no-result");
+
+        assert!(matches!(
+            simulate_outcome(&action, &order, &connection),
+            DispatchOutcome::ResultUnknown { .. }
+        ));
+        assert!(matches!(
+            simulate_investigation(&action, &order, &connection),
+            InvestigationOutcome::VerifiedNoResult { .. }
+        ));
+    }
+
+    #[test]
     fn non_place_action_has_no_external_order_no() {
         let order = sample_order();
         let action = sample_action(SupplierOrderActionType::Refund);
-        let outcome = simulate_outcome(
-            &action,
-            &order,
-            &sample_connection("https://supplier.example.com/api"),
-        );
+        let outcome = simulate_outcome(&action, &order, &sample_connection("sim://success"));
         assert!(matches!(
             outcome,
             DispatchOutcome::Succeeded {

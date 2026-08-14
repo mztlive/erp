@@ -1,10 +1,7 @@
-//! 域 D03 `work_item` 的 DTO（Handler 直接复用，禁止在 handler 内重复定义同构类型）。
-//!
-//! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
-//! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
+//! D03 人工任务责任队列的 HTTP 共用 DTO。
 
 use entities::work_item::{
-    WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
+    AssignmentMode, AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -12,457 +9,971 @@ use validator::Validate;
 use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
-/// 待办列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
-pub(crate) const WORK_ITEM_SORT_FIELDS: &[&str] = &["created_at", "updated_at", "due_at"];
+const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
+const WORK_ITEM_TYPES: [WorkItemType; 17] = [
+    WorkItemType::ProcurementConfirmation,
+    WorkItemType::LowMarginManagerConfirmation,
+    WorkItemType::PurchaseOrderReview,
+    WorkItemType::SalesChangeImpactReview,
+    WorkItemType::SalesChangeFinanceReview,
+    WorkItemType::CardFundsReview,
+    WorkItemType::CardFundsDeltaReview,
+    WorkItemType::CardSalesManagerApproval,
+    WorkItemType::CardSalesOperationApproval,
+    WorkItemType::OwnershipMigrationSalesConfirmation,
+    WorkItemType::OwnershipMigrationFinanceConfirmation,
+    WorkItemType::InventoryAdjustmentReview,
+    WorkItemType::FinanceCorrectionReview,
+    WorkItemType::SupplierSettlementReview,
+    WorkItemType::ImportBusinessConfirmation,
+    WorkItemType::IntegrationResultUnknown,
+    WorkItemType::BusinessException,
+];
 
-/// 排序方向。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortDir {
-    /// 升序。
-    Asc,
-    /// 降序。
-    Desc,
+/// 责任队列固定范围。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkItemScope {
+    /// 当前用户已负责的开放任务。
+    Mine,
+    /// 当前用户有资格开始处理的开放责任池任务。
+    Team,
+    /// 主管授权组织内全部开放任务。
+    Managed,
+    /// 当前用户参与过的已完成或已关闭任务。
+    History,
 }
 
-/// 归一化后的分页查询 DTO（Service → Repository 共用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PageParams {
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数（已 clamp 到 1–100）。
-    pub page_size: u32,
-    /// 排序字段（已过白名单校验，`&'static str` 保证来源只可能是白名单）。
-    pub sort_by: &'static str,
-    /// 排序方向。
-    pub sort_dir: SortDir,
-}
-
-/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `allowed_fields` - 白名单
-///
-/// # 返回
-/// 返回 `(排序字段, 方向)`；未提供时默认 `("created_at", Desc)`。
-///
-/// # 错误
-/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) fn normalize_sort(
-    sort_by: &Option<String>,
-    sort_dir: &Option<String>,
-    allowed_fields: &'static [&'static str],
-) -> Result<(&'static str, SortDir)> {
-    let sort_by = match sort_by
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some(field) => allowed_fields
-            .iter()
-            .find(|allowed| **allowed == field)
-            .copied()
-            .ok_or_else(|| Error::ValidationError(format!("不支持的排序字段: {field}")))?,
-        None => "created_at",
-    };
-    let sort_dir = match sort_dir
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some("asc") => SortDir::Asc,
-        Some("desc") => SortDir::Desc,
-        Some(other) => return Err(Error::ValidationError(format!("非法排序方向: {other}"))),
-        None => SortDir::Desc,
-    };
-    Ok((sort_by, sort_dir))
-}
-
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-#[derive(Debug, Clone, Serialize)]
-pub struct PageView<T> {
-    /// 当前页数据。
-    pub items: Vec<T>,
-    /// 满足筛选条件的总数（非当前页条数）。
-    pub total: i64,
-    /// 当前页码（1 起）。
-    pub page: u64,
-    /// 请求的分页大小。
-    pub page_size: u32,
-}
-
-/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
-/// 不生效，空对象类型/ID 需要按「空白视为空」拒绝，落入 HTTP 400）。
-fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
-    if value.trim().is_empty() {
-        return Err(validator::ValidationError::new("不能为空白"));
+impl WorkItemScope {
+    /// 返回稳定范围代码。
+    ///
+    /// # 返回
+    /// 返回 `mine`、`team`、`managed` 或 `history`。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Mine => "mine",
+            Self::Team => "team",
+            Self::Managed => "managed",
+            Self::History => "history",
+        }
     }
-    Ok(())
 }
 
-/// 待办响应视图（契约形状：W01/W02 队列投影所需字段 + 乐观锁版本）。
+/// 任务族筛选。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkItemFamily {
+    /// 审批与确认。
+    Approval,
+    /// 财务处理。
+    Finance,
+    /// 履约处理。
+    Fulfillment,
+    /// 异常与补偿。
+    Exception,
+}
+
+impl WorkItemFamily {
+    /// 返回该任务族的服务端注册任务类型。
+    ///
+    /// # 返回
+    /// 返回不可由客户端扩展的任务类型集合。
+    pub(crate) fn work_item_types(self) -> Vec<WorkItemType> {
+        WORK_ITEM_TYPES
+            .into_iter()
+            .filter(|work_item_type| family_of(*work_item_type) == self)
+            .collect()
+    }
+}
+
+/// 到期时间筛选。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkItemDueFilter {
+    /// 当前业务时区今天到期。
+    Today,
+    /// 当前业务时区今天之前到期。
+    Overdue,
+}
+
+/// 队列排序。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkItemSort {
+    /// 优先按时限排序；优先级仍由任务行展示。
+    PriorityDue,
+    /// 到期时间升序。
+    DueAsc,
+    /// 创建时间倒序。
+    CreatedDesc,
+}
+
+/// 队列查询参数。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct WorkItemListParams {
+    /// 必填责任范围。
+    pub scope: WorkItemScope,
+    /// 可选任务族。
+    pub family: Option<WorkItemFamily>,
+    /// 可选固定任务类型。
+    pub work_item_type: Option<WorkItemType>,
+    /// 历史状态筛选；开放范围只允许 `OPEN`。
+    pub status: Option<WorkItemStatus>,
+    /// 到期时间筛选。
+    pub due: Option<WorkItemDueFilter>,
+    /// 逗号分隔优先级序号，1 至 4 对应紧急至低。
+    pub priorities: Option<String>,
+    /// 在授权结果内按固定安全摘要字段检索。
+    #[validate(length(max = 128, message = "检索词不能超过128个字符"))]
+    pub q: Option<String>,
+    /// 排序方式。
+    pub sort: Option<WorkItemSort>,
+    /// 服务端返回的队列上下文；当前实现只接受同查询重算值。
+    pub queue_context_id: Option<String>,
+    /// 希望聚焦的任务；不可见时服务端失败关闭。
+    #[validate(length(max = 128, message = "焦点任务ID不能超过128个字符"))]
+    pub current_work_item_id: Option<String>,
+    /// IANA 时区；当前版本固定支持 `Asia/Shanghai`。
+    pub timezone: Option<String>,
+    /// 页码（1 起）。
+    #[validate(range(min = 1, message = "页码必须大于0"))]
+    pub page: Option<u64>,
+    /// 单页条数（1 至 100）。
+    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
+    pub page_size: Option<u32>,
+}
+
+/// Service 使用的规范化队列查询。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkItemListQuery {
+    pub scope: WorkItemScope,
+    pub work_item_types: Vec<WorkItemType>,
+    pub statuses: Vec<WorkItemStatus>,
+    pub due: Option<WorkItemDueFilter>,
+    pub priorities: Vec<WorkItemPriority>,
+    pub query: Option<String>,
+    pub current_work_item_id: Option<String>,
+    pub sort_by: &'static str,
+    pub sort_ascending: bool,
+    pub page: u64,
+    pub page_size: u32,
+    pub queue_context_id: Option<String>,
+}
+
+impl WorkItemListParams {
+    /// 校验并规范化责任队列查询。
+    ///
+    /// # 返回
+    /// 返回不包含客户端责任过滤条件的服务端查询事实。
+    ///
+    /// # 错误
+    /// scope/status 不兼容、时区或暂不支持的查询参数非法时返回验证错误。
+    pub(crate) fn normalized(&self) -> Result<WorkItemListQuery> {
+        let statuses = normalize_statuses(self.scope, self.status)?;
+        let work_item_types = normalize_work_item_types(self.family, self.work_item_type)?;
+        let priorities = parse_priorities(self.priorities.as_deref())?;
+        ensure_supported_query(self)?;
+        let (sort_by, sort_ascending) = normalize_sort(self.sort);
+        Ok(WorkItemListQuery {
+            scope: self.scope,
+            work_item_types,
+            statuses,
+            due: self.due,
+            priorities,
+            query: normalized_text(self.q.as_deref()),
+            current_work_item_id: normalized_text(self.current_work_item_id.as_deref()),
+            sort_by,
+            sort_ascending,
+            page: page_or_default(self.page),
+            page_size: page_size_or_default(self.page_size),
+            queue_context_id: normalized_text(self.queue_context_id.as_deref()),
+        })
+    }
+}
+
+/// 分页责任队列响应。
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkItemPageView {
+    /// 当前页任务。
+    pub items: Vec<WorkItemView>,
+    /// 授权范围内总数。
+    pub total: i64,
+    /// 当前页码。
+    pub page: u64,
+    /// 单页条数。
+    pub page_size: u32,
+    /// 服务端形成的稳定队列上下文。
+    pub queue_context_id: String,
+}
+
+/// 待办统计查询参数。
+///
+/// 统计与正式列表复用同一责任范围、任务族、类型、时限和工作时区语义；
+/// 不接受分页、自由检索或客户端责任人条件。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct WorkItemStatsParams {
+    /// 指标预警所依据的当前责任范围。
+    pub scope: WorkItemScope,
+    /// 可选任务族。
+    pub family: Option<WorkItemFamily>,
+    /// 可选固定任务类型。
+    pub work_item_type: Option<WorkItemType>,
+    /// 可选时限筛选。
+    pub due: Option<WorkItemDueFilter>,
+    /// IANA 时区；当前版本固定支持 `Asia/Shanghai`。
+    pub timezone: Option<String>,
+}
+
+impl WorkItemStatsParams {
+    /// 复用正式队列规范化逻辑形成服务端统计查询。
+    ///
+    /// # 错误
+    /// 任务族与类型冲突或时区不受支持时返回验证错误。
+    pub(crate) fn normalized(&self) -> Result<WorkItemListQuery> {
+        WorkItemListParams {
+            scope: self.scope,
+            family: self.family,
+            work_item_type: self.work_item_type,
+            status: None,
+            due: self.due,
+            priorities: None,
+            q: None,
+            sort: Some(WorkItemSort::CreatedDesc),
+            queue_context_id: None,
+            current_work_item_id: None,
+            timezone: self.timezone.clone(),
+            page: Some(1),
+            page_size: Some(100),
+        }
+        .normalized()
+    }
+}
+
+/// 服务端权限过滤后的待办统计。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemStatsView {
+    /// 已分配给当前用户的开放任务总数。
+    pub assigned: u64,
+    /// 当前用户有资格开始处理的团队责任池任务总数。
+    pub team: u64,
+    /// 当前选中责任范围内、工作时区今天到期的任务数。
+    pub due_today: u64,
+    /// 当前选中责任范围内、截止时间早于统计时点的开放任务数。
+    pub overdue: u64,
+    /// 当前选中责任范围内的结果未知与业务异常任务数。
+    pub exception: u64,
+    /// 服务端统计时点。
+    pub as_of: entities::common::time::Instant,
+}
+
+/// 当前处理状态。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProcessingState {
+    /// 责任和审批步骤允许继续处理。
+    Ready,
+    /// 审批步骤受阻，普通责任动作必须为空。
+    ApprovalBlocked,
+}
+
+/// 权限安全的任务阻断摘要。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProcessingBlockerView {
+    /// 稳定阻断码。
+    pub code: String,
+    /// 面向用户且不泄露内部细节的说明。
+    pub message: String,
+}
+
+/// 服务端计算的允许动作。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum WorkItemAllowedAction {
+    /// 查看对象。
+    View,
+    /// 进入固定强类型处理器。
+    Process,
+    /// 从责任池建立本人责任。
+    StartProcessing,
+    /// 退回责任池。
+    ReleaseToTeam,
+    /// 受控转交。
+    Reassign,
+    /// 受控关闭无效任务。
+    Close,
+}
+
+/// 用户或组织安全摘要。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemPartyView {
+    /// 稳定身份。
+    pub id: String,
+    /// 权限安全的展示名。
+    pub display_name: String,
+}
+
+/// 受控路由上下文。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemRouteContext {
+    /// 导入确认范围；不适用时为空。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmation_scope: Option<String>,
+}
+
+/// 人工任务队列安全投影。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkItemView {
-    /// 实体主键。
     pub id: String,
-    /// 任务类型。
     pub work_item_type: WorkItemType,
-    /// 业务对象类型代码。
-    pub business_object_type: String,
-    /// 业务对象 ID。
-    pub business_object_id: String,
-    /// 任务针对的对象版本。
-    pub subject_version: Option<String>,
-    /// 任务状态。
+    pub handler_key: String,
+    pub destination_workspace_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_context: Option<WorkItemRouteContext>,
+    pub approval_step_instance_id: Option<String>,
     pub status: WorkItemStatus,
-    /// 责任角色。
-    pub owner_role: Option<String>,
-    /// 当前责任人。
+    pub assignment_mode: AssignmentMode,
+    pub assignment_source: AssignmentSource,
+    pub owner_role: String,
+    pub owner_role_label: String,
+    pub owner_organization_id: String,
+    pub owner_organization: WorkItemPartyView,
     pub owner_user_id: Option<String>,
-    /// 优先级。
+    pub owner_user: Option<WorkItemPartyView>,
+    pub processing_state: ProcessingState,
+    pub processing_blocker: Option<ProcessingBlockerView>,
+    pub business_object_type: String,
+    pub business_object_id: String,
+    /// 业务对象所属的工作面根对象；与任务对象相同时返回同一 ID。
+    pub root_business_object_id: String,
+    pub business_object_label: String,
+    pub subject_version: String,
+    pub task_version: String,
+    pub allowed_actions: Vec<WorkItemAllowedAction>,
+    pub action_blockers: Vec<ProcessingBlockerView>,
     pub priority: WorkItemPriority,
-    /// 时限（秒级时间戳）。
     pub due_at: Option<u64>,
-    /// 产生原因代码。
     pub reason_code: Option<String>,
-    /// 业务影响摘要。
-    pub impact_summary: Option<String>,
-    /// 该任务唯一允许的完成动作。
-    pub completion_action: String,
-    /// 正式完成审计时间（秒级时间戳）。
+    pub reason_label: String,
+    pub impact_summary: String,
+    pub assigned_at: Option<u64>,
+    pub started_at: Option<u64>,
+    pub current_assignment_at: Option<u64>,
+    pub last_activity_at: Option<u64>,
     pub completed_at: Option<u64>,
-    /// 正式完成执行人。
     pub completed_by: Option<String>,
-    /// 关闭原因代码。
-    pub close_reason_code: Option<String>,
-    /// 关闭原因说明。
-    pub close_reason_text: Option<String>,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
+    pub closed_at: Option<u64>,
+    pub closed_by: Option<String>,
+    pub close_reason: Option<String>,
+    pub created_at: u64,
+    pub queue_context_id: String,
+}
+
+/// 责任命令的稳定冲突分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkItemConflictKind {
+    /// 客户端提交的任务版本已经陈旧。
+    Version,
+    /// 任务当前责任已经由其他操作改变。
+    Responsibility,
+}
+
+impl WorkItemConflictKind {
+    /// 返回 HTTP 契约使用的稳定错误码。
+    ///
+    /// # 返回
+    /// 返回不依赖展示文案的冲突代码。
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Version => "WORK_ITEM_VERSION_CONFLICT",
+            Self::Responsibility => "WORK_ITEM_RESPONSIBILITY_CONFLICT",
+        }
+    }
+
+    /// 返回权限安全的用户提示。
+    ///
+    /// # 返回
+    /// 返回不包含处理人 ID 或内部版本细节的提示。
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::Version => "任务已被其他操作更新，请按最新状态重试",
+            Self::Responsibility => "任务责任已变化，请按最新状态处理",
+        }
+    }
+}
+
+/// 责任命令冲突时返回的权限安全数据。
+///
+/// `current_work_item` 必须由 Service 使用当前 actor 重新投影；若最新任务
+/// 已不在 actor 的查看范围内，则固定返回 `null`，不得降级返回原始实体。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemConflict {
+    #[serde(skip)]
+    kind: WorkItemConflictKind,
+    /// 当前仍可见时的最新安全投影；不可见或已删除时为空。
+    pub current_work_item: Option<WorkItemView>,
+}
+
+impl WorkItemConflict {
+    /// 创建责任命令冲突数据。
+    ///
+    /// # 参数
+    /// * `kind` - 稳定冲突分类
+    /// * `current_work_item` - actor 重新授权后的最新安全投影
+    ///
+    /// # 返回
+    /// 返回可直接放入 409 响应 `data` 的冲突数据。
+    pub fn new(kind: WorkItemConflictKind, current_work_item: Option<WorkItemView>) -> Self {
+        Self {
+            kind,
+            current_work_item,
+        }
+    }
+
+    /// 返回稳定冲突分类。
+    ///
+    /// # 返回
+    /// 返回版本冲突或责任冲突。
+    pub fn kind(&self) -> WorkItemConflictKind {
+        self.kind
+    }
+}
+
+/// 责任命令的服务端结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkItemMutationOutcome {
+    /// 命令已应用并返回更新后的安全投影。
+    Applied(WorkItemView),
+    /// 命令因并发版本或责任变化未应用。
+    Conflict(WorkItemConflict),
+}
+
+impl WorkItemView {
+    /// 设置服务端完成的处理状态与动作判断。
+    ///
+    /// # 返回
+    /// 返回更新后的投影。
+    pub(crate) fn with_access(
+        mut self,
+        processing_state: ProcessingState,
+        processing_blocker: Option<ProcessingBlockerView>,
+        allowed_actions: Vec<WorkItemAllowedAction>,
+        action_blockers: Vec<ProcessingBlockerView>,
+    ) -> Self {
+        self.processing_state = processing_state;
+        self.processing_blocker = processing_blocker;
+        self.allowed_actions = allowed_actions;
+        self.action_blockers = action_blockers;
+        self
+    }
+
+    pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Self {
+        let route = handler_route(
+            fields.work_item_type,
+            &fields.business_object_type,
+            &fields.owner_role,
+        );
+        let owner_user = fields.owner_user_id.as_ref().map(|id| WorkItemPartyView {
+            id: id.clone(),
+            display_name: "当前处理人".to_string(),
+        });
+        Self {
+            id: fields.id,
+            work_item_type: fields.work_item_type,
+            handler_key: route.handler_key.to_string(),
+            destination_workspace_id: route.destination_workspace_id.to_string(),
+            route_context: route.route_context,
+            approval_step_instance_id: fields.approval_step_instance_id,
+            status: fields.status,
+            assignment_mode: fields.assignment_mode,
+            assignment_source: fields.assignment_source,
+            owner_role_label: role_label(&fields.owner_role),
+            owner_role: fields.owner_role,
+            owner_organization: WorkItemPartyView {
+                id: fields.owner_organization_id.clone(),
+                display_name: "责任组织".to_string(),
+            },
+            owner_organization_id: fields.owner_organization_id,
+            owner_user_id: fields.owner_user_id,
+            owner_user,
+            processing_state: ProcessingState::Ready,
+            processing_blocker: None,
+            business_object_label: fields.business_object_label,
+            business_object_type: fields.business_object_type,
+            business_object_id: fields.business_object_id,
+            root_business_object_id: fields.root_business_object_id,
+            subject_version: fields.subject_version,
+            task_version: fields.task_version.to_string(),
+            allowed_actions: Vec::new(),
+            action_blockers: Vec::new(),
+            priority: fields.priority,
+            due_at: seconds(fields.due_at),
+            reason_label: reason_label(fields.reason_code.as_deref()),
+            reason_code: fields.reason_code,
+            impact_summary: fields
+                .impact_summary
+                .unwrap_or_else(|| "请打开业务对象核对影响。".to_string()),
+            assigned_at: seconds(fields.assigned_at),
+            started_at: seconds(fields.started_at),
+            current_assignment_at: seconds(fields.current_assignment_at),
+            last_activity_at: seconds(fields.last_activity_at),
+            completed_at: seconds(fields.completed_at),
+            completed_by: fields.completed_by,
+            closed_at: seconds(fields.closed_at),
+            closed_by: fields.closed_by,
+            close_reason: fields.close_reason,
+            created_at: fields.created_at,
+            queue_context_id,
+        }
+    }
+}
+
+/// 开始处理请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct StartProcessingRequest {
+    #[validate(length(min = 1, max = 20, message = "任务版本格式非法"))]
+    pub expected_task_version: String,
+    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    pub idempotency_key: String,
+}
+
+/// 退回团队请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ReleaseToTeamRequest {
+    #[validate(length(min = 1, max = 20, message = "任务版本格式非法"))]
+    pub expected_task_version: String,
+    #[validate(length(min = 1, max = 150, message = "原因长度必须在1-150之间"))]
+    pub reason: String,
+    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    pub idempotency_key: String,
+}
+
+/// 转交任务请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ReassignWorkItemRequest {
+    #[validate(length(min = 1, max = 20, message = "任务版本格式非法"))]
+    pub expected_task_version: String,
+    #[validate(length(min = 1, max = 128, message = "目标用户不能为空或过长"))]
+    pub target_user_id: String,
+    #[validate(length(min = 1, max = 150, message = "原因长度必须在1-150之间"))]
+    pub reason: String,
+    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    pub idempotency_key: String,
+}
+
+/// 关闭无效任务请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CloseWorkItemRequest {
+    #[validate(length(min = 1, max = 20, message = "任务版本格式非法"))]
+    pub expected_task_version: String,
+    #[validate(length(min = 1, max = 64, message = "关闭原因代码不能为空或过长"))]
+    pub reason_code: String,
+    #[validate(length(max = 100, message = "关闭说明不能超过100个字符"))]
+    pub comment: Option<String>,
+    /// `DUPLICATE` 时必填的有效替代正式任务。
+    #[validate(length(min = 1, max = 128, message = "替代任务ID不能为空或过长"))]
+    pub replacement_work_item_id: Option<String>,
+    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WorkItemFields {
+    pub id: String,
+    pub work_item_type: WorkItemType,
+    pub approval_step_instance_id: Option<String>,
+    pub business_object_type: String,
+    pub business_object_id: String,
+    pub root_business_object_id: String,
+    pub business_object_label: String,
+    pub subject_version: String,
+    pub status: WorkItemStatus,
+    pub assignment_mode: AssignmentMode,
+    pub owner_role: String,
+    pub owner_organization_id: String,
+    pub owner_user_id: Option<String>,
+    pub assignment_source: AssignmentSource,
+    pub assigned_at: Option<entities::common::time::Instant>,
+    pub started_at: Option<entities::common::time::Instant>,
+    pub current_assignment_at: Option<entities::common::time::Instant>,
+    pub last_activity_at: Option<entities::common::time::Instant>,
+    pub priority: WorkItemPriority,
+    pub due_at: Option<entities::common::time::Instant>,
+    pub reason_code: Option<String>,
+    pub impact_summary: Option<String>,
+    pub completed_at: Option<entities::common::time::Instant>,
+    pub completed_by: Option<String>,
+    pub closed_at: Option<entities::common::time::Instant>,
+    pub closed_by: Option<String>,
+    pub close_reason: Option<String>,
+    pub task_version: u64,
     pub created_at: u64,
 }
 
-impl From<WorkItem> for WorkItemView {
-    /// 从实体构造响应视图。
+impl From<WorkItem> for WorkItemFields {
     fn from(item: WorkItem) -> Self {
+        let root_business_object_id = item.business_object_id.clone();
         Self {
             id: item.base.id,
             work_item_type: item.work_item_type,
+            approval_step_instance_id: item.approval_step_instance_id,
             business_object_type: item.business_object_type,
             business_object_id: item.business_object_id,
+            root_business_object_id,
+            business_object_label: item.work_item_type.label().to_string(),
             subject_version: item.subject_version,
             status: item.status,
+            assignment_mode: item.assignment_mode,
             owner_role: item.owner_role,
+            owner_organization_id: item.owner_organization_id,
             owner_user_id: item.owner_user_id,
+            assignment_source: item.assignment_source,
+            assigned_at: item.assigned_at,
+            started_at: item.started_at,
+            current_assignment_at: item.current_assignment_at,
+            last_activity_at: item.last_activity_at,
             priority: item.priority,
-            due_at: item.due_at.map(|instant| instant.unix_secs() as u64),
+            due_at: item.due_at,
             reason_code: item.reason_code,
             impact_summary: item.impact_summary,
-            completion_action: item.completion_action,
-            completed_at: item.completed_at.map(|instant| instant.unix_secs() as u64),
+            completed_at: item.completed_at,
             completed_by: item.completed_by,
-            close_reason_code: item.close_reason_code,
-            close_reason_text: item.close_reason_text,
-            version: item.base.version,
+            closed_at: item.closed_at,
+            closed_by: item.closed_by,
+            close_reason: item.close_reason,
+            task_version: item.base.version,
             created_at: item.base.created_at,
         }
     }
 }
 
-/// 待办列表查询参数（分页参数与筛选字段扁平传递）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct WorkItemListParams {
-    /// 任务类型筛选。
-    pub work_item_type: Option<WorkItemType>,
-    /// 任务状态筛选。
-    pub status: Option<WorkItemStatus>,
-    /// 责任角色筛选。
-    pub owner_role: Option<String>,
-    /// 当前责任人筛选。
-    pub owner_user_id: Option<String>,
-    /// 优先级筛选。
-    pub priority: Option<WorkItemPriority>,
-    /// 页码（1 起）。
-    #[validate(range(min = 1, message = "页码必须大于0"))]
-    pub page: Option<u64>,
-    /// 单页条数（1–100）。
-    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
-    pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`/`updated_at`/`due_at`）。
-    pub sort_by: Option<String>,
-    /// 排序方向（`asc`/`desc`）。
-    pub sort_dir: Option<String>,
+impl From<database::WorkItemRow> for WorkItemFields {
+    fn from(item: database::WorkItemRow) -> Self {
+        let root_business_object_id = item.business_object_id.clone();
+        Self {
+            id: item.id,
+            work_item_type: item.work_item_type,
+            approval_step_instance_id: item.approval_step_instance_id,
+            business_object_type: item.business_object_type,
+            business_object_id: item.business_object_id,
+            root_business_object_id,
+            business_object_label: item.work_item_type.label().to_string(),
+            subject_version: item.subject_version,
+            status: item.status,
+            assignment_mode: item.assignment_mode,
+            owner_role: item.owner_role,
+            owner_organization_id: item.owner_organization_id,
+            owner_user_id: item.owner_user_id,
+            assignment_source: item.assignment_source,
+            assigned_at: item.assigned_at,
+            started_at: item.started_at,
+            current_assignment_at: item.current_assignment_at,
+            last_activity_at: item.last_activity_at,
+            priority: item.priority,
+            due_at: item.due_at,
+            reason_code: item.reason_code,
+            impact_summary: item.impact_summary,
+            completed_at: item.completed_at,
+            completed_by: item.completed_by,
+            closed_at: item.closed_at,
+            closed_by: item.closed_by,
+            close_reason: item.close_reason,
+            task_version: item.version,
+            created_at: item.created_at,
+        }
+    }
 }
 
-/// 归一化后的待办列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkItemListQuery {
-    /// 任务类型筛选。
-    pub work_item_type: Option<WorkItemType>,
-    /// 任务状态筛选。
-    pub status: Option<WorkItemStatus>,
-    /// 责任角色筛选。
-    pub owner_role: Option<String>,
-    /// 当前责任人筛选。
-    pub owner_user_id: Option<String>,
-    /// 优先级筛选。
-    pub priority: Option<WorkItemPriority>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
+struct HandlerRoute {
+    handler_key: &'static str,
+    destination_workspace_id: &'static str,
+    route_context: Option<WorkItemRouteContext>,
 }
 
-impl WorkItemListParams {
-    /// 归一化待办列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<WorkItemListQuery> {
-        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, WORK_ITEM_SORT_FIELDS)?;
-        Ok(WorkItemListQuery {
-            work_item_type: self.work_item_type,
-            status: self.status,
-            owner_role: normalized_text(self.owner_role.as_deref()),
-            owner_user_id: normalized_text(self.owner_user_id.as_deref()),
-            priority: self.priority,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
+fn handler_route(work_item_type: WorkItemType, business_object_type: &str, owner_role: &str) -> HandlerRoute {
+    let (handler_key, destination_workspace_id) = match (work_item_type, business_object_type) {
+        (
+            WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException,
+            "SUPPLIER_FULFILLMENT_ORDER",
+        ) => ("supplier_fulfillment_investigation", "W26"),
+        (WorkItemType::BusinessException, "SUPPLIER_OFFERING") => ("supplier_supply_exception", "W21"),
+        (WorkItemType::BusinessException, "MASTER_MAPPING_TASK") => ("master_mapping_task", "W17"),
+        (WorkItemType::IntegrationResultUnknown, "integration_error_task") => ("integration_unknown", "W29"),
+        (WorkItemType::BusinessException, "integration_error_task" | "reconciliation_difference") => {
+            ("business_exception", "W29")
+        }
+        (WorkItemType::IntegrationResultUnknown, "reconciliation_difference") => {
+            ("integration_unknown", "W29")
+        }
+        (WorkItemType::ProcurementConfirmation, _) => ("procurement_confirmation", "W07"),
+        (WorkItemType::LowMarginManagerConfirmation, _) => ("low_margin_manager", "W05"),
+        (WorkItemType::PurchaseOrderReview, _) => ("po_review", "W08"),
+        (WorkItemType::SalesChangeImpactReview, _) => ("sales_change_impact_review", "W05"),
+        (WorkItemType::SalesChangeFinanceReview, _) => ("sales_change_finance_review", "W05"),
+        (WorkItemType::CardFundsReview, _) => ("card_funds", "W13"),
+        (WorkItemType::CardFundsDeltaReview, _) => ("card_funds_delta", "W13"),
+        (WorkItemType::CardSalesManagerApproval, _) => ("card_sales_manager_approval", "W05"),
+        (WorkItemType::CardSalesOperationApproval, _) => ("card_sales_operations_approval", "W05"),
+        (WorkItemType::OwnershipMigrationSalesConfirmation, _) => ("ownership_sales", "W03"),
+        (WorkItemType::OwnershipMigrationFinanceConfirmation, _) => ("ownership_finance", "W17"),
+        (WorkItemType::InventoryAdjustmentReview, _) => ("inventory_adj", "W10"),
+        (WorkItemType::FinanceCorrectionReview, _) => ("finance_correction", "W17"),
+        (WorkItemType::SupplierSettlementReview, _) => ("supplier_settlement", "W27"),
+        (WorkItemType::ImportBusinessConfirmation, _) => ("import_business_confirmation", "W18"),
+        (WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException, _) => {
+            ("unregistered_work_item", "W01")
+        }
+    };
+    let route_context =
+        w18_confirmation_scope(work_item_type, owner_role).map(|scope| WorkItemRouteContext {
+            confirmation_scope: Some(scope.to_string()),
+        });
+    HandlerRoute {
+        handler_key,
+        destination_workspace_id,
+        route_context,
+    }
+}
+
+fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Option<&'static str> {
+    if work_item_type != WorkItemType::ImportBusinessConfirmation {
+        return None;
+    }
+    match owner_role {
+        "role-sales" => Some("SALES"),
+        "role-procurement" => Some("PROCUREMENT"),
+        "role-operations" => Some("OPERATIONS"),
+        "role-warehouse" => Some("WAREHOUSE"),
+        "role-finance" => Some("FINANCE"),
+        _ => None,
+    }
+}
+
+fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
+    match work_item_type {
+        WorkItemType::CardFundsReview
+        | WorkItemType::CardFundsDeltaReview
+        | WorkItemType::PurchaseOrderReview
+        | WorkItemType::SalesChangeFinanceReview
+        | WorkItemType::OwnershipMigrationFinanceConfirmation
+        | WorkItemType::FinanceCorrectionReview
+        | WorkItemType::SupplierSettlementReview => WorkItemFamily::Finance,
+        WorkItemType::ProcurementConfirmation
+        | WorkItemType::SalesChangeImpactReview
+        | WorkItemType::InventoryAdjustmentReview => WorkItemFamily::Fulfillment,
+        WorkItemType::ImportBusinessConfirmation
+        | WorkItemType::IntegrationResultUnknown
+        | WorkItemType::BusinessException => WorkItemFamily::Exception,
+        _ => WorkItemFamily::Approval,
+    }
+}
+
+fn normalize_work_item_types(
+    family: Option<WorkItemFamily>,
+    work_item_type: Option<WorkItemType>,
+) -> Result<Vec<WorkItemType>> {
+    let Some(family) = family else {
+        return Ok(work_item_type.into_iter().collect());
+    };
+    if let Some(work_item_type) = work_item_type {
+        if family_of(work_item_type) != family {
+            return Err(Error::ValidationError("任务类型不属于所选任务族".to_string()));
+        }
+        return Ok(vec![work_item_type]);
+    }
+    Ok(family.work_item_types())
+}
+
+fn normalize_statuses(scope: WorkItemScope, status: Option<WorkItemStatus>) -> Result<Vec<WorkItemStatus>> {
+    match scope {
+        WorkItemScope::History => match status {
+            None => Ok(vec![WorkItemStatus::Completed, WorkItemStatus::Closed]),
+            Some(WorkItemStatus::Completed | WorkItemStatus::Closed) => Ok(vec![status.unwrap()]),
+            Some(WorkItemStatus::Open) => Err(Error::ValidationError(
+                "处理历史只能查询已完成或已关闭任务".to_string(),
+            )),
+        },
+        _ => match status {
+            None | Some(WorkItemStatus::Open) => Ok(vec![WorkItemStatus::Open]),
+            Some(_) => Err(Error::ValidationError("开放队列只能查询待处理任务".to_string())),
+        },
+    }
+}
+
+fn parse_priorities(value: Option<&str>) -> Result<Vec<WorkItemPriority>> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    value
+        .split(',')
+        .map(|part| match part.trim() {
+            "1" => Ok(WorkItemPriority::Urgent),
+            "2" => Ok(WorkItemPriority::High),
+            "3" => Ok(WorkItemPriority::Normal),
+            "4" => Ok(WorkItemPriority::Low),
+            _ => Err(Error::ValidationError("优先级必须是1至4".to_string())),
         })
+        .collect()
+}
+
+fn ensure_supported_query(params: &WorkItemListParams) -> Result<()> {
+    let timezone = params.timezone.as_deref().unwrap_or(DEFAULT_TIMEZONE).trim();
+    if timezone != DEFAULT_TIMEZONE {
+        return Err(Error::ValidationError(
+            "当前任务队列只支持 Asia/Shanghai 时区".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn normalize_sort(sort: Option<WorkItemSort>) -> (&'static str, bool) {
+    match sort.unwrap_or(WorkItemSort::PriorityDue) {
+        WorkItemSort::PriorityDue | WorkItemSort::DueAsc => ("due_at", true),
+        WorkItemSort::CreatedDesc => ("created_at", false),
     }
 }
 
-/// 派发待办请求（HTTP 契约：`{ work_item_type, business_object_type,
-/// business_object_id, ... }`；责任人创建时不领取）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct DispatchWorkItemRequest {
-    /// 任务类型（固定枚举，禁止临时创造同义代码）。
-    pub work_item_type: WorkItemType,
-    /// 业务对象类型代码（跨域开放目录）。
-    #[validate(custom(function = "non_blank", message = "业务对象类型不能为空"))]
-    pub business_object_type: String,
-    /// 业务对象 ID。
-    #[validate(custom(function = "non_blank", message = "业务对象ID不能为空"))]
-    pub business_object_id: String,
-    /// 任务针对的对象版本（适用时）。
-    #[validate(length(max = 64, message = "对象版本过长"))]
-    pub subject_version: Option<String>,
-    /// 责任角色。
-    #[validate(length(max = 128, message = "责任角色过长"))]
-    pub owner_role: Option<String>,
-    /// 优先级。
-    pub priority: WorkItemPriority,
-    /// 时限（秒级时间戳）。
-    #[validate(range(min = 1, message = "时限必须大于 0"))]
-    pub due_at: Option<u64>,
-    /// 产生原因代码。
-    #[validate(length(max = 64, message = "原因代码过长"))]
-    pub reason_code: Option<String>,
-    /// 业务影响摘要。
-    #[validate(length(max = 512, message = "影响摘要过长"))]
-    pub impact_summary: Option<String>,
-    /// 该任务唯一允许的完成动作。
-    #[validate(custom(function = "non_blank", message = "完成动作不能为空"))]
-    pub completion_action: String,
+fn seconds(value: Option<entities::common::time::Instant>) -> Option<u64> {
+    value.and_then(|instant| u64::try_from(instant.unix_secs()).ok())
 }
 
-impl DispatchWorkItemRequest {
-    /// 转换为实体创建数据。
-    ///
-    /// # 返回
-    /// 返回实体层创建数据（初始 `UNCLAIMED`）。
-    pub(crate) fn into_data(self) -> WorkItemData {
-        WorkItemData {
-            work_item_type: self.work_item_type,
-            business_object_type: self.business_object_type,
-            business_object_id: self.business_object_id,
-            subject_version: self.subject_version,
-            owner_role: self.owner_role,
-            owner_user_id: None,
-            priority: self.priority,
-            due_at: self
-                .due_at
-                .map(|secs| entities::common::time::Instant::from_unix_secs(secs as i64)),
-            reason_code: self.reason_code,
-            impact_summary: self.impact_summary,
-            completion_action: self.completion_action,
-        }
+fn role_label(role: &str) -> String {
+    match role {
+        "role-sales" | "sales" => "销售",
+        "role-sales-leader" | "sales_leader" => "销售领导",
+        "role-procurement" | "procurement" => "采购",
+        "role-operations" | "operations" => "运营",
+        "role-finance" | "finance" => "财务",
+        "role-management" | "management" => "管理层",
+        _ => role,
     }
+    .to_string()
 }
 
-/// 领取待办请求（携带期望版本，冲突返回 409）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ClaimWorkItemRequest {
-    /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
-}
-
-/// 暂挂待办请求（携带期望版本，冲突返回 409）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct DeferWorkItemRequest {
-    /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
-    /// 暂挂原因说明。
-    #[validate(length(max = 512, message = "暂挂原因过长"))]
-    pub comment: Option<String>,
-}
-
-/// 转交待办请求（携带期望版本，冲突返回 409）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct TransferWorkItemRequest {
-    /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
-    /// 新责任角色。
-    #[validate(custom(function = "non_blank", message = "责任角色不能为空"))]
-    pub owner_role: String,
-    /// 新责任人。
-    #[validate(custom(function = "non_blank", message = "责任人不能为空"))]
-    pub owner_user_id: String,
-    /// 转交原因。
-    #[validate(length(max = 512, message = "转交原因过长"))]
-    pub comment: Option<String>,
-}
-
-/// 完成待办请求（携带期望版本，冲突返回 409）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct CompleteWorkItemRequest {
-    /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
-}
-
-/// 关闭待办请求（携带期望版本，冲突返回 409；关闭必须记录结构化原因）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct CloseWorkItemRequest {
-    /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
-    /// 关闭原因代码（结构化原因，必填）。
-    #[validate(custom(function = "non_blank", message = "关闭原因代码不能为空"))]
-    pub close_reason_code: String,
-    /// 关闭原因说明。
-    #[validate(length(max = 512, message = "关闭原因过长"))]
-    pub close_reason_text: Option<String>,
-}
-
-impl CloseWorkItemRequest {
-    /// 转换为实体关闭数据。
-    ///
-    /// # 返回
-    /// 返回实体层关闭数据。
-    pub(crate) fn into_close_data(self) -> WorkItemCloseData {
-        WorkItemCloseData {
-            close_reason_code: self.close_reason_code,
-            close_reason_text: self.close_reason_text,
-        }
-    }
+fn reason_label(reason_code: Option<&str>) -> String {
+    reason_code.unwrap_or("待处理").replace('_', " ")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_sort, DispatchWorkItemRequest, SortDir, TransferWorkItemRequest, WorkItemListParams,
-    };
-    use entities::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
-    use serde_json::json;
-    use validator::Validate;
+    use super::*;
 
-    #[test]
-    fn sort_whitelist_rejects_unknown_fields_and_directions() {
-        assert!(normalize_sort(&Some("owner_user_id".to_string()), &None, &["due_at"]).is_err());
-        assert!(normalize_sort(&None, &Some("up".to_string()), &["due_at"]).is_err());
-
-        let (field, direction) = normalize_sort(
-            &Some(" due_at ".to_string()),
-            &Some(" asc ".to_string()),
-            &["due_at"],
-        )
-        .unwrap();
-        assert_eq!(field, "due_at");
-        assert_eq!(direction, SortDir::Asc);
-    }
-
-    #[test]
-    fn list_params_normalize_paging_filters_and_sort_defaults() {
-        let params = WorkItemListParams {
-            work_item_type: Some(WorkItemType::ImportBusinessConfirmation),
-            status: Some(WorkItemStatus::InProgress),
-            owner_role: Some(" sales ".to_string()),
-            owner_user_id: Some(" user-1 ".to_string()),
-            priority: Some(WorkItemPriority::High),
-            page: None,
-            page_size: None,
-            sort_by: None,
-            sort_dir: None,
-        };
-        let query = params.normalized().unwrap();
-        assert_eq!(
-            query.work_item_type,
-            Some(WorkItemType::ImportBusinessConfirmation)
-        );
-        assert_eq!(query.status, Some(WorkItemStatus::InProgress));
-        assert_eq!(query.owner_role.as_deref(), Some("sales"));
-        assert_eq!(query.owner_user_id.as_deref(), Some("user-1"));
-        assert_eq!(query.paging.page, 1);
-        assert_eq!(query.paging.page_size, 20);
-        assert_eq!(query.paging.sort_by, "created_at");
-        assert_eq!(query.paging.sort_dir, SortDir::Desc);
-    }
-
-    #[test]
-    fn dispatch_request_converts_to_entity_data() {
-        let request: DispatchWorkItemRequest = serde_json::from_value(json!({
-            "work_item_type": "IMPORT_BUSINESS_CONFIRMATION",
-            "business_object_type": "LEGACY_IMPORT_BATCH",
-            "business_object_id": "batch-1",
-            "owner_role": "sales",
-            "priority": "normal",
-            "due_at": 1700604800,
-            "completion_action": "COMPLETE_IMPORT_BUSINESS_CONFIRMATION",
-        }))
-        .unwrap();
-        let data = request.into_data();
-        assert_eq!(data.business_object_type, "LEGACY_IMPORT_BATCH");
-        assert!(data.owner_user_id.is_none());
-        assert_eq!(data.completion_action, "COMPLETE_IMPORT_BUSINESS_CONFIRMATION");
-    }
-
-    #[test]
-    fn stale_version_and_blank_role_are_rejected() {
-        let request = TransferWorkItemRequest {
-            version: 0,
-            owner_role: "  ".to_string(),
-            owner_user_id: "user-1".to_string(),
-            comment: None,
-        };
-        assert!(request.validate().is_err());
-    }
-
-    #[test]
-    fn list_params_reject_unbounded_page_size() {
-        let params = WorkItemListParams {
+    fn params(scope: WorkItemScope) -> WorkItemListParams {
+        WorkItemListParams {
+            scope,
+            family: None,
             work_item_type: None,
             status: None,
-            owner_role: None,
-            owner_user_id: None,
-            priority: None,
-            page: Some(0),
-            page_size: Some(u32::MAX),
-            sort_by: None,
-            sort_dir: None,
-        };
-        assert!(params.validate().is_err());
+            due: None,
+            priorities: None,
+            q: None,
+            sort: None,
+            queue_context_id: None,
+            current_work_item_id: None,
+            timezone: Some(DEFAULT_TIMEZONE.to_string()),
+            page: None,
+            page_size: None,
+        }
+    }
+
+    #[test]
+    fn scope_status_combinations_fail_closed() {
+        let mut history = params(WorkItemScope::History);
+        history.status = Some(WorkItemStatus::Open);
+        assert!(history.normalized().is_err());
+
+        let mut mine = params(WorkItemScope::Mine);
+        mine.status = Some(WorkItemStatus::Completed);
+        assert!(mine.normalized().is_err());
+    }
+
+    #[test]
+    fn family_and_type_must_match_registered_mapping() {
+        let mut query = params(WorkItemScope::Mine);
+        query.family = Some(WorkItemFamily::Finance);
+        query.work_item_type = Some(WorkItemType::BusinessException);
+        assert!(query.normalized().is_err());
+    }
+
+    #[test]
+    fn text_search_and_focus_are_normalized_for_server_filtering() {
+        let mut query = params(WorkItemScope::Mine);
+        query.q = Some("  SO-1  ".to_string());
+        query.current_work_item_id = Some("  wi-1  ".to_string());
+        let normalized = query.normalized().unwrap();
+        assert_eq!(normalized.query.as_deref(), Some("SO-1"));
+        assert_eq!(normalized.current_work_item_id.as_deref(), Some("wi-1"));
+    }
+
+    #[test]
+    fn priority_codes_are_strict_and_ordered() {
+        let priorities = parse_priorities(Some("1,3")).unwrap();
+        assert_eq!(
+            priorities,
+            vec![WorkItemPriority::Urgent, WorkItemPriority::Normal]
+        );
+        assert!(parse_priorities(Some("urgent")).is_err());
+    }
+
+    #[test]
+    fn conflict_data_serializes_only_permission_safe_projection() {
+        let hidden = WorkItemConflict::new(WorkItemConflictKind::Responsibility, None);
+        let value = serde_json::to_value(&hidden).expect("conflict data should serialize");
+
+        assert_eq!(value, serde_json::json!({ "current_work_item": null }));
+        assert_eq!(hidden.kind().code(), "WORK_ITEM_RESPONSIBILITY_CONFLICT");
+        assert_eq!(WorkItemConflictKind::Version.code(), "WORK_ITEM_VERSION_CONFLICT");
+    }
+
+    #[test]
+    fn w13_receivable_review_routes_use_fixed_handlers() {
+        let opening = handler_route(
+            WorkItemType::CardFundsReview,
+            "receivable_account",
+            "role-finance",
+        );
+        let delta = handler_route(
+            WorkItemType::CardFundsDeltaReview,
+            "receivable_account",
+            "role-finance",
+        );
+
+        assert_eq!(opening.handler_key, "card_funds");
+        assert_eq!(opening.destination_workspace_id, "W13");
+        assert_eq!(delta.handler_key, "card_funds_delta");
+        assert_eq!(delta.destination_workspace_id, "W13");
+        assert!(opening.route_context.is_none());
+        assert!(delta.route_context.is_none());
+    }
+
+    #[test]
+    fn w18_route_context_uses_only_fixed_owner_role_registry() {
+        let cases = [
+            ("role-sales", "SALES"),
+            ("role-procurement", "PROCUREMENT"),
+            ("role-operations", "OPERATIONS"),
+            ("role-warehouse", "WAREHOUSE"),
+            ("role-finance", "FINANCE"),
+        ];
+        for (role, scope) in cases {
+            let route = handler_route(
+                WorkItemType::ImportBusinessConfirmation,
+                "LEGACY_IMPORT_BATCH",
+                role,
+            );
+            assert_eq!(
+                route
+                    .route_context
+                    .and_then(|context| context.confirmation_scope)
+                    .as_deref(),
+                Some(scope)
+            );
+        }
+        let unknown = handler_route(
+            WorkItemType::ImportBusinessConfirmation,
+            "LEGACY_IMPORT_BATCH",
+            "role-unregistered",
+        );
+        assert!(unknown.route_context.is_none());
     }
 }

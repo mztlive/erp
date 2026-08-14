@@ -301,7 +301,7 @@ erDiagram
 | 表组 | 主要表 |
 | --- | --- |
 | 销售 | `sales_order`、`sales_order_line`、`sales_order_working_copy`、`sales_order_working_copy_line`、`sales_order_submission`、`sales_order_submission_line`、`sales_order_revision`、`sales_order_revision_line`、`sales_order_goods_service_line_revision`、`sales_order_voucher_line_revision` |
-| 审批与变更 | `sales_order_review`、`procurement_confirmation`、`procurement_confirmation_line`、`sales_change_order`、`sales_change_submission`、`sales_change_submission_line`、`sales_change_review` |
+| 审批与变更 | `sales_order_review`、`low_margin_manager_confirmation`、`procurement_confirmation`、`procurement_confirmation_line`、`sales_change_order`、`sales_change_submission`、`sales_change_submission_line`、`sales_change_review` |
 | 采购 | `purchase_order`、`purchase_order_submission`、`purchase_order_submission_line`、`purchase_order_revision`、`purchase_order_revision_line`、`purchase_line_sales_allocation`、`purchase_change_order`、`purchase_change_submission`、`purchase_change_submission_line` |
 | 履约 | `purchase_receipt`、`purchase_receipt_line`、`delivery`、`delivery_line`、`electronic_delivery`、`service_fulfillment`、`customer_acceptance`、`customer_acceptance_line`、`acceptance_fulfillment_allocation` |
 | 库存 | `stock_movement`、`stock_balance`、`stock_reservation`、`stock_reservation_entry`、`stock_adjustment`、`stock_adjustment_line` |
@@ -446,7 +446,7 @@ erDiagram
 
 | 字段 | 说明 |
 | --- | --- |
-| `definition_key` / `version` | 稳定定义编码和单调递增版本 |
+| `definition_key` / `definition_version` | 稳定定义编码和单调递增业务版本；`definition_version` 避免与 `BaseModel.version` 乐观锁字段重名，API 合同仍称定义 `version` |
 | `name` | 管理与审计名称 |
 | `runtime_kind` | `INTERNAL` / `BPM` |
 | `status` | `DRAFT` / `PUBLISHED` / `RETIRED` |
@@ -466,10 +466,11 @@ erDiagram
 
 必需约束与索引：
 
-- `(definition_key, version)` 唯一；同一 `definition_key` 同时最多一个 `PUBLISHED` 版本；
+- `(definition_key, definition_version)` 唯一；同一 `definition_key` 同时最多一个 `PUBLISHED` 版本；
 - `(approval_definition_id, step_key)`、`(approval_definition_id, sequence_no)` 分别唯一；
 - 步骤只允许在父定义为 `DRAFT` 时增删改；发布操作校验后同时冻结定义和步骤；
 - 已发布定义和步骤不可修改，只能创建并发布新版本；审批启动只选择 `PUBLISHED`；
+- 版本升级必须在单一事务内完成“创建新 `DRAFT` 与步骤 → 退役旧 `PUBLISHED` → 发布新版本”；旧实例继续引用已退役版本；
 - 当前只允许连续序号的串行步骤；处理人解析器不得保存脚本、任意表达式或回调 URL；
 - 发布前必须证明任务类型、处理器、解析器、决定、下一步骤和最终强类型领域动作均已注册。
 
@@ -483,6 +484,8 @@ erDiagram
 | `runtime_kind` | `INTERNAL` / `BPM`；启动后不可切换 |
 | `business_object_type` / `business_object_id` | 被审批的稳定业务对象 |
 | `subject_version` | 被审批的不可变提交或业务版本 |
+| `start_idempotency_key` | 启动命令业务幂等键；同一 `definition_key` 内永久唯一 |
+| `owner_organization_id` | 启动时冻结的责任组织；无开放待办的阻塞实例仍据此执行授权过滤和恢复 |
 | `lock_version` | 实例乐观锁版本；API 固定命名为 `instance_version` |
 | `status` | `RUNNING` / `APPROVED` / `REJECTED` / `TERMINATED` / `CANCELLED` / `BLOCKED` |
 | `current_step_instance_id` | `RUNNING` 或 `BLOCKED` 时指向当前步骤；终态必须为空 |
@@ -505,6 +508,7 @@ erDiagram
 必需约束与索引：
 
 - 同一业务对象、`subject_version` 和定义同时最多一个 `RUNNING` 或 `BLOCKED` 实例；
+- `(definition_key, start_idempotency_key)` 永久唯一；同键重试必须严格核对业务对象、提交版本和启动人后回读原实例；
 - `(approval_instance_id, step_key)` 唯一；同一实例同时最多一个 `ACTIVE` 或 `BLOCKED` 当前步骤；
 - 实例和步骤的每次写入均以各自 `lock_version` 为条件并递增；阻塞查询必须返回对应 API 版本；
 - `ACTIVE` 步骤必须存在一个开放 `work_item`；`BLOCKED` 步骤允许保留阻塞前的一个开放待办，
@@ -517,7 +521,8 @@ erDiagram
 当前两期固定 `work_item_type` 至少包括：
 
 `PROCUREMENT_CONFIRMATION`、`LOW_MARGIN_MANAGER_CONFIRMATION`、
-`PURCHASE_ORDER_REVIEW`、`CARD_FUNDS_REVIEW`、
+`PURCHASE_ORDER_REVIEW`、`SALES_CHANGE_IMPACT_REVIEW`、
+`SALES_CHANGE_FINANCE_REVIEW`、`CARD_FUNDS_REVIEW`、
 `CARD_FUNDS_DELTA_REVIEW`、`CARD_SALES_MANAGER_APPROVAL`、
 `CARD_SALES_OPERATION_APPROVAL`、`OWNERSHIP_MIGRATION_SALES_CONFIRMATION`、
 `OWNERSHIP_MIGRATION_FINANCE_CONFIRMATION`、`INVENTORY_ADJUSTMENT_REVIEW`、
@@ -525,6 +530,9 @@ erDiagram
 `IMPORT_BUSINESS_CONFIRMATION`、
 `INTEGRATION_RESULT_UNKNOWN` 和 `BUSINESS_EXCEPTION`。页面、接口和后台任务不得
 临时创造同义代码。
+
+销售变更履约影响与财务复核不得复用采购确认或采购单财务审核类型；两类任务分别固定使用
+`sales_change_impact_review`、`sales_change_finance_review` 处理器并路由 W05，且只能执行销售变更域的强类型命令。
 
 一期正常导入确认的固定注册如下；不得按销售、采购、运营、仓储、财务拆成五个同义任务类型：
 
@@ -534,13 +542,16 @@ erDiagram
 
 该领域命令的 decision 仅允许 `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`。每个“批次 ×
 `confirmation_scope` × `trial_version`”创建一个任务；责任差异由
-`confirmation_scope + owner_role` 表达，不改变任务类型、handler 或领域命令。
+`confirmation_scope + owner_role` 表达，不改变任务类型、handler 或领域命令。服务端必须把
+固定注册的 `confirmation_scope` 写入不可变 `responsibility_key`；不得拼接、替换或伪造
+`business_object_id` 来绕过开放任务唯一性。
 
 | 字段 | 说明 |
 | --- | --- |
 | `work_item_type` | 采购确认、低毛利上级确认、审批、复核、异常等固定类型 |
 | `approval_step_instance_id` | 审批步骤任务必填；独立任务为空 |
 | `business_object_type` / `business_object_id` | 任务对应的稳定业务对象 |
+| `responsibility_key` | 服务端创建时冻结的可选责任维度；普通任务为空；W18 正常导入确认固定为已注册 `confirmation_scope`；客户端不得提供或修改 |
 | `subject_version` | 任务针对的对象版本 |
 | `lock_version` | 任务自身乐观锁版本；API 固定命名为 `task_version` |
 | `status` | `OPEN` / `COMPLETED` / `CLOSED` |
@@ -557,7 +568,12 @@ erDiagram
 
 必需约束与索引：
 
-- 同一业务对象、任务类型同时最多一个 `OPEN` 任务；每个 `ACTIVE` 审批步骤恰有一个 `OPEN` 任务，
+- `(business_object_type, business_object_id, work_item_type, responsibility_key)` 建立仅约束
+  `OPEN` 的唯一索引；普通任务的 `responsibility_key` 为空，仍保持同一业务对象、任务类型最多
+  一个开放任务；W18 同一批次、同一 `confirmation_scope` 最多一个开放任务，不同已注册范围可并存；
+- `responsibility_key` 只允许由已注册服务端生产者在创建时写入；开始处理、退回团队、转交、完成和关闭
+  均不得修改；不得把责任范围编码进虚构的 `business_object_id`；
+- 每个 `ACTIVE` 审批步骤恰有一个 `OPEN` 任务，
   `BLOCKED` 当前步骤允许零或一个原有 `OPEN` 任务；
 - `status + owner_user_id + due_at` 是“我的待办”索引；
   `status + assignment_mode + owner_role + due_at` 是“团队待处理”索引；
@@ -1309,6 +1325,29 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 采购二次确认的唯一状态源是下述 `procurement_confirmation`。它不再重复写成
 `sales_order_review.review_stage`；通用审计由 `workflow_action` 和对应 `work_item` 记录。
+
+#### `low_margin_manager_confirmation`
+
+`low_margin_manager_confirmation` 保存采购驳回后“照原商业条件承接低毛利”的冻结申请与唯一正式决定，不替代采购确认。
+
+| 字段 | 说明 |
+| --- | --- |
+| `sales_order_id` | 待承接的销售单 |
+| `rejected_procurement_confirmation_id` / `rejected_submission_id` | 本轮来源的采购驳回链 |
+| `low_margin_submission_id` | 商业条件不变时重新冻结的新提交 |
+| `acceptance_reason` / `evidence_reference_ids` | 销售承接理由及已登记受控证据 |
+| `requested_by` / `requested_at` | 申请人和申请时间 |
+| `status` | `PENDING` / `APPROVED` / `REJECTED` |
+| `decided_by` / `decided_at` | 上级决定人和决定时间 |
+| `decision_reason_code` / `decision_comment` | 驳回原因代码及决定意见；通过时原因代码为空 |
+
+必需约束与索引：
+
+- `low_margin_submission_id` 永久唯一；同一新提交不得创建第二个低毛利确认事实；
+- 开放任务固定为 `LOW_MARGIN_MANAGER_CONFIRMATION`、`business_object_type = sales_order`，并由开放任务唯一索引保证同一销售单同时最多一个该类型任务；
+- 创建前必须验证新提交与原驳回提交的商业条件完全一致；事实创建、提交冻结、销售单进入待低毛利上级确认和开放任务创建处于同一事务；
+- 上级通过时，决定事实、当前任务完成和同一新提交的唯一 `PROCUREMENT_CONFIRMATION` 创建处于同一事务；上级驳回时不创建采购确认并把销售单退回销售处理；
+- 申请人或新提交人不得决定自己的低毛利申请；完成后的事实和任务不得重新开启或改绑提交。
 
 #### `procurement_confirmation` 与明细
 
@@ -2196,7 +2235,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `failure_diagnostic_file_asset_id` | 失败对象的合规诊断包，按 30 天销毁 |
 | `import_rule_version` | 本批解析、清理和映射规则版本 |
 | `source_file_hmac` | 受控临时区计算的 keyed HMAC，仅用于审计去重 |
-| `status` | 待校验、校验中、待确认、导入中、完成、部分失败、失败 |
+| `status` | 待校验、校验中、待确认、待应用、导入中、完成、部分失败、失败；稳定码分别为 `pending_validation`、`validating`、`pending_confirmation`、`ready_to_apply`、`importing`、`completed`、`partial_failed`、`failed` |
 | `total_rows` / `success_rows` / `failed_rows` | 处理统计 |
 | `failure_code_summary` | 脱敏错误码及计数，不含原值和行列明细 |
 | `confirmation_status_summary` | 各必要 `legacy_import_confirmation` 的派生摘要；不保存单个确认人作为多范围事实源 |
@@ -2242,6 +2281,9 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
   关闭（`CLOSED`），不能继续处理或完成；
 - 只有当前版本全部必要范围均 `CONFIRMED`，生产应用 guard 才能通过；批次上的确认状态仅为
   这些事实的派生摘要。
+- 最后一项必要责任确认只把批次从 `pending_confirmation` 推进到 `ready_to_apply`，并返回
+  `next_step=START_APPLY`；确认事务不得启动 `background_job`，也不得把批次直接推进到
+  `importing`。
 
 `legacy_import_batch` / `legacy_import_row` 必需约束与索引：
 
@@ -2249,6 +2291,15 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - `(batch_id, source_object_type, source_row_key)` 唯一；
 - `source_file_hmac + source_object_set + baseline_date` 用于重复导入预警；
 - `parse_status + mapping_status + import_status` 处理队列索引；
+- `START_APPLY` 是 `ready_to_apply -> importing` 的唯一业务入口，并在同一事务把关联
+  `background_job` 从 `pending` 推进到 `running`；后台逐行应用接口只接受已由该命令启动的任务；
+- `CANCEL_PENDING` 只终止关联任务中尚未应用的项，保留全部已成功、已跳过、已失败计数和已形成
+  的业务事实；任务进入 `cancelled` 后不得通过 `RETRY_FAILED` 重新打开；
+- `RETRY_FAILED` 只允许明确可重试的 `partial_failed` / `failed` 结果，将失败行从 `failed`
+  重置为 `pending_import`，清除该行上次失败诊断，保留已导入、已跳过和原本未处理行；批次回到
+  `ready_to_apply`，仍须新的 `START_APPLY` 才能继续执行；
+- `START_APPLY`、`CANCEL_PENDING`、`RETRY_FAILED` 的批次、行、后台任务、审计和幂等收据必须
+  同事务提交；同一 `request_id` 与同一载荷重放原收据，不因后台后续进度改变原响应；
 - 本表是唯一持久兼容层，不为旧五张表各建一套 ERP 影子业务表；
 - 原始 SQL 仅在临时 ETL 区读取，持久层只保存白名单规范化行以及
   `source_file_hmac`，不保存可反推原文件内容的普通摘要；

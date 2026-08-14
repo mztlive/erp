@@ -9,6 +9,7 @@
 //! 开票与应收。
 
 use entities::ids::{SalesOrderId, SourceSystemId};
+use entities::integration_ops::ErrorClass;
 use entities::money::Amount;
 use entities::projection::{
     CardForm, ProjectionDeliveryStatus, ProjectionSource, SalesOrderProjection, SalesOrderProjectionRevision,
@@ -207,31 +208,150 @@ pub struct SalesOrderProjectionDeliveryView {
     pub status: ProjectionDeliveryStatus,
     /// 发送次数。
     pub attempt_count: u32,
+    /// 最近发送时间（秒级时间戳）。
+    pub last_attempt_at: Option<i64>,
+    /// 下次受控处理时间（秒级时间戳）。
+    pub next_attempt_at: Option<i64>,
     /// 商城确认时间（秒级时间戳）。
     pub mall_ack_at: Option<i64>,
+    /// 商城执行基线。
+    pub mall_execution_baseline: Option<String>,
+    /// 稳定错误分类。
+    pub error_class: Option<ErrorClass>,
     /// 错误码。
     pub error_code: Option<String>,
+    /// 脱敏错误摘要。
+    pub error_summary: Option<String>,
+    /// W29 错误对象。
+    pub error_task_id: Option<String>,
+    /// W29 正式待办。
+    pub work_item_id: Option<String>,
+    /// 服务端根据当前投递事实开放的对象动作。
+    pub allowed_actions: Vec<String>,
+    /// 当前动作阻断原因。
+    pub action_blockers: Vec<ProjectionActionBlockerView>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
 }
 
-/// 下发结果视图（成功/失败均返回消息信封与错误任务 ID）。
+/// W23 投递对象动作阻断投影。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct ProjectionDeliveryResultView {
-    /// 下发记录 ID。
+pub struct ProjectionActionBlockerView {
+    /// 被阻断的动作代码。
+    pub action: String,
+    /// 稳定阻断代码。
+    pub code: String,
+    /// 面向处理人的明确说明。
+    pub message: String,
+}
+
+/// 投递对象强动作。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProjectionDeliveryAction {
+    /// 查询原稳定消息键的商城最终结果。
+    QueryResult,
+    /// 沿原稳定消息键安排重试。
+    Retry,
+    /// 按固定责任规则升级为 W29 错误对象与待办。
+    Escalate,
+}
+
+impl ProjectionDeliveryAction {
+    /// 返回协议稳定动作代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::QueryResult => "QUERY_RESULT",
+            Self::Retry => "RETRY",
+            Self::Escalate => "ESCALATE",
+        }
+    }
+}
+
+/// 投递对象强命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionDeliveryCommand {
+    /// 投影稳定身份。
+    #[validate(custom(function = "non_blank", message = "投影ID不能为空"))]
+    pub projection_id: String,
+    /// 投影不可变修订。
+    #[validate(custom(function = "non_blank", message = "投影修订ID不能为空"))]
+    pub projection_revision_id: String,
+    /// 固定投递身份。
+    #[validate(custom(function = "non_blank", message = "投递ID不能为空"))]
     pub delivery_id: String,
-    /// 下发状态。
-    pub delivery_status: ProjectionDeliveryStatus,
-    /// 承接本次下发的消息信封 ID（`inbox_message`）。
-    pub inbox_message_id: String,
-    /// 失败时创建的集成错误任务 ID；成功路径为 `None`。
+    /// 强类型对象动作。
+    pub action: ProjectionDeliveryAction,
+    /// 查询所得投递对象版本。
+    pub expected_object_version: u64,
+    /// 调用方幂等请求身份；不会原文写入日志。
+    #[validate(length(max = 128, message = "请求ID过长"))]
+    #[validate(custom(function = "non_blank", message = "请求ID不能为空"))]
+    pub request_id: String,
+}
+
+/// 投递对象强动作结果分类。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProjectionDeliveryActionResult {
+    /// 商城权威确认。
+    Acked,
+    /// 商城明确失败，或发送入口在调用前失败关闭。
+    Failed,
+    /// 查询后仍无法确定最终结果。
+    StillUnknown,
+    /// 已沿原身份排入受控重试。
+    RetryScheduled,
+    /// 已创建或复用 W29 错误对象与待办。
+    Escalated,
+}
+
+/// 下发与对象动作结果视图。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectionDeliveryResultView {
+    /// 稳定操作编号；同一请求重试返回相同编号与原结果。
+    pub operation_id: String,
+    /// 固定投递记录 ID。
+    pub delivery_id: String,
+    /// 正式动作结果。
+    pub result: ProjectionDeliveryActionResult,
+    /// 升级 W29 时的正式待办。
+    pub work_item_id: Option<String>,
+    /// 升级 W29 时的错误对象。
     pub error_task_id: Option<String>,
-    /// 商城执行基线；成功路径有值。
-    pub mall_execution_baseline: Option<String>,
-    /// 投影稳定身份乐观锁版本。
-    pub projection_version: u64,
+    /// 结果形成时间（秒级时间戳）。
+    pub occurred_at: i64,
+    /// 服务端给出的下一步。
+    pub next_action: Option<String>,
+}
+
+/// 受控待发送处理请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessProjectionDeliveriesRequest {
+    /// 本批最大处理数，避免无界扫描。
+    #[validate(range(min = 1, max = 100, message = "单批处理数必须在1-100之间"))]
+    pub limit: Option<u32>,
+}
+
+/// 受控待发送处理结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProcessProjectionDeliveriesResult {
+    /// 本批取得的候选数量。
+    pub scanned: u32,
+    /// 商城确认数量。
+    pub acked: u32,
+    /// 明确失败数量。
+    pub failed: u32,
+    /// 结果未知数量。
+    pub still_unknown: u32,
+    /// CAS 未取得或状态已变化数量。
+    pub skipped: u32,
+    /// 逐项正式结果。
+    pub items: Vec<ProjectionDeliveryResultView>,
 }
 
 /// 执行投影列表查询参数（分页参数与筛选字段扁平传递）。

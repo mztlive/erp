@@ -9,7 +9,6 @@ import {
 
 import {
     appendDifferenceEvidence,
-    claimSettlementReview,
     createSettlementDraft,
     decideSettlementReview,
     fetchSettlementDetail,
@@ -24,8 +23,13 @@ const settlementKeys = {
     all: ["supplier-settlements"] as const,
     list: (input: ListQueryInput) =>
         [...settlementKeys.all, "list", input] as const,
-    detail: (statementId: string) =>
-        [...settlementKeys.all, "detail", statementId] as const,
+    detail: (statementId: string, workItemId?: string) =>
+        [
+            ...settlementKeys.all,
+            "detail",
+            statementId,
+            workItemId ?? null,
+        ] as const,
 }
 
 export function useSettlementListQuery(input: ListQueryInput) {
@@ -36,10 +40,14 @@ export function useSettlementListQuery(input: ListQueryInput) {
     })
 }
 
-export function useSettlementDetailQuery(statementId: string | undefined) {
+export function useSettlementDetailQuery(
+    statementId: string | undefined,
+    workItemId?: string,
+) {
     return useQuery({
-        queryKey: settlementKeys.detail(statementId ?? ""),
-        queryFn: () => fetchSettlementDetail({ statementId: statementId! }),
+        queryKey: settlementKeys.detail(statementId ?? "", workItemId),
+        queryFn: () =>
+            fetchSettlementDetail({ statementId: statementId!, workItemId }),
         enabled: Boolean(statementId),
         placeholderData: keepPreviousData,
     })
@@ -114,16 +122,6 @@ export function useReviewDecisionMutation() {
             ) {
                 await invalidate()
             }
-        },
-    })
-}
-
-export function useClaimReviewMutation() {
-    const invalidate = useInvalidateAll()
-    return useMutation({
-        mutationFn: claimSettlementReview,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") await invalidate()
         },
     })
 }

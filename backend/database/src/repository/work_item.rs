@@ -1,16 +1,13 @@
-//! 域 D03 `work_item` 仓储：work_item。
-//!
-//! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
-//! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
-//! 「领取 = 条件更新（行锁）」原子入口（数据模型 §6.1）。集合名常量统一从
-//! `extensions::WorkItemExt` 关联常量导入（conventions §4.3）。
-//!
-//! 筛选/行类型定义在本文件，经 `WorkItemExt` 的关联类型对外暴露。
+//! 域 D03 `work_item` 仓储：责任队列查询与责任池原子开始处理。
 
-use entities::work_item::{WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
+use std::num::NonZeroU32;
+
+use entities::common::time::Instant;
+use entities::work_item::{
+    AssignmentMode, AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
+};
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
@@ -18,80 +15,162 @@ use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Error, Result};
 
-/// 待办列表投影行（列表接口只取必要字段，禁止返回整文档）。
+/// 队列列表的最小任务事实投影。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkItemRow {
-    /// 实体主键。
+    /// 任务 ID。
     pub id: String,
-    /// 任务类型。
+    /// 固定任务类型。
     pub work_item_type: WorkItemType,
-    /// 业务对象类型代码。
+    /// 审批步骤实例；独立任务为空。
+    pub approval_step_instance_id: Option<String>,
+    /// 业务对象类型。
     pub business_object_type: String,
     /// 业务对象 ID。
     pub business_object_id: String,
-    /// 任务针对的对象版本。
-    pub subject_version: Option<String>,
-    /// 任务状态。
+    /// 被处理的业务版本。
+    pub subject_version: String,
+    /// 生命周期状态。
     pub status: WorkItemStatus,
+    /// 责任分派模式。
+    pub assignment_mode: AssignmentMode,
     /// 责任角色。
-    pub owner_role: Option<String>,
-    /// 当前责任人。
+    pub owner_role: String,
+    /// 责任组织。
+    pub owner_organization_id: String,
+    /// 当前个人责任人。
     pub owner_user_id: Option<String>,
+    /// 曾形成个人责任的用户 ID；仅供服务端历史范围过滤。
+    pub responsibility_actor_ids: Vec<String>,
+    /// 当前或最近责任来源。
+    pub assignment_source: AssignmentSource,
+    /// 首次形成个人责任的时间。
+    pub assigned_at: Option<Instant>,
+    /// 首次正式处理时间。
+    pub started_at: Option<Instant>,
+    /// 当前个人责任生效时间。
+    pub current_assignment_at: Option<Instant>,
+    /// 最近一次活动时间。
+    pub last_activity_at: Option<Instant>,
     /// 优先级。
     pub priority: WorkItemPriority,
-    /// 时限（秒级时间戳）。
-    pub due_at: Option<u64>,
-    /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
+    /// 时限。
+    pub due_at: Option<Instant>,
+    /// 产生原因代码。
+    pub reason_code: Option<String>,
+    /// 影响摘要。
+    pub impact_summary: Option<String>,
+    /// 正式完成时间。
+    pub completed_at: Option<Instant>,
+    /// 正式完成人。
+    pub completed_by: Option<String>,
+    /// 关闭时间。
+    pub closed_at: Option<Instant>,
+    /// 关闭操作人。
+    pub closed_by: Option<String>,
+    /// 关闭原因。
+    pub close_reason: Option<String>,
+    /// 持久化乐观锁版本；API 必须映射为 `task_version`。
     pub version: u64,
-    /// 创建时间（秒级时间戳）。
+    /// 创建时间。
     pub created_at: u64,
+    /// 最近持久化更新时间。
+    pub updated_at: u64,
 }
 
 /// 待办列表筛选条件。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WorkItemFilter {
-    /// 任务类型；`None` 表示不筛选。
-    pub work_item_type: Option<WorkItemType>,
-    /// 任务状态；`None` 表示不筛选。
-    pub status: Option<WorkItemStatus>,
-    /// 责任角色；`None` 表示不筛选。
-    pub owner_role: Option<String>,
-    /// 当前责任人；`None` 表示不筛选。
+    /// 允许的任务类型集合；为空时不筛选。
+    pub work_item_types: Vec<WorkItemType>,
+    /// 允许的状态集合；为空时不筛选。
+    pub statuses: Vec<WorkItemStatus>,
+    /// 分派模式；为空时不筛选。
+    pub assignment_mode: Option<AssignmentMode>,
+    /// 允许的责任角色集合；为空时不筛选。
+    pub owner_roles: Vec<String>,
+    /// 允许的责任组织集合；为空时不筛选。
+    pub owner_organization_ids: Vec<String>,
+    /// 角色与组织的已授权组合；组织为 `None` 表示该角色公司级授权。
+    pub responsibility_scopes: Vec<(String, Option<String>)>,
+    /// 允许的注册任务类型与权威业务对象类型组合。
+    pub object_access_shapes: Option<Vec<(WorkItemType, String)>>,
+    /// 当前个人责任人；为空时不筛选。
     pub owner_user_id: Option<String>,
-    /// 优先级；`None` 表示不筛选。
-    pub priority: Option<WorkItemPriority>,
+    /// 是否只查询尚无个人责任人的责任池任务。
+    pub unassigned_only: bool,
+    /// 历史参与人；匹配曾负责、完成人或关闭人之一。
+    pub history_actor_id: Option<String>,
+    /// 具备组织级历史查看权的组织集合；`Some(空)` 表示公司级。
+    pub history_managed_organization_ids: Option<Vec<String>>,
+    /// 到期时间下界（包含）。
+    pub due_from: Option<Instant>,
+    /// 到期时间上界（不包含）。
+    pub due_before: Option<Instant>,
+    /// 允许的优先级集合；为空时不筛选。
+    pub priorities: Vec<WorkItemPriority>,
+    /// 权限过滤范围内的安全字面量检索。
+    pub query: Option<String>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
     pub page_size: u32,
-    /// 排序字段（白名单：`created_at` / `updated_at` / `due_at`，默认 `created_at`）。
+    /// 排序字段白名单值。
     pub sort_by: Option<String>,
-    /// 是否升序；`false` 表示降序（默认）。
+    /// 是否升序。
     pub sort_ascending: bool,
 }
 
 impl QueryFilter for WorkItemFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    /// 构造与责任队列索引一致的 MongoDB 查询条件。
     ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回包含软删除约束的查询文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(work_item_type) = self.work_item_type {
-            filter.insert("work_item_type", work_item_type.as_str());
+        insert_enum_filter(&mut filter, "status", &self.statuses, WorkItemStatus::as_str);
+        insert_enum_filter(
+            &mut filter,
+            "work_item_type",
+            &self.work_item_types,
+            WorkItemType::as_str,
+        );
+        insert_enum_filter(
+            &mut filter,
+            "priority",
+            &self.priorities,
+            WorkItemPriority::as_str,
+        );
+        insert_string_filter(&mut filter, "owner_role", &self.owner_roles);
+        insert_string_filter(&mut filter, "owner_organization_id", &self.owner_organization_ids);
+        if let Some(assignment_mode) = self.assignment_mode {
+            filter.insert("assignment_mode", assignment_mode.as_str());
         }
-        if let Some(status) = self.status {
-            filter.insert("status", status.as_str());
-        }
-        if let Some(owner_role) = &self.owner_role {
-            filter.insert("owner_role", owner_role);
-        }
-        if let Some(owner_user_id) = &self.owner_user_id {
+        if self.unassigned_only {
+            filter.insert("owner_user_id", Bson::Null);
+        } else if let Some(owner_user_id) = &self.owner_user_id {
             filter.insert("owner_user_id", owner_user_id);
         }
-        if let Some(priority) = self.priority {
-            filter.insert("priority", priority.as_str());
+        let mut conjunctions = Vec::new();
+        if let Some(shapes) = &self.object_access_shapes {
+            conjunctions.push(object_access_shape_filter(shapes));
         }
+        if !self.responsibility_scopes.is_empty() {
+            conjunctions.push(responsibility_scope_filter(&self.responsibility_scopes));
+        }
+        if self.history_actor_id.is_some() || self.history_managed_organization_ids.is_some() {
+            conjunctions.push(history_scope_filter(
+                self.history_actor_id.as_deref(),
+                self.history_managed_organization_ids.as_deref(),
+            ));
+        }
+        if let Some(query) = self.query.as_deref() {
+            conjunctions.push(literal_query_filter(query));
+        }
+        if !conjunctions.is_empty() {
+            filter.insert("$and", conjunctions);
+        }
+        insert_due_range(&mut filter, self.due_from, self.due_before);
         filter
     }
 }
@@ -100,28 +179,48 @@ impl Pagination for WorkItemFilter {
     /// 返回页码与单页条数。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
 }
 
+/// 责任池原子开始处理的持久化结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StartProcessingOutcome {
+    /// 本次请求成功形成个人责任。
+    Started(WorkItem),
+    /// 同一用户的重试；返回当前事实，且不再次递增版本。
+    AlreadyOwned(WorkItem),
+    /// 任务已由其他用户负责。
+    OwnershipConflict(WorkItem),
+    /// 任务仍可开始处理，但请求携带的版本或责任范围已陈旧。
+    VersionConflict(WorkItem),
+    /// 任务不存在、非开放、非责任池或已不具备开始处理形态。
+    NotStartable(Option<WorkItem>),
+}
+
+/// 开始处理 CAS 必须固定的服务端资格快照。
+///
+/// Service 在更新前校验角色、组织、对象参与权与岗位分离，并把校验时看到的
+/// 责任范围装入本类型；Repository 将角色和组织一并放入原子过滤条件，避免
+/// 资格校验后任务责任范围被并发替换。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StartProcessingEligibility<'a> {
+    /// 资格校验时看到的责任角色。
+    pub owner_role: &'a str,
+    /// 资格校验时看到的责任组织。
+    pub owner_organization_id: &'a str,
+}
+
 impl<'a> Repository<'a, WorkItem> {
-    /// 分页检索待办列表（投影查询，工作队列）。
+    /// 分页检索责任队列任务投影。
     ///
-    /// 只返回 [`WorkItemRow`] 所需的列表字段，不加载整文档；`owner_role` /
-    /// `owner_user_id` 精确匹配，组合覆盖 `idx_work_items_queue` 工作队列索引
-    /// 前缀（§6.1）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
+    /// 调用方负责按 `mine / team / managed / history` 授权范围构造筛选条件；
+    /// 仓储只执行事实查询，不推断角色或组织权限。
     ///
     /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// MongoDB 查询、计数或反序列化失败时返回错误。
     pub async fn search_work_items(
         &self,
         filter: &WorkItemFilter,
@@ -143,84 +242,107 @@ impl<'a> Repository<'a, WorkItem> {
         })
     }
 
-    /// 领取任务（条件更新原子完成，行锁语义）。
+    /// 按固定批次读取队列候选任务投影。
     ///
-    /// 数据模型 §6.1：领取 = 条件更新，仅当行内状态仍为 `UNCLAIMED` 时迁移到
-    /// `IN_PROGRESS` 并写入领取人，同一时刻只能被一个用户处理，无需租约或令牌。
-    /// 调用方应先通过 `WorkItem::claim` 做状态机校验（本方法不再校验内存状态），
-    /// 然后调用本方法把迁移原子落库：过滤条件同时比较 `id + version + status`，
-    /// 任一不匹配（他人已领取、版本陈旧）返回
-    /// [`crate::Error::OptimisticLockingError`]，内存实体版本不被改写。
-    ///
-    /// 单条条件写，**不需要事务执行器**；传入 `NoTransaction` 行为可预期。
+    /// 本方法不执行未授权候选总数统计；Service 必须逐批加载权威
+    /// 业务对象事实，完成参与权过滤后再形成分页和总数。
     ///
     /// # 参数
-    /// * `item` - 已由实体 `claim` 迁移到 `IN_PROGRESS` 的任务（携带领取人）
+    /// * `filter` - 服务端责任范围与业务筛选
+    /// * `offset` - 未授权候选集的起始偏移
+    /// * `batch_size` - 非零固定批次大小
     /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 无返回值；成功时同步递增内存实体 `version` / `updated_at`。
+    /// 返回当前候选批次，不暴露仓储候选总数为授权总数。
     ///
     /// # 错误
-    /// 行内状态或版本不匹配时返回 [`crate::Error::OptimisticLockingError`]；
-    /// 元数据越界或 MongoDB 写入失败时返回错误。
-    pub async fn claim(&self, item: &mut WorkItem, executor: &mut dyn Executor) -> Result<()> {
-        let base = item.base().clone();
-        let expected_version =
-            i64::try_from(base.version).map_err(|_| Error::EntityMetadataOutOfRange("version"))?;
-        let next_version = base
-            .version
-            .checked_add(1)
-            .ok_or(Error::EntityMetadataOutOfRange("version"))?;
-        let updated_at_bson = chrono::Local::now().timestamp();
-        let updated_at =
-            u64::try_from(updated_at_bson).map_err(|_| Error::EntityMetadataOutOfRange("updated_at"))?;
+    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
+    pub async fn scan_work_item_batch(
+        &self,
+        filter: &WorkItemFilter,
+        offset: u64,
+        batch_size: NonZeroU32,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItemRow>> {
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(offset)
+            .limit(i64::from(batch_size.get()))
+            .projection(work_item_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<WorkItemRow>();
+        mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await
+    }
 
-        let result = mongo_ops::update_one(
+    /// 在与队列完全相同的授权筛选内查找焦点任务。
+    ///
+    /// # 返回
+    /// 任务同时满足 ID 与全部 scope/角色/组织/业务筛选时返回完整实体；否则
+    /// 返回 `None`，调用方不得退回无过滤的 ID 查询。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_visible_by_id(
+        &self,
+        id: &str,
+        filter: &WorkItemFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<WorkItem>> {
+        let mut document = filter.to_doc();
+        document.insert("id", id);
+        mongo_ops::find_one(&self.collection(), document, executor).await
+    }
+
+    /// 以单文档 CAS 原子开始处理责任池任务。
+    ///
+    /// 过滤条件同时固定任务版本、开放状态、`POOL` 模式、尚无个人责任以及资格
+    /// 校验时看到的角色和组织；更新管道以 `$ifNull` 保留首次分派/处理时间。
+    /// CAS 未命中后只读取当前事实以区分同人幂等、他人冲突和版本冲突。
+    ///
+    /// # 错误
+    /// 元数据越界、MongoDB 更新或反序列化失败时返回错误。
+    pub async fn start_processing(
+        &self,
+        id: &str,
+        expected_task_version: u64,
+        eligibility: StartProcessingEligibility<'_>,
+        actor_id: &str,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<StartProcessingOutcome> {
+        let expected_version =
+            i64::try_from(expected_task_version).map_err(|_| Error::EntityMetadataOutOfRange("version"))?;
+        let updated = mongo_ops::find_one_and_update_pipeline(
             &self.collection(),
-            doc! {
-                "id": &base.id,
-                "version": expected_version,
-                "status": WorkItemStatus::Unclaimed.as_str(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            doc! {
-                "$set": {
-                    "status": WorkItemStatus::InProgress.as_str(),
-                    "owner_user_id": item.owner_user_id.clone(),
-                    "version": i64::try_from(next_version)
-                        .map_err(|_| Error::EntityMetadataOutOfRange("version"))?,
-                    "updated_at": updated_at_bson,
-                }
-            },
-            false,
+            start_processing_filter(
+                id,
+                expected_version,
+                eligibility.owner_role,
+                eligibility.owner_organization_id,
+            ),
+            start_processing_pipeline(actor_id, at),
             executor,
         )
         .await?;
-        if result.matched_count == 0 {
-            return Err(Error::OptimisticLockingError);
+        if let Some(item) = updated {
+            return Ok(StartProcessingOutcome::Started(item));
         }
-        item.base_mut().version = next_version;
-        item.base_mut().updated_at = updated_at;
-        Ok(())
+        let current = self.find_by_id(id, executor).await?;
+        Ok(classify_start_processing_miss(
+            current,
+            expected_task_version,
+            actor_id,
+        ))
     }
 
-    /// 查询业务对象当前的全部有效任务（`UNCLAIMED` / `IN_PROGRESS`）。
+    /// 查询业务对象当前全部开放任务。
     ///
-    /// 数据模型 §6.1：同一业务对象、任务类型同时最多一个有效任务，唯一性由
-    /// 部分唯一索引 `uk_work_items_active` 承担；本方法供服务层派发前核对
-    /// 既有有效任务（如重复派发保护），查询条件与索引部分过滤表达式一致。
-    ///
-    /// # 参数
-    /// * `business_object_type` - 业务对象类型代码
-    /// * `business_object_id` - 业务对象 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该业务对象当前全部有效任务。
+    /// 该查询供强类型服务核对当前责任事实；同一对象与任务类型的开放唯一性由
+    /// `uk_work_items_open_object_type` 部分唯一索引保证。
     ///
     /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_active_by_object(
         &self,
         business_object_type: &str,
@@ -231,10 +353,7 @@ impl<'a> Repository<'a, WorkItem> {
             doc! {
                 "business_object_type": business_object_type,
                 "business_object_id": business_object_id,
-                "status": { "$in": [
-                    WorkItemStatus::Unclaimed.as_str(),
-                    WorkItemStatus::InProgress.as_str(),
-                ] },
+                "status": WorkItemStatus::Open.as_str(),
             },
             doc! { "created_at": 1 },
             executor,
@@ -243,87 +362,512 @@ impl<'a> Repository<'a, WorkItem> {
     }
 }
 
-/// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
-///
-/// 仅允许 `created_at` / `updated_at` / `due_at`；未知字段回落默认 `created_at`。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或白名单外字段时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
+fn start_processing_filter(
+    id: &str,
+    expected_version: i64,
+    owner_role: &str,
+    owner_organization_id: &str,
+) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "status": WorkItemStatus::Open.as_str(),
+        "assignment_mode": AssignmentMode::Pool.as_str(),
+        "owner_role": owner_role,
+        "owner_organization_id": owner_organization_id,
+        "owner_user_id": Bson::Null,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+fn start_processing_pipeline(actor_id: &str, at: Instant) -> Vec<Document> {
+    let timestamp = at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "owner_user_id": actor_id,
+            "responsibility_actor_ids": {
+                "$cond": [
+                    { "$in": [actor_id, "$responsibility_actor_ids"] },
+                    "$responsibility_actor_ids",
+                    { "$concatArrays": ["$responsibility_actor_ids", [actor_id]] },
+                ]
+            },
+            "assignment_source": AssignmentSource::SelfStart.as_str(),
+            "assigned_at": { "$ifNull": ["$assigned_at", timestamp] },
+            "started_at": { "$ifNull": ["$started_at", timestamp] },
+            "current_assignment_at": timestamp,
+            "last_activity_at": timestamp,
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": timestamp,
+        }
+    }]
+}
+
+fn classify_start_processing_miss(
+    current: Option<WorkItem>,
+    expected_task_version: u64,
+    actor_id: &str,
+) -> StartProcessingOutcome {
+    let Some(item) = current else {
+        return StartProcessingOutcome::NotStartable(None);
+    };
+    if item.status != WorkItemStatus::Open || item.assignment_mode != AssignmentMode::Pool {
+        return StartProcessingOutcome::NotStartable(Some(item));
+    }
+    if item.owner_user_id.as_deref() == Some(actor_id) {
+        return StartProcessingOutcome::AlreadyOwned(item);
+    }
+    if item.owner_user_id.is_some() {
+        return StartProcessingOutcome::OwnershipConflict(item);
+    }
+    if item.base().version != expected_task_version {
+        return StartProcessingOutcome::VersionConflict(item);
+    }
+    StartProcessingOutcome::NotStartable(Some(item))
+}
+
+fn insert_enum_filter<T: Copy>(
+    filter: &mut Document,
+    field: &str,
+    values: &[T],
+    code: impl Fn(T) -> &'static str,
+) {
+    match values {
+        [] => {}
+        [value] => {
+            filter.insert(field, code(*value));
+        }
+        values => {
+            filter.insert(
+                field,
+                doc! { "$in": values.iter().copied().map(code).collect::<Vec<_>>() },
+            );
+        }
+    }
+}
+
+fn insert_string_filter(filter: &mut Document, field: &str, values: &[String]) {
+    match values {
+        [] => {}
+        [value] => {
+            filter.insert(field, value);
+        }
+        values => {
+            filter.insert(field, doc! { "$in": values.to_vec() });
+        }
+    }
+}
+
+fn insert_due_range(filter: &mut Document, due_from: Option<Instant>, due_before: Option<Instant>) {
+    let mut range = Document::new();
+    if let Some(due_from) = due_from {
+        range.insert("$gte", due_from.unix_secs());
+    }
+    if let Some(due_before) = due_before {
+        range.insert("$lt", due_before.unix_secs());
+    }
+    if !range.is_empty() {
+        filter.insert("due_at", range);
+    }
+}
+
+fn literal_query_filter(query: &str) -> Document {
+    let literal = regex::escape(query.trim());
+    doc! {
+        "$or": [
+            { "business_object_id": { "$regex": &literal, "$options": "i" } },
+            { "business_object_type": { "$regex": &literal, "$options": "i" } },
+            { "reason_code": { "$regex": &literal, "$options": "i" } },
+            { "impact_summary": { "$regex": &literal, "$options": "i" } },
+        ]
+    }
+}
+
+fn responsibility_scope_filter(scopes: &[(String, Option<String>)]) -> Document {
+    let alternatives = scopes
+        .iter()
+        .map(|(role, organization_id)| {
+            let mut filter = doc! { "owner_role": role };
+            if let Some(organization_id) = organization_id {
+                filter.insert("owner_organization_id", organization_id);
+            }
+            filter
+        })
+        .collect::<Vec<_>>();
+    doc! { "$or": alternatives }
+}
+
+fn object_access_shape_filter(shapes: &[(WorkItemType, String)]) -> Document {
+    if shapes.is_empty() {
+        return doc! { "id": { "$exists": false } };
+    }
+    let alternatives = shapes
+        .iter()
+        .map(|(work_item_type, business_object_type)| {
+            doc! {
+                "work_item_type": work_item_type.as_str(),
+                "business_object_type": business_object_type,
+            }
+        })
+        .collect::<Vec<_>>();
+    doc! { "$or": alternatives }
+}
+
+fn history_scope_filter(actor_id: Option<&str>, managed_organization_ids: Option<&[String]>) -> Document {
+    let mut alternatives = Vec::new();
+    if let Some(actor_id) = actor_id {
+        alternatives.extend([
+            doc! { "responsibility_actor_ids": actor_id },
+            doc! { "completed_by": actor_id },
+            doc! { "closed_by": actor_id },
+        ]);
+    }
+    if let Some(organization_ids) = managed_organization_ids {
+        if organization_ids.is_empty() {
+            alternatives.push(Document::new());
+        } else {
+            alternatives.push(doc! { "owner_organization_id": { "$in": organization_ids.to_vec() } });
+        }
+    }
+    doc! { "$or": alternatives }
+}
+
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = match sort_by {
         Some("updated_at") => "updated_at",
         Some("due_at") => "due_at",
+        Some("current_assignment_at") => "current_assignment_at",
+        Some("last_activity_at") => "last_activity_at",
+        Some("completed_at") => "completed_at",
+        Some("closed_at") => "closed_at",
         _ => "created_at",
     };
     doc! { field: direction }
 }
 
-/// 待办列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
 fn work_item_projection() -> Document {
     doc! {
         "id": 1,
         "work_item_type": 1,
+        "approval_step_instance_id": 1,
         "business_object_type": 1,
         "business_object_id": 1,
         "subject_version": 1,
         "status": 1,
+        "assignment_mode": 1,
         "owner_role": 1,
+        "owner_organization_id": 1,
         "owner_user_id": 1,
+        "responsibility_actor_ids": 1,
+        "assignment_source": 1,
+        "assigned_at": 1,
+        "started_at": 1,
+        "current_assignment_at": 1,
+        "last_activity_at": 1,
         "priority": 1,
         "due_at": 1,
+        "reason_code": 1,
+        "impact_summary": 1,
+        "completed_at": 1,
+        "completed_by": 1,
+        "closed_at": 1,
+        "closed_by": 1,
+        "close_reason": 1,
         "version": 1,
         "created_at": 1,
+        "updated_at": 1,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, QueryFilter, WorkItemFilter};
-    use entities::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
-    use mongodb::bson::doc;
+    use entity_core::HasBaseModel;
+    use mongodb::bson::{doc, Bson};
 
-    #[test]
-    fn filter_applies_type_status_and_owner_fields() {
-        let filter = WorkItemFilter {
-            work_item_type: Some(WorkItemType::ImportBusinessConfirmation),
-            status: Some(WorkItemStatus::InProgress),
-            owner_role: Some("sales".to_string()),
-            owner_user_id: Some("user-1".to_string()),
-            priority: Some(WorkItemPriority::High),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
+    use super::{
+        classify_start_processing_miss, sort_doc, start_processing_filter, start_processing_pipeline,
+        QueryFilter, StartProcessingOutcome, WorkItemFilter,
+    };
+    use entities::common::time::Instant;
+    use entities::ids::WorkItemId;
+    use entities::work_item::{
+        AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus,
+        WorkItemType,
+    };
 
-        let document = filter.to_doc();
-        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
-        assert_eq!(
-            document.get_str("work_item_type").unwrap(),
-            "IMPORT_BUSINESS_CONFIRMATION"
-        );
-        assert_eq!(document.get_str("status").unwrap(), "IN_PROGRESS");
-        assert_eq!(document.get_str("owner_role").unwrap(), "sales");
-        assert_eq!(document.get_str("owner_user_id").unwrap(), "user-1");
-        assert_eq!(document.get_str("priority").unwrap(), "high");
+    fn pool_item() -> WorkItem {
+        WorkItem::new_at(
+            WorkItemId::new("wi-1"),
+            WorkItemData {
+                work_item_type: WorkItemType::ImportBusinessConfirmation,
+                approval_step_instance_id: None,
+                business_object_type: "LEGACY_IMPORT_BATCH".to_string(),
+                business_object_id: "batch-1".to_string(),
+                subject_version: "v1".to_string(),
+                assignment_mode: AssignmentMode::Pool,
+                owner_role: "sales".to_string(),
+                owner_organization_id: "org-1".to_string(),
+                owner_user_id: None,
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: None,
+                impact_summary: None,
+            },
+            Instant::from_unix_secs(100),
+        )
+        .unwrap()
     }
 
     #[test]
-    fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
+    fn scope_filter_supports_team_and_history_facts() {
+        let team = WorkItemFilter {
+            statuses: vec![WorkItemStatus::Open],
+            work_item_types: vec![
+                WorkItemType::ImportBusinessConfirmation,
+                WorkItemType::BusinessException,
+            ],
+            assignment_mode: Some(AssignmentMode::Pool),
+            owner_roles: vec!["sales".to_string(), "operations".to_string()],
+            owner_organization_ids: vec!["org-1".to_string()],
+            unassigned_only: true,
+            priorities: vec![WorkItemPriority::High, WorkItemPriority::Urgent],
+            due_from: Some(Instant::from_unix_secs(100)),
+            due_before: Some(Instant::from_unix_secs(200)),
+            page: 1,
+            page_size: 20,
+            ..WorkItemFilter::default()
+        }
+        .to_doc();
+        assert_eq!(team.get_str("status").unwrap(), "OPEN");
+        assert_eq!(team.get_str("assignment_mode").unwrap(), "POOL");
+        assert_eq!(team.get("owner_user_id"), Some(&Bson::Null));
+        assert_eq!(
+            team.get_document("owner_role").unwrap(),
+            &doc! { "$in": ["sales", "operations"] }
+        );
+        assert_eq!(
+            team.get_document("due_at").unwrap(),
+            &doc! { "$gte": 100_i64, "$lt": 200_i64 }
+        );
+        assert_eq!(
+            team.get_document("priority").unwrap(),
+            &doc! { "$in": ["high", "urgent"] }
+        );
+        assert_eq!(
+            team.get_document("work_item_type").unwrap(),
+            &doc! { "$in": ["IMPORT_BUSINESS_CONFIRMATION", "BUSINESS_EXCEPTION"] }
+        );
+
+        let history = WorkItemFilter {
+            statuses: vec![WorkItemStatus::Completed, WorkItemStatus::Closed],
+            history_actor_id: Some("alice".to_string()),
+            page: 1,
+            page_size: 20,
+            ..WorkItemFilter::default()
+        }
+        .to_doc();
+        let history_or = history.get_array("$and").unwrap()[0]
+            .as_document()
+            .unwrap()
+            .get_array("$or")
+            .unwrap();
+        assert_eq!(
+            history_or,
+            &vec![
+                Bson::Document(doc! { "responsibility_actor_ids": "alice" }),
+                Bson::Document(doc! { "completed_by": "alice" }),
+                Bson::Document(doc! { "closed_by": "alice" }),
+            ]
+        );
+    }
+
+    #[test]
+    fn text_query_is_literal_and_composes_with_history_scope() {
+        let filter = WorkItemFilter {
+            statuses: vec![WorkItemStatus::Completed, WorkItemStatus::Closed],
+            history_actor_id: Some("alice".to_string()),
+            query: Some("SO.[1]".to_string()),
+            page: 1,
+            page_size: 20,
+            ..WorkItemFilter::default()
+        }
+        .to_doc();
+
+        let conjunctions = filter.get_array("$and").unwrap();
+        assert_eq!(conjunctions.len(), 2);
+        let query = conjunctions[1].as_document().unwrap().get_array("$or").unwrap();
+        let regex = query[0]
+            .as_document()
+            .unwrap()
+            .get_document("business_object_id")
+            .unwrap()
+            .get_str("$regex")
+            .unwrap();
+        assert_eq!(regex, r"SO\.\[1\]");
+    }
+
+    #[test]
+    fn responsibility_scopes_preserve_role_organization_pairs() {
+        let filter = WorkItemFilter {
+            responsibility_scopes: vec![
+                ("role-sales".to_string(), Some("org-a".to_string())),
+                ("role-procurement".to_string(), Some("org-b".to_string())),
+            ],
+            page: 1,
+            page_size: 20,
+            ..WorkItemFilter::default()
+        }
+        .to_doc();
+
+        let scopes = filter.get_array("$and").unwrap()[0]
+            .as_document()
+            .unwrap()
+            .get_array("$or")
+            .unwrap();
+        assert_eq!(
+            scopes,
+            &vec![
+                Bson::Document(doc! { "owner_role": "role-sales", "owner_organization_id": "org-a" }),
+                Bson::Document(doc! { "owner_role": "role-procurement", "owner_organization_id": "org-b" }),
+            ]
+        );
+    }
+
+    #[test]
+    fn history_scope_unions_actor_and_managed_organizations() {
+        let filter = WorkItemFilter {
+            history_actor_id: Some("alice".to_string()),
+            history_managed_organization_ids: Some(vec!["org-a".to_string()]),
+            page: 1,
+            page_size: 20,
+            ..WorkItemFilter::default()
+        }
+        .to_doc();
+
+        let history = filter.get_array("$and").unwrap()[0]
+            .as_document()
+            .unwrap()
+            .get_array("$or")
+            .unwrap();
+        assert_eq!(history.len(), 4);
+        assert_eq!(
+            history[3],
+            Bson::Document(doc! { "owner_organization_id": { "$in": ["org-a"] } })
+        );
+    }
+
+    #[test]
+    fn object_access_shapes_fail_closed_and_pair_type_with_object() {
+        let denied = WorkItemFilter {
+            object_access_shapes: Some(Vec::new()),
+            page: 1,
+            page_size: 20,
+            ..WorkItemFilter::default()
+        }
+        .to_doc();
+        assert_eq!(
+            denied.get_array("$and").unwrap()[0],
+            Bson::Document(doc! { "id": { "$exists": false } })
+        );
+
+        let allowed = WorkItemFilter {
+            object_access_shapes: Some(vec![(
+                WorkItemType::PurchaseOrderReview,
+                "purchase_order".to_string(),
+            )]),
+            page: 1,
+            page_size: 20,
+            ..WorkItemFilter::default()
+        }
+        .to_doc();
+        assert_eq!(
+            allowed.get_array("$and").unwrap()[0],
+            Bson::Document(doc! { "$or": [{
+                "work_item_type": "PURCHASE_ORDER_REVIEW",
+                "business_object_type": "purchase_order",
+            }] })
+        );
+    }
+
+    #[test]
+    fn start_filter_fixes_version_responsibility_and_pool_shape() {
+        let filter = start_processing_filter("wi-1", 7, "sales", "org-1");
+
+        assert_eq!(filter.get_i64("version").unwrap(), 7);
+        assert_eq!(filter.get_str("status").unwrap(), "OPEN");
+        assert_eq!(filter.get_str("assignment_mode").unwrap(), "POOL");
+        assert_eq!(filter.get_str("owner_role").unwrap(), "sales");
+        assert_eq!(filter.get_str("owner_organization_id").unwrap(), "org-1");
+        assert_eq!(filter.get("owner_user_id"), Some(&Bson::Null));
+    }
+
+    #[test]
+    fn start_pipeline_uses_if_null_and_add() {
+        let pipeline = start_processing_pipeline("alice", Instant::from_unix_secs(123));
+        let set = pipeline[0].get_document("$set").unwrap();
+
+        assert_eq!(set.get_str("owner_user_id").unwrap(), "alice");
+        assert_eq!(
+            set.get_document("responsibility_actor_ids").unwrap(),
+            &doc! {
+                "$cond": [
+                    { "$in": ["alice", "$responsibility_actor_ids"] },
+                    "$responsibility_actor_ids",
+                    { "$concatArrays": ["$responsibility_actor_ids", ["alice"]] },
+                ]
+            }
+        );
+        assert_eq!(set.get_str("assignment_source").unwrap(), "SELF_START");
+        assert_eq!(
+            set.get_document("assigned_at").unwrap(),
+            &doc! { "$ifNull": ["$assigned_at", 123_i64] }
+        );
+        assert_eq!(
+            set.get_document("started_at").unwrap(),
+            &doc! { "$ifNull": ["$started_at", 123_i64] }
+        );
+        assert_eq!(
+            set.get_document("version").unwrap(),
+            &doc! { "$add": ["$version", 1_i64] }
+        );
+    }
+
+    #[test]
+    fn missed_start_distinguishes_idempotency_owner_and_version() {
+        let mut same_actor = pool_item();
+        same_actor.owner_user_id = Some("alice".to_string());
+        assert!(matches!(
+            classify_start_processing_miss(Some(same_actor), 0, "alice"),
+            StartProcessingOutcome::AlreadyOwned(_)
+        ));
+
+        let mut other_actor = pool_item();
+        other_actor.owner_user_id = Some("bob".to_string());
+        assert!(matches!(
+            classify_start_processing_miss(Some(other_actor), 0, "alice"),
+            StartProcessingOutcome::OwnershipConflict(_)
+        ));
+
+        let mut stale = pool_item();
+        stale.base_mut().version = 2;
+        assert!(matches!(
+            classify_start_processing_miss(Some(stale), 1, "alice"),
+            StartProcessingOutcome::VersionConflict(_)
+        ));
+    }
+
+    #[test]
+    fn sort_doc_is_whitelisted() {
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
-        assert_eq!(sort_doc(Some("due_at"), true), doc! { "due_at": 1 });
+        assert_eq!(
+            sort_doc(Some("last_activity_at"), true),
+            doc! { "last_activity_at": 1 }
+        );
         assert_eq!(
             sort_doc(Some("business_object_id"), false),
-            doc! { "created_at": -1 },
-            "白名单外字段回落默认排序"
+            doc! { "created_at": -1 }
         );
     }
 }

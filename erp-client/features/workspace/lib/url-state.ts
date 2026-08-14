@@ -13,11 +13,10 @@ const FAMILY_VALUES = [
     "finance",
     "fulfillment",
     "exception",
-    "procurement",
 ] as const
 
 export type WorkspaceUrlState = {
-    scope: "mine" | "role_pool"
+    scope: "mine" | "team"
     due?: WorkspaceDueFilter
     family?: WorkspaceFamilyFilter
 }
@@ -27,7 +26,7 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
     {
         key: "scope",
         type: "enum",
-        values: ["mine", "role_pool"],
+        values: ["mine", "team"],
         defaultValue: "mine",
     },
     { key: "due", type: "enum", values: DUE_VALUES },
@@ -109,7 +108,7 @@ export function buildGroupAllHref(
 }
 
 /**
- * 主区标题按指标与责任范围出词，杜绝「团队待认领」指标配「待我处理」标题。
+ * 主区标题按指标与责任范围出词，杜绝「团队待处理」指标配「待我处理」标题。
  */
 export function filterSummaryFor(
     key: WorkspaceMetricKey,
@@ -119,7 +118,7 @@ export function filterSummaryFor(
         case "mine":
             return scope === "mine"
                 ? sequentialText.minePending
-                : sequentialText.teamUnclaimed
+                : sequentialText.teamPending
         case "due_today":
             return "今日到期"
         case "overdue":

@@ -89,6 +89,11 @@ export function CardFundsRecords({
                         type="button"
                         variant="secondary"
                         size="sm"
+                        disabled={
+                            !task.workItem.allowedActions.includes(
+                                "REGISTER_RECEIPT",
+                            )
+                        }
                         onClick={() => openAllocation("receipt")}
                     >
                         登记历史回款
@@ -97,6 +102,11 @@ export function CardFundsRecords({
                         type="button"
                         variant="secondary"
                         size="sm"
+                        disabled={
+                            !task.workItem.allowedActions.includes(
+                                "REGISTER_INVOICE",
+                            )
+                        }
                         onClick={() => openAllocation("invoice")}
                     >
                         登记历史发票

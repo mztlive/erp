@@ -670,9 +670,15 @@ export function AcceptanceWorkspace({
         )
     }
 
-    const canPost = view.permissions.allowedActions.includes("POST_ACCEPTANCE")
-    const canSave = view.permissions.allowedActions.includes("SAVE_DRAFT")
+    const acceptanceEntryBlocked = Boolean(view.workItemConfigBlocker)
+    const canPost =
+        !acceptanceEntryBlocked &&
+        view.permissions.allowedActions.includes("POST_ACCEPTANCE")
+    const canSave =
+        !acceptanceEntryBlocked &&
+        view.permissions.allowedActions.includes("SAVE_DRAFT")
     const canCreate =
+        !acceptanceEntryBlocked &&
         view.permissions.allowedActions.includes("CREATE_ACCEPTANCE")
     const postBlocker = view.permissions.actionBlockers.find(
         (b) =>

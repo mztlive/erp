@@ -13,8 +13,9 @@ export type SafetyPauseCause =
 
 type SafetyPauseFollowUpWorkItemRef = {
     workItemId: string
+    taskVersion: string
     workItemType: "BUSINESS_EXCEPTION"
-    businessObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+    businessObjectType: "SUPPLIER_OFFERING"
     businessObjectId: string
     subjectVersion: string
     subjectHash: string
@@ -52,7 +53,7 @@ type SafetyPauseAffectedPublicationView =
 type KnownSafetyPauseOperationBase = {
     operationId: string
     resultStatus: "COMMITTED" | "ALREADY_SAFE"
-    sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+    sourceObjectType: "SUPPLIER_OFFERING"
     sourceObjectId: string
     sourceVersion: string
     subjectHash: string
@@ -86,7 +87,7 @@ export type SystemSafetyPauseOperationView =
           operationId: string
           resultStatus: "UNKNOWN"
           cause: SafetyPauseCause
-          sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+          sourceObjectType: "SUPPLIER_OFFERING"
           sourceObjectId: string
           sourceVersion: string
           subjectHash: string

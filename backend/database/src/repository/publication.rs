@@ -12,14 +12,17 @@
 //! 筛选/行类型定义在本文件，经 `PublicationExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use entities::ids::{SkuId, SourceSystemId};
+use entities::common::time::Instant;
+use entities::ids::{InboxMessageId, IntegrationErrorTaskId, SkuId, SourceSystemId, WorkItemId};
+use entities::integration_ops::ErrorClass;
 use entities::money::Amount;
 use entities::publication::{
     ProductPublication, ProductPublicationDelivery, ProductPublicationRevision, ProductPublicationRevisionId,
-    ProductPublicationRevisionMedia, ProductPublicationStatus, PublicationDeliveryStatus, SaleStatus,
+    ProductPublicationRevisionMedia, ProductPublicationStatus, PublicationDeliveryStatus, SafetyPauseCause,
+    SafetyPauseSourceObjectType, SaleStatus, SystemSafetyPauseOperation,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
@@ -37,6 +40,117 @@ const PRODUCT_PUBLICATION_REVISIONS: &str =
 /// `product_publication_revision_media` 集合名（单一来源：`PublicationExt` 关联常量）。
 const PRODUCT_PUBLICATION_REVISION_MEDIA: &str =
     <mongodb::Database as PublicationExt>::PRODUCT_PUBLICATION_REVISION_MEDIA;
+
+/// 商品发布投递失败或结果未知的原子落库参数。
+#[derive(Debug, Clone, Copy)]
+pub struct PublicationDeliveryFailure<'a> {
+    /// 目标状态。
+    pub status: PublicationDeliveryStatus,
+    /// 错误分类。
+    pub error_class: ErrorClass,
+    /// 稳定错误码。
+    pub error_code: &'a str,
+    /// 可展示的错误摘要。
+    pub error_summary: &'a str,
+    /// 事实发生时间。
+    pub at: Instant,
+}
+
+/// 商品发布投递升级 W29 的原子落库参数。
+#[derive(Debug, Clone, Copy)]
+pub struct PublicationDeliveryEscalation<'a> {
+    /// 原投递错误分类。
+    pub error_class: ErrorClass,
+    /// 原投递稳定错误码。
+    pub error_code: &'a str,
+    /// 原投递错误摘要。
+    pub error_summary: &'a str,
+    /// 正式 W29 错误对象。
+    pub error_task_id: &'a IntegrationErrorTaskId,
+    /// 与错误对象配对的正式待办。
+    pub work_item_id: &'a WorkItemId,
+    /// 升级发生时间。
+    pub at: Instant,
+}
+
+impl<'a> Repository<'a, SystemSafetyPauseOperation> {
+    /// 按可信来源事件身份查找安全暂停操作。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn find_safety_pause_by_event(
+        &self,
+        source_object_type: SafetyPauseSourceObjectType,
+        source_object_id: &str,
+        cause: SafetyPauseCause,
+        source_version: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SystemSafetyPauseOperation>> {
+        self.find_one(
+            doc! {
+                "source_object_type": source_object_type.as_str(),
+                "source_object_id": source_object_id,
+                "cause": cause.as_str(),
+                "source_version": source_version,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 按调用幂等键查找安全暂停操作。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn find_safety_pause_by_idempotency_key(
+        &self,
+        idempotency_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SystemSafetyPauseOperation>> {
+        self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
+            .await
+    }
+
+    /// 判断发布是否存在任一已提交的系统安全暂停证据。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn has_safety_pause_for_publication(
+        &self,
+        publication_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self
+            .find_one(
+                doc! { "affected_publications.publication_id": publication_id },
+                executor,
+            )
+            .await?
+            .is_some())
+    }
+
+    /// 判断来源对象是否已有任一系统安全暂停证据。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn has_safety_pause_for_source(
+        &self,
+        source_object_type: SafetyPauseSourceObjectType,
+        source_object_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self
+            .find_one(
+                doc! {
+                    "source_object_type": source_object_type.as_str(),
+                    "source_object_id": source_object_id,
+                },
+                executor,
+            )
+            .await?
+            .is_some())
+    }
+}
 
 /// 发布列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -310,14 +424,32 @@ pub struct ProductPublicationDeliveryRow {
     pub publication_revision_id: String,
     /// 目标商城。
     pub target_mall_id: String,
+    /// 跨全部尝试不变的消息身份。
+    pub message_key: String,
     /// 投递状态。
     pub delivery_status: PublicationDeliveryStatus,
     /// 发送次数。
     pub attempt_count: u32,
+    /// 最近真实发送时间。
+    pub last_attempt_at: Option<i64>,
+    /// 下次受控处理时间。
+    pub next_attempt_at: Option<i64>,
+    /// 商城确认时间。
+    pub mall_ack_at: Option<i64>,
     /// 商城确认版本。
     pub mall_version: Option<String>,
+    /// 稳定错误分类。
+    pub error_class: Option<ErrorClass>,
     /// 错误码。
     pub error_code: Option<String>,
+    /// 脱敏错误摘要。
+    pub error_summary: Option<String>,
+    /// 原消息信封。
+    pub inbox_message_id: Option<String>,
+    /// W29 错误对象。
+    pub error_task_id: Option<String>,
+    /// W29 正式待办。
+    pub work_item_id: Option<String>,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -434,6 +566,291 @@ impl<'a> Repository<'a, ProductPublicationDelivery> {
         )
         .await
     }
+
+    /// 列出待发送与已到期重试的投递；发送中和结果未知不得被盲目重放。
+    pub async fn list_processable_publication_deliveries(
+        &self,
+        at: Instant,
+        limit: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductPublicationDelivery>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "created_at": 1, "id": 1 })
+            .limit(i64::from(limit))
+            .build();
+        mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                "$or": [
+                    { "delivery_status": PublicationDeliveryStatus::PendingSend.as_str() },
+                    {
+                        "delivery_status": PublicationDeliveryStatus::Retrying.as_str(),
+                        "next_attempt_at": { "$lte": at.unix_secs() },
+                    },
+                ],
+            },
+            options,
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 取得待发送或到期重试投递，并保持原投递与消息身份。
+    pub async fn claim_publication_delivery(
+        &self,
+        id: &str,
+        expected_version: u64,
+        inbox_message_id: &InboxMessageId,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductPublicationDelivery>> {
+        let expected_version = publication_metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            publication_claim_filter(id, expected_version, at),
+            publication_claim_pipeline(inbox_message_id, at),
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 将发送中或待查结果投递落为商城已确认。
+    pub async fn confirm_publication_delivery(
+        &self,
+        id: &str,
+        expected_version: u64,
+        mall_version: &str,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductPublicationDelivery>> {
+        let expected_version = publication_metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            publication_result_filter(id, expected_version),
+            publication_confirm_pipeline(mall_version, at),
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 记录明确失败或结果未知。
+    pub async fn fail_publication_delivery(
+        &self,
+        id: &str,
+        expected_version: u64,
+        failure: PublicationDeliveryFailure<'_>,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductPublicationDelivery>> {
+        let expected_version = publication_metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            publication_result_filter(id, expected_version),
+            publication_fail_pipeline(
+                failure.status,
+                failure.error_class,
+                failure.error_code,
+                failure.error_summary,
+                failure.at,
+            ),
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 安排沿原消息身份重试。
+    pub async fn schedule_publication_retry(
+        &self,
+        id: &str,
+        expected_version: u64,
+        at: Instant,
+        next_attempt_at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductPublicationDelivery>> {
+        let expected_version = publication_metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            publication_retry_filter(id, expected_version),
+            publication_retry_pipeline(at, next_attempt_at),
+            executor,
+        )
+        .await
+    }
+
+    /// 以单文档 CAS 关联 W29 错误对象与正式待办并转人工。
+    pub async fn escalate_publication_delivery(
+        &self,
+        id: &str,
+        expected_version: u64,
+        escalation: PublicationDeliveryEscalation<'_>,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductPublicationDelivery>> {
+        let expected_version = publication_metadata_version(expected_version)?;
+        mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            publication_escalation_filter(id, expected_version),
+            publication_escalation_pipeline(
+                escalation.error_class,
+                escalation.error_code,
+                escalation.error_summary,
+                escalation.error_task_id,
+                escalation.work_item_id,
+                escalation.at,
+            ),
+            executor,
+        )
+        .await
+    }
+}
+
+fn publication_metadata_version(version: u64) -> Result<i64> {
+    i64::try_from(version).map_err(|_| crate::Error::EntityMetadataOutOfRange("version"))
+}
+
+fn publication_claim_filter(id: &str, expected_version: i64, at: Instant) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "$or": [
+            { "delivery_status": PublicationDeliveryStatus::PendingSend.as_str() },
+            {
+                "delivery_status": PublicationDeliveryStatus::Retrying.as_str(),
+                "next_attempt_at": { "$lte": at.unix_secs() },
+            },
+        ],
+    }
+}
+
+fn publication_claim_pipeline(inbox_message_id: &InboxMessageId, at: Instant) -> Vec<Document> {
+    let timestamp = at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "delivery_status": PublicationDeliveryStatus::Sending.as_str(),
+            "attempt_count": { "$add": ["$attempt_count", 1_i64] },
+            "last_attempt_at": timestamp,
+            "next_attempt_at": Bson::Null,
+            "inbox_message_id": { "$ifNull": ["$inbox_message_id", inbox_message_id.to_string()] },
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": timestamp,
+        }
+    }]
+}
+
+fn publication_result_filter(id: &str, expected_version: i64) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "delivery_status": {
+            "$in": [
+                PublicationDeliveryStatus::Sending.as_str(),
+                PublicationDeliveryStatus::ResultUnknown.as_str(),
+                PublicationDeliveryStatus::Failed.as_str(),
+            ]
+        },
+    }
+}
+
+fn publication_confirm_pipeline(mall_version: &str, at: Instant) -> Vec<Document> {
+    let timestamp = at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "delivery_status": PublicationDeliveryStatus::Confirmed.as_str(),
+            "next_attempt_at": Bson::Null,
+            "mall_ack_at": timestamp,
+            "mall_version": mall_version,
+            "error_class": Bson::Null,
+            "error_code": Bson::Null,
+            "error_summary": Bson::Null,
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": timestamp,
+        }
+    }]
+}
+
+fn publication_fail_pipeline(
+    status: PublicationDeliveryStatus,
+    error_class: ErrorClass,
+    error_code: &str,
+    error_summary: &str,
+    at: Instant,
+) -> Vec<Document> {
+    let timestamp = at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "delivery_status": status.as_str(),
+            "next_attempt_at": Bson::Null,
+            "mall_ack_at": Bson::Null,
+            "mall_version": Bson::Null,
+            "error_class": error_class.as_str(),
+            "error_code": error_code,
+            "error_summary": error_summary,
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": timestamp,
+        }
+    }]
+}
+
+fn publication_retry_filter(id: &str, expected_version: i64) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "delivery_status": PublicationDeliveryStatus::Failed.as_str(),
+        "error_class": {
+            "$in": [ErrorClass::TransientFailure.as_str(), ErrorClass::RateLimited.as_str()]
+        },
+    }
+}
+
+fn publication_retry_pipeline(at: Instant, next_attempt_at: Instant) -> Vec<Document> {
+    vec![doc! {
+        "$set": {
+            "delivery_status": PublicationDeliveryStatus::Retrying.as_str(),
+            "next_attempt_at": next_attempt_at.unix_secs(),
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": at.unix_secs(),
+        }
+    }]
+}
+
+fn publication_escalation_filter(id: &str, expected_version: i64) -> Document {
+    doc! {
+        "id": id,
+        "version": expected_version,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "delivery_status": {
+            "$in": [
+                PublicationDeliveryStatus::Sending.as_str(),
+                PublicationDeliveryStatus::ResultUnknown.as_str(),
+                PublicationDeliveryStatus::Failed.as_str(),
+            ]
+        },
+    }
+}
+
+fn publication_escalation_pipeline(
+    error_class: ErrorClass,
+    error_code: &str,
+    error_summary: &str,
+    error_task_id: &IntegrationErrorTaskId,
+    work_item_id: &WorkItemId,
+    at: Instant,
+) -> Vec<Document> {
+    vec![doc! {
+        "$set": {
+            "delivery_status": PublicationDeliveryStatus::Manual.as_str(),
+            "next_attempt_at": Bson::Null,
+            "error_class": error_class.as_str(),
+            "error_code": error_code,
+            "error_summary": error_summary,
+            "error_task_id": error_task_id.to_string(),
+            "work_item_id": work_item_id.to_string(),
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": at.unix_secs(),
+        }
+    }]
 }
 
 /// D26 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
@@ -600,10 +1017,19 @@ fn product_publication_delivery_projection() -> Document {
         "id": 1,
         "publication_revision_id": 1,
         "target_mall_id": 1,
+        "message_key": 1,
         "delivery_status": 1,
         "attempt_count": 1,
+        "last_attempt_at": 1,
+        "next_attempt_at": 1,
+        "mall_ack_at": 1,
         "mall_version": 1,
+        "error_class": 1,
         "error_code": 1,
+        "error_summary": 1,
+        "inbox_message_id": 1,
+        "error_task_id": 1,
+        "work_item_id": 1,
         "version": 1,
         "created_at": 1,
     }
@@ -611,7 +1037,11 @@ fn product_publication_delivery_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, ProductPublicationDeliveryFilter, ProductPublicationFilter, QueryFilter};
+    use super::{
+        publication_claim_filter, publication_retry_pipeline, sort_doc, ProductPublicationDeliveryFilter,
+        ProductPublicationFilter, QueryFilter,
+    };
+    use entities::common::time::Instant;
     use entities::ids::{SkuId, SourceSystemId};
     use entities::publication::{ProductPublicationStatus, PublicationDeliveryStatus};
     use mongodb::bson::doc;
@@ -661,5 +1091,38 @@ mod tests {
             doc! { "created_at": -1 },
             "白名单外字段一律回退默认排序"
         );
+    }
+
+    #[test]
+    fn publication_claim_filter_cas_only_accepts_pending_or_due_retry() {
+        let filter = publication_claim_filter("delivery-1", 3, Instant::from_unix_secs(100));
+        assert_eq!(filter.get_str("id").unwrap(), "delivery-1");
+        assert_eq!(filter.get_i64("version").unwrap(), 3);
+        let choices = filter.get_array("$or").unwrap();
+        assert_eq!(choices.len(), 2);
+        assert_eq!(
+            choices[0]
+                .as_document()
+                .unwrap()
+                .get_str("delivery_status")
+                .unwrap(),
+            "pending_send"
+        );
+        assert_eq!(
+            choices[1]
+                .as_document()
+                .unwrap()
+                .get_str("delivery_status")
+                .unwrap(),
+            "retrying"
+        );
+    }
+
+    #[test]
+    fn publication_retry_pipeline_separates_schedule_from_update_time() {
+        let pipeline = publication_retry_pipeline(Instant::from_unix_secs(100), Instant::from_unix_secs(160));
+        let set = pipeline[0].get_document("$set").unwrap();
+        assert_eq!(set.get_i64("updated_at").unwrap(), 100);
+        assert_eq!(set.get_i64("next_attempt_at").unwrap(), 160);
     }
 }

@@ -2,7 +2,9 @@ use entities::common::time::Instant;
 use entities::ids::SourceSystemId;
 use entities::mall_sync::{
     MallSalesSyncCursor, MallSalesSyncJob, MallSalesSyncJobStatus, MallSalesSyncJobType,
+    MallSyncTriggerSource,
 };
+use entities::source_registry::MallSyncStage;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -14,17 +16,86 @@ use super::common::{normalize_sort, PageParams};
 /// 同步作业列表允许的排序字段白名单。
 pub(crate) const MALL_SALES_SYNC_JOB_SORT_FIELDS: &[&str] = &["created_at", "started_at"];
 
-/// 同步作业创建请求（数据模型 §6.13；区间必须成对，实体层校验）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct CreateMallSalesSyncJobRequest {
-    /// 来源商城。
-    pub source_system_id: SourceSystemId,
-    /// 作业类型。
-    pub job_type: MallSalesSyncJobType,
-    /// 本次查询时间边界起（单号补拉等无区间任务为空）。
-    pub range_start: Option<Instant>,
-    /// 本次查询时间边界止（与 `range_start` 必须成对出现）。
-    pub range_end: Option<Instant>,
+/// 每日核对的固定来源边界。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReconciliationBoundary {
+    /// 来源清单时点。
+    pub as_of: Instant,
+    /// 来源清单摘要。
+    pub source_digest: Option<String>,
+}
+
+/// W17 同步触发强类型命令。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "mode", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TriggerMallSyncCommand {
+    /// 由系统水位与当前安全时间计算范围的增量任务。
+    Incremental {
+        source_system_id: SourceSystemId,
+        execution_stage: MallSyncStage,
+        trigger_source: MallSyncTriggerSource,
+        reason: Option<String>,
+        base_cursor_version: Option<u64>,
+        idempotency_key: String,
+    },
+    /// 沿原来源销售单身份执行的按单补拉。
+    SingleOrder {
+        source_system_id: SourceSystemId,
+        execution_stage: MallSyncStage,
+        trigger_source: MallSyncTriggerSource,
+        external_order_no: String,
+        reason: String,
+        idempotency_key: String,
+    },
+    /// 沿原失败作业创建的新重试尝试。
+    RetryFailedJob {
+        source_system_id: SourceSystemId,
+        execution_stage: MallSyncStage,
+        failed_job_id: String,
+        reason: String,
+        base_cursor_version: Option<u64>,
+        idempotency_key: String,
+    },
+    /// 按固定清单边界执行核对。
+    Reconciliation {
+        source_system_id: SourceSystemId,
+        execution_stage: MallSyncStage,
+        reason: String,
+        reconciliation_boundary: ReconciliationBoundary,
+        idempotency_key: String,
+    },
+}
+
+impl TriggerMallSyncCommand {
+    /// 返回命令指定的来源商城。
+    pub fn source_system_id(&self) -> &SourceSystemId {
+        match self {
+            Self::Incremental { source_system_id, .. }
+            | Self::SingleOrder { source_system_id, .. }
+            | Self::RetryFailedJob { source_system_id, .. }
+            | Self::Reconciliation { source_system_id, .. } => source_system_id,
+        }
+    }
+
+    /// 返回调用方冻结的执行阶段。
+    pub fn execution_stage(&self) -> MallSyncStage {
+        match self {
+            Self::Incremental { execution_stage, .. }
+            | Self::SingleOrder { execution_stage, .. }
+            | Self::RetryFailedJob { execution_stage, .. }
+            | Self::Reconciliation { execution_stage, .. } => *execution_stage,
+        }
+    }
+
+    /// 返回命令幂等键。
+    pub fn idempotency_key(&self) -> &str {
+        match self {
+            Self::Incremental { idempotency_key, .. }
+            | Self::SingleOrder { idempotency_key, .. }
+            | Self::RetryFailedJob { idempotency_key, .. }
+            | Self::Reconciliation { idempotency_key, .. } => idempotency_key,
+        }
+    }
 }
 
 /// 同步作业完成请求（终态结果；`Success` 要求错误计数为零，实体层校验）。
@@ -59,6 +130,16 @@ pub struct MallSalesSyncJobView {
     pub range_start: Option<Instant>,
     /// 本次查询时间边界止。
     pub range_end: Option<Instant>,
+    /// 按单补拉的原来源销售单号。
+    pub external_order_no: Option<String>,
+    /// 触发来源。
+    pub trigger_source: MallSyncTriggerSource,
+    /// 人工触发理由。
+    pub trigger_reason: Option<String>,
+    /// 人工触发人。
+    pub triggered_by: Option<String>,
+    /// 失败重试沿用的原作业。
+    pub source_job_id: Option<String>,
     /// 任务开始时间。
     pub started_at: Instant,
     /// 任务结束时间。
@@ -92,6 +173,11 @@ impl From<MallSalesSyncJob> for MallSalesSyncJobView {
             job_type: job.job_type,
             range_start: job.range_start,
             range_end: job.range_end,
+            external_order_no: job.external_order_no,
+            trigger_source: job.trigger_source,
+            trigger_reason: job.trigger_reason,
+            triggered_by: job.triggered_by,
+            source_job_id: job.source_job_id.map(|id| id.to_string()),
             started_at: job.started_at,
             finished_at: job.finished_at,
             status: job.status,
@@ -212,7 +298,7 @@ impl From<MallSalesSyncCursor> for MallSalesSyncCursorView {
 
 #[cfg(test)]
 mod tests {
-    use super::MallSalesSyncJobListParams;
+    use super::{MallSalesSyncJobListParams, TriggerMallSyncCommand};
     use crate::mall_sync::dto::common::SortDir;
     use validator::Validate;
 
@@ -250,5 +336,21 @@ mod tests {
             sort_dir: None,
         };
         assert!(params.validate().is_err());
+    }
+
+    #[test]
+    fn single_order_command_carries_source_identity_and_stage() {
+        let command: TriggerMallSyncCommand = serde_json::from_value(serde_json::json!({
+            "mode": "SINGLE_ORDER",
+            "source_system_id": "mall-1",
+            "execution_stage": "FIRST_PHASE_MALL_OWNED",
+            "trigger_source": "MANUAL",
+            "external_order_no": "MALL-001",
+            "reason": "核对差异后补拉",
+            "idempotency_key": "request-1"
+        }))
+        .unwrap();
+        assert_eq!(command.source_system_id().as_ref(), "mall-1");
+        assert_eq!(command.idempotency_key(), "request-1");
     }
 }

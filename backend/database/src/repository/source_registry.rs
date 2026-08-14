@@ -8,9 +8,12 @@
 //! 筛选/行类型定义在本文件，经 `SourceRegistryExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use std::collections::HashMap;
+
 use entities::source_registry::{
-    ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType, MappingStatus,
-    SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType,
+    ExternalIdKey, ExternalIdentityMap, ExternalIdentityTarget, ExternalObjectType, MallSyncStage,
+    MappingStatus, RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType,
+    TargetStatus,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -41,6 +44,8 @@ pub struct SourceSystemRow {
     pub system_type: SourceSystemType,
     /// 启停状态。
     pub status: SourceSystemStatus,
+    /// 商城同步执行阶段；仅 `MALL` 来源存在。
+    pub mall_sync_stage: Option<MallSyncStage>,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -289,6 +294,70 @@ impl<'a> SourceRegistryRepository<'a> {
         Self { db }
     }
 
+    /// 反向解析指定商城下某个 ERP 规范对象的当前有效外部身份。
+    ///
+    /// 只接受 `PRIMARY + ACTIVE` 且有效期覆盖 `as_of_unix_secs` 的目标谱系，随后
+    /// 关联同一来源系统、同一对象类型且状态为 `MAPPED` 的映射。返回全部命中，
+    /// 由 Service 强制“恰好一条”；这样零条与多条不会被仓储静默猜测。
+    ///
+    /// # 参数
+    /// * `source_system_id` - 目标商城来源系统
+    /// * `object_type` - 客户或卡券类目
+    /// * `internal_object_id` - ERP 规范对象 ID
+    /// * `as_of_unix_secs` - 提交时服务端 Unix 秒
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 按目标谱系逐条返回匹配的外部 ID；重复活动目标不会被去重。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn active_external_identities_for_internal_object(
+        &self,
+        source_system_id: &SourceSystemId,
+        object_type: ExternalObjectType,
+        internal_object_id: &str,
+        as_of_unix_secs: i64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let targets = mongo_ops::find_many(
+            &self
+                .db
+                .collection::<ExternalIdentityTarget>(EXTERNAL_IDENTITY_TARGETS),
+            active_identity_target_filter(object_type, internal_object_id, as_of_unix_secs),
+            FindOptions::builder().sort(doc! { "id": 1 }).build(),
+            executor,
+        )
+        .await?;
+        if targets.is_empty() {
+            return Ok(Vec::new());
+        }
+        let map_ids = targets
+            .iter()
+            .map(|target| target.external_identity_map_id.to_string())
+            .collect::<Vec<_>>();
+        let maps = mongo_ops::find_many(
+            &self.db.collection::<ExternalIdentityMap>(EXTERNAL_IDENTITY_MAPS),
+            active_identity_map_filter(source_system_id, object_type, map_ids),
+            FindOptions::builder().sort(doc! { "id": 1 }).build(),
+            executor,
+        )
+        .await?;
+        let external_ids = maps
+            .into_iter()
+            .map(|mapping| (mapping.base.id, mapping.external_id))
+            .collect::<HashMap<_, _>>();
+
+        Ok(targets
+            .into_iter()
+            .filter_map(|target| {
+                external_ids
+                    .get(target.external_identity_map_id.as_ref())
+                    .cloned()
+            })
+            .collect())
+    }
+
     /// 建立外部身份映射（跨集合多步骤写入）。
     ///
     /// 依次写入 `external_identity_maps` 与 `external_identity_targets`，
@@ -329,6 +398,42 @@ impl<'a> SourceRegistryRepository<'a> {
     }
 }
 
+/// 构造商城外部身份反向解析的活动目标过滤条件。
+fn active_identity_target_filter(
+    object_type: ExternalObjectType,
+    internal_object_id: &str,
+    as_of_unix_secs: i64,
+) -> Document {
+    doc! {
+        "internal_object_type": object_type.as_str(),
+        "internal_object_id": internal_object_id,
+        "relation_role": RelationRole::Primary.as_str(),
+        "status": TargetStatus::Active.as_str(),
+        "valid_from": { "$lte": as_of_unix_secs },
+        "$or": [
+            { "valid_to": null },
+            { "valid_to": { "$exists": false } },
+            { "valid_to": { "$gt": as_of_unix_secs } },
+        ],
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 构造商城外部身份反向解析的已确认映射过滤条件。
+fn active_identity_map_filter(
+    source_system_id: &SourceSystemId,
+    object_type: ExternalObjectType,
+    map_ids: Vec<String>,
+) -> Document {
+    doc! {
+        "id": { "$in": map_ids },
+        "source_system_id": source_system_id.to_string(),
+        "object_type": object_type.as_str(),
+        "mapping_status": MappingStatus::Mapped.as_str(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
 /// 构建排序文档。
 ///
 /// # 参数
@@ -353,6 +458,7 @@ fn source_system_projection() -> Document {
         "name": 1,
         "system_type": 1,
         "status": 1,
+        "mall_sync_stage": 1,
         "version": 1,
         "created_at": 1,
     }
@@ -377,7 +483,10 @@ fn external_identity_map_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, QueryFilter, SourceSystemFilter};
+    use super::{
+        active_identity_map_filter, active_identity_target_filter, sort_doc, QueryFilter, SourceSystemFilter,
+    };
+    use entities::source_registry::{ExternalObjectType, SourceSystemId};
     use mongodb::bson::doc;
 
     #[test]
@@ -403,5 +512,29 @@ mod tests {
     fn sort_doc_defaults_to_created_at_descending() {
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
         assert_eq!(sort_doc(Some("code"), true), doc! { "code": 1 });
+    }
+
+    #[test]
+    fn active_identity_filters_require_primary_active_mapped_lineage() {
+        let target = active_identity_target_filter(ExternalObjectType::Customer, "customer-1", 100);
+        assert_eq!(target.get_str("internal_object_type").unwrap(), "customer");
+        assert_eq!(target.get_str("internal_object_id").unwrap(), "customer-1");
+        assert_eq!(target.get_str("relation_role").unwrap(), "PRIMARY");
+        assert_eq!(target.get_str("status").unwrap(), "active");
+        assert_eq!(
+            target.get_document("valid_from").unwrap(),
+            &doc! { "$lte": 100_i64 }
+        );
+        assert!(target.get_array("$or").is_ok());
+
+        let maps = active_identity_map_filter(
+            &SourceSystemId::new("mall-1"),
+            ExternalObjectType::Customer,
+            vec!["map-1".to_string()],
+        );
+        assert_eq!(maps.get_str("source_system_id").unwrap(), "mall-1");
+        assert_eq!(maps.get_str("object_type").unwrap(), "customer");
+        assert_eq!(maps.get_str("mapping_status").unwrap(), "mapped");
+        assert_eq!(maps.get_document("id").unwrap(), &doc! { "$in": ["map-1"] });
     }
 }

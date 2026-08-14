@@ -520,7 +520,7 @@ impl SalesOrder {
     pub fn submit_for_review(&mut self, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.commercial_status, CommercialStatus::PendingReview)?;
         ensure_transition(self.review_status, ReviewStatus::NotSubmitted)?;
-        self.commercial_status = CommercialStatus::PendingReview;
+        self.transition_commercial_status(CommercialStatus::PendingReview)?;
         self.review_status = match self.business_type {
             BusinessType::GoodsService => ReviewStatus::PendingProcurementConfirmation,
             BusinessType::Voucher => ReviewStatus::PendingSalesLeader,
@@ -540,8 +540,7 @@ impl SalesOrder {
     /// # 错误
     /// 非审核中态时返回 [`Error::InvalidStateTransition`]。
     pub fn return_to_draft(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        ensure_transition(self.commercial_status, CommercialStatus::Draft)?;
-        self.commercial_status = CommercialStatus::Draft;
+        self.transition_commercial_status(CommercialStatus::Draft)?;
         self.review_status = ReviewStatus::NotSubmitted;
         self.stable.touch(updated_by);
         Ok(())
@@ -564,7 +563,7 @@ impl SalesOrder {
     pub fn approve(&mut self, effective_at: Instant, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.commercial_status, CommercialStatus::Effective)?;
         ensure_transition(self.review_status, ReviewStatus::Approved)?;
-        self.commercial_status = CommercialStatus::Effective;
+        self.transition_commercial_status(CommercialStatus::Effective)?;
         self.review_status = ReviewStatus::Approved;
         self.effective_at = Some(effective_at);
         self.stable.touch(updated_by);
@@ -582,9 +581,20 @@ impl SalesOrder {
     /// # 错误
     /// 非草稿态时返回 [`Error::InvalidStateTransition`]。
     pub fn void(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        ensure_transition(self.commercial_status, CommercialStatus::Voided)?;
-        self.commercial_status = CommercialStatus::Voided;
+        self.transition_commercial_status(CommercialStatus::Voided)?;
         self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 推进唯一商业主状态并保持 `StableBase` 的通用状态镜像一致。
+    ///
+    /// 业务查询和索引只使用 `commercial_status`；`StableBase.status` 仅是实体基元
+    /// 随带的同类型镜像，任何状态迁移都必须在本方法内原子同步，禁止形成两个
+    /// 不同的销售主状态。
+    fn transition_commercial_status(&mut self, to: CommercialStatus) -> Result<()> {
+        ensure_transition(self.commercial_status, to)?;
+        self.commercial_status = to;
+        self.stable.status = to;
         Ok(())
     }
 
@@ -759,6 +769,7 @@ mod tests {
         assert_eq!(order.business_type, BusinessType::GoodsService);
         assert_eq!(order.origin_system, OriginSystem::Erp);
         assert_eq!(order.commercial_status, CommercialStatus::Draft);
+        assert_eq!(order.stable.status, order.commercial_status);
         assert_eq!(order.review_status, ReviewStatus::NotSubmitted);
         assert_eq!(order.fulfillment_progress, FulfillmentProgress::NotStarted);
         assert_eq!(order.collection_progress, CollectionProgress::NotCollected);
@@ -835,6 +846,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(order.commercial_status, CommercialStatus::Effective);
+        assert_eq!(order.stable.status, order.commercial_status);
         assert!(order.update(SalesOrderUpdate::default(), "admin-2").is_err());
     }
 
@@ -883,6 +895,7 @@ mod tests {
             .and_then(|()| rejected.return_to_draft("procurement"))
             .unwrap();
         assert_eq!(rejected.commercial_status, CommercialStatus::Draft);
+        assert_eq!(rejected.stable.status, rejected.commercial_status);
         assert_eq!(rejected.review_status, ReviewStatus::NotSubmitted);
     }
 
@@ -916,6 +929,7 @@ mod tests {
         order.return_to_draft("admin-2").unwrap();
         order.void("admin-2").unwrap();
         assert_eq!(order.commercial_status, CommercialStatus::Voided);
+        assert_eq!(order.stable.status, order.commercial_status);
     }
 
     #[test]

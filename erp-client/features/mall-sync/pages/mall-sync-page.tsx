@@ -10,7 +10,6 @@ import {
     RefreshCwIcon,
     SearchIcon,
     ShieldAlertIcon,
-    TriangleAlertIcon,
 } from "lucide-react"
 
 import {
@@ -26,6 +25,7 @@ import {
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
+import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -48,19 +48,18 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { MallSyncViewName } from "@/features/mall-sync/types"
 import {
-    DEFER_REASON_OPTIONS,
     DIRECTION_LABEL,
+    SOURCE_FIX_REASON_OPTIONS,
     STAGE_LABEL,
     VIEW_LABEL,
 } from "@/features/mall-sync/types"
 import {
-    useClaimMappingMutation,
     useConfirmMappingMutation,
-    useDeferMappingMutation,
     useMallSyncPageQuery,
     useReapplyMutation,
     useResolveUnknownReapplyMutation,
     useRetryJobMutation,
+    useRequestSourceFixMutation,
     useTriggerIncrementalMutation,
     useTriggerSingleOrderMutation,
 } from "@/features/mall-sync/hooks/queries"
@@ -70,14 +69,16 @@ import { MallSyncReadViews } from "@/features/mall-sync/components/mall-sync-rea
 import {
     ALL_OBJECT_PARAMS,
     confirmSchema,
-    deferSchema,
     incrementalSchema,
     parseView,
     pullSchema,
-    type SessionLease,
+    releaseSchema,
+    sourceFixSchema,
     VIEW_OBJECT_PARAMS,
     VIEWS,
 } from "@/features/mall-sync/lib/presentation"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import { SourceSystemsCard } from "@/features/mall-sync/components/source-systems-card"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -109,19 +110,20 @@ export function MallSyncPage() {
         pageIndex: 0,
         pageSize: 20,
     })
-    const [sessionLease, setSessionLease] = React.useState<SessionLease | null>(
-        null,
-    )
     const [selectedCandidateId, setSelectedCandidateId] = React.useState<
         string | null
     >(null)
     const [result, setResult] = React.useState<ResultState>(null)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
-    const [deferOpen, setDeferOpen] = React.useState(false)
+    const [sourceFixOpen, setSourceFixOpen] = React.useState(false)
+    const [releaseOpen, setReleaseOpen] = React.useState(false)
     const [pullOpen, setPullOpen] = React.useState(false)
     const [incrementalOpen, setIncrementalOpen] = React.useState(false)
     const [retryConfirmOpen, setRetryConfirmOpen] = React.useState(false)
     const [actionError, setActionError] = React.useState<string | null>(null)
+    const commandIdentities = React.useRef(
+        new Map<string, { idempotencyKey: string; operationId: string }>(),
+    )
 
     const queryInput = React.useMemo(
         () => ({
@@ -133,6 +135,7 @@ export function MallSyncPage() {
             workItemId,
             differenceId,
             queueContextId,
+            owner: "all" as const,
         }),
         [
             view,
@@ -147,23 +150,22 @@ export function MallSyncPage() {
     )
 
     const pageQuery = useMallSyncPageQuery(queryInput)
+    const profileQuery = useAccountProfileQuery()
     const triggerInc = useTriggerIncrementalMutation()
     const triggerSo = useTriggerSingleOrderMutation()
     const retryJob = useRetryJobMutation()
-    const claimMutation = useClaimMappingMutation()
     const confirmMutation = useConfirmMappingMutation()
-    const deferMutation = useDeferMappingMutation()
+    const sourceFixMutation = useRequestSourceFixMutation()
+    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const reapplyMutation = useReapplyMutation()
     const resolveReapply = useResolveUnknownReapplyMutation()
 
     const data = pageQuery.data
     const context = data?.context
     const ownership = context?.ownership
-    const policyState = context?.manualGovernancePolicy
-    const policyMissing = policyState?.state === "MISSING"
-    const stage = ownership?.stage ?? "FIRST_PHASE_MALL_OWNED"
+    const stage = ownership?.stage ?? "ARCHIVED"
     const firstPhase = stage === "FIRST_PHASE_MALL_OWNED"
-    const sealed = stage === "SECOND_PHASE_ERP_OWNED"
+    const sealed = stage === "ARCHIVED"
 
     const mappingTask = data?.selectedMappingTask
     const mappingIndex = React.useMemo(() => {
@@ -232,18 +234,10 @@ export function MallSyncPage() {
         }
     }, [sealed, view, jobId, snapshotId, mappingTaskId])
 
-    // 切换映射任务时重置候选与租约绑定
+    // 切换映射任务时重置候选与动作错误；责任始终从服务端重取。
     React.useEffect(() => {
         setSelectedCandidateId(null)
         setActionError(null)
-        if (
-            sessionLease &&
-            mappingTask?.ownerRoutingState === "CONFIGURED" &&
-            sessionLease.workItemId !== mappingTask.workItem.workItemId
-        ) {
-            setSessionLease(null)
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mappingTask?.mappingTaskId])
 
     function patchUrl(
@@ -297,18 +291,31 @@ export function MallSyncPage() {
         },
     })
 
-    const deferForm = useAppForm({
+    const sourceFixForm = useAppForm({
         defaultValues: {
-            reasonCode: "WAITING_SOURCE" as
-                | "WAITING_SOURCE"
-                | "NEED_CLARIFICATION"
-                | "WAITING_MASTER_DATA"
+            reasonCode: "SOURCE_FIELD_MISSING" as
+                | "SOURCE_FIELD_MISSING"
+                | "SOURCE_FIELD_CONFLICT"
+                | "SOURCE_EVIDENCE_REQUIRED"
                 | "OTHER",
             note: "",
+            requestedEvidence: "",
         },
-        validators: { onChange: deferSchema },
+        validators: { onChange: sourceFixSchema },
         onSubmit: async ({ value }) => {
-            await handleDefer(value.reasonCode, value.note)
+            await handleRequestSourceFix(
+                value.reasonCode,
+                value.note,
+                value.requestedEvidence,
+            )
+        },
+    })
+
+    const releaseForm = useAppForm({
+        defaultValues: { reason: "" },
+        validators: { onChange: releaseSchema },
+        onSubmit: async ({ value }) => {
+            await handleReleaseToTeam(value.reason)
         },
     })
 
@@ -316,13 +323,18 @@ export function MallSyncPage() {
         defaultValues: { externalOrderNo: "", reason: "" },
         validators: { onChange: pullSchema },
         onSubmit: async ({ value }) => {
+            const identity = commandIdentity(
+                "single-order",
+                value.externalOrderNo.trim(),
+            )
             const res = await triggerSo.mutateAsync({
                 externalOrderNo: value.externalOrderNo,
                 reason: value.reason,
-                policyConfigured: !policyMissing,
                 stage,
+                idempotencyKey: identity.idempotencyKey,
             })
             if (res.status === "succeeded") {
+                commandIdentities.current.delete(identity.key)
                 setResult({
                     status: "succeeded",
                     title: "按单补拉已受理",
@@ -341,12 +353,14 @@ export function MallSyncPage() {
         defaultValues: { reason: "" },
         validators: { onChange: incrementalSchema },
         onSubmit: async ({ value }) => {
+            const identity = commandIdentity("incremental", "manual")
             const res = await triggerInc.mutateAsync({
                 reason: value.reason,
-                policyConfigured: !policyMissing,
                 stage,
+                idempotencyKey: identity.idempotencyKey,
             })
             if (res.status === "succeeded") {
+                commandIdentities.current.delete(identity.key)
                 setResult({
                     status: "succeeded",
                     title: "立即增量已受理",
@@ -361,25 +375,45 @@ export function MallSyncPage() {
         },
     })
 
-    async function handleClaim() {
+    function commandIdentity(kind: string, objectId: string) {
+        const key = `${kind}:${objectId}`
+        const existing = commandIdentities.current.get(key)
+        if (existing) return { key, ...existing }
+        const identity = {
+            idempotencyKey: `w17:${kind}:${objectId}:${crypto.randomUUID()}`,
+            operationId: `w17:${kind}:${crypto.randomUUID()}`,
+        }
+        commandIdentities.current.set(key, identity)
+        return { key, ...identity }
+    }
+
+    async function handleStartProcessing() {
         if (mappingTask?.ownerRoutingState !== "CONFIGURED") return
         setActionError(null)
+        const identity = commandIdentity(
+            "start-processing",
+            mappingTask.workItem.workItemId,
+        )
         try {
-            const lease = await claimMutation.mutateAsync({
+            await responsibilityMutation.mutateAsync({
+                kind: "START_PROCESSING",
                 workItemId: mappingTask.workItem.workItemId,
-                subjectVersion: mappingTask.workItem.subjectVersion,
+                expectedTaskVersion: mappingTask.workItem.taskVersion,
+                idempotencyKey: identity.idempotencyKey,
             })
-            setSessionLease({
-                workItemId: lease.workItemId,
-                subjectVersion: lease.subjectVersion,
-            })
+            commandIdentities.current.delete(identity.key)
+            await pageQuery.refetch()
         } catch (e) {
-            setActionError(getErrorMessage(e, "领取失败"))
+            setActionError(getErrorMessage(e, "开始处理失败"))
         }
     }
 
     async function handleConfirm() {
-        if (mappingTask?.ownerRoutingState !== "CONFIGURED" || !sessionLease)
+        if (
+            mappingTask?.ownerRoutingState !== "CONFIGURED" ||
+            responsibilityStatus !== "assigned_to_me" ||
+            !firstPhase
+        )
             return
         const candidate = mappingTask.candidateTargets.find(
             (c) => c.objectId === selectedCandidateId,
@@ -391,18 +425,29 @@ export function MallSyncPage() {
         const evidenceNote = String(
             confirmForm.getFieldValue("evidenceNote") ?? "",
         ).trim()
+        const identity = commandIdentity(
+            "confirm-mapping",
+            mappingTask.mappingTaskId,
+        )
         const res = await confirmMutation.mutateAsync({
             mappingTaskId: mappingTask.mappingTaskId,
+            sourceSnapshotId: mappingTask.sourceSnapshotId,
+            externalIdentityMapId: mappingTask.externalIdentityMapId,
             workItemId: mappingTask.workItem.workItemId,
+            expectedTaskVersion: mappingTask.workItem.taskVersion,
             expectedSubjectVersion: mappingTask.workItem.subjectVersion,
-            expectedLockVersion: mappingTask.lockVersion,
+            expectedMappingTaskVersion: mappingTask.lockVersion,
+            mappingOperationId: identity.operationId,
+            targetObjectType: candidate.objectType,
             targetObjectId: candidate.objectId,
-            targetLabel: `${candidate.stableNo} ${candidate.label}`,
+            relationRole: mappingTask.mappingType,
             evidenceNote,
-            stage,
+            executionStage: "FIRST_PHASE_MALL_OWNED",
+            idempotencyKey: identity.idempotencyKey,
         })
         setConfirmOpen(false)
         if (res.status === "succeeded") {
+            commandIdentities.current.delete(identity.key)
             setResult({
                 status: "succeeded",
                 title: "映射已确认",
@@ -414,9 +459,7 @@ export function MallSyncPage() {
                     },
                 ],
             })
-            setSessionLease(null)
             void pageQuery.refetch()
-            // 与「先跳过」一致：自动定位到下一项
             const tasks = data?.mappingTasks ?? []
             const idx = tasks.findIndex(
                 (t) => t.mappingTaskId === mappingTask.mappingTaskId,
@@ -437,56 +480,94 @@ export function MallSyncPage() {
         }
     }
 
-    async function handleDefer(reasonCode: string, note?: string) {
-        if (mappingTask?.ownerRoutingState !== "CONFIGURED" || !sessionLease) {
-            setActionError("请先领取任务")
+    async function handleRequestSourceFix(
+        reasonCode: string,
+        reasonText: string,
+        requestedEvidence: string,
+    ) {
+        if (
+            mappingTask?.ownerRoutingState !== "CONFIGURED" ||
+            responsibilityStatus !== "assigned_to_me"
+        ) {
+            setActionError("当前责任不允许提交来源修复说明")
             return
         }
-        const res = await deferMutation.mutateAsync({
+        const identity = commandIdentity(
+            "request-source-fix",
+            mappingTask.mappingTaskId,
+        )
+        const res = await sourceFixMutation.mutateAsync({
             mappingTaskId: mappingTask.mappingTaskId,
+            sourceSnapshotId: mappingTask.sourceSnapshotId,
             workItemId: mappingTask.workItem.workItemId,
+            expectedTaskVersion: mappingTask.workItem.taskVersion,
             expectedSubjectVersion: mappingTask.workItem.subjectVersion,
+            expectedMappingTaskVersion: mappingTask.lockVersion,
+            requestOperationId: identity.operationId,
             reasonCode,
-            note,
-            queueContextId,
+            reasonText,
+            requestedEvidence: requestedEvidence
+                .split(/[，,\n]/)
+                .map((value) => value.trim())
+                .filter(Boolean),
+            idempotencyKey: identity.idempotencyKey,
         })
-        setDeferOpen(false)
+        setSourceFixOpen(false)
         if (res.status === "succeeded") {
+            commandIdentities.current.delete(identity.key)
             setResult({
                 status: "succeeded",
-                title: "已跳过（任务仍在待处理列表）",
+                title: "来源修复说明已记录",
                 description: res.message,
+                reference: res.mappingEvidenceEntryId,
             })
-            setSessionLease(null)
-            // 移动到下一项（仅浏览游标）
-            const tasks = data?.mappingTasks ?? []
-            const idx = tasks.findIndex(
-                (t) => t.mappingTaskId === mappingTask.mappingTaskId,
-            )
-            const next = tasks[idx + 1]
-            if (next) {
-                patchUrl({
-                    view: "mapping",
-                    mappingTaskId: next.mappingTaskId,
-                    workItemId:
-                        next.ownerRoutingState === "CONFIGURED"
-                            ? next.workItem.workItemId
-                            : null,
-                })
-            }
+            void pageQuery.refetch()
         } else {
             setActionError(res.message)
+        }
+    }
+
+    async function handleReleaseToTeam(reason: string) {
+        if (mappingTask?.ownerRoutingState !== "CONFIGURED") return
+        const identity = commandIdentity(
+            "release-to-team",
+            mappingTask.workItem.workItemId,
+        )
+        try {
+            await responsibilityMutation.mutateAsync({
+                kind: "RELEASE_TO_TEAM",
+                workItemId: mappingTask.workItem.workItemId,
+                expectedTaskVersion: mappingTask.workItem.taskVersion,
+                reason,
+                idempotencyKey: identity.idempotencyKey,
+            })
+            commandIdentities.current.delete(identity.key)
+            setReleaseOpen(false)
+            setResult({
+                status: "succeeded",
+                title: "已退回团队",
+                description:
+                    "当前映射仍待处理，个人责任已释放；可继续浏览下一项。",
+            })
+            await pageQuery.refetch()
+        } catch (error) {
+            setActionError(getErrorMessage(error, "退回团队失败"))
         }
     }
 
     async function handleReapply() {
-        if (!mappingTask) return
+        if (!mappingTask || !firstPhase) return
+        const identity = commandIdentity("reapply", mappingTask.mappingTaskId)
         const res = await reapplyMutation.mutateAsync({
             mappingTaskId: mappingTask.mappingTaskId,
             sourceSnapshotId: mappingTask.sourceSnapshotId,
-            stage,
+            expectedMappingVersion: mappingTask.lockVersion,
+            operationId: identity.operationId,
+            executionStage: "FIRST_PHASE_MALL_OWNED",
+            idempotencyKey: identity.idempotencyKey,
         })
         if (res.status === "succeeded") {
+            commandIdentities.current.delete(identity.key)
             setResult({
                 status: "succeeded",
                 title: "重新归集成功",
@@ -511,11 +592,16 @@ export function MallSyncPage() {
 
     async function handleRetryJob() {
         if (!data?.selectedJob) return
+        const identity = commandIdentity("retry-job", data.selectedJob.jobId)
         const res = await retryJob.mutateAsync({
             jobId: data.selectedJob.jobId,
             reason: "重试未成功部分的分页",
             stage,
+            idempotencyKey: identity.idempotencyKey,
         })
+        if (res.status === "succeeded") {
+            commandIdentities.current.delete(identity.key)
+        }
         setRetryConfirmOpen(false)
         if (res.status === "succeeded") {
             setResult({
@@ -556,32 +642,35 @@ export function MallSyncPage() {
         }
     }
 
-    const canManualSync =
-        firstPhase && !policyMissing && !context?.sourceUnavailable
+    const canManualSync = firstPhase && !context?.sourceUnavailable
     const manualSyncDisabledReason = !firstPhase
         ? "已封存：无第一期写动作"
-        : policyMissing
-          ? "人工治理策略未配置：立即增量/按单补拉已禁用"
-          : context?.sourceUnavailable
-            ? "来源不可用时不新建推进任务（可重试既有失败）"
-            : null
+        : context?.sourceUnavailable
+          ? "来源不可用时不新建推进任务（可重试既有失败）"
+          : null
 
     const { diffColumns, jobColumns, mappingColumns, snapshotColumns } =
         useMallSyncColumns({ patchUrl, searchParams })
-    const leaseStatus: "active" | "unclaimed" | "lost" | "released" =
-        mappingTask?.ownerRoutingState !== "CONFIGURED"
-            ? "released"
-            : mappingTask.mappingTaskStatus === "RESOLVED"
-              ? "released"
-              : sessionLease?.workItemId === mappingTask.workItem.workItemId
-                ? "active"
-                : "unclaimed"
+    const responsibilityStatus: ResponsibilityStatus = (() => {
+        if (mappingTask?.ownerRoutingState !== "CONFIGURED") return "blocked"
+        const workItem = mappingTask.workItem
+        if (workItem.status === "COMPLETED") return "completed"
+        if (workItem.status === "CLOSED") return "closed"
+        if (workItem.processingState === "APPROVAL_BLOCKED") return "blocked"
+        if (workItem.assignmentMode === "POOL" && !workItem.ownerUser) {
+            return "pool_available"
+        }
+        return workItem.ownerUser?.id === profileQuery.data?.userid
+            ? "assigned_to_me"
+            : "assigned_to_other"
+    })()
 
     const canConfirmMapping =
+        firstPhase &&
         mappingTask?.ownerRoutingState === "CONFIGURED" &&
         mappingTask.mappingTaskStatus === "PENDING" &&
         mappingTask.allowedActions.includes("CONFIRM_TARGET") &&
-        leaseStatus === "active" &&
+        responsibilityStatus === "assigned_to_me" &&
         !!selectedCandidateId &&
         !mappingTask.hasConflict
 
@@ -615,12 +704,31 @@ export function MallSyncPage() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={leaseStatus !== "active"}
-                        onClick={() => setDeferOpen(true)}
+                        disabled={
+                            responsibilityStatus !== "assigned_to_me" ||
+                            !mappingTask.allowedActions.includes(
+                                "REQUEST_SOURCE_FIX",
+                            )
+                        }
+                        onClick={() => setSourceFixOpen(true)}
                     >
                         <PauseIcon className="size-4" />
-                        先跳过
+                        请求来源修复
                     </Button>
+                    {mappingTask.workItem.assignmentMode === "POOL" &&
+                    mappingTask.workItem.allowedActions.includes(
+                        "RELEASE_TO_TEAM",
+                    ) ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={responsibilityStatus !== "assigned_to_me"}
+                            onClick={() => setReleaseOpen(true)}
+                        >
+                            退回团队
+                        </Button>
+                    ) : null}
                 </div>
                 {!selectedCandidateId ? (
                     <p className="text-xs text-muted-foreground">
@@ -630,9 +738,9 @@ export function MallSyncPage() {
                     <p className="text-xs text-muted-foreground">
                         冲突未解决前确认禁用。
                     </p>
-                ) : leaseStatus !== "active" ? (
+                ) : responsibilityStatus !== "assigned_to_me" ? (
                     <p className="text-xs text-muted-foreground">
-                        请先领取任务后确认。
+                        当前责任人开始处理后才可确认。
                     </p>
                 ) : null}
             </form>
@@ -832,38 +940,13 @@ export function MallSyncPage() {
                 </div>
             )}
 
-            {policyMissing ? (
-                <Alert variant="warning">
-                    <TriangleAlertIcon />
-                    <AlertTitle>人工同步治理策略未配置</AlertTitle>
-                    <AlertDescription className="space-y-1">
-                        <p>
-                            「立即增量」「按单补拉」已禁用（界面与系统均拒绝）。
-                        </p>
-                        <p className="text-muted-foreground">
-                            {context?.scheduledIncrementalNote}
-                        </p>
-                    </AlertDescription>
-                </Alert>
-            ) : (
-                <Alert>
-                    <AlertTitle>人工同步治理</AlertTitle>
-                    <AlertDescription>
-                        策略已配置 · 版本{" "}
-                        {policyState?.state === "CONFIGURED"
-                            ? policyState.policyVersion
-                            : "—"}{" "}
-                        · 模式{" "}
-                        {policyState?.state === "CONFIGURED"
-                            ? policyState.executionMode ===
-                              "SINGLE_OPERATOR_REASON"
-                                ? "单人执行"
-                                : "双人复核"
-                            : "—"}
-                        。定时增量仍按调度独立运行。
-                    </AlertDescription>
-                </Alert>
-            )}
+            <Alert>
+                <AlertTitle>人工同步审计边界</AlertTitle>
+                <AlertDescription>
+                    授权管理员可直接提交带理由的立即增量与按单补拉；服务端重读执行阶段、来源身份与水位，封存后拒绝。
+                    {context?.scheduledIncrementalNote}
+                </AlertDescription>
+            </Alert>
 
             {context?.sourceUnavailable ? (
                 <Alert variant="destructive">
@@ -1021,7 +1104,6 @@ export function MallSyncPage() {
                 onRetryJob={() => setRetryConfirmOpen(true)}
                 patchUrl={patchUrl}
                 firstPhase={firstPhase}
-                policyMissing={policyMissing}
                 sealed={sealed}
                 onPullDifference={(externalOrderNo) => {
                     setPullOpen(true)
@@ -1038,8 +1120,9 @@ export function MallSyncPage() {
                     onSelectCandidate={setSelectedCandidateId}
                     confirmFormContent={mappingConfirmForm}
                     mappingIndex={mappingIndex}
-                    leaseStatus={leaseStatus}
+                    responsibilityStatus={responsibilityStatus}
                     canConfirmMapping={canConfirmMapping}
+                    responsibilityPending={responsibilityMutation.isPending}
                     reapplyPending={reapplyMutation.isPending}
                     onReapply={handleReapply}
                     onResolveUnknownReapply={handleResolveUnknownReapply}
@@ -1049,7 +1132,7 @@ export function MallSyncPage() {
                         )
                     }
                     onConfirm={() => confirmForm.handleSubmit()}
-                    onClaim={handleClaim}
+                    onStartProcessing={handleStartProcessing}
                 />
             ) : null}
             {/* 立即增量 */}
@@ -1061,15 +1144,7 @@ export function MallSyncPage() {
                             不修改来源；范围由系统按当前同步进度计算。禁止页面改写同步进度。
                         </DialogDescription>
                     </DialogHeader>
-                    {policyMissing ? (
-                        <Alert variant="destructive">
-                            <AlertTitle>人工治理策略未配置</AlertTitle>
-                            <AlertDescription>
-                                策略未配置，动作禁用。定时增量说明仍可读：
-                                {context?.scheduledIncrementalNote}
-                            </AlertDescription>
-                        </Alert>
-                    ) : (
+                    {firstPhase ? (
                         <form
                             className="space-y-3"
                             onSubmit={(e) => {
@@ -1109,6 +1184,13 @@ export function MallSyncPage() {
                                 </incrementalForm.AppForm>
                             </DialogFooter>
                         </form>
+                    ) : (
+                        <Alert variant="destructive">
+                            <AlertTitle>阶段不可用</AlertTitle>
+                            <AlertDescription>
+                                {manualSyncDisabledReason}
+                            </AlertDescription>
+                        </Alert>
                     )}
                 </DialogContent>
             </Dialog>
@@ -1119,16 +1201,12 @@ export function MallSyncPage() {
                     <DialogHeader>
                         <DialogTitle>按单号补拉</DialogTitle>
                         <DialogDescription>
-                            使用原来源身份；不创建第二张销售单。仅第一阶段（商城开单）且策略已配置时可用。
+                            使用原来源身份；不创建第二张销售单。仅第一阶段（商城开单）可用。
                         </DialogDescription>
                     </DialogHeader>
-                    {policyMissing || !firstPhase ? (
+                    {!firstPhase ? (
                         <Alert variant="destructive">
-                            <AlertTitle>
-                                {policyMissing
-                                    ? "人工治理策略未配置"
-                                    : "阶段不可用"}
-                            </AlertTitle>
+                            <AlertTitle>阶段不可用</AlertTitle>
                             <AlertDescription>
                                 {manualSyncDisabledReason}
                             </AlertDescription>
@@ -1173,23 +1251,22 @@ export function MallSyncPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* 暂挂 */}
-            <Dialog open={deferOpen} onOpenChange={setDeferOpen}>
+            <Dialog open={sourceFixOpen} onOpenChange={setSourceFixOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>先跳过当前映射</DialogTitle>
+                        <DialogTitle>请求来源修复</DialogTitle>
                         <DialogDescription>
-                            只记录结构化原因与当前处理位置；不会暂停或完成任务。
+                            只向当前映射追加说明和证据要求；任务保持待处理，不创建新的协同任务。
                         </DialogDescription>
                     </DialogHeader>
                     <form
                         className="space-y-3"
                         onSubmit={(e) => {
                             e.preventDefault()
-                            void deferForm.handleSubmit()
+                            void sourceFixForm.handleSubmit()
                         }}
                     >
-                        <deferForm.AppField
+                        <sourceFixForm.AppField
                             name="reasonCode"
                             children={(field) => (
                                 <div className="space-y-1.5">
@@ -1200,13 +1277,13 @@ export function MallSyncPage() {
                                             if (v)
                                                 field.handleChange(
                                                     v as
-                                                        | "WAITING_SOURCE"
-                                                        | "NEED_CLARIFICATION"
-                                                        | "WAITING_MASTER_DATA"
+                                                        | "SOURCE_FIELD_MISSING"
+                                                        | "SOURCE_FIELD_CONFLICT"
+                                                        | "SOURCE_EVIDENCE_REQUIRED"
                                                         | "OTHER",
                                                 )
                                         }}
-                                        options={DEFER_REASON_OPTIONS.map(
+                                        options={SOURCE_FIX_REASON_OPTIONS.map(
                                             (o) => ({
                                                 value: o.value,
                                                 label: o.label,
@@ -1217,10 +1294,19 @@ export function MallSyncPage() {
                                 </div>
                             )}
                         />
-                        <deferForm.AppField
+                        <sourceFixForm.AppField
                             name="note"
                             children={(field) => (
-                                <field.TextareaField label="备注（可选）" />
+                                <field.TextareaField label="修复说明" />
+                            )}
+                        />
+                        <sourceFixForm.AppField
+                            name="requestedEvidence"
+                            children={(field) => (
+                                <field.TextareaField
+                                    label="需要补充的来源证据"
+                                    placeholder="多项可用逗号或换行分隔"
+                                />
                             )}
                         />
                         <DialogFooter>
@@ -1231,9 +1317,46 @@ export function MallSyncPage() {
                             >
                                 取消
                             </DialogClose>
-                            <deferForm.AppForm>
-                                <deferForm.SubmitButton label="确认跳过" />
-                            </deferForm.AppForm>
+                            <sourceFixForm.AppForm>
+                                <sourceFixForm.SubmitButton label="记录修复要求" />
+                            </sourceFixForm.AppForm>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={releaseOpen} onOpenChange={setReleaseOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>退回团队</DialogTitle>
+                        <DialogDescription>
+                            清除当前个人责任，原映射任务保持待处理，不改变映射状态。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form
+                        className="space-y-3"
+                        onSubmit={(event) => {
+                            event.preventDefault()
+                            void releaseForm.handleSubmit()
+                        }}
+                    >
+                        <releaseForm.AppField
+                            name="reason"
+                            children={(field) => (
+                                <field.TextareaField label="退回原因" />
+                            )}
+                        />
+                        <DialogFooter>
+                            <DialogClose
+                                render={
+                                    <Button type="button" variant="outline" />
+                                }
+                            >
+                                取消
+                            </DialogClose>
+                            <releaseForm.AppForm>
+                                <releaseForm.SubmitButton label="确认退回团队" />
+                            </releaseForm.AppForm>
                         </DialogFooter>
                     </form>
                 </DialogContent>

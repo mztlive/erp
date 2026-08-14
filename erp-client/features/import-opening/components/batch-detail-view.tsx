@@ -27,6 +27,7 @@ import {
     AuditSection,
     ConfirmSection,
     FilesSection,
+    ImportExecutionActions,
     OverviewSection,
     ProgressSection,
     ResultSection,
@@ -111,7 +112,12 @@ export function BatchDetailView({
     patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
     replaceUrl: (next: ImportOpeningUrlState) => void
 }) {
-    const detailQuery = useImportBatchDetailQuery(batchId)
+    const detailQuery = useImportBatchDetailQuery({
+        batchId,
+        workItemId: urlState.workItemId,
+        confirmationScope: urlState.confirmationScope,
+        queueContextId: urlState.queueContextId,
+    })
     const issueQuery = useImportIssuesQuery(
         {
             batchId,
@@ -167,6 +173,9 @@ export function BatchDetailView({
                                     ...urlState,
                                     batchId: undefined,
                                     section: "overview",
+                                    workItemId: undefined,
+                                    confirmationScope: undefined,
+                                    queueContextId: undefined,
                                 })
                             }
                         >
@@ -225,6 +234,9 @@ export function BatchDetailView({
                                 issueCode: undefined,
                                 issueObjectType: undefined,
                                 rowStatus: undefined,
+                                workItemId: undefined,
+                                confirmationScope: undefined,
+                                queueContextId: undefined,
                             })
                         }
                     >
@@ -387,6 +399,13 @@ export function BatchDetailView({
 
             {section === "audit" ? <AuditSection batch={batch} /> : null}
 
+            <ImportExecutionActions
+                batch={batch}
+                onGoSection={(nextSection) =>
+                    patchUrl({ section: nextSection })
+                }
+            />
+
             {/* 生产应用门禁：仅提交应用前阶段展示 */}
             {batch.stage !== "RESULT" && batch.stage !== "APPLY" ? (
                 <Card size="sm" className={surfacePanelClassName}>
@@ -419,7 +438,7 @@ export function BatchDetailView({
                         />
                         <GateRow
                             ok={batch.productionGates.workItemTypeRegistered}
-                            label="导入确认任务类型已登记"
+                            label="导入确认任务与专用提交命令已接线"
                         />
                         {applyBlocked.length > 0 ? (
                             <FormalActionResult

@@ -22,6 +22,7 @@ const DOMAIN_MODULES: &[&str] = &[
     "source_registry",
     "document_registry",
     "work_item",
+    "approval_instance",
     "bulk_job",
     "file_asset",
     "access_control",

@@ -1,5 +1,6 @@
 pub mod access_control;
 mod account_support;
+pub mod approval;
 pub mod audit;
 pub mod auth;
 pub mod bulk_job;

@@ -22,7 +22,7 @@ function FulfillmentFallback() {
 
 /**
  * SPA 壳：URL 查询由客户端 useSearchParams 读取并恢复
- * lane / type / scope / currentWorkItemId / queueContextId / salesOrderId /
+ * lane / type / currentOperationId / salesOrderId /
  * purchaseOrderId / warehouseId / returnTo / from / autoNext。
  * lane=warehouse → 收货与发货；lane=procurement → 交付与代发。
  * 业务数据不在服务端 fetch。

@@ -358,9 +358,8 @@ impl IntegrationErrorTask {
     /// - 迁移到已解决：必须提供非「关闭」的解决方式与终态证据（取得可验证终态，
     ///   或形成经复核的取消/退款/冲正/补偿事实并完成对账后才能解决；对账完整性
     ///   校验依赖跨聚合查询，属 P3 条目 §8.4）；
-    /// - 迁移到已关闭：必须使用「关闭」解决方式并提供替代任务或终态证据；结果未知
-    ///   任务不得以通用「关闭」退出（应查询原请求后解决；资金未闭环与补偿未完成
-    ///   校验依赖跨聚合查询，属 P3 条目 §8.4）；
+    /// - 迁移到已关闭：必须使用「关闭」解决方式并提供替代任务或误派证据；
+    ///   W02 受控关闭入口负责校验替代任务、对象类别与管理范围；
     /// - 非终态迁移不允许携带解决信息。
     ///
     /// # 参数
@@ -373,8 +372,7 @@ impl IntegrationErrorTask {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 迁移不在邻接矩阵中，或终态迁移缺少解决方式/证据、结果未知任务以通用「关闭」
-    /// 退出、非终态迁移携带解决信息时返回错误。
+    /// 迁移不在邻接矩阵中，或终态迁移缺少解决方式/证据、非终态迁移携带解决信息时返回错误。
     pub fn transition(
         &mut self,
         to: ErrorTaskStatus,
@@ -465,7 +463,7 @@ impl IntegrationErrorTask {
     /// * `at` - 完成时间
     ///
     /// # 错误
-    /// 解决方式不是「关闭」、证据为空或超长、错误分类为结果未知时返回错误。
+    /// 解决方式不是「关闭」或证据为空、超长时返回错误。
     fn apply_close(
         &mut self,
         resolution_type: Option<ResolutionType>,
@@ -474,11 +472,6 @@ impl IntegrationErrorTask {
     ) -> Result<()> {
         if !matches!(resolution_type, Some(ResolutionType::Close)) {
             return Err(Error::from("关闭任务必须使用“关闭”解决方式"));
-        }
-        if self.error_class == ErrorClass::ResultUnknown {
-            return Err(Error::from(
-                "结果未知任务不得以通用“关闭”退出，应查询原请求后解决",
-            ));
         }
         let resolution = match resolution {
             Some(resolution) => resolution,
@@ -747,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    fn close_requires_evidence_and_rejects_result_unknown() {
+    fn close_requires_evidence_and_accepts_controlled_result_unknown_evidence() {
         let mut created = task();
         created
             .transition(
@@ -782,14 +775,15 @@ mod tests {
             .is_err());
 
         let mut result_unknown = task_with_class(ErrorClass::ResultUnknown);
-        assert!(result_unknown
+        result_unknown
             .transition(
                 ErrorTaskStatus::Closed,
                 Some(ResolutionType::Close),
                 Some("替代任务".to_string()),
                 Instant::from_unix_secs(NOW),
             )
-            .is_err());
+            .unwrap();
+        assert_eq!(result_unknown.status, ErrorTaskStatus::Closed);
     }
 
     #[test]

@@ -29,6 +29,7 @@
 pub mod delivery;
 pub mod product_publication;
 pub mod revision;
+pub mod safety_pause;
 
 pub use delivery::{
     ProductPublicationDelivery, ProductPublicationDeliveryData, ProductPublicationDeliveryUpdate,
@@ -40,6 +41,11 @@ pub use product_publication::{
 pub use revision::{
     MediaRole, ProductCapability, ProductPublicationRevision, ProductPublicationRevisionData,
     ProductPublicationRevisionMedia, ProductPublicationRevisionMediaData, SaleStatus,
+};
+pub use safety_pause::{
+    SafetyPauseAffectedPublication, SafetyPauseBlocker, SafetyPauseBlockerCode, SafetyPauseCause,
+    SafetyPauseFollowUp, SafetyPauseSourceObjectType, SafetyPauseWorkItemRef, SystemSafetyPauseOperation,
+    SystemSafetyPauseOperationData,
 };
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。

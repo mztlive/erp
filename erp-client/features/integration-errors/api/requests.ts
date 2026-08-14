@@ -5,17 +5,19 @@
  */
 
 import { apiGet, apiPost, type Page } from "@/lib/api"
+import {
+    listWorkItems,
+    mapWorkItemDto,
+    type WorkItemProjection,
+} from "@/features/work-items"
 import type {
-    ClaimResult,
     DirectReconciliationInput,
-    IntegrationCloseInput,
     IntegrationFormalResult,
     IntegrationQueueView,
     IntegrationResolutionItemView,
     IntegrationResolutionQuery,
     IntegrationResolveInput,
     IntegrationTaskActionInput,
-    IntegrationTransferInput,
 } from "../types"
 import { ENV_LABEL, ERROR_CLASS_LABEL, MODE_LABEL, VIEW_LABEL } from "../types"
 import {
@@ -25,14 +27,64 @@ import {
     errorClassToBackend,
     type BackendDifference,
     type BackendErrorTask,
-    type BackendReplayResult,
 } from "./mappers"
+import {
+    mapAllowedIntegrationActions,
+    toDirectReconciliationWire,
+    toTaskActionWire,
+    toTaskCompletionWire,
+} from "./wire"
+
+function workItemObjectKey(type: string, id: string): string {
+    return `${type.trim().toUpperCase()}:${id}`
+}
+
+async function fetchW29WorkItems(
+    owner: IntegrationResolutionQuery["owner"],
+    history = false,
+): Promise<Map<string, WorkItemProjection>> {
+    const scope = history
+        ? "history"
+        : owner === "team"
+          ? "team"
+          : owner === "assigned"
+            ? "managed"
+            : "mine"
+    const page = await listWorkItems({
+        scope,
+        timezone:
+            Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
+        page: 1,
+        pageSize: 100,
+    })
+    const byObject = new Map<string, WorkItemProjection>()
+    for (const dto of page.items) {
+        const item = mapWorkItemDto(dto)
+        const objectType = item.businessObjectType.trim().toUpperCase()
+        if (
+            item.destinationWorkspaceId !== "W29" ||
+            (item.workItemType !== "INTEGRATION_RESULT_UNKNOWN" &&
+                item.workItemType !== "BUSINESS_EXCEPTION") ||
+            (objectType !== "INTEGRATION_ERROR_TASK" &&
+                objectType !== "RECONCILIATION_DIFFERENCE")
+        ) {
+            continue
+        }
+        byObject.set(workItemObjectKey(objectType, item.businessObjectId), item)
+    }
+    return byObject
+}
 
 export async function fetchIntegrationQueue(
     query: IntegrationResolutionQuery,
 ): Promise<IntegrationQueueView> {
     const pageSize = 50
     const items: IntegrationResolutionItemView[] = []
+
+    const workItems = await fetchW29WorkItems(
+        query.owner,
+        query.view === "resolved",
+    )
 
     if (query.view !== "reconciliation") {
         const status =
@@ -57,7 +109,14 @@ export async function fetchIntegrationQueue(
             },
         )
         for (const t of tasks.items ?? []) {
-            items.push(mapErrorTask(t))
+            items.push(
+                mapErrorTask(
+                    t,
+                    workItems.get(
+                        workItemObjectKey("INTEGRATION_ERROR_TASK", t.id),
+                    ),
+                ),
+            )
         }
 
         // Also fetch pending if view is mine/all
@@ -78,7 +137,19 @@ export async function fetchIntegrationQueue(
             )
             const seen = new Set(items.map((i) => i.identity.id))
             for (const t of more.items ?? []) {
-                if (!seen.has(t.id)) items.push(mapErrorTask(t))
+                if (!seen.has(t.id)) {
+                    items.push(
+                        mapErrorTask(
+                            t,
+                            workItems.get(
+                                workItemObjectKey(
+                                    "INTEGRATION_ERROR_TASK",
+                                    t.id,
+                                ),
+                            ),
+                        ),
+                    )
+                }
             }
         }
     }
@@ -103,7 +174,17 @@ export async function fetchIntegrationQueue(
                 },
             )
             for (const d of diffs.items ?? []) {
-                items.push(mapDifference(d))
+                items.push(
+                    mapDifference(
+                        d,
+                        workItems.get(
+                            workItemObjectKey(
+                                "RECONCILIATION_DIFFERENCE",
+                                d.id,
+                            ),
+                        ),
+                    ),
+                )
             }
         }
     }
@@ -136,9 +217,7 @@ export async function fetchIntegrationQueue(
     let resolvedEntry: IntegrationQueueView["resolvedEntry"]
     if (query.resolveWorkItemId) {
         const hit = items.find(
-            (i) =>
-                i.workItem?.workItemId === query.resolveWorkItemId ||
-                i.identity.id === query.resolveWorkItemId,
+            (i) => i.workItem?.workItemId === query.resolveWorkItemId,
         )
         if (hit) {
             resolvedEntry = {
@@ -179,238 +258,129 @@ export async function fetchIntegrationQueue(
 export async function fetchIntegrationItem(input: {
     itemType: "ERROR_TASK" | "RECONCILIATION_DIFFERENCE"
     id: string
-}): Promise<IntegrationResolutionItemView | null> {
-    try {
-        if (input.itemType === "ERROR_TASK") {
-            const task = await apiGet<BackendErrorTask>(
-                `/admin/integration/error-tasks/${encodeURIComponent(input.id)}`,
-            )
-            return mapErrorTask(task)
-        }
-        const diff = await apiGet<BackendDifference>(
-            `/admin/integration/differences/${encodeURIComponent(input.id)}`,
+}): Promise<IntegrationResolutionItemView> {
+    const [mine, team, history] = await Promise.all([
+        fetchW29WorkItems("me"),
+        fetchW29WorkItems("team"),
+        fetchW29WorkItems("me", true),
+    ])
+    const workItems = new Map([...mine, ...team, ...history])
+    if (input.itemType === "ERROR_TASK") {
+        const task = await apiGet<BackendErrorTask>(
+            `/admin/integration/error-tasks/${encodeURIComponent(input.id)}`,
         )
-        return mapDifference(diff)
-    } catch (err) {
-        const status =
-            err && typeof err === "object" && "status" in err
-                ? (err as { status?: number }).status
-                : undefined
-        if (status === 404) return null
-        throw err
+        return mapErrorTask(
+            task,
+            workItems.get(
+                workItemObjectKey("INTEGRATION_ERROR_TASK", input.id),
+            ),
+        )
     }
-}
-
-export async function claimIntegrationTask(input: {
-    workItemId: string
-    subjectVersion?: string
-}): Promise<ClaimResult> {
-    const version = Number(input.subjectVersion) || 1
-    await apiPost(
-        `/admin/work-items/${encodeURIComponent(input.workItemId)}/claim`,
-        { version },
+    const diff = await apiGet<BackendDifference>(
+        `/admin/integration/differences/${encodeURIComponent(input.id)}`,
     )
-    return { workItemId: input.workItemId }
+    return mapDifference(
+        diff,
+        workItems.get(workItemObjectKey("RECONCILIATION_DIFFERENCE", input.id)),
+    )
 }
 
 export async function applyIntegrationTaskAction(
     input: IntegrationTaskActionInput,
 ): Promise<IntegrationFormalResult> {
-    const version = Number(input.expectedWorkItemVersion) || 1
-
-    if (input.kind === "QUERY_ORIGINAL_RESULT") {
-        const outcome = "no_result_confirmed"
-        await apiPost(
-            `/admin/integration/error-tasks/${encodeURIComponent(input.itemId)}/query`,
-            {
-                version,
-                outcome,
-                comment: input.comment,
-            },
-        )
-        return {
-            status: "succeeded",
-            title: "查询原结果：明确无结果",
-            description:
-                "已确认无结果；可按原任务号开放重新提交（若服务端允许）。",
-            reference: input.operationId,
-            outcome: "NO_RESULT_CONFIRMED",
-            workItemStatus: "IN_PROGRESS",
-            stayOnItem: true,
-            terminal: false,
-        }
-    }
-
-    if (input.kind === "REPLAY_ORIGINAL") {
-        const result = await apiPost<BackendReplayResult>(
-            `/admin/integration/error-tasks/${encodeURIComponent(input.itemId)}/replay`,
-            {
-                version,
-                comment: input.comment,
-            },
-        )
-        return {
-            status: "succeeded",
-            title: "重新提交已受理",
-            description:
-                "系统已按原任务号重新提交。任务仍在处理中，需处理完成后才能关闭。",
-            reference: input.operationId,
-            outcome: "REPLAY_ACCEPTED",
-            workItemStatus: "IN_PROGRESS",
-            stayOnItem: true,
-            terminal: false,
-            facts: [
-                {
-                    label: "原任务号",
-                    value: result.original_action_idempotency_key_summary,
-                },
-                { label: "手动指定原任务号", value: "否" },
-                { label: "任务状态", value: "处理中" },
-            ],
-        }
-    }
-
-    if (input.kind === "DEFER" || input.kind === "SKIP") {
-        await apiPost(
-            `/admin/integration/error-tasks/${encodeURIComponent(input.itemId)}/hold`,
-            {
-                version,
-                kind: input.kind === "DEFER" ? "defer" : "skip",
-                reason_code: input.reasonCode,
-                comment: input.comment,
-            },
-        )
-        return {
-            status: "succeeded",
-            title:
-                input.kind === "DEFER" ? "已跳过 · 保留在队列" : "已跳过当前项",
-            description:
-                "任务仍在待处理队列，未完成。本次处理已结束；可稍后继续。",
-            reference: input.operationId,
-            outcome: input.kind === "DEFER" ? "DEFERRED" : "SKIPPED",
-            workItemStatus: "PENDING",
-            stayOnItem: input.kind === "DEFER",
-            terminal: false,
-        }
-    }
-
-    if (input.kind === "ADD_EVIDENCE" || input.kind === "LINK_COMPENSATION") {
-        return {
-            status: "succeeded",
-            title:
-                input.kind === "LINK_COMPENSATION"
-                    ? "已关联补偿证据"
-                    : "已追加证据",
-            description: "证据记录由服务端策略校验；任务仍在待处理列表。",
-            reference: input.operationId,
+    const result = await apiPost<{
+        work_item_id: string
+        work_item_status: "OPEN"
+        evidence: {
+            operation_id: string
             outcome:
-                input.kind === "LINK_COMPENSATION"
-                    ? "EVIDENCE_LINKED"
-                    : "EVIDENCE_ADDED",
-            workItemStatus: "IN_PROGRESS",
-            stayOnItem: true,
-            terminal: false,
+                | "TERMINAL_EVIDENCE_FOUND"
+                | "NO_RESULT_CONFIRMED"
+                | "RESULT_UNKNOWN"
+                | "REPLAY_ACCEPTED"
+                | "REATTRIBUTED"
+                | "EVIDENCE_LINKED"
+                | "EVIDENCE_ADDED"
+            business_result_reference?: string | null
+            evidence_reference?: string | null
         }
+        next_allowed_actions: string[]
+    }>("/admin/integration/task-actions", toTaskActionWire(input))
+    const titleByOutcome: Record<typeof result.evidence.outcome, string> = {
+        TERMINAL_EVIDENCE_FOUND: "已取得可验证结果",
+        NO_RESULT_CONFIRMED: "已确认原操作无结果",
+        RESULT_UNKNOWN: "结果仍需核实",
+        REPLAY_ACCEPTED: "重新提交已受理",
+        REATTRIBUTED: "重新归集已记录",
+        EVIDENCE_LINKED: "补偿证据已关联",
+        EVIDENCE_ADDED: "证据已补充",
     }
-
-    if (input.kind === "REATTRIBUTE") {
-        return {
-            status: "blocked",
-            title: "重新归集未交付",
-            description: "后端尚未提供独立的重新归集接口。",
-            stayOnItem: true,
-        }
-    }
-
     return {
-        status: "blocked",
-        title: "未实现的动作",
-        description: input.kind,
+        status:
+            result.evidence.outcome === "RESULT_UNKNOWN"
+                ? "unknown"
+                : "succeeded",
+        title: titleByOutcome[result.evidence.outcome],
+        description:
+            "本次处理记录已追加；当前任务仍为待处理，取得完成凭证后需单独确认解决。",
+        reference: result.evidence.operation_id,
+        outcome: result.evidence.outcome,
+        nextAllowedActions: mapAllowedIntegrationActions(
+            result.next_allowed_actions,
+            {
+                hasWorkItem: true,
+                hasResolutionPolicy: true,
+                directConclusions: [],
+            },
+        ),
+        workItemStatus: result.work_item_status,
         stayOnItem: true,
+        terminal: false,
+        facts: [
+            ...(result.evidence.business_result_reference
+                ? [
+                      {
+                          label: "业务结果",
+                          value: result.evidence.business_result_reference,
+                      },
+                  ]
+                : []),
+            ...(result.evidence.evidence_reference
+                ? [
+                      {
+                          label: "证据记录",
+                          value: result.evidence.evidence_reference,
+                      },
+                  ]
+                : []),
+        ],
     }
 }
 
 export async function resolveIntegrationTask(
     input: IntegrationResolveInput,
 ): Promise<IntegrationFormalResult> {
-    const version = Number(input.expectedWorkItemVersion) || 1
-    await apiPost(
-        `/admin/integration/error-tasks/${encodeURIComponent(input.itemId)}/resolve`,
-        {
-            version,
-            resolution_type: "query_confirm",
-            resolution:
-                input.comment ||
-                `policy=${input.evidencePolicyId}@${input.evidencePolicyVersion}; evidence=${input.evidenceRefs.length}`,
-        },
-    )
+    const result = await apiPost<{
+        work_item_id: string
+        work_item_status: "COMPLETED"
+        operation_id: string
+        resolution_record_id: string
+        terminal_evidence_reference: string
+    }>("/admin/integration/task-completions", toTaskCompletionWire(input))
     return {
         status: "succeeded",
         title: "已标记解决",
         description: "处理已完成，可进入下一项。",
-        reference: input.operationId,
+        reference: result.resolution_record_id,
         outcome: "RESOLVED",
-        workItemStatus: "COMPLETED",
-        stayOnItem: false,
-        terminal: true,
-    }
-}
-
-export async function closeIntegrationTask(
-    input: IntegrationCloseInput,
-): Promise<IntegrationFormalResult> {
-    const version = Number(input.expectedWorkItemVersion) || 1
-    await apiPost(
-        `/admin/integration/error-tasks/${encodeURIComponent(input.itemId)}/close`,
-        {
-            version,
-            reason:
-                input.kind === "CLOSE_DUPLICATE" ? "duplicate" : "misrouted",
-            resolution: input.comment || input.reasonCode,
-            replacement_task_id: input.replacementWorkItemId,
-        },
-    )
-    return {
-        status: "succeeded",
-        title:
-            input.kind === "CLOSE_DUPLICATE" ? "已关闭重复任务" : "已关闭误派",
-        description: "仅关闭任务本身；不写业务解决结论。",
-        reference: input.operationId,
-        outcome:
-            input.kind === "CLOSE_DUPLICATE"
-                ? "CLOSED_DUPLICATE"
-                : "CLOSED_MISROUTED",
-        workItemStatus: "CLOSED",
-        stayOnItem: false,
-        terminal: true,
-        replacementWorkItemId: input.replacementWorkItemId,
-    }
-}
-
-export async function transferIntegrationTask(
-    input: IntegrationTransferInput,
-): Promise<IntegrationFormalResult> {
-    const version = Number(input.expectedWorkItemVersion) || 1
-    await apiPost(
-        `/admin/integration/error-tasks/${encodeURIComponent(input.itemId)}/transfer`,
-        {
-            version,
-            owner_role: input.targetRole,
-            owner_user_id: input.targetUserId,
-        },
-    )
-    return {
-        status: "succeeded",
-        title: "已转交",
-        description: "任务已转交，仅处理人变化。转交不是解决。",
-        reference: input.operationId,
-        outcome: "TRANSFERRED",
-        workItemStatus: "IN_PROGRESS",
+        workItemStatus: result.work_item_status,
         stayOnItem: false,
         terminal: true,
         facts: [
-            { label: "目标角色", value: input.targetRole },
-            { label: "原任务状态", value: "处理中（已转交）" },
+            {
+                label: "完成凭证",
+                value: result.terminal_evidence_reference,
+            },
         ],
     }
 }
@@ -418,62 +388,49 @@ export async function transferIntegrationTask(
 export async function applyDirectReconciliation(
     input: DirectReconciliationInput,
 ): Promise<IntegrationFormalResult> {
-    const version = Number(input.expectedDifferenceVersion) || 0
-
-    if (input.decision.kind === "NON_TERMINAL_ACTION") {
-        await apiPost(
-            `/admin/integration/differences/${encodeURIComponent(input.differenceId)}/process`,
-            {
-                version,
-                action:
-                    input.decision.action === "ADD_EVIDENCE"
-                        ? "add_evidence"
-                        : input.decision.action === "QUERY_ORIGINAL_RESULT"
-                          ? "processing"
-                          : "add_evidence",
-                evidence_reference: input.decision.evidenceRefs?.[0]?.recordId,
-                comment: input.decision.comment,
-            },
-        )
-        return {
-            status: "succeeded",
-            title: "已记录处理动作",
-            description: "差异处理记录已追加，未终结。",
-            reference: input.operationId,
-            stayOnItem: true,
-            terminal: false,
-        }
-    }
-
-    await apiPost(
-        `/admin/integration/differences/${encodeURIComponent(input.differenceId)}/resolve`,
-        {
-            version,
-            conclusion:
-                input.decision.conclusion === "CONFIRM_NO_ERROR"
-                    ? "confirm_no_error"
-                    : "confirm_valid_difference",
-            reason_code: "BUSINESS_CONFIRMED_NO_ERROR",
-            evidence_reference:
-                input.decision.evidenceRefs[0]?.recordId ||
-                input.decision.registeredReasonId,
-            comment: input.decision.comment,
-        },
+    const result = await apiPost<{
+        difference_id: string
+        operation_id: string
+        resolution_record_id: string
+        resulting_status:
+            | "OPEN"
+            | "EVIDENCE_PENDING"
+            | "CONFIRMED_NO_ERROR"
+            | "CONFIRMED_VALID_DIFFERENCE"
+        is_terminal: boolean
+        outcome:
+            | "TERMINAL_EVIDENCE_FOUND"
+            | "NO_RESULT_CONFIRMED"
+            | "RESULT_UNKNOWN"
+            | "REPLAY_ACCEPTED"
+            | "REATTRIBUTED"
+            | "EVIDENCE_LINKED"
+            | "EVIDENCE_ADDED"
+            | "CONFIRMED_NO_ERROR"
+            | "CONFIRMED_VALID_DIFFERENCE"
+        business_result_reference?: string | null
+    }>(
+        `/admin/integration/differences/${encodeURIComponent(input.differenceId)}/decisions`,
+        toDirectReconciliationWire(input),
     )
 
     return {
-        status: "succeeded",
-        title:
-            input.decision.conclusion === "CONFIRM_NO_ERROR"
-                ? "已确认无误"
-                : "已确认有效差异",
-        description: "直接对账结论已登记；不完成/关闭任何任务。",
-        reference: input.operationId,
-        outcome:
-            input.decision.conclusion === "CONFIRM_NO_ERROR"
-                ? "CONFIRMED_NO_ERROR"
-                : "CONFIRMED_VALID_DIFFERENCE",
-        stayOnItem: false,
-        terminal: true,
+        status: result.outcome === "RESULT_UNKNOWN" ? "unknown" : "succeeded",
+        title: result.is_terminal ? "对账结论已登记" : "对账证据已追加",
+        description: result.is_terminal
+            ? "直接对账结论已登记；未完成或关闭任何处理任务。"
+            : "差异处理记录已追加，当前差异仍待处理。",
+        reference: result.resolution_record_id,
+        outcome: result.outcome,
+        stayOnItem: !result.is_terminal,
+        terminal: result.is_terminal,
+        facts: result.business_result_reference
+            ? [
+                  {
+                      label: "业务结果",
+                      value: result.business_result_reference,
+                  },
+              ]
+            : undefined,
     }
 }

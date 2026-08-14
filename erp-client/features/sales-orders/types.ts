@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/ui/status-badge"
+import type { AssignmentMode, WorkItemStatus } from "@/features/work-items"
 
 export type SalesOrderNature = "physical_service" | "card_voucher"
 export type SalesOrderOrigin = "erp" | "mall"
@@ -29,6 +30,8 @@ export type SalesOrderContractInput = {
 
 /** M5 建单输入；合同必须选择已有有效版本。 */
 export type CreateSalesOrderInput = {
+    /** 页面生命周期内冻结；结果未知时与原幂等键一起重用。 */
+    orderNo: string
     contract: SalesOrderContractInput
     nature: SalesOrderNature
     /** 负责销售用户 id（当前登录用户）。 */
@@ -38,6 +41,10 @@ export type CreateSalesOrderInput = {
     welfareScene: string
     paymentTerms: string
     fulfillmentDeadline: string
+    /** 卡券执行投影的目标商城；非卡券为空。 */
+    targetMallId: string
+    /** 卡券销售生效时形成应收所使用的业务到期日。 */
+    receivableDueDate: string
     taxRatePercent: string
     remark: string
     lineItems: SalesOrderDraftLineInput[]
@@ -133,14 +140,20 @@ export type ProcurementRejectionResolution = {
     estimatedMarginPercent?: string
     fixedResolutions: readonly [
         "RESUBMIT_CHANGED_TERMS",
+        "REQUEST_LOW_MARGIN_ACCEPTANCE",
         "VOID_AFTER_REJECTION",
     ]
-    allowedActions: Array<"RESUBMIT_CHANGED_TERMS" | "VOID_AFTER_REJECTION">
+    allowedActions: Array<
+        | "RESUBMIT_CHANGED_TERMS"
+        | "REQUEST_LOW_MARGIN_ACCEPTANCE"
+        | "VOID_AFTER_REJECTION"
+    >
     actionBlockers: ActionBlocker[]
     /** 已解决时的正式结果摘要（会话内） */
     resolutionOutcome?: {
         outcome:
             | "CHANGED_TERMS_RESUBMITTED"
+            | "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
             | "VOIDED_AFTER_PROCUREMENT_REJECTION"
         reference: string
         detail: string
@@ -150,21 +163,67 @@ export type ProcurementRejectionResolution = {
     }
 }
 
-export type CardSalesApproval = {
+/** 销售上级承接低毛利的唯一活动确认投影。 */
+export type ActiveLowMarginManagerConfirmation = {
+    confirmationId: string
+    workItemId: string
+    taskVersion: string
+    subjectVersion: string
+    lowMarginSubmissionId: string
+    rejectedProcurementConfirmationId: string
+    acceptanceReason: string
+    evidenceReferenceIds: string[]
+    ownerUser?: { id: string; displayName: string }
+    allowedActions: Array<"START_PROCESSING" | "APPROVE" | "REJECT">
+    actionBlockers: Array<{ code: string; message: string }>
+}
+
+type CardSalesApprovalBase = {
+    approvalInstanceId: string
+    instanceVersion: string
+    approvalStepInstanceId: string
+    stepVersion: string
+    processingState: "READY" | "APPROVAL_BLOCKED"
+    processingBlocker?: { code: string; message: string }
+    subjectVersion: string
+    salesOrderSubmissionId: string
+    submissionNo: number
+    ownerUser?: { id: string; displayName: string }
+    /** 冻结提交摘要（只读） */
+    frozenSubmissionSummary: string
+    expectedReviewStatus: "PENDING_SALES_LEAD" | "PENDING_OPERATIONS"
+    allowedActions: Array<
+        "START_PROCESSING" | "APPROVE" | "REJECT" | "TERMINATE" | "CANCEL"
+    >
+    actionBlockers: ActionBlocker[]
+}
+
+type CardSalesApprovalWorkItem = {
     workItemId: string
     workItemType:
         | "CARD_SALES_MANAGER_APPROVAL"
         | "CARD_SALES_OPERATION_APPROVAL"
-    workItemStatus: "UNCLAIMED" | "CLAIMED" | "COMPLETED"
-    subjectVersion: string
-    subjectHash: string
-    claimedByLabel?: string
-    /** 冻结提交摘要（只读） */
-    frozenSubmissionSummary: string
-    expectedReviewStatus: "PENDING_SALES_LEAD" | "PENDING_OPERATIONS"
-    allowedActions: Array<"CLAIM" | "APPROVE" | "REJECT">
-    actionBlockers: ActionBlocker[]
+    taskVersion: string
+    workItemStatus: WorkItemStatus
+    assignmentMode: AssignmentMode
 }
+
+/**
+ * 当前活动卡券审批投影。
+ *
+ * `READY` 必须同时携带实例、步骤、任务和业务对象四个版本；首步直接分派解析
+ * 失败时可以只有 `BLOCKED` 实例/步骤而没有任务，前端不得补造任务身份。
+ */
+export type CardSalesApproval =
+    | (CardSalesApprovalBase &
+          CardSalesApprovalWorkItem & {
+              processingState: "READY"
+          })
+    | (CardSalesApprovalBase &
+          Partial<CardSalesApprovalWorkItem> & {
+              processingState: "APPROVAL_BLOCKED"
+              allowedActions: Array<"CANCEL">
+          })
 
 export type SalesOrderRevisionSnapshot = {
     revisionNo: number
@@ -262,6 +321,9 @@ export type SalesOrderListItem = {
     revisions: readonly SalesOrderRevisionSnapshot[]
     procurementRejection?: ProcurementRejectionResolution | null
     activeCardSalesApproval?: CardSalesApproval | null
+    activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
+    /** 审批在途但服务端未返回正式实例/步骤/任务投影时只读阻断。 */
+    cardApprovalProjectionBlocker?: string | null
     activeChangeOrder?: SalesChangeOrderSummary | null
     allowedActions: FormalAllowedAction[]
     actionBlockers: ActionBlocker[]
