@@ -12,16 +12,27 @@ import {
     priorityToNumber,
     secsToIso,
 } from "./mapping"
-import type { QueueFilters } from "./filters"
+import { isServerIssuedQueueContextId, type QueueFilters } from "./filters"
 import type {
     ProcurementConfirmationTask,
     ProcurementQueueView,
     SubmissionOrigin,
 } from "@/features/procurement-confirmation/types"
 
+type WorkItemQueuePage = {
+    items: WorkItemProjection[]
+    queueContextId?: string
+}
+
+/**
+ * 拉取 W07 责任队列。
+ * URL / W02 带来的 queueContextId 不是本查询的同条件哈希，不能提交；
+ * 仅当调用方传入上一次本查询成功响应里的服务端上下文时才回传。
+ */
 async function fetchWorkItemsForQueue(
     filters: QueueFilters,
-): Promise<WorkItemProjection[]> {
+    listQueueContextId?: string,
+): Promise<WorkItemQueuePage> {
     const page = await listWorkItems({
         scope: filters.scope,
         workItemType: "PROCUREMENT_CONFIRMATION",
@@ -36,13 +47,18 @@ async function fetchWorkItemsForQueue(
                 : filters.sort === "submitted_at"
                   ? "created_desc"
                   : "due_asc",
-        queueContextId: filters.queueContextId,
+        queueContextId: isServerIssuedQueueContextId(listQueueContextId)
+            ? listQueueContextId
+            : undefined,
         currentWorkItemId: filters.currentWorkItemId,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         page: 1,
         pageSize: 100,
     })
-    return page.items.map(mapWorkItemDto)
+    return {
+        items: page.items.map(mapWorkItemDto),
+        queueContextId: page.queue_context_id ?? undefined,
+    }
 }
 
 async function projectTask(
@@ -201,10 +217,16 @@ async function projectTask(
     }
 }
 
+/**
+ * 组装 W07 队列视图。
+ * `listQueueContextId` 只能是同一组筛选上次列表响应里的服务端上下文。
+ */
 export async function fetchProcurementQueue(
     filters: QueueFilters,
+    listQueueContextId?: string,
 ): Promise<ProcurementQueueView> {
-    const workItems = await fetchWorkItemsForQueue(filters)
+    const { items: workItems, queueContextId: issuedQueueContextId } =
+        await fetchWorkItemsForQueue(filters, listQueueContextId)
 
     const projected = (
         await Promise.all(workItems.map((wi) => projectTask(wi, filters.scope)))
@@ -213,7 +235,10 @@ export async function fetchProcurementQueue(
     const tasks = projected
 
     const queueContextId =
-        filters.queueContextId ??
+        issuedQueueContextId ??
+        (isServerIssuedQueueContextId(listQueueContextId)
+            ? listQueueContextId
+            : undefined) ??
         `queue:procurement-confirmation:${filters.scope}`
 
     let position = 0

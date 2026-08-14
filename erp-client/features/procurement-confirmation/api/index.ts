@@ -7,6 +7,7 @@
  */
 
 export type { QueueFilters } from "./filters"
+export { isServerIssuedQueueContextId } from "./filters"
 export { fetchProcurementRecommendation } from "./recommendation"
 export type { ProcurementSupplyOption } from "./supply-options"
 export { fetchProcurementSupplyOptions } from "./supply-options"

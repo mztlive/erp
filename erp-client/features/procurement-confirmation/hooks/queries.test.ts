@@ -7,6 +7,8 @@ vi.mock("@/features/procurement-confirmation/api", () => ({
     fetchProcurementSupplyOptions: vi.fn(),
     saveProcurementConfirmation: vi.fn(),
     completeProcurementDecision: vi.fn(),
+    isServerIssuedQueueContextId: (value?: string | null) =>
+        typeof value === "string" && /^[0-9a-f]{64}$/i.test(value),
 }))
 
 vi.mock("@/features/unified-task-queue/queries", () => ({
@@ -30,6 +32,7 @@ import {
     renderHookWithProviders,
 } from "@/features/test-utils"
 import {
+    procurementListQueryKey,
     useCompleteProcurementMutation,
     useProcurementConfirmationQuery,
     useProcurementRecommendationQuery,
@@ -168,7 +171,9 @@ describe("useProcurementSupplyOptionsQuery", () => {
     it("fetches via fetchProcurementSupplyOptions and sorts skuIds in the key", async () => {
         const options = [{ skuId: "sku_a" }]
         mockedFetchSupplyOptions.mockResolvedValue(
-            options as Awaited<ReturnType<typeof fetchProcurementSupplyOptions>>,
+            options as Awaited<
+                ReturnType<typeof fetchProcurementSupplyOptions>
+            >,
         )
         const client = createFreshQueryClient()
 
@@ -228,8 +233,81 @@ describe("useProcurementConfirmationQuery", () => {
 
         await waitFor(() => expect(result.current.isPending).toBe(false))
         expect(result.current.data).toEqual(view)
-        expect(mockedFetchQueue).toHaveBeenCalledWith(FILTERS)
+        expect(mockedFetchQueue).toHaveBeenCalledWith(FILTERS, undefined)
         expect(mockedFetchQueue).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not send a W02 URL queueContextId on the first list fetch", async () => {
+        mockedFetchQueue.mockResolvedValue(makeQueueView())
+        const client = createFreshQueryClient()
+        const filters: QueueFilters = {
+            scope: "mine",
+            queueContextId:
+                "271b84b7bfdcdf958012858b2b57a09b1cbd9fd7e293122a59835b5d9e1d3560",
+            currentWorkItemId: "wi_1",
+        }
+
+        const { result } = renderHookWithProviders(
+            () => useProcurementConfirmationQuery(filters),
+            { queryClient: client },
+        )
+        await waitFor(() => expect(result.current.isPending).toBe(false))
+        expect(mockedFetchQueue).toHaveBeenCalledWith(filters, undefined)
+        expect(client.getQueryCache().findAll()[0]?.queryKey).toEqual([
+            "procurement-confirmation",
+            "queue",
+            procurementListQueryKey(filters),
+        ])
+        expect(procurementListQueryKey(filters)).not.toHaveProperty(
+            "queueContextId",
+        )
+    })
+
+    it("reuses the server-issued queue context on the same list query", async () => {
+        const serverId =
+            "89cbbe65b947589c15920e01adef5faf4cb6d33d951e120530b6e26e03311fdb"
+        const view = makeQueueView()
+        mockedFetchQueue.mockResolvedValue({
+            ...view,
+            context: { ...view.context, queueContextId: serverId },
+        })
+        const client = createFreshQueryClient()
+
+        const { result } = renderHookWithProviders(
+            () => useProcurementConfirmationQuery(FILTERS),
+            { queryClient: client },
+        )
+        await waitFor(() => expect(result.current.isPending).toBe(false))
+        expect(mockedFetchQueue).toHaveBeenCalledWith(FILTERS, undefined)
+
+        await act(async () => {
+            await result.current.refetch()
+        })
+        expect(mockedFetchQueue).toHaveBeenLastCalledWith(FILTERS, serverId)
+    })
+
+    it("does not reuse a server context after the W07 filters change", async () => {
+        const serverId =
+            "89cbbe65b947589c15920e01adef5faf4cb6d33d951e120530b6e26e03311fdb"
+        const view = makeQueueView()
+        mockedFetchQueue.mockResolvedValue({
+            ...view,
+            context: { ...view.context, queueContextId: serverId },
+        })
+        const client = createFreshQueryClient()
+        let filters: QueueFilters = FILTERS
+
+        const { result, rerender } = renderHookWithProviders(
+            () => useProcurementConfirmationQuery(filters),
+            { queryClient: client },
+        )
+        await waitFor(() => expect(result.current.isPending).toBe(false))
+
+        filters = { scope: "mine", due: "today" }
+        rerender()
+        await waitFor(() =>
+            expect(mockedFetchQueue).toHaveBeenCalledWith(filters, undefined),
+        )
     })
 
     it("keeps a stable key for the same filters", async () => {
@@ -249,7 +327,7 @@ describe("useProcurementConfirmationQuery", () => {
         expect(entries[0]?.queryKey).toEqual([
             "procurement-confirmation",
             "queue",
-            FILTERS,
+            procurementListQueryKey(FILTERS),
         ])
     })
 

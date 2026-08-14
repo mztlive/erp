@@ -104,7 +104,7 @@ export function useProcurementConfirmationController() {
 
     useProcurementConfirmationQueueUrlSync({
         scope: url.scope,
-        queueContextId: url.queueContextId,
+        queueContextId: view?.context.queueContextId ?? url.queueContextId,
         queueReady: !queueQuery.isPending && Boolean(view),
         tasksLength: tasks.length,
         currentTaskWorkItemId: task?.workItemId,
