@@ -1,15 +1,12 @@
-mod app_state;
-mod core;
-
-use app_state::AppState;
 use config::{Config, S3Config, SafeConfig};
-use core::{
-    routes,
-    tracing::{init_tracing, TracingConfig},
-};
 use std::net::SocketAddr;
 use storage::{S3Storage, S3StorageConfig};
 use tracing::{info, warn};
+use web_api::app_state::AppState;
+use web_api::core::{
+    routes,
+    tracing::{init_tracing, TracingConfig},
+};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

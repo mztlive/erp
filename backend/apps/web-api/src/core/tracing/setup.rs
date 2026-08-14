@@ -11,12 +11,17 @@ use tracing_subscriber::{
 };
 
 /// Web API 的日志输出配置。
-pub(crate) struct TracingConfig {
-    pub(crate) env_filter: String,
-    pub(crate) log_to_file: bool,
-    pub(crate) log_directory: String,
-    pub(crate) log_file_prefix: String,
-    pub(crate) json_format: bool,
+pub struct TracingConfig {
+    /// `RUST_LOG` 未设置时使用的默认过滤表达式。
+    pub env_filter: String,
+    /// 是否同时写入滚动文件日志。
+    pub log_to_file: bool,
+    /// 滚动文件日志目录。
+    pub log_directory: String,
+    /// 滚动文件日志文件名前缀。
+    pub log_file_prefix: String,
+    /// 是否输出 JSON 格式日志。
+    pub json_format: bool,
 }
 
 impl Default for TracingConfig {
@@ -45,7 +50,7 @@ impl Default for TracingConfig {
 ///
 /// # 错误
 /// 创建滚动日志文件失败时返回错误。
-pub(crate) fn init_tracing(
+pub fn init_tracing(
     config: TracingConfig,
 ) -> Result<Option<WorkerGuard>, Box<dyn std::error::Error + Send + Sync>> {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.env_filter));

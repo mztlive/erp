@@ -2,11 +2,7 @@ use clap::Parser;
 use config::Config;
 use services::iam::{AdminService, InitializeSuperAdminParams};
 use tracing::info;
-
-#[path = "../core/tracing/setup.rs"]
-mod tracing_setup;
-
-use tracing_setup::{init_tracing, TracingConfig};
+use web_api::core::tracing::{init_tracing, TracingConfig};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
