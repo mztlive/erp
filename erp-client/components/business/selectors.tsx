@@ -12,6 +12,10 @@ import {
     ComboboxItem,
     ComboboxList,
 } from "@/components/ui/combobox"
+import {
+    remoteSearchFromInputChange,
+    useStickySelected,
+} from "@/components/business/combobox-input-search"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import {
     Sheet,
@@ -67,14 +71,20 @@ function BusinessObjectCombobox({
     required = false,
     className,
 }: BusinessObjectComboboxProps) {
-    const selected = items.find((item) => item.id === value) ?? null
+    const selected = useStickySelected(items, value, (item) => item.id)
 
     return (
         <Combobox
-            items={[...items]}
+            items={items}
             value={selected}
             onValueChange={(next) => onValueChange(next?.id)}
-            onInputValueChange={(query) => onSearchChange?.(query)}
+            onInputValueChange={(query, details) => {
+                const nextQuery = remoteSearchFromInputChange(
+                    query,
+                    details.reason,
+                )
+                if (nextQuery !== undefined) onSearchChange?.(nextQuery)
+            }}
             itemToStringLabel={(item) => item.label}
             itemToStringValue={(item) => item.id}
             isItemEqualToValue={(item, current) => item.id === current.id}

@@ -29,9 +29,10 @@ export type RemoteSearchComboboxOptions<TItem> = {
 export function useRemoteSearchCombobox<TItem>(
     options: RemoteSearchComboboxOptions<TItem>,
 ) {
+    const selectedRow = options.selectedItem ?? options.selected?.data
     const rows = mergeSelected(
         options.list.data,
-        options.selectedItem ?? options.selected?.data,
+        selectedRow,
         options.idOf,
     )
     return {
@@ -39,7 +40,8 @@ export function useRemoteSearchCombobox<TItem>(
         loading:
             options.extraLoading === true ||
             options.list.isFetching ||
-            (options.selected?.isFetching ?? false),
+            // 已选项详情在列表里已有时不必进入加载态，否则选中后输入框会闪「正在加载」。
+            (Boolean(options.selected?.isFetching) && selectedRow == null),
         emptyLabel: options.list.isError
             ? getErrorMessage(options.list.error, options.fallbackError)
             : options.emptyLabel,

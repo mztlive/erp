@@ -3,6 +3,10 @@
 import * as React from "react"
 
 import {
+    remoteSearchFromInputChange,
+    useStickySelected,
+} from "@/components/business/combobox-input-search"
+import {
     Combobox,
     ComboboxContent,
     ComboboxEmpty,
@@ -84,7 +88,7 @@ export function OptionCombobox({
     onBlur,
 }: OptionComboboxProps) {
     const items = React.useMemo(() => toInternal(options), [options])
-    const selected = items.find((item) => item.value === (value ?? "")) ?? null
+    const selected = useStickySelected(items, value ?? undefined, (item) => item.value)
 
     return (
         <Combobox
@@ -93,7 +97,13 @@ export function OptionCombobox({
             onValueChange={(next) => {
                 onValueChange(next?.value ?? null)
             }}
-            onInputValueChange={(query) => onSearchChange?.(query)}
+            onInputValueChange={(query, details) => {
+                const nextQuery = remoteSearchFromInputChange(
+                    query,
+                    details.reason,
+                )
+                if (nextQuery !== undefined) onSearchChange?.(nextQuery)
+            }}
             itemToStringLabel={(item) => item.label}
             itemToStringValue={(item) => item.value}
             isItemEqualToValue={(item, current) => item.value === current.value}

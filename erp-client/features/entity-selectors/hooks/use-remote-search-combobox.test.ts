@@ -117,6 +117,16 @@ describe("useRemoteSearchCombobox", () => {
         )
         expect(detailFetching.result.current.loading).toBe(true)
 
+        const detailFetchingWithRow = renderHook(() =>
+            useRemoteSearchCombobox({
+                list: listQuery({ data: [item("a")] }),
+                selected: selectedQuery({ data: item("a"), isFetching: true }),
+                idOf: (it) => it.id,
+                fallbackError: "加载失败",
+            }),
+        )
+        expect(detailFetchingWithRow.result.current.loading).toBe(false)
+
         const extraLoading = renderHook(() =>
             useRemoteSearchCombobox({
                 list: listQuery(),
