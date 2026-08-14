@@ -1,7 +1,10 @@
 //! 业务预定义角色种子。
 //!
-//! 应用启动时按固定角色 ID 幂等写入：数据库中尚不存在（含软删除记录）时创建角色与权限；
-//! 已存在则**不覆盖**名称、状态与 Casbin policy，避免冲掉管理员的后续配置。
+//! 应用启动时按固定角色 ID 幂等写入：
+//! - 数据库中尚不存在（含软删除记录）时创建角色与推荐权限；
+//! - 已存在且权限仍等于已知旧种子时，整集升级到当前推荐权限；
+//! - 其余已存在角色只**追加**当前种子中尚未覆盖的权限，不删除管理员额外授予的权限，
+//!   也不覆盖名称、启停状态与 system 标记。
 //!
 //! 角色集合与默认权限对齐第一期部门职责（`docs/erp-phase-1.md` §11）、
 //! 工作台角色入口（`docs/ui-workspaces/w01-today-workspace.md` §2.1）以及二期销售领导审批轨。
@@ -530,19 +533,22 @@ const SYSADMIN_PERMISSIONS: &[&str] = &[
     "background_job_item:list",
 ];
 
-/// 确保全部业务预定义角色已写入数据库。
+/// 确保全部业务预定义角色已写入数据库，并补齐当前种子中缺失的权限。
 ///
-/// 对每个固定角色 ID：若不存在则创建角色实体与 Casbin 权限；已有角色仅在权限
-/// 与已知旧种子完全相等时升级。管理员增删过权限的角色不得被启动过程覆盖。
+/// 对每个固定角色 ID：若不存在则创建角色实体与 Casbin 权限；已有角色先按已知旧
+/// 种子做精确升级，再把当前推荐权限中尚未覆盖的项追加进 policy。
 ///
 /// # 参数
 /// * `rbac` - 共享 RBAC 服务
 ///
 /// # 返回值
-/// 全部角色检查或创建完成后返回 `Ok(())`。
+/// 全部角色检查、创建或补齐完成后返回 `Ok(())`。
 ///
 /// # 错误
 /// 角色校验、MongoDB 写入或 Casbin policy 事务失败时返回错误。
+///
+/// # 业务约束
+/// 管理员额外授予的权限、角色名称与启停状态不会被启动过程删除或覆盖。
 pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
         seed_one(rbac, role).await?;
@@ -557,6 +563,37 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     upgrade_import_confirmation_permissions(rbac).await?;
     upgrade_integration_task_permissions(rbac).await?;
     upgrade_supplier_connection_governance_permissions(rbac).await?;
+    ensure_missing_permissions(rbac).await?;
+    Ok(())
+}
+
+/// 为已存在的预定义角色追加当前种子中尚未覆盖的权限。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务
+///
+/// # 返回值
+/// 全部角色检查或补齐完成后返回 `Ok(())`。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
+///
+/// # 业务约束
+/// 只追加缺失权限；已有更宽通配覆盖目标时视为已具备，不再写入重复细项。
+async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
+    for role in PREDEFINED_ROLES {
+        let desired = parse_permissions(role.permissions)?;
+        if rbac
+            .ensure_missing_seeded_role_permissions(role.id, desired)
+            .await?
+        {
+            tracing::info!(
+                role_id = role.id,
+                role_name = role.name,
+                "predefined role missing permissions appended"
+            );
+        }
+    }
     Ok(())
 }
 
@@ -1211,6 +1248,25 @@ mod tests {
                 .any(|p| p.covers(&Permission::parse("purchase_order:review").unwrap())),
             "销售不应默认具备采购财务审核权"
         );
+    }
+
+    #[test]
+    fn startup_appends_missing_seed_permissions_without_dropping_custom_grants() {
+        let desired = PermissionSet::new(parse_permissions(SALES_PERMISSIONS).unwrap());
+        let extra = Permission::parse("custom:extra").unwrap();
+        let current = PermissionSet::new(
+            desired
+                .as_slice()
+                .iter()
+                .filter(|permission| permission.to_string() != "sellable_sku:list")
+                .cloned()
+                .chain(std::iter::once(extra.clone())),
+        );
+        let merged = current.with_missing(&desired).expect("应补齐可售 SKU 查询权限");
+
+        assert!(merged.covers(&desired));
+        assert!(merged.covers_one(&extra));
+        assert!(desired.with_missing(&desired).is_none());
     }
 
     #[test]

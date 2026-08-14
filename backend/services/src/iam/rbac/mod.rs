@@ -1,5 +1,7 @@
 //! Casbin RBAC 服务。
 
+mod seed;
+
 use std::{
     collections::HashMap,
     future::Future,
@@ -931,84 +933,6 @@ impl RbacService {
             })
         })
         .await
-    }
-
-    /// 若角色 ID 尚不存在则创建预定义角色及其权限；已存在（含软删除）则不改动。
-    ///
-    /// 与 [`ensure_root_role`] 不同：本方法**不会**修复名称、system 标记或 Casbin policy，
-    /// 以便管理员在首次种子之后调整权限，进程重启不会被覆盖。
-    ///
-    /// # 参数
-    /// * `id` - 固定角色 ID
-    /// * `data` - 角色展示信息
-    /// * `permissions` - 首次创建时写入的权限集合
-    ///
-    /// # 返回值
-    /// 新建成功返回 `true`；已存在或并发写入冲突时返回 `false`。
-    ///
-    /// # 错误
-    /// 角色校验、MongoDB 或 Casbin policy 写入失败（非并发冲突）时返回错误。
-    pub(in crate::iam) async fn seed_role_if_absent(
-        self: &Arc<Self>,
-        id: &str,
-        data: RoleData,
-        permissions: Vec<Permission>,
-    ) -> Result<bool> {
-        if self
-            .db
-            .roles()
-            .find_by_id_including_deleted(id, &mut NoTransaction)
-            .await?
-            .is_some()
-        {
-            return Ok(false);
-        }
-
-        match self
-            .create_role_with_id(id.to_string(), data, permissions, None, None)
-            .await
-        {
-            Ok(_) => Ok(true),
-            Err(Error::ConflictError(_)) => Ok(false),
-            Err(error) => Err(error),
-        }
-    }
-
-    /// 仅当预定义角色权限仍与旧种子完全一致时升级到新种子。
-    ///
-    /// 管理员已经增删过权限时保持原样；多实例并发升级产生冲突后会重新读取，若另一
-    /// 实例已完成相同升级则按幂等成功处理。
-    pub(in crate::iam) async fn upgrade_seeded_role_permissions_if_exact(
-        self: &Arc<Self>,
-        role_id: &str,
-        previous: Vec<Permission>,
-        desired: Vec<Permission>,
-    ) -> Result<bool> {
-        if self
-            .db
-            .roles()
-            .find_by_id(role_id, &mut NoTransaction)
-            .await?
-            .is_none()
-        {
-            return Ok(false);
-        }
-        let previous = PermissionSet::new(previous);
-        let desired_set = PermissionSet::new(desired.clone());
-        if self.direct_role_permissions(role_id).await? != previous {
-            return Ok(false);
-        }
-        match self.replace_role_permissions(role_id, desired, None, None).await {
-            Ok(_) => Ok(true),
-            Err(error @ Error::ConflictError(_)) => {
-                if self.direct_role_permissions(role_id).await? == desired_set {
-                    Ok(false)
-                } else {
-                    Err(error)
-                }
-            }
-            Err(error) => Err(error),
-        }
     }
 
     /// 读取角色自身的直接权限，不展开继承关系。

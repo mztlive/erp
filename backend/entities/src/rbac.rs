@@ -264,13 +264,115 @@ impl PermissionSet {
 
     /// 判断当前集合是否覆盖目标集合中的每项权限。
     ///
+    /// # 参数
+    /// * `required` - 需要被覆盖的目标权限集合
+    ///
     /// # 返回值
     /// 所有目标权限都至少被当前集合中的一项覆盖时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 业务约束
+    /// 覆盖语义与单项 [`Permission::covers`] 一致，包含 `*` 通配。
     pub fn covers(&self, required: &Self) -> bool {
-        required
-            .0
-            .iter()
-            .all(|required| self.0.iter().any(|permission| permission.covers(required)))
+        required.0.iter().all(|required| self.covers_one(required))
+    }
+
+    /// 判断当前集合是否覆盖单项权限。
+    ///
+    /// # 参数
+    /// * `required` - 需要被覆盖的目标权限
+    ///
+    /// # 返回值
+    /// 集合中存在一项能够授予该权限时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 业务约束
+    /// 更宽通配覆盖更窄权限，例如 `customer:*` 覆盖 `customer:list`。
+    pub fn covers_one(&self, required: &Permission) -> bool {
+        self.0.iter().any(|permission| permission.covers(required))
+    }
+
+    /// 返回目标集合中当前集合尚未覆盖的权限。
+    ///
+    /// # 参数
+    /// * `desired` - 期望拥有的权限集合
+    ///
+    /// # 返回值
+    /// 返回去重排序后的缺失权限；已全部覆盖时返回空集合。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 业务约束
+    /// 已存在更宽通配的权限不会再作为缺失项返回；管理员额外授予的权限不影响判定。
+    pub fn missing_from(&self, desired: &Self) -> Self {
+        Self::new(
+            desired
+                .0
+                .iter()
+                .filter(|required| !self.covers_one(required))
+                .cloned(),
+        )
+    }
+
+    /// 合并两个权限集合。
+    ///
+    /// # 参数
+    /// * `other` - 需要并入的权限集合
+    ///
+    /// # 返回值
+    /// 返回去重并按 `resource:action` 排序的并集。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 业务约束
+    /// 合并只追加权限，不删除任一侧已有项。
+    pub fn union(&self, other: &Self) -> Self {
+        Self::new(self.0.iter().cloned().chain(other.0.iter().cloned()))
+    }
+
+    /// 若存在尚未覆盖的目标权限，返回并入这些权限后的新集合。
+    ///
+    /// # 参数
+    /// * `desired` - 启动种子中的推荐权限
+    ///
+    /// # 返回值
+    /// 存在缺失权限时返回补齐后的集合；已全部覆盖时返回 `None`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 业务约束
+    /// 只追加缺失项，保留当前集合中管理员额外授予的权限。
+    pub fn with_missing(&self, desired: &Self) -> Option<Self> {
+        let missing = self.missing_from(desired);
+        if missing.is_empty() {
+            None
+        } else {
+            Some(self.union(&missing))
+        }
+    }
+
+    /// 判断集合是否为空。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回值
+    /// 没有任何权限时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 业务约束
+    /// 无。
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// 返回规范化权限切片。
@@ -347,5 +449,59 @@ mod tests {
         assert_eq!(actor.as_slice().len(), 2);
         assert!(actor.covers(&allowed));
         assert!(!actor.covers(&elevated));
+        assert!(actor.covers_one(&Permission::parse("customer:update").unwrap()));
+        assert!(!actor.covers_one(&Permission::parse("role:delete").unwrap()));
+        assert!(!actor.is_empty());
+        assert!(PermissionSet::default().is_empty());
+    }
+
+    #[test]
+    fn permission_set_should_report_uncovered_desired_permissions() {
+        let current = PermissionSet::new([
+            Permission::parse("customer:*").unwrap(),
+            Permission::parse("custom:extra").unwrap(),
+        ]);
+        let desired = PermissionSet::new([
+            Permission::parse("customer:list").unwrap(),
+            Permission::parse("sales_order:create").unwrap(),
+        ]);
+        let missing = current.missing_from(&desired);
+
+        assert_eq!(
+            missing.as_slice(),
+            [Permission::parse("sales_order:create").unwrap()]
+        );
+        assert!(current.missing_from(&current).is_empty());
+    }
+
+    #[test]
+    fn permission_set_should_append_missing_permissions_without_dropping_extras() {
+        let current = PermissionSet::new([
+            Permission::parse("customer:list").unwrap(),
+            Permission::parse("custom:extra").unwrap(),
+        ]);
+        let desired = PermissionSet::new([
+            Permission::parse("customer:list").unwrap(),
+            Permission::parse("customer:create").unwrap(),
+        ]);
+        let merged = current.with_missing(&desired).expect("应补齐缺失权限");
+
+        assert_eq!(
+            merged.as_slice(),
+            [
+                Permission::parse("custom:extra").unwrap(),
+                Permission::parse("customer:create").unwrap(),
+                Permission::parse("customer:list").unwrap(),
+            ]
+        );
+        assert!(current.with_missing(&current).is_none());
+        assert_eq!(
+            current.union(&desired).as_slice(),
+            [
+                Permission::parse("custom:extra").unwrap(),
+                Permission::parse("customer:create").unwrap(),
+                Permission::parse("customer:list").unwrap(),
+            ]
+        );
     }
 }
