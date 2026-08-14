@@ -17,7 +17,7 @@ use crate::errors::Result;
 
 /// 单条预定义角色的静态定义。
 #[derive(Debug, Clone, Copy)]
-pub(super) struct PredefinedRoleDef {
+pub(crate) struct PredefinedRoleDef {
     /// 稳定角色 ID（写入 Mongo `roles.id` 与 Casbin `role:{id}`）。
     pub id: &'static str,
     /// 展示名称。
@@ -29,7 +29,7 @@ pub(super) struct PredefinedRoleDef {
 }
 
 /// 全部业务预定义角色（不含超级管理员 `role-root`）。
-pub(super) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
+pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
     PredefinedRoleDef {
         id: "role-sales",
         name: "销售",
@@ -45,7 +45,8 @@ pub(super) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
     PredefinedRoleDef {
         id: "role-procurement",
         name: "采购",
-        description: "商品与供应商主数据、采购二次确认、采购单、履约与供应商目录/API 协同。",
+        description:
+            "商品与供应商主数据、采购二次确认、采购单、履约、销售变更履约确认、采购退货与供应商结算协同。",
         permissions: PROCUREMENT_PERMISSIONS,
     },
     PredefinedRoleDef {
@@ -180,9 +181,14 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "work_item:release_to_team",
     "integration_task:process",
     "integration_task:complete",
+    // W29 责任任务对象读取；不授 list，治理菜单仍只对系统管理员开放。
+    "integration_error_task:detail",
+    "reconciliation_difference:detail",
     "legacy_import_confirmation:list",
     "legacy_import_confirmation:detail",
     "legacy_import_confirmation:complete",
+    // W18 确认任务的业务对象读取权；不授 batch:list，避免打开导入治理菜单。
+    "legacy_import_batch:detail",
     "file_asset:list",
     "file_asset:create",
     "file_asset:detail",
@@ -230,11 +236,25 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "procurement_confirmation:*",
     "purchase_order:*",
     "purchase_change_order:*",
+    // 销售变更履约影响确认（财务复核仍由 work_item 责任角色隔离）
+    "sales_change_order:list",
+    "sales_change_order:detail",
+    "sales_change_order:approve",
+    "sales_change_order:reject",
+    // 采购退货（财务保留票款冲正，不替代采购建单）
+    "purchase_return_order:list",
+    "purchase_return_order:create",
+    "purchase_return_order:detail",
     // 履约作业
     "purchase_receipt:*",
     "delivery:*",
     "electronic_delivery:*",
     "service_fulfillment:*",
+    // 库存只读：核验入库结果、预占与变更影响
+    "stock_balance:list",
+    "stock_balance:detail",
+    "stock_movement:list",
+    "stock_reservation:list",
     // 供应商供给 / API / 订单
     "supplier_offering:*",
     "supplier_offering_availability:*",
@@ -256,6 +276,12 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "payable_account:detail",
     "supplier_payment:list",
     "supplier_payment:detail",
+    // 供应商结算协同：查看与补证；正式结论由结算经办人在服务层二次校验
+    "supplier_settlement_statement:list",
+    "supplier_settlement_statement:detail",
+    "supplier_settlement_item:list",
+    "supplier_settlement_difference:list",
+    "supplier_settlement_difference:update",
 ];
 
 /// 运营推荐权限。
@@ -564,6 +590,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     upgrade_integration_task_permissions(rbac).await?;
     upgrade_supplier_connection_governance_permissions(rbac).await?;
     ensure_missing_permissions(rbac).await?;
+    super::predefined_data_scopes::ensure_predefined_role_data_scopes(rbac).await?;
     Ok(())
 }
 
@@ -749,11 +776,38 @@ async fn upgrade_procurement_role_permissions(rbac: &SharedRbacService) -> Resul
     Ok(())
 }
 
+/// 本轮补齐前采购默认种子缺少的职责权限。
+///
+/// 这些权限只追加、不替换既有动作；历史快照必须先剔除它们，才能继续精确
+/// 识别上一版默认种子。
+const PROCUREMENT_DUTY_GAP_PERMISSIONS: &[&str] = &[
+    "integration_error_task:detail",
+    "reconciliation_difference:detail",
+    "legacy_import_batch:detail",
+    "sales_change_order:list",
+    "sales_change_order:detail",
+    "sales_change_order:approve",
+    "sales_change_order:reject",
+    "purchase_return_order:list",
+    "purchase_return_order:create",
+    "purchase_return_order:detail",
+    "stock_balance:list",
+    "stock_balance:detail",
+    "stock_movement:list",
+    "stock_reservation:list",
+    "supplier_settlement_statement:list",
+    "supplier_settlement_statement:detail",
+    "supplier_settlement_item:list",
+    "supplier_settlement_difference:list",
+    "supplier_settlement_difference:update",
+];
+
 /// 构造可安全识别的历史采购默认权限快照。
 fn procurement_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
-    let before_sellable_pool = remove_permissions(desired, &["sellable_sku:list"]);
+    let before_duty_gaps = remove_permissions(desired, PROCUREMENT_DUTY_GAP_PERMISSIONS);
+    let before_sellable_pool = remove_permissions(&before_duty_gaps, &["sellable_sku:list"]);
     let before_sensitive_reveal = remove_permissions(
-        desired,
+        &before_duty_gaps,
         &[
             "sellable_sku:list",
             "file_asset:preview",
@@ -761,7 +815,7 @@ fn procurement_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec
         ],
     );
     let mut catalog_era = remove_permissions(
-        desired,
+        &before_duty_gaps,
         &[
             "sellable_sku:list",
             "supplier_sensitive:reveal",
@@ -779,7 +833,12 @@ fn procurement_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec
     ] {
         catalog_era.push(Permission::parse(permission)?);
     }
-    Ok(vec![before_sellable_pool, before_sensitive_reveal, catalog_era])
+    Ok(vec![
+        before_sellable_pool,
+        before_sensitive_reveal,
+        catalog_era,
+        before_duty_gaps,
+    ])
 }
 
 /// 仅为仍保持旧默认种子的角色收紧客户范围并补齐字段级权限。
@@ -1191,18 +1250,71 @@ mod tests {
     }
 
     #[test]
+    fn procurement_permissions_cover_assigned_duties_without_finance_writes() {
+        let permissions = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
+        for required in [
+            "sales_change_order:list",
+            "sales_change_order:detail",
+            "sales_change_order:approve",
+            "sales_change_order:reject",
+            "purchase_return_order:list",
+            "purchase_return_order:create",
+            "purchase_return_order:detail",
+            "stock_balance:list",
+            "stock_balance:detail",
+            "stock_movement:list",
+            "stock_reservation:list",
+            "supplier_settlement_statement:list",
+            "supplier_settlement_statement:detail",
+            "supplier_settlement_item:list",
+            "supplier_settlement_difference:list",
+            "supplier_settlement_difference:update",
+            "integration_error_task:detail",
+            "reconciliation_difference:detail",
+            "legacy_import_batch:detail",
+        ] {
+            let required = PermissionSet::new([Permission::parse(required).unwrap()]);
+            assert!(permissions.covers(&required), "采购缺少 {required:?}");
+        }
+        for forbidden in [
+            "supplier_payment:create",
+            "supplier_settlement_statement:confirm",
+            "supplier_settlement_statement:create",
+            "integration_error_task:list",
+            "reconciliation_difference:list",
+            "legacy_import_batch:list",
+            "stock_adjustment:create",
+        ] {
+            let forbidden = Permission::parse(forbidden).unwrap();
+            assert!(
+                !permissions.covers_one(&forbidden),
+                "采购不应默认具备 {forbidden}"
+            );
+        }
+    }
+
+    #[test]
     fn procurement_legacy_snapshots_cover_current_database_seed() {
         let desired = parse_permissions(PROCUREMENT_PERMISSIONS).unwrap();
         let snapshots = procurement_legacy_permission_snapshots(&desired).unwrap();
-        assert_eq!(snapshots[0].len(), desired.len() - 1);
-        assert_eq!(snapshots[1].len(), desired.len() - 3);
-        assert_eq!(snapshots[2].len(), desired.len());
+        let duty_gap_count = super::PROCUREMENT_DUTY_GAP_PERMISSIONS.len();
+        assert_eq!(snapshots.len(), 4);
+        assert_eq!(snapshots[0].len(), desired.len() - duty_gap_count - 1);
+        assert_eq!(snapshots[1].len(), desired.len() - duty_gap_count - 3);
+        assert_eq!(snapshots[2].len(), desired.len() - duty_gap_count);
+        assert_eq!(snapshots[3].len(), desired.len() - duty_gap_count);
         assert!(snapshots[2]
             .iter()
             .any(|permission| permission.to_string() == "supplier_catalog_cost:detail"));
         assert!(!snapshots[2]
             .iter()
             .any(|permission| permission.to_string() == "supplier_sensitive:reveal"));
+        assert!(snapshots
+            .iter()
+            .flatten()
+            .all(|permission| super::PROCUREMENT_DUTY_GAP_PERMISSIONS
+                .iter()
+                .all(|gap| permission.to_string() != *gap)));
     }
 
     #[test]

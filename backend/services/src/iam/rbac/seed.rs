@@ -3,7 +3,10 @@
 use std::sync::Arc;
 
 use database::{AccessControlExt, NoTransaction};
-use entities::{Permission, PermissionSet, RoleData};
+use entities::{
+    access_control::{DataScope, DataScopeData, DataScopeId, DataScopeSubjectType, DataScopeType},
+    Permission, PermissionSet, RoleData,
+};
 
 use super::RbacService;
 use crate::errors::{Error, Result};
@@ -118,6 +121,84 @@ impl RbacService {
         };
         self.commit_seeded_role_permissions(role_id, merged.into_vec(), |latest| latest.covers(&desired))
             .await
+    }
+
+    /// 若预定义角色尚无任何生效数据范围，则补齐公司级范围。
+    ///
+    /// `scope=team` 要求角色具备可证明的责任范围；第一期单公司部署下，空范围
+    /// 岗位无法进入团队待办。已配置或已软删除的范围不覆盖、不重建。
+    ///
+    /// # 参数
+    /// * `role_id` - 预定义角色 ID
+    ///
+    /// # 返回值
+    /// 本次新写入公司级范围返回 `true`；角色不存在、已有范围或唯一键冲突时返回 `false`。
+    ///
+    /// # 错误
+    /// 范围构造失败，或非冲突的 MongoDB 写入失败时返回错误。
+    ///
+    /// # 业务约束
+    /// 只在角色当前没有任何生效数据范围时写入；管理员收窄或删除后重启不得回写。
+    pub(in crate::iam) async fn seed_role_company_data_scope_if_absent(
+        self: &Arc<Self>,
+        role_id: &str,
+    ) -> Result<bool> {
+        if !self.active_role_exists(role_id).await? || self.role_has_live_data_scope(role_id).await? {
+            return Ok(false);
+        }
+        self.insert_company_data_scope(role_id).await
+    }
+
+    /// 判断角色是否已有未删除的数据范围。
+    ///
+    /// # 参数
+    /// * `role_id` - 角色 ID
+    ///
+    /// # 返回值
+    /// 存在至少一条生效范围时返回 `true`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    ///
+    /// # 业务约束
+    /// 只统计未删除记录；软删除范围视为管理员已收回，不得据此跳过唯一键冲突处理。
+    async fn role_has_live_data_scope(&self, role_id: &str) -> Result<bool> {
+        Ok(!self
+            .db
+            .data_scopes()
+            .list_by_subject(DataScopeSubjectType::Role, role_id, &mut NoTransaction)
+            .await?
+            .is_empty())
+    }
+
+    /// 写入角色公司级数据范围；唯一键冲突视为另一实例已写入或历史身份仍占用。
+    ///
+    /// # 参数
+    /// * `role_id` - 角色 ID
+    ///
+    /// # 返回值
+    /// 新建成功返回 `true`；`uk_data_scopes_subject_scope` 冲突返回 `false`。
+    ///
+    /// # 错误
+    /// 实体校验失败，或非唯一键冲突的 MongoDB 写入失败时返回错误。
+    ///
+    /// # 业务约束
+    /// 内建种子不写操作人审计；公司级范围不携带组织/团队目标。
+    async fn insert_company_data_scope(&self, role_id: &str) -> Result<bool> {
+        let scope = DataScope::new(
+            DataScopeId::new(id_generator::next_id()),
+            DataScopeData {
+                subject_type: DataScopeSubjectType::Role,
+                subject_id: role_id.to_string(),
+                scope_type: DataScopeType::Company,
+                scope_targets: Vec::new(),
+            },
+        )?;
+        match self.db.data_scopes().create(&scope, &mut NoTransaction).await {
+            Ok(()) => Ok(true),
+            Err(database::Error::DuplicateKey(_)) => Ok(false),
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// 判断未删除的预定义角色是否存在。
