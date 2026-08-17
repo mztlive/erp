@@ -388,6 +388,8 @@ pub enum ProcurementConfirmationDecision {
         submission_id: String,
         /// 当前采购确认编辑版本。
         expected_confirmation_edit_version: u64,
+        /// 本次一并提交的确认分行；通过事务内落库后再拆采购单。
+        lines: Vec<ProcurementConfirmationLineRequest>,
     },
     /// 驳回并退回销售。
     Rejected {
@@ -445,6 +447,16 @@ impl ProcurementConfirmationDecision {
         if self.expected_confirmation_edit_version() == 0 {
             return Err(Error::ValidationError("采购确认版本必须大于 0".to_string()));
         }
+        if let Self::Approved { lines, .. } = self {
+            if lines.is_empty() || lines.len() > 200 {
+                return Err(Error::ValidationError(
+                    "通过采购确认时必须提交1-200条确认分行".to_string(),
+                ));
+            }
+            for line in lines {
+                line.validate()?;
+            }
+        }
         if let Self::Rejected { comment, .. } = self {
             let count = comment.trim().chars().count();
             if count == 0 || count > 512 {
@@ -454,6 +466,20 @@ impl ProcurementConfirmationDecision {
             }
         }
         Ok(())
+    }
+
+    /// 返回通过分支携带的确认分行。
+    ///
+    /// # 返回
+    /// 通过分支返回分行切片；驳回分支返回 `None`。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn approved_lines(&self) -> Option<&[ProcurementConfirmationLineRequest]> {
+        match self {
+            Self::Approved { lines, .. } => Some(lines),
+            Self::Rejected { .. } => None,
+        }
     }
 
     /// 返回驳回分支字段；通过分支返回 `None`。
@@ -714,6 +740,15 @@ pub enum ProcurementSalesResolution {
     VoidAfterRejection,
 }
 
+/// 确认通过事务内生成的采购草稿身份。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ApprovedPurchaseOrderDraftView {
+    /// 采购单主键。
+    pub purchase_order_id: String,
+    /// 采购单号。
+    pub purchase_no: String,
+}
+
 /// 采购确认的正式业务结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "outcome", rename_all = "SCREAMING_SNAKE_CASE")]
@@ -732,6 +767,8 @@ pub enum ProcurementConfirmationBusinessResult {
         receivable_account_id: String,
         /// 可唯一消费的采购创建依据；当前稳定使用采购确认 ID。
         procurement_creation_basis_id: String,
+        /// 同一事务内按供应商/履约方式拆出的采购草稿。
+        purchase_orders: Vec<ApprovedPurchaseOrderDraftView>,
     },
     /// 采购确认驳回并退回销售草稿。
     RejectedToSales {
@@ -1052,6 +1089,53 @@ mod tests {
         assert_eq!(
             entities::sales_review::types::FulfillmentMode::from(command.action.lines[0].fulfillment_mode),
             entities::sales_review::types::FulfillmentMode::CompanyWarehouse
+        );
+    }
+
+    #[test]
+    fn w07_approve_decision_requires_confirmation_lines() {
+        let command: super::CompleteProcurementConfirmationCommand = serde_json::from_value(json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "8",
+            "expected_subject_version": "submission-1",
+            "decision": {
+                "review_result": "APPROVED",
+                "confirmation_id": "pc-1",
+                "submission_id": "submission-1",
+                "expected_confirmation_edit_version": 4,
+                "lines": [{
+                    "line_no": 1,
+                    "sales_order_submission_line_id": "line-1",
+                    "supplier_id": "supplier-1",
+                    "supplier_offering_revision_id": "offering-revision-1",
+                    "confirmed_quantity": "1.000000",
+                    "latest_cost_gross": "10.0000",
+                    "input_tax_rate": "0.130000",
+                    "expected_delivery_date": "2026-08-31",
+                    "fulfillment_mode": "WAREHOUSE",
+                    "supplier_capability_revision_id": "capability-revision-1"
+                }]
+            },
+            "idempotency_key": "decision-1"
+        }))
+        .unwrap();
+        assert_eq!(command.decision.approved_lines().map(<[_]>::len), Some(1));
+        command.decision.validate_branch().unwrap();
+
+        let missing_lines = json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "8",
+            "expected_subject_version": "submission-1",
+            "decision": {
+                "review_result": "APPROVED",
+                "confirmation_id": "pc-1",
+                "submission_id": "submission-1",
+                "expected_confirmation_edit_version": 4
+            },
+            "idempotency_key": "decision-1"
+        });
+        assert!(
+            serde_json::from_value::<super::CompleteProcurementConfirmationCommand>(missing_lines).is_err()
         );
     }
 

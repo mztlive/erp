@@ -103,7 +103,7 @@ export function ProcurementOutcomeFeedback({
                     <span className="text-muted-foreground">
                         {finishedResult.status === "rejected"
                             ? "销售可在销售单选择三条固定出路"
-                            : "已形成采购创建依据，后续建单将另行执行"}
+                            : "采购单已生成"}
                     </span>
                     <div className="ml-auto flex flex-wrap items-center gap-2">
                         <Button
@@ -244,10 +244,16 @@ export function buildProcurementResultFacts(
             },
             { label: "处理结果", value: "销售单已生效" },
             {
-                label: "采购创建依据",
-                value: outcome.procurementCreationBasisId,
+                label: "采购单草稿",
+                value:
+                    outcome.purchaseOrders.length > 1
+                        ? outcome.purchaseOrders
+                              .map((order) => order.purchaseNo)
+                              .join("、")
+                        : (outcome.purchaseOrders[0]?.purchaseNo ??
+                          outcome.procurementCreationBasisId),
             },
-            { label: "下一环节", value: "按创建依据进入采购建单" },
+            { label: "下一环节", value: "可继续提交财务审核" },
         ]
     }
     if (outcome.kind === "REJECTED_TO_SALES") {
@@ -286,6 +292,22 @@ export function ProcurementResultActions({
 }) {
     return (
         <>
+            {lastResult.outcome?.kind === "APPROVED_AND_SALES_EFFECTIVE" &&
+            lastResult.outcome.purchaseOrders[0] ? (
+                <Button
+                    type="button"
+                    size="sm"
+                    render={
+                        <Link
+                            href={`/procurement/orders/${lastResult.outcome.purchaseOrders[0].purchaseOrderId}?mode=edit`}
+                        />
+                    }
+                >
+                    {lastResult.outcome.purchaseOrders.length > 1
+                        ? `查看采购单（共 ${lastResult.outcome.purchaseOrders.length} 张）`
+                        : "查看采购单"}
+                </Button>
+            ) : null}
             {taskSalesOrderId ? (
                 <Button
                     type="button"
@@ -297,7 +319,7 @@ export function ProcurementResultActions({
                         />
                     }
                 >
-                    查看详情
+                    查看销售单
                 </Button>
             ) : null}
             {lastResult.status !== "unknown" &&

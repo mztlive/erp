@@ -180,12 +180,14 @@ describe("useProcurementConfirmationUrl", () => {
 })
 
 describe("useProcurementConfirmationQueueUrlSync", () => {
-    function renderSync(overrides: {
-        queueReady?: boolean
-        tasksLength?: number
-        currentTaskWorkItemId?: string
-        scope?: "mine" | "team"
-    } = {}) {
+    function renderSync(
+        overrides: {
+            queueReady?: boolean
+            tasksLength?: number
+            currentTaskWorkItemId?: string
+            scope?: "mine" | "team"
+        } = {},
+    ) {
         return renderHook(() =>
             useProcurementConfirmationQueueUrlSync({
                 scope: overrides.scope ?? "mine",
@@ -214,9 +216,7 @@ describe("useProcurementConfirmationQueueUrlSync", () => {
     })
 
     it("migrates the legacy task param to currentWorkItemId and drops completed", () => {
-        navMocks.searchParams = new URLSearchParams(
-            "task=wi_1&completed=1",
-        )
+        navMocks.searchParams = new URLSearchParams("task=wi_1&completed=1")
         renderSync({ currentTaskWorkItemId: "wi_1" })
         const params = lastReplacedParams()
         expect(params.get("currentWorkItemId")).toBe("wi_1")

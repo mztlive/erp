@@ -110,7 +110,10 @@ function makeListResult() {
         page: 1,
         pageSize: 20,
         metrics: [],
-        freshness: { updatedAt: "2026-08-14T00:00:00.000Z", state: "fresh" as const },
+        freshness: {
+            updatedAt: "2026-08-14T00:00:00.000Z",
+            state: "fresh" as const,
+        },
     }
 }
 
@@ -347,6 +350,14 @@ describe("useCreationBasesQuery", () => {
         await waitFor(() => expect(result.current.data).toEqual(bases))
         expect(mockedFetchBases).toHaveBeenCalledTimes(1)
     })
+
+    it("enabled=false 时不请求", () => {
+        const { result } = renderHookWithProviders(() =>
+            useCreationBasesQuery({ enabled: false }),
+        )
+        expect(result.current.fetchStatus).toBe("idle")
+        expect(mockedFetchBases).not.toHaveBeenCalled()
+    })
 })
 
 describe("useAcquireDraftTokenMutation", () => {
@@ -392,9 +403,12 @@ describe("useSavePurchaseOrderDraftMutation", () => {
         })
         const client = createFreshQueryClient()
         const invalidate = vi.spyOn(client, "invalidateQueries")
-        const { result } = renderHook(() => useSavePurchaseOrderDraftMutation(), {
-            wrapper: makeMutationWrapper(client),
-        })
+        const { result } = renderHook(
+            () => useSavePurchaseOrderDraftMutation(),
+            {
+                wrapper: makeMutationWrapper(client),
+            },
+        )
         await act(async () => {
             await result.current.mutateAsync(input)
         })
@@ -413,9 +427,12 @@ describe("useSavePurchaseOrderDraftMutation", () => {
         })
         const client = createFreshQueryClient()
         const invalidate = vi.spyOn(client, "invalidateQueries")
-        const { result } = renderHook(() => useSavePurchaseOrderDraftMutation(), {
-            wrapper: makeMutationWrapper(client),
-        })
+        const { result } = renderHook(
+            () => useSavePurchaseOrderDraftMutation(),
+            {
+                wrapper: makeMutationWrapper(client),
+            },
+        )
         await act(async () => {
             await result.current.mutateAsync(input)
         })

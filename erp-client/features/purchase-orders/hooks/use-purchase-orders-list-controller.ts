@@ -41,22 +41,24 @@ export function usePurchaseOrdersListController() {
         basisFromUrl,
     } = usePurchaseOrdersListUrl()
 
+    const [createOpen, setCreateOpen] = React.useState(false)
+
     const listQuery = usePurchaseOrdersQuery(listQueryInput)
     const exportQuery = usePurchaseOrderExportDataQuery(listQueryInput)
-    const basesQuery = useCreationBasesQuery()
+    const basesQuery = useCreationBasesQuery({
+        enabled: createOpen || Boolean(basisFromUrl),
+    })
     const createMutation = useCreateFromBasisMutation()
 
     const pageRows = React.useMemo(
         () => listQuery.data?.rows ?? [],
         [listQuery.data],
     )
-    const metrics = listQuery.data?.metrics ?? []
     const total = listQuery.data?.total ?? 0
 
     const [searchDraft, setSearchDraft] = React.useState(search)
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [focusedIndex, setFocusedIndex] = React.useState(0)
-    const [createOpen, setCreateOpen] = React.useState(false)
     const [selectedBasisId, setSelectedBasisId] = React.useState<string>("")
     const [actionResult, setActionResult] =
         React.useState<PurchaseOrdersActionResult | null>(null)
@@ -118,17 +120,14 @@ export function usePurchaseOrdersListController() {
         })
     }, [focusedIndex, pageRows])
 
-    const closePreviewAndRefocus = React.useCallback(
-        (id: string | null) => {
-            setPreviewId(null)
-            if (id) {
-                requestAnimationFrame(() => {
-                    rowRefs.current.get(id)?.focus()
-                })
-            }
-        },
-        [],
-    )
+    const closePreviewAndRefocus = React.useCallback((id: string | null) => {
+        setPreviewId(null)
+        if (id) {
+            requestAnimationFrame(() => {
+                rowRefs.current.get(id)?.focus()
+            })
+        }
+    }, [])
 
     usePurchaseOrdersListKeyboard({
         pageRows,
@@ -173,6 +172,12 @@ export function usePurchaseOrdersListController() {
         setCreateOpen(true)
     }, [basisFromUrl])
 
+    React.useEffect(() => {
+        if (!createOpen || selectedBasisId || basisFromUrl) return
+        const first = openBases[0]?.basisId
+        if (first) setSelectedBasisId(first)
+    }, [basisFromUrl, createOpen, openBases, selectedBasisId])
+
     const handleCreate = async () => {
         if (!selectedBasisId) return
         const basis = openBases.find((b) => b.basisId === selectedBasisId)
@@ -213,7 +218,6 @@ export function usePurchaseOrdersListController() {
         createMutation,
         previewQuery,
         pageRows,
-        metrics,
         total,
         pagination,
         sorting,

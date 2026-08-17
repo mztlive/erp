@@ -94,7 +94,7 @@ impl PurchaseOrderService {
         let submission = self
             .freeze_submission(&mut order, &mut draft, &mut draft_lines, actor)
             .await?;
-        let work_item = self.build_review_work_item(&order, &submission)?;
+        let work_item = finance_review_work_item(&order, &submission)?;
 
         let audit_actor = actor.clone();
         let audit_id_for_tx = audit_id.clone();
@@ -286,34 +286,43 @@ impl PurchaseOrderService {
             .unwrap_or(0);
         Ok(format!("SUB-{:06}", max_no + 1))
     }
+}
 
-    /// 构建审核待办（D03）。
-    fn build_review_work_item(
-        &self,
-        order: &PurchaseOrder,
-        submission: &PurchaseOrderSubmission,
-    ) -> Result<WorkItem> {
-        WorkItem::new(
-            WorkItemId::new(next_id()),
-            WorkItemData {
-                work_item_type: WorkItemType::PurchaseOrderReview,
-                approval_step_instance_id: None,
-                business_object_type: "purchase_order".to_string(),
-                business_object_id: order.base.id.clone(),
-                subject_version: submission.base.id.clone(),
-                assignment_mode: AssignmentMode::Pool,
-                owner_role: "role-finance".to_string(),
-                owner_organization_id: "company".to_string(),
-                owner_user_id: None,
-                assignment_source: AssignmentSource::SystemRule,
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-                reason_code: None,
-                impact_summary: Some(format!("采购单 {} 待财务审核", order.purchase_no)),
-            },
-        )
-        .map_err(Into::into)
-    }
+/// 构造采购财务审核待办。
+///
+/// # 参数
+/// * `order` - 已提交财务审核的采购单
+/// * `submission` - 对应的不可变提交
+///
+/// # 返回
+/// 返回未落库的财务审核待办。
+///
+/// # 错误
+/// 待办字段非法时返回校验错误。
+pub(super) fn finance_review_work_item(
+    order: &PurchaseOrder,
+    submission: &PurchaseOrderSubmission,
+) -> Result<WorkItem> {
+    WorkItem::new(
+        WorkItemId::new(next_id()),
+        WorkItemData {
+            work_item_type: WorkItemType::PurchaseOrderReview,
+            approval_step_instance_id: None,
+            business_object_type: "purchase_order".to_string(),
+            business_object_id: order.base.id.clone(),
+            subject_version: submission.base.id.clone(),
+            assignment_mode: AssignmentMode::Pool,
+            owner_role: "role-finance".to_string(),
+            owner_organization_id: "company".to_string(),
+            owner_user_id: None,
+            assignment_source: AssignmentSource::SystemRule,
+            priority: WorkItemPriority::Normal,
+            due_at: None,
+            reason_code: None,
+            impact_summary: Some(format!("采购单 {} 待财务审核", order.purchase_no)),
+        },
+    )
+    .map_err(Into::into)
 }
 
 /// 采购提交命令的最小、可重放结果收据。

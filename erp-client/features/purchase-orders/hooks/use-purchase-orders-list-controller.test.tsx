@@ -78,14 +78,19 @@ function makeListItem(): PurchaseOrderListItem {
     }
 }
 
-function makeListResult(overrides: Partial<{ page: number; rows: PurchaseOrderListItem[] }> = {}) {
+function makeListResult(
+    overrides: Partial<{ page: number; rows: PurchaseOrderListItem[] }> = {},
+) {
     return {
         rows: overrides.rows ?? [makeListItem()],
         total: overrides.rows?.length ?? 1,
         page: overrides.page ?? 1,
         pageSize: 20,
         metrics: [],
-        freshness: { updatedAt: "2026-08-14T00:00:00.000Z", state: "fresh" as const },
+        freshness: {
+            updatedAt: "2026-08-14T00:00:00.000Z",
+            state: "fresh" as const,
+        },
     }
 }
 
@@ -112,7 +117,9 @@ function renderController() {
     const client = createFreshQueryClient()
     const rendered = renderHook(() => usePurchaseOrdersListController(), {
         wrapper: ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={client}>{children}</QueryClientProvider>
+            <QueryClientProvider client={client}>
+                {children}
+            </QueryClientProvider>
         ),
     })
     return rendered
@@ -180,9 +187,7 @@ describe("usePurchaseOrdersListController", () => {
     })
 
     it("搜索词与 URL 一致时不重复写回", async () => {
-        mockUseSearchParams.mockReturnValue(
-            new URLSearchParams("q=abc"),
-        )
+        mockUseSearchParams.mockReturnValue(new URLSearchParams("q=abc"))
         const { result } = renderController()
         await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
 
@@ -204,16 +209,13 @@ describe("usePurchaseOrdersListController", () => {
         act(() => {
             result.current.clearFilters()
         })
-        expect(mockRouter.replace).toHaveBeenCalledWith(
-            "/procurement/orders",
-            { scroll: false },
-        )
+        expect(mockRouter.replace).toHaveBeenCalledWith("/procurement/orders", {
+            scroll: false,
+        })
     })
 
     it("列表返回页码与 URL 不同步时校正 URL", async () => {
-        mockUseSearchParams.mockReturnValue(
-            new URLSearchParams("page=3"),
-        )
+        mockUseSearchParams.mockReturnValue(new URLSearchParams("page=3"))
         mockedFetchList.mockResolvedValue(makeListResult({ page: 5 }))
         renderController()
         await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
@@ -262,6 +264,12 @@ describe("usePurchaseOrdersListController", () => {
         expect(result.current.actionResult).toBeNull()
     })
 
+    it("进入列表时不预取创建依据", async () => {
+        renderController()
+        await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
+        expect(mockedFetchBases).not.toHaveBeenCalled()
+    })
+
     it("建单成功：调用 API、关闭弹框并跳转编辑页", async () => {
         mockedFetchBases.mockResolvedValue([makeBasis()])
         mockedCreate.mockResolvedValue({
@@ -274,6 +282,9 @@ describe("usePurchaseOrdersListController", () => {
             reference: "PO-NEW",
         })
         const { result } = renderController()
+        act(() => {
+            result.current.openCreateDialog()
+        })
         await waitFor(() => expect(result.current.openBases).toHaveLength(1))
 
         act(() => {
@@ -305,10 +316,12 @@ describe("usePurchaseOrdersListController", () => {
             code: "CONFLICT",
         })
         const { result } = renderController()
+        act(() => {
+            result.current.openCreateDialog()
+        })
         await waitFor(() => expect(result.current.openBases).toHaveLength(1))
 
         act(() => {
-            result.current.openCreateDialog()
             result.current.setSelectedBasisId("bas_1")
         })
         expect(result.current.createOpen).toBe(true)
@@ -343,9 +356,7 @@ describe("usePurchaseOrdersListController", () => {
         })
         expect(result.current.focusedIndex).toBe(2)
 
-        mockUseSearchParams.mockReturnValue(
-            new URLSearchParams("status=DRAFT"),
-        )
+        mockUseSearchParams.mockReturnValue(new URLSearchParams("status=DRAFT"))
         rerender()
         await waitFor(() => expect(result.current.focusedIndex).toBe(0))
     })
@@ -358,6 +369,8 @@ describe("usePurchaseOrdersListController", () => {
         act(() => {
             result.current.setPreviewId("po_1")
         })
-        await waitFor(() => expect(mockedFetchCenter).toHaveBeenCalledWith("po_1"))
+        await waitFor(() =>
+            expect(mockedFetchCenter).toHaveBeenCalledWith("po_1"),
+        )
     })
 })

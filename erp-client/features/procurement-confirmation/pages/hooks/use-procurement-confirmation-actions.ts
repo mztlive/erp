@@ -53,6 +53,9 @@ export type ProcurementConfirmationActionsOptions = {
     setLastResult: React.Dispatch<React.SetStateAction<ResultState>>
     setFinishedResult: React.Dispatch<React.SetStateAction<ResultState>>
     setAdvanceAfterConfirm: React.Dispatch<React.SetStateAction<boolean>>
+    openGeneratedPurchaseOrders: (
+        orders: readonly { purchaseOrderId: string; purchaseNo: string }[],
+    ) => void
 }
 
 /**
@@ -67,7 +70,6 @@ export function useProcurementConfirmationActions({
     linesValid,
     allCovered,
     autoNext,
-    advanceAfterConfirm,
     recommendation,
     saveMutation,
     completeMutation,
@@ -83,6 +85,7 @@ export function useProcurementConfirmationActions({
     setLastResult,
     setFinishedResult,
     setAdvanceAfterConfirm,
+    openGeneratedPurchaseOrders,
 }: ProcurementConfirmationActionsOptions) {
     const assertAllowed = React.useCallback(
         (action: string) => {
@@ -171,45 +174,24 @@ export function useProcurementConfirmationActions({
         }
         setActionError(null)
         try {
-            assertAllowed("SAVE")
-            await saveMutation.mutateAsync({
+            if (!canOpenProcurementConfirmPlan(task.allowedActions)) {
+                throw new Error("当前责任或任务版本已变化，请刷新后再处理")
+            }
+            const response = await completeMutation.mutateAsync({
                 workItemId: task.workItemId,
                 expectedTaskVersion: task.taskVersion,
                 expectedSubjectVersion: task.subjectVersion,
-                confirmationId: task.confirmation.confirmationId,
-                submissionId: task.salesSubmission.submissionId,
-                expectedEditVersion: task.confirmation.editVersion,
-                lines: lineDrafts,
-                idempotencyKey: `w07:${task.workItemId}:${task.taskVersion}:save:${task.confirmation.editVersion}`,
-            })
-            setDirty(false)
-            // 方案落库后编辑版本已变化：正式确认前重读当前任务。
-            const latestTask =
-                (await queueRefetch()).data?.tasks.find(
-                    (t) => t.workItemId === task.workItemId,
-                ) ?? task
-            if (!latestTask.allowedActions.includes("APPROVE")) {
-                setActionError(
-                    latestTask.actionBlockers.find(
-                        (blocker) => blocker.action === "APPROVE",
-                    )?.message ?? "当前任务还不能通过，请刷新后重试",
-                )
-                return
-            }
-            const response = await completeMutation.mutateAsync({
-                workItemId: latestTask.workItemId,
-                expectedTaskVersion: latestTask.taskVersion,
-                expectedSubjectVersion: latestTask.subjectVersion,
-                idempotencyKey: `w07:${latestTask.workItemId}:${latestTask.taskVersion}:approve`,
+                idempotencyKey: `w07:${task.workItemId}:${task.taskVersion}:approve`,
                 decision: {
                     reviewResult: "APPROVED",
-                    confirmationId: latestTask.confirmation.confirmationId,
-                    submissionId: latestTask.salesSubmission.submissionId,
+                    confirmationId: task.confirmation.confirmationId,
+                    submissionId: task.salesSubmission.submissionId,
                     expectedConfirmationEditVersion:
-                        latestTask.confirmation.editVersion,
-                    salesOrderId: latestTask.salesSubmission.salesOrderId,
-                    salesOrderNo: latestTask.salesSubmission.salesOrderNo,
-                    subjectHash: latestTask.salesSubmission.subjectHash,
+                        task.confirmation.editVersion,
+                    salesOrderId: task.salesSubmission.salesOrderId,
+                    salesOrderNo: task.salesSubmission.salesOrderNo,
+                    subjectHash: task.salesSubmission.subjectHash,
+                    lines: lineDrafts,
                 },
             })
 
@@ -231,41 +213,25 @@ export function useProcurementConfirmationActions({
             }
 
             const outcome = response.outcome
-            if (outcome.kind !== "APPROVED_AND_SALES_EFFECTIVE") return
+            if (outcome.kind !== "APPROVED_AND_SALES_EFFECTIVE") {
+                setActionError("生成采购单未返回成功结果，请刷新后重试")
+                return
+            }
+            setDirty(false)
             setConfirmOpen(false)
-            const approvedResult: ResultState = {
-                status: "succeeded",
-                title: "采购确认已通过 · 已形成采购创建依据",
-                description:
-                    advanceAfterConfirm && autoNext
-                        ? "销售单已生效，采购创建依据已形成；队列将打开下一条。"
-                        : "销售单已生效，采购创建依据已形成；后续建单尚未在本次事务中执行。",
-                reference: outcome.reference,
-                outcome,
-                stayOnItem: !(advanceAfterConfirm && autoNext),
-            }
-            setLastResult(approvedResult)
-            if (advanceAfterConfirm && autoNext) {
-                setFinishedResult(approvedResult)
-                advanceIfNeeded(true)
-            } else {
-                setFinishedResult(null)
-            }
+            setLastResult(null)
+            setFinishedResult(null)
+            openGeneratedPurchaseOrders(outcome.purchaseOrders)
         } catch (error) {
             setActionError(getErrorMessage(error, "通过失败"))
         }
     }, [
-        advanceAfterConfirm,
-        advanceIfNeeded,
         allCovered,
-        autoNext,
         completeMutation,
-        assertAllowed,
         lineDrafts,
-        queueRefetch,
         recommendation,
-        saveMutation,
         setActionError,
+        openGeneratedPurchaseOrders,
         setConfirmOpen,
         setDirty,
         setFinishedResult,

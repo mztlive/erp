@@ -24,6 +24,7 @@ use mongodb::Database;
 mod change;
 mod creation_basis;
 mod draft_edit;
+mod draft_from_confirmation;
 mod dto;
 mod formalization;
 mod query;
@@ -32,6 +33,7 @@ mod shared;
 mod submission;
 mod view_mapping;
 
+pub(crate) use self::draft_from_confirmation::create_drafts_from_confirmation_lines;
 pub use self::dto::{
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView, CreationBasisView,
     EffectPurchaseChangeRequest, PageView, PurchaseActionBlockerView, PurchaseChangeEffectResult,

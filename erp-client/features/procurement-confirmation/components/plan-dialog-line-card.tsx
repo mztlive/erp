@@ -151,8 +151,7 @@ export function PlanLineCard({
                         )
                         updatePlanLine(line.lineKey, {
                             fulfillmentMode,
-                            capabilityRevisionId:
-                                capability?.revisionId ?? "",
+                            capabilityRevisionId: capability?.revisionId ?? "",
                             capabilitySummary:
                                 capability?.label ?? "请选择供应资质",
                             qualificationStatus: capability

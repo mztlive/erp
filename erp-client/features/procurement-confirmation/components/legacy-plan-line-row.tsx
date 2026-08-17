@@ -62,10 +62,7 @@ export function LegacyPlanLineRow({
                 <OptionCombobox
                     value={line.offeringRevisionId || undefined}
                     onValueChange={(revisionId) => {
-                        const offering = findOffering(
-                            supplyOptions,
-                            revisionId,
-                        )
+                        const offering = findOffering(supplyOptions, revisionId)
                         const supplier = supplierOptions?.find(
                             (option) =>
                                 option.supplierId === offering?.supplierId,
@@ -89,8 +86,7 @@ export function LegacyPlanLineRow({
                             capabilityRevisionId:
                                 onlyCapability?.revisionId ?? "",
                             capabilitySummary:
-                                onlyCapability?.label ??
-                                "请选择有效供应资质",
+                                onlyCapability?.label ?? "请选择有效供应资质",
                             qualificationStatus: onlyCapability
                                 ? "VALID"
                                 : "INVALID",
@@ -186,8 +182,7 @@ export function LegacyPlanLineRow({
                             capabilityRevisionId:
                                 onlyCapability?.revisionId ?? "",
                             capabilitySummary:
-                                onlyCapability?.label ??
-                                "请选择有效供应资质",
+                                onlyCapability?.label ?? "请选择有效供应资质",
                             qualificationStatus: onlyCapability
                                 ? "VALID"
                                 : "INVALID",

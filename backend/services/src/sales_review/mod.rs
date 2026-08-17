@@ -37,7 +37,7 @@ mod sales_order_review;
 mod sourcing;
 
 pub use self::dto::{
-    ChangeReviewDecisionRequest, CompleteProcurementConfirmationCommand,
+    ApprovedPurchaseOrderDraftView, ChangeReviewDecisionRequest, CompleteProcurementConfirmationCommand,
     CompleteProcurementConfirmationResult, CreateSalesChangeOrderRequest, PageView,
     ProcurementConfirmationActionBlockerView, ProcurementConfirmationAllowedAction,
     ProcurementConfirmationBusinessResult, ProcurementConfirmationDecision,

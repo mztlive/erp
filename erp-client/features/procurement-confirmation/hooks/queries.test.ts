@@ -459,7 +459,10 @@ describe("useCompleteProcurementMutation", () => {
                 salesOrderRevisionId: "rev_1",
                 receivableAccountId: "ra_1",
                 procurementCreationBasisId: "basis_1",
-                reference: "basis_1",
+                purchaseOrders: [
+                    { purchaseOrderId: "po_1", purchaseNo: "PO-1" },
+                ],
+                reference: "po_1",
             },
         })
         await act(async () => {

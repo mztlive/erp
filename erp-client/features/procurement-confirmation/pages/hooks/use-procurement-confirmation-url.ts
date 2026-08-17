@@ -23,9 +23,7 @@ export function useProcurementConfirmationUrl() {
         searchParams.get("scope") === "team" ? "team" : "mine"
     const dueParam = searchParams.get("due")
     const due: ProcurementConfirmationDue =
-        dueParam === "today" ||
-        dueParam === "overdue" ||
-        dueParam === "active"
+        dueParam === "today" || dueParam === "overdue" || dueParam === "active"
             ? dueParam
             : "active"
     const sortParam = searchParams.get("sort")

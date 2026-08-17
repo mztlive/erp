@@ -28,18 +28,7 @@ export async function saveProcurementConfirmation(input: {
             confirmation_id: input.confirmationId,
             submission_id: input.submissionId,
             expected_edit_version: input.expectedEditVersion,
-            lines: input.lines.map((line, index) => ({
-                line_no: index + 1,
-                sales_order_submission_line_id: line.submissionLineId,
-                supplier_id: line.supplierId,
-                supplier_offering_revision_id: line.offeringRevisionId,
-                confirmed_quantity: line.confirmedQuantity,
-                latest_cost_gross: line.latestCostGross,
-                input_tax_rate: line.inputTaxRate,
-                expected_delivery_date: line.expectedDeliveryDate,
-                fulfillment_mode: line.fulfillmentMode,
-                supplier_capability_revision_id: line.capabilityRevisionId,
-            })),
+            lines: toConfirmationLinePayload(input.lines),
         },
         idempotency_key: input.idempotencyKey,
     }
@@ -80,6 +69,7 @@ export async function completeProcurementDecision(input: {
               salesOrderId: string
               salesOrderNo: string
               subjectHash: string
+              lines: ConfirmationLineDraft[]
           }
         | {
               reviewResult: "REJECTED"
@@ -106,6 +96,10 @@ export async function completeProcurementDecision(input: {
                       sales_order_revision_id: string
                       receivable_account_id: string
                       procurement_creation_basis_id: string
+                      purchase_orders?: Array<{
+                          purchase_order_id: string
+                          purchase_no: string
+                      }>
                   }
                 | {
                       outcome: "REJECTED_TO_SALES"
@@ -135,6 +129,9 @@ export async function completeProcurementDecision(input: {
                               expected_confirmation_edit_version:
                                   input.decision
                                       .expectedConfirmationEditVersion,
+                              lines: toConfirmationLinePayload(
+                                  input.decision.lines,
+                              ),
                           }
                         : {
                               review_result: "REJECTED",
@@ -161,7 +158,21 @@ export async function completeProcurementDecision(input: {
                     status: "failed",
                     code: "INCOMPLETE_FORMAL_RESULT",
                     message:
-                        "任务完成记录或采购创建依据不完整；当前结果不能按成功展示",
+                        "任务完成记录或采购单草稿不完整；当前结果不能按成功展示",
+                }
+            }
+            const purchaseOrders = (business.purchase_orders ?? [])
+                .filter((order) => order.purchase_order_id && order.purchase_no)
+                .map((order) => ({
+                    purchaseOrderId: order.purchase_order_id,
+                    purchaseNo: order.purchase_no,
+                }))
+            if (purchaseOrders.length === 0) {
+                return {
+                    status: "failed",
+                    code: "INCOMPLETE_FORMAL_RESULT",
+                    message:
+                        "任务完成记录或采购单草稿不完整；当前结果不能按成功展示",
                 }
             }
             const outcome: FormalOutcome = {
@@ -175,7 +186,10 @@ export async function completeProcurementDecision(input: {
                 receivableAccountId: business.receivable_account_id,
                 procurementCreationBasisId:
                     business.procurement_creation_basis_id,
-                reference: business.procurement_creation_basis_id,
+                purchaseOrders,
+                reference:
+                    purchaseOrders[0]?.purchaseOrderId ??
+                    business.procurement_creation_basis_id,
             }
             return { status: "succeeded", outcome }
         }
@@ -232,4 +246,19 @@ export async function completeProcurementDecision(input: {
             code: apiErrorCode(error),
         }
     }
+}
+
+function toConfirmationLinePayload(lines: ConfirmationLineDraft[]) {
+    return lines.map((line, index) => ({
+        line_no: index + 1,
+        sales_order_submission_line_id: line.submissionLineId,
+        supplier_id: line.supplierId,
+        supplier_offering_revision_id: line.offeringRevisionId,
+        confirmed_quantity: line.confirmedQuantity,
+        latest_cost_gross: line.latestCostGross,
+        input_tax_rate: line.inputTaxRate,
+        expected_delivery_date: line.expectedDeliveryDate,
+        fulfillment_mode: line.fulfillmentMode,
+        supplier_capability_revision_id: line.capabilityRevisionId,
+    }))
 }

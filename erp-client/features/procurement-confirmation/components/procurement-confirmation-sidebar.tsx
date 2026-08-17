@@ -105,9 +105,9 @@ export function ProcurementConfirmationSidebar({
                     </dl>
                     <Alert variant="info">
                         <CircleCheckIcon aria-hidden="true" />
-                        <AlertTitle>确认通过只形成采购创建依据</AlertTitle>
+                        <AlertTitle>确认通过将同时生成采购草稿</AlertTitle>
                         <AlertDescription>
-                            本次处理不会创建采购单；后续建单使用本次返回的采购创建依据。
+                            通过后销售单生效，并按供应商/履约方式拆出采购单草稿，可继续改草稿后提交财务审核。
                         </AlertDescription>
                     </Alert>
                     <div
@@ -283,7 +283,7 @@ export function ProcurementConfirmationSidebar({
                                                         ]
                                                     }{" "}
                                                     · {order.lineCount} 条明细 ·
-                                                    待后续建单
+                                                    确认后生成采购单
                                                 </p>
                                             </li>
                                         ),

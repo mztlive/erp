@@ -21,8 +21,8 @@ use super::formalization::{build_receivable_account, build_receivable_entry, bui
 use super::procurement_confirmation::{
     command_audit_id, command_fingerprint, ensure_command_confirmation_id, ensure_pending_confirmation,
     ensure_procurement_confirmation_actor_eligible, ensure_submission_identity,
-    load_procurement_confirmation_work_item, parse_task_version, ProcurementConfirmationTaskGuard,
-    DECISION_COMMAND_ACTION,
+    load_procurement_confirmation_work_item, parse_task_version, replace_pending_confirmation_lines,
+    ProcurementConfirmationTaskGuard, DECISION_COMMAND_ACTION,
 };
 use super::{
     CompleteProcurementConfirmationCommand, CompleteProcurementConfirmationResult,
@@ -64,8 +64,8 @@ impl SalesReviewService {
     /// 以 W07 唯一强类型完成命令通过采购确认。
     ///
     /// 单事务重验命令身份、任务/确认版本、当前责任、资格和岗位分离，形成销售
-    /// 正式版本、应收、采购创建依据语义、追加式工作流动作及审计收据，并完成原
-    /// 待办。本入口不创建 PurchaseOrder 或后继任务。
+    /// 正式版本、应收、采购创建依据语义、按供应商/履约方式拆出的采购草稿、
+    /// 追加式工作流动作及审计收据，并完成原待办。不创建后继采购建单任务。
     ///
     /// # 错误
     /// 任一身份、状态、版本或准入事实漂移时整体回滚并返回稳定业务错误。
@@ -144,10 +144,12 @@ impl SalesReviewService {
                         .sales_order_submission_lines()
                         .list_lines_by_submissions(std::slice::from_ref(&confirmation.submission_id), session)
                         .await?;
-                    let confirmation_lines = db
-                        .procurement_confirmation_lines()
-                        .list_lines_by_confirmation(&confirmation.base.id.clone().into(), session)
-                        .await?;
+                    let incoming_lines = command.decision.approved_lines().ok_or_else(|| {
+                        Error::ValidationError("通过采购确认时必须提交确认分行".to_string())
+                    })?;
+                    let confirmation_lines =
+                        replace_pending_confirmation_lines(&db, &confirmation, incoming_lines, session)
+                            .await?;
                     SalesReviewService::new(db.clone())
                         .ensure_confirmation_sources(&confirmation_lines, &submission_lines, session)
                         .await?;
@@ -218,12 +220,27 @@ impl SalesReviewService {
                     db.business_documents().update(&mut document, session).await?;
                     db.workflow_actions().create(&workflow, session).await?;
                     db.work_items().update(&mut work_item, session).await?;
+                    let drafts = crate::purchase_order::create_drafts_from_confirmation_lines(
+                        &db,
+                        &confirmation.sales_order_id,
+                        &confirmation_lines,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
                     let receipt = DecisionCommandReceipt::Approved {
                         confirmation_id: confirmation.base.id.clone(),
                         sales_order_id: confirmation.sales_order_id.to_string(),
                         submission_id: confirmation.submission_id.to_string(),
                         sales_order_revision_id: revision.revision.base.id.clone(),
                         receivable_account_id: account.base.id.clone(),
+                        purchase_orders: drafts
+                            .into_iter()
+                            .map(|draft| super::ApprovedPurchaseOrderDraftView {
+                                purchase_order_id: draft.purchase_order_id,
+                                purchase_no: draft.purchase_no,
+                            })
+                            .collect(),
                     };
                     let audit = actor_owned.resource_log_with_id(
                         audit_id_for_tx,
@@ -592,6 +609,7 @@ enum DecisionCommandReceipt {
         submission_id: String,
         sales_order_revision_id: String,
         receivable_account_id: String,
+        purchase_orders: Vec<super::ApprovedPurchaseOrderDraftView>,
     },
     Rejected {
         confirmation_id: String,
@@ -610,6 +628,7 @@ impl DecisionCommandReceipt {
                 submission_id,
                 sales_order_revision_id,
                 receivable_account_id,
+                purchase_orders,
             } => ProcurementConfirmationBusinessResult::ApprovedAndSalesEffective {
                 procurement_confirmation_id: confirmation_id.clone(),
                 sales_order_id,
@@ -617,6 +636,7 @@ impl DecisionCommandReceipt {
                 sales_order_revision_id,
                 receivable_account_id,
                 procurement_creation_basis_id: confirmation_id,
+                purchase_orders,
             },
             Self::Rejected {
                 confirmation_id,
@@ -681,9 +701,13 @@ fn decision_receipt_message(fingerprint: &str, receipt: &DecisionCommandReceipt)
             submission_id,
             sales_order_revision_id,
             receivable_account_id,
-        } => format!(
-            "fp={fingerprint};approved={confirmation_id}|{sales_order_id}|{submission_id}|{sales_order_revision_id}|{receivable_account_id}"
-        ),
+            purchase_orders,
+        } => {
+            let drafts = encode_purchase_order_receipt(purchase_orders);
+            format!(
+                "fp={fingerprint};approved={confirmation_id}|{sales_order_id}|{submission_id}|{sales_order_revision_id}|{receivable_account_id}|{drafts}"
+            )
+        }
         DecisionCommandReceipt::Rejected {
             confirmation_id,
             sales_order_id,
@@ -695,6 +719,53 @@ fn decision_receipt_message(fingerprint: &str, receipt: &DecisionCommandReceipt)
             )
         }
     }
+}
+
+/// 把通过事务生成的采购草稿编码进幂等收据。
+///
+/// # 参数
+/// * `purchase_orders` - 草稿身份列表
+///
+/// # 返回
+/// 返回 `id:no,id:no` 形式的稳定文本；空列表返回空串。
+///
+/// # 错误
+/// 无。
+fn encode_purchase_order_receipt(purchase_orders: &[super::ApprovedPurchaseOrderDraftView]) -> String {
+    purchase_orders
+        .iter()
+        .map(|order| format!("{}:{}", order.purchase_order_id, order.purchase_no))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// 从幂等收据解析采购草稿身份。
+///
+/// # 参数
+/// * `value` - `id:no,id:no` 文本；空串表示无草稿
+///
+/// # 返回
+/// 返回解析出的草稿身份；无法识别的片段会被跳过。
+///
+/// # 错误
+/// 无。
+fn decode_purchase_order_receipt(value: &str) -> Vec<super::ApprovedPurchaseOrderDraftView> {
+    if value.is_empty() {
+        return Vec::new();
+    }
+    value
+        .split(',')
+        .filter_map(|item| {
+            let (purchase_order_id, purchase_no) = item.split_once(':')?;
+            if purchase_order_id.is_empty() || purchase_no.is_empty() {
+                return None;
+            }
+            Some(super::ApprovedPurchaseOrderDraftView {
+                purchase_order_id: purchase_order_id.to_string(),
+                purchase_no: purchase_no.to_string(),
+            })
+        })
+        .collect()
 }
 
 fn parse_decision_receipt(message: &str, expected_fingerprint: &str) -> Result<DecisionCommandReceipt> {
@@ -711,17 +782,19 @@ fn parse_decision_receipt(message: &str, expected_fingerprint: &str) -> Result<D
     }
     if let Some(value) = result.strip_prefix("approved=") {
         let fields = value.split('|').collect::<Vec<_>>();
-        let [confirmation_id, sales_order_id, submission_id, sales_order_revision_id, receivable_account_id] =
-            fields.as_slice()
-        else {
+        if fields.len() != 5 && fields.len() != 6 {
             return Err(Error::Internal("采购确认通过收据结果非法".to_string()));
-        };
+        }
         return Ok(DecisionCommandReceipt::Approved {
-            confirmation_id: (*confirmation_id).to_string(),
-            sales_order_id: (*sales_order_id).to_string(),
-            submission_id: (*submission_id).to_string(),
-            sales_order_revision_id: (*sales_order_revision_id).to_string(),
-            receivable_account_id: (*receivable_account_id).to_string(),
+            confirmation_id: fields[0].to_string(),
+            sales_order_id: fields[1].to_string(),
+            submission_id: fields[2].to_string(),
+            sales_order_revision_id: fields[3].to_string(),
+            receivable_account_id: fields[4].to_string(),
+            purchase_orders: fields
+                .get(5)
+                .map(|value| decode_purchase_order_receipt(value))
+                .unwrap_or_default(),
         });
     }
     if let Some(value) = result.strip_prefix("rejected=") {
@@ -916,6 +989,7 @@ mod tests {
                 submission_id: "submission-1".to_string(),
                 sales_order_revision_id: "revision-1".to_string(),
                 receivable_account_id: "account-1".to_string(),
+                purchase_orders: Vec::new(),
             }
         );
         assert!(parse_decision_receipt(
@@ -952,6 +1026,10 @@ mod tests {
             submission_id: "submission-1".to_string(),
             sales_order_revision_id: "revision-1".to_string(),
             receivable_account_id: "account-1".to_string(),
+            purchase_orders: vec![super::super::ApprovedPurchaseOrderDraftView {
+                purchase_order_id: "po-1".to_string(),
+                purchase_no: "PO-1".to_string(),
+            }],
         }
         .into_result("work-1")
         .unwrap();
@@ -961,6 +1039,42 @@ mod tests {
             value["business_result"]["procurement_creation_basis_id"],
             "confirmation-1"
         );
-        assert!(value["business_result"].get("purchase_orders").is_none());
+        assert_eq!(
+            value["business_result"]["purchase_orders"][0]["purchase_order_id"],
+            "po-1"
+        );
+        assert_eq!(
+            value["business_result"]["purchase_orders"][0]["purchase_no"],
+            "PO-1"
+        );
+    }
+
+    #[test]
+    fn approved_receipt_round_trips_purchase_orders() {
+        let receipt = parse_decision_receipt(
+            "fp=abc;approved=confirmation-1|sales-1|submission-1|revision-1|account-1|po-1:PO-1,po-2:PO-2",
+            "abc",
+        )
+        .unwrap();
+        assert_eq!(
+            receipt,
+            DecisionCommandReceipt::Approved {
+                confirmation_id: "confirmation-1".to_string(),
+                sales_order_id: "sales-1".to_string(),
+                submission_id: "submission-1".to_string(),
+                sales_order_revision_id: "revision-1".to_string(),
+                receivable_account_id: "account-1".to_string(),
+                purchase_orders: vec![
+                    super::super::ApprovedPurchaseOrderDraftView {
+                        purchase_order_id: "po-1".to_string(),
+                        purchase_no: "PO-1".to_string(),
+                    },
+                    super::super::ApprovedPurchaseOrderDraftView {
+                        purchase_order_id: "po-2".to_string(),
+                        purchase_no: "PO-2".to_string(),
+                    },
+                ],
+            }
+        );
     }
 }

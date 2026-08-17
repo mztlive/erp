@@ -36,7 +36,9 @@ function renderResponsibility(
         lastResult: null as ResultState,
     }
     const callbacks = {
-        neighborId: vi.fn((delta: number) => (delta === 1 ? "wi_2" : undefined)),
+        neighborId: vi.fn((delta: number) =>
+            delta === 1 ? "wi_2" : undefined,
+        ),
         goToWorkItem: vi.fn(),
         replaceUrl: vi.fn(),
         handleSave: vi.fn(async () => true),
@@ -83,8 +85,9 @@ afterEach(() => {
 
 describe("useProcurementResponsibilityActions", () => {
     it("releases to team after saving the dirty draft", async () => {
-        const { result, state, callbacks, mutation } =
-            renderResponsibility({ dirty: true })
+        const { result, state, callbacks, mutation } = renderResponsibility({
+            dirty: true,
+        })
         await act(async () => {
             await result.current.handleReleaseToTeam()
         })
@@ -174,9 +177,7 @@ describe("useProcurementResponsibilityActions", () => {
         await act(async () => {
             await result.current.handleStartProcessing()
         })
-        expect(callbacks.assertAllowed).toHaveBeenCalledWith(
-            "START_PROCESSING",
-        )
+        expect(callbacks.assertAllowed).toHaveBeenCalledWith("START_PROCESSING")
         expect(mutation.mutateAsync).toHaveBeenCalledWith({
             kind: "START_PROCESSING",
             workItemId: "wi_1",

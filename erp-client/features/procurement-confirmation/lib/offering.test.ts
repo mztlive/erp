@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest"
 
 import type { ProcurementSupplyOption } from "@/features/procurement-confirmation/api"
-import {
-    findOffering,
-    singleCapabilityForMode,
-} from "./offering"
+import { findOffering, singleCapabilityForMode } from "./offering"
 
 function makeOption(
     overrides: Partial<ProcurementSupplyOption> = {},
@@ -22,8 +19,16 @@ function makeOption(
         freightAmount: "0",
         serviceFeeAmount: "0",
         capabilities: [
-            { revisionId: "cap_p", label: "实物商品", capabilityCode: "physical" },
-            { revisionId: "cap_v", label: "虚拟商品", capabilityCode: "virtual" },
+            {
+                revisionId: "cap_p",
+                label: "实物商品",
+                capabilityCode: "physical",
+            },
+            {
+                revisionId: "cap_v",
+                label: "虚拟商品",
+                capabilityCode: "virtual",
+            },
         ],
         ...overrides,
     }
@@ -32,7 +37,12 @@ function makeOption(
 describe("findOffering", () => {
     it("returns the offering matching the revision id", () => {
         const target = makeOption()
-        expect(findOffering([makeOption({ offeringRevisionId: "off_2" }), target], "off_1")).toBe(target)
+        expect(
+            findOffering(
+                [makeOption({ offeringRevisionId: "off_2" }), target],
+                "off_1",
+            ),
+        ).toBe(target)
     })
 
     it("returns undefined when no offering matches", () => {
@@ -53,8 +63,16 @@ describe("singleCapabilityForMode", () => {
     it("returns undefined when several capabilities match (requires manual choice)", () => {
         const option = makeOption({
             capabilities: [
-                { revisionId: "cap_1", label: "实物商品", capabilityCode: "physical" },
-                { revisionId: "cap_2", label: "实物商品", capabilityCode: "physical" },
+                {
+                    revisionId: "cap_1",
+                    label: "实物商品",
+                    capabilityCode: "physical",
+                },
+                {
+                    revisionId: "cap_2",
+                    label: "实物商品",
+                    capabilityCode: "physical",
+                },
             ],
         })
         expect(singleCapabilityForMode(option, "WAREHOUSE")).toBeUndefined()

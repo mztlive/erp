@@ -11,13 +11,15 @@ import {
     makeTask,
 } from "./test-data"
 
-function renderDrafts(overrides: {
-    task?: ReturnType<typeof makeTask> | undefined
-    confirmOpen?: boolean
-    recommendation?: ReturnType<typeof makeRecommendation> | undefined
-    supplyOptions?: ReturnType<typeof makeSupplyOption>[]
-    supplierOptions?: ReturnType<typeof makeSupplierOption>[]
-} = {}) {
+function renderDrafts(
+    overrides: {
+        task?: ReturnType<typeof makeTask> | undefined
+        confirmOpen?: boolean
+        recommendation?: ReturnType<typeof makeRecommendation> | undefined
+        supplyOptions?: ReturnType<typeof makeSupplyOption>[]
+        supplierOptions?: ReturnType<typeof makeSupplierOption>[]
+    } = {},
+) {
     const state = {
         saveMessage: null as string | null,
         actionError: null as string | null,
@@ -30,17 +32,20 @@ function renderDrafts(overrides: {
             state.actionError = next
         }) as unknown as Dispatch<SetStateAction<string | null>>,
     }
-    const utils = renderHook((props: typeof overrides) => {
-        return useProcurementConfirmationDrafts({
-            task: props.task,
-            confirmOpen: props.confirmOpen ?? false,
-            recommendation: props.recommendation,
-            supplyOptions: props.supplyOptions ?? [],
-            supplierOptions: props.supplierOptions ?? [],
-            setSaveMessage: setters.setSaveMessage,
-            setActionError: setters.setActionError,
-        })
-    }, { initialProps: overrides })
+    const utils = renderHook(
+        (props: typeof overrides) => {
+            return useProcurementConfirmationDrafts({
+                task: props.task,
+                confirmOpen: props.confirmOpen ?? false,
+                recommendation: props.recommendation,
+                supplyOptions: props.supplyOptions ?? [],
+                supplierOptions: props.supplierOptions ?? [],
+                setSaveMessage: setters.setSaveMessage,
+                setActionError: setters.setActionError,
+            })
+        },
+        { initialProps: overrides },
+    )
     return { ...utils, state, setters }
 }
 
@@ -73,9 +78,7 @@ describe("useProcurementConfirmationDrafts", () => {
         const task = makeTask()
         const { result } = renderDrafts({ task })
         expect(result.current.lineDrafts).toHaveLength(1)
-        expect(result.current.lineDrafts[0]).toEqual(
-            task.confirmation.lines[0],
-        )
+        expect(result.current.lineDrafts[0]).toEqual(task.confirmation.lines[0])
         expect(result.current.lineDrafts[0]).not.toBe(
             task.confirmation.lines[0],
         )
@@ -164,9 +167,7 @@ describe("useProcurementConfirmationDrafts", () => {
         )
         rerender({
             task,
-            supplierOptions: [
-                makeSupplierOption({ supplierName: "甲公司" }),
-            ],
+            supplierOptions: [makeSupplierOption({ supplierName: "甲公司" })],
         })
         expect(result.current.lineDrafts[0].supplierName).toBe("甲公司")
     })
@@ -246,7 +247,9 @@ describe("useProcurementConfirmationDrafts", () => {
     it("updateLine patches the target line and marks dirty", () => {
         const { result } = renderDrafts({ task: makeTask() })
         act(() => {
-            result.current.updateLine("cl_1", { expectedDeliveryDate: "2026-09-01" })
+            result.current.updateLine("cl_1", {
+                expectedDeliveryDate: "2026-09-01",
+            })
         })
         expect(result.current.lineDrafts[0].expectedDeliveryDate).toBe(
             "2026-09-01",

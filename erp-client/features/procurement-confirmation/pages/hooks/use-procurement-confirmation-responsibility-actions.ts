@@ -9,7 +9,8 @@ import type {
 } from "@/features/procurement-confirmation/types"
 import type { ProcurementQueueRefetchResult } from "./use-procurement-confirmation-actions"
 
-type ResultState = import("@/components/business/feedback").ResultState<FormalOutcome>
+type ResultState =
+    import("@/components/business/feedback").ResultState<FormalOutcome>
 type ResponsibilityMutation = ReturnType<
     typeof import("@/features/work-items").useWorkItemResponsibilityMutation
 >

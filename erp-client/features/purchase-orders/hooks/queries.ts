@@ -49,10 +49,11 @@ export function usePurchaseOrderCenterQuery(purchaseOrderId: string) {
     })
 }
 
-export function useCreationBasesQuery() {
+export function useCreationBasesQuery(options?: { enabled?: boolean }) {
     return useQuery({
         queryKey: purchaseOrderKeys.bases(),
         queryFn: fetchCreationBases,
+        enabled: options?.enabled ?? true,
     })
 }
 

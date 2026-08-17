@@ -272,7 +272,7 @@ export function ProcurementConfirmationPage() {
                             controller.saveMutation.isPending ||
                             controller.completeMutation.isPending
                         }
-                        advanceAfterConfirm={controller.advanceAfterConfirm}
+                        actionError={controller.actionError}
                         onApprove={actions.handleApprove}
                     />
 

@@ -21,67 +21,6 @@ import type {
 const PURCHASE_ORDER_DEFAULT_PAGE_SIZE = 20
 const PURCHASE_ORDER_MAX_PAGE_SIZE = 100
 
-async function countByStatus(status?: string): Promise<number> {
-    const page = await apiGet<BackendPage<BackendListItem>>(
-        "/admin/purchase-orders",
-        {
-            status,
-            page: 1,
-            page_size: 1,
-        },
-    )
-    return page.total ?? 0
-}
-
-async function buildMetrics(
-    basesCount: number,
-): Promise<PurchaseOrderListResult["metrics"]> {
-    const [all, draft, review, fulfill] = await Promise.all([
-        countByStatus(undefined),
-        countByStatus("DRAFT"),
-        countByStatus("PENDING_FINANCE_REVIEW"),
-        countByStatus("EFFECTIVE"),
-    ])
-    return [
-        {
-            key: "all",
-            label: "全部采购单",
-            count: all,
-            detail: "当前数据范围",
-        },
-        {
-            key: "pending_create",
-            label: "可建单依据",
-            count: basesCount,
-            detail: "采购二次确认固定结果",
-        },
-        {
-            key: "draft",
-            label: "草稿",
-            count: draft,
-            detail: "可继续编辑",
-        },
-        {
-            key: "review",
-            label: "待财务审核",
-            count: review,
-            detail: "财务闸门",
-        },
-        {
-            key: "fulfill",
-            label: "待履约",
-            count: fulfill,
-            detail: "含门禁阻塞",
-        },
-        {
-            key: "gate_blocked",
-            label: "先款门禁阻塞",
-            count: 0,
-            detail: "后端未投影门禁指标",
-        },
-    ]
-}
-
 export async function fetchPurchaseOrders(
     query: PurchaseOrderListQuery = {},
 ): Promise<PurchaseOrderListResult> {
@@ -112,23 +51,6 @@ export async function fetchPurchaseOrders(
         sortBy = query.sortBy
     }
 
-    if (query.metric === "pending_create") {
-        // 列表展示建单依据不是采购单行：返回空列表 + metrics
-        const bases = await fetchCreationBases()
-        const open = bases.filter((b) => !b.consumed)
-        return {
-            rows: [],
-            total: 0,
-            page: 1,
-            pageSize,
-            metrics: await buildMetrics(open.length),
-            freshness: {
-                updatedAt: new Date().toISOString(),
-                state: "fresh",
-            },
-        }
-    }
-
     const pageData = await apiGet<BackendPage<BackendListItem>>(
         "/admin/purchase-orders",
         {
@@ -141,9 +63,6 @@ export async function fetchPurchaseOrders(
         },
     )
 
-    const bases = await fetchCreationBases().catch(
-        () => [] as PurchaseCreationBasis[],
-    )
     const rows = (pageData.items ?? []).map(mapListItem)
 
     return {
@@ -151,7 +70,7 @@ export async function fetchPurchaseOrders(
         total: pageData.total ?? rows.length,
         page: pageData.page ?? page,
         pageSize: pageData.page_size ?? pageSize,
-        metrics: await buildMetrics(bases.filter((b) => !b.consumed).length),
+        metrics: [],
         freshness: {
             updatedAt: new Date().toISOString(),
             state: "fresh",

@@ -114,9 +114,7 @@ export function RejectConfirmationDialog({
                     </div>
                     <DialogFooter>
                         <DialogClose
-                            render={
-                                <Button type="button" variant="outline" />
-                            }
+                            render={<Button type="button" variant="outline" />}
                         >
                             取消
                         </DialogClose>

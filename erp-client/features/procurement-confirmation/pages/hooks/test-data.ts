@@ -178,17 +178,27 @@ export function makeSupplyOption(
         freightAmount: "12",
         serviceFeeAmount: "3",
         capabilities: [
-            { revisionId: "cap_1", label: "实物商品", capabilityCode: "physical" },
-            { revisionId: "cap_2", label: "虚拟商品", capabilityCode: "virtual" },
+            {
+                revisionId: "cap_1",
+                label: "实物商品",
+                capabilityCode: "physical",
+            },
+            {
+                revisionId: "cap_2",
+                label: "虚拟商品",
+                capabilityCode: "virtual",
+            },
         ],
         ...overrides,
     }
 }
 
-export function makeSupplierOption(overrides: {
-    supplierId?: string
-    supplierName?: string
-} = {}) {
+export function makeSupplierOption(
+    overrides: {
+        supplierId?: string
+        supplierName?: string
+    } = {},
+) {
     return {
         supplierId: overrides.supplierId ?? "sup_1",
         supplierName: overrides.supplierName ?? "演示供应商",

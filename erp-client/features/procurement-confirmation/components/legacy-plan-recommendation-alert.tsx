@@ -46,8 +46,7 @@ export function RecommendationStatusAlert({
                     ? `预计采购含税 ${money.format(Number(recommendation.estimatedPurchaseGross))}，预计毛利 ${money.format(Number(recommendation.estimatedGrossMargin))}。交期仍需采购核对。`
                     : recommendation?.blockingIssues
                           .map((issue) => issue.message)
-                          .join("；") ||
-                      "请等待系统完成计算，或刷新后重试。"}
+                          .join("；") || "请等待系统完成计算，或刷新后重试。"}
             </AlertDescription>
         </Alert>
     )

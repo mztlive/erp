@@ -185,6 +185,10 @@ export type FormalOutcome =
           salesOrderRevisionId: string
           receivableAccountId: string
           procurementCreationBasisId: string
+          purchaseOrders: readonly {
+              purchaseOrderId: string
+              purchaseNo: string
+          }[]
           reference: string
       }
     | {

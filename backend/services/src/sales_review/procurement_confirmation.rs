@@ -304,7 +304,13 @@ impl SalesReviewService {
                         session,
                     )
                     .await?;
-                    let lines = build_confirmation_lines(&confirmation, &command.action.lines)?;
+                    let lines = replace_pending_confirmation_lines(
+                        &db,
+                        &confirmation,
+                        &command.action.lines,
+                        session,
+                    )
+                    .await?;
                     let submission_lines = db
                         .sales_order_submission_lines()
                         .list_lines_by_submissions(std::slice::from_ref(&confirmation.submission_id), session)
@@ -312,18 +318,6 @@ impl SalesReviewService {
                     SalesReviewService::new(db.clone())
                         .ensure_confirmation_sources(&lines, &submission_lines, session)
                         .await?;
-                    let old_lines = db
-                        .procurement_confirmation_lines()
-                        .list_lines_by_confirmation(&confirmation.base.id.clone().into(), session)
-                        .await?;
-                    for mut old in old_lines {
-                        db.procurement_confirmation_lines()
-                            .soft_delete(&mut old, session)
-                            .await?;
-                    }
-                    for line in &lines {
-                        db.procurement_confirmation_lines().create(line, session).await?;
-                    }
                     let now = entities::common::time::Instant::now();
                     confirmation.record_edit(&actor_id)?;
                     work_item.record_activity(&actor_id, now)?;
@@ -615,6 +609,41 @@ fn parse_save_receipt(message: &str, expected_fingerprint: &str) -> Result<SaveC
             .parse()
             .map_err(|_| Error::Internal("采购确认保存收据任务版本非法".to_string()))?,
     })
+}
+
+/// 用本次提交的分行替换待处理采购确认上的旧分行。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `confirmation` - 待处理采购确认
+/// * `lines` - 本次确认分行
+/// * `executor` - 由调用方传入的事务执行器
+///
+/// # 返回
+/// 返回新写入的确认分行。
+///
+/// # 错误
+/// 行号重复、实体校验失败或仓储写入失败时返回错误。
+pub(super) async fn replace_pending_confirmation_lines(
+    db: &mongodb::Database,
+    confirmation: &ProcurementConfirmation,
+    lines: &[dto::ProcurementConfirmationLineRequest],
+    executor: &mut dyn Executor,
+) -> Result<Vec<ProcurementConfirmationLine>> {
+    let built = build_confirmation_lines(confirmation, lines)?;
+    let old_lines = db
+        .procurement_confirmation_lines()
+        .list_lines_by_confirmation(&confirmation.base.id.clone().into(), executor)
+        .await?;
+    for mut old in old_lines {
+        db.procurement_confirmation_lines()
+            .soft_delete(&mut old, executor)
+            .await?;
+    }
+    for line in &built {
+        db.procurement_confirmation_lines().create(line, executor).await?;
+    }
+    Ok(built)
 }
 
 /// 构建采购确认分行实体。

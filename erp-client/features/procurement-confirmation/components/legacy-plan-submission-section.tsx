@@ -80,9 +80,7 @@ export function LegacyPlanSubmissionSection({
                 </div>
                 <div className="text-right text-xs" aria-live="polite">
                     <Badge
-                        variant={
-                            cov?.complete ? "secondary" : "destructive"
-                        }
+                        variant={cov?.complete ? "secondary" : "destructive"}
                     >
                         覆盖 {cov?.confirmed}/{cov?.required} {subLine.unit}
                         {cov && !cov.complete

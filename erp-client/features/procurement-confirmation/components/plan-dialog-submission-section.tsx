@@ -81,7 +81,9 @@ export function PlanSubmissionSection({
                     </p>
                 </div>
                 <Badge
-                    variant={lineCoverage?.complete ? "secondary" : "destructive"}
+                    variant={
+                        lineCoverage?.complete ? "secondary" : "destructive"
+                    }
                 >
                     已安排 {lineCoverage?.confirmed ?? "0"}/
                     {lineCoverage?.required ?? subLine.committedQuantity}{" "}

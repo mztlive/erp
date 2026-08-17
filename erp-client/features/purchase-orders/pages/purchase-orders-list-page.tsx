@@ -10,8 +10,6 @@ import {
     DataFreshness,
     DataTable,
     FormalActionResult,
-    MetricFilterItem,
-    MetricStrip,
     PageActions,
     PageHeader,
     PageScaffold,
@@ -22,11 +20,7 @@ import { buildPurchaseOrdersListColumns } from "@/features/purchase-orders/pages
 import { PurchaseOrdersCreateDialog } from "@/features/purchase-orders/pages/purchase-orders-list-create-dialog"
 import { PurchaseOrdersListPreviewSheet } from "@/features/purchase-orders/pages/purchase-orders-list-preview-sheet"
 import { PurchaseOrdersListToolbar } from "@/features/purchase-orders/pages/purchase-orders-list-toolbar"
-import {
-    PO_METRIC_LABEL,
-    PO_STATUS_FILTER_LABEL,
-    type PurchaseOrderMetricFilter,
-} from "@/features/purchase-orders/types"
+import { PO_STATUS_FILTER_LABEL } from "@/features/purchase-orders/types"
 
 export function PurchaseOrdersListPage() {
     const ctrl = usePurchaseOrdersListController()
@@ -158,42 +152,12 @@ export function PurchaseOrdersListPage() {
                 />
             ) : null}
 
-            <MetricStrip
-                columns={
-                    Math.min(4, Math.max(2, ctrl.metrics.length)) as 2 | 3 | 4
-                }
-                aria-label="采购单指标筛选"
-            >
-                {ctrl.metrics.map((metric) => (
-                    <MetricFilterItem
-                        key={metric.key}
-                        label={metric.label}
-                        value={metric.count}
-                        detail={metric.detail}
-                        active={
-                            metric.key !== "pending_create" &&
-                            ctrl.metricKey === metric.key
-                        }
-                        onClick={() => {
-                            if (metric.key === "pending_create") {
-                                ctrl.openCreateDialog()
-                                return
-                            }
-                            ctrl.pushUrl({
-                                metric: metric.key as PurchaseOrderMetricFilter,
-                                page: 1,
-                            })
-                        }}
-                    />
-                ))}
-            </MetricStrip>
-
             <BusinessTableFrame
                 title="采购单列表"
                 description={
-                    ctrl.metricKey === "all" && ctrl.statusFilter === "all"
+                    ctrl.statusFilter === "all"
                         ? "搜索采购单号、供应商或来源销售单；键盘 j/k 移动行，Enter 打开预览，/ 聚焦搜索。"
-                        : `当前筛选：${PO_METRIC_LABEL[ctrl.effectiveMetric]} · ${PO_STATUS_FILTER_LABEL[ctrl.statusFilter]}`
+                        : `当前筛选：${PO_STATUS_FILTER_LABEL[ctrl.statusFilter]}`
                 }
                 toolbar={
                     <PurchaseOrdersListToolbar
@@ -245,19 +209,27 @@ export function PurchaseOrdersListPage() {
                             ctrl.setPreviewId(row.purchaseOrderId)
                         }
                         errorState={
-                            <BusinessFailureState
-                                kind="system"
-                                title="列表加载失败"
-                                description="未能加载采购单列表，请重试；若持续失败可稍后再来。"
-                                onRetry={() => void ctrl.listQuery.refetch()}
-                            />
+                            ctrl.listQuery.isError ? (
+                                <BusinessFailureState
+                                    kind="system"
+                                    title="列表加载失败"
+                                    description="未能加载采购单列表，请重试；若持续失败可稍后再来。"
+                                    onRetry={() =>
+                                        void ctrl.listQuery.refetch()
+                                    }
+                                />
+                            ) : undefined
                         }
                         emptyTitle={
                             ctrl.hasActiveFilters
                                 ? "没有符合条件的采购单"
-                                : undefined
+                                : "暂无采购单"
                         }
-                        emptyDescription="当前筛选没有匹配的采购单，可调整或清除筛选后重试。"
+                        emptyDescription={
+                            ctrl.hasActiveFilters
+                                ? "当前筛选没有匹配的采购单，可调整或清除筛选后重试。"
+                                : "还没有采购单。可从采购二次确认的创建依据新建。"
+                        }
                         emptyAction={
                             <div className="flex flex-wrap gap-2">
                                 {ctrl.hasActiveFilters ? (
@@ -306,6 +278,9 @@ export function PurchaseOrdersListPage() {
                 open={ctrl.createOpen}
                 onOpenChange={ctrl.setCreateOpen}
                 openBases={ctrl.openBases}
+                basesPending={ctrl.basesQuery.isLoading}
+                basesFailed={ctrl.basesQuery.isError}
+                onRetryBases={() => void ctrl.basesQuery.refetch()}
                 basisFromUrl={ctrl.basisFromUrl}
                 selectedBasisId={ctrl.selectedBasisId}
                 onSelectedBasisIdChange={ctrl.setSelectedBasisId}

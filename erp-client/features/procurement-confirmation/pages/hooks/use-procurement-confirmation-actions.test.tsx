@@ -50,7 +50,8 @@ function approveResponse(): FormalActionResponse {
             salesOrderRevisionId: "sr_1",
             receivableAccountId: "ra_1",
             procurementCreationBasisId: "pcb_1",
-            reference: "pcb_1",
+            purchaseOrders: [{ purchaseOrderId: "po_1", purchaseNo: "PO-1" }],
+            reference: "po_1",
         },
     }
 }
@@ -98,6 +99,7 @@ function renderActions(
         ),
         goToWorkItem: vi.fn(),
         replaceUrl: vi.fn(),
+        openGeneratedPurchaseOrders: vi.fn(),
         queueRefetch: vi.fn(async () => ({
             data: { tasks: [task] },
             isError: false,
@@ -153,6 +155,7 @@ function renderActions(
             replaceUrl: callbacks.replaceUrl,
             neighborId: callbacks.neighborId,
             goToWorkItem: callbacks.goToWorkItem,
+            openGeneratedPurchaseOrders: callbacks.openGeneratedPurchaseOrders,
             ...setters,
         }),
     )
@@ -259,13 +262,13 @@ describe("useProcurementConfirmationActions", () => {
         )
     })
 
-    it("approves by saving, refetching, completing and advancing to the next item", async () => {
+    it("generates the purchase order in one request with the current plan", async () => {
         const { result, state, callbacks, mutations, task } = renderActions()
         await act(async () => {
             await result.current.handleApprove()
         })
-        expect(mutations.saveMutation.mutateAsync).toHaveBeenCalledTimes(1)
-        expect(callbacks.queueRefetch).toHaveBeenCalledTimes(1)
+        expect(mutations.saveMutation.mutateAsync).not.toHaveBeenCalled()
+        expect(callbacks.queueRefetch).not.toHaveBeenCalled()
         expect(mutations.completeMutation.mutateAsync).toHaveBeenCalledWith({
             workItemId: task.workItemId,
             expectedTaskVersion: task.taskVersion,
@@ -275,29 +278,23 @@ describe("useProcurementConfirmationActions", () => {
                 reviewResult: "APPROVED",
                 confirmationId: task.confirmation.confirmationId,
                 salesOrderId: task.salesSubmission.salesOrderId,
+                lines: task.confirmation.lines,
             }),
         })
         expect(state.confirmOpen).toBe(false)
-        expect(state.lastResult).toMatchObject({
-            status: "succeeded",
-            title: "采购确认已通过 · 已形成采购创建依据",
-            reference: "pcb_1",
-            stayOnItem: false,
-        })
-        expect(state.finishedResult).toMatchObject({ status: "succeeded" })
-        expect(callbacks.goToWorkItem).toHaveBeenCalledWith("wi_2")
+        expect(state.lastResult).toBeNull()
+        expect(callbacks.openGeneratedPurchaseOrders).toHaveBeenCalledWith([
+            { purchaseOrderId: "po_1", purchaseNo: "PO-1" },
+        ])
+        expect(callbacks.goToWorkItem).not.toHaveBeenCalled()
     })
 
-    it("stays on the item after approving when autoNext is off", async () => {
-        const { result, state, callbacks } = renderActions({ autoNext: false })
+    it("stays off the completed confirmation task after generating", async () => {
+        const { result, callbacks } = renderActions({ autoNext: false })
         await act(async () => {
             await result.current.handleApprove()
         })
-        expect(state.lastResult).toMatchObject({
-            status: "succeeded",
-            stayOnItem: true,
-        })
-        expect(state.finishedResult).toBeNull()
+        expect(callbacks.openGeneratedPurchaseOrders).toHaveBeenCalledTimes(1)
         expect(callbacks.goToWorkItem).not.toHaveBeenCalled()
     })
 
@@ -370,7 +367,9 @@ describe("useProcurementConfirmationActions", () => {
         })
         expect(state.advanceAfterConfirm).toBe(false)
         expect(state.confirmOpen).toBe(true)
+    })
 
+    it("lets SAVE-only operators open the plan and blocks others", async () => {
         const saveOnly = renderActions({
             task: makeTask({ allowedActions: ["SAVE"] }),
         })
@@ -392,63 +391,25 @@ describe("useProcurementConfirmationActions", () => {
         )
     })
 
-    it("approves a SAVE-only task after the saved plan unlocks APPROVE", async () => {
+    it("lets a SAVE-only task generate the purchase order in one request", async () => {
         const saveOnly = makeTask({ allowedActions: ["SAVE"] })
-        const approved = makeTask({
-            allowedActions: ["SAVE", "APPROVE"],
-            taskVersion: "6",
-            confirmation: {
-                ...saveOnly.confirmation,
-                editVersion: 3,
-            },
-        })
-        const { result, mutations, callbacks } = renderActions({
+        const { result, mutations } = renderActions({
             task: saveOnly,
-        })
-        callbacks.queueRefetch.mockResolvedValueOnce({
-            data: { tasks: [approved] },
-            isError: false,
-            error: null,
         })
         await act(async () => {
             await result.current.handleApprove()
         })
-        expect(mutations.saveMutation.mutateAsync).toHaveBeenCalledTimes(1)
+        expect(mutations.saveMutation.mutateAsync).not.toHaveBeenCalled()
         expect(mutations.completeMutation.mutateAsync).toHaveBeenCalledWith(
             expect.objectContaining({
-                expectedTaskVersion: "6",
+                expectedTaskVersion: saveOnly.taskVersion,
                 decision: expect.objectContaining({
                     reviewResult: "APPROVED",
-                    expectedConfirmationEditVersion: 3,
+                    expectedConfirmationEditVersion:
+                        saveOnly.confirmation.editVersion,
+                    lines: saveOnly.confirmation.lines,
                 }),
             }),
         )
-    })
-
-    it("stops after save when the refreshed task still cannot be approved", async () => {
-        const saveOnly = makeTask({
-            allowedActions: ["SAVE"],
-            actionBlockers: [
-                {
-                    action: "APPROVE",
-                    code: "CONFIRMATION_LINES_INCOMPLETE",
-                    message: "采购确认分行不完整，不能通过",
-                },
-            ],
-        })
-        const { result, state, mutations, callbacks } = renderActions({
-            task: saveOnly,
-        })
-        callbacks.queueRefetch.mockResolvedValueOnce({
-            data: { tasks: [saveOnly] },
-            isError: false,
-            error: null,
-        })
-        await act(async () => {
-            await result.current.handleApprove()
-        })
-        expect(mutations.saveMutation.mutateAsync).toHaveBeenCalledTimes(1)
-        expect(mutations.completeMutation.mutateAsync).not.toHaveBeenCalled()
-        expect(state.actionError).toBe("采购确认分行不完整，不能通过")
     })
 })

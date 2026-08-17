@@ -13,6 +13,8 @@ import {
 } from "@/features/procurement-confirmation/hooks/queries"
 import type { FormalOutcome } from "@/features/procurement-confirmation/types"
 import { useWorkItemResponsibilityMutation } from "@/features/work-items"
+import { useRouter } from "next/navigation"
+
 import { useProcurementConfirmationActions } from "./use-procurement-confirmation-actions"
 import { useProcurementConfirmationDrafts } from "./use-procurement-confirmation-drafts"
 import { useProcurementKeyboardShortcuts } from "./use-procurement-keyboard-shortcuts"
@@ -125,7 +127,26 @@ export function useProcurementConfirmationController() {
         }
     }, [task, lastResult])
 
+    const router = useRouter()
     const replaceUrl = url.replaceUrl
+
+    const openGeneratedPurchaseOrders = React.useCallback(
+        (
+            orders: readonly {
+                purchaseOrderId: string
+                purchaseNo: string
+            }[],
+        ) => {
+            replaceUrl({ currentWorkItemId: null })
+            const first = orders[0]
+            if (orders.length === 1 && first) {
+                router.replace(`/procurement/orders/${first.purchaseOrderId}`)
+                return
+            }
+            router.replace("/procurement/orders")
+        },
+        [replaceUrl, router],
+    )
 
     const goToWorkItem = React.useCallback(
         (workItemId: string | undefined | null) => {
@@ -172,6 +193,7 @@ export function useProcurementConfirmationController() {
         setLastResult,
         setFinishedResult,
         setAdvanceAfterConfirm,
+        openGeneratedPurchaseOrders,
     })
 
     const responsibilityActions = useProcurementResponsibilityActions({

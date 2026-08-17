@@ -5,10 +5,7 @@ import { CheckIcon, CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    BusinessFailureState,
-    ValidationSummary,
-} from "@/components/business"
+import { BusinessFailureState, ValidationSummary } from "@/components/business"
 import type { ValidationIssue } from "@/components/business/feedback"
 import type { SupplierComboboxItem } from "@/components/business/entity-comboboxes"
 import {
@@ -76,7 +73,7 @@ type ProcurementPlanConfirmationDialogProps = {
     allCovered: boolean
     formalPending: boolean
     isSubmitting: boolean
-    advanceAfterConfirm: boolean
+    actionError: string | null
     onApprove: () => Promise<void>
 }
 
@@ -105,7 +102,7 @@ export function ProcurementPlanConfirmationDialog({
     allCovered,
     formalPending,
     isSubmitting,
-    advanceAfterConfirm,
+    actionError,
     onApprove,
 }: ProcurementPlanConfirmationDialogProps) {
     return (
@@ -134,8 +131,8 @@ export function ProcurementPlanConfirmationDialog({
                         <Alert variant="success">
                             <CircleCheckIcon aria-hidden="true" />
                             <AlertTitle>
-                                当前方案预计形成 {currentPlanSummary.orderCount}{" "}
-                                组采购创建依据
+                                当前方案预计生成 {currentPlanSummary.orderCount}{" "}
+                                张采购单
                             </AlertTitle>
                             <AlertDescription>
                                 当前采购含税{" "}
@@ -213,7 +210,7 @@ export function ProcurementPlanConfirmationDialog({
 
                             {clientBlocking.length > 0 ? (
                                 <ValidationSummary
-                                    title="确认采购创建依据前需要补齐"
+                                    title="生成采购单前需要补齐"
                                     issues={clientBlocking}
                                 />
                             ) : null}
@@ -243,6 +240,14 @@ export function ProcurementPlanConfirmationDialog({
                     </Alert>
                 )}
 
+                {actionError ? (
+                    <Alert variant="destructive">
+                        <TriangleAlertIcon aria-hidden="true" />
+                        <AlertTitle>生成采购单未完成</AlertTitle>
+                        <AlertDescription>{actionError}</AlertDescription>
+                    </Alert>
+                ) : null}
+
                 <DialogFooter>
                     <DialogClose
                         render={<Button type="button" variant="outline" />}
@@ -263,11 +268,7 @@ export function ProcurementPlanConfirmationDialog({
                             data-icon="inline-start"
                             aria-hidden="true"
                         />
-                        {isSubmitting
-                            ? "正在确认采购创建依据…"
-                            : advanceAfterConfirm
-                              ? "保存调整、确认并打开下一条"
-                              : "保存调整并确认"}
+                        {isSubmitting ? "正在生成采购单…" : "生成采购单"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

@@ -46,6 +46,9 @@ export type PurchaseOrdersCreateDialogProps = {
     open: boolean
     onOpenChange: (open: boolean) => void
     openBases: readonly PurchaseCreationBasis[]
+    basesPending: boolean
+    basesFailed: boolean
+    onRetryBases: () => void
     basisFromUrl: string | null
     selectedBasisId: string
     onSelectedBasisIdChange: (value: string) => void
@@ -57,15 +60,16 @@ export function PurchaseOrdersCreateDialog({
     open,
     onOpenChange,
     openBases,
+    basesPending,
+    basesFailed,
+    onRetryBases,
     basisFromUrl,
     selectedBasisId,
     onSelectedBasisIdChange,
     createPending,
     onCreate,
 }: PurchaseOrdersCreateDialogProps) {
-    const selectedBasis = openBases.find(
-        (b) => b.basisId === selectedBasisId,
-    )
+    const selectedBasis = openBases.find((b) => b.basisId === selectedBasisId)
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-lg">
@@ -77,7 +81,25 @@ export function PurchaseOrdersCreateDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
-                    {openBases.length === 0 && !basisFromUrl ? (
+                    {basesPending ? (
+                        <p className="text-sm text-muted-foreground">
+                            正在加载创建依据…
+                        </p>
+                    ) : basesFailed ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm text-destructive">
+                                创建依据加载失败，请重试。
+                            </p>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={onRetryBases}
+                            >
+                                重试
+                            </Button>
+                        </div>
+                    ) : openBases.length === 0 && !basisFromUrl ? (
                         <p className="text-sm text-muted-foreground">
                             当前没有可消费的创建依据。请先在采购二次确认完成确认。
                         </p>
