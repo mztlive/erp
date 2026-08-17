@@ -243,6 +243,7 @@ export function useProcurementConfirmationController() {
         setRejectOpen,
         advanceAfterConfirm,
         lastResult,
+        setLastResult,
         finishedResult,
         setFinishedResult,
         actionError,

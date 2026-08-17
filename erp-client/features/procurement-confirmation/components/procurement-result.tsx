@@ -1,21 +1,24 @@
+"use client"
+
 import type { Ref } from "react"
 import Link from "next/link"
 import { ArrowRightIcon, CircleCheckIcon } from "lucide-react"
 
 import { type ResultState } from "@/components/business/feedback"
 import {
-    FormalActionResult,
+    BusinessStatusBadge,
     surfaceInsetClassName,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import {
     NEXT_SALES_RESOLUTION_COPY,
     REJECT_REASON_LABEL,
@@ -35,6 +38,18 @@ function salesOrderHref(
     return `/sales/orders/${salesOrderId}?${params.toString()}`
 }
 
+function resultBadge(
+    status: NonNullable<ResultState<FormalOutcome>>["status"],
+) {
+    if (status === "rejected") {
+        return { label: "未通过", tone: "destructive" as const }
+    }
+    if (status === "failed" || status === "unknown") {
+        return { label: "待核实", tone: "warning" as const }
+    }
+    return { label: "已完成", tone: "success" as const }
+}
+
 type ProcurementOutcomeFeedbackProps = {
     finishedResult: ResultState<FormalOutcome>
     lastResult: ResultState<FormalOutcome>
@@ -44,6 +59,7 @@ type ProcurementOutcomeFeedbackProps = {
     returnTo: string
     resultRef: Ref<HTMLDivElement>
     onDismissFinished: () => void
+    onDismissLastResult: () => void
     onNext: () => void
 }
 
@@ -56,8 +72,14 @@ export function ProcurementOutcomeFeedback({
     returnTo,
     resultRef,
     onDismissFinished,
+    onDismissLastResult,
     onNext,
 }: ProcurementOutcomeFeedbackProps) {
+    const salesOrderId =
+        lastResult?.outcome && "salesOrderId" in lastResult.outcome
+            ? lastResult.outcome.salesOrderId
+            : fallbackSalesOrderId
+
     return (
         <>
             {finishedResult && !lastResult ? (
@@ -116,44 +138,79 @@ export function ProcurementOutcomeFeedback({
                 </div>
             ) : null}
 
-            {lastResult ? (
-                <div ref={resultRef} tabIndex={-1} className="outline-none">
-                    <FormalActionResult
-                        status={
-                            lastResult.status === "failed"
-                                ? "blocked"
-                                : lastResult.status
-                        }
-                        title={lastResult.title}
-                        description={lastResult.description}
-                        reference={lastResult.reference}
-                        facts={buildProcurementResultFacts(
-                            lastResult.outcome,
-                            context,
-                            submissionNo,
-                        )}
-                        actions={
+            <Dialog
+                open={Boolean(lastResult)}
+                onOpenChange={(open) => {
+                    if (!open) onDismissLastResult()
+                }}
+            >
+                {lastResult ? (
+                    <DialogContent ref={resultRef} className="sm:max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle className="flex flex-wrap items-center gap-2 pr-8">
+                                <span>{lastResult.title}</span>
+                                <BusinessStatusBadge
+                                    context="list"
+                                    {...resultBadge(lastResult.status)}
+                                />
+                            </DialogTitle>
+                            <DialogDescription>
+                                {lastResult.description}
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex flex-col gap-4">
+                            {lastResult.reference ? (
+                                <p className="text-xs text-muted-foreground">
+                                    结果编号：
+                                    <span className="num font-mono">
+                                        {lastResult.reference}
+                                    </span>
+                                </p>
+                            ) : null}
+                            <dl className="grid gap-3 sm:grid-cols-2">
+                                {buildProcurementResultFacts(
+                                    lastResult.outcome,
+                                    context,
+                                    submissionNo,
+                                ).map((fact) => (
+                                    <div key={fact.label}>
+                                        <dt className="text-xs text-muted-foreground">
+                                            {fact.label}
+                                        </dt>
+                                        <dd className="mt-1 text-sm">
+                                            {fact.value}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                            {lastResult.outcome?.kind ===
+                            "REJECTED_TO_SALES" ? (
+                                <ProcurementRejectionNextSteps
+                                    salesOrderId={
+                                        lastResult.outcome.salesOrderId
+                                    }
+                                    returnTo={returnTo}
+                                />
+                            ) : null}
+                        </div>
+                        <DialogFooter>
+                            <DialogClose
+                                render={
+                                    <Button type="button" variant="outline" />
+                                }
+                            >
+                                关闭
+                            </DialogClose>
                             <ProcurementResultActions
                                 lastResult={lastResult}
-                                taskSalesOrderId={
-                                    lastResult.outcome &&
-                                    "salesOrderId" in lastResult.outcome
-                                        ? lastResult.outcome.salesOrderId
-                                        : fallbackSalesOrderId
-                                }
+                                taskSalesOrderId={salesOrderId}
                                 returnTo={returnTo}
                                 onNext={onNext}
                             />
-                        }
-                    />
-                    {lastResult.outcome?.kind === "REJECTED_TO_SALES" ? (
-                        <ProcurementRejectionNextSteps
-                            salesOrderId={lastResult.outcome.salesOrderId}
-                            returnTo={returnTo}
-                        />
-                    ) : null}
-                </div>
-            ) : null}
+                        </DialogFooter>
+                    </DialogContent>
+                ) : null}
+            </Dialog>
         </>
     )
 }
@@ -263,39 +320,39 @@ export function ProcurementRejectionNextSteps({
     returnTo: string
 }) {
     return (
-        <Card size="sm" className={`mt-3 ${surfacePanelClassName}`}>
-            <CardHeader className="rounded-t-lg border-b border-border/30">
-                <CardTitle>销售三条固定出路</CardTitle>
-                <CardDescription>
-                    上一驳回提交已作废；本页只读展示出路，不代销售选择。
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-                <ol className="list-decimal space-y-3 pl-5 text-sm">
-                    {NEXT_SALES_RESOLUTION_COPY.map((item) => (
-                        <li key={item.code}>
-                            <p className="font-medium">{item.title}</p>
-                            <p className="text-muted-foreground">
-                                {item.description}
-                            </p>
-                        </li>
-                    ))}
-                </ol>
-                <Button
-                    render={
-                        <Link
-                            href={salesOrderHref(
-                                salesOrderId,
-                                returnTo,
-                                "procurement-rejection",
-                            )}
-                        />
-                    }
-                >
-                    打开销售单驳回处理
-                    <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
-                </Button>
-            </CardContent>
-        </Card>
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3">
+            <div>
+                <p className="text-sm font-medium">销售三条固定出路</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    上一驳回提交已作废；这里只读展示出路，不代销售选择。
+                </p>
+            </div>
+            <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm">
+                {NEXT_SALES_RESOLUTION_COPY.map((item) => (
+                    <li key={item.code}>
+                        <p className="font-medium">{item.title}</p>
+                        <p className="text-muted-foreground">
+                            {item.description}
+                        </p>
+                    </li>
+                ))}
+            </ol>
+            <Button
+                variant="outline"
+                size="sm"
+                render={
+                    <Link
+                        href={salesOrderHref(
+                            salesOrderId,
+                            returnTo,
+                            "procurement-rejection",
+                        )}
+                    />
+                }
+            >
+                打开销售单驳回处理
+                <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
+            </Button>
+        </div>
     )
 }

@@ -108,6 +108,7 @@ export function ProcurementConfirmationPage() {
                 returnTo={url.returnTo}
                 resultRef={controller.resultRef}
                 onDismissFinished={() => controller.setFinishedResult(null)}
+                onDismissLastResult={() => controller.setLastResult(null)}
                 onNext={() => {
                     const next =
                         context?.nextWorkItemId ??
