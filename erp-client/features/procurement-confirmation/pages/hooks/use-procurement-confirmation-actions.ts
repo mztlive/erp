@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { getErrorMessage } from "@/lib/api/errors"
+import { canOpenProcurementConfirmPlan } from "@/features/procurement-confirmation/lib/actions"
 import type {
     ConfirmationLineDraft,
     FormalOutcome,
@@ -11,7 +12,8 @@ import type {
     RejectReasonCode,
 } from "@/features/procurement-confirmation/types"
 
-type ResultState = import("@/components/business/feedback").ResultState<FormalOutcome>
+type ResultState =
+    import("@/components/business/feedback").ResultState<FormalOutcome>
 type SaveMutation = ReturnType<
     typeof import("@/features/procurement-confirmation/hooks/queries").useSaveProcurementConfirmationMutation
 >
@@ -169,7 +171,7 @@ export function useProcurementConfirmationActions({
         }
         setActionError(null)
         try {
-            assertAllowed("APPROVE")
+            assertAllowed("SAVE")
             await saveMutation.mutateAsync({
                 workItemId: task.workItemId,
                 expectedTaskVersion: task.taskVersion,
@@ -186,6 +188,14 @@ export function useProcurementConfirmationActions({
                 (await queueRefetch()).data?.tasks.find(
                     (t) => t.workItemId === task.workItemId,
                 ) ?? task
+            if (!latestTask.allowedActions.includes("APPROVE")) {
+                setActionError(
+                    latestTask.actionBlockers.find(
+                        (blocker) => blocker.action === "APPROVE",
+                    )?.message ?? "当前任务还不能通过，请刷新后重试",
+                )
+                return
+            }
             const response = await completeMutation.mutateAsync({
                 workItemId: latestTask.workItemId,
                 expectedTaskVersion: latestTask.taskVersion,
@@ -356,20 +366,13 @@ export function useProcurementConfirmationActions({
     }, [assertAllowed, guardTerminalOpen, setActionError, setRejectOpen])
 
     const handleOpenConfirm = React.useCallback(async () => {
-        try {
-            assertAllowed("APPROVE")
-            setAdvanceAfterConfirm(autoNext)
-            setConfirmOpen(true)
-        } catch (error) {
-            setActionError(getErrorMessage(error, "当前任务不可处理"))
+        if (!task || !canOpenProcurementConfirmPlan(task.allowedActions)) {
+            setActionError("当前还不能打开确认方案，请先开始处理或刷新任务")
+            return
         }
-    }, [
-        assertAllowed,
-        autoNext,
-        setActionError,
-        setAdvanceAfterConfirm,
-        setConfirmOpen,
-    ])
+        setAdvanceAfterConfirm(autoNext)
+        setConfirmOpen(true)
+    }, [autoNext, setActionError, setAdvanceAfterConfirm, setConfirmOpen, task])
 
     return {
         assertAllowed,

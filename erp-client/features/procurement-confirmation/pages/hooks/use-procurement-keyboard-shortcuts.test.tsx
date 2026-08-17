@@ -71,9 +71,17 @@ describe("useProcurementKeyboardShortcuts", () => {
         expect(handlers.onConfirmApprove).toHaveBeenCalledTimes(1)
     })
 
-    it("keeps Ctrl+Enter inactive when APPROVE is not allowed", () => {
+    it("opens the approve dialog on Ctrl+Enter once SAVE is available", () => {
         const { handlers } = renderShortcuts({
             allowedActions: ["SAVE", "REJECT"],
+        })
+        pressKey("Enter", { ctrlKey: true })
+        expect(handlers.onConfirmApprove).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps Ctrl+Enter inactive before the operator can work the confirmation", () => {
+        const { handlers } = renderShortcuts({
+            allowedActions: ["START_PROCESSING", "REJECT"],
         })
         pressKey("Enter", { ctrlKey: true })
         expect(handlers.onConfirmApprove).not.toHaveBeenCalled()
@@ -141,7 +149,7 @@ describe("useProcurementKeyboardShortcuts", () => {
         const { handlers, rerender } = renderShortcuts()
         pressKey("Enter", { ctrlKey: true })
         expect(handlers.onConfirmApprove).toHaveBeenCalledTimes(1)
-        rerender({ ...options(), allowedActions: ["SAVE"] })
+        rerender({ ...options(), allowedActions: ["START_PROCESSING"] })
         pressKey("Enter", { ctrlKey: true })
         expect(handlers.onConfirmApprove).toHaveBeenCalledTimes(1)
     })

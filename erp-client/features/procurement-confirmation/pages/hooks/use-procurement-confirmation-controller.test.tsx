@@ -52,14 +52,6 @@ vi.mock("@/hooks/use-options", () => ({
     useSupplierOptionsQuery: supplierOptionMocks.suppliers,
 }))
 
-const contractMocks = vi.hoisted(() => ({
-    contract: vi.fn(),
-}))
-
-vi.mock("@/features/contracts/queries", () => ({
-    useContractCenterQuery: contractMocks.contract,
-}))
-
 const responsibilityMocks = vi.hoisted(() => ({
     responsibility: vi.fn(),
 }))
@@ -97,11 +89,6 @@ beforeEach(() => {
     })
     supplierOptionMocks.suppliers.mockReturnValue({
         data: [makeSupplierOption()],
-    })
-    contractMocks.contract.mockReturnValue({
-        isPending: false,
-        isError: false,
-        data: undefined,
     })
     responsibilityMocks.responsibility.mockReturnValue({
         isPending: false,
@@ -155,6 +142,12 @@ describe("useProcurementConfirmationController", () => {
     it("exposes the recommendation purchase estimate", () => {
         const { result } = renderController()
         expect(result.current.estimatedPurchase).toBe("800")
+    })
+
+    it("does not expose a contract-center query on the confirmation page", () => {
+        const { result } = renderController()
+        expect(result.current).not.toHaveProperty("contractQuery")
+        expect(result.current.contractOpen).toBe(false)
     })
 
     it("enables the recommendation query only while the confirm dialog is open", () => {

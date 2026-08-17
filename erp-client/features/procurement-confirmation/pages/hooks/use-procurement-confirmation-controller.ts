@@ -4,7 +4,6 @@ import * as React from "react"
 
 import type { ResultState as SharedResultState } from "@/components/business/feedback"
 import { useSupplierOptionsQuery } from "@/hooks/use-options"
-import { useContractCenterQuery } from "@/features/contracts/queries"
 import {
     useCompleteProcurementMutation,
     useProcurementConfirmationQuery,
@@ -26,8 +25,9 @@ import {
 type ResultState = SharedResultState<FormalOutcome>
 
 /**
- * 采购二次确认页面控制器：URL 状态、队列/方案/合同查询、
+ * 采购二次确认页面控制器：URL 状态、队列/方案查询、
  * 分行草稿与全部任务动作都收敛在这里，页面只负责布局。
+ * 合同与客户只展示销售提交快照，不预拉合同中心或客户主数据。
  */
 export function useProcurementConfirmationController() {
     const url = useProcurementConfirmationUrl()
@@ -82,9 +82,6 @@ export function useProcurementConfirmationController() {
         confirmOpen,
     )
     const recommendation = recommendationQuery.data
-    const contractQuery = useContractCenterQuery(
-        task?.salesSubmission.contractId ?? "",
-    )
     const taskSkuIds = React.useMemo(
         () => task?.salesSubmission.lines.map((line) => line.itemSku) ?? [],
         [task],
@@ -236,7 +233,6 @@ export function useProcurementConfirmationController() {
         completed,
         recommendationQuery,
         recommendation,
-        contractQuery,
         contractOpen,
         setContractOpen,
         supplyOptions,

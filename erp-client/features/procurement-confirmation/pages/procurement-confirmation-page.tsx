@@ -11,7 +11,6 @@ import {
 import { formatDateTime } from "@/lib/datetime"
 import { freshnessText } from "@/lib/ui-text"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
 import { ProcurementSalesDocument } from "@/features/procurement-confirmation/components/procurement-sales-document"
 import { ProcurementPlanConfirmationDialog } from "@/features/procurement-confirmation/components/procurement-plan-confirmation-dialog"
 import { LegacyProcurementPlanEditor } from "@/features/procurement-confirmation/components/legacy-procurement-plan-editor"
@@ -122,7 +121,9 @@ export function ProcurementConfirmationPage() {
                 <Alert variant="destructive" role="alert">
                     <TriangleAlertIcon aria-hidden="true" />
                     <AlertTitle>操作未生效</AlertTitle>
-                    <AlertDescription>{controller.actionError}</AlertDescription>
+                    <AlertDescription>
+                        {controller.actionError}
+                    </AlertDescription>
                 </Alert>
             ) : null}
 
@@ -158,8 +159,7 @@ export function ProcurementConfirmationPage() {
                                 task={task}
                                 onOpenContract={
                                     task.salesSubmission.contractId
-                                        ? () =>
-                                              controller.setContractOpen(true)
+                                        ? () => controller.setContractOpen(true)
                                         : undefined
                                 }
                             />
@@ -223,28 +223,13 @@ export function ProcurementConfirmationPage() {
                         />
                     </div>
 
-                    {controller.contractQuery.data ? (
-                        <ContractPaperDialog
-                            contract={controller.contractQuery.data}
-                            open={controller.contractOpen}
-                            onOpenChange={controller.setContractOpen}
-                        />
-                    ) : (
-                        <ContractPreviewDialog
-                            open={controller.contractOpen}
-                            onOpenChange={controller.setContractOpen}
-                            pending={controller.contractQuery.isPending}
-                            contractSnapshot={
-                                task.salesSubmission.contractSnapshot
-                            }
-                            customerSnapshot={
-                                task.salesSubmission.customerSnapshot
-                            }
-                            paymentTermLabel={
-                                task.salesSubmission.paymentTermLabel
-                            }
-                        />
-                    )}
+                    <ContractPreviewDialog
+                        open={controller.contractOpen}
+                        onOpenChange={controller.setContractOpen}
+                        contractSnapshot={task.salesSubmission.contractSnapshot}
+                        customerSnapshot={task.salesSubmission.customerSnapshot}
+                        paymentTermLabel={task.salesSubmission.paymentTermLabel}
+                    />
 
                     <ProcurementPlanConfirmationDialog
                         open={controller.confirmOpen}

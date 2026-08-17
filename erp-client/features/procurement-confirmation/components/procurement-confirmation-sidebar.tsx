@@ -16,6 +16,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { canOpenProcurementConfirmPlan } from "@/features/procurement-confirmation/lib/actions"
 import type {
     ConfirmationLineDraft,
     CoverageByLine,
@@ -133,7 +134,7 @@ export function ProcurementConfirmationSidebar({
                                 驳回
                             </Button>
                         ) : null}
-                        {task.allowedActions.includes("APPROVE") ? (
+                        {canOpenProcurementConfirmPlan(task.allowedActions) ? (
                             <Button
                                 type="button"
                                 disabled={formalPending}
@@ -153,10 +154,17 @@ export function ProcurementConfirmationSidebar({
                             </Button>
                         ) : null}
                     </div>
+                    {canOpenProcurementConfirmPlan(task.allowedActions) &&
+                    !task.allowedActions.includes("APPROVE") ? (
+                        <p className="text-xs text-muted-foreground">
+                            打开确认方案后，补齐供应商与数量再提交通过。
+                        </p>
+                    ) : null}
                     {task.allowedActions.every(
                         (action) =>
                             ![
                                 "START_PROCESSING",
+                                "SAVE",
                                 "APPROVE",
                                 "REJECT",
                                 "RELEASE_TO_TEAM",

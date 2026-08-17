@@ -6,6 +6,7 @@
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
 //! 关联常量随 trait 公开可达，两侧共用同一值，禁止字面量重复。
 
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::{
     bson::{doc, Document},
     options::IndexOptions,
@@ -49,6 +50,10 @@ pub(crate) const SALES_CHANGE_REVIEWS: &str = <mongodb::Database as SalesReviewE
 ///   **部分唯一索引**（仅 `DRAFT`/`PENDING_IMPACT_CONFIRMATION`/
 ///   `PENDING_FINANCE_REVIEW`/`REJECTED` 参与唯一）：已生效/已作废变更保留为
 ///   历史。回滚方式同上；
+/// - 采购确认分行是可被反复替换的工作数据：保存时先软删旧行再写入新行。
+///   `(procurement_confirmation_id, line_no)` 唯一只约束未删除行；
+///   全量唯一索引会让第二次保存撞上已软删的同号行。回滚方式：删除部分唯一
+///   索引、恢复旧的全量唯一索引名，并停止对已删除行复用 `line_no`；
 /// - 审批/确认/变更提交是事实类集合，唯一约束直接建在身份组合上（无软删除语义）。
 ///
 /// # 参数
@@ -65,6 +70,12 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     )
     .await?;
     create_indexes(db, PROCUREMENT_CONFIRMATIONS, procurement_confirmation_indexes()).await?;
+    drop_named_index_if_exists(
+        db,
+        PROCUREMENT_CONFIRMATION_LINES,
+        LEGACY_PROCUREMENT_CONFIRMATION_LINE_UNIQUE_INDEX,
+    )
+    .await?;
     create_indexes(
         db,
         PROCUREMENT_CONFIRMATION_LINES,
@@ -98,10 +109,45 @@ fn low_margin_manager_confirmation_indexes() -> Vec<IndexModel> {
 }
 
 /// 为单个集合创建一组幂等命名索引。
+///
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库
+/// * `collection` - 集合名
+/// * `indexes` - 待创建的命名索引
+///
+/// # 返回
+/// 索引已存在且定义一致时幂等成功。
+///
+/// # 错误
+/// 当已有数据违反唯一约束、同名索引定义冲突或 MongoDB 无法创建索引时返回错误。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection)
         .create_indexes(indexes)
         .await?;
+    Ok(())
+}
+
+/// 按名称删除索引；索引不存在时视为已完成。
+///
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库
+/// * `collection` - 集合名
+/// * `name` - 要删除的索引名
+///
+/// # 返回
+/// 索引已删除或不存在时返回成功。
+///
+/// # 错误
+/// 列举或删除索引失败且原因不是“索引不存在”时返回错误。
+///
+/// # 约束
+/// 只用于把旧的全量唯一索引替换为部分唯一索引，不得用于删除业务数据。
+async fn drop_named_index_if_exists(db: &Database, collection: &str, name: &str) -> Result<()> {
+    let names = db.collection::<Document>(collection).list_index_names().await?;
+    if !names.iter().any(|existing| existing == name) {
+        return Ok(());
+    }
+    db.collection::<Document>(collection).drop_index(name).await?;
     Ok(())
 }
 
@@ -134,11 +180,32 @@ fn procurement_confirmation_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `procurement_confirmation_line` 的分行唯一约束。
+/// 旧的全量唯一索引名。保存会软删后再写入同号分行，该索引会把已删除行算进唯一。
+const LEGACY_PROCUREMENT_CONFIRMATION_LINE_UNIQUE_INDEX: &str =
+    "uk_procurement_confirmation_lines_confirmation_line";
+
+/// 未删除采购确认分行的部分唯一索引名。
+const PROCUREMENT_CONFIRMATION_LINE_ACTIVE_UNIQUE_INDEX: &str =
+    "uk_procurement_confirmation_lines_active_confirmation_line";
+
+/// 返回 `procurement_confirmation_line` 的未删除分行唯一约束。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回只约束 `deleted_at = 0` 行的部分唯一索引。
+///
+/// # 错误
+/// 无。
+///
+/// # 约束
+/// 保存采购确认工作数据会软删旧分行并插入相同 `line_no` 的新分行。
 fn procurement_confirmation_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_procurement_confirmation_lines_confirmation_line",
+    vec![unique_partial_index(
+        PROCUREMENT_CONFIRMATION_LINE_ACTIVE_UNIQUE_INDEX,
         doc! { "procurement_confirmation_id": 1, "line_no": 1 },
+        doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
     )]
 }
 
@@ -236,7 +303,8 @@ mod tests {
 
     use super::{
         low_margin_manager_confirmation_indexes, procurement_confirmation_indexes,
-        sales_change_order_indexes, sales_change_review_indexes, sales_order_review_indexes,
+        procurement_confirmation_line_indexes, sales_change_order_indexes, sales_change_review_indexes,
+        sales_order_review_indexes, PROCUREMENT_CONFIRMATION_LINE_ACTIVE_UNIQUE_INDEX,
     };
 
     #[test]
@@ -256,6 +324,29 @@ mod tests {
         assert!(indexes
             .iter()
             .any(|index| { index.keys == doc! { "status": 1, "review_stage": 1, "reviewed_at": -1 } }));
+    }
+
+    #[test]
+    fn procurement_confirmation_line_uniqueness_ignores_soft_deleted_rows() {
+        let indexes = procurement_confirmation_line_indexes();
+
+        let active = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some(PROCUREMENT_CONFIRMATION_LINE_ACTIVE_UNIQUE_INDEX)
+            })
+            .unwrap();
+        assert_eq!(
+            active.keys,
+            doc! { "procurement_confirmation_id": 1, "line_no": 1 }
+        );
+        let options = active.options.as_ref().unwrap();
+        assert_eq!(options.unique, Some(true));
+        assert_eq!(
+            options.partial_filter_expression.as_ref().unwrap(),
+            &doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON }
+        );
     }
 
     #[test]

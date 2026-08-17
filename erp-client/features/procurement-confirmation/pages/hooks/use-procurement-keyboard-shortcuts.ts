@@ -2,8 +2,10 @@
 
 import * as React from "react"
 
+import { canOpenProcurementConfirmPlan } from "@/features/procurement-confirmation/lib/actions"
+
 export type ProcurementKeyboardShortcutsOptions = {
-    /** 当前任务允许的动作；⌘↵ 仅当包含 APPROVE 时打开通过确认。 */
+    /** 当前任务允许的动作；⌘↵ 在可保存或已可通过时打开确认方案。 */
     allowedActions: readonly string[] | undefined
     searchInputRef: React.RefObject<HTMLInputElement | null>
     onSave: () => void
@@ -46,7 +48,7 @@ export function useProcurementKeyboardShortcuts({
                 !inField
             ) {
                 event.preventDefault()
-                if (allowedActions?.includes("APPROVE")) {
+                if (canOpenProcurementConfirmPlan(allowedActions)) {
                     onConfirmApprove()
                 }
                 return

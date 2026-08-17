@@ -78,7 +78,9 @@ function rejectResponse(): FormalActionResponse {
     }
 }
 
-function renderActions(overrides: Partial<ProcurementConfirmationActionsOptions> = {}) {
+function renderActions(
+    overrides: Partial<ProcurementConfirmationActionsOptions> = {},
+) {
     const task = overrides.task ?? makeTask()
     const state = {
         dirty: overrides.dirty ?? false,
@@ -91,7 +93,9 @@ function renderActions(overrides: Partial<ProcurementConfirmationActionsOptions>
         finishedResult: null as ResultState,
     }
     const callbacks = {
-        neighborId: vi.fn((delta: number) => (delta === 1 ? "wi_2" : undefined)),
+        neighborId: vi.fn((delta: number) =>
+            delta === 1 ? "wi_2" : undefined,
+        ),
         goToWorkItem: vi.fn(),
         replaceUrl: vi.fn(),
         queueRefetch: vi.fn(async () => ({
@@ -134,9 +138,9 @@ function renderActions(overrides: Partial<ProcurementConfirmationActionsOptions>
         useProcurementConfirmationActions({
             task: overrides.task ?? task,
             tasks: overrides.tasks ?? [task],
-            lineDrafts: overrides.lineDrafts ?? [
-                ...task.confirmation.lines,
-            ] as ConfirmationLineDraft[],
+            lineDrafts:
+                overrides.lineDrafts ??
+                ([...task.confirmation.lines] as ConfirmationLineDraft[]),
             dirty: overrides.dirty ?? false,
             linesValid: overrides.linesValid ?? true,
             allCovered: overrides.allCovered ?? true,
@@ -165,7 +169,9 @@ afterEach(() => {
 
 describe("useProcurementConfirmationActions", () => {
     it("blocks saving when the draft lines are invalid", async () => {
-        const { result, state, mutations } = renderActions({ linesValid: false })
+        const { result, state, mutations } = renderActions({
+            linesValid: false,
+        })
         await act(async () => {
             await expect(result.current.handleSave()).resolves.toBe(false)
         })
@@ -357,7 +363,7 @@ describe("useProcurementConfirmationActions", () => {
         expect(state.finishedResult).toMatchObject({ status: "rejected" })
     })
 
-    it("opens the confirm dialog only for APPROVE-capable tasks", async () => {
+    it("opens the confirm dialog when the operator can save the confirmation plan", async () => {
         const { result, state } = renderActions({ autoNext: false })
         await act(async () => {
             await result.current.handleOpenConfirm()
@@ -365,15 +371,84 @@ describe("useProcurementConfirmationActions", () => {
         expect(state.advanceAfterConfirm).toBe(false)
         expect(state.confirmOpen).toBe(true)
 
-        const denied = renderActions({
+        const saveOnly = renderActions({
             task: makeTask({ allowedActions: ["SAVE"] }),
+        })
+        await act(async () => {
+            await saveOnly.result.current.handleOpenConfirm()
+        })
+        expect(saveOnly.state.confirmOpen).toBe(true)
+        expect(saveOnly.state.actionError).toBeNull()
+
+        const denied = renderActions({
+            task: makeTask({ allowedActions: ["START_PROCESSING"] }),
         })
         await act(async () => {
             await denied.result.current.handleOpenConfirm()
         })
         expect(denied.state.confirmOpen).toBe(false)
         expect(denied.state.actionError).toBe(
-            "当前责任或任务版本已变化，请刷新后再处理",
+            "当前还不能打开确认方案，请先开始处理或刷新任务",
         )
+    })
+
+    it("approves a SAVE-only task after the saved plan unlocks APPROVE", async () => {
+        const saveOnly = makeTask({ allowedActions: ["SAVE"] })
+        const approved = makeTask({
+            allowedActions: ["SAVE", "APPROVE"],
+            taskVersion: "6",
+            confirmation: {
+                ...saveOnly.confirmation,
+                editVersion: 3,
+            },
+        })
+        const { result, mutations, callbacks } = renderActions({
+            task: saveOnly,
+        })
+        callbacks.queueRefetch.mockResolvedValueOnce({
+            data: { tasks: [approved] },
+            isError: false,
+            error: null,
+        })
+        await act(async () => {
+            await result.current.handleApprove()
+        })
+        expect(mutations.saveMutation.mutateAsync).toHaveBeenCalledTimes(1)
+        expect(mutations.completeMutation.mutateAsync).toHaveBeenCalledWith(
+            expect.objectContaining({
+                expectedTaskVersion: "6",
+                decision: expect.objectContaining({
+                    reviewResult: "APPROVED",
+                    expectedConfirmationEditVersion: 3,
+                }),
+            }),
+        )
+    })
+
+    it("stops after save when the refreshed task still cannot be approved", async () => {
+        const saveOnly = makeTask({
+            allowedActions: ["SAVE"],
+            actionBlockers: [
+                {
+                    action: "APPROVE",
+                    code: "CONFIRMATION_LINES_INCOMPLETE",
+                    message: "采购确认分行不完整，不能通过",
+                },
+            ],
+        })
+        const { result, state, mutations, callbacks } = renderActions({
+            task: saveOnly,
+        })
+        callbacks.queueRefetch.mockResolvedValueOnce({
+            data: { tasks: [saveOnly] },
+            isError: false,
+            error: null,
+        })
+        await act(async () => {
+            await result.current.handleApprove()
+        })
+        expect(mutations.saveMutation.mutateAsync).toHaveBeenCalledTimes(1)
+        expect(mutations.completeMutation.mutateAsync).not.toHaveBeenCalled()
+        expect(state.actionError).toBe("采购确认分行不完整，不能通过")
     })
 })

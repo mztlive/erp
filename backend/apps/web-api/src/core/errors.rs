@@ -80,6 +80,10 @@ fn duplicate_key_conflict_message(error: &database::Error) -> String {
         Some("uk_supplier_accounts_supplier_no") => "供应商编号已存在".to_string(),
         Some("uk_customer_accounts_party") => "该主体已绑定客户角色".to_string(),
         Some("uk_customer_accounts_customer_no") => "客户编号已存在".to_string(),
+        Some("uk_procurement_confirmation_lines_confirmation_line")
+        | Some("uk_procurement_confirmation_lines_active_confirmation_line") => {
+            "该采购确认已有相同分行序号，请刷新后重试".to_string()
+        }
         _ => "数据已存在，请勿重复提交".to_string(),
     }
 }
