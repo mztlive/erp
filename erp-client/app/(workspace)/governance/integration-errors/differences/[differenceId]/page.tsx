@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { IntegrationDifferenceDetailPage } from "@/features/integration-errors/integration-error-detail-page"
+import { IntegrationDifferenceDetailPage } from "@/features/integration-errors/pages/integration-error-detail-page"
 
 export const metadata: Metadata = {
     title: "对账差异",

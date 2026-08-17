@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 
 import { PageScaffold } from "@/components/business"
-import { CustomerQualityPage } from "@/features/customer-quality/customer-quality-page"
+import { CustomerQualityPage } from "@/features/customer-quality/pages/customer-quality-page"
 
 export const metadata: Metadata = {
     title: "客户经营质量",

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { ExecutionProjectionsPage } from "@/features/execution-projections/execution-projections-page"
+import { ExecutionProjectionsPage } from "@/features/execution-projections/pages/execution-projections-page"
 
 export const metadata: Metadata = {
     title: "执行信息",

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { InventoryLedgerPage } from "@/features/inventory/inventory-ledger-page"
+import { InventoryLedgerPage } from "@/features/inventory/pages/inventory-ledger-page"
 
 export const metadata: Metadata = {
     title: "库存台账",

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { IntegrationErrorsPage } from "@/features/integration-errors/integration-errors-page"
+import { IntegrationErrorsPage } from "@/features/integration-errors/pages/integration-errors-page"
 
 export const metadata: Metadata = {
     title: "接口错误与对账中心",

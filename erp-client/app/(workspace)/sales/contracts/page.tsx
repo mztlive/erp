@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { ContractsListPage } from "@/features/contracts/contracts-list-page"
+import { ContractsListPage } from "@/features/contracts/pages/contracts-list-page"
 
 export const metadata: Metadata = {
     title: "合同",

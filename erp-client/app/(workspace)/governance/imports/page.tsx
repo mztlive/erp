@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { ImportOpeningPage } from "@/features/import-opening/import-opening-page"
+import { ImportOpeningPage } from "@/features/import-opening/pages/import-opening-page"
 
 export const metadata: Metadata = {
     title: "导入与期初",

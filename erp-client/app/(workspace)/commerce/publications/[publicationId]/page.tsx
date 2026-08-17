@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { PublicationCenterPage } from "@/features/product-publications/publication-center-page"
+import { PublicationCenterPage } from "@/features/product-publications/pages/publication-center-page"
 
 export const metadata: Metadata = {
     title: "商品发布",

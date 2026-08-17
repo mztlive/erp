@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { SupplierApiConnectionsPage } from "@/features/supplier-api-connections/supplier-api-connections-page"
+import { SupplierApiConnectionsPage } from "@/features/supplier-api-connections/pages/supplier-api-connections-page"
 
 export const metadata: Metadata = {
     title: "API 供应商连接",

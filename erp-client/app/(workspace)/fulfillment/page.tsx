@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { FulfillmentOperationsPage } from "@/features/fulfillment-operations/fulfillment-operations-page"
+import { FulfillmentOperationsPage } from "@/features/fulfillment-operations/pages/fulfillment-operations-page"
 
 export const metadata: Metadata = {
     title: "收货与发货 / 交付与代发",

@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 
 import { PageHeader, PageScaffold } from "@/components/business"
-import { UnifiedTaskQueuePage } from "@/features/unified-task-queue/unified-task-queue-page"
+import { UnifiedTaskQueuePage } from "@/features/unified-task-queue/pages/unified-task-queue-page"
 
 export const metadata: Metadata = {
     title: "待办队列",

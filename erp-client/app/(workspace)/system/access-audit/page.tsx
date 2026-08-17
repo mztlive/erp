@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { AccessAuditPage } from "@/features/access-audit/access-audit-page"
+import { AccessAuditPage } from "@/features/access-audit/pages/access-audit-page"
 
 export const metadata: Metadata = {
     title: "权限与审计",

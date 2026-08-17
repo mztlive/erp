@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 
 import { PageScaffold } from "@/components/business"
-import { CardBusinessAnalyticsPage } from "@/features/card-business-analytics/card-business-analytics-page"
+import { CardBusinessAnalyticsPage } from "@/features/card-business-analytics/pages/card-business-analytics-page"
 
 export const metadata: Metadata = {
     title: "卡券消费台账与经营分析",

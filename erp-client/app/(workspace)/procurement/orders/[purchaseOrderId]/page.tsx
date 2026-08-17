@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { PurchaseOrderDetailPage } from "@/features/purchase-orders/purchase-order-detail-page"
+import { PurchaseOrderDetailPage } from "@/features/purchase-orders/pages/purchase-order-detail-page"
 
 export const metadata: Metadata = {
     title: "采购单详情",

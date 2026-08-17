@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { MallSyncPage } from "@/features/mall-sync/mall-sync-page"
+import { MallSyncPage } from "@/features/mall-sync/pages/mall-sync-page"
 
 export const metadata: Metadata = {
     title: "商城同步与映射",

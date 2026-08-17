@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { RoleFormPage } from "@/features/admin/role-form-page"
+import { RoleFormPage } from "@/features/admin/pages/role-form-page"
 
 export const metadata: Metadata = {
     title: "新建角色",

@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 
 import { PageScaffold } from "@/components/business"
-import { CardFundsReviewPage } from "@/features/card-funds-review/card-funds-review-page"
+import { CardFundsReviewPage } from "@/features/card-funds-review/pages/card-funds-review-page"
 
 export const metadata: Metadata = {
     title: "卡券票款复核",

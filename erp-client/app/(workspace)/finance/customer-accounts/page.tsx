@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 
 import { PageScaffold } from "@/components/business"
-import { CustomerReceivablesPage } from "@/features/customer-receivables/customer-receivables-page"
+import { CustomerReceivablesPage } from "@/features/customer-receivables/pages/customer-receivables-page"
 
 export const metadata: Metadata = {
     title: "客户往来",

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { ProcurementConfirmationPage } from "@/features/procurement-confirmation/procurement-confirmation-page"
+import { ProcurementConfirmationPage } from "@/features/procurement-confirmation/pages/procurement-confirmation-page"
 
 export const metadata: Metadata = {
     title: "采购二次确认",

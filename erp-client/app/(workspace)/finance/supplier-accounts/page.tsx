@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 
 import { PageScaffold } from "@/components/business"
-import { SupplierAccountsPage } from "@/features/supplier-payables/supplier-accounts-page"
+import { SupplierAccountsPage } from "@/features/supplier-payables/pages/supplier-accounts-page"
 
 export const metadata: Metadata = {
     title: "供应商往来",
