@@ -164,9 +164,27 @@ const actionLabels = {
 const WORK_ITEM_ACTION_BY_TYPE_LABEL: Record<string, string> = {
     采购二次确认: actionLabels.confirmProcurement,
     卡券票款复核: actionLabels.reviewCardFunds,
+    卡券票款差异复核: "去复核票款差额",
     映射异常处理: actionLabels.handleMappingException,
+    主数据映射任务: actionLabels.handleMappingException,
     回款事实复核: actionLabels.reconcileReceipt,
     回款核对: actionLabels.reconcileReceipt,
+    低毛利销售审批: "去审批低毛利订单",
+    销售变更履约影响复核: "去复核履约影响",
+    销售变更财务复核: "去复核财务影响",
+    采购单财务审核: "去审核采购单",
+    卡券销售领导审批: "去审批卡券销售",
+    卡券运营审批: "去审批卡券运营",
+    归属迁移销售确认: "去确认归属迁移",
+    归属迁移财务确认: "去确认财务归属",
+    库存调整复核: "去复核库存调整",
+    财务纠错复核: "去复核财务纠错",
+    供应商结算复核: "去复核供应商结算",
+    导入业务确认: "去确认导入范围",
+    供应商履约异常调查: "去调查履约异常",
+    供应商供给异常: "去处理供给异常",
+    集成结果待确认: "去确认集成结果",
+    业务异常: "去处理业务异常",
     履约作业: actionLabels.handleFulfillment,
     收货与发货: actionLabels.handleFulfillment,
     交付与代发: actionLabels.handleFulfillment,
@@ -183,6 +201,27 @@ export function actionLabelForWorkItemType(
     return (
         WORK_ITEM_ACTION_BY_TYPE_LABEL[workItemTypeLabel] ??
         sequentialText.goProcess
+    )
+}
+
+const NEXT_ACTION_HINT_BY_TYPE_LABEL: Record<string, string> = {
+    采购二次确认: "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。",
+    低毛利销售审批: "进入销售单后，确认是否按原条件承接；通过后仍需采购再次确认供货。",
+    采购单财务审核: "进入采购单后，核对成本与付款条件并提交审核结论。",
+    销售变更履约影响复核: "进入销售单后，核对本次变更对履约的影响并提交结论。",
+    销售变更财务复核: "进入销售单后，核对本次变更对金额的影响并提交结论。",
+    卡券票款复核: "进入票款复核页后，核对准期初回款与开票事实。",
+    卡券票款差异复核: "进入票款复核页后，核对差额并提交复核结论。",
+}
+
+/** 按任务类型生成进入处理后的下一步说明。 */
+export function nextActionHintForWorkItemType(
+    workItemTypeLabel: string | null | undefined,
+): string {
+    if (!workItemTypeLabel) return "进入对应页面后提交处理结论。"
+    return (
+        NEXT_ACTION_HINT_BY_TYPE_LABEL[workItemTypeLabel] ??
+        "进入对应页面后提交处理结论。"
     )
 }
 

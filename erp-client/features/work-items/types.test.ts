@@ -86,6 +86,7 @@ describe("mapWorkItemDto", () => {
             reasonCode: "LATE",
             reasonLabel: "来晚了",
             impactSummary: "影响入库",
+            nextActionHint: "进入对应页面后提交处理结论。",
             summarySections: [{ label: "金额", value: "12.00", numeric: true }],
             createdAt: 1_700_000_000_000,
             queueContextId: "qc_1",
@@ -109,8 +110,11 @@ describe("mapWorkItemDto", () => {
         expect(projection.counterpartyLabel).toBeUndefined()
         expect(projection.allowedActions).toEqual([])
         expect(projection.actionBlockers).toEqual([])
-        expect(projection.reasonLabel).toBe("待处理")
-        expect(projection.impactSummary).toBe("请打开业务对象核对影响。")
+        expect(projection.reasonLabel).toBe("需要你处理")
+        expect(projection.impactSummary).toBe(
+            "不处理将卡住后续业务，请进入对应页面核对。",
+        )
+        expect(projection.nextActionHint).toBe("进入对应页面后提交处理结论。")
         expect(projection.summarySections).toEqual([])
         expect(projection.queueContextId).toBeUndefined()
     })
@@ -121,7 +125,7 @@ describe("mapWorkItemDto", () => {
         )
         expect(projection.ownerUser).toEqual({
             id: "u_9",
-            displayName: "当前处理人",
+            displayName: "处理人待确认",
         })
     })
 

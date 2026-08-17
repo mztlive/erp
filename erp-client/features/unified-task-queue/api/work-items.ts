@@ -30,7 +30,9 @@ export async function fetchUnifiedTaskQueue(
             page.items[0]?.queue_context_id ??
             undefined,
         total: page.total,
-        items: page.items.map(mapQueueWorkItemDto),
+        items: page.items.map((item) =>
+            mapQueueWorkItemDto(item, filters.viewerUserId),
+        ),
     }
 }
 

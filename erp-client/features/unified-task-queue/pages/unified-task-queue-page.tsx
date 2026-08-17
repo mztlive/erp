@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { RefreshCwIcon } from "lucide-react"
+import { ArrowRightIcon, RefreshCwIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -15,6 +15,7 @@ import {
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useTeamOptionsQuery } from "@/hooks/use-options"
 import { hasAnyPermission } from "@/lib/permissions"
+import { actionLabelForWorkItemType } from "@/lib/ui-text"
 import { Button } from "@/components/ui/button"
 
 import { BlockedApprovalList } from "../components/blocked-approval-list"
@@ -70,6 +71,7 @@ export function UnifiedTaskQueuePage() {
         viewerKey: profileQuery.data
             ? `${profileQuery.data.userid}:${[...profileQuery.data.role_ids].sort().join(",")}`
             : "profile-pending",
+        viewerUserId: profileQuery.data?.userid,
     })
     const items = queueQuery.data?.items ?? []
     const selectedIndex = currentWorkItemId
@@ -98,7 +100,7 @@ export function UnifiedTaskQueuePage() {
                 description={
                     approvalBlockers
                         ? "重试当前受阻步骤，不改变处理人和审批路径。"
-                        : "按当前责任处理任务；业务结论在对应页面提交。"
+                        : "先看清要处理哪张单、为什么找你，再进入对应页面提交结论。"
                 }
                 metadata={
                     approvalBlockers ? null : (
@@ -183,7 +185,10 @@ export function UnifiedTaskQueuePage() {
                                     responsibilityStatusLabel={
                                         selected.responsibilityLabel
                                     }
-                                    processLabel="打开业务对象"
+                                    processLabel={actionLabelForWorkItemType(
+                                        selected.workItemTypeLabel,
+                                    )}
+                                    processIcon={ArrowRightIcon}
                                     showProcessNext={false}
                                     showProcess={!readonly}
                                     processDisabled={!handlerHref}

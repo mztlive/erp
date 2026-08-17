@@ -21,6 +21,7 @@ export type UnifiedQueueFilters = Readonly<{
     queueContextId?: string
     currentWorkItemId?: string
     viewerKey?: string
+    viewerUserId?: string
 }>
 
 export type QueueWorkItemView = WorkItemProjection &

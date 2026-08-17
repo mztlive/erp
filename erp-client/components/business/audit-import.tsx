@@ -62,7 +62,7 @@ export interface WorkTaskItemProps extends Omit<
     enteredDateTime?: string
     /** 默认密度下「进入时间」字段的标签；默认「进入队列」（沿用既有语境）。 */
     enteredAtLabel?: string
-    dueAt: React.ReactNode
+    dueAt?: React.ReactNode
     dueDateTime?: string
     responsibleParty: React.ReactNode
     reason: React.ReactNode
@@ -98,6 +98,13 @@ export function WorkTaskItem({
     ...props
 }: WorkTaskItemProps) {
     const compact = density === "compact"
+    const dueText =
+        typeof dueAt === "string" ? dueAt.trim() : dueAt
+    const hasDue =
+        Boolean(dueDateTime) ||
+        (typeof dueText === "string"
+            ? dueText !== "" && dueText !== "未设置" && dueText !== "—"
+            : Boolean(dueText))
     const due = dueDateTime ? (
         <time dateTime={dueDateTime}>{dueAt}</time>
     ) : (
@@ -129,12 +136,14 @@ export function WorkTaskItem({
 
                 {compact ? (
                     <dl className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs">
-                        <div className="flex items-baseline gap-1">
-                            <dt className="text-muted-foreground">截止</dt>
-                            <dd className="font-medium text-foreground">
-                                {due}
-                            </dd>
-                        </div>
+                        {hasDue ? (
+                            <div className="flex items-baseline gap-1">
+                                <dt className="text-muted-foreground">截止</dt>
+                                <dd className="font-medium text-foreground">
+                                    {due}
+                                </dd>
+                            </div>
+                        ) : null}
                         <div className="flex min-w-0 items-baseline gap-1">
                             <dt className="sr-only">责任方</dt>
                             <dd className="truncate text-muted-foreground">
@@ -159,12 +168,16 @@ export function WorkTaskItem({
                                     )}
                                 </dd>
                             </div>
-                            <div className="flex items-baseline gap-1">
-                                <dt className="text-muted-foreground">截止</dt>
-                                <dd className="font-medium text-foreground">
-                                    {due}
-                                </dd>
-                            </div>
+                            {hasDue ? (
+                                <div className="flex items-baseline gap-1">
+                                    <dt className="text-muted-foreground">
+                                        截止
+                                    </dt>
+                                    <dd className="font-medium text-foreground">
+                                        {due}
+                                    </dd>
+                                </div>
+                            ) : null}
                             <div className="flex items-baseline gap-1">
                                 <dt className="text-muted-foreground">
                                     责任方

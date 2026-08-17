@@ -45,9 +45,19 @@ export function TaskDetailCard({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <CardTitle>{selected.businessObject}</CardTitle>
-                        <CardDescription>
-                            {selected.workItemTypeLabel}
-                        </CardDescription>
+                        {selected.workItemTypeLabel !==
+                        selected.businessObject ? (
+                            <CardDescription>
+                                {selected.workItemTypeLabel}
+                                {selected.counterparty
+                                    ? ` · ${selected.counterparty}`
+                                    : ""}
+                            </CardDescription>
+                        ) : selected.counterparty ? (
+                            <CardDescription>
+                                {selected.counterparty}
+                            </CardDescription>
+                        ) : null}
                     </div>
                     <BusinessStatusBadge
                         label={selected.statusPresentation.label}
@@ -57,26 +67,32 @@ export function TaskDetailCard({
             </CardHeader>
             <CardContent className="space-y-4">
                 <dl className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            为什么需要处理
-                        </dt>
-                        <dd className="mt-1 text-sm">{selected.reason}</dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            业务影响
-                        </dt>
-                        <dd className="mt-1 text-sm">{selected.impact}</dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            责任角色
-                        </dt>
-                        <dd className="mt-1 text-sm">
-                            {selected.ownerRoleLabel}
-                        </dd>
-                    </div>
+                    {selected.reason ? (
+                        <div>
+                            <dt className="text-xs text-muted-foreground">
+                                为什么需要处理
+                            </dt>
+                            <dd className="mt-1 text-sm">{selected.reason}</dd>
+                        </div>
+                    ) : null}
+                    {selected.impact ? (
+                        <div>
+                            <dt className="text-xs text-muted-foreground">
+                                业务影响
+                            </dt>
+                            <dd className="mt-1 text-sm">{selected.impact}</dd>
+                        </div>
+                    ) : null}
+                    {selected.ownerRoleLabel ? (
+                        <div>
+                            <dt className="text-xs text-muted-foreground">
+                                责任角色
+                            </dt>
+                            <dd className="mt-1 text-sm">
+                                {selected.ownerRoleLabel}
+                            </dd>
+                        </div>
+                    ) : null}
                     <div>
                         <dt className="text-xs text-muted-foreground">
                             当前处理人
@@ -86,6 +102,11 @@ export function TaskDetailCard({
                         </dd>
                     </div>
                 </dl>
+                {selected.nextActionHint ? (
+                    <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                        {selected.nextActionHint}
+                    </p>
+                ) : null}
 
                 {!selected.handlerKnown || !handlerHref ? (
                     <Alert variant="warning">
@@ -113,7 +134,8 @@ export function TaskDetailCard({
                             {containsAction(selected, "RELEASE_TO_TEAM") ? (
                                 <Button
                                     type="button"
-                                    variant="outline"
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() =>
                                         onAction("RELEASE_TO_TEAM")
                                     }
@@ -124,7 +146,8 @@ export function TaskDetailCard({
                             {containsAction(selected, "REASSIGN") ? (
                                 <Button
                                     type="button"
-                                    variant="outline"
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => onAction("REASSIGN")}
                                 >
                                     {responsibilityText.reassign}

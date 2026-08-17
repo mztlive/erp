@@ -3,6 +3,8 @@ import {
     type WorkItemDto,
 } from "@/features/work-items"
 
+import { queueResponsibilityLabel } from "@/features/work-items/display"
+
 import type { QueueWorkItemView } from "../types"
 import {
     getHandlerRegistration,
@@ -46,14 +48,11 @@ function formatDateTime(iso?: string): string {
     }).format(new Date(iso))
 }
 
-function responsibilityLabel(item: ReturnType<typeof mapStableWorkItemDto>) {
-    if (item.ownerUser) return `由 ${item.ownerUser.displayName} 处理`
-    if (item.assignmentMode === "POOL") return "团队待处理"
-    return "处理人待确认"
-}
-
 /** 构建 W02 展示模型；allowedActions 保持服务端原值。 */
-export function mapQueueWorkItemDto(dto: WorkItemDto): QueueWorkItemView {
+export function mapQueueWorkItemDto(
+    dto: WorkItemDto,
+    viewerUserId?: string,
+): QueueWorkItemView {
     const item = mapStableWorkItemDto(dto)
     const registered = getHandlerRegistration(item.handlerKey)
     const registration = isRegisteredHandlerDestination(
@@ -91,7 +90,11 @@ export function mapQueueWorkItemDto(dto: WorkItemDto): QueueWorkItemView {
         enteredDateTime,
         dueLabel: dueDateTime ? formatDateTime(dueDateTime) : "未设置",
         dueDateTime: dueDateTime || undefined,
-        responsibilityLabel: responsibilityLabel(item),
+        responsibilityLabel: queueResponsibilityLabel({
+            assignmentMode: item.assignmentMode,
+            ownerUser: item.ownerUser,
+            viewerUserId,
+        }),
         reason: item.reasonLabel,
         impact: item.impactSummary,
         statusPresentation:

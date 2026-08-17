@@ -46,6 +46,7 @@ export function makeQueueItem(
         reason: "需要确认",
         impact: "影响付款",
         impactSummary: "影响付款",
+        nextActionHint: "进入对应页面后提交处理结论。",
         summarySections: [],
         createdAt: 1_736_899_200,
         enteredAt: "1月1日 08:00",

@@ -5,6 +5,13 @@
  * 得到的 `WorkItemProjection`，不得自行推断责任、状态或允许动作。
  */
 
+import {
+    displayImpactSummary,
+    displayNextActionHint,
+    displayOwnerName,
+    displayReasonLabel,
+} from "./display"
+
 export type WorkItemStatus = "OPEN" | "COMPLETED" | "CLOSED"
 
 export type AssignmentMode = "DIRECT" | "POOL"
@@ -69,6 +76,7 @@ export type WorkItemDto = Readonly<{
     reason_code?: string | null
     reason_label?: string | null
     impact_summary?: string | null
+    next_action_hint?: string | null
     summary_sections?: readonly Readonly<{
         label: string
         value: string
@@ -128,6 +136,7 @@ export type WorkItemProjection = Readonly<{
     reasonCode?: string
     reasonLabel: string
     impactSummary: string
+    nextActionHint: string
     summarySections: readonly Readonly<{
         label: string
         value: string
@@ -172,10 +181,10 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         ownerUser: dto.owner_user
             ? {
                   id: dto.owner_user.id,
-                  displayName: dto.owner_user.display_name,
+                  displayName: displayOwnerName(dto.owner_user.display_name),
               }
             : dto.owner_user_id
-              ? { id: dto.owner_user_id, displayName: "当前处理人" }
+              ? { id: dto.owner_user_id, displayName: displayOwnerName() }
               : undefined,
         processingState: dto.processing_state,
         processingBlocker: dto.processing_blocker ?? undefined,
@@ -191,8 +200,16 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         priority: dto.priority,
         dueAt: dto.due_at ?? undefined,
         reasonCode: dto.reason_code ?? undefined,
-        reasonLabel: dto.reason_label ?? dto.reason_code ?? "待处理",
-        impactSummary: dto.impact_summary ?? "请打开业务对象核对影响。",
+        reasonLabel: displayReasonLabel({
+            reasonLabel: dto.reason_label,
+            reasonCode: dto.reason_code,
+        }),
+        impactSummary: displayImpactSummary({
+            impactSummary: dto.impact_summary,
+        }),
+        nextActionHint: displayNextActionHint({
+            nextActionHint: dto.next_action_hint,
+        }),
         summarySections: dto.summary_sections ?? [],
         createdAt: dto.created_at,
         queueContextId: dto.queue_context_id ?? undefined,

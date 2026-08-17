@@ -39,6 +39,8 @@ use crate::{
 };
 
 mod dto;
+mod party_names;
+mod presentation;
 
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -544,17 +546,28 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::SalesOrder, order.base.id.clone()),
-                ObjectFact {
-                    root_document_id: order.base.id.clone(),
-                    label: format!("销售单 {}", order.order_no),
-                    created_by: order.stable.created_by,
-                    subject_versions: Vec::new(),
-                },
+                ObjectFact::new(
+                    order.base.id.clone(),
+                    format!("销售单 {}", order.order_no),
+                    order.stable.created_by,
+                ),
             );
         }
         Ok(())
     }
 
+    /// 读取采购确认对应的销售单身份、客户和提交规模，供队列展示。
+    ///
+    /// # 参数
+    /// * `keys` - 本批任务引用的对象键
+    /// * `facts` - 输出的对象事实表
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 成功时写入销售单号、客户名和影响摘要；关联对象缺失时仍保留最小标题。
+    ///
+    /// # 错误
+    /// 仓储查询失败时返回错误。
     async fn load_procurement_confirmation_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -565,23 +578,129 @@ impl WorkItemService {
         if ids.is_empty() {
             return Ok(());
         }
-        for confirmation in self
+        let confirmations = self
             .db
             .procurement_confirmations()
             .find_many(doc! { "id": { "$in": ids } }, executor)
-            .await?
-        {
+            .await?;
+        let displays = self
+            .procurement_confirmation_displays(&confirmations, executor)
+            .await?;
+        for confirmation in confirmations {
+            let display = displays.get(&confirmation.base.id);
             facts.insert(
                 (ObjectKind::ProcurementConfirmation, confirmation.base.id.clone()),
                 ObjectFact {
                     root_document_id: confirmation.sales_order_id.to_string(),
-                    label: "采购二次确认".to_string(),
+                    label: display
+                        .map(|item| item.label.clone())
+                        .unwrap_or_else(|| presentation::sales_order_object_label("")),
                     created_by: confirmation.stable.created_by,
                     subject_versions: Vec::new(),
+                    counterparty_label: display.and_then(|item| item.counterparty.clone()),
+                    impact_summary: display.map(|item| item.impact.clone()),
                 },
             );
         }
         Ok(())
+    }
+
+    /// 按确认记录批量解析销售单号、客户和提交规模。
+    ///
+    /// # 参数
+    /// * `confirmations` - 本批采购确认
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回确认 ID 到展示字段的映射。
+    ///
+    /// # 错误
+    /// 仓储查询失败时返回错误。
+    async fn procurement_confirmation_displays(
+        &self,
+        confirmations: &[entities::sales_review::ProcurementConfirmation],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, ProcurementConfirmationDisplay>> {
+        let order_ids = confirmations
+            .iter()
+            .map(|item| item.sales_order_id.to_string())
+            .collect::<Vec<_>>();
+        let submission_ids = confirmations
+            .iter()
+            .map(|item| item.submission_id.to_string())
+            .collect::<Vec<_>>();
+        let orders = self
+            .db
+            .sales_orders()
+            .find_many(doc! { "id": { "$in": order_ids } }, executor)
+            .await?
+            .into_iter()
+            .map(|order| (order.base.id.clone(), order.order_no))
+            .collect::<HashMap<_, _>>();
+        let submissions = self
+            .db
+            .sales_order_submissions()
+            .find_many(doc! { "id": { "$in": submission_ids.clone() } }, executor)
+            .await?
+            .into_iter()
+            .map(|submission| (submission.base.id.clone(), submission))
+            .collect::<HashMap<_, _>>();
+        let line_counts = self.submission_line_counts(&submission_ids, executor).await?;
+        Ok(confirmations
+            .iter()
+            .map(|confirmation| {
+                let submission = submissions.get(&confirmation.submission_id.to_string());
+                (
+                    confirmation.base.id.clone(),
+                    ProcurementConfirmationDisplay {
+                        label: presentation::sales_order_object_label(
+                            orders
+                                .get(&confirmation.sales_order_id.to_string())
+                                .map(String::as_str)
+                                .unwrap_or(""),
+                        ),
+                        counterparty: submission
+                            .map(|item| item.customer_snapshot.customer_name.clone())
+                            .filter(|name| !name.trim().is_empty()),
+                        impact: presentation::procurement_impact_summary(
+                            line_counts.get(&confirmation.submission_id.to_string()).copied(),
+                            submission.map(|item| &item.gross_amount),
+                        ),
+                    },
+                )
+            })
+            .collect())
+    }
+
+    /// 统计本批销售提交的明细行数。
+    ///
+    /// # 参数
+    /// * `submission_ids` - 提交 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回提交 ID 到行数的映射。
+    ///
+    /// # 错误
+    /// 仓储查询失败时返回错误。
+    async fn submission_line_counts(
+        &self,
+        submission_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, usize>> {
+        if submission_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let mut counts = HashMap::new();
+        for line in self
+            .db
+            .sales_order_submission_lines()
+            .find_many(doc! { "submission_id": { "$in": submission_ids } }, executor)
+            .await?
+        {
+            *counts.entry(line.submission_id.to_string()).or_insert(0) += 1;
+        }
+        Ok(counts)
     }
 
     async fn load_purchase_order_facts(
@@ -602,12 +721,11 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::PurchaseOrder, order.base.id.clone()),
-                ObjectFact {
-                    root_document_id: order.base.id.clone(),
-                    label: format!("采购单 {}", order.purchase_no),
-                    created_by: order.stable.created_by,
-                    subject_versions: Vec::new(),
-                },
+                ObjectFact::new(
+                    order.base.id.clone(),
+                    format!("采购单 {}", order.purchase_no),
+                    order.stable.created_by,
+                ),
             );
         }
         Ok(())
@@ -646,12 +764,11 @@ impl WorkItemService {
             };
             facts.insert(
                 (ObjectKind::SalesChangeReview, review.base.id.clone()),
-                ObjectFact {
-                    root_document_id: submission.sales_order_id.to_string(),
-                    label: "销售变更复核".to_string(),
-                    created_by: submission.submitted_by.clone(),
-                    subject_versions: Vec::new(),
-                },
+                ObjectFact::new(
+                    submission.sales_order_id.to_string(),
+                    "销售变更复核",
+                    submission.submitted_by.clone(),
+                ),
             );
         }
         Ok(())
@@ -675,12 +792,11 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::ReceivableAccount, account.base.id.clone()),
-                ObjectFact {
-                    root_document_id: account.sales_order_id.to_string(),
-                    label: format!("卡券应收子账 {}", account.account_seq),
-                    created_by: account.stable.created_by,
-                    subject_versions: Vec::new(),
-                },
+                ObjectFact::new(
+                    account.sales_order_id.to_string(),
+                    format!("卡券应收子账 {}", account.account_seq),
+                    account.stable.created_by,
+                ),
             );
         }
         Ok(())
@@ -722,12 +838,11 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::StockAdjustment, adjustment.base.id.clone()),
-                ObjectFact {
-                    root_document_id: adjustment.base.id.clone(),
-                    label: format!("库存调整单 {}", adjustment.adjustment_no),
-                    created_by: adjustment.prepared_by,
-                    subject_versions: Vec::new(),
-                },
+                ObjectFact::new(
+                    adjustment.base.id.clone(),
+                    format!("库存调整单 {}", adjustment.adjustment_no),
+                    adjustment.prepared_by,
+                ),
             );
         }
         Ok(())
@@ -751,12 +866,11 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::SupplierSettlement, statement.base.id.clone()),
-                ObjectFact {
-                    root_document_id: statement.base.id.clone(),
-                    label: format!("供应商结算单 {}", statement.statement_no),
-                    created_by: statement.prepared_by,
-                    subject_versions: Vec::new(),
-                },
+                ObjectFact::new(
+                    statement.base.id.clone(),
+                    format!("供应商结算单 {}", statement.statement_no),
+                    statement.prepared_by,
+                ),
             );
         }
         Ok(())
@@ -780,12 +894,11 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::LegacyImportBatch, batch.base.id.clone()),
-                ObjectFact {
-                    root_document_id: batch.base.id.clone(),
-                    label: format!("旧数据导入批次 {}", batch.batch_no),
-                    created_by: SYSTEM_OBJECT_OWNER.to_string(),
-                    subject_versions: Vec::new(),
-                },
+                ObjectFact::new(
+                    batch.base.id.clone(),
+                    format!("旧数据导入批次 {}", batch.batch_no),
+                    SYSTEM_OBJECT_OWNER,
+                ),
             );
         }
         Ok(())
@@ -809,14 +922,12 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::IntegrationErrorTask, task.base.id.clone()),
-                ObjectFact {
-                    root_document_id: task.base.id.clone(),
-                    label: "集成异常处理".to_string(),
-                    created_by: task
-                        .owner_user_id
+                ObjectFact::new(
+                    task.base.id.clone(),
+                    "集成异常处理",
+                    task.owner_user_id
                         .unwrap_or_else(|| SYSTEM_OBJECT_OWNER.to_string()),
-                    subject_versions: Vec::new(),
-                },
+                ),
             );
         }
         Ok(())
@@ -840,12 +951,11 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::ReconciliationDifference, difference.base.id.clone()),
-                ObjectFact {
-                    root_document_id: difference.base.id.clone(),
-                    label: format!("对账差异：{}", difference.difference_type),
-                    created_by: SYSTEM_OBJECT_OWNER.to_string(),
-                    subject_versions: Vec::new(),
-                },
+                ObjectFact::new(
+                    difference.base.id.clone(),
+                    format!("对账差异：{}", difference.difference_type),
+                    SYSTEM_OBJECT_OWNER,
+                ),
             );
         }
         Ok(())
@@ -869,14 +979,12 @@ impl WorkItemService {
         {
             facts.insert(
                 (ObjectKind::MasterMappingTask, task.base.id.clone()),
-                ObjectFact {
-                    root_document_id: task.base.id.clone(),
-                    label: format!("{}映射任务", task.mapping_type.label()),
-                    created_by: task
-                        .owner_user_id
+                ObjectFact::new(
+                    task.base.id.clone(),
+                    format!("{}映射任务", task.mapping_type.label()),
+                    task.owner_user_id
                         .unwrap_or_else(|| SYSTEM_OBJECT_OWNER.to_string()),
-                    subject_versions: Vec::new(),
-                },
+                ),
             );
         }
         Ok(())
@@ -906,6 +1014,8 @@ impl WorkItemService {
                     label: format!("供应商履约订单 {}", order.fulfillment_order_no),
                     created_by: SYSTEM_OBJECT_OWNER.to_string(),
                     subject_versions: vec![order.base.version.to_string()],
+                    counterparty_label: None,
+                    impact_summary: None,
                 },
             );
         }
@@ -961,6 +1071,8 @@ impl WorkItemService {
                     label: format!("供应商供给 {}", offering.supplier_sku_code),
                     created_by: offering.stable.created_by,
                     subject_versions,
+                    counterparty_label: None,
+                    impact_summary: None,
                 },
             );
         }
@@ -988,6 +1100,7 @@ impl WorkItemService {
                 ),
             );
         }
+        self.apply_party_names(&mut items).await?;
         Ok(items)
     }
 
@@ -1007,12 +1120,14 @@ impl WorkItemService {
             .ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
         let queue_context_id = single_item_context_id(actor.id(), &item_id);
         let view_access = self.view_access(&fields, scope, actor, &access).await?;
-        Ok(WorkItemView::from_fields(fields, queue_context_id).with_access(
+        let mut view = WorkItemView::from_fields(fields, queue_context_id).with_access(
             view_access.processing_state,
             view_access.processing_blocker,
             view_access.allowed_actions,
             view_access.action_blockers,
-        ))
+        );
+        self.apply_party_names(std::slice::from_mut(&mut view)).await?;
+        Ok(view)
     }
 
     /// 从责任池原子建立本人责任。
@@ -2724,14 +2839,15 @@ impl WorkItemService {
             .next()
             .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".to_string()))?;
         let view_access = self.view_access(&fields, scope, actor, &access).await?;
-        Ok(
-            WorkItemView::from_fields(fields, single_item_context_id(actor.id(), &item_id)).with_access(
+        let mut view = WorkItemView::from_fields(fields, single_item_context_id(actor.id(), &item_id))
+            .with_access(
                 view_access.processing_state,
                 view_access.processing_blocker,
                 view_access.allowed_actions,
                 view_access.action_blockers,
-            ),
-        )
+            );
+        self.apply_party_names(std::slice::from_mut(&mut view)).await?;
+        Ok(view)
     }
 }
 
@@ -3008,9 +3124,47 @@ struct ObjectFact {
     created_by: String,
     /// 生产者合同允许的权威版本；空集合表示该领域没有通用锁版本约束。
     subject_versions: Vec<String>,
+    counterparty_label: Option<String>,
+    impact_summary: Option<String>,
+}
+
+impl ObjectFact {
+    /// 构造只有身份标题的对象事实。
+    ///
+    /// # 参数
+    /// * `root_document_id` - 工作面根对象 ID
+    /// * `label` - 面向用户的对象标题
+    /// * `created_by` - 对象创建人，用于参与权判断
+    ///
+    /// # 返回
+    /// 返回无往来方、无影响覆盖的对象事实。
+    ///
+    /// # 错误
+    /// 无。
+    fn new(
+        root_document_id: impl Into<String>,
+        label: impl Into<String>,
+        created_by: impl Into<String>,
+    ) -> Self {
+        Self {
+            root_document_id: root_document_id.into(),
+            label: label.into(),
+            created_by: created_by.into(),
+            subject_versions: Vec::new(),
+            counterparty_label: None,
+            impact_summary: None,
+        }
+    }
 }
 
 type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
+
+#[derive(Debug, Clone)]
+struct ProcurementConfirmationDisplay {
+    label: String,
+    counterparty: Option<String>,
+    impact: String,
+}
 
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
@@ -3261,8 +3415,7 @@ fn authorized_fields(
                 return None;
             }
             let mut fields = dto::WorkItemFields::from(row);
-            fields.business_object_label = fact.label.clone();
-            fields.root_business_object_id = fact.root_document_id.clone();
+            apply_object_display(&mut fields, fact);
             Some(fields)
         })
         .collect()
@@ -3282,9 +3435,28 @@ fn authorized_item_fields(
         return None;
     }
     let mut fields = dto::WorkItemFields::from(item);
+    apply_object_display(&mut fields, fact);
+    Some(fields)
+}
+
+/// 把对象事实中的标题、往来方和影响写回任务投影字段。
+///
+/// # 参数
+/// * `fields` - 待覆盖的任务字段
+/// * `fact` - 已授权对象事实
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
     fields.business_object_label = fact.label.clone();
     fields.root_business_object_id = fact.root_document_id.clone();
-    Some(fields)
+    fields.counterparty_label = fact.counterparty_label.clone();
+    if let Some(impact) = fact.impact_summary.clone() {
+        fields.impact_summary = Some(impact);
+    }
 }
 
 fn subject_version_matches(fact: &ObjectFact, actual: &str) -> bool {
@@ -3884,12 +4056,7 @@ mod tests {
     fn w13_facts() -> ObjectFactMap {
         HashMap::from([(
             (ObjectKind::ReceivableAccount, "account-1".to_string()),
-            ObjectFact {
-                root_document_id: "sales-order-1".to_string(),
-                label: "卡券应收子账 2".to_string(),
-                created_by: "sales-user".to_string(),
-                subject_versions: Vec::new(),
-            },
+            ObjectFact::new("sales-order-1", "卡券应收子账 2", "sales-user"),
         )])
     }
 

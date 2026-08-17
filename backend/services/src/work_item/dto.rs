@@ -6,6 +6,9 @@ use entities::work_item::{
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::presentation::{
+    next_action_hint, reason_label, usable_impact_summary, UNRESOLVED_OWNER_DISPLAY_NAME,
+};
 use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
@@ -347,6 +350,9 @@ pub struct WorkItemView {
     /// 业务对象所属的工作面根对象；与任务对象相同时返回同一 ID。
     pub root_business_object_id: String,
     pub business_object_label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_label: Option<String>,
+    pub next_action_hint: String,
     pub subject_version: String,
     pub task_version: String,
     pub allowed_actions: Vec<WorkItemAllowedAction>,
@@ -467,6 +473,17 @@ impl WorkItemView {
         self
     }
 
+    /// 由已授权字段生成队列安全投影。
+    ///
+    /// # 参数
+    /// * `fields` - 已通过对象授权的任务字段
+    /// * `queue_context_id` - 当前队列上下文
+    ///
+    /// # 返回
+    /// 返回原因、影响和下一步均已翻译成业务语言的投影；处理人姓名仍可能是占位，由服务层补齐。
+    ///
+    /// # 错误
+    /// 无。
     pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Self {
         let route = handler_route(
             fields.work_item_type,
@@ -475,7 +492,7 @@ impl WorkItemView {
         );
         let owner_user = fields.owner_user_id.as_ref().map(|id| WorkItemPartyView {
             id: id.clone(),
-            display_name: "当前处理人".to_string(),
+            display_name: UNRESOLVED_OWNER_DISPLAY_NAME.to_string(),
         });
         Self {
             id: fields.id,
@@ -499,6 +516,8 @@ impl WorkItemView {
             processing_state: ProcessingState::Ready,
             processing_blocker: None,
             business_object_label: fields.business_object_label,
+            counterparty_label: fields.counterparty_label,
+            next_action_hint: next_action_hint(fields.work_item_type),
             business_object_type: fields.business_object_type,
             business_object_id: fields.business_object_id,
             root_business_object_id: fields.root_business_object_id,
@@ -508,11 +527,9 @@ impl WorkItemView {
             action_blockers: Vec::new(),
             priority: fields.priority,
             due_at: seconds(fields.due_at),
-            reason_label: reason_label(fields.reason_code.as_deref()),
+            reason_label: reason_label(fields.reason_code.as_deref(), fields.work_item_type),
             reason_code: fields.reason_code,
-            impact_summary: fields
-                .impact_summary
-                .unwrap_or_else(|| "请打开业务对象核对影响。".to_string()),
+            impact_summary: usable_impact_summary(fields.impact_summary.as_deref(), fields.work_item_type),
             assigned_at: seconds(fields.assigned_at),
             started_at: seconds(fields.started_at),
             current_assignment_at: seconds(fields.current_assignment_at),
@@ -586,6 +603,7 @@ pub(crate) struct WorkItemFields {
     pub business_object_id: String,
     pub root_business_object_id: String,
     pub business_object_label: String,
+    pub counterparty_label: Option<String>,
     pub subject_version: String,
     pub status: WorkItemStatus,
     pub assignment_mode: AssignmentMode,
@@ -621,6 +639,7 @@ impl From<WorkItem> for WorkItemFields {
             business_object_id: item.business_object_id,
             root_business_object_id,
             business_object_label: item.work_item_type.label().to_string(),
+            counterparty_label: None,
             subject_version: item.subject_version,
             status: item.status,
             assignment_mode: item.assignment_mode,
@@ -658,6 +677,7 @@ impl From<database::WorkItemRow> for WorkItemFields {
             business_object_id: item.business_object_id,
             root_business_object_id,
             business_object_label: item.work_item_type.label().to_string(),
+            counterparty_label: None,
             subject_version: item.subject_version,
             status: item.status,
             assignment_mode: item.assignment_mode,
@@ -848,10 +868,6 @@ fn role_label(role: &str) -> String {
         _ => role,
     }
     .to_string()
-}
-
-fn reason_label(reason_code: Option<&str>) -> String {
-    reason_code.unwrap_or("待处理").replace('_', " ")
 }
 
 #[cfg(test)]

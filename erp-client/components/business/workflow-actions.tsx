@@ -387,6 +387,7 @@ export type SequentialProcessBarProps = Omit<
     responsibilityStatus: ResponsibilityStatus
     responsibilityStatusLabel?: string
     processLabel?: string
+    processIcon?: LucideIcon
     processNextLabel?: string
     pending?: boolean
     processDisabled?: boolean
@@ -427,6 +428,7 @@ function SequentialProcessBar({
     responsibilityStatus,
     responsibilityStatusLabel,
     processLabel = "处理当前任务",
+    processIcon: ProcessIcon = CheckIcon,
     processNextLabel = "处理并打开下一条",
     pending = false,
     processDisabled = false,
@@ -543,7 +545,7 @@ function SequentialProcessBar({
                                 className="animate-spin"
                             />
                         ) : (
-                            <CheckIcon
+                            <ProcessIcon
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />

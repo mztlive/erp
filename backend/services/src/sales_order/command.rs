@@ -575,7 +575,7 @@ impl SalesOrderService {
                         priority: WorkItemPriority::High,
                         due_at: None,
                         reason_code: Some("procurement_confirmation_dispatched".to_string()),
-                        impact_summary: Some(format!("采购二次确认：销售提交 {}", submission.submission_no)),
+                        impact_summary: Some("不确认则销售单不能生效".to_string()),
                     },
                 )?;
                 (None, Some(confirmation), Some(item))

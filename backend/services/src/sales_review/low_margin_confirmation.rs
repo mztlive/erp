@@ -618,7 +618,7 @@ fn new_procurement_work_item(
             priority: WorkItemPriority::High,
             due_at: None,
             reason_code: Some("low_margin_approved_procurement_confirmation".to_string()),
-            impact_summary: Some(format!("采购二次确认：销售提交 {}", submission.submission_no)),
+            impact_summary: Some("不确认则销售单不能生效".to_string()),
         },
     )
     .map_err(Error::Logic)

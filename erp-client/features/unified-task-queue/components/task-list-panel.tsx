@@ -39,7 +39,7 @@ export function TaskListPanel({
                         counterparty={item.counterparty}
                         enteredAt={item.enteredAt}
                         enteredDateTime={item.enteredDateTime}
-                        dueAt={item.dueLabel}
+                        dueAt={item.dueDateTime ? item.dueLabel : undefined}
                         dueDateTime={item.dueDateTime}
                         responsibleParty={item.responsibilityLabel}
                         reason={item.reason}
