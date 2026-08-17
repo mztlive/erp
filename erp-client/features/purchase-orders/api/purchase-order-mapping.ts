@@ -54,9 +54,9 @@ export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
         purchaseType: mapPurchaseType(String(row.purchase_type)),
         // 缺口：列表无履约责任
         fulfillmentResponsibility: "WAREHOUSE",
-        paymentTermCode: "",
-        paymentTermLabel: "—",
-        ownerName: "—",
+        paymentTermCode: row.payment_term_code ?? "",
+        paymentTermLabel: paymentTermLabel(row.payment_term_code ?? ""),
+        ownerName: row.owner_name?.trim() || "—",
         grossAmount: row.gross_amount ?? "0",
         netAmount: row.net_amount ?? "0",
         taxAmount: row.tax_amount ?? "0",

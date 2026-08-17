@@ -9,8 +9,8 @@ import {
     FormalActionResult,
     PageActions,
     PageHeader,
-    StatusTrackSummary,
 } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
 import {
@@ -207,36 +207,22 @@ export function PurchaseOrderDetailHeader({
                         : "草稿"
                 }
                 meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-1.5">
+                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                         <span>来源 {order.header.salesOrderNo}</span>
+                        <span aria-hidden="true">·</span>
+                        <Badge variant="secondary" className="font-normal">
+                            {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
+                        </Badge>
+                        <Badge variant="secondary" className="font-normal">
+                            {
+                                FULFILLMENT_RESPONSIBILITY_LABEL[
+                                    order.header.fulfillmentResponsibility
+                                ]
+                            }
+                        </Badge>
                     </span>
                 }
                 statuses={[
-                    {
-                        id: "type",
-                        label: "类型",
-                        status: {
-                            label: PURCHASE_TYPE_LABEL[
-                                order.header.purchaseType
-                            ],
-                            tone: "neutral",
-                        },
-                    },
-                    {
-                        id: "resp",
-                        label: "履约",
-                        status: {
-                            label: FULFILLMENT_RESPONSIBILITY_LABEL[
-                                order.header.fulfillmentResponsibility
-                            ],
-                            tone: "neutral",
-                        },
-                    },
-                ]}
-            />
-
-            <StatusTrackSummary
-                tracks={[
                     {
                         id: "review",
                         label: "审核",
@@ -245,8 +231,7 @@ export function PurchaseOrderDetailHeader({
                             tone:
                                 order.identity.reviewStatus === "PENDING"
                                     ? "warning"
-                                    : order.identity.reviewStatus ===
-                                        "APPROVED"
+                                    : order.identity.reviewStatus === "APPROVED"
                                       ? "success"
                                       : order.identity.reviewStatus ===
                                           "REJECTED"

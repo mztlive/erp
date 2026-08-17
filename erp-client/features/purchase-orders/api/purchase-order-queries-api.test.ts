@@ -69,8 +69,33 @@ describe("fetchPurchaseOrders", () => {
         })
         expect(result.rows).toHaveLength(1)
         expect(result.rows[0]?.purchaseOrderId).toBe("po_1")
+        expect(result.rows[0]?.paymentTermLabel).toBe("—")
+        expect(result.rows[0]?.ownerName).toBe("—")
         expect(result.total).toBe(1)
         expect(result.metrics).toEqual([])
+    })
+
+    it("把付款条件与负责人映射到列表行", async () => {
+        mockedApiGet.mockResolvedValue({
+            items: [
+                makeBackendListItem({
+                    payment_term_code: "POSTPAY_NET30",
+                    owner_name: "张三",
+                }),
+            ],
+            total: 1,
+            page: 1,
+            page_size: 20,
+        })
+
+        const result = await fetchPurchaseOrders({
+            page: 1,
+            pageSize: 20,
+        })
+
+        expect(result.rows[0]?.paymentTermCode).toBe("POSTPAY_NET30")
+        expect(result.rows[0]?.paymentTermLabel).toBe("货到 30 天")
+        expect(result.rows[0]?.ownerName).toBe("张三")
     })
 })
 

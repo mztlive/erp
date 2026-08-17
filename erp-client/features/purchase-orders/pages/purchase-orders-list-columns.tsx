@@ -23,7 +23,6 @@ export type PurchaseOrdersListColumnsOptions = {
     focusedIndex: number
     listReturnHref: string
     rowRefs: React.RefObject<Map<string, HTMLElement>>
-    onPreview: (purchaseOrderId: string) => void
 }
 
 export function buildPurchaseOrdersListColumns({
@@ -31,7 +30,6 @@ export function buildPurchaseOrdersListColumns({
     focusedIndex,
     listReturnHref,
     rowRefs,
-    onPreview,
 }: PurchaseOrdersListColumnsOptions): ColumnDef<PurchaseOrderListItem>[] {
     return [
         {
@@ -49,9 +47,7 @@ export function buildPurchaseOrdersListColumns({
                                 el,
                             )
                         } else {
-                            rowRefs.current.delete(
-                                row.original.purchaseOrderId,
-                            )
+                            rowRefs.current.delete(row.original.purchaseOrderId)
                         }
                     }}
                     tabIndex={
@@ -83,9 +79,11 @@ export function buildPurchaseOrdersListColumns({
                                 variant="link"
                                 size="xs"
                                 className="num px-0"
-                                aria-label={`预览 ${displayPurchaseOrderNo(row.original)}`}
-                                onClick={() =>
-                                    onPreview(row.original.purchaseOrderId)
+                                aria-label={`打开采购单 ${displayPurchaseOrderNo(row.original)}`}
+                                render={
+                                    <Link
+                                        href={`/procurement/orders/${row.original.purchaseOrderId}`}
+                                    />
                                 }
                             >
                                 {displayPurchaseOrderNo(row.original)}
@@ -126,18 +124,18 @@ export function buildPurchaseOrdersListColumns({
             header: "类型 / 履约",
             meta: { label: "类型与履约责任", width: "default" },
             cell: ({ row }) => (
-                <div className="text-xs">
-                    <div>
-                        {PURCHASE_TYPE_LABEL[row.original.purchaseType]}
-                    </div>
-                    <div className="text-muted-foreground">
+                <span className="whitespace-nowrap text-sm">
+                    {PURCHASE_TYPE_LABEL[row.original.purchaseType]}
+                    <span className="text-muted-foreground">
+                        {" "}
+                        /{" "}
                         {
                             FULFILLMENT_RESPONSIBILITY_LABEL[
                                 row.original.fulfillmentResponsibility
                             ]
                         }
-                    </div>
-                </div>
+                    </span>
+                </span>
             ),
         },
         {
@@ -194,9 +192,7 @@ export function buildPurchaseOrdersListColumns({
             enableSorting: true,
             cell: ({ row }) =>
                 row.original.costMasked ? (
-                    <span className="text-sm text-muted-foreground">
-                        •••
-                    </span>
+                    <span className="text-sm text-muted-foreground">•••</span>
                 ) : (
                     <MoneyValue
                         value={row.original.grossAmount}
@@ -209,8 +205,8 @@ export function buildPurchaseOrdersListColumns({
             header: "付款条件",
             meta: { label: "付款条件", width: "default" },
             cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground">
-                    {row.original.paymentTermLabel}
+                <span className="text-sm">
+                    {row.original.paymentTermLabel || "—"}
                 </span>
             ),
         },
@@ -219,99 +215,9 @@ export function buildPurchaseOrdersListColumns({
             accessorKey: "ownerName",
             header: "负责人",
             meta: { label: "负责人", width: "default" },
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default", align: "end" },
-            cell: ({ row }) => {
-                const canReview =
-                    row.original.allowedActions.includes("REVIEW")
-                const canEdit = row.original.allowedActions.includes("EDIT")
-                const canFulfill =
-                    row.original.allowedActions.includes("FULFILL")
-                const fulfillBlocker = row.original.actionBlockers.find(
-                    (b) => b.action === "FULFILL",
-                )
-                return (
-                    <div className="flex justify-end gap-1">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            onClick={() =>
-                                onPreview(row.original.purchaseOrderId)
-                            }
-                        >
-                            预览
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="xs"
-                            render={
-                                <Link
-                                    href={`/procurement/orders/${row.original.purchaseOrderId}`}
-                                />
-                            }
-                        >
-                            详情
-                        </Button>
-                        {canEdit ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                render={
-                                    <Link
-                                        href={`/procurement/orders/${row.original.purchaseOrderId}?mode=edit`}
-                                    />
-                                }
-                            >
-                                编辑
-                            </Button>
-                        ) : null}
-                        {canReview ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                render={
-                                    <Link
-                                        href={`/procurement/orders/${row.original.purchaseOrderId}?mode=review`}
-                                    />
-                                }
-                            >
-                                去审核
-                            </Button>
-                        ) : null}
-                        {canFulfill ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                render={
-                                    <Link
-                                        href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${row.original.purchaseOrderId}&from=W08&returnTo=${encodeURIComponent(listReturnHref)}`}
-                                    />
-                                }
-                            >
-                                去交付
-                            </Button>
-                        ) : fulfillBlocker ? (
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                disabled
-                                title={fulfillBlocker.message}
-                            >
-                                交付已阻断
-                            </Button>
-                        ) : null}
-                    </div>
-                )
-            },
+            cell: ({ row }) => (
+                <span className="text-sm">{row.original.ownerName || "—"}</span>
+            ),
         },
     ]
 }

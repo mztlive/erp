@@ -1,8 +1,8 @@
 //! 采购单查询与对象中心视图编排。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use database::{NoTransaction, PurchaseOrderExt, WorkItemExt};
+use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, WorkItemExt};
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
 use entities::work_item::{AssignmentMode, WorkItem, WorkItemStatus, WorkItemType};
 use validator::Validate;
@@ -60,6 +60,8 @@ impl PurchaseOrderService {
         let supplier_ids: Vec<&entities::ids::SupplierAccountId> =
             page.items.iter().map(|row| &row.supplier_id).collect();
         let supplier_names = self.resolve_supplier_names(&supplier_ids).await?;
+        let owner_ids: Vec<String> = page.items.iter().map(|row| row.created_by.clone()).collect();
+        let owner_names = self.resolve_account_names(&owner_ids).await?;
         let pointer_ids: Vec<String> = page
             .items
             .iter()
@@ -93,6 +95,8 @@ impl PurchaseOrderService {
                     supplier_id: row.supplier_id.to_string(),
                     supplier_name,
                     purchase_type: row.purchase_type,
+                    payment_term_code: row.payment_term_code,
+                    owner_name: owner_names.get(&row.created_by).cloned().unwrap_or_default(),
                     status: row.status,
                     review_status: row.review_status,
                     gross_amount: totals.0,
@@ -280,6 +284,45 @@ impl PurchaseOrderService {
             responsibility_actions,
             domain_allowed_actions,
         }))
+    }
+
+    /// 批量解析账号展示姓名。
+    ///
+    /// 用于采购单列表「负责人」列：把 `created_by` 解析为账号姓名，避免把账号 ID 直接展示给用户。
+    ///
+    /// # 参数
+    /// * `account_ids` - 账号 ID 列表（可重复；空串会被忽略）
+    ///
+    /// # 返回
+    /// 返回账号 ID → 姓名映射；账号不存在时不写入该键。
+    ///
+    /// # 错误
+    /// * `RepositoryError` - 数据库查询失败
+    async fn resolve_account_names(&self, account_ids: &[String]) -> Result<HashMap<String, String>> {
+        let mut unique = Vec::new();
+        let mut seen = HashSet::new();
+        for account_id in account_ids {
+            let trimmed = account_id.trim();
+            if trimmed.is_empty() || !seen.insert(trimmed.to_string()) {
+                continue;
+            }
+            unique.push(trimmed.to_string());
+        }
+        if unique.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let accounts = self
+            .db
+            .accounts()
+            .find_many(
+                mongodb::bson::doc! { "id": { "$in": unique } },
+                &mut NoTransaction,
+            )
+            .await?;
+        Ok(accounts
+            .into_iter()
+            .map(|account| (account.base.id, account.name))
+            .collect())
     }
 
     /// 批量解析供应商名称（D07 主体修订快照）。

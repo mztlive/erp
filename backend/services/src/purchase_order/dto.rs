@@ -199,6 +199,10 @@ pub struct PurchaseOrderListItemView {
     pub supplier_name: String,
     /// 采购类型。
     pub purchase_type: PurchaseType,
+    /// 付款条件代码（实体 `payment_term_code`）。
+    pub payment_term_code: String,
+    /// 采购单负责人展示名（创建人账号姓名；账号不存在时回落账号 ID）。
+    pub owner_name: String,
     /// 主状态。
     pub status: PurchaseOrderStatus,
     /// 财务审核状态。

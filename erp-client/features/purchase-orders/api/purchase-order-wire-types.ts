@@ -27,6 +27,8 @@ export type BackendListItem = {
     supplier_id: string
     supplier_name: string
     purchase_type: PurchaseType | string
+    payment_term_code?: string | null
+    owner_name?: string | null
     status: string
     review_status: string
     gross_amount: string

@@ -693,9 +693,9 @@ function DataTable<TData>({
                                                     variant="ghost"
                                                     size="xs"
                                                     className={cn(
-                                                        // size="xs" 自带 text-xs，会比非排序表头继承的 text-sm 小一号；
-                                                        // 排序表头只需要更矮的点击区域，字号要跟未排序列对齐。
-                                                        "w-full px-0 text-sm",
+                                                        // TableHead 本身是 text-xs；size="xs" 也是 text-xs，
+                                                        // 不要再抬成 text-sm，否则排序列会比其它列头大一号。
+                                                        "w-full px-0 text-xs",
                                                         sortableHeaderClass(
                                                             meta?.align,
                                                         ),

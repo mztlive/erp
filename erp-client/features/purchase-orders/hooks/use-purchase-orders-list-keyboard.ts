@@ -7,25 +7,21 @@ import type { PurchaseOrderListItem } from "@/features/purchase-orders/types"
 export type UsePurchaseOrdersListKeyboardOptions = {
     pageRows: readonly PurchaseOrderListItem[]
     focusedIndex: number
-    previewId: string | null
     createOpen: boolean
     onFocusIndex: React.Dispatch<React.SetStateAction<number>>
-    onOpenPreview: (purchaseOrderId: string) => void
-    onClosePreview: (purchaseOrderId: string) => void
+    onOpenDetail: (purchaseOrderId: string) => void
 }
 
 /**
- * 列表键盘导航：j/k/↑/↓ 移动焦点行，Enter 打开预览，Escape 关闭预览，
- * / 聚焦搜索框。预览抽屉或建单弹框打开时后台列表不响应 j/k/Enter，避免状态污染。
+ * 列表键盘导航：j/k/↑/↓ 移动焦点行，Enter 打开详情，/ 聚焦搜索框。
+ * 建单弹框打开时后台列表不响应 j/k/Enter，避免状态污染。
  */
 export function usePurchaseOrdersListKeyboard({
     pageRows,
     focusedIndex,
-    previewId,
     createOpen,
     onFocusIndex,
-    onOpenPreview,
-    onClosePreview,
+    onOpenDetail,
 }: UsePurchaseOrdersListKeyboardOptions) {
     React.useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -54,13 +50,6 @@ export function usePurchaseOrdersListKeyboard({
                 return
             }
 
-            if (previewId) {
-                if (event.key === "Escape") {
-                    event.preventDefault()
-                    onClosePreview(previewId)
-                }
-                return
-            }
             if (createOpen) return
 
             if (pageRows.length === 0) return
@@ -74,18 +63,10 @@ export function usePurchaseOrdersListKeyboard({
             } else if (event.key === "Enter") {
                 event.preventDefault()
                 const row = pageRows[focusedIndex]
-                if (row) onOpenPreview(row.purchaseOrderId)
+                if (row) onOpenDetail(row.purchaseOrderId)
             }
         }
         window.addEventListener("keydown", onKeyDown)
         return () => window.removeEventListener("keydown", onKeyDown)
-    }, [
-        createOpen,
-        focusedIndex,
-        onClosePreview,
-        onFocusIndex,
-        onOpenPreview,
-        pageRows,
-        previewId,
-    ])
+    }, [createOpen, focusedIndex, onFocusIndex, onOpenDetail, pageRows])
 }

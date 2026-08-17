@@ -6,7 +6,6 @@ import type { PaginationState, SortingState } from "@tanstack/react-table"
 import {
     useCreateFromBasisMutation,
     useCreationBasesQuery,
-    usePurchaseOrderCenterQuery,
     usePurchaseOrderExportDataQuery,
     usePurchaseOrdersQuery,
 } from "@/features/purchase-orders/hooks/queries"
@@ -23,7 +22,7 @@ export type PurchaseOrdersActionResult = {
 
 /**
  * 采购单列表页控制器：URL 状态、查询接线、搜索防抖、键盘导航、
- * 预览抽屉、建单弹框与导出/建单动作的全部状态逻辑。
+ * 建单弹框与导出/建单动作的全部状态逻辑。
  */
 export function usePurchaseOrdersListController() {
     const {
@@ -57,7 +56,6 @@ export function usePurchaseOrdersListController() {
     const total = listQuery.data?.total ?? 0
 
     const [searchDraft, setSearchDraft] = React.useState(search)
-    const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [focusedIndex, setFocusedIndex] = React.useState(0)
     const [selectedBasisId, setSelectedBasisId] = React.useState<string>("")
     const [actionResult, setActionResult] =
@@ -99,8 +97,6 @@ export function usePurchaseOrdersListController() {
         return () => globalThis.clearTimeout(handle)
     }, [pushUrl, searchDraft, url.q])
 
-    const previewQuery = usePurchaseOrderCenterQuery(previewId ?? "")
-
     React.useEffect(() => {
         setFocusedIndex(0)
     }, [metricKey, pageRows.length, search, statusFilter])
@@ -111,7 +107,7 @@ export function usePurchaseOrdersListController() {
         pushUrl({ page: data.page })
     }, [listQuery.data, pushUrl, url.page])
 
-    // 键盘导航：仅列表可见且预览/建单弹层未打开时生效；焦点行滚动到可视区。
+    // 键盘导航：仅列表可见且建单弹层未打开时生效；焦点行滚动到可视区。
     React.useEffect(() => {
         const focusedRow = pageRows[focusedIndex]
         if (!focusedRow) return
@@ -120,23 +116,19 @@ export function usePurchaseOrdersListController() {
         })
     }, [focusedIndex, pageRows])
 
-    const closePreviewAndRefocus = React.useCallback((id: string | null) => {
-        setPreviewId(null)
-        if (id) {
-            requestAnimationFrame(() => {
-                rowRefs.current.get(id)?.focus()
-            })
-        }
-    }, [])
+    const openDetail = React.useCallback(
+        (purchaseOrderId: string) => {
+            router.push(`/procurement/orders/${purchaseOrderId}`)
+        },
+        [router],
+    )
 
     usePurchaseOrdersListKeyboard({
         pageRows,
         focusedIndex,
-        previewId,
         createOpen,
         onFocusIndex: setFocusedIndex,
-        onOpenPreview: setPreviewId,
-        onClosePreview: closePreviewAndRefocus,
+        onOpenDetail: openDetail,
     })
 
     const exportCsv = React.useCallback(async () => {
@@ -216,7 +208,6 @@ export function usePurchaseOrdersListController() {
         exportQuery,
         basesQuery,
         createMutation,
-        previewQuery,
         pageRows,
         total,
         pagination,
@@ -235,8 +226,6 @@ export function usePurchaseOrdersListController() {
         // 交互状态
         searchDraft,
         setSearchDraft,
-        previewId,
-        setPreviewId,
         focusedIndex,
         setFocusedIndex,
         createOpen,
@@ -251,6 +240,6 @@ export function usePurchaseOrdersListController() {
         handleCreate,
         openBases,
         openCreateDialog,
-        closePreviewAndRefocus,
+        openDetail,
     }
 }

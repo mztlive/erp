@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button"
 import { usePurchaseOrdersListController } from "@/features/purchase-orders/hooks/use-purchase-orders-list-controller"
 import { buildPurchaseOrdersListColumns } from "@/features/purchase-orders/pages/purchase-orders-list-columns"
 import { PurchaseOrdersCreateDialog } from "@/features/purchase-orders/pages/purchase-orders-list-create-dialog"
-import { PurchaseOrdersListPreviewSheet } from "@/features/purchase-orders/pages/purchase-orders-list-preview-sheet"
 import { PurchaseOrdersListToolbar } from "@/features/purchase-orders/pages/purchase-orders-list-toolbar"
 import { PO_STATUS_FILTER_LABEL } from "@/features/purchase-orders/types"
 
@@ -32,15 +31,8 @@ export function PurchaseOrdersListPage() {
                 focusedIndex: ctrl.focusedIndex,
                 listReturnHref: ctrl.listReturnHref,
                 rowRefs: ctrl.rowRefs,
-                onPreview: ctrl.setPreviewId,
             }),
-        [
-            ctrl.focusedIndex,
-            ctrl.listReturnHref,
-            ctrl.pageRows,
-            ctrl.rowRefs,
-            ctrl.setPreviewId,
-        ],
+        [ctrl.focusedIndex, ctrl.listReturnHref, ctrl.pageRows, ctrl.rowRefs],
     )
 
     if (ctrl.listQuery.isPending) {
@@ -156,7 +148,7 @@ export function PurchaseOrdersListPage() {
                 title="采购单列表"
                 description={
                     ctrl.statusFilter === "all"
-                        ? "搜索采购单号、供应商或来源销售单；键盘 j/k 移动行，Enter 打开预览，/ 聚焦搜索。"
+                        ? "搜索采购单号、供应商或来源销售单；键盘 j/k 移动行，Enter 打开详情，/ 聚焦搜索。"
                         : `当前筛选：${PO_STATUS_FILTER_LABEL[ctrl.statusFilter]}`
                 }
                 toolbar={
@@ -196,17 +188,14 @@ export function PurchaseOrdersListPage() {
                             })
                         }}
                         layout="flush"
-                        density="compact"
+                        density="comfortable"
+                        className="[&_[data-slot=table-cell]]:h-auto [&_[data-slot=table-cell]]:min-h-(--table-row-height) [&_[data-slot=table-cell]]:py-2.5 [&_[data-slot=table-head]]:h-auto [&_[data-slot=table-head]]:min-h-(--table-row-height) [&_[data-slot=table-head]]:py-2.5"
                         loading={ctrl.listQuery.isFetching}
                         defaultColumnPinning={{
                             left: ["document"],
-                            right: ["actions"],
                         }}
-                        onRowPreview={(row) =>
-                            ctrl.setPreviewId(row.purchaseOrderId)
-                        }
                         onRowOpen={(row) =>
-                            ctrl.setPreviewId(row.purchaseOrderId)
+                            ctrl.openDetail(row.purchaseOrderId)
                         }
                         errorState={
                             ctrl.listQuery.isError ? (
@@ -259,19 +248,6 @@ export function PurchaseOrdersListPage() {
                         }
                     />
                 }
-            />
-
-            <PurchaseOrdersListPreviewSheet
-                previewId={ctrl.previewId}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        ctrl.closePreviewAndRefocus(ctrl.previewId)
-                    }
-                }}
-                onClosePreview={ctrl.closePreviewAndRefocus}
-                order={ctrl.previewQuery.data}
-                pending={ctrl.previewQuery.isPending}
-                listReturnHref={ctrl.listReturnHref}
             />
 
             <PurchaseOrdersCreateDialog

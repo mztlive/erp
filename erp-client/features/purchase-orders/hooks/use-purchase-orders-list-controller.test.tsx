@@ -30,7 +30,6 @@ import {
     createPurchaseOrderFromBasis,
     fetchCreationBases,
     fetchPurchaseOrderExportData,
-    fetchPurchaseOrderCenter,
     fetchPurchaseOrders,
 } from "@/features/purchase-orders/api/purchase-orders"
 import type {
@@ -42,7 +41,6 @@ import { usePurchaseOrdersListController } from "./use-purchase-orders-list-cont
 
 const mockedFetchList = vi.mocked(fetchPurchaseOrders)
 const mockedFetchExport = vi.mocked(fetchPurchaseOrderExportData)
-const mockedFetchCenter = vi.mocked(fetchPurchaseOrderCenter)
 const mockedFetchBases = vi.mocked(fetchCreationBases)
 const mockedCreate = vi.mocked(createPurchaseOrderFromBasis)
 
@@ -129,7 +127,6 @@ beforeEach(() => {
     vi.clearAllMocks()
     mockUseSearchParams.mockReturnValue(new URLSearchParams())
     mockedFetchList.mockResolvedValue(makeListResult())
-    mockedFetchCenter.mockResolvedValue(null)
     mockedFetchBases.mockResolvedValue([])
     mockedFetchExport.mockResolvedValue([])
     URL.createObjectURL = vi.fn(() => "blob:mock")
@@ -361,16 +358,13 @@ describe("usePurchaseOrdersListController", () => {
         await waitFor(() => expect(result.current.focusedIndex).toBe(0))
     })
 
-    it("预览按 id 取中心视图", async () => {
+    it("openDetail 跳转到采购单详情", async () => {
         const { result } = renderController()
         await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
-        expect(mockedFetchCenter).not.toHaveBeenCalled()
 
         act(() => {
-            result.current.setPreviewId("po_1")
+            result.current.openDetail("po_1")
         })
-        await waitFor(() =>
-            expect(mockedFetchCenter).toHaveBeenCalledWith("po_1"),
-        )
+        expect(mockRouter.push).toHaveBeenCalledWith("/procurement/orders/po_1")
     })
 })

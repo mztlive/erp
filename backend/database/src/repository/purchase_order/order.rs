@@ -28,6 +28,10 @@ pub struct PurchaseOrderRow {
     pub supplier_id: SupplierAccountId,
     /// 采购类型。
     pub purchase_type: PurchaseType,
+    /// 付款条件代码。
+    pub payment_term_code: String,
+    /// 创建人账号 ID（列表「负责人」解析来源）。
+    pub created_by: String,
     /// 主状态。
     pub status: PurchaseOrderStatus,
     /// 财务审核状态。
@@ -197,6 +201,8 @@ fn purchase_order_projection() -> Document {
         "sales_order_id": 1,
         "supplier_id": 1,
         "purchase_type": 1,
+        "payment_term_code": 1,
+        "created_by": 1,
         "status": 1,
         "review_status": 1,
         "payment_progress": 1,
@@ -244,6 +250,13 @@ mod tests {
             "正则必须转义字面量"
         );
         assert_eq!(regex.get_str("$options").unwrap(), "i");
+    }
+
+    #[test]
+    fn projection_includes_payment_term_and_owner_source() {
+        let document = super::purchase_order_projection();
+        assert_eq!(document.get_i32("payment_term_code").unwrap(), 1);
+        assert_eq!(document.get_i32("created_by").unwrap(), 1);
     }
 
     #[test]

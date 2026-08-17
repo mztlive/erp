@@ -41,20 +41,19 @@ function renderWithState(
     pageRows: readonly PurchaseOrderListItem[],
     createOpen = false,
 ) {
-    return renderHook(() => {
+    const onOpenDetail = vi.fn()
+    const rendered = renderHook(() => {
         const [focusedIndex, setFocusedIndex] = React.useState(0)
-        const [previewId, setPreviewId] = React.useState<string | null>(null)
         usePurchaseOrdersListKeyboard({
             pageRows,
             focusedIndex,
-            previewId,
             createOpen,
             onFocusIndex: setFocusedIndex,
-            onOpenPreview: setPreviewId,
-            onClosePreview: () => setPreviewId(null),
+            onOpenDetail,
         })
-        return { focusedIndex, previewId }
+        return { focusedIndex }
     })
+    return { ...rendered, onOpenDetail }
 }
 
 function key(keyName: string, target?: EventTarget) {
@@ -115,37 +114,16 @@ describe("usePurchaseOrdersListKeyboard", () => {
         expect(result.current.focusedIndex).toBe(0)
     })
 
-    it("Enter 打开焦点行的预览", () => {
-        const { result } = renderWithState(rows)
+    it("Enter 打开焦点行的详情", () => {
+        const { result, onOpenDetail } = renderWithState(rows)
         act(() => {
             key("j")
         })
         act(() => {
             key("Enter")
         })
-        expect(result.current.previewId).toBe("po_2")
-    })
-
-    it("预览打开时忽略 j/k/Enter，Escape 关闭", () => {
-        const { result } = renderWithState(rows)
-        act(() => {
-            key("Enter")
-        })
-        expect(result.current.previewId).toBe("po_1")
-
-        act(() => {
-            key("j")
-            key("Enter")
-        })
-        expect(result.current.focusedIndex).toBe(0)
-        expect(result.current.previewId).toBe("po_1")
-
-        let escapeEvent: KeyboardEvent
-        act(() => {
-            escapeEvent = key("Escape")
-        })
-        expect(escapeEvent!.defaultPrevented).toBe(true)
-        expect(result.current.previewId).toBeNull()
+        expect(result.current.focusedIndex).toBe(1)
+        expect(onOpenDetail).toHaveBeenCalledWith("po_2")
     })
 
     it("/ 聚焦搜索框并阻止默认行为", () => {
@@ -172,50 +150,35 @@ describe("usePurchaseOrdersListKeyboard", () => {
     })
 
     it("建单弹框打开时列表不响应按键", () => {
-        const { result } = renderWithState(rows, true)
+        const { result, onOpenDetail } = renderWithState(rows, true)
         act(() => {
             key("j")
             key("Enter")
         })
         expect(result.current.focusedIndex).toBe(0)
-        expect(result.current.previewId).toBeNull()
+        expect(onOpenDetail).not.toHaveBeenCalled()
     })
 
     it("空列表不响应按键", () => {
-        const { result } = renderWithState([])
+        const { result, onOpenDetail } = renderWithState([])
         act(() => {
             key("j")
             key("Enter")
         })
         expect(result.current.focusedIndex).toBe(0)
-        expect(result.current.previewId).toBeNull()
+        expect(onOpenDetail).not.toHaveBeenCalled()
     })
 
     it("输入框内按键不触发行导航", () => {
         const input = document.createElement("input")
         document.body.appendChild(input)
 
-        const { result } = renderWithState(rows)
+        const { result, onOpenDetail } = renderWithState(rows)
         act(() => {
             key("j", input)
             key("Enter", input)
         })
         expect(result.current.focusedIndex).toBe(0)
-        expect(result.current.previewId).toBeNull()
-    })
-
-    it("预览打开时输入框内 Escape 仍可关闭预览", () => {
-        const input = document.createElement("input")
-        document.body.appendChild(input)
-
-        const { result } = renderWithState(rows)
-        act(() => {
-            key("Enter")
-        })
-        expect(result.current.previewId).toBe("po_1")
-        act(() => {
-            key("Escape", input)
-        })
-        expect(result.current.previewId).toBeNull()
+        expect(onOpenDetail).not.toHaveBeenCalled()
     })
 })
