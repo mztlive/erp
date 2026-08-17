@@ -66,6 +66,7 @@ impl WorkItemService {
                     counterparty_label: display.and_then(|item| item.counterparty.clone()),
                     impact_summary: display.map(|item| item.impact.clone()),
                     brief_source: display.map(|item| item.brief.clone()),
+                    subject_briefs: HashMap::new(),
                 },
             );
         }
@@ -219,7 +220,7 @@ impl WorkItemService {
     ///
     /// # 错误
     /// 账号查询失败时返回仓储错误。
-    async fn account_names(
+    pub(super) async fn account_names(
         &self,
         account_ids: &[String],
         executor: &mut dyn Executor,

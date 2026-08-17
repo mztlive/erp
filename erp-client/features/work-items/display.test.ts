@@ -40,6 +40,21 @@ describe("displayImpactSummary", () => {
                 impactSummary: "请打开业务对象核对影响。",
             }),
         ).toBe("不处理将卡住后续业务，请进入对应页面核对。")
+        expect(
+            displayImpactSummary({
+                impactSummary: "采购单 PO-20260817-9a550b 待财务审核",
+                workItemType: "PURCHASE_ORDER_REVIEW",
+            }),
+        ).toBe("不审核则不能形成应付、不能付款")
+    })
+
+    it("maps purchase review reason codes", () => {
+        expect(
+            displayReasonLabel({
+                reasonCode: "purchase_order_review_dispatched",
+                reasonLabel: "purchase order review dispatched",
+            }),
+        ).toBe("采购已提交，需要核对成本、进项税和付款条件")
     })
 })
 

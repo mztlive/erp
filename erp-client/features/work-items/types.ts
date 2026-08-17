@@ -220,6 +220,7 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         }),
         impactSummary: displayImpactSummary({
             impactSummary: dto.impact_summary,
+            workItemType: dto.work_item_type,
         }),
         nextActionHint: displayNextActionHint({
             nextActionHint: dto.next_action_hint,

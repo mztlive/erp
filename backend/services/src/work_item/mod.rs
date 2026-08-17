@@ -43,6 +43,7 @@ mod dto;
 mod party_names;
 mod presentation;
 mod procurement_brief;
+mod purchase_review_brief;
 
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -51,6 +52,7 @@ pub use dto::{
     WorkItemPageView, WorkItemPartyView, WorkItemScope, WorkItemSort, WorkItemStatsParams, WorkItemStatsView,
     WorkItemView,
 };
+pub(crate) use purchase_review_brief::purchase_review_reason_code;
 
 type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 
@@ -558,34 +560,6 @@ impl WorkItemService {
         Ok(())
     }
 
-    async fn load_purchase_order_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::PurchaseOrder);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for order in self
-            .db
-            .purchase_orders()
-            .find_many(doc! { "id": { "$in": ids } }, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::PurchaseOrder, order.base.id.clone()),
-                ObjectFact::new(
-                    order.base.id.clone(),
-                    format!("采购单 {}", order.purchase_no),
-                    order.stable.created_by,
-                ),
-            );
-        }
-        Ok(())
-    }
-
     async fn load_sales_change_review_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -872,6 +846,7 @@ impl WorkItemService {
                     counterparty_label: None,
                     impact_summary: None,
                     brief_source: None,
+                    subject_briefs: HashMap::new(),
                 },
             );
         }
@@ -930,6 +905,7 @@ impl WorkItemService {
                     counterparty_label: None,
                     impact_summary: None,
                     brief_source: None,
+                    subject_briefs: HashMap::new(),
                 },
             );
         }
@@ -2974,6 +2950,13 @@ enum AssignmentSeparationPolicy {
     FailClosed,
 }
 
+#[derive(Debug, Clone, Default)]
+struct SubjectBrief {
+    counterparty_label: Option<String>,
+    impact_summary: Option<String>,
+    brief_source: Option<brief::ObjectBriefSource>,
+}
+
 #[derive(Debug, Clone)]
 struct ObjectFact {
     root_document_id: String,
@@ -2984,6 +2967,7 @@ struct ObjectFact {
     counterparty_label: Option<String>,
     impact_summary: Option<String>,
     brief_source: Option<brief::ObjectBriefSource>,
+    subject_briefs: HashMap<String, SubjectBrief>,
 }
 
 impl ObjectFact {
@@ -3012,6 +2996,7 @@ impl ObjectFact {
             counterparty_label: None,
             impact_summary: None,
             brief_source: None,
+            subject_briefs: HashMap::new(),
         }
     }
 }
@@ -3305,11 +3290,39 @@ fn authorized_item_fields(
 fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
     fields.business_object_label = fact.label.clone();
     fields.root_business_object_id = fact.root_document_id.clone();
-    fields.counterparty_label = fact.counterparty_label.clone();
-    if let Some(impact) = fact.impact_summary.clone() {
+    let subject = fact.subject_briefs.get(&fields.subject_version);
+    apply_subject_display(fields, fact, subject);
+}
+
+/// 按任务针对的提交版本覆盖往来方、影响和事项简报。
+///
+/// # 参数
+/// * `fields` - 待覆盖的任务字段
+/// * `fact` - 对象级默认展示
+/// * `subject` - 与 `subject_version` 对应的提交展示；缺失时回退对象默认值
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+fn apply_subject_display(
+    fields: &mut dto::WorkItemFields,
+    fact: &ObjectFact,
+    subject: Option<&SubjectBrief>,
+) {
+    fields.counterparty_label = subject
+        .and_then(|item| item.counterparty_label.clone())
+        .or_else(|| fact.counterparty_label.clone());
+    if let Some(impact) = subject
+        .and_then(|item| item.impact_summary.clone())
+        .or_else(|| fact.impact_summary.clone())
+    {
         fields.impact_summary = Some(impact);
     }
-    fields.brief_source = fact.brief_source.clone();
+    fields.brief_source = subject
+        .and_then(|item| item.brief_source.clone())
+        .or_else(|| fact.brief_source.clone());
 }
 
 fn subject_version_matches(fact: &ObjectFact, actual: &str) -> bool {

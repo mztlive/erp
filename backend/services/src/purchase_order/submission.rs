@@ -318,8 +318,10 @@ pub(super) fn finance_review_work_item(
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::Normal,
             due_at: None,
-            reason_code: None,
-            impact_summary: Some(format!("采购单 {} 待财务审核", order.purchase_no)),
+            reason_code: Some(
+                crate::work_item::purchase_review_reason_code(&submission.submission_no).to_string(),
+            ),
+            impact_summary: None,
         },
     )
     .map_err(Into::into)

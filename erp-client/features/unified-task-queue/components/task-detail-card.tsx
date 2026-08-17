@@ -94,9 +94,7 @@ export function TaskDetailCard({
                         </div>
                     ) : null}
                     <div>
-                        <dt className="text-xs text-muted-foreground">
-                            当前处理人
-                        </dt>
+                        <dt className="text-xs text-muted-foreground">责任</dt>
                         <dd className="mt-1 text-sm">
                             {selected.responsibilityLabel}
                         </dd>
@@ -148,7 +146,7 @@ export function TaskDetailCard({
                                 ))}
                                 {selected.briefMoreCount ? (
                                     <li className="text-xs text-muted-foreground">
-                                        还有 {selected.briefMoreCount} 行，进入后逐行确认
+                                        还有 {selected.briefMoreCount} 行
                                     </li>
                                 ) : null}
                             </ul>

@@ -76,7 +76,9 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::LowMarginManagerConfirmation => {
             "进入销售单后，确认是否按原条件承接；通过后仍需采购再次确认供货。"
         }
-        WorkItemType::PurchaseOrderReview => "进入采购单后，核对成本与付款条件并提交审核结论。",
+        WorkItemType::PurchaseOrderReview => {
+            "进入后核对供应商、含税成本、进项税和付款条件，再提交通过或驳回。"
+        }
         WorkItemType::SalesChangeImpactReview => "进入销售单后，核对本次变更对履约的影响并提交结论。",
         WorkItemType::SalesChangeFinanceReview => "进入销售单后，核对本次变更对金额的影响并提交结论。",
         WorkItemType::CardFundsReview => "进入票款复核页后，核对准期初回款与开票事实。",
@@ -140,6 +142,41 @@ pub(crate) fn procurement_impact_summary(line_count: Option<usize>, gross_amount
     summary
 }
 
+/// 用行数、含税金额和先款门禁生成采购财务审核的业务影响。
+///
+/// # 参数
+/// * `line_count` - 采购提交行数；未知时为 `None`
+/// * `gross_amount` - 提交含税金额；未知时为 `None`
+/// * `prepay_gate` - 是否先款后货
+///
+/// # 返回
+/// 返回「不审核则不能形成应付、不能付款」，有规模或先款时追加说明。
+///
+/// # 错误
+/// 无。
+pub(crate) fn purchase_review_impact_summary(
+    line_count: Option<usize>,
+    gross_amount: Option<&Amount>,
+    prepay_gate: bool,
+) -> String {
+    let mut summary = default_impact_summary(WorkItemType::PurchaseOrderReview).to_string();
+    let mut scale = Vec::new();
+    if let Some(count) = line_count.filter(|count| *count > 0) {
+        scale.push(format!("{count} 行"));
+    }
+    if let Some(amount) = gross_amount {
+        scale.push(format_yuan(amount));
+    }
+    if !scale.is_empty() {
+        summary.push_str(" · ");
+        summary.push_str(&scale.join(" / "));
+    }
+    if prepay_gate {
+        summary.push_str(" · 先款后货");
+    }
+    summary
+}
+
 /// 按账号姓名表解析处理人展示名。
 ///
 /// # 参数
@@ -178,6 +215,8 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "supplier_settlement_review_dispatched" => "供应商结算单待复核",
         "import_trial_confirmation" => "导入试算已完成，需要业务确认范围",
         "supplier_stopped" => "供应已停止，商城在售发布已暂停",
+        "purchase_order_review_dispatched" => "采购已提交，需要核对成本、进项税和付款条件",
+        "purchase_order_review_resubmitted" => "采购已按驳回意见重提，需要重新核对成本与付款条件",
         other if other.ends_with("_active") => "当前审批步骤等待处理",
         _ => return None,
     })
@@ -187,7 +226,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementConfirmation => "销售已提交，需要采购确认能否供货",
         WorkItemType::LowMarginManagerConfirmation => "需要上级确认是否按原条件承接",
-        WorkItemType::PurchaseOrderReview => "采购单待财务审核",
+        WorkItemType::PurchaseOrderReview => "采购已提交，需要核对成本、进项税和付款条件",
         WorkItemType::SalesChangeImpactReview => "销售变更待核对履约影响",
         WorkItemType::SalesChangeFinanceReview => "销售变更待核对财务影响",
         WorkItemType::CardFundsReview => "卡券票款待复核",
@@ -209,7 +248,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementConfirmation => "不确认则销售单不能生效",
         WorkItemType::LowMarginManagerConfirmation => "不确认则销售单不能按原条件继续",
-        WorkItemType::PurchaseOrderReview => "不审核则采购单不能进入后续付款",
+        WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",
         WorkItemType::SalesChangeImpactReview => "不复核则销售变更不能继续履约",
         WorkItemType::SalesChangeFinanceReview => "不复核则销售变更金额不能入账",
         WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview => {
@@ -234,6 +273,25 @@ fn is_usable_impact(text: &str, work_item_type: WorkItemType) -> bool {
     is_user_facing_copy(text)
         && !text.contains("打开业务对象")
         && !text.starts_with(&format!("{}：", work_item_type.label()))
+        && !is_identity_echo_impact(text, work_item_type)
+}
+
+/// 识别只复读任务类型或单号、没有说明后果的影响摘要。
+///
+/// # 参数
+/// * `text` - 任务上保存的影响摘要
+/// * `work_item_type` - 任务类型
+///
+/// # 返回
+/// 复读身份时应丢弃并回退类型默认后果。
+///
+/// # 错误
+/// 无。
+fn is_identity_echo_impact(text: &str, work_item_type: WorkItemType) -> bool {
+    match work_item_type {
+        WorkItemType::PurchaseOrderReview => text.contains("待财务审核") && !text.contains("不审核"),
+        _ => false,
+    }
 }
 
 fn is_user_facing_copy(text: &str) -> bool {
@@ -298,7 +356,14 @@ mod tests {
         );
         assert_eq!(
             reason_label(Some("unknown_internal_event"), WorkItemType::PurchaseOrderReview),
-            "采购单待财务审核"
+            "采购已提交，需要核对成本、进项税和付款条件"
+        );
+        assert_eq!(
+            reason_label(
+                Some("purchase_order_review_resubmitted"),
+                WorkItemType::PurchaseOrderReview
+            ),
+            "采购已按驳回意见重提，需要重新核对成本与付款条件"
         );
         assert_eq!(
             reason_label(Some("客户资料缺失"), WorkItemType::ImportBusinessConfirmation),
@@ -323,6 +388,13 @@ mod tests {
             usable_impact_summary(Some("同步差额待复核"), WorkItemType::CardFundsDeltaReview),
             "同步差额待复核"
         );
+        assert_eq!(
+            usable_impact_summary(
+                Some("采购单 PO-20260817-9a550b 待财务审核"),
+                WorkItemType::PurchaseOrderReview
+            ),
+            "不审核则不能形成应付、不能付款"
+        );
     }
 
     #[test]
@@ -335,6 +407,10 @@ mod tests {
             "不确认则销售单不能生效 · 3 行 / ¥12,800"
         );
         assert_eq!(procurement_impact_summary(None, None), "不确认则销售单不能生效");
+        assert_eq!(
+            purchase_review_impact_summary(Some(3), Some(&amount), true),
+            "不审核则不能形成应付、不能付款 · 3 行 / ¥12,800 · 先款后货"
+        );
     }
 
     #[test]
@@ -356,6 +432,7 @@ mod tests {
     #[test]
     fn next_action_hint_tells_user_what_to_do() {
         assert!(next_action_hint(WorkItemType::ProcurementConfirmation).contains("逐行确认可供数量"));
+        assert!(next_action_hint(WorkItemType::PurchaseOrderReview).contains("核对供应商、含税成本、进项税"));
         assert!(!next_action_hint(WorkItemType::PurchaseOrderReview).contains("打开业务对象"));
     }
 }

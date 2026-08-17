@@ -1,10 +1,10 @@
 //! 统一待办事项简报。
 //!
-//! 队列只展示只读业务内容，不承载确认/审批表单。采购二次确认先打通：
-//! 客户、金额、前几行品名/数量/交期、提交来源。
+//! 队列只展示只读业务内容，不承载确认/审批表单。采购二次确认提供客户、金额
+//! 与前几行明细；采购财务审核通过 `extra_sections` 补充供应商、税额和付款条件。
 
 use chrono::{Datelike, FixedOffset, TimeZone};
-use entities::common::time::Instant;
+use entities::common::time::{BusinessDate, Instant};
 use entities::money::{Amount, Quantity};
 
 use super::presentation::format_yuan;
@@ -21,6 +21,7 @@ pub(crate) struct ObjectBriefSource {
     pub more_count: u32,
     pub submitter_name: Option<String>,
     pub list_summary: String,
+    pub extra_sections: Vec<BriefSection>,
 }
 
 /// 简报中的一行销售明细。
@@ -131,6 +132,7 @@ pub(crate) fn object_brief_source(
         more_count,
         submitter_name,
         list_summary,
+        extra_sections: Vec::new(),
     }
 }
 
@@ -148,20 +150,42 @@ pub(crate) fn object_brief_source(
 pub(crate) fn assemble_brief(source: &ObjectBriefSource, reason_code: Option<&str>) -> AssembledBrief {
     let mut sections = Vec::new();
     push_section(&mut sections, "客户", source.customer.as_deref(), false);
-    push_section(&mut sections, "含税金额", source.amount_label.as_deref(), true);
-    push_section(
-        &mut sections,
-        "提交来源",
-        submission_origin_label(reason_code),
-        false,
-    );
-    push_section(&mut sections, "提交人", source.submitter_name.as_deref(), false);
+    sections.extend(source.extra_sections.iter().cloned());
+    if !has_section(&sections, "含税金额") {
+        push_section(&mut sections, "含税金额", source.amount_label.as_deref(), true);
+    }
+    if !has_section(&sections, "提交来源") {
+        push_section(
+            &mut sections,
+            "提交来源",
+            submission_origin_label(reason_code),
+            false,
+        );
+    }
+    if !has_section(&sections, "提交人") {
+        push_section(&mut sections, "提交人", source.submitter_name.as_deref(), false);
+    }
     AssembledBrief {
         sections,
         lines: source.lines.clone(),
         more_count: source.more_count,
         list_summary: source.list_summary.clone(),
     }
+}
+
+/// 判断简报是否已有同名键值，避免任务类型专属段与默认段重复上屏。
+///
+/// # 参数
+/// * `sections` - 已组装的键值段
+/// * `label` - 要查找的标签
+///
+/// # 返回
+/// 已存在同名段时返回 `true`。
+///
+/// # 错误
+/// 无。
+fn has_section(sections: &[BriefSection], label: &str) -> bool {
+    sections.iter().any(|section| section.label == label)
 }
 
 fn push_section(sections: &mut Vec<BriefSection>, label: &str, value: Option<&str>, numeric: bool) {
@@ -175,7 +199,18 @@ fn push_section(sections: &mut Vec<BriefSection>, label: &str, value: Option<&st
     });
 }
 
-fn line_title(item_name: &str, spec: Option<&str>) -> String {
+/// 用商品名称和规格拼简报行标题。
+///
+/// # 参数
+/// * `item_name` - 品名快照
+/// * `spec` - 规格快照；超长时丢弃以免撑爆队列行
+///
+/// # 返回
+/// 返回可读标题；名称与规格都空时回退「未命名明细」。
+///
+/// # 错误
+/// 无。
+pub(crate) fn line_title(item_name: &str, spec: Option<&str>) -> String {
     let name = item_name.trim();
     let spec = spec
         .map(str::trim)
@@ -188,7 +223,18 @@ fn line_title(item_name: &str, spec: Option<&str>) -> String {
     }
 }
 
-fn format_quantity(quantity: &Quantity, unit: Option<&str>) -> String {
+/// 把数量和单位格式化为简报数量文案。
+///
+/// # 参数
+/// * `quantity` - 基础单位数量
+/// * `unit` - 单位快照
+///
+/// # 返回
+/// 有单位时返回 `20 件`；无单位时返回 `×20`。
+///
+/// # 错误
+/// 无。
+pub(crate) fn format_quantity(quantity: &Quantity, unit: Option<&str>) -> String {
     let number = quantity.to_decimal().normalize().to_string();
     match unit.map(str::trim).filter(|text| !text.is_empty()) {
         Some(unit) => format!("{number} {unit}"),
@@ -200,6 +246,21 @@ fn format_due_label(due_at: Instant) -> String {
     let offset = FixedOffset::east_opt(8 * 3600).expect("东八区偏移合法");
     let local = offset.from_utc_datetime(&due_at.as_utc().naive_utc());
     format!("{}/{} 交", local.month(), local.day())
+}
+
+/// 把采购预计交期格式化为队列交期文案。
+///
+/// # 参数
+/// * `due` - 业务自然日
+///
+/// # 返回
+/// 返回 `8/20 交` 这类相对日历文案。
+///
+/// # 错误
+/// 无。
+pub(crate) fn format_business_due_label(due: BusinessDate) -> String {
+    let (_, month, day) = due.ymd();
+    format!("{month}/{day} 交")
 }
 
 fn list_summary(
@@ -288,5 +349,43 @@ mod tests {
             .iter()
             .any(|section| section.label == "提交人" && section.value == "周航"));
         assert_eq!(assembled.more_count, 1);
+    }
+
+    #[test]
+    fn extra_sections_keep_type_specific_order_without_duplicating_defaults() {
+        let source = ObjectBriefSource {
+            extra_sections: vec![
+                BriefSection {
+                    label: "供应商".to_string(),
+                    value: "华东纸业".to_string(),
+                    numeric: false,
+                },
+                BriefSection {
+                    label: "含税金额".to_string(),
+                    value: "¥12,800".to_string(),
+                    numeric: true,
+                },
+                BriefSection {
+                    label: "提交来源".to_string(),
+                    value: "初次提交".to_string(),
+                    numeric: false,
+                },
+            ],
+            amount_label: Some("¥1".to_string()),
+            submitter_name: Some("周航".into()),
+            list_summary: "华东纸业".to_string(),
+            ..ObjectBriefSource::default()
+        };
+        let assembled = assemble_brief(&source, Some("procurement_confirmation_dispatched"));
+        let labels = assembled
+            .sections
+            .iter()
+            .map(|section| section.label.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(labels, vec!["供应商", "含税金额", "提交来源", "提交人"]);
+        assert_eq!(
+            format_business_due_label(BusinessDate::from_ymd(2026, 8, 20).unwrap()),
+            "8/20 交"
+        );
     }
 }
