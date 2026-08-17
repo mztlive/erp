@@ -69,6 +69,8 @@ export interface WorkTaskItemProps extends Omit<
     impact: React.ReactNode
     status?: WorkTaskStatus
     nextAction?: React.ReactNode
+    /** 列表一行事项摘要，例如「办公椅 ×20 · 8/20 交 · 另 2 行」。 */
+    contentSummary?: React.ReactNode
     /**
      * compact：只保留任务类型、对象、截止与责任方，省略进入队列时间与原因/影响。
      * 仅用于右侧已有详情面板的队列选择列表；独立展示的工作台请用 default。
@@ -93,6 +95,7 @@ export function WorkTaskItem({
     impact,
     status,
     nextAction,
+    contentSummary,
     density = "default",
     className,
     ...props
@@ -133,6 +136,9 @@ export function WorkTaskItem({
                     </span>
                     {counterparty ? <span>{counterparty}</span> : null}
                 </ItemDescription>
+                {contentSummary ? (
+                    <p className="text-xs text-muted-foreground">{contentSummary}</p>
+                ) : null}
 
                 {compact ? (
                     <dl className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs">

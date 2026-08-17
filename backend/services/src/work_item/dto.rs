@@ -6,6 +6,7 @@ use entities::work_item::{
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::brief::assemble_brief;
 use super::presentation::{
     next_action_hint, reason_label, usable_impact_summary, UNRESOLVED_OWNER_DISPLAY_NAME,
 };
@@ -316,6 +317,25 @@ pub struct WorkItemPartyView {
     pub display_name: String,
 }
 
+/// 事项简报中的只读键值。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemSummarySection {
+    pub label: String,
+    pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub numeric: Option<bool>,
+}
+
+/// 事项简报中的一行业务明细。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemBriefLine {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantity: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub due_label: Option<String>,
+}
+
 /// 受控路由上下文。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkItemRouteContext {
@@ -353,6 +373,12 @@ pub struct WorkItemView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub counterparty_label: Option<String>,
     pub next_action_hint: String,
+    pub summary_sections: Vec<WorkItemSummarySection>,
+    pub brief_lines: Vec<WorkItemBriefLine>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brief_more_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list_summary: Option<String>,
     pub subject_version: String,
     pub task_version: String,
     pub allowed_actions: Vec<WorkItemAllowedAction>,
@@ -494,6 +520,10 @@ impl WorkItemView {
             id: id.clone(),
             display_name: UNRESOLVED_OWNER_DISPLAY_NAME.to_string(),
         });
+        let brief = fields
+            .brief_source
+            .as_ref()
+            .map(|source| assemble_brief(source, fields.reason_code.as_deref()));
         Self {
             id: fields.id,
             work_item_type: fields.work_item_type,
@@ -518,6 +548,42 @@ impl WorkItemView {
             business_object_label: fields.business_object_label,
             counterparty_label: fields.counterparty_label,
             next_action_hint: next_action_hint(fields.work_item_type),
+            summary_sections: brief
+                .as_ref()
+                .map(|assembled| {
+                    assembled
+                        .sections
+                        .iter()
+                        .map(|section| WorkItemSummarySection {
+                            label: section.label.clone(),
+                            value: section.value.clone(),
+                            numeric: section.numeric.then_some(true),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            brief_lines: brief
+                .as_ref()
+                .map(|assembled| {
+                    assembled
+                        .lines
+                        .iter()
+                        .map(|line| WorkItemBriefLine {
+                            title: line.title.clone(),
+                            quantity: line.quantity.clone(),
+                            due_label: line.due_label.clone(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            brief_more_count: brief
+                .as_ref()
+                .map(|assembled| assembled.more_count)
+                .filter(|count| *count > 0),
+            list_summary: brief
+                .as_ref()
+                .map(|assembled| assembled.list_summary.clone())
+                .filter(|text| !text.trim().is_empty()),
             business_object_type: fields.business_object_type,
             business_object_id: fields.business_object_id,
             root_business_object_id: fields.root_business_object_id,
@@ -626,6 +692,7 @@ pub(crate) struct WorkItemFields {
     pub close_reason: Option<String>,
     pub task_version: u64,
     pub created_at: u64,
+    pub brief_source: Option<super::brief::ObjectBriefSource>,
 }
 
 impl From<WorkItem> for WorkItemFields {
@@ -662,6 +729,7 @@ impl From<WorkItem> for WorkItemFields {
             close_reason: item.close_reason,
             task_version: item.base.version,
             created_at: item.base.created_at,
+            brief_source: None,
         }
     }
 }
@@ -700,6 +768,7 @@ impl From<database::WorkItemRow> for WorkItemFields {
             close_reason: item.close_reason,
             task_version: item.version,
             created_at: item.created_at,
+            brief_source: None,
         }
     }
 }

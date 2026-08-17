@@ -82,6 +82,13 @@ export type WorkItemDto = Readonly<{
         value: string
         numeric?: boolean
     }>[]
+    brief_lines?: readonly Readonly<{
+        title: string
+        quantity?: string | null
+        due_label?: string | null
+    }>[]
+    brief_more_count?: number | null
+    list_summary?: string | null
     assigned_at?: number | null
     started_at?: number | null
     current_assignment_at?: number | null
@@ -142,6 +149,13 @@ export type WorkItemProjection = Readonly<{
         value: string
         numeric?: boolean
     }>[]
+    briefLines: readonly Readonly<{
+        title: string
+        quantity?: string
+        dueLabel?: string
+    }>[]
+    briefMoreCount?: number
+    listSummary?: string
     createdAt: number
     queueContextId?: string
 }>
@@ -211,6 +225,13 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
             nextActionHint: dto.next_action_hint,
         }),
         summarySections: dto.summary_sections ?? [],
+        briefLines: (dto.brief_lines ?? []).map((line) => ({
+            title: line.title,
+            quantity: line.quantity ?? undefined,
+            dueLabel: line.due_label ?? undefined,
+        })),
+        briefMoreCount: dto.brief_more_count ?? undefined,
+        listSummary: dto.list_summary?.trim() || undefined,
         createdAt: dto.created_at,
         queueContextId: dto.queue_context_id ?? undefined,
     }

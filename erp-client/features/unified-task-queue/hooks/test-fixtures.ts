@@ -48,6 +48,7 @@ export function makeQueueItem(
         impactSummary: "影响付款",
         nextActionHint: "进入对应页面后提交处理结论。",
         summarySections: [],
+        briefLines: [],
         createdAt: 1_736_899_200,
         enteredAt: "1月1日 08:00",
         enteredDateTime: "2026-01-01T00:00:00.000Z",

@@ -172,6 +172,10 @@ export function UnifiedTaskQueuePage() {
                                         currentWorkItemId: item.workItemId,
                                     })
                                 }
+                                onOpen={(item) => {
+                                    const href = buildHandlerHref(item)
+                                    if (href) router.push(href)
+                                }}
                             />
 
                             <section

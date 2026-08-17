@@ -7,12 +7,14 @@ export type TaskListPanelProps = Readonly<{
     items: readonly QueueWorkItemView[]
     selectedWorkItemId: string
     onSelect: (item: QueueWorkItemView) => void
+    onOpen: (item: QueueWorkItemView) => void
 }>
 
 export function TaskListPanel({
     items,
     selectedWorkItemId,
     onSelect,
+    onOpen,
 }: TaskListPanelProps) {
     return (
         <section
@@ -31,12 +33,14 @@ export function TaskListPanel({
                         item.workItemId === selectedWorkItemId || undefined
                     }
                     onClick={() => onSelect(item)}
+                    onDoubleClick={() => onOpen(item)}
                 >
                     <WorkTaskItem
                         density="compact"
                         taskType={item.workItemTypeLabel}
                         businessObject={item.businessObject}
                         counterparty={item.counterparty}
+                        contentSummary={item.listSummary}
                         enteredAt={item.enteredAt}
                         enteredDateTime={item.enteredDateTime}
                         dueAt={item.dueDateTime ? item.dueLabel : undefined}

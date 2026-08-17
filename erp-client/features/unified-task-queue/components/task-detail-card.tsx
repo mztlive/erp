@@ -102,6 +102,60 @@ export function TaskDetailCard({
                         </dd>
                     </div>
                 </dl>
+                {selected.summarySections.length > 0 ||
+                selected.briefLines.length > 0 ? (
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-medium">事项</h3>
+                        {selected.summarySections.length > 0 ? (
+                            <dl className="grid gap-3 sm:grid-cols-2">
+                                {selected.summarySections.map((section) => (
+                                    <div key={`${section.label}-${section.value}`}>
+                                        <dt className="text-xs text-muted-foreground">
+                                            {section.label}
+                                        </dt>
+                                        <dd
+                                            className={
+                                                section.numeric
+                                                    ? "mt-1 text-sm tabular-nums"
+                                                    : "mt-1 text-sm"
+                                            }
+                                        >
+                                            {section.value}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        ) : null}
+                        {selected.briefLines.length > 0 ? (
+                            <ul className="space-y-1 text-sm">
+                                {selected.briefLines.map((line, index) => (
+                                    <li
+                                        key={`${line.title}-${index}`}
+                                        className="flex flex-wrap gap-x-3"
+                                    >
+                                        <span>{line.title}</span>
+                                        {line.quantity ? (
+                                            <span className="tabular-nums text-muted-foreground">
+                                                {line.quantity}
+                                            </span>
+                                        ) : null}
+                                        {line.dueLabel ? (
+                                            <span className="text-muted-foreground">
+                                                {line.dueLabel}
+                                            </span>
+                                        ) : null}
+                                    </li>
+                                ))}
+                                {selected.briefMoreCount ? (
+                                    <li className="text-xs text-muted-foreground">
+                                        还有 {selected.briefMoreCount} 行，进入后逐行确认
+                                    </li>
+                                ) : null}
+                            </ul>
+                        ) : null}
+                    </div>
+                ) : null}
+
                 {selected.nextActionHint ? (
                     <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
                         {selected.nextActionHint}

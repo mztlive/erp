@@ -240,7 +240,17 @@ fn is_user_facing_copy(text: &str) -> bool {
     !text.is_ascii()
 }
 
-fn format_yuan(amount: &Amount) -> String {
+/// 把含税金额格式化为带千分位的人民币文案。
+///
+/// # 参数
+/// * `amount` - 定点金额
+///
+/// # 返回
+/// 返回如 `¥12,800` 的展示串。
+///
+/// # 错误
+/// 无。
+pub(crate) fn format_yuan(amount: &Amount) -> String {
     let raw = amount.to_decimal().normalize().to_string();
     let (int_part, frac) = raw.split_once('.').unwrap_or((raw.as_str(), ""));
     let grouped = group_int(int_part);

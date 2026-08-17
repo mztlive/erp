@@ -38,9 +38,11 @@ use crate::{
     iam::SharedRbacService,
 };
 
+mod brief;
 mod dto;
 mod party_names;
 mod presentation;
+mod procurement_brief;
 
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -556,153 +558,6 @@ impl WorkItemService {
         Ok(())
     }
 
-    /// 读取采购确认对应的销售单身份、客户和提交规模，供队列展示。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入销售单号、客户名和影响摘要；关联对象缺失时仍保留最小标题。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    async fn load_procurement_confirmation_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::ProcurementConfirmation);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let confirmations = self
-            .db
-            .procurement_confirmations()
-            .find_many(doc! { "id": { "$in": ids } }, executor)
-            .await?;
-        let displays = self
-            .procurement_confirmation_displays(&confirmations, executor)
-            .await?;
-        for confirmation in confirmations {
-            let display = displays.get(&confirmation.base.id);
-            facts.insert(
-                (ObjectKind::ProcurementConfirmation, confirmation.base.id.clone()),
-                ObjectFact {
-                    root_document_id: confirmation.sales_order_id.to_string(),
-                    label: display
-                        .map(|item| item.label.clone())
-                        .unwrap_or_else(|| presentation::sales_order_object_label("")),
-                    created_by: confirmation.stable.created_by,
-                    subject_versions: Vec::new(),
-                    counterparty_label: display.and_then(|item| item.counterparty.clone()),
-                    impact_summary: display.map(|item| item.impact.clone()),
-                },
-            );
-        }
-        Ok(())
-    }
-
-    /// 按确认记录批量解析销售单号、客户和提交规模。
-    ///
-    /// # 参数
-    /// * `confirmations` - 本批采购确认
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回确认 ID 到展示字段的映射。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    async fn procurement_confirmation_displays(
-        &self,
-        confirmations: &[entities::sales_review::ProcurementConfirmation],
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, ProcurementConfirmationDisplay>> {
-        let order_ids = confirmations
-            .iter()
-            .map(|item| item.sales_order_id.to_string())
-            .collect::<Vec<_>>();
-        let submission_ids = confirmations
-            .iter()
-            .map(|item| item.submission_id.to_string())
-            .collect::<Vec<_>>();
-        let orders = self
-            .db
-            .sales_orders()
-            .find_many(doc! { "id": { "$in": order_ids } }, executor)
-            .await?
-            .into_iter()
-            .map(|order| (order.base.id.clone(), order.order_no))
-            .collect::<HashMap<_, _>>();
-        let submissions = self
-            .db
-            .sales_order_submissions()
-            .find_many(doc! { "id": { "$in": submission_ids.clone() } }, executor)
-            .await?
-            .into_iter()
-            .map(|submission| (submission.base.id.clone(), submission))
-            .collect::<HashMap<_, _>>();
-        let line_counts = self.submission_line_counts(&submission_ids, executor).await?;
-        Ok(confirmations
-            .iter()
-            .map(|confirmation| {
-                let submission = submissions.get(&confirmation.submission_id.to_string());
-                (
-                    confirmation.base.id.clone(),
-                    ProcurementConfirmationDisplay {
-                        label: presentation::sales_order_object_label(
-                            orders
-                                .get(&confirmation.sales_order_id.to_string())
-                                .map(String::as_str)
-                                .unwrap_or(""),
-                        ),
-                        counterparty: submission
-                            .map(|item| item.customer_snapshot.customer_name.clone())
-                            .filter(|name| !name.trim().is_empty()),
-                        impact: presentation::procurement_impact_summary(
-                            line_counts.get(&confirmation.submission_id.to_string()).copied(),
-                            submission.map(|item| &item.gross_amount),
-                        ),
-                    },
-                )
-            })
-            .collect())
-    }
-
-    /// 统计本批销售提交的明细行数。
-    ///
-    /// # 参数
-    /// * `submission_ids` - 提交 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回提交 ID 到行数的映射。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    async fn submission_line_counts(
-        &self,
-        submission_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, usize>> {
-        if submission_ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let mut counts = HashMap::new();
-        for line in self
-            .db
-            .sales_order_submission_lines()
-            .find_many(doc! { "submission_id": { "$in": submission_ids } }, executor)
-            .await?
-        {
-            *counts.entry(line.submission_id.to_string()).or_insert(0) += 1;
-        }
-        Ok(counts)
-    }
-
     async fn load_purchase_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -1016,6 +871,7 @@ impl WorkItemService {
                     subject_versions: vec![order.base.version.to_string()],
                     counterparty_label: None,
                     impact_summary: None,
+                    brief_source: None,
                 },
             );
         }
@@ -1073,6 +929,7 @@ impl WorkItemService {
                     subject_versions,
                     counterparty_label: None,
                     impact_summary: None,
+                    brief_source: None,
                 },
             );
         }
@@ -3126,6 +2983,7 @@ struct ObjectFact {
     subject_versions: Vec<String>,
     counterparty_label: Option<String>,
     impact_summary: Option<String>,
+    brief_source: Option<brief::ObjectBriefSource>,
 }
 
 impl ObjectFact {
@@ -3153,18 +3011,12 @@ impl ObjectFact {
             subject_versions: Vec::new(),
             counterparty_label: None,
             impact_summary: None,
+            brief_source: None,
         }
     }
 }
 
 type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
-
-#[derive(Debug, Clone)]
-struct ProcurementConfirmationDisplay {
-    label: String,
-    counterparty: Option<String>,
-    impact: String,
-}
 
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
@@ -3457,6 +3309,7 @@ fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
     if let Some(impact) = fact.impact_summary.clone() {
         fields.impact_summary = Some(impact);
     }
+    fields.brief_source = fact.brief_source.clone();
 }
 
 fn subject_version_matches(fact: &ObjectFact, actual: &str) -> bool {

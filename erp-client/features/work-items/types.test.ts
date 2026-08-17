@@ -88,6 +88,9 @@ describe("mapWorkItemDto", () => {
             impactSummary: "影响入库",
             nextActionHint: "进入对应页面后提交处理结论。",
             summarySections: [{ label: "金额", value: "12.00", numeric: true }],
+            briefLines: [],
+            briefMoreCount: undefined,
+            listSummary: undefined,
             createdAt: 1_700_000_000_000,
             queueContextId: "qc_1",
         })
@@ -116,6 +119,9 @@ describe("mapWorkItemDto", () => {
         )
         expect(projection.nextActionHint).toBe("进入对应页面后提交处理结论。")
         expect(projection.summarySections).toEqual([])
+        expect(projection.briefLines).toEqual([])
+        expect(projection.briefMoreCount).toBeUndefined()
+        expect(projection.listSummary).toBeUndefined()
         expect(projection.queueContextId).toBeUndefined()
     })
 
