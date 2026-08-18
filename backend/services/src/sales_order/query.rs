@@ -14,7 +14,7 @@ use entities::work_item::{WorkItem, WorkItemStatus};
 use entities::Permission;
 use validator::Validate;
 
-use super::adapter::{document_approval_view, is_goods_service_sales_order};
+use super::adapter::document_approval_view;
 use super::dto;
 use super::dto::{
     ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CardSalesApprovalAllowedAction,
@@ -346,20 +346,16 @@ impl SalesOrderService {
             has_active_change_order,
         );
 
-        let approval = if is_goods_service_sales_order(order.business_type) {
-            let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
-                .await
-                .ok()
-                .flatten();
-            Some(document_approval_view(
-                binding.as_ref(),
-                None,
-                order.commercial_status,
-                order.review_status,
-            ))
-        } else {
-            None
-        };
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .ok()
+            .flatten();
+        let approval = Some(document_approval_view(
+            binding.as_ref(),
+            None,
+            order.commercial_status,
+            order.review_status,
+        ));
 
         Ok(SalesOrderDetailView {
             id: order.base.id.clone(),
@@ -1197,5 +1193,22 @@ mod card_sales_cancel_policy_tests {
             OPERATIONS_APPROVAL,
             false,
         ));
+    }
+}
+
+#[cfg(test)]
+mod voucher_approval_view_tests {
+    /// 卡券详情必须返回统一 approval 结构，不得再按业务性质留空。
+    #[test]
+    fn voucher_detail_returns_unified_approval() {
+        let source = include_str!("query.rs");
+        let detail = source
+            .split("pub async fn sales_order_detail")
+            .nth(1)
+            .and_then(|body| body.split("pub(super) async fn working_copy_view").next())
+            .expect("详情方法");
+        assert!(detail.contains("document_approval_view"));
+        assert!(detail.contains("let approval = Some(document_approval_view"));
+        assert!(!detail.contains("is_goods_service_sales_order"));
     }
 }

@@ -142,9 +142,10 @@ impl ReviewStatus {
 impl DocumentState for ReviewStatus {
     /// 审核轨固定邻接。
     ///
-    /// 实物及服务目标路径：`NOT_SUBMITTED → IN_APPROVAL → APPROVED`，
-    /// 撤回 `IN_APPROVAL → NOT_SUBMITTED`。旧逐节点复核态与 `REJECTED`
-    /// 不得由新提交写入；邻接仅保留给未删除旧数据与卡券子阶段。
+    /// `SalesOrder` 与 `VoucherSalesOrder` 目标路径均为
+    /// `NOT_SUBMITTED → IN_APPROVAL → APPROVED`，撤回
+    /// `IN_APPROVAL → NOT_SUBMITTED`。驳回不改业务状态。
+    /// 旧逐节点复核态与 `REJECTED` 不得由新提交写入；邻接仅保留给未删除旧数据。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::NotSubmitted => &[
@@ -517,7 +518,7 @@ impl SalesOrder {
 
     /// 提交进入审核（主状态 `DRAFT → PENDING_REVIEW`）。
     ///
-    /// 审核轨按业务性质进入：实物及服务 → 待采购确认；卡券 → 待销售领导（§7.3）。
+    /// 实物及服务与卡券目标路径均进入 `IN_APPROVAL`。旧逐节点复核态不得由本方法写入。
     ///
     /// # 参数
     /// * `updated_by` - 提交人
@@ -531,18 +532,15 @@ impl SalesOrder {
         ensure_transition(self.commercial_status, CommercialStatus::PendingReview)?;
         ensure_transition(self.review_status, ReviewStatus::NotSubmitted)?;
         self.transition_commercial_status(CommercialStatus::PendingReview)?;
-        self.review_status = match self.business_type {
-            BusinessType::GoodsService => ReviewStatus::InApproval,
-            BusinessType::Voucher => ReviewStatus::PendingSalesLeader,
-        };
+        self.review_status = ReviewStatus::InApproval;
         self.stable.touch(updated_by);
         Ok(())
     }
 
-    /// 实物及服务销售单提交并进入统一审批。
+    /// 销售单提交并进入统一审批。
     ///
     /// 商业主状态变为 `PENDING_REVIEW`，审核轨只允许 `IN_APPROVAL`。
-    /// 卡券销售单不得走本端口。
+    /// `GoodsService` 与 `Voucher` 共用本端口，不得再写入卡券两级复核态。
     ///
     /// # 参数
     /// * `updated_by` - 提交人
@@ -551,11 +549,8 @@ impl SalesOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非实物及服务、非草稿或审核轨非未提交时返回冲突或非法迁移。
+    /// 非草稿或审核轨非未提交时返回冲突或非法迁移。
     pub fn start_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        if self.business_type != BusinessType::GoodsService {
-            return Err(Error::from("只有实物及服务销售单可以由本端口启动审批"));
-        }
         self.submit_for_review(updated_by)
     }
 
@@ -598,7 +593,7 @@ impl SalesOrder {
 
     /// 审批通过并生效（主状态 `PENDING_REVIEW → EFFECTIVE`）。
     ///
-    /// 审核轨同时推进到 `Approved`。实物及服务目标路径只接受 `IN_APPROVAL`。
+    /// 审核轨同时推进到 `Approved`。目标路径只接受 `IN_APPROVAL`。
     /// 生效时间由调用方以服务端时间给出。
     ///
     /// # 参数
@@ -949,25 +944,44 @@ mod tests {
     }
 
     #[test]
-    fn voucher_order_enters_sales_leader_review_track() {
+    fn voucher_order_enters_unified_in_approval() {
         let voucher_data = SalesOrderData {
             business_type: BusinessType::Voucher,
             ..data()
         };
         let mut order = SalesOrder::new(SalesOrderId::new("o-3"), voucher_data, "admin-1").unwrap();
-        order.submit_for_review("admin-1").unwrap();
-        assert_eq!(order.review_status, ReviewStatus::PendingSalesLeader);
-        assert!(
-            order.transition_review(ReviewStatus::Approved, "leader").is_err(),
-            "待运营才能通过"
-        );
+        order.start_approval_submission("admin-1").unwrap();
+        assert_eq!(order.commercial_status, CommercialStatus::PendingReview);
+        assert_eq!(order.review_status, ReviewStatus::InApproval);
+        assert!(order
+            .transition_review(ReviewStatus::Rejected, "approver")
+            .is_err());
+        assert!(order
+            .transition_review(ReviewStatus::PendingSalesLeader, "approver")
+            .is_err());
+        assert!(order
+            .transition_review(ReviewStatus::PendingOperations, "approver")
+            .is_err());
         order
-            .transition_review(ReviewStatus::PendingOperations, "leader")
+            .transition_review(ReviewStatus::Approved, "approver")
+            .and_then(|()| order.approve(Instant::from_unix_secs(1_800_000_000), "approver"))
             .unwrap();
-        order
-            .transition_review(ReviewStatus::Approved, "operations")
-            .and_then(|()| order.approve(Instant::from_unix_secs(1_800_000_000), "operations"))
-            .unwrap();
+        assert_eq!(order.commercial_status, CommercialStatus::Effective);
+        assert_eq!(order.review_status, ReviewStatus::Approved);
+
+        let mut withdrawn = SalesOrder::new(
+            SalesOrderId::new("o-4"),
+            SalesOrderData {
+                business_type: BusinessType::Voucher,
+                ..data()
+            },
+            "admin-1",
+        )
+        .unwrap();
+        withdrawn.start_approval_submission("admin-1").unwrap();
+        withdrawn.cancel_approval_submission("admin-1").unwrap();
+        assert_eq!(withdrawn.commercial_status, CommercialStatus::Draft);
+        assert_eq!(withdrawn.review_status, ReviewStatus::NotSubmitted);
     }
 
     #[test]

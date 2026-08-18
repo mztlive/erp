@@ -80,3 +80,19 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
 }
+
+#[cfg(test)]
+mod tests {
+    /// `VoucherSalesOrder` 复用销售单提交/撤回路由，不得新增卡券专用决定入口。
+    #[test]
+    fn voucher_sales_order_reuses_unified_sales_routes() {
+        let production = include_str!("sales_order.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("/sales-orders/{id}/submit"));
+        assert!(production.contains("/sales-orders/{id}/cancel-approval"));
+        assert!(!production.contains("CARD_SALES"));
+        assert!(!production.contains("CardSales"));
+    }
+}

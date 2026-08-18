@@ -1,6 +1,6 @@
 //! 销售单命令用例：建单、保存草稿、提交、作废。
 
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 use mongodb::ClientSession;
 
@@ -10,8 +10,7 @@ use database::{
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::document_registry::{
-    BusinessDocument, BusinessDocumentData, DocumentType, WorkflowAction, WorkflowActionData,
-    WorkflowActionType,
+    BusinessDocument, BusinessDocumentData, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
 use entities::ids::{
     BusinessDocumentId, ContractId, ContractRevisionId, CustomerAccountId, SalesOrderId,
@@ -28,9 +27,10 @@ use validator::Validate;
 
 use super::adapter::{
     build_sales_order_snapshot, document_type_for_sales_create, execute_sales_order_domain_action,
-    is_goods_service_sales_order, require_frozen_binding, sales_order_adapter, sales_order_object_readable,
-    sales_order_responsible_org_id, sales_order_start_command, sales_order_subject_ref,
-    start_approval_command_kind, RECENT_HISTORY_LIMIT,
+    reject_legacy_card_sales_decision, reject_legacy_card_sales_work_item, require_frozen_binding,
+    sales_approval_ports, sales_order_object_readable, sales_order_responsible_org_id,
+    sales_order_start_command, start_approval_command_kind, subject_ref_for_sales_business,
+    RECENT_HISTORY_LIMIT,
 };
 use super::cancel_approval::{
     build_sales_order_cancel_input, load_cancel_runtime, persist_sales_order_cancel,
@@ -55,9 +55,6 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::{prepare_cancel, prepare_start};
-use crate::approval::{
-    FailClosedApprovalActionPort, InternalApprovalRuntime, StartApprovalCommand, CARD_SALES_APPROVAL,
-};
 use crate::audit::AuditActor;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
@@ -94,26 +91,25 @@ fn sales_submission_fingerprint(
     )
 }
 
-/// 实物及服务创建时构造绑定命令；卡券不在本阶段绑定。
+/// 按业务性质构造创建时绑定命令。
+///
+/// `GoodsService` 绑定 `SalesOrder`，`Voucher` 绑定 `VoucherSalesOrder`。
 ///
 /// # 错误
 /// 责任组织为空时返回校验错误。
-fn goods_service_bind_command(
+fn sales_create_bind_command(
     order: &SalesOrder,
     actor: &AuditActor,
-) -> Result<Option<BindPublishedDefinitionCommand>> {
-    if !is_goods_service_sales_order(order.business_type) {
-        return Ok(None);
-    }
-    Ok(Some(BindPublishedDefinitionCommand {
-        document_type: DocumentType::SalesOrder,
+) -> Result<BindPublishedDefinitionCommand> {
+    Ok(BindPublishedDefinitionCommand {
+        document_type: document_type_for_sales_create(order.business_type),
         business_object_id: order.base.id.clone(),
         business_object_version: order.base.version,
         context: BindingRevalidationContext {
             organization_id: sales_order_responsible_org_id(order)?,
             creator_id: actor.id().to_string(),
         },
-    }))
+    })
 }
 
 /// 查询发布定义、写入绑定并持久化注册行。
@@ -258,11 +254,8 @@ impl SalesOrderService {
         let working_copy_for_tx = working_copy.clone();
         let working_copy_lines_for_tx = working_copy_lines.clone();
         let mut document_for_tx = document;
-        let bind_command = goods_service_bind_command(&order, actor)?;
-        let rbac_for_tx = bind_command
-            .as_ref()
-            .map(|_| self.require_rbac().cloned())
-            .transpose()?;
+        let bind_command = sales_create_bind_command(&order, actor)?;
+        let rbac_for_tx = self.require_rbac().cloned()?;
         let actor_for_tx = actor.clone();
         let sellable_refs_for_tx = Self::sellable_working_copy_refs(&working_copy_lines)?;
         let transaction_result = client
@@ -272,19 +265,15 @@ impl SalesOrderService {
                         .ensure_sellable_refs(&sellable_refs_for_tx, session)
                         .await?;
                     db.sales_orders().create(&order_for_tx, session).await?;
-                    if let (Some(command), Some(rbac)) = (bind_command.as_ref(), rbac_for_tx.as_ref()) {
-                        persist_bound_sales_document(
-                            &db,
-                            rbac,
-                            &mut document_for_tx,
-                            command,
-                            &actor_for_tx,
-                            session,
-                        )
-                        .await?;
-                    } else {
-                        db.business_documents().create(&document_for_tx, session).await?;
-                    }
+                    persist_bound_sales_document(
+                        &db,
+                        &rbac_for_tx,
+                        &mut document_for_tx,
+                        &bind_command,
+                        &actor_for_tx,
+                        session,
+                    )
+                    .await?;
                     for line in &lines_for_tx {
                         db.sales_order_lines().create(line, session).await?;
                     }
@@ -507,9 +496,9 @@ impl SalesOrderService {
 
     /// 提交销售单并冻结提交快照。
     ///
-    /// 实物及服务直接调用统一 `start_approval`，以 `submission_no` 冻结
-    /// `subject_version` 与快照；禁止经 `sales_review` 准入或第二条启动路径。
-    /// 卡券仍走旧卡券启动路径，由后续子阶段切换。
+    /// `GoodsService` 与 `Voucher` 均直接调用统一 `start_approval`，以
+    /// `submission_no` 冻结 `subject_version` 与快照；禁止经 `sales_review`
+    /// 准入、`CARD_SALES_APPROVAL` 或第二条启动路径。
     ///
     /// # 参数
     /// * `id` - 销售单 ID
@@ -610,107 +599,24 @@ impl SalesOrderService {
                 .map(|value| value.voucher_category.as_str()),
         )?;
         let submission_lines = build_submission_lines(&submission, &copy_lines)?;
-        let mut order_mut = order;
         working_copy.submit()?;
-        if is_goods_service_sales_order(order_mut.business_type) {
-            return self
-                .start_approval_submission(
-                    id,
-                    order_mut,
-                    working_copy,
-                    submission,
-                    submission_lines,
-                    resolved_identities,
-                    copy_lines,
-                    actor,
-                    &req.idempotency_key,
-                    audit_id,
-                    fingerprint,
-                )
-                .await;
-        }
-        order_mut.submit_for_review(actor.id())?;
-        let approval_start = StartApprovalCommand {
-            definition_key: CARD_SALES_APPROVAL.to_string(),
-            business_object_type: "sales_order".to_string(),
-            business_object_id: order_id.to_string(),
-            subject_version: submission.base.id.clone(),
-            owner_organization_id: "company".to_string(),
-            started_by: actor.id().to_string(),
-            idempotency_key: req.idempotency_key.clone(),
-        };
-        let workflow_action = WorkflowAction::new(
-            WorkflowActionId::new(next_id()),
-            WorkflowActionData {
-                document_id: BusinessDocumentId::new(order_id.to_string()),
-                action_type: WorkflowActionType::Submit,
-                from_status: "DRAFT".to_string(),
-                to_status: "PENDING_REVIEW".to_string(),
-                actor_id: actor.id().to_string(),
-                actor_role: "role-sales".to_string(),
-                comment: None,
-            },
-        )?;
-        let audit = actor.clone().resource_log_with_id(
-            audit_id.clone(),
-            "sales_order.submit",
-            "sales_order_submission",
-            submission.base.id.clone(),
-            Some(format!("command_sha256={fingerprint}")),
-        )?;
-
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut wc_for_tx = working_copy.clone();
-        let submission_for_tx = submission.clone();
-        let lines_for_tx = submission_lines.clone();
-        let workflow_action_for_tx = workflow_action;
-        let resolved_identities_for_tx = resolved_identities;
-        let sellable_refs_for_tx = Self::sellable_working_copy_refs(&copy_lines)?;
-        let transaction_result = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let service = SalesOrderService::new(db.clone());
-                    service
-                        .ensure_sellable_refs(&sellable_refs_for_tx, session)
-                        .await?;
-                    let current_identities = service
-                        .resolve_card_external_identities(&wc_for_tx, session)
-                        .await?;
-                    if current_identities != resolved_identities_for_tx {
-                        return Err(Error::ConflictError(
-                            "目标商城外部身份映射在提交期间已变化，请刷新后重试".to_string(),
-                        ));
-                    }
-                    db.sales_order()
-                        .submit_working_copy(&mut wc_for_tx, &submission_for_tx, &lines_for_tx, session)
-                        .await?;
-                    db.sales_orders().update(&mut order_mut, session).await?;
-                    db.workflow_actions()
-                        .create(&workflow_action_for_tx, session)
-                        .await?;
-                    InternalApprovalRuntime::new(db.clone(), Arc::new(FailClosedApprovalActionPort))
-                        .start_approval_in_transaction(approval_start, session)
-                        .await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await;
-        if let Err(error) = transaction_result {
-            if let Some(existing) = self
-                .replay_sales_submission(&audit_id, &fingerprint, id, actor.id())
-                .await?
-            {
-                return Ok(existing);
-            }
-            return Err(error);
-        }
-
-        Ok(submission_view(submission, submission_lines))
+        self.start_approval_submission(
+            id,
+            order,
+            working_copy,
+            submission,
+            submission_lines,
+            resolved_identities,
+            copy_lines,
+            actor,
+            &req.idempotency_key,
+            audit_id,
+            fingerprint,
+        )
+        .await
     }
 
-    /// 实物及服务销售单提交并启动统一审批。
+    /// 销售单提交并启动统一审批。
     ///
     /// # 错误
     /// 无绑定、定义缺失、状态不允许或写入失败时返回错误。
@@ -729,22 +635,36 @@ impl SalesOrderService {
         audit_id: String,
         fingerprint: String,
     ) -> Result<SubmissionView> {
-        let adapter = sales_order_adapter()?;
-        let subject = sales_order_subject_ref(id)?;
+        let ports = sales_approval_ports(order.business_type)?;
+        let subject = subject_ref_for_sales_business(order.business_type, id)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        execute_sales_order_domain_action(&mut order, adapter.on_approval_start, actor.id())?;
+        execute_sales_order_domain_action(&mut order, ports.on_approval_start, actor.id())?;
         let now = Instant::now();
         let snapshot = build_sales_order_snapshot(&order, &submission, &submission_lines, actor.id(), now)?;
-        let start = sales_order_start_command(id, submission.submission_no, actor.id(), idempotency_key);
+        let start = sales_order_start_command(
+            ports.document_type,
+            id,
+            submission.submission_no,
+            actor.id(),
+            idempotency_key,
+        );
+        ensure_unified_start_command(&start)?;
         let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
         let organization_id = sales_order_responsible_org_id(&order)?;
         let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt =
-            load_start_receipt(&self.db, &subject, submission.submission_no, idempotency_key).await?;
+        let existing_receipt = load_start_receipt(
+            &self.db,
+            ports.document_type,
+            &subject,
+            submission.submission_no,
+            idempotency_key,
+        )
+        .await?;
         let start_input = build_sales_order_start_input(
             graph,
             &binding,
+            ports.document_type,
             subject,
             submission.submission_no,
             actor.id(),
@@ -793,12 +713,13 @@ impl SalesOrderService {
                 submission,
                 submission_lines,
                 workflow_action,
+                document_type: ports.document_type,
             },
             actor,
             id,
             snapshot,
             prepared,
-            adapter.owner_role,
+            ports.owner_role,
             organization_id,
             now,
             audit,
@@ -806,10 +727,11 @@ impl SalesOrderService {
         .await
     }
 
-    /// 撤回审批中的实物及服务销售单，回到可修正草稿。
+    /// 撤回审批中的销售单，回到可修正草稿。
     ///
-    /// 先按主体加载 RUNNING/BLOCKED 实例并调用统一 `prepare_cancel`，
-    /// 关闭开放任务后再执行 `cancel_action`。已 `APPROVED` 必须拒绝。
+    /// `GoodsService` 与 `Voucher` 均先按主体加载 RUNNING/BLOCKED 实例并调用
+    /// 统一 `prepare_cancel`，关闭开放任务后再执行 `cancel_action`。
+    /// 已 `APPROVED` 必须拒绝。
     ///
     /// # 参数
     /// * `id` - 销售单主键
@@ -839,15 +761,10 @@ impl SalesOrderService {
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
         }
-        if !is_goods_service_sales_order(order.business_type) {
-            return Err(Error::ConflictError(
-                "只有实物及服务销售单可以由本端口撤回审批".to_string(),
-            ));
-        }
-        let adapter = sales_order_adapter()?;
+        let ports = sales_approval_ports(order.business_type)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let subject = sales_order_subject_ref(id)?;
+        let subject = subject_ref_for_sales_business(order.business_type, id)?;
         let subject_version = latest_submission_no(&self.db, id).await?;
         let runtime = load_cancel_runtime(&self.db, &binding, &subject, subject_version).await?;
         let now = Instant::now();
@@ -860,7 +777,7 @@ impl SalesOrderService {
             now,
         )?;
         let prepared = prepare_cancel(input)?;
-        execute_sales_order_domain_action(&mut order, adapter.cancel_action, actor.id())?;
+        execute_sales_order_domain_action(&mut order, ports.cancel_action, actor.id())?;
         let audit =
             actor
                 .clone()
@@ -1225,6 +1142,18 @@ impl SalesOrderService {
     }
 }
 
+/// 禁止回退 `CARD_SALES_APPROVAL` 或卡券专用工作项。
+///
+/// # 错误
+/// 主体种类为旧卡券定义时返回冲突。
+fn ensure_unified_start_command(start: &super::adapter::SalesOrderStartCommand) -> Result<()> {
+    reject_legacy_card_sales_work_item("DOCUMENT_APPROVAL")?;
+    if start.subject_kind == "CARD_SALES_APPROVAL" {
+        return reject_legacy_card_sales_decision();
+    }
+    Ok(())
+}
+
 /// 读取销售单最新提交号，作为撤回查找实例的 `subject_version`。
 ///
 /// # 错误
@@ -1340,6 +1269,35 @@ mod goods_service_cutover_tests {
         assert!(!submit.contains("ProcurementConfirmation::new"));
         assert!(!submit.contains("WorkItemType::ProcurementConfirmation"));
         assert!(!submit.contains("create_procurement_confirmation"));
+        assert!(!submit.contains("CARD_SALES_APPROVAL"));
+        assert!(!submit.contains("InternalApprovalRuntime"));
+        assert!(!submit.contains("FailClosedApprovalActionPort"));
+        assert!(!submit.contains("CardSalesManagerApproval"));
+        assert!(!submit.contains("CardSalesOperationApproval"));
+    }
+
+    /// 卡券提交必须绑定 VoucherSalesOrder 并走统一启动，不得回退旧路径。
+    #[test]
+    fn voucher_create_binds_and_submit_starts_unified_approval() {
+        let source = include_str!("command.rs");
+        assert!(source.contains("sales_create_bind_command"));
+        assert!(source.contains("document_type_for_sales_create"));
+        let submit = source
+            .split("pub async fn submit_sales_order")
+            .nth(1)
+            .and_then(|body| body.split("pub async fn cancel_approval_submission").next())
+            .expect("提交方法");
+        assert!(submit.contains("start_approval_submission"));
+        assert!(!submit.contains("CARD_SALES_APPROVAL"));
+        assert!(!submit.contains("InternalApprovalRuntime"));
+        assert!(!submit.contains("submit_for_review"));
+        let create = source
+            .split("fn sales_create_bind_command")
+            .nth(1)
+            .and_then(|body| body.split("async fn persist_bound_sales_document").next())
+            .expect("绑定命令");
+        assert!(create.contains("document_type_for_sales_create"));
+        assert!(!create.contains("DocumentType::SalesOrder"));
     }
 
     /// 撤回必须构造并调用统一取消端口。

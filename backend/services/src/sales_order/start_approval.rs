@@ -1,4 +1,7 @@
-//! 实物及服务销售单提交启动：加载定义图、构造 `prepare_start` 输入并持久化运行事实。
+//! 销售单提交启动：加载定义图、构造 `prepare_start` 输入并持久化运行事实。
+//!
+//! `SalesOrder` 与 `VoucherSalesOrder` 共用本模块，按 `DocumentType` 分派
+//! `ProcessKind`、快照与任务归属，不得回退 `CARD_SALES_APPROVAL`。
 
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
 use bpm::ids::{
@@ -73,6 +76,7 @@ fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> Definition
 ///
 /// # 参数
 /// * `db` - 数据库
+/// * `document_type` - 按业务性质分派的单据类型
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
 /// * `idempotency_key` - 调用方幂等键
@@ -84,12 +88,13 @@ fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> Definition
 /// 幂等键非法或仓储失败时返回错误。
 pub(super) async fn load_start_receipt(
     db: &Database,
+    document_type: DocumentType,
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
     let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::SalesOrder);
+    let process_kind = process_kind_of(document_type);
     let scope = start_scope(
         process_kind.as_str(),
         subject.subject_kind(),
@@ -114,6 +119,7 @@ pub(super) async fn load_start_receipt(
 /// # 参数
 /// * `graph` - 绑定定义图
 /// * `binding` - 冻结绑定
+/// * `document_type` - 按业务性质分派的单据类型
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
 /// * `actor_id` - 提交人
@@ -131,6 +137,7 @@ pub(super) async fn load_start_receipt(
 pub(super) fn build_sales_order_start_input(
     graph: DefinitionGraph,
     binding: &ApprovalDefinitionBinding,
+    document_type: DocumentType,
     subject: SubjectRef,
     subject_version: u32,
     actor_id: &str,
@@ -166,7 +173,7 @@ pub(super) fn build_sales_order_start_input(
             idempotency_key,
             now: timestamp,
         },
-        process_kind: process_kind_of(DocumentType::SalesOrder),
+        process_kind: process_kind_of(document_type),
         subject,
         subject_version,
         binding_id: binding.approval_process_definition_id.as_ref().to_string(),
@@ -228,6 +235,8 @@ pub(super) struct SalesOrderStartPersistInput {
     pub submission_lines: Vec<entities::sales_order::SalesOrderSubmissionLine>,
     /// 工作流动作。
     pub workflow_action: entities::document_registry::WorkflowAction,
+    /// 按业务性质分派的单据类型。
+    pub document_type: DocumentType,
 }
 
 /// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
@@ -271,6 +280,7 @@ pub(super) async fn persist_sales_order_start(
         submission,
         submission_lines,
         workflow_action,
+        document_type,
     } = input;
     let submission_view = super::mapper::submission_view(submission.clone(), submission_lines.clone());
     client
@@ -286,6 +296,7 @@ pub(super) async fn persist_sales_order_start(
                         persist_runtime_writes(
                             &db,
                             &writes,
+                            document_type,
                             &snapshot_payload,
                             owner_role,
                             &organization_id,
@@ -309,6 +320,7 @@ pub(super) async fn persist_sales_order_start(
 /// # 参数
 /// * `db` - 数据库
 /// * `writes` - 启动写入集合
+/// * `document_type` - 按业务性质分派的单据类型
 /// * `snapshot_payload` - 快照载荷
 /// * `owner_role` - 责任角色
 /// * `organization_id` - 责任组织
@@ -317,9 +329,11 @@ pub(super) async fn persist_sales_order_start(
 ///
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
+#[allow(clippy::too_many_arguments)]
 async fn persist_runtime_writes(
     db: &Database,
     writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    document_type: DocumentType,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     owner_role: &str,
     organization_id: &str,
@@ -343,7 +357,7 @@ async fn persist_runtime_writes(
     let snapshot = ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new(next_id()),
         ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
-        DocumentType::SalesOrder,
+        document_type,
         writes.instance.subject.subject_id(),
         writes.instance.subject_version,
         snapshot_payload.clone(),
@@ -352,7 +366,16 @@ async fn persist_runtime_writes(
     db.approval_subject_snapshots()
         .create_immutable_snapshot(&snapshot, session)
         .await?;
-    persist_open_tasks(db, writes, owner_role, organization_id, now, session).await
+    persist_open_tasks(
+        db,
+        writes,
+        document_type,
+        owner_role,
+        organization_id,
+        now,
+        session,
+    )
+    .await
 }
 
 /// 由入口执行构造有界列表投影。
@@ -383,6 +406,7 @@ fn list_projection_from_execution(
 /// # 参数
 /// * `db` - 数据库
 /// * `writes` - 启动写入
+/// * `document_type` - 按业务性质分派的单据类型
 /// * `owner_role` - 责任角色
 /// * `organization_id` - 责任组织
 /// * `now` - 创建时间
@@ -393,6 +417,7 @@ fn list_projection_from_execution(
 async fn persist_open_tasks(
     db: &Database,
     writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    document_type: DocumentType,
     owner_role: &str,
     organization_id: &str,
     now: Instant,
@@ -411,7 +436,7 @@ async fn persist_open_tasks(
             WorkItemId::new(next_id()),
             DocumentApprovalWorkItemData {
                 approval_node_execution_id: execution_id.clone(),
-                business_object_type: DocumentType::SalesOrder.as_str().to_string(),
+                business_object_type: document_type.as_str().to_string(),
                 business_object_id: writes.instance.subject.subject_id().to_string(),
                 subject_version: writes.instance.subject_version.to_string(),
                 owner_role: owner_role.to_string(),
