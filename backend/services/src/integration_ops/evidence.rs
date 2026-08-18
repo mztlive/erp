@@ -1094,7 +1094,7 @@ mod tests {
             "SOURCE_CORRECTED_AND_REATTRIBUTED",
             DifferenceReasonCode::SourceCorrectedAndReattributed,
             DirectReconciliationConclusion::ConfirmValidDifference,
-            &[evidence.clone()],
+            std::slice::from_ref(&evidence),
         )
         .unwrap();
         assert!(ensure_direct_reason(

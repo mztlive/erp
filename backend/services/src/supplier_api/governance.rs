@@ -1813,7 +1813,7 @@ mod tests {
     fn production_enable_requires_business_and_distinct_technical_facts() {
         let connection = connection(ConnectionEnvironment::Production);
         let capability = capability();
-        let no_facts = enable_blockers(&connection, &[capability.clone()], &[], &[]);
+        let no_facts = enable_blockers(&connection, std::slice::from_ref(&capability), &[], &[]);
         assert_eq!(no_facts[0].code, "BUSINESS_CONFIRMATION_MISSING");
     }
 
