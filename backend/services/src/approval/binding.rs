@@ -7,7 +7,7 @@ use bpm::ids::ApprovalProcessDefinitionId;
 use bpm::model::types::ModelError;
 use bpm::model::{ApprovalNodeDefinition, ApprovalTransitionDefinition};
 use database::repository::bpm::DefinitionGraph;
-use database::{AccessControlExt, BpmExt, DocumentRegistryExt, Executor};
+use database::{AccessControlExt, BpmExt, DocumentRegistryExt, Executor, MongoCasbinAdapter};
 use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
@@ -20,8 +20,8 @@ use crate::errors::{Error, Result};
 use crate::iam::{subject, SharedRbacService};
 
 use super::business_adapter::{
-    adapter_spec_of, assignee_ids_of, ensure_binding_scope, ensure_published_status,
-    ensure_separation_of_duties, subject_ref_for, BindingRevalidationContext,
+    adapter_spec_of, assignee_ids_of, ensure_published_status, ensure_separation_of_duties,
+    revalidate_assignee_binding_access, subject_ref_for, BindingRevalidationContext,
 };
 use super::policy::{
     policy_of, require_process_required, ApprovalRequirement, ApproverEligibilityPolicy,
@@ -311,29 +311,20 @@ async fn revalidate_binding_graph(
         &assignee_ids,
     )?;
     for user_id in &assignee_ids {
-        revalidate_one_assignee(db, rbac, policy, context, user_id, executor).await?;
-        let scopes = db
-            .data_scopes()
-            .list_by_subject(
-                entities::access_control::DataScopeSubjectType::User,
-                user_id,
-                executor,
-            )
-            .await?;
-        ensure_binding_scope(&spec, &scopes, &context.organization_id, true)?;
+        let account = revalidate_one_assignee(db, rbac, user_id, executor).await?;
+        let (user_scopes, role_scopes) = load_assignee_scope_sets(db, &account, executor).await?;
+        revalidate_assignee_binding_access(&spec, &user_scopes, &role_scopes, context, user_id)?;
     }
     Ok(())
 }
 
-/// 重验单个指定审批人的账号、静态权限与组织范围。
+/// 重验单个指定审批人的账号与静态权限。
 async fn revalidate_one_assignee(
     db: &Database,
     rbac: &SharedRbacService,
-    policy: &ProcessRequiredApprovalPolicy,
-    context: &BindingRevalidationContext,
     user_id: &str,
     executor: &mut dyn Executor,
-) -> Result<()> {
+) -> Result<AccountCore> {
     let account = db
         .accounts()
         .find_by_id(user_id, executor)
@@ -341,9 +332,83 @@ async fn revalidate_one_assignee(
         .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
     ensure_assignee_ready(&account)?;
     ensure_static_decide_permission(rbac, &account).await?;
-    let _ = context;
-    let _ = policy;
-    Ok(())
+    Ok(account)
+}
+
+/// 同时加载用户与启用角色的 DataScope，强度与 Resolver 一致。
+async fn load_assignee_scope_sets(
+    db: &Database,
+    account: &AccountCore,
+    executor: &mut dyn Executor,
+) -> Result<(
+    Vec<entities::access_control::DataScope>,
+    Vec<entities::access_control::DataScope>,
+)> {
+    let user_scopes = db
+        .data_scopes()
+        .list_by_subject(
+            entities::access_control::DataScopeSubjectType::User,
+            &account.base.id,
+            executor,
+        )
+        .await?;
+    let role_scopes = load_enabled_role_scopes(db, account, executor).await?;
+    Ok((user_scopes, role_scopes))
+}
+
+/// 读取审批人当前启用角色的全部组织范围。
+async fn load_enabled_role_scopes(
+    db: &Database,
+    account: &AccountCore,
+    executor: &mut dyn Executor,
+) -> Result<Vec<entities::access_control::DataScope>> {
+    let mut role_scopes = Vec::new();
+    for role_id in load_enabled_role_ids(db, account, executor).await? {
+        role_scopes.extend(
+            db.data_scopes()
+                .list_by_subject(
+                    entities::access_control::DataScopeSubjectType::Role,
+                    &role_id,
+                    executor,
+                )
+                .await?,
+        );
+    }
+    Ok(role_scopes)
+}
+
+/// 读取 Casbin 绑定且仍然启用的角色 ID。
+async fn load_enabled_role_ids(
+    db: &Database,
+    account: &AccountCore,
+    executor: &mut dyn Executor,
+) -> Result<Vec<String>> {
+    let role_ids = casbin_role_ids(
+        MongoCasbinAdapter::new(db.clone())
+            .subject_roles(&subject(account.kind, &account.base.id), executor)
+            .await?,
+    );
+    if role_ids.is_empty() {
+        return Ok(role_ids);
+    }
+    Ok(db
+        .roles()
+        .enabled_roles(&role_ids, executor)
+        .await?
+        .into_iter()
+        .map(|role| role.base.id)
+        .collect())
+}
+
+/// 从 Casbin 角色键提取角色 ID。
+fn casbin_role_ids(role_keys: Vec<String>) -> Vec<String> {
+    let mut role_ids = role_keys
+        .into_iter()
+        .filter_map(|role_key| role_key.strip_prefix("role:").map(str::to_string))
+        .collect::<Vec<_>>();
+    role_ids.sort();
+    role_ids.dedup();
+    role_ids
 }
 
 /// 后台有效账号闸门。
@@ -853,6 +918,34 @@ mod tests {
             assert!(seen.insert(*document_type));
             let _ = new_registered_document("id-1", *document_type, "").expect("空编号草稿可注册");
         }
+    }
+
+    /// bind/upgrade 生产路径必须走用户+角色范围与 Adapter 读取权闸门。
+    #[test]
+    fn bind_and_upgrade_use_shared_scope_and_read_gate() {
+        let production = include_str!("binding.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码必须存在");
+        assert!(production.contains("revalidate_assignee_binding_access"));
+        assert!(production.contains("load_assignee_scope_sets"));
+        assert!(production.contains("DataScopeSubjectType::Role"));
+        assert!(!production.contains("ensure_binding_scope(&spec, &scopes, &context.organization_id, true)"));
+        let spec = crate::approval::business_adapter::adapter_spec_of(DocumentType::StockAdjustment)
+            .expect("试点必须有适配器");
+        let context = BindingRevalidationContext {
+            organization_id: "org-1".to_string(),
+            creator_id: "creator-1".to_string(),
+        };
+        let error = crate::approval::business_adapter::revalidate_assignee_binding_access(
+            &spec,
+            &[],
+            &[],
+            &context,
+            "u1",
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("数据范围不覆盖当前单据组织"));
     }
 
     /// 草稿允许空编号；正式号原样登记。

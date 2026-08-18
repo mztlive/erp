@@ -242,25 +242,87 @@ pub fn ensure_separation_of_duties(
     Ok(())
 }
 
-/// 按当前单据组织重验用户 DataScope。
-///
-/// # 参数
-/// * `scopes` - 用户已加载范围
-/// * `organization_id` - 单据责任组织
+/// 判断单条范围是否覆盖当前单据组织。
 ///
 /// # 返回
-/// 公司范围或组织/团队命中时为 `true`；仅本人/协作范围不得覆盖。
-pub fn data_scope_covers_organization(scopes: &[DataScope], organization_id: &str) -> bool {
-    if scopes.is_empty() {
-        return true;
-    }
-    scopes.iter().any(|scope| match scope.scope_type {
+/// 公司范围或组织/团队目标命中为 `true`；本人/协作不得覆盖。
+fn scope_matches_organization(scope: &DataScope, organization_id: &str) -> bool {
+    match scope.scope_type {
         DataScopeType::Company => true,
         DataScopeType::Organization | DataScopeType::Team => {
             scope.scope_targets.iter().any(|target| target == organization_id)
         }
         DataScopeType::SelfOwned | DataScopeType::Collaborative => false,
-    })
+    }
+}
+
+/// 判断已加载范围是否覆盖当前单据组织。
+///
+/// 空范围不得误放行。公司范围或组织/团队命中才覆盖；本人/协作不覆盖。
+///
+/// # 参数
+/// * `scopes` - 用户或角色已加载范围
+/// * `organization_id` - 单据责任组织
+///
+/// # 返回
+/// 至少一条范围命中时为 `true`。
+pub fn data_scope_covers_organization(scopes: &[DataScope], organization_id: &str) -> bool {
+    scopes
+        .iter()
+        .any(|scope| scope_matches_organization(scope, organization_id))
+}
+
+/// 用户范围：无单独范围时沿用角色；有范围时必须显式覆盖组织。
+///
+/// # 返回
+/// 空用户范围返回 `true`（交由角色范围证明）；否则与角色范围相同规则。
+pub fn user_scope_covers_organization(scopes: &[DataScope], organization_id: &str) -> bool {
+    if scopes.is_empty() {
+        return true;
+    }
+    data_scope_covers_organization(scopes, organization_id)
+}
+
+/// 与 Resolver 同等强度：用户覆盖且角色覆盖。双方皆空必须拒绝。
+///
+/// # 返回
+/// 用户与角色范围同时覆盖当前组织时为 `true`。
+pub fn assignment_scope_covers_organization(
+    user_scopes: &[DataScope],
+    role_scopes: &[DataScope],
+    organization_id: &str,
+) -> bool {
+    user_scope_covers_organization(user_scopes, organization_id)
+        && data_scope_covers_organization(role_scopes, organization_id)
+}
+
+/// 领域 Adapter 按单据组织/创建人上下文给出对象读取权。
+///
+/// 本阶段只登记规格，不伪造读取成功；未接线返回 `None`。
+///
+/// # 错误
+/// 组织或审批人为空时返回校验错误。
+pub fn adapter_object_read_decision(
+    spec: &ApprovalAdapterSpec,
+    context: &BindingRevalidationContext,
+    assignee_user_id: &str,
+) -> Result<Option<bool>> {
+    match spec.read_scope {
+        AdapterReadScope::DocumentOrganizationAndCreator => {}
+    }
+    if context.organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
+        return Err(Error::ValidationError("单据组织或审批人不能为空".to_string()));
+    }
+    let _ = context.creator_id.as_str();
+    Ok(None)
+}
+
+/// 未接线的对象读取权必须失败关闭。
+///
+/// # 错误
+/// `None` 表示 Adapter 未接线，禁止默认放行。
+pub fn require_wired_object_read(decision: Option<bool>) -> Result<bool> {
+    decision.ok_or_else(|| Error::ValidationError("对象读取权未接线，已按安全策略拒绝".to_string()))
 }
 
 /// 校验指定用户具备对象读取权。
@@ -274,25 +336,46 @@ pub fn ensure_object_readable(can_read: bool) -> Result<()> {
     Err(Error::ValidationError("审批人不能读取被审单据".to_string()))
 }
 
-/// 以当前组织上下文重验 DataScope 与读取权。
+/// 以用户+角色范围和显式读取权重验绑定资格。
 ///
 /// # 错误
-/// 超出范围或不能读取时返回校验错误。
+/// 组织未覆盖或不能读取时返回校验错误。
 pub fn ensure_binding_scope(
     spec: &ApprovalAdapterSpec,
-    scopes: &[DataScope],
+    user_scopes: &[DataScope],
+    role_scopes: &[DataScope],
     organization_id: &str,
     can_read: bool,
 ) -> Result<()> {
     match spec.read_scope {
         AdapterReadScope::DocumentOrganizationAndCreator => {}
     }
-    if !data_scope_covers_organization(scopes, organization_id) {
+    if !assignment_scope_covers_organization(user_scopes, role_scopes, organization_id) {
         return Err(Error::ValidationError(
             "审批人数据范围不覆盖当前单据组织".to_string(),
         ));
     }
     ensure_object_readable(can_read)
+}
+
+/// bind/upgrade 共用闸门：先证明组织覆盖，再要求 Adapter 显式读取权。
+///
+/// # 错误
+/// 范围不足、读取权未接线或显式拒绝时返回错误。
+pub fn revalidate_assignee_binding_access(
+    spec: &ApprovalAdapterSpec,
+    user_scopes: &[DataScope],
+    role_scopes: &[DataScope],
+    context: &BindingRevalidationContext,
+    assignee_user_id: &str,
+) -> Result<()> {
+    if !assignment_scope_covers_organization(user_scopes, role_scopes, &context.organization_id) {
+        return Err(Error::ValidationError(
+            "审批人数据范围不覆盖当前单据组织".to_string(),
+        ));
+    }
+    let can_read = require_wired_object_read(adapter_object_read_decision(spec, context, assignee_user_id)?)?;
+    ensure_binding_scope(spec, user_scopes, role_scopes, &context.organization_id, can_read)
 }
 
 /// 重验已发布图状态，禁止绑定草稿或退役定义。
@@ -336,6 +419,7 @@ pub fn binding_requirement_of(policy: &DocumentApprovalPolicy) -> ApprovalRequir
 mod tests {
     use super::*;
     use crate::approval::policy::policy_of;
+    use entities::access_control::DataScopeSubjectType;
 
     /// 12 个必须审批类型的适配器规格完整，8 个无审批类型不得注册空适配器。
     #[test]
@@ -425,5 +509,127 @@ mod tests {
         assert!(ensure_separation_of_duties(policy, "u1", &["u1".into()]).is_err());
         assert!(ensure_object_readable(true).is_ok());
         assert!(ensure_object_readable(false).is_err());
+    }
+
+    /// 空范围不得误放行；角色空范围不能证明组织覆盖。
+    #[test]
+    fn empty_scopes_do_not_cover_organization() {
+        assert!(!data_scope_covers_organization(&[], "org-1"));
+        assert!(!assignment_scope_covers_organization(&[], &[], "org-1"));
+        assert!(user_scope_covers_organization(&[], "org-1"));
+    }
+
+    /// 组织未命中与 SelfOwned 不得覆盖，即使角色是公司范围。
+    #[test]
+    fn organization_miss_and_self_owned_fail_closed() {
+        let user_other = fixture_scope(
+            "ds-user-other",
+            DataScopeSubjectType::User,
+            "u1",
+            DataScopeType::Organization,
+            &["org-2"],
+        );
+        let user_self = fixture_scope(
+            "ds-user-self",
+            DataScopeSubjectType::User,
+            "u1",
+            DataScopeType::SelfOwned,
+            &[],
+        );
+        let role_company = fixture_scope(
+            "ds-role-company",
+            DataScopeSubjectType::Role,
+            "role-1",
+            DataScopeType::Company,
+            &[],
+        );
+        assert!(!assignment_scope_covers_organization(
+            &[user_other],
+            std::slice::from_ref(&role_company),
+            "org-1"
+        ));
+        assert!(!assignment_scope_covers_organization(
+            &[user_self],
+            std::slice::from_ref(&role_company),
+            "org-1"
+        ));
+    }
+
+    /// 读取权未接线或显式拒绝必须失败关闭。
+    #[test]
+    fn object_read_unwired_and_denied_fail_closed() {
+        let spec = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
+        let context = BindingRevalidationContext {
+            organization_id: "org-1".to_string(),
+            creator_id: "creator-1".to_string(),
+        };
+        assert!(adapter_object_read_decision(&spec, &context, "u1")
+            .expect("未接线应返回 None")
+            .is_none());
+        assert!(require_wired_object_read(None).is_err());
+        assert!(ensure_object_readable(false).is_err());
+    }
+
+    /// bind/upgrade 共用闸门会走到组织未覆盖、空范围和读取权拒绝。
+    #[test]
+    fn bind_upgrade_gate_hits_scope_and_read_failures() {
+        let spec = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
+        let context = BindingRevalidationContext {
+            organization_id: "org-1".to_string(),
+            creator_id: "creator-1".to_string(),
+        };
+        let empty = revalidate_assignee_binding_access(&spec, &[], &[], &context, "u1").unwrap_err();
+        assert!(empty.to_string().contains("数据范围不覆盖当前单据组织"));
+
+        let role_company = fixture_scope(
+            "ds-role",
+            DataScopeSubjectType::Role,
+            "role-1",
+            DataScopeType::Company,
+            &[],
+        );
+        let user_org = fixture_scope(
+            "ds-user",
+            DataScopeSubjectType::User,
+            "u1",
+            DataScopeType::Organization,
+            &["org-1"],
+        );
+        let unwired = revalidate_assignee_binding_access(
+            &spec,
+            std::slice::from_ref(&user_org),
+            std::slice::from_ref(&role_company),
+            &context,
+            "u1",
+        )
+        .unwrap_err();
+        assert!(unwired.to_string().contains("对象读取权未接线"));
+        assert!(ensure_binding_scope(
+            &spec,
+            std::slice::from_ref(&user_org),
+            std::slice::from_ref(&role_company),
+            "org-1",
+            false
+        )
+        .is_err());
+    }
+
+    fn fixture_scope(
+        id: &str,
+        subject_type: DataScopeSubjectType,
+        subject_id: &str,
+        scope_type: DataScopeType,
+        targets: &[&str],
+    ) -> DataScope {
+        DataScope::new(
+            entities::ids::DataScopeId::new(id),
+            entities::access_control::DataScopeData {
+                subject_type,
+                subject_id: subject_id.to_string(),
+                scope_type,
+                scope_targets: targets.iter().map(|target| (*target).to_string()).collect(),
+            },
+        )
+        .expect("范围夹具必须可构造")
     }
 }
