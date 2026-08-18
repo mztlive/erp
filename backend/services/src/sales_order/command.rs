@@ -32,6 +32,9 @@ use super::adapter::{
     sales_order_responsible_org_id, sales_order_start_command, sales_order_subject_ref,
     start_approval_command_kind, RECENT_HISTORY_LIMIT,
 };
+use super::cancel_approval::{
+    build_sales_order_cancel_input, load_cancel_runtime, persist_sales_order_cancel,
+};
 use super::dto::{
     CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, SalesOrderCreateIntent, SalesOrderDetailView,
     SalesOrderDraftLineRequest, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
@@ -51,7 +54,7 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::prepare_start;
+use crate::approval::execution::{prepare_cancel, prepare_start};
 use crate::approval::{
     FailClosedApprovalActionPort, InternalApprovalRuntime, StartApprovalCommand, CARD_SALES_APPROVAL,
 };
@@ -805,7 +808,8 @@ impl SalesOrderService {
 
     /// 撤回审批中的实物及服务销售单，回到可修正草稿。
     ///
-    /// 只走合同 `cancel_action`，不经采购确认或低毛利入口。
+    /// 先按主体加载 RUNNING/BLOCKED 实例并调用统一 `prepare_cancel`，
+    /// 关闭开放任务后再执行 `cancel_action`。已 `APPROVED` 必须拒绝。
     ///
     /// # 参数
     /// * `id` - 销售单主键
@@ -816,7 +820,7 @@ impl SalesOrderService {
     /// 返回撤回后的销售单详情。
     ///
     /// # 错误
-    /// 非审批中、原因缺失或并发冲突时返回错误。
+    /// 非审批中、已最终通过、原因缺失或并发冲突时返回错误。
     pub async fn cancel_approval_submission(
         &self,
         id: &str,
@@ -841,22 +845,37 @@ impl SalesOrderService {
             ));
         }
         let adapter = sales_order_adapter()?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = require_frozen_binding(binding.as_ref())?.clone();
+        let subject = sales_order_subject_ref(id)?;
+        let subject_version = latest_submission_no(&self.db, id).await?;
+        let runtime = load_cancel_runtime(&self.db, &binding, &subject, subject_version).await?;
+        let now = Instant::now();
+        let input = build_sales_order_cancel_input(
+            &runtime,
+            &req.reason,
+            actor.id(),
+            &req.idempotency_key,
+            None,
+            now,
+        )?;
+        let prepared = prepare_cancel(input)?;
         execute_sales_order_domain_action(&mut order, adapter.cancel_action, actor.id())?;
         let audit =
             actor
                 .clone()
                 .resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.sales_orders().update(&mut order, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
+        persist_sales_order_cancel(
+            &self.db,
+            order,
+            prepared,
+            runtime.open_tasks,
+            actor.id(),
+            &req.reason,
+            now,
+            audit,
+        )
+        .await?;
         self.sales_order_detail(id, None).await
     }
 
@@ -1206,6 +1225,25 @@ impl SalesOrderService {
     }
 }
 
+/// 读取销售单最新提交号，作为撤回查找实例的 `subject_version`。
+///
+/// # 错误
+/// 没有提交时返回冲突。
+async fn latest_submission_no(db: &mongodb::Database, sales_order_id: &str) -> Result<u32> {
+    let submissions = db
+        .sales_order_submissions()
+        .find_many(
+            mongodb::bson::doc! { "sales_order_id": sales_order_id },
+            &mut NoTransaction,
+        )
+        .await?;
+    submissions
+        .iter()
+        .map(|item| item.submission_no)
+        .max()
+        .ok_or_else(|| Error::ConflictError("销售单没有可撤回的提交版本".to_string()))
+}
+
 /// 将仓储的全部活动映射命中收敛为提交允许的精确唯一身份。
 fn require_unique_card_external_identity(matches: Vec<String>, object_label: &str) -> Result<String> {
     match matches.as_slice() {
@@ -1283,5 +1321,39 @@ mod card_projection_input_tests {
             sales_order_create_fingerprint("actor-1", &json!({"order_no": "SO-2", "intent": "SAVE_DRAFT"}))
                 .unwrap()
         );
+    }
+}
+
+#[cfg(test)]
+mod goods_service_cutover_tests {
+    /// 实物及服务提交不得再写入采购确认或旧待办。
+    #[test]
+    fn goods_service_submit_does_not_create_procurement_confirmation() {
+        let source = include_str!("command.rs");
+        let submit = source
+            .split("pub async fn submit_sales_order")
+            .nth(1)
+            .and_then(|body| body.split("pub async fn cancel_approval_submission").next())
+            .expect("提交方法");
+        assert!(submit.contains("prepare_start"));
+        assert!(submit.contains("start_approval_submission"));
+        assert!(!submit.contains("ProcurementConfirmation::new"));
+        assert!(!submit.contains("WorkItemType::ProcurementConfirmation"));
+        assert!(!submit.contains("create_procurement_confirmation"));
+    }
+
+    /// 撤回必须构造并调用统一取消端口。
+    #[test]
+    fn cancel_calls_unified_prepare_cancel() {
+        let source = include_str!("command.rs");
+        let cancel = source
+            .split("pub async fn cancel_approval_submission")
+            .nth(1)
+            .and_then(|body| body.split("async fn replay_sales_submission").next())
+            .expect("撤回方法");
+        assert!(cancel.contains("prepare_cancel"));
+        assert!(cancel.contains("build_sales_order_cancel_input"));
+        assert!(cancel.contains("load_cancel_runtime"));
+        assert!(cancel.contains("persist_sales_order_cancel"));
     }
 }

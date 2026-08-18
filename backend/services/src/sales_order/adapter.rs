@@ -152,14 +152,16 @@ pub fn is_goods_service_sales_order(business_type: BusinessType) -> bool {
 /// 提交并启动：进入 `PENDING_REVIEW` / `IN_APPROVAL`。
 ///
 /// 版本权威来源是提交记录 `submission_no`，本方法不改写该编号。
+/// 更新人必须是调用方提交销售，不得回落到上次更新人。
 ///
 /// # 参数
 /// * `order` - 待提交销售单
+/// * `submitted_by` - 本次提交销售
 ///
 /// # 错误
 /// 非实物及服务或状态不允许时返回冲突。
-pub fn start_sales_order_approval(order: &mut SalesOrder) -> Result<()> {
-    Ok(order.start_approval_submission(order.stable.updated_by.clone())?)
+pub fn start_sales_order_approval(order: &mut SalesOrder, submitted_by: &str) -> Result<()> {
+    Ok(order.start_approval_submission(submitted_by)?)
 }
 
 /// 撤回审批：回到 `DRAFT` / `NOT_SUBMITTED`，且提交号不回退。
@@ -277,8 +279,7 @@ pub fn execute_sales_order_domain_action(
 ) -> Result<()> {
     match action {
         ApprovalDomainAction::SalesOrderStartApprovalSubmission => {
-            let _ = updated_by;
-            start_sales_order_approval(order)
+            start_sales_order_approval(order, updated_by)
         }
         ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission => ensure_final_approve_formalize(order),
         ApprovalDomainAction::SalesOrderCancelApprovalSubmission => {
@@ -612,11 +613,12 @@ mod tests {
         execute_sales_order_domain_action(
             &mut order,
             ApprovalDomainAction::SalesOrderStartApprovalSubmission,
-            "user-1",
+            "submitter-9",
         )
         .unwrap();
         assert_eq!(order.commercial_status, CommercialStatus::PendingReview);
         assert_eq!(order.review_status, ReviewStatus::InApproval);
+        assert_eq!(order.stable.updated_by, "submitter-9");
         assert!(order.transition_review(ReviewStatus::Rejected, "u").is_err());
         execute_sales_order_domain_action(
             &mut order,
@@ -634,13 +636,13 @@ mod tests {
         let mut effective = draft_order();
         effective.commercial_status = CommercialStatus::Effective;
         effective.review_status = ReviewStatus::Approved;
-        assert!(start_sales_order_approval(&mut effective).is_err());
+        assert!(start_sales_order_approval(&mut effective, "user-2").is_err());
         assert!(cancel_sales_order_to_draft(&mut effective, "u").is_err());
         assert!(ensure_final_approve_formalize(&effective).is_err());
 
         let mut voucher = draft_order();
         voucher.business_type = BusinessType::Voucher;
-        assert!(start_sales_order_approval(&mut voucher).is_err());
+        assert!(start_sales_order_approval(&mut voucher, "user-2").is_err());
     }
 
     /// 启动命令不含定义 ID 或审批人。

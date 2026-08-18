@@ -24,6 +24,7 @@ use crate::iam::SharedRbacService;
 use mongodb::Database;
 
 mod adapter;
+mod cancel_approval;
 mod command;
 mod draft_working_copy;
 mod dto;

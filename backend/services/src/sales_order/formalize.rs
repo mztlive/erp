@@ -284,12 +284,41 @@ fn submission_line_goods(line: &SalesOrderSubmissionLine) -> Result<GoodsLineFie
 /// 证明本模块只包装仓储 `formalize_submission`。
 #[cfg(test)]
 mod tests {
-    /// 形式化入口名称必须与合同签署端口一致。
+    use super::ensure_final_approve_formalize;
+    use entities::ids::{CustomerAccountId, PartyId, SalesOrderId};
+    use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderData};
+
+    fn draft_order() -> SalesOrder {
+        SalesOrder::new(
+            SalesOrderId::new("so-1"),
+            SalesOrderData {
+                order_no: "SO-1".into(),
+                business_type: BusinessType::GoodsService,
+                origin_system: entities::sales_order::OriginSystem::Erp,
+                source_identity_id: None,
+                customer_id: CustomerAccountId::new("cust-1"),
+                contract_id: None,
+                settlement_party_id: PartyId::new("party-1"),
+                source_status_code: None,
+            },
+            "user-1",
+        )
+        .expect("草稿必须可构造")
+    }
+
+    /// 形式化必须调用仓储 `formalize_submission`，且只接受 `IN_APPROVAL`。
     #[test]
-    fn formalize_port_name_is_contracted() {
-        assert!(
-            stringify!(super::SalesOrderService::formalize_approved_submission)
-                .contains("formalize_approved_submission")
-        );
+    fn formalize_wraps_repository_and_only_accepts_in_approval() {
+        let source = include_str!("formalize.rs");
+        assert!(source.contains("formalize_submission("));
+        assert!(source.contains("ensure_final_approve_formalize"));
+        let mut order = draft_order();
+        assert!(ensure_final_approve_formalize(&order).is_err());
+        order.start_approval_submission("user-1").expect("提交进入审批中");
+        assert_eq!(order.review_status, ReviewStatus::InApproval);
+        assert!(ensure_final_approve_formalize(&order).is_ok());
+        order.commercial_status = CommercialStatus::Effective;
+        order.review_status = ReviewStatus::Approved;
+        assert!(ensure_final_approve_formalize(&order).is_err());
     }
 }
