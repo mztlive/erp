@@ -4,11 +4,15 @@
  */
 
 export {
+    buildAdjustmentSubmitRequest,
     createAdjustmentDraft,
+    fetchAdjustmentDetail,
     fetchBalanceDetail,
+    readInstanceResponsibility,
     fetchInventoryList,
     resolveAdjustmentUnknown,
     startInventoryExport,
+    STOCK_ADJUSTMENT_DOCUMENT_TYPE,
     submitAdjustment,
 } from "./api/inventory"
 export type { InventoryExportJob } from "./api/inventory"

@@ -54,17 +54,14 @@ export function buildAdjustmentColumns(): ColumnDef<StockAdjustmentRow>[] {
         },
         {
             id: "people",
-            header: "岗位",
-            meta: { label: "岗位", width: "default" },
+            header: "审批进度",
+            meta: { label: "审批进度", width: "default" },
             cell: ({ row }) => (
                 <div className="text-xs text-muted-foreground">
                     <div>经办 {row.original.operatorLabel}</div>
+                    <div>当前节点 {row.original.currentNodeLabel ?? "—"}</div>
                     <div>
-                        仓储复核{" "}
-                        {row.original.warehouseReviewerLabel ?? "—"}
-                    </div>
-                    <div>
-                        财务确认 {row.original.financeConfirmerLabel ?? "—"}
+                        当前审批人 {row.original.currentAssigneeLabel ?? "—"}
                     </div>
                 </div>
             ),

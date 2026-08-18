@@ -4,6 +4,8 @@
  */
 
 export {
+    inventoryKeys,
+    useAdjustmentDetailQuery,
     useBalanceDetailQuery,
     useCreateAdjustmentDraftMutation,
     useInventoryListQuery,

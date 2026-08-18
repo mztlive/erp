@@ -22,6 +22,7 @@ import {
 } from "@/features/inventory/api/display"
 import {
     mapAdjustment,
+    mapAdjustmentApproval,
     mapBalance,
     mapMovement,
     mapReservation,
@@ -127,7 +128,7 @@ export async function fetchInventoryList(
     let pendingAdjustmentCount = 0
 
     try {
-        const [balPage, pendingWh, pendingFin] = await Promise.all([
+        const [balPage, pendingApproval] = await Promise.all([
             apiGet<BackendPage<BackendStockBalance>>("/admin/stock-balances", {
                 page: 1,
                 page_size: 1,
@@ -140,16 +141,7 @@ export async function fetchInventoryList(
                     page: 1,
                     page_size: 1,
                     warehouse_id: query.warehouseId,
-                    status: "PENDING_WAREHOUSE_REVIEW",
-                },
-            ),
-            apiGet<BackendPage<BackendStockAdjustment>>(
-                "/admin/stock-adjustments",
-                {
-                    page: 1,
-                    page_size: 1,
-                    warehouse_id: query.warehouseId,
-                    status: "PENDING_FINANCE_REVIEW",
+                    status: "IN_APPROVAL",
                 },
             ),
         ])
@@ -157,7 +149,7 @@ export async function fetchInventoryList(
         // reserved/zero metrics require availability filters the backend lacks
         reservedDimensionCount = 0
         zeroAvailableDimensionCount = 0
-        pendingAdjustmentCount = pendingWh.total + pendingFin.total
+        pendingAdjustmentCount = pendingApproval.total
     } catch (error) {
         if (isApiError(error) && error.status === 403) {
             return emptyBase("PERMISSION_REVOKED", {
@@ -285,7 +277,11 @@ export async function fetchInventoryList(
                         `/admin/stock-adjustments/${encodeURIComponent(a.id)}`,
                     )
                     const line = detail.lines[0]
-                    return mapAdjustment(detail.adjustment, line)
+                    return mapAdjustment(
+                        detail.adjustment,
+                        line,
+                        mapAdjustmentApproval(detail.approval),
+                    )
                 } catch {
                     return mapAdjustment(a)
                 }

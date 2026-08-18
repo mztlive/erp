@@ -16,12 +16,14 @@ import {
     localNowInput,
 } from "@/features/inventory/lib/presentation"
 import { REASON_TYPE_OPTIONS } from "@/features/inventory/types"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     AdjustmentReasonType,
     StockBalanceRow,
 } from "@/features/inventory/types"
 
 export type AdjustmentMeta = {
+    stockAdjustmentId: string
     warehouseName: string
     skuCode: string
     skuName: string
@@ -31,6 +33,7 @@ export type AdjustmentMeta = {
     adjustmentNo: string
     editVersion: number
     segregationNote: string
+    approval?: DocumentApprovalView
 }
 
 export type AdjustmentPendingPayload = {
@@ -45,6 +48,28 @@ export type AdjustmentPendingPayload = {
     occurredAt: string
     idempotencyKey: string
     forceUnknown?: boolean
+}
+
+/**
+ * 只拼接服务端已给出的当前节点/审批人，缺失字段省略。
+ */
+export const formatSubmittedResult = (
+    outcome: {
+        adjustmentNo: string
+        currentNodeLabel?: string
+        nextResponsible?: string
+    },
+    suffix?: string,
+): string => {
+    const parts = [`单号 ${outcome.adjustmentNo}`]
+    if (outcome.currentNodeLabel) {
+        parts.push(`当前节点：${outcome.currentNodeLabel}`)
+    }
+    if (outcome.nextResponsible) {
+        parts.push(`当前审批人：${outcome.nextResponsible}`)
+    }
+    if (suffix) parts.push(suffix.replace(/。$/, ""))
+    return `${parts.join("。")}。`
 }
 
 export interface AdjustmentWorkflowInput {
@@ -133,6 +158,7 @@ export function useAdjustmentWorkflow({
                 setAdjustLockVersion(draft.balanceLockVersion)
                 setAdjustSeedLock(row.lockVersion)
                 setAdjustMeta({
+                    stockAdjustmentId: draft.stockAdjustmentId,
                     warehouseName: draft.warehouseName,
                     skuCode: draft.skuCode,
                     skuName: draft.skuName,
@@ -142,6 +168,7 @@ export function useAdjustmentWorkflow({
                     adjustmentNo: draft.adjustmentNo,
                     editVersion: draft.editVersion,
                     segregationNote: draft.segregationNote,
+                    approval: draft.approval,
                 })
                 form.reset()
                 form.setFieldValue("reasonType", draft.reasonType)
@@ -156,7 +183,13 @@ export function useAdjustmentWorkflow({
                 setActionError(getErrorMessage(err, "创建调整草稿失败"))
             }
         },
-        [createDraftMutation, form, isPhoneNarrow, onFocusRestore, onPreviewClose],
+        [
+            createDraftMutation,
+            form,
+            isPhoneNarrow,
+            onFocusRestore,
+            onPreviewClose,
+        ],
     )
 
     const doSubmit = React.useCallback(async () => {
@@ -186,8 +219,11 @@ export function useAdjustmentWorkflow({
         if (result.status === "succeeded") {
             setLastResult({
                 status: "succeeded",
-                title: "调整已提交待复核",
-                description: `单号 ${result.outcome.adjustmentNo}。下一责任方：${result.outcome.nextResponsible}。余额尚未变化，确认入账后由系统刷新。`,
+                title: "调整已提交审批",
+                description: formatSubmittedResult(
+                    result.outcome,
+                    "余额尚未变化，审批通过后由系统更新。",
+                ),
                 reference: result.outcome.reference,
             })
             setConfirmOpen(false)
@@ -237,8 +273,8 @@ export function useAdjustmentWorkflow({
         if (r.status === "succeeded") {
             setLastResult({
                 status: "succeeded",
-                title: "调整已提交待复核",
-                description: `单号 ${r.outcome.adjustmentNo}。下一责任方：${r.outcome.nextResponsible}。`,
+                title: "调整已提交审批",
+                description: formatSubmittedResult(r.outcome),
                 reference: r.outcome.reference,
             })
             closeAdjustment()
@@ -278,6 +314,4 @@ export function useAdjustmentWorkflow({
     }
 }
 
-export type AdjustmentFormApi = ReturnType<
-    typeof useAdjustmentWorkflow
->["form"]
+export type AdjustmentFormApi = ReturnType<typeof useAdjustmentWorkflow>["form"]

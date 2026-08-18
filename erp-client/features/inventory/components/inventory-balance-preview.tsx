@@ -25,6 +25,7 @@ type InventoryBalancePreviewProps = {
     onClose: () => void
     onViewMovements: (detail: BalanceDetailView) => void
     onStartAdjustment: (row: StockBalanceRow) => Promise<void>
+    onOpenAdjustment?: (adjustmentId: string) => void
 }
 
 function InventoryBalancePreview({
@@ -34,6 +35,7 @@ function InventoryBalancePreview({
     onClose,
     onViewMovements,
     onStartAdjustment,
+    onOpenAdjustment,
 }: InventoryBalancePreviewProps) {
     return (
         <QuickPreviewSheet
@@ -328,9 +330,25 @@ function InventoryBalancePreview({
                                             key={a.adjustmentId}
                                             className="flex justify-between"
                                         >
-                                            <span className="num">
-                                                {a.adjustmentNo}
-                                            </span>
+                                            {onOpenAdjustment ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="link"
+                                                    size="xs"
+                                                    className="num h-auto px-0"
+                                                    onClick={() =>
+                                                        onOpenAdjustment(
+                                                            a.adjustmentId,
+                                                        )
+                                                    }
+                                                >
+                                                    {a.adjustmentNo}
+                                                </Button>
+                                            ) : (
+                                                <span className="num">
+                                                    {a.adjustmentNo}
+                                                </span>
+                                            )}
                                             <BusinessStatusBadge
                                                 context="list"
                                                 label={a.statusLabel}
