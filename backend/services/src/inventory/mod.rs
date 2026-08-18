@@ -36,6 +36,7 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
+use crate::approval::execution::prepare_start;
 use crate::audit::AuditActor;
 use crate::document_registry::{find_approval_binding, new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
@@ -59,6 +60,7 @@ pub use self::dto::{
 
 mod adapter;
 mod dto;
+mod start_approval;
 
 pub use adapter::stock_adjustment_object_readable;
 
@@ -638,31 +640,59 @@ impl InventoryService {
     ) -> Result<StockAdjustmentView> {
         req.validate()?;
         let adapter = stock_adjustment_adapter()?;
-        let _ = stock_adjustment_subject_ref(id)?;
+        let subject = stock_adjustment_subject_ref(id)?;
         let mut adjustment = self.load_stock_adjustment(id).await?;
         ensure_expected_version(adjustment.base.version, req.expected_version)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
-        require_frozen_binding(binding.as_ref())?;
+        let binding = require_frozen_binding(binding.as_ref())?.clone();
         let lines = self
             .db
             .inventory()
             .adjustment_lines_by_adjustment_ids(&[StockAdjustmentId::new(id.to_string())], &mut NoTransaction)
             .await?;
         execute_stock_adjustment_domain_action(&mut adjustment, adapter.on_approval_start)?;
-        let snapshot = build_stock_adjustment_snapshot(&adjustment, &lines, actor.id(), Instant::now())?;
+        let now = Instant::now();
+        let snapshot = build_stock_adjustment_snapshot(&adjustment, &lines, actor.id(), now)?;
         let start = stock_adjustment_start_command(
             id,
             adjustment.approval_subject_version,
             actor.id(),
             &req.idempotency_key,
         );
-        let _ = (
-            start_approval_command_kind(&start),
+        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
+        let organization_id = adjustment.warehouse_id.to_string();
+        let graph = start_approval::load_bound_definition_graph(&self.db, &binding).await?;
+        let existing_receipt = start_approval::load_start_receipt(
+            &self.db,
+            &subject,
+            adjustment.approval_subject_version,
+            &req.idempotency_key,
+        )
+        .await?;
+        let start_input = start_approval::build_stock_adjustment_start_input(
+            graph,
+            &binding,
+            subject,
+            adjustment.approval_subject_version,
+            actor.id(),
+            &organization_id,
+            &req.idempotency_key,
+            existing_receipt,
+            now,
+        )?;
+        let prepared = prepare_start(start_input)?;
+        start_approval::persist_stock_adjustment_start(
+            &self.db,
+            adjustment,
+            actor,
+            id,
             snapshot,
-            binding,
-            RECENT_HISTORY_LIMIT,
-        );
-        persist_adjustment_transition(&self.db, adjustment, actor, "stock_adjustment.submit", id).await
+            prepared,
+            adapter.owner_role,
+            organization_id,
+            now,
+        )
+        .await
     }
 
     /// 撤回库存调整审批，成功后回到草稿且 `subject_version` 不回退。
