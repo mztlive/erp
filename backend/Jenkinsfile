@@ -91,6 +91,7 @@ pipeline {
                     cargo check --workspace
                     cargo clippy --workspace --all-targets --all-features -- -D warnings
                     cargo test --workspace
+                    ./scripts/check-bpm-boundaries.sh
                 '''
             }
         }
