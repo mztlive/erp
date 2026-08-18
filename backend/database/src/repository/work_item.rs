@@ -2,15 +2,17 @@
 
 use std::num::NonZeroU32;
 
+use bpm::ApprovalNodeExecutionId;
 use entities::common::time::Instant;
 use entities::work_item::{
     AssignmentMode, AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
-use mongodb::bson::{doc, Bson, Document};
+use mongodb::bson::{doc, to_document, Bson, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
+use super::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Error, Result};
@@ -24,6 +26,9 @@ pub struct WorkItemRow {
     pub work_item_type: WorkItemType,
     /// 审批步骤实例；独立任务为空。
     pub approval_step_instance_id: Option<String>,
+    /// 类型化审批节点执行；审批任务存在，独立任务为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_node_execution_id: Option<String>,
     /// 业务对象类型。
     pub business_object_type: String,
     /// 业务对象 ID。
@@ -336,6 +341,54 @@ impl<'a> Repository<'a, WorkItem> {
         ))
     }
 
+    /// 以 `id + OPEN + expected_task_version + approval_node_execution_id` 完成审批任务。
+    ///
+    /// # 错误
+    /// 元数据越界或 MongoDB 更新失败时返回错误。
+    pub async fn complete_approval_task(
+        &self,
+        item: &WorkItem,
+        expected_task_version: u64,
+        approval_node_execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<CasWriteOutcome<WorkItem>> {
+        self.persist_open_approval_task(item, expected_task_version, approval_node_execution_id, executor)
+            .await
+    }
+
+    /// 以 `id + OPEN + expected_task_version + approval_node_execution_id` 关闭审批任务。
+    ///
+    /// 改派和人员恢复不得更新旧 `CLOSED` 任务，只能为新执行插入新任务。
+    ///
+    /// # 错误
+    /// 元数据越界或 MongoDB 更新失败时返回错误。
+    pub async fn close_approval_task(
+        &self,
+        item: &WorkItem,
+        expected_task_version: u64,
+        approval_node_execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<CasWriteOutcome<WorkItem>> {
+        self.persist_open_approval_task(item, expected_task_version, approval_node_execution_id, executor)
+            .await
+    }
+
+    /// 按审批执行读取全生命周期关联任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_by_approval_node_execution_id(
+        &self,
+        approval_node_execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<WorkItem>> {
+        self.find_one(
+            doc! { "approval_node_execution_id": approval_node_execution_id.as_ref() },
+            executor,
+        )
+        .await
+    }
+
     /// 查询业务对象当前全部开放任务。
     ///
     /// 该查询供强类型服务核对当前责任事实；同一对象与任务类型的开放唯一性由
@@ -360,6 +413,48 @@ impl<'a> Repository<'a, WorkItem> {
         )
         .await
     }
+
+    async fn persist_open_approval_task(
+        &self,
+        item: &WorkItem,
+        expected_task_version: u64,
+        approval_node_execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<CasWriteOutcome<WorkItem>> {
+        let next_version = next_task_version(expected_task_version)?;
+        let mut set_doc = to_document(item)?;
+        set_doc.insert("version", next_version);
+        let matched = mongo_ops::update_one(
+            &self.collection(),
+            approval_task_cas_filter(&item.base.id, expected_task_version, approval_node_execution_id)?,
+            doc! { "$set": set_doc },
+            false,
+            executor,
+        )
+        .await?
+        .matched_count;
+        if matched > 0 {
+            let mut applied = item.clone();
+            applied.base_mut().version = expected_task_version.saturating_add(1);
+            return Ok(CasWriteOutcome::Applied(applied));
+        }
+        let current = self.find_by_id(&item.base.id, executor).await?;
+        let expected_execution = approval_node_execution_id.clone();
+        Ok(classify_cas_miss(current, expected_task_version, move |row| {
+            approval_task_still_open(row, &expected_execution)
+        }))
+    }
+}
+
+fn next_task_version(expected_task_version: u64) -> Result<i64> {
+    let next = expected_task_version
+        .checked_add(1)
+        .ok_or(Error::EntityMetadataOutOfRange("version"))?;
+    i64::try_from(next).map_err(|_| Error::EntityMetadataOutOfRange("version"))
+}
+
+fn approval_task_still_open(item: &WorkItem, execution_id: &ApprovalNodeExecutionId) -> bool {
+    item.status == WorkItemStatus::Open && item.approval_node_execution_id.as_ref() == Some(execution_id)
 }
 
 fn start_processing_filter(
@@ -551,6 +646,7 @@ fn work_item_projection() -> Document {
         "id": 1,
         "work_item_type": 1,
         "approval_step_instance_id": 1,
+        "approval_node_execution_id": 1,
         "business_object_type": 1,
         "business_object_id": 1,
         "subject_version": 1,
@@ -586,9 +682,12 @@ mod tests {
     use mongodb::bson::{doc, Bson};
 
     use super::{
-        classify_start_processing_miss, sort_doc, start_processing_filter, start_processing_pipeline,
-        QueryFilter, StartProcessingOutcome, WorkItemFilter,
+        approval_task_still_open, classify_start_processing_miss, sort_doc, start_processing_filter,
+        start_processing_pipeline, work_item_projection, QueryFilter, StartProcessingOutcome, WorkItemFilter,
+        WorkItemRow,
     };
+    use crate::repository::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
+    use bpm::ApprovalNodeExecutionId;
     use entities::common::time::Instant;
     use entities::ids::WorkItemId;
     use entities::work_item::{
@@ -869,5 +968,109 @@ mod tests {
             sort_doc(Some("business_object_id"), false),
             doc! { "created_at": -1 }
         );
+    }
+
+    #[test]
+    fn approval_task_cas_miss_classifies_closed_and_version() {
+        let execution = ApprovalNodeExecutionId::new("exec-1");
+        let filter = approval_task_cas_filter("wi-1", 3, &execution).unwrap();
+        assert_eq!(filter.get_str("status").unwrap(), "OPEN");
+        assert_eq!(filter.get_str("approval_node_execution_id").unwrap(), "exec-1");
+
+        let mut closed = pool_item();
+        closed.status = WorkItemStatus::Closed;
+        closed.approval_node_execution_id = Some(execution.clone());
+        assert!(!approval_task_still_open(&closed, &execution));
+        let closed_version = closed.base().version;
+        assert!(matches!(
+            classify_cas_miss(Some(closed), closed_version, |item| {
+                approval_task_still_open(item, &execution)
+            }),
+            CasWriteOutcome::StatusChanged(_)
+        ));
+
+        let mut stale = pool_item();
+        stale.approval_node_execution_id = Some(execution.clone());
+        stale.base_mut().version = 4;
+        assert!(matches!(
+            classify_cas_miss(Some(stale), 3, |item| approval_task_still_open(item, &execution)),
+            CasWriteOutcome::VersionConflict(_)
+        ));
+
+        let mut open_wrong = pool_item();
+        open_wrong.approval_node_execution_id = Some(ApprovalNodeExecutionId::new("exec-2"));
+        let open_version = open_wrong.base().version;
+        assert!(!approval_task_still_open(&open_wrong, &execution));
+        assert!(matches!(
+            classify_cas_miss(Some(open_wrong), open_version, |item| {
+                approval_task_still_open(item, &execution)
+            }),
+            CasWriteOutcome::StatusChanged(_)
+        ));
+        assert!(matches!(
+            classify_cas_miss::<WorkItem>(None, 1, |item| approval_task_still_open(item, &execution)),
+            CasWriteOutcome::NotFound
+        ));
+    }
+
+    #[test]
+    fn work_item_projection_includes_approval_node_execution_id() {
+        let projection = work_item_projection();
+        assert_eq!(projection.get_i32("approval_node_execution_id").unwrap(), 1);
+        assert_eq!(projection.get_i32("approval_step_instance_id").unwrap(), 1);
+        let row = WorkItemRow {
+            id: "wi-1".to_string(),
+            work_item_type: WorkItemType::CardFundsDeltaReview,
+            approval_step_instance_id: None,
+            approval_node_execution_id: Some("exec-1".to_string()),
+            business_object_type: "receivable_account".to_string(),
+            business_object_id: "account-1".to_string(),
+            subject_version: "v1".to_string(),
+            status: WorkItemStatus::Open,
+            assignment_mode: AssignmentMode::Direct,
+            owner_role: "role-finance".to_string(),
+            owner_organization_id: "org-1".to_string(),
+            owner_user_id: Some("user-1".to_string()),
+            responsibility_actor_ids: Vec::new(),
+            assignment_source: AssignmentSource::SystemRule,
+            assigned_at: None,
+            started_at: None,
+            current_assignment_at: None,
+            last_activity_at: None,
+            priority: WorkItemPriority::Normal,
+            due_at: None,
+            reason_code: None,
+            impact_summary: None,
+            completed_at: None,
+            completed_by: None,
+            closed_at: None,
+            closed_by: None,
+            close_reason: None,
+            version: 1,
+            created_at: 1,
+            updated_at: 1,
+        };
+        assert_eq!(row.approval_node_execution_id.as_deref(), Some("exec-1"));
+        let decoded: WorkItemRow = mongodb::bson::from_document(doc! {
+            "id": "wi-2",
+            "work_item_type": "CARD_FUNDS_DELTA_REVIEW",
+            "approval_step_instance_id": Bson::Null,
+            "business_object_type": "receivable_account",
+            "business_object_id": "account-1",
+            "subject_version": "v1",
+            "status": "OPEN",
+            "assignment_mode": "DIRECT",
+            "owner_role": "role-finance",
+            "owner_organization_id": "org-1",
+            "owner_user_id": "user-1",
+            "responsibility_actor_ids": [],
+            "assignment_source": "SYSTEM_RULE",
+            "priority": "normal",
+            "version": 1i64,
+            "created_at": 1i64,
+            "updated_at": 1i64,
+        })
+        .expect("缺少 approval_node_execution_id 的旧文档仍可反序列化");
+        assert_eq!(decoded.approval_node_execution_id, None);
     }
 }

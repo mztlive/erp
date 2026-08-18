@@ -8,16 +8,18 @@
 //!
 //! 筛选/行类型定义在本文件，经 `DocumentRegistryExt` 的关联类型对外暴露。
 
+use entities::common::time::Instant;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentId, DocumentParticipant, DocumentRelation, DocumentType,
     WorkflowAction, WorkflowActionType,
 };
-use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
+use super::bpm::{assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome};
 use super::extensions::DocumentRegistryExt;
 use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
@@ -90,10 +92,10 @@ impl Pagination for BusinessDocumentFilter {
 impl<'a> Repository<'a, BusinessDocument> {
     /// 幂等注册业务单据。
     ///
-    /// 跨域注册表入口（数据模型 §6.1）：由 `uk_business_documents_identity`
-    /// 唯一索引 `(document_type, document_no)` 承担并发仲裁。已存在同身份且同 ID
-    /// 的注册时视为幂等成功并返回已存在行；同身份但 ID 不同的重复注册透出
-    /// [`crate::Error::DuplicateKey`]（由 Service 映射为冲突），不会产生第二条注册行。
+    /// 跨域注册表入口（数据模型 §6.1）：空编号草稿可并存；非空
+    /// `(document_type, document_no)` 由部分唯一索引 `uk_business_documents_identity`
+    /// 承担并发仲裁。已存在同身份且同 ID 的非空注册视为幂等成功并返回已存在行；
+    /// 同身份但 ID 不同的重复注册透出 [`crate::Error::DuplicateKey`]。
     ///
     /// 本方法采用「先插后查」：唯一索引保证并发下最多一条注册行，不存在
     /// 读后写的竞态窗口，**不需要事务执行器**；传入 `NoTransaction` 时行为
@@ -117,6 +119,10 @@ impl<'a> Repository<'a, BusinessDocument> {
         doc: &BusinessDocument,
         executor: &mut dyn Executor,
     ) -> Result<Option<BusinessDocument>> {
+        if doc.document_no.is_empty() {
+            mongo_ops::insert_one(&self.collection(), doc, executor).await?;
+            return Ok(None);
+        }
         match mongo_ops::insert_one(&self.collection(), doc, executor).await {
             Ok(()) => Ok(None),
             Err(Error::DuplicateKey(duplicate)) => {
@@ -162,6 +168,41 @@ impl<'a> Repository<'a, BusinessDocument> {
             executor,
         )
         .await
+    }
+
+    /// 以 `id + document_no 为空 + expected_version` 一次性赋值正式编号。
+    ///
+    /// 成功时同时写入 `document_no_assigned_at`，不得覆盖已有编号。同载荷回读
+    /// 同一结果；不同编号竞争只允许一个成功。
+    ///
+    /// # 错误
+    /// 元数据越界或 MongoDB 更新失败时返回错误。
+    pub async fn assign_document_no(
+        &self,
+        id: &str,
+        document_no: &str,
+        expected_version: u64,
+        assigned_at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<AssignDocumentNoOutcome<BusinessDocument>> {
+        let updated = mongo_ops::find_one_and_update_pipeline(
+            &self.collection(),
+            assign_document_no_filter(id, expected_version)?,
+            assign_document_no_pipeline(document_no, assigned_at),
+            executor,
+        )
+        .await?;
+        if let Some(document) = updated {
+            return Ok(AssignDocumentNoOutcome::Assigned(document));
+        }
+        let current = self.find_by_id(id, executor).await?;
+        Ok(classify_assign_document_no_miss(
+            current,
+            expected_version,
+            document_no,
+            |row| row.base().version,
+            |row| row.document_no.as_str(),
+        ))
     }
 
     /// 分页检索单据注册列表（投影查询）。
@@ -494,6 +535,19 @@ impl<'a> DocumentRegistryRepository<'a> {
     }
 }
 
+/// 一次性编号赋值更新管道。
+fn assign_document_no_pipeline(document_no: &str, assigned_at: Instant) -> Vec<Document> {
+    let assigned_at = assigned_at.unix_secs();
+    vec![doc! {
+        "$set": {
+            "document_no": document_no,
+            "document_no_assigned_at": assigned_at,
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": assigned_at,
+        }
+    }]
+}
+
 /// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
 ///
 /// 仅允许 `created_at` / `updated_at`；未知字段回落默认 `created_at`。
@@ -547,7 +601,13 @@ fn workflow_action_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, BusinessDocumentFilter, QueryFilter, WorkflowActionFilter};
+    use super::{
+        assign_document_no_pipeline, sort_doc, BusinessDocumentFilter, QueryFilter, WorkflowActionFilter,
+    };
+    use crate::repository::bpm::{
+        assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome,
+    };
+    use entities::common::time::Instant;
     use entities::document_registry::{BusinessDocumentId, DocumentType, WorkflowActionType};
     use mongodb::bson::doc;
 
@@ -597,5 +657,65 @@ mod tests {
             doc! { "created_at": -1 },
             "白名单外字段回落默认排序"
         );
+    }
+
+    #[test]
+    fn assign_document_no_cas_allows_empty_drafts_and_rejects_overwrite() {
+        let filter = assign_document_no_filter("bd-1", 2).unwrap();
+        assert_eq!(filter.get_str("id").unwrap(), "bd-1");
+        assert_eq!(filter.get_i64("version").unwrap(), 2);
+        let alternatives = filter.get_array("$or").unwrap();
+        assert_eq!(
+            alternatives,
+            &vec![
+                mongodb::bson::Bson::Document(doc! { "document_no": "" }),
+                mongodb::bson::Bson::Document(doc! { "document_no": mongodb::bson::Bson::Null }),
+            ]
+        );
+
+        let pipeline = assign_document_no_pipeline("SO-1", Instant::from_unix_secs(99));
+        let set = pipeline[0].get_document("$set").unwrap();
+        assert_eq!(set.get_str("document_no").unwrap(), "SO-1");
+        assert_eq!(set.get_i64("document_no_assigned_at").unwrap(), 99);
+        assert!(matches!(
+            classify_assign_document_no_miss(
+                Some((1_u64, "SO-1".to_string())),
+                1,
+                "SO-1",
+                |row| row.0,
+                |row| row.1.as_str()
+            ),
+            AssignDocumentNoOutcome::SamePayload(_)
+        ));
+        assert!(matches!(
+            classify_assign_document_no_miss(
+                Some((1_u64, "SO-2".to_string())),
+                1,
+                "SO-1",
+                |row| row.0,
+                |row| row.1.as_str()
+            ),
+            AssignDocumentNoOutcome::NumberConflict(_)
+        ));
+        assert!(matches!(
+            classify_assign_document_no_miss(
+                Some((2_u64, String::new())),
+                1,
+                "SO-1",
+                |row| row.0,
+                |row| row.1.as_str()
+            ),
+            AssignDocumentNoOutcome::VersionConflict(_)
+        ));
+        assert!(matches!(
+            classify_assign_document_no_miss(
+                Some((1_u64, String::new())),
+                1,
+                "SO-1",
+                |row| row.0,
+                |row| row.1.as_str()
+            ),
+            AssignDocumentNoOutcome::VersionConflict(_)
+        ));
     }
 }

@@ -1,4 +1,4 @@
-//! 域 D03 `work_item` 的开放唯一性与责任队列索引。
+//! 域 D03 `work_item` 的开放唯一性、审批执行关联与统一工作台索引。
 
 use mongodb::{
     bson::{doc, Document},
@@ -26,19 +26,14 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 fn work_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_open_object_type_index(),
-        unique_open_approval_step_index(),
+        unique_approval_execution_index(),
         named_index(
             "idx_work_items_mine",
-            doc! { "status": 1, "owner_user_id": 1, "due_at": 1 },
+            doc! { "status": 1, "owner_user_id": 1, "due_at": 1, "id": 1 },
         ),
         named_index(
-            "idx_work_items_team_pool",
-            doc! {
-                "status": 1,
-                "assignment_mode": 1,
-                "owner_role": 1,
-                "due_at": 1,
-            },
+            "idx_work_items_pending_approval",
+            doc! { "status": 1, "owner_user_id": 1, "assigned_at": -1, "id": -1 },
         ),
         named_index(
             "idx_work_items_managed",
@@ -76,22 +71,24 @@ fn unique_open_object_type_index() -> IndexModel {
             IndexOptions::builder()
                 .name("uk_work_items_open_object_type".to_string())
                 .unique(true)
-                .partial_filter_expression(doc! { "status": "OPEN" })
+                .partial_filter_expression(doc! {
+                    "status": "OPEN",
+                    "owner_user_id": { "$type": "string" },
+                })
                 .build(),
         )
         .build()
 }
 
-fn unique_open_approval_step_index() -> IndexModel {
+fn unique_approval_execution_index() -> IndexModel {
     IndexModel::builder()
-        .keys(doc! { "approval_step_instance_id": 1 })
+        .keys(doc! { "approval_node_execution_id": 1 })
         .options(
             IndexOptions::builder()
-                .name("uk_work_items_open_approval_step".to_string())
+                .name("uk_work_items_approval_execution".to_string())
                 .unique(true)
                 .partial_filter_expression(doc! {
-                    "status": "OPEN",
-                    "approval_step_instance_id": { "$type": "string" },
+                    "approval_node_execution_id": { "$type": "string" },
                 })
                 .build(),
         )
@@ -112,52 +109,47 @@ mod tests {
     use super::work_item_indexes;
 
     #[test]
-    fn open_uniqueness_excludes_terminal_history() {
+    fn open_object_uniqueness_requires_owner_and_execution_is_lifecycle_unique() {
         let indexes = work_item_indexes();
         let object = index_named(&indexes, "uk_work_items_open_object_type");
         assert_eq!(object.options.as_ref().unwrap().unique, Some(true));
         assert_eq!(
-            object.keys,
-            doc! {
-                "business_object_type": 1,
-                "business_object_id": 1,
-                "work_item_type": 1,
-                "responsibility_key": 1,
-            }
-        );
-        assert_eq!(
             object.options.as_ref().unwrap().partial_filter_expression,
-            Some(doc! { "status": "OPEN" })
-        );
-
-        let step = index_named(&indexes, "uk_work_items_open_approval_step");
-        assert_eq!(step.options.as_ref().unwrap().unique, Some(true));
-        assert_eq!(
-            step.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! {
                 "status": "OPEN",
-                "approval_step_instance_id": { "$type": "string" },
+                "owner_user_id": { "$type": "string" },
             })
         );
+
+        let execution = index_named(&indexes, "uk_work_items_approval_execution");
+        assert_eq!(execution.keys, doc! { "approval_node_execution_id": 1 });
+        assert_eq!(execution.options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(
+            execution.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! { "approval_node_execution_id": { "$type": "string" } })
+        );
+        assert!(indexes.iter().all(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                != Some("uk_work_items_open_approval_step")
+        }));
     }
 
     #[test]
-    fn queue_indexes_follow_contract_field_order() {
+    fn queue_indexes_follow_unified_workbench_and_drop_pool_filter() {
         let indexes = work_item_indexes();
-
         assert_eq!(
             index_named(&indexes, "idx_work_items_mine").keys,
-            doc! { "status": 1, "owner_user_id": 1, "due_at": 1 }
+            doc! { "status": 1, "owner_user_id": 1, "due_at": 1, "id": 1 }
         );
         assert_eq!(
-            index_named(&indexes, "idx_work_items_team_pool").keys,
-            doc! {
-                "status": 1,
-                "assignment_mode": 1,
-                "owner_role": 1,
-                "due_at": 1,
-            }
+            index_named(&indexes, "idx_work_items_pending_approval").keys,
+            doc! { "status": 1, "owner_user_id": 1, "assigned_at": -1, "id": -1 }
         );
+        assert!(indexes.iter().all(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                != Some("idx_work_items_team_pool")
+                && !index.keys.contains_key("assignment_mode")
+        }));
         assert_eq!(
             index_named(&indexes, "idx_work_items_managed").keys,
             doc! {
@@ -167,16 +159,12 @@ mod tests {
                 "due_at": 1,
             }
         );
-        assert_eq!(
-            index_named(&indexes, "idx_work_items_responsibility_history").keys,
-            doc! { "status": 1, "responsibility_actor_ids": 1, "due_at": 1 }
-        );
     }
 
     fn index_named<'a>(indexes: &'a [mongodb::IndexModel], name: &str) -> &'a mongodb::IndexModel {
         indexes
             .iter()
             .find(|index| index.options.as_ref().and_then(|options| options.name.as_deref()) == Some(name))
-            .unwrap()
+            .unwrap_or_else(|| panic!("missing index {name}"))
     }
 }

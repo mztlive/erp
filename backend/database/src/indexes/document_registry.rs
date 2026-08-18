@@ -26,8 +26,8 @@ pub(crate) const WORKFLOW_ACTIONS: &str = <mongodb::Database as DocumentRegistry
 /// 创建本域集合的幂等命名索引。
 ///
 /// 逐条落地数据模型 §6.1「必需约束与索引」：
-/// - `business_document`：`(document_type, document_no)` 全局唯一（跨域注册表
-///   身份，软删除后仍保留身份，避免复用破坏恢复语义）；`document_no` 全局搜索索引；
+/// - `business_document`：非空 `(document_type, document_no)` 部分唯一（空编号
+///   草稿可并存）；非空 `document_no` 全局搜索索引；
 /// - `document_relation`：`(from_document_id, to_document_id, relation_type)` 唯一，
 ///   `to_document_id + relation_type` 反向查询索引；
 /// - `workflow_action`：`document_id + created_at` 历史索引、`actor_id + created_at`
@@ -56,15 +56,25 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
     Ok(())
 }
 
-/// 返回 `business_document` 的身份约束与全局编号搜索索引。
+/// 返回 `business_document` 的非空编号身份约束与搜索索引。
 fn business_document_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
+        unique_partial_index(
             "uk_business_documents_identity",
             doc! { "document_type": 1, "document_no": 1 },
+            non_empty_document_no_filter(),
         ),
-        named_index("idx_business_documents_no", doc! { "document_no": 1 }),
+        named_partial_index(
+            "idx_business_documents_no",
+            doc! { "document_no": 1 },
+            non_empty_document_no_filter(),
+        ),
     ]
+}
+
+/// 非空 `document_no` 部分过滤；空字符串草稿不进入唯一或搜索索引。
+fn non_empty_document_no_filter() -> Document {
+    doc! { "document_no": { "$gt": "" } }
 }
 
 /// 返回 `document_relation` 的关系唯一约束与反向查询索引。
@@ -131,6 +141,33 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
         .build()
 }
 
+/// 构建命名部分唯一索引。
+fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
+    IndexModel::builder()
+        .keys(keys)
+        .options(
+            IndexOptions::builder()
+                .name(name.into())
+                .unique(true)
+                .partial_filter_expression(filter)
+                .build(),
+        )
+        .build()
+}
+
+/// 构建命名部分普通索引。
+fn named_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
+    IndexModel::builder()
+        .keys(keys)
+        .options(
+            IndexOptions::builder()
+                .name(name.into())
+                .partial_filter_expression(filter)
+                .build(),
+        )
+        .build()
+}
+
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
@@ -141,8 +178,9 @@ mod tests {
     };
 
     #[test]
-    fn business_document_identity_index_is_globally_unique() {
+    fn business_document_identity_index_is_partial_unique_for_non_empty_no() {
         let indexes = business_document_indexes();
+        let non_empty = doc! { "document_no": { "$gt": "" } };
 
         let identity = indexes
             .iter()
@@ -153,16 +191,23 @@ mod tests {
             .unwrap();
         assert_eq!(identity.keys, doc! { "document_type": 1, "document_no": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
-        assert!(identity
-            .options
-            .as_ref()
-            .unwrap()
-            .partial_filter_expression
-            .is_none());
+        assert_eq!(
+            identity.options.as_ref().unwrap().partial_filter_expression,
+            Some(non_empty.clone())
+        );
 
-        assert!(indexes
+        let search = indexes
             .iter()
-            .any(|index| index.keys == doc! { "document_no": 1 }));
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("idx_business_documents_no")
+            })
+            .unwrap();
+        assert_eq!(search.keys, doc! { "document_no": 1 });
+        assert_eq!(
+            search.options.as_ref().unwrap().partial_filter_expression,
+            Some(non_empty)
+        );
     }
 
     #[test]
