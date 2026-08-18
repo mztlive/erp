@@ -1,11 +1,11 @@
 //! 启动审批的单事务编排核心。
 
-use bpm::engine::{start, CommitRequired, StartAssigneeBinding, StartCommand, TransitionPlan};
+use bpm::engine::{start, StartAssigneeBinding, StartCommand, TransitionPlan};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalCommandReceipt, ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
-use super::apply_plan::{apply_plan, DomainActionKind, PlannedWrites};
+use super::apply_plan::{apply_plan, DomainActionKind};
 use super::idempotency::{classify_receipt, start_digest, start_scope, ReceiptBranch};
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::errors::{Error, Result};
@@ -65,6 +65,15 @@ pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
             });
         }
         ReceiptBranch::Fresh => {}
+    }
+    if input
+        .bindings
+        .iter()
+        .any(|item| item.eligibility.blocked_code().is_some())
+    {
+        return Err(Error::ValidationError(
+            "启动时全部审批人必须有效，不得创建审批实例".to_string(),
+        ));
     }
     let plan = start(
         StartCommand {
@@ -128,15 +137,4 @@ pub(crate) fn map_engine_error(error: bpm::engine::EngineError) -> Error {
         }
         bpm::engine::EngineError::Model(error) => Error::BusinessLogicError(error.to_string()),
     }
-}
-
-/// 启动成功但入口受阻时，对外仍是可提交的 blocked 结果。
-///
-/// # 参数
-/// * `writes` - 计划写入
-///
-/// # 返回
-/// 入口受阻时返回 `true`。
-pub fn start_entered_blocked(writes: &PlannedWrites) -> bool {
-    writes.commit == CommitRequired::Blocked
 }

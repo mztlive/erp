@@ -493,9 +493,7 @@ mod tests {
     use entities::{approval::ApprovalDecision, common::time::Instant};
     use serde_json::json;
 
-    use super::{
-        ApprovalRecoveryAction, BlockedApprovalListParams, BlockedApprovalView, SubmitDecisionCommand,
-    };
+    use super::{BlockedApprovalListParams, BlockedApprovalView, SubmitDecisionCommand};
 
     #[test]
     fn decision_http_payload_cannot_forge_actor_and_keeps_step_identity() {
@@ -532,7 +530,7 @@ mod tests {
             blocker_message: "审批责任角色当前不可用".to_string(),
             blocked_at: Instant::now(),
             work_item: None,
-            allowed_actions: vec![ApprovalRecoveryAction::RetryCurrentStep],
+            allowed_actions: vec![],
         })
         .unwrap();
         let object = value.as_object().unwrap();
@@ -555,7 +553,7 @@ mod tests {
         assert!(!object.contains_key("business_object_id"));
         assert!(!object.contains_key("owner_organization_id"));
         assert_eq!(value["instance_version"], "2");
-        assert_eq!(value["allowed_actions"], json!(["RETRY_CURRENT_STEP"]));
+        assert_eq!(value["allowed_actions"], json!([]));
     }
 
     #[test]

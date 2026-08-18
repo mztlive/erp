@@ -14,6 +14,7 @@ pub mod observability;
 pub mod reassign;
 pub mod resume;
 pub mod start;
+pub mod store;
 pub mod view;
 
 use bpm::engine::{DefinitionGraph, Eligibility};
@@ -28,6 +29,7 @@ pub use decision::{prepare_decision, DecisionExecutionInput};
 pub use reassign::{prepare_reassign, ReassignExecutionInput};
 pub use resume::{prepare_resume, ResumeExecutionInput};
 pub use start::{prepare_start, StartExecutionInput};
+pub use store::{commit_writes, replay_after_duplicate, MemoryRuntimeStore, TaskApplyContext};
 pub use view::{map_command_view, ApprovalCommandOutcome, ApprovalCommandView, OpenTaskSummary};
 
 /// 各命令共用的图、资格、收据与时间。
@@ -302,18 +304,27 @@ mod tests {
     /// 恢复与改派创建新执行；结构阻塞不能改派。
     #[test]
     fn execution_resume_and_reassign_replace_execution() {
-        let started = prepare_start(start_input(
+        let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
+        let PreparedExecution::Apply(start_writes) = started else {
+            panic!("启动必须写入");
+        };
+        let blocked_now = prepare_decision(decision_input(
+            start_writes.instance,
+            start_writes.created_executions[0].clone(),
+            ApprovalDecision::Approve,
+            None,
             blocked("u1", "张三", ApprovalBlockerCode::ApproverEmploymentInvalid),
+            eligible("u2", "李四"),
             None,
         ))
         .unwrap();
-        let PreparedExecution::Apply(writes) = started else {
-            panic!("启动必须写入");
+        let PreparedExecution::Apply(writes) = blocked_now else {
+            panic!("人员失效必须提交 BLOCKED");
         };
         let resumed = prepare_resume(resume_input(
             writes.instance.clone(),
-            writes.created_executions[0].clone(),
-            writes.created_assignees[0].clone(),
+            writes.updated_executions[0].clone(),
+            start_writes.created_assignees[0].clone(),
             None,
         ))
         .unwrap();
@@ -327,8 +338,8 @@ mod tests {
 
         let reassigned = prepare_reassign(reassign_input(
             writes.instance,
-            writes.created_executions[0].clone(),
-            writes.created_assignees[0].clone(),
+            writes.updated_executions[0].clone(),
+            start_writes.created_assignees[0].clone(),
             blocked("u1", "张三", ApprovalBlockerCode::ApproverEmploymentInvalid),
             None,
         ))
@@ -342,6 +353,184 @@ mod tests {
                 .as_str(),
             "u9"
         );
+    }
+
+    /// 启动时任一审批人失效不得创建实例。
+    #[test]
+    fn execution_start_rejects_ineligible_assignee() {
+        let error = prepare_start(start_input(
+            blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive),
+            None,
+        ))
+        .unwrap_err();
+        assert!(error.to_string().contains("全部审批人必须有效"));
+    }
+
+    /// 人员失效不得走受阻取消；结构阻塞只能走受阻取消。
+    #[test]
+    fn execution_cancel_blocked_rejects_personnel_and_accepts_structural() {
+        let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
+        let PreparedExecution::Apply(start_writes) = started else {
+            panic!("启动必须写入");
+        };
+        let personnel = prepare_decision(decision_input(
+            start_writes.instance.clone(),
+            start_writes.created_executions[0].clone(),
+            ApprovalDecision::Approve,
+            None,
+            blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive),
+            eligible("u2", "李四"),
+            None,
+        ))
+        .unwrap();
+        let PreparedExecution::Apply(personnel_writes) = personnel else {
+            panic!("人员失效必须提交");
+        };
+        let personnel_blocked = prepare_cancel(cancel_input(
+            personnel_writes.instance,
+            personnel_writes.updated_executions[0].clone(),
+            true,
+            None,
+        ))
+        .unwrap_err();
+        assert!(personnel_blocked.to_string().contains("人员失效不得走受阻取消"));
+
+        let mut graph = two_node_graph();
+        graph.transitions.clear();
+        let mut structural_input = decision_input(
+            start_writes.instance,
+            start_writes.created_executions[0].clone(),
+            ApprovalDecision::Approve,
+            None,
+            eligible("u1", "张三"),
+            eligible("u2", "李四"),
+            None,
+        );
+        structural_input.command.graph = graph;
+        let structural = prepare_decision(structural_input).unwrap();
+        let PreparedExecution::Apply(structural_writes) = structural else {
+            panic!("图损坏必须提交 BLOCKED");
+        };
+        assert_eq!(
+            structural_writes.instance.blocker_code,
+            Some(ApprovalBlockerCode::DefinitionGraphCorrupted)
+        );
+        let normal_cancel = prepare_cancel(cancel_input(
+            structural_writes.instance.clone(),
+            structural_writes.updated_executions[0].clone(),
+            false,
+            None,
+        ))
+        .unwrap_err();
+        assert!(normal_cancel
+            .to_string()
+            .contains("非人员一致性阻塞只能走受阻取消"));
+        let blocked_cancel = prepare_cancel(cancel_input(
+            structural_writes.instance,
+            structural_writes.updated_executions[0].clone(),
+            true,
+            None,
+        ))
+        .unwrap();
+        let PreparedExecution::Apply(cancel_writes) = blocked_cancel else {
+            panic!("受阻取消必须写入");
+        };
+        assert_eq!(
+            cancel_writes.instance.status,
+            ApprovalProcessInstanceStatus::Cancelled
+        );
+    }
+
+    /// 同一执行多个 OPEN 任务提交 OPEN_TASK_CONFLICT。
+    #[test]
+    fn execution_blocks_open_task_conflict() {
+        let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
+        let PreparedExecution::Apply(writes) = started else {
+            panic!("启动必须写入");
+        };
+        let mut input = decision_input(
+            writes.instance,
+            writes.created_executions[0].clone(),
+            ApprovalDecision::Approve,
+            None,
+            eligible("u1", "张三"),
+            eligible("u2", "李四"),
+            None,
+        );
+        input.open_task_count = 2;
+        let prepared = prepare_decision(input).unwrap();
+        let PreparedExecution::Apply(blocked_writes) = prepared else {
+            panic!("任务冲突必须提交");
+        };
+        assert_eq!(
+            blocked_writes.instance.blocker_code,
+            Some(ApprovalBlockerCode::OpenTaskConflict)
+        );
+        assert_eq!(blocked_writes.commit, CommitRequired::Blocked);
+    }
+
+    /// 事务内应用计划；领域动作失败整单回滚；收据重复键按同/异载荷回读。
+    #[test]
+    fn execution_commit_writes_and_duplicate_key_replay() {
+        use super::store::{
+            commit_writes, replay_after_duplicate, MemoryRuntimeStore, RecordingDomainActions,
+            TaskApplyContext,
+        };
+        use entities::common::time::Instant;
+
+        let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
+        let PreparedExecution::Apply(writes) = started else {
+            panic!("启动必须写入");
+        };
+        let ctx = TaskApplyContext {
+            work_item_id: "wi-1".into(),
+            business_object_type: "stock_adjustment".into(),
+            business_object_id: "adj-1".into(),
+            subject_version: "1".into(),
+            owner_role: "stock_adjustment_approver".into(),
+            owner_organization_id: "org-1".into(),
+            actor_id: "u1".into(),
+            now: Instant::from_unix_secs(10),
+        };
+        let mut failing = MemoryRuntimeStore::default();
+        let fail_domain = RecordingDomainActions {
+            fail: true,
+            ..RecordingDomainActions::default()
+        };
+        assert!(commit_writes(&mut failing, &writes, &ctx, &fail_domain).is_err());
+        assert!(failing.instance("inst").is_none());
+
+        let mut store = MemoryRuntimeStore::default();
+        let domain = RecordingDomainActions::default();
+        commit_writes(&mut store, &writes, &ctx, &domain).unwrap();
+        assert!(store.instance("inst").is_some());
+        assert_eq!(store.open_task_count(&ApprovalNodeExecutionId::new("e1")), 1);
+        assert!(store.outbox_items().next().is_some());
+        assert!(!domain.executed.borrow().is_empty());
+
+        let mut again = store.clone();
+        let duplicate = commit_writes(&mut again, &writes, &ctx, &domain).unwrap_err();
+        assert_eq!(duplicate, super::store::ApplyError::DuplicateReceipt);
+        let same = replay_after_duplicate(
+            &store,
+            ApprovalCommandKind::StartApproval,
+            &writes.receipt.scope_id,
+            &writes.receipt.idempotency_key,
+            &writes.receipt.payload_digest,
+        )
+        .unwrap();
+        assert_eq!(same.payload_digest, writes.receipt.payload_digest);
+        let conflict = replay_after_duplicate(
+            &store,
+            ApprovalCommandKind::StartApproval,
+            &writes.receipt.scope_id,
+            &writes.receipt.idempotency_key,
+            "other-digest",
+        )
+        .unwrap_err();
+        assert!(conflict
+            .to_string()
+            .contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
     /// 运行路径不接受旧恢复动作名称。
@@ -418,6 +607,7 @@ mod tests {
             next_execution_id: ApprovalNodeExecutionId::new("e2"),
             next_execution_no: 2,
             receipt_id: ApprovalCommandReceiptId::new("r-dec"),
+            open_task_count: 1,
         }
     }
 

@@ -201,21 +201,37 @@ mod tests {
             .any(|event| event.kind.as_str() == "INSTANCE_STARTED"));
     }
 
-    /// 入口人员失效时启动仍提交 BLOCKED 执行且不产生任务。
+    /// 入口或任一审批人失效时启动失败关闭，不得创建运行链。
     #[test]
-    fn engine_start_blocks_when_entry_ineligible() {
-        let plan = start_two_node(blocked(
-            "u1",
-            "张三",
-            ApprovalBlockerCode::ApproverAccountInactive,
-        ));
-        assert_eq!(plan.commit, CommitRequired::Blocked);
-        assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Blocked);
-        assert!(plan.task_intents.is_empty());
-        assert_eq!(
-            plan.created_executions[0].status,
-            ApprovalNodeExecutionStatus::Blocked
-        );
+    fn engine_start_rejects_ineligible_assignee() {
+        let error = start(
+            StartCommand {
+                instance_id: ApprovalProcessInstanceId::new("inst"),
+                process_kind: ProcessKind::StockAdjustment,
+                subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+                subject_version: 1,
+                started_by: participant("starter"),
+                entry_execution_id: ApprovalNodeExecutionId::new("e1"),
+                now: at(10),
+            },
+            &two_node_graph(),
+            &[
+                StartAssigneeBinding {
+                    id: ApprovalInstanceAssigneeId::new("a1"),
+                    node_key: "n1".into(),
+                    participant: participant("u1"),
+                    eligibility: blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive),
+                },
+                StartAssigneeBinding {
+                    id: ApprovalInstanceAssigneeId::new("a2"),
+                    node_key: "n2".into(),
+                    participant: participant("u2"),
+                    eligibility: eligible("u2", "李四"),
+                },
+            ],
+        )
+        .unwrap_err();
+        assert!(matches!(error, EngineError::InvalidCommand(_)));
     }
 
     /// 通过进入下一节点；下一审批人失效时保留本次通过。
@@ -407,12 +423,8 @@ mod tests {
     /// 恢复创建新执行和新任务，旧任务保持关闭。
     #[test]
     fn engine_resume_creates_new_execution() {
-        let blocked = start_two_node(blocked(
-            "u1",
-            "张三",
-            ApprovalBlockerCode::ApproverEmploymentInvalid,
-        ));
-        let current = blocked.created_executions[0].clone();
+        let blocked = block_after_start(ApprovalBlockerCode::ApproverEmploymentInvalid);
+        let current = blocked.updated_executions[0].clone();
         let assignee = blocked.created_assignees[0].clone();
         let plan = resume(
             blocked.instance,
@@ -487,14 +499,10 @@ mod tests {
     /// 管理员改派结束旧执行并创建新执行。
     #[test]
     fn engine_reassign_replaces_blocked_execution() {
-        let blocked = start_two_node(blocked(
-            "u1",
-            "张三",
-            ApprovalBlockerCode::ApproverAccountInactive,
-        ));
+        let blocked = block_after_start(ApprovalBlockerCode::ApproverAccountInactive);
         let plan = reassign(
             blocked.instance,
-            blocked.created_executions[0].clone(),
+            blocked.updated_executions[0].clone(),
             blocked.created_assignees[0].clone(),
             &two_node_graph(),
             ReassignCommand {
@@ -559,6 +567,30 @@ mod tests {
         assert!(!debug.contains("permission"));
         assert!(!debug.contains("sales_order:detail"));
         assert!(!debug.contains("notification"));
+    }
+
+    fn block_after_start(code: ApprovalBlockerCode) -> super::TransitionPlan {
+        let started = start_two_node(eligible("u1", "张三"));
+        let assignees = started.created_assignees.clone();
+        let current = started.created_executions[0].clone();
+        let mut blocked = decide(
+            started.instance,
+            current,
+            &two_node_graph(),
+            DecideCommand {
+                decision: ApprovalDecision::Approve,
+                reason: None,
+                actor: participant("u1"),
+                current_eligibility: blocked("u1", "张三", code),
+                next_eligibility: eligible("u2", "李四"),
+                next_execution_id: ApprovalNodeExecutionId::new("e2"),
+                next_execution_no: 2,
+                now: at(15),
+            },
+        )
+        .unwrap();
+        blocked.created_assignees = assignees;
+        blocked
     }
 
     fn start_two_node(entry: Eligibility) -> super::TransitionPlan {

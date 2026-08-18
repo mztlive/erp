@@ -511,13 +511,13 @@ impl WorkItemView {
     /// 返回原因、影响和下一步均已翻译成业务语言的投影；处理人姓名仍可能是占位，由服务层补齐。
     ///
     /// # 错误
-    /// 无。
-    pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Self {
+    /// DocumentApproval 缺少已签署页面映射时返回错误。
+    pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
         let route = handler_route(
             fields.work_item_type,
             &fields.business_object_type,
             &fields.owner_role,
-        );
+        )?;
         let owner_user = fields.owner_user_id.as_ref().map(|id| WorkItemPartyView {
             id: id.clone(),
             display_name: UNRESOLVED_OWNER_DISPLAY_NAME.to_string(),
@@ -526,7 +526,7 @@ impl WorkItemView {
             .brief_source
             .as_ref()
             .map(|source| assemble_brief(source, fields.reason_code.as_deref()));
-        Self {
+        Ok(Self {
             id: fields.id,
             work_item_type: fields.work_item_type,
             handler_key: route.handler_key.to_string(),
@@ -609,7 +609,7 @@ impl WorkItemView {
             close_reason: fields.close_reason,
             created_at: fields.created_at,
             queue_context_id,
-        }
+        })
     }
 }
 
@@ -781,7 +781,11 @@ struct HandlerRoute {
     route_context: Option<WorkItemRouteContext>,
 }
 
-fn handler_route(work_item_type: WorkItemType, business_object_type: &str, owner_role: &str) -> HandlerRoute {
+fn handler_route(
+    work_item_type: WorkItemType,
+    business_object_type: &str,
+    owner_role: &str,
+) -> Result<HandlerRoute> {
     let (handler_key, destination_workspace_id) = match (work_item_type, business_object_type) {
         (
             WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException,
@@ -814,7 +818,7 @@ fn handler_route(work_item_type: WorkItemType, business_object_type: &str, owner
         (WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException, _) => {
             ("unregistered_work_item", "W01")
         }
-        (WorkItemType::DocumentApproval, object_type) => document_approval_route(object_type),
+        (WorkItemType::DocumentApproval, object_type) => document_approval_route(object_type)?,
     };
     let mut route_context =
         w18_confirmation_scope(work_item_type, owner_role).map(|scope| WorkItemRouteContext {
@@ -827,11 +831,11 @@ fn handler_route(work_item_type: WorkItemType, business_object_type: &str, owner
             document_type: Some(business_object_type.to_string()),
         });
     }
-    HandlerRoute {
+    Ok(HandlerRoute {
         handler_key,
         destination_workspace_id,
         route_context,
-    }
+    })
 }
 
 fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Option<&'static str> {
@@ -878,14 +882,19 @@ fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
 ///
 /// # 返回
 /// 返回 handler 与目标 workspace。
-fn document_approval_route(business_object_type: &str) -> (&'static str, &'static str) {
+///
+/// # 错误
+/// 未签署映射时返回稳定错误，不得回落默认工作面。
+fn document_approval_route(business_object_type: &str) -> Result<(&'static str, &'static str)> {
     match business_object_type {
-        "sales_order" | "voucher_sales_order" | "sales_change_order" => ("document_approval", "W05"),
-        "purchase_order" | "purchase_change_order" => ("document_approval", "W08"),
-        "stock_adjustment" => ("document_approval", "W10"),
-        "customer_receipt" | "customer_refund" | "receipt_reversal" => ("document_approval", "W11"),
-        "supplier_payment" | "supplier_refund" | "payment_reversal" => ("document_approval", "W12"),
-        _ => ("document_approval_unmapped", "UNMAPPED"),
+        "sales_order" | "voucher_sales_order" | "sales_change_order" => Ok(("document_approval", "W05")),
+        "purchase_order" | "purchase_change_order" => Ok(("document_approval", "W08")),
+        "stock_adjustment" => Ok(("document_approval", "W10")),
+        "customer_receipt" | "customer_refund" | "receipt_reversal" => Ok(("document_approval", "W11")),
+        "supplier_payment" | "supplier_refund" | "payment_reversal" => Ok(("document_approval", "W12")),
+        _ => Err(Error::ValidationError(
+            "APPROVAL_DOCUMENT_ROUTE_UNMAPPED".to_string(),
+        )),
     }
 }
 
@@ -1048,12 +1057,14 @@ mod tests {
             WorkItemType::CardFundsReview,
             "receivable_account",
             "role-finance",
-        );
+        )
+        .unwrap();
         let delta = handler_route(
             WorkItemType::CardFundsDeltaReview,
             "receivable_account",
             "role-finance",
-        );
+        )
+        .unwrap();
 
         assert_eq!(opening.handler_key, "card_funds");
         assert_eq!(opening.destination_workspace_id, "W13");
@@ -1077,7 +1088,8 @@ mod tests {
                 WorkItemType::ImportBusinessConfirmation,
                 "LEGACY_IMPORT_BATCH",
                 role,
-            );
+            )
+            .unwrap();
             assert_eq!(
                 route
                     .route_context
@@ -1090,7 +1102,8 @@ mod tests {
             WorkItemType::ImportBusinessConfirmation,
             "LEGACY_IMPORT_BATCH",
             "role-unregistered",
-        );
+        )
+        .unwrap();
         assert!(unknown.route_context.is_none());
     }
 
@@ -1100,7 +1113,8 @@ mod tests {
             WorkItemType::DocumentApproval,
             "stock_adjustment",
             "stock_adjustment_approver",
-        );
+        )
+        .unwrap();
         assert_eq!(stock.handler_key, "document_approval");
         assert_eq!(stock.destination_workspace_id, "W10");
         assert_eq!(
@@ -1111,8 +1125,10 @@ mod tests {
             Some("stock_adjustment")
         );
         let missing = handler_route(WorkItemType::DocumentApproval, "unknown_type", "approver");
-        assert_eq!(missing.destination_workspace_id, "UNMAPPED");
-        assert_ne!(missing.destination_workspace_id, "W05");
+        match missing {
+            Err(error) => assert!(error.to_string().contains("APPROVAL_DOCUMENT_ROUTE_UNMAPPED")),
+            Ok(_) => panic!("缺少映射必须失败关闭"),
+        }
         assert_eq!(
             family_of(WorkItemType::DocumentApproval),
             WorkItemFamily::Approval

@@ -1,8 +1,8 @@
 //! 决定编排核心：通过、驳回与当前责任人失效阻塞。
 
-use bpm::engine::{decide, CommitRequired, DecideCommand, TransitionPlan};
+use bpm::engine::{decide, CommitRequired, DecideCommand, TaskCloseReason, TaskIntent, TransitionPlan};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
-use bpm::model::types::{ApprovalCommandKind, ApprovalDecision};
+use bpm::model::types::{ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision};
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
 
 use super::apply_plan::{apply_plan, DomainActionKind};
@@ -41,6 +41,8 @@ pub struct DecisionExecutionInput {
     pub next_execution_no: u32,
     /// 收据主键。
     pub receipt_id: ApprovalCommandReceiptId,
+    /// 当前执行已关联的开放任务数。大于 1 时提交 OPEN_TASK_CONFLICT。
+    pub open_task_count: usize,
 }
 
 /// 规划决定。当前责任人失效时返回可提交的 blocked 计划。
@@ -73,6 +75,9 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
         input.current.assignee_participant_id.as_str(),
         &input.instance_assignee_id,
     )?;
+    if input.open_task_count > 1 {
+        return prepare_open_task_conflict(input);
+    }
     let scope = input.current.base.id.clone();
     let plan = decide(
         input.instance,
@@ -127,6 +132,44 @@ fn receipt_from_plan(
         now,
     )
     .map_err(|error| Error::ValidationError(error.to_string()))
+}
+
+/// 同一执行存在多个 OPEN 任务时提交结构阻塞，关闭全部开放任务。
+fn prepare_open_task_conflict(input: DecisionExecutionInput) -> Result<PreparedExecution> {
+    let mut current = input.current;
+    let mut instance = input.instance;
+    let now = input.command.now;
+    current
+        .block(ApprovalBlockerCode::OpenTaskConflict, now)
+        .map_err(|error| map_engine_error(error.into()))?;
+    instance
+        .enter_blocked(ApprovalBlockerCode::OpenTaskConflict, now)
+        .map_err(|error| map_engine_error(error.into()))?;
+    let execution_id = ApprovalNodeExecutionId::new(current.base.id.clone());
+    let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);
+    plan.task_intents.push(TaskIntent::CloseTask {
+        execution_id,
+        reason: TaskCloseReason::ApprovalRuntimeBlocked,
+    });
+    plan.updated_executions.push(current);
+    let receipt = receipt_from_plan(
+        input.receipt_id,
+        ApprovalCommandKind::SubmitDecision,
+        plan.updated_executions[0].base.id.clone(),
+        input.command.idempotency_key,
+        decision_digest(
+            &input.work_item_id,
+            input.decision.as_str(),
+            input.reason.as_deref(),
+            input.expected_task_version,
+            input.actor.as_str(),
+        ),
+        &plan,
+        now,
+    )?;
+    Ok(PreparedExecution::Apply(Box::new(apply_plan(
+        plan, receipt, None,
+    ))))
 }
 
 /// 当前责任人失效的决定必须作为可提交 blocked 结果，不得回滚。

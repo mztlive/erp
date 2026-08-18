@@ -8,7 +8,7 @@ use crate::model::{
 
 use super::enter_node::plan_enter_node;
 use super::event::{BpmEvent, BpmEventKind};
-use super::transition_plan::{CommitRequired, TransitionPlan};
+use super::transition_plan::TransitionPlan;
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 
 /// 启动命令：调用方提供全部 ID、时间与入口资格。
@@ -45,18 +45,21 @@ pub struct StartAssigneeBinding {
 
 /// 创建 `RUNNING` 第 1 轮实例、全部节点审批人快照，并进入入口。
 ///
+/// 任一人资格无效时不得创建实例或执行。入口进入必须是有效资格。
+///
 /// # 参数
 /// * `command` - 启动命令
 /// * `graph` - 定义图
 /// * `bindings` - 与定义节点一一对应的审批人绑定
 ///
 /// # 错误
-/// 入口缺失、绑定不完整或模型不变式失败时返回错误。
+/// 入口缺失、绑定不完整、任一人失效或模型不变式失败时返回错误。
 pub fn start(
     command: StartCommand,
     graph: &DefinitionGraph,
     bindings: &[StartAssigneeBinding],
 ) -> EngineResult<TransitionPlan> {
+    ensure_all_assignees_eligible(bindings)?;
     let instance = ApprovalProcessInstance::start_running(
         command.instance_id.clone(),
         graph.definition.base.id.clone().into_definition(),
@@ -88,10 +91,20 @@ pub fn start(
         0,
         BpmEvent::new(BpmEventKind::InstanceStarted, command.instance_id, 1).with_actor(command.started_by),
     );
-    if plan.commit == CommitRequired::Blocked {
-        return Ok(plan);
-    }
     Ok(plan)
+}
+
+/// 启动前全部节点审批人必须有效，否则不得形成运行链。
+fn ensure_all_assignees_eligible(bindings: &[StartAssigneeBinding]) -> EngineResult<()> {
+    if bindings
+        .iter()
+        .any(|item| item.eligibility.blocked_code().is_some())
+    {
+        return Err(EngineError::InvalidCommand(
+            "启动时全部审批人必须有效，不得创建受阻实例",
+        ));
+    }
+    Ok(())
 }
 
 /// 为定义中每个节点冻结实例审批人，缺节点或重复时失败关闭。

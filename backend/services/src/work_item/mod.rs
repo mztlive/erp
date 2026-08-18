@@ -925,7 +925,7 @@ impl WorkItemService {
         for fields in fields {
             let access = self.view_access(&fields, scope, actor, actor_access).await?;
             items.push(
-                WorkItemView::from_fields(fields, queue_context_id.to_string()).with_access(
+                WorkItemView::from_fields(fields, queue_context_id.to_string())?.with_access(
                     access.processing_state,
                     access.processing_blocker,
                     access.allowed_actions,
@@ -953,7 +953,7 @@ impl WorkItemService {
             .ok_or_else(|| Error::NotFound("任务或业务对象不可见".to_string()))?;
         let queue_context_id = single_item_context_id(actor.id(), &item_id);
         let view_access = self.view_access(&fields, scope, actor, &access).await?;
-        let mut view = WorkItemView::from_fields(fields, queue_context_id).with_access(
+        let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
             view_access.processing_state,
             view_access.processing_blocker,
             view_access.allowed_actions,
@@ -2593,7 +2593,7 @@ impl WorkItemService {
             .next()
             .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".to_string()))?;
         let view_access = self.view_access(&fields, scope, actor, &access).await?;
-        let mut view = WorkItemView::from_fields(fields, single_item_context_id(actor.id(), &item_id))
+        let mut view = WorkItemView::from_fields(fields, single_item_context_id(actor.id(), &item_id))?
             .with_access(
                 view_access.processing_state,
                 view_access.processing_blocker,

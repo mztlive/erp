@@ -1,10 +1,12 @@
 //! 将 BPM 计划映射为可在同一事务内应用的写入意图。
 
-use bpm::engine::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
+use bpm::engine::{BpmEvent, CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance,
 };
+
+use super::notification_outbox::{map_notification_intents, NotificationIntent};
 
 /// 强类型领域动作。适配器尚未接线时由调用方失败关闭。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +44,10 @@ pub struct PlannedWrites {
     pub domain_action: Option<DomainActionKind>,
     /// 提交类别。
     pub commit: CommitRequired,
+    /// 中性领域事件，供审计映射。
+    pub events: Vec<BpmEvent>,
+    /// 事务内待追加的通知意图。
+    pub notifications: Vec<NotificationIntent>,
 }
 
 /// 校验计划只包含 BPM 状态和中性意图，再展开写入。
@@ -82,6 +88,8 @@ pub fn apply_plan(
         receipt,
         domain_action,
         commit: plan.commit,
+        notifications: map_notification_intents(&plan.events),
+        events: plan.events,
     }
 }
 
