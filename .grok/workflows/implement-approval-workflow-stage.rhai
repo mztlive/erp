@@ -781,8 +781,8 @@ let scope_prompt = "角色：只读范围与实现计划代理。agent_type 为 
 scope_prompt += "必须全程使用简体中文思考与作答：evidence、blockers、implementation_steps、acceptance 中的说明文字，以及所有结论必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
 scope_prompt += "这是阻断性只读范围证明。禁止编辑、格式化、生成、再生成、写入、删除、提交、推送、建分支、修复或改动任何项目文件、测试、文档、生成文件或工作流。";
 scope_prompt += "使用 read_file、grep/rg 与终端证据。先阅读 docs/dev-plan/README.md、docs/dev-plan/conventions.md、docs/dev-plan/domains.md、docs/dev-plan/_meta.json、docs/dev-plan/approval-workflow.md、docs/approval-workflow-implementation-plan/README.md、docs/approval-workflow-contract.md、docs/erp-phase-1.md、docs/erp-phase-2.md，以及 docs/approval-workflow-implementation-plan/11-integration-and-acceptance.md。";
-scope_prompt += "然后阅读从元数据选出的精确 planDoc，包括 stages[] 对应的计划文件，或 perDocumentTypeStages[].p3/.p4 对象的默认计划文件。从 _meta.json 精确解析请求的 stage_id：projects.approval-workflow.stages[] 中的一个精确对象，或嵌套在 projects.approval-workflow.perDocumentTypeStages[] 下的一个精确 p3/p4 对象。禁止发明、合并、重命名或推断阶段模型。";
-scope_prompt += "返回精确的 id、source、规范化 stage_kind、documentType、approvalRequirement、branch、dependsOn、dependencyGroups、owns、ownsWithin、creates、deletes、forbids、acceptance、实现步骤，以及完整适用的 backend、frontend、docs 合并门禁列表。stage_kind 是脚本规范化字段，不是元数据源字段：stages[] 必须为 top_level，perDocumentTypeStages[].p3 必须为 p3，perDocumentTypeStages[].p4 必须为 p4。stages[] 可将 documentType 与 approvalRequirement 返回为空字符串；仅 perDocumentTypeStages[].p3/.p4 必须将二者都返回为非空字符串。";
+scope_prompt += "然后阅读从元数据选出的精确 planDoc，包括 stages[] 对应的计划文件，或 perDocumentTypeStages[].p3/.p4 对象的默认计划文件。从 _meta.json 精确解析请求的 stage_id：在 projects.approval-workflow.stages[] 中找一个精确对象，或在 projects.approval-workflow.perDocumentTypeStages[] 下找一个精确 p3/p4 对象。禁止发明、合并、重命名或推断阶段模型。";
+scope_prompt += "返回精确的 id、source、规范化 stage_kind、documentType、approvalRequirement、branch、dependsOn、dependencyGroups、owns、ownsWithin、creates、deletes、forbids、acceptance、实现步骤，以及完整适用的 backend、frontend、docs 合并门禁列表。stage_source 必须精确为下列三者之一，不得加 projects.approval-workflow. 前缀：stages[]、perDocumentTypeStages[].p3、perDocumentTypeStages[].p4。stage_kind 是脚本规范化字段，不是元数据源字段：当 stage_source 为 stages[] 时必须为 top_level；当 stage_source 为 perDocumentTypeStages[].p3 时必须为 p3；当 stage_source 为 perDocumentTypeStages[].p4 时必须为 p4。stages[] 可将 documentType 与 approvalRequirement 返回为空字符串；仅 perDocumentTypeStages[].p3/.p4 必须将二者都返回为非空字符串。";
 scope_prompt += "下任何结论前先运行：git status --porcelain=v1 --untracked-files=all；";
 scope_prompt += base_diff_command;
 scope_prompt += "；";
@@ -823,17 +823,26 @@ if scope_out != () {
 let scope_ok = false;
 if scope_out != () {
     if type_of(scope_out) == "map" {
-        let source_ok = scope_out.stage_source == "stages[]" || scope_out.stage_source == "perDocumentTypeStages[].p3" || scope_out.stage_source == "perDocumentTypeStages[].p4";
+        let stage_source = scope_out.stage_source;
+        if stage_source == "projects.approval-workflow.stages[]" {
+            stage_source = "stages[]";
+        } else if stage_source == "projects.approval-workflow.perDocumentTypeStages[].p3" {
+            stage_source = "perDocumentTypeStages[].p3";
+        } else if stage_source == "projects.approval-workflow.perDocumentTypeStages[].p4" {
+            stage_source = "perDocumentTypeStages[].p4";
+        }
+        scope_out.stage_source = stage_source;
+        let source_ok = stage_source == "stages[]" || stage_source == "perDocumentTypeStages[].p3" || stage_source == "perDocumentTypeStages[].p4";
         let stage_kind_ok = false;
-        if scope_out.stage_source == "stages[]" {
+        if stage_source == "stages[]" {
             stage_kind_ok = scope_out.stage_kind == "top_level";
-        } else if scope_out.stage_source == "perDocumentTypeStages[].p3" {
+        } else if stage_source == "perDocumentTypeStages[].p3" {
             stage_kind_ok = scope_out.stage_kind == "p3";
-        } else if scope_out.stage_source == "perDocumentTypeStages[].p4" {
+        } else if stage_source == "perDocumentTypeStages[].p4" {
             stage_kind_ok = scope_out.stage_kind == "p4";
         }
         let document_fields_ok = type_of(scope_out.document_type) == "string" && type_of(scope_out.approval_requirement) == "string";
-        if scope_out.stage_source == "perDocumentTypeStages[].p3" || scope_out.stage_source == "perDocumentTypeStages[].p4" {
+        if stage_source == "perDocumentTypeStages[].p3" || stage_source == "perDocumentTypeStages[].p4" {
             document_fields_ok = is_nonempty_text(scope_out.document_type) && is_nonempty_text(scope_out.approval_requirement);
         }
         let identity_ok = is_nonempty_text(scope_out.stage_id) && is_nonempty_text(scope_out.stage_source) && stage_kind_ok && document_fields_ok && is_nonempty_text(scope_out.plan_doc) && is_nonempty_text(scope_out.branch) && scope_out.stage_id == stage_id;
