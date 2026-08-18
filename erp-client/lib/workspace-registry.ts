@@ -75,6 +75,7 @@ export type WorkspaceId =
     | "W21"
     | "W22"
     | "W23"
+    | "W24"
     | "W25"
     | "W26"
     | "W27"
@@ -208,6 +209,8 @@ function defaultNavPermissionsFor(
             return ["product_publication:list"]
         case "W23":
             return ["sales_order_projection:list"]
+        case "W24":
+            return ["approval_process:read"]
         case "W25":
             return ["mall_order:list"]
         case "W26":
@@ -455,6 +458,13 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         mode: "M2+M4",
         mainRoute: "/commerce/execution-projections",
         navHref: "/commerce/execution-projections",
+    },
+    {
+        id: "W24",
+        name: "审批流程配置",
+        mode: "M2+M4",
+        mainRoute: "/system/approval-processes",
+        navHref: "/system/approval-processes",
     },
     {
         id: "W25",
@@ -732,6 +742,10 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W19",
                     icon: ShieldCheckIcon,
+                },
+                {
+                    routeId: "W24",
+                    icon: WorkflowIcon,
                 },
             ],
         },
