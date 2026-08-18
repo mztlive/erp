@@ -50,7 +50,10 @@ impl ApprovalDefinitionService {
         let accounts = self
             .db()
             .accounts()
-            .find_many(mongodb::bson::doc! { "status": "active", "kind": "admin" }, &mut NoTransaction)
+            .find_many(
+                mongodb::bson::doc! { "status": "active", "kind": "admin" },
+                &mut NoTransaction,
+            )
             .await?;
         let search = query.search.unwrap_or_default();
         let items = accounts

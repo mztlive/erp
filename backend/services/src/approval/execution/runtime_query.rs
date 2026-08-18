@@ -93,11 +93,9 @@ pub fn ensure_list_view_status(
         (RuntimeInstanceListView::Mine, None | Some(RuntimeInstanceStatusFilter::Running)) => Ok(()),
         (RuntimeInstanceListView::Blocked, None | Some(RuntimeInstanceStatusFilter::Blocked)) => Ok(()),
         (RuntimeInstanceListView::Started | RuntimeInstanceListView::Managed, _) => Ok(()),
-        (RuntimeInstanceListView::Mine, _) | (RuntimeInstanceListView::Blocked, _) => {
-            Err(Error::ValidationError(
-                "当前 view 与 status 组合不合法".to_string(),
-            ))
-        }
+        (RuntimeInstanceListView::Mine, _) | (RuntimeInstanceListView::Blocked, _) => Err(
+            Error::ValidationError("当前 view 与 status 组合不合法".to_string()),
+        ),
     }
 }
 

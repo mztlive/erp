@@ -421,11 +421,7 @@ impl ApprovalRuntimeService {
         if let Some(document_type) = &query.document_type {
             filter.insert("business_object_type", document_type);
         }
-        let rows = self
-            .db
-            .work_items()
-            .find_many(filter, &mut NoTransaction)
-            .await?;
+        let rows = self.db.work_items().find_many(filter, &mut NoTransaction).await?;
         Ok(RuntimeInstanceListPage {
             items: rows
                 .into_iter()
@@ -524,7 +520,9 @@ fn parse_document_type(code: &str) -> Result<DocumentType> {
 }
 
 /// 映射列表状态过滤。
-fn map_status_filter(status: RuntimeInstanceStatusFilter) -> bpm::model::types::ApprovalProcessInstanceStatus {
+fn map_status_filter(
+    status: RuntimeInstanceStatusFilter,
+) -> bpm::model::types::ApprovalProcessInstanceStatus {
     match status {
         RuntimeInstanceStatusFilter::Running => bpm::model::types::ApprovalProcessInstanceStatus::Running,
         RuntimeInstanceStatusFilter::Approved => bpm::model::types::ApprovalProcessInstanceStatus::Approved,

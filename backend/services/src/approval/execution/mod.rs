@@ -30,8 +30,6 @@ pub use cancel::{prepare_cancel, CancelExecutionInput};
 pub use decision::{prepare_decision, DecisionExecutionInput};
 pub use reassign::{prepare_reassign, ReassignExecutionInput};
 pub use resume::{prepare_resume, ResumeExecutionInput};
-pub use start::{prepare_start, StartExecutionInput};
-pub use store::{commit_writes, replay_after_duplicate, MemoryRuntimeStore, TaskApplyContext};
 pub use runtime_query::{
     ensure_list_view_status, recovery_options_for, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
     RuntimeRecoveryAction,
@@ -40,6 +38,8 @@ pub use runtime_service::{
     ApprovalRuntimeService, RuntimeAssigneeCandidate, RuntimeInstanceListItem, RuntimeInstanceListPage,
     RuntimeInstanceListQuery, RuntimeRecoveryOptionsView, UpgradeBindingCommand,
 };
+pub use start::{prepare_start, StartExecutionInput};
+pub use store::{commit_writes, replay_after_duplicate, MemoryRuntimeStore, TaskApplyContext};
 pub use view::{map_command_view, ApprovalCommandOutcome, ApprovalCommandView, OpenTaskSummary};
 
 /// 各命令共用的图、资格、收据与时间。
