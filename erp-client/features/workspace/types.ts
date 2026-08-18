@@ -1,13 +1,11 @@
 /**
- * W01 今日工作台 — 客户端契约类型（对齐 docs/ui-workspaces/w01 §8）。
- * 任务行由 `/admin/work-items` 提供，指标由同一授权规则的 `/admin/work-items/stats` 聚合。
+ * W01 我的工作台 — 列表 + 详情主从。
+ *
+ * 只有「待我处理」口径，不存在团队分区。指标数量来自服务端，不得对已加载条目求和。
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"
-import type {
-    AssignmentMode,
-    WorkItemStatus,
-} from "@/features/work-items/types"
+import type { WorkItemStatus } from "@/features/work-items/types"
 import type { WorkspaceId } from "@/lib/workspace-registry"
 
 export type WorkspaceDueFilter = "today" | "overdue"
@@ -16,10 +14,20 @@ export type WorkspaceFamilyFilter =
     | "finance"
     | "fulfillment"
     | "exception"
+export type WorkspaceViewFilter = "inbox" | "started" | "managed"
+export type WorkspaceSort = "priority_due" | "due_asc" | "created_desc"
 
-export type WorkspaceMetricKey = "mine" | "due_today" | "overdue" | "exception"
+export type WorkspaceMetricKey = "inbox" | "overdue" | "blocked" | "started"
 
-export type WorkspaceActionCode = "VIEW" | "PROCESS" | "START_PROCESSING"
+export type WorkspaceActionCode =
+    | "VIEW"
+    | "PROCESS"
+    | "OPEN_DOCUMENT"
+    | "APPROVE"
+    | "REJECT"
+    | "RESUME_CURRENT_APPROVER"
+    | "REASSIGN_CURRENT_APPROVER"
+    | "CANCEL_BLOCKED_APPROVAL"
 
 export type WorkspaceWorkItem = Readonly<{
     workItemId: string
@@ -31,23 +39,23 @@ export type WorkspaceWorkItem = Readonly<{
     subjectVersion: string
     stableNumber: string
     objectTitle: string
-    counterpartyName: string
+    counterpartyName?: string
+    listSummary?: string
     status: WorkItemStatus
     statusLabel: string
     statusTone: StatusTone
     processingState: "READY" | "APPROVAL_BLOCKED"
-    assignmentMode: AssignmentMode
     priority: number
     createdAt: string
-    dueAt: string
+    dueAt?: string
     ownerRoleLabel: string
     ownerOrganizationLabel: string
-    ownerUserLabel?: string
+    ownerUserLabel: string
     reasonLabel: string
     impactSummary: string
     allowedActions: readonly WorkspaceActionCode[]
     actionBlockers: readonly {
-        action: WorkspaceActionCode
+        action: string
         code: string
         message: string
     }[]
@@ -61,16 +69,19 @@ export type WorkspaceWorkItem = Readonly<{
     dueAtLabel: string
     dueBucket: "today" | "overdue" | "later"
     family: WorkspaceFamilyFilter
-}>
-
-export type WorkspaceTaskGroup = Readonly<{
-    family: WorkspaceFamilyFilter
-    label: string
-    total: number
-    pagePreviewLimit?: number
-    previewLimitSource?: "CONFIGURED" | "TEMPORARY_FALLBACK"
-    defaultExpanded: boolean
-    items: readonly WorkspaceWorkItem[]
+    approvalProcessInstanceId?: string
+    approvalNodeExecutionId?: string
+    approval?: {
+        instanceId: string
+        currentRoundNo: number
+        currentNodeLabel: string
+        currentAssigneeLabel: string
+        lastRejectorLabel?: string
+        lastRejectReason?: string
+        processName: string
+        processVersion: string
+        status: string
+    }
 }>
 
 export type WorkspaceMetric = Readonly<{
@@ -82,7 +93,7 @@ export type WorkspaceMetric = Readonly<{
     detail?: string
 }>
 
-type WorkspaceWarning = Readonly<{
+export type WorkspaceWarning = Readonly<{
     warningId: string
     kind: string
     severity: "warning" | "destructive" | "info"
@@ -93,7 +104,7 @@ type WorkspaceWarning = Readonly<{
     objectId?: string
 }>
 
-type WorkspaceRecentItem = Readonly<{
+export type WorkspaceRecentItem = Readonly<{
     id: string
     label: string
     destinationWorkspaceId: WorkspaceId
@@ -102,9 +113,15 @@ type WorkspaceRecentItem = Readonly<{
 }>
 
 export type TodayWorkspaceQuery = Readonly<{
-    scope: "mine" | "team"
+    view: WorkspaceViewFilter
     due?: WorkspaceDueFilter
+    blocked?: boolean
     family?: WorkspaceFamilyFilter
+    workItemType?: string
+    query?: string
+    sort: WorkspaceSort
+    cursor?: string
+    currentWorkItemId?: string
     timezone: string
 }>
 
@@ -118,13 +135,15 @@ export type TodayWorkspaceView = Readonly<{
     }
     freshness: {
         workItemsUpdatedAt: string
+        statsUpdatedAt: string
+        statsState: "fresh" | "stale" | "failed"
         projectionUpdatedAt: string
         projectionState: "fresh" | "stale" | "failed" | "rebuilding"
     }
     metrics: readonly WorkspaceMetric[]
-    groups: readonly WorkspaceTaskGroup[]
+    items: readonly WorkspaceWorkItem[]
+    nextCursor?: string
+    total: number
     warnings: readonly WorkspaceWarning[]
     recent: readonly WorkspaceRecentItem[]
-    canOpenTaskQueue: boolean
-    temporaryPreviewLimitFallback: number
 }>

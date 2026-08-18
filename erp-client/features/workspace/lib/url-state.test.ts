@@ -1,162 +1,98 @@
 import { describe, expect, it } from "vitest"
 
-import { sequentialText } from "@/lib/ui-text"
 import {
-    buildGroupAllHref,
-    buildTaskQueueHref,
     buildWorkspaceSearchParams,
     filterSummaryFor,
     metricKeyFromUrlState,
     parseWorkspaceSearchParams,
+    pickLegalWorkspaceQuery,
     toTodayWorkspaceQuery,
     urlStateFromMetricKey,
 } from "./url-state"
 
 describe("parseWorkspaceSearchParams", () => {
-    it("falls back to the mine scope for an empty query string", () => {
-        expect(parseWorkspaceSearchParams(new URLSearchParams())).toEqual({
-            scope: "mine",
-        })
-    })
-
-    it("parses explicit enum values", () => {
-        const state = parseWorkspaceSearchParams(
-            new URLSearchParams("scope=team&due=today&family=exception"),
+    it("defaults to inbox without a team scope switch", () => {
+        expect(parseWorkspaceSearchParams(new URLSearchParams())).toMatchObject(
+            {
+                view: "inbox",
+                sort: "priority_due",
+            },
         )
-        expect(state).toEqual({
-            scope: "team",
-            due: "today",
-            family: "exception",
-        })
-    })
-
-    it("ignores invalid enum values and falls back to defaults", () => {
-        const state = parseWorkspaceSearchParams(
-            new URLSearchParams("scope=bogus&due=week"),
-        )
-        expect(state).toEqual({ scope: "mine" })
-    })
-})
-
-describe("buildWorkspaceSearchParams", () => {
-    it("omits the default scope to keep the url minimal", () => {
-        expect(buildWorkspaceSearchParams({ scope: "mine" })).toBe("")
-    })
-
-    it("serializes non-default filters in field order", () => {
         expect(
-            buildWorkspaceSearchParams({
-                scope: "team",
-                due: "overdue",
-                family: "finance",
+            parseWorkspaceSearchParams(new URLSearchParams("scope=team")),
+        ).toMatchObject({ view: "inbox" })
+    })
+
+    it("parses legal workbench filters", () => {
+        const state = parseWorkspaceSearchParams(
+            new URLSearchParams(
+                "view=started&due=overdue&family=approval&q=SO-1&sort=due_asc",
+            ),
+        )
+        expect(state.view).toBe("started")
+        expect(state.due).toBe("overdue")
+        expect(state.family).toBe("approval")
+        expect(state.query).toBe("SO-1")
+        expect(state.sort).toBe("due_asc")
+    })
+})
+
+describe("metric filters do not jump routes", () => {
+    it("writes overdue and blocked into the same page query", () => {
+        expect(metricKeyFromUrlState({ view: "inbox", blocked: true })).toBe(
+            "blocked",
+        )
+        expect(
+            urlStateFromMetricKey("overdue", {
+                view: "inbox",
+                sort: "priority_due",
             }),
-        ).toBe("?scope=team&due=overdue&family=finance")
-    })
-
-    it("round-trips parsed state", () => {
-        const raw = "scope=team&due=overdue"
-        const state = parseWorkspaceSearchParams(new URLSearchParams(raw))
-        expect(buildWorkspaceSearchParams(state)).toBe(`?${raw}`)
-    })
-})
-
-describe("metricKeyFromUrlState", () => {
-    it("maps due filters before family and defaults to mine", () => {
-        expect(metricKeyFromUrlState({ due: "today" })).toBe("due_today")
-        expect(metricKeyFromUrlState({ due: "overdue" })).toBe("overdue")
-        expect(metricKeyFromUrlState({ family: "exception" })).toBe("exception")
-        expect(metricKeyFromUrlState({ family: "finance" })).toBe("mine")
-        expect(metricKeyFromUrlState({})).toBe("mine")
+        ).toMatchObject({ view: "inbox", due: "overdue", blocked: false })
+        expect(
+            urlStateFromMetricKey("started", {
+                view: "inbox",
+                sort: "priority_due",
+            }).view,
+        ).toBe("started")
     })
 })
 
-describe("urlStateFromMetricKey", () => {
-    const current = { scope: "team" as const }
-
-    it("selects due_today and clears the family filter", () => {
-        expect(urlStateFromMetricKey("due_today", current)).toEqual({
-            scope: "team",
-            due: "today",
-            family: undefined,
-        })
-    })
-
-    it("selects overdue and clears the family filter", () => {
-        expect(urlStateFromMetricKey("overdue", current)).toEqual({
-            scope: "team",
-            due: "overdue",
-            family: undefined,
-        })
-    })
-
-    it("selects the exception family and clears the due filter", () => {
-        expect(urlStateFromMetricKey("exception", current)).toEqual({
-            scope: "team",
-            due: undefined,
-            family: "exception",
-        })
-    })
-
-    it("returns to the default filters for mine but keeps the scope", () => {
-        expect(urlStateFromMetricKey("mine", current)).toEqual({
-            scope: "team",
-            due: undefined,
-            family: undefined,
-        })
+describe("filterSummaryFor", () => {
+    it("never uses team pending wording", () => {
+        expect(filterSummaryFor("inbox")).toBe("待我处理")
+        expect(filterSummaryFor("overdue")).toBe("已超期")
+        expect(filterSummaryFor("blocked")).toBe("受阻")
+        expect(filterSummaryFor("started")).toBe("我发起的审批")
     })
 })
 
 describe("toTodayWorkspaceQuery", () => {
-    it("attaches the timezone to the url state", () => {
+    it("keeps timezone and omits team scope", () => {
         expect(
             toTodayWorkspaceQuery(
-                { scope: "team", due: "today" },
+                { view: "inbox", sort: "priority_due", due: "today" },
                 "Asia/Shanghai",
             ),
-        ).toEqual({
-            scope: "team",
+        ).toMatchObject({
+            view: "inbox",
             due: "today",
-            family: undefined,
             timezone: "Asia/Shanghai",
         })
     })
 })
 
-describe("buildTaskQueueHref", () => {
-    it("always carries the scope", () => {
-        expect(buildTaskQueueHref({ scope: "mine" })).toBe(
-            "/workspace/tasks?scope=mine",
+describe("pickLegalWorkspaceQuery", () => {
+    it("maps the retired tasks route onto /workspace and drops team scope", () => {
+        expect(pickLegalWorkspaceQuery(new URLSearchParams("scope=team"))).toBe(
+            "/workspace",
         )
-    })
-
-    it("appends active filters", () => {
         expect(
-            buildTaskQueueHref({ scope: "team", due: "today" }),
-        ).toBe("/workspace/tasks?scope=team&due=today")
+            pickLegalWorkspaceQuery(
+                new URLSearchParams("view=approval-blockers&family=finance"),
+            ),
+        ).toBe("/workspace?blocked=1&family=finance")
         expect(
-            buildTaskQueueHref({
-                scope: "team",
-                due: "today",
-                family: "finance",
-            }),
-        ).toBe("/workspace/tasks?scope=team&due=today&family=finance")
-    })
-})
-
-describe("buildGroupAllHref", () => {
-    it("narrows the task queue link to the group family", () => {
-        expect(buildGroupAllHref({ scope: "mine" }, "finance")).toBe(
-            "/workspace/tasks?scope=mine&family=finance",
-        )
-    })
-})
-
-describe("filterSummaryFor", () => {
-    it("matches the title wording to the metric and scope", () => {
-        expect(filterSummaryFor("mine", "mine")).toBe(sequentialText.minePending)
-        expect(filterSummaryFor("mine", "team")).toBe(sequentialText.teamPending)
-        expect(filterSummaryFor("due_today", "mine")).toBe("今日到期")
-        expect(filterSummaryFor("overdue", "mine")).toBe("已超期")
-        expect(filterSummaryFor("exception", "team")).toBe("同步异常")
+            buildWorkspaceSearchParams({ view: "inbox", sort: "priority_due" }),
+        ).toBe("")
     })
 })

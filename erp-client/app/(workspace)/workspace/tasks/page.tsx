@@ -1,23 +1,15 @@
-import type { Metadata } from "next"
-import { Suspense } from "react"
+import { permanentRedirect } from "next/navigation"
 
-import { PageHeader, PageScaffold } from "@/components/business"
-import { UnifiedTaskQueuePage } from "@/features/unified-task-queue/pages/unified-task-queue-page"
+import { pickLegalWorkspaceQuery } from "@/features/workspace/lib/url-state"
 
-export const metadata: Metadata = {
-    title: "待办队列",
-}
-
-export default function Page() {
-    return (
-        <Suspense
-            fallback={
-                <PageScaffold>
-                    <PageHeader title="统一待办队列" description="正在加载…" />
-                </PageScaffold>
-            }
-        >
-            <UnifiedTaskQueuePage />
-        </Suspense>
-    )
+/**
+ * 旧统一待办路由永久重定向到唯一工作台，不保留第二套页面代码。
+ */
+export default async function WorkspaceTasksRedirectPage({
+    searchParams,
+}: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+    const params = await searchParams
+    permanentRedirect(pickLegalWorkspaceQuery(params))
 }

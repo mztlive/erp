@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import type { WorkspaceWorkItem } from "@/features/workspace/types"
-import { responsibilityText } from "@/lib/ui-text"
 import {
     canProcess,
     canView,
+    isBlockedWorkItem,
     processBlocker,
     responsiblePartyLabel,
 } from "./work-item"
@@ -27,18 +27,17 @@ function itemFixture(
         statusLabel: "待处理",
         statusTone: "info",
         processingState: "READY",
-        assignmentMode: "DIRECT",
         priority: 3,
         createdAt: "",
-        dueAt: "",
         ownerRoleLabel: "销售",
         ownerOrganizationLabel: "华东区",
+        ownerUserLabel: "张三",
         reasonLabel: "",
         impactSummary: "",
         allowedActions: ["PROCESS", "VIEW"],
         actionBlockers: [],
-        destinationWorkspaceId: "W02",
-        handlerKey: "w02.process",
+        destinationWorkspaceId: "W01",
+        handlerKey: "business_exception",
         enteredAtLabel: "",
         dueAtLabel: "",
         dueBucket: "later",
@@ -48,92 +47,53 @@ function itemFixture(
 }
 
 describe("responsiblePartyLabel", () => {
-    it("prefers the named owner", () => {
-        expect(
-            responsiblePartyLabel(itemFixture({ ownerUserLabel: "张三" })),
-        ).toBe("销售 · 张三")
-    })
-
-    it("marks pool assignments as team-pending", () => {
+    it("prefers the named owner and never says 团队待处理", () => {
+        expect(responsiblePartyLabel(itemFixture())).toBe("销售 · 张三")
         expect(
             responsiblePartyLabel(
+                itemFixture({ ownerUserLabel: "处理人待确认" }),
+            ),
+        ).not.toContain("团队待处理")
+    })
+})
+
+describe("processBlocker / canProcess / canView", () => {
+    it("reads server blockers and view actions", () => {
+        expect(
+            processBlocker(
                 itemFixture({
-                    ownerUserLabel: undefined,
-                    assignmentMode: "POOL",
+                    actionBlockers: [
+                        {
+                            action: "PROCESS",
+                            code: "ACTION_BLOCKED",
+                            message: "请先复核",
+                        },
+                    ],
                 }),
             ),
-        ).toBe(`销售 · ${responsibilityText.poolAvailable}`)
-    })
-
-    it("falls back to the owning organization", () => {
-        expect(
-            responsiblePartyLabel(itemFixture({ ownerUserLabel: undefined })),
-        ).toBe("销售 · 华东区")
-    })
-})
-
-describe("processBlocker", () => {
-    it("returns the first PROCESS blocker message", () => {
-        const item = itemFixture({
-            actionBlockers: [
-                {
-                    action: "PROCESS",
-                    code: "ACTION_BLOCKED",
-                    message: "请先复核",
-                },
-                {
-                    action: "PROCESS",
-                    code: "ACTION_BLOCKED",
-                    message: "第二条",
-                },
-            ],
-        })
-        expect(processBlocker(item)).toBe("请先复核")
-    })
-
-    it("returns undefined when nothing blocks PROCESS", () => {
-        expect(processBlocker(itemFixture())).toBeUndefined()
-    })
-})
-
-describe("canProcess", () => {
-    it("allows PROCESS when unblocked", () => {
+        ).toBe("请先复核")
         expect(canProcess(itemFixture())).toBe(true)
-    })
-
-    it("allows START_PROCESSING as handler navigation", () => {
+        expect(canProcess(itemFixture({ allowedActions: ["VIEW"] }))).toBe(true)
         expect(
             canProcess(
-                itemFixture({ allowedActions: ["START_PROCESSING", "VIEW"] }),
+                itemFixture({
+                    allowedActions: ["START_PROCESSING" as never],
+                }),
             ),
+        ).toBe(false)
+        expect(
+            canView(itemFixture({ allowedActions: ["OPEN_DOCUMENT"] })),
         ).toBe(true)
-    })
-
-    it("denies PROCESS when a blocker exists", () => {
-        const item = itemFixture({
-            actionBlockers: [
-                {
-                    action: "PROCESS",
-                    code: "ACTION_BLOCKED",
-                    message: "请先复核",
-                },
-            ],
-        })
-        expect(canProcess(item)).toBe(false)
-    })
-
-    it("denies when only VIEW is allowed", () => {
-        expect(canProcess(itemFixture({ allowedActions: ["VIEW"] }))).toBe(
-            false,
-        )
     })
 })
 
-describe("canView", () => {
-    it("reflects the VIEW action", () => {
-        expect(canView(itemFixture())).toBe(true)
-        expect(canView(itemFixture({ allowedActions: ["PROCESS"] }))).toBe(
-            false,
-        )
+describe("isBlockedWorkItem", () => {
+    it("uses processing state or instance status, not a normal pending look", () => {
+        expect(
+            isBlockedWorkItem(
+                itemFixture({ processingState: "APPROVAL_BLOCKED" }),
+            ),
+        ).toBe(true)
+        expect(isBlockedWorkItem(itemFixture())).toBe(false)
     })
 })

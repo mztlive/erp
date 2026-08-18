@@ -9,7 +9,7 @@ import { WorkspaceAccountMenu } from "@/components/layout/workspace-account-menu
 import { hasAnyPermission, hasPermission } from "@/lib/permissions"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
-import { useUnifiedTaskCountQuery } from "@/features/unified-task-queue/queries"
+import { useWorkspaceInboxCountQuery } from "@/features/workspace/hooks/queries"
 
 export function WorkspaceTopbar() {
     const router = useRouter()
@@ -36,7 +36,7 @@ export function WorkspaceTopbar() {
             enabled: canSearchCustomers && search.trim().length >= 2,
         },
     )
-    const todoCountQuery = useUnifiedTaskCountQuery()
+    const todoCountQuery = useWorkspaceInboxCountQuery()
     const todoCount = canSeeTodos ? todoCountQuery.data?.mine : undefined
     const customerMatches = React.useMemo(
         () =>

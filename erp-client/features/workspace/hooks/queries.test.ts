@@ -20,8 +20,9 @@ vi.mock("@/features/workspace/api/dashboard", () => ({
 const mockedFetch = vi.mocked(fetchWorkspaceDashboard)
 
 const queryFixture: TodayWorkspaceQuery = {
-    scope: "mine",
+    view: "inbox",
     due: "today",
+    sort: "priority_due",
     timezone: "Asia/Shanghai",
 }
 
@@ -45,15 +46,16 @@ const viewFixture: TodayWorkspaceView = {
     },
     freshness: {
         workItemsUpdatedAt: "",
+        statsUpdatedAt: "",
+        statsState: "fresh",
         projectionUpdatedAt: "",
         projectionState: "fresh",
     },
     metrics: [],
-    groups: [],
+    items: [],
+    total: 0,
     warnings: [],
     recent: [],
-    canOpenTaskQueue: true,
-    temporaryPreviewLimitFallback: 5,
 }
 
 beforeEach(() => {

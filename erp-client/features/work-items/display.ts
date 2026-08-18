@@ -4,7 +4,8 @@ const KNOWN_REASON_LABELS: Record<string, string> = {
     procurement_confirmation_dispatched: "销售已提交，需要采购确认能否供货",
     low_margin_approved_procurement_confirmation:
         "低毛利已获上级通过，需要采购重新确认供货",
-    procurement_confirmation_resubmitted: "销售已按驳回意见重提，需要采购重新确认",
+    procurement_confirmation_resubmitted:
+        "销售已按驳回意见重提，需要采购重新确认",
     procurement_rejection_low_margin_requested:
         "采购驳回后，需要上级确认是否按原条件承接",
     change_impact_dispatched: "销售变更已提交，需要核对履约影响",
@@ -61,7 +62,11 @@ export function displayImpactSummary(input: {
         !text.includes("打开业务对象") &&
         !text.startsWith("采购二次确认：") &&
         !text.startsWith("采购单财务审核：") &&
-        !(isPurchaseReview && text.includes("待财务审核") && !text.includes("不审核"))
+        !(
+            isPurchaseReview &&
+            text.includes("待财务审核") &&
+            !text.includes("不审核")
+        )
     ) {
         return text
     }
@@ -103,6 +108,5 @@ export function queueResponsibilityLabel(input: {
         if (name === "处理人待确认") return name
         return `由 ${name} 处理`
     }
-    if (input.assignmentMode === "POOL") return "团队待处理"
     return "处理人待确认"
 }

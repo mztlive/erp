@@ -69,12 +69,17 @@ describe("queueResponsibilityLabel", () => {
         ).toBe("由你处理")
     })
 
-    it("never shows 当前处理人", () => {
+    it("never shows 当前处理人 or 团队待处理", () => {
         expect(displayOwnerName("当前处理人")).toBe("处理人待确认")
         expect(
             queueResponsibilityLabel({
                 assignmentMode: "POOL",
                 ownerUser: { id: "u1", displayName: "当前处理人" },
+            }),
+        ).toBe("处理人待确认")
+        expect(
+            queueResponsibilityLabel({
+                assignmentMode: "POOL",
             }),
         ).toBe("处理人待确认")
     })

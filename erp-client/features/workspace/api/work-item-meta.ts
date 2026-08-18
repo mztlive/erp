@@ -4,10 +4,7 @@
  * 单独存放便于按「一张表一个关注点」维护，避免撑大请求模块。
  */
 
-import type {
-    WorkspaceFamilyFilter,
-    WorkspaceWorkItem,
-} from "../types"
+import type { WorkspaceFamilyFilter, WorkspaceWorkItem } from "../types"
 
 export const FAMILY_META: Record<
     WorkspaceFamilyFilter,

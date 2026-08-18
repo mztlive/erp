@@ -13,22 +13,22 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { RecentPanel } from "@/features/workspace/components/recent-panel"
-import { ScopeSwitcher } from "@/features/workspace/components/scope-switcher"
-import { TaskListCard } from "@/features/workspace/components/task-list-card"
-import { WarningsPanel } from "@/features/workspace/components/warnings-panel"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { WorkspaceFilterBar } from "@/features/workspace/components/workspace-filter-bar"
 import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
+import { WorkspaceTaskDetail } from "@/features/workspace/components/workspace-task-detail"
+import { WorkspaceTaskList } from "@/features/workspace/components/workspace-task-list"
 import { useWorkspaceHome } from "@/features/workspace/hooks/use-workspace-home"
 import {
     deriveProjectionFreshness,
     deriveWorkItemsFreshness,
     greetingForNow,
 } from "@/features/workspace/lib/freshness"
-import {
-    buildTaskQueueHref,
-    filterSummaryFor,
-} from "@/features/workspace/lib/url-state"
+import { filterSummaryFor } from "@/features/workspace/lib/url-state"
 
+/**
+ * 唯一工作台：指标筛选左列，审批决定在右侧详情连续提交。
+ */
 export function WorkspaceHomePage() {
     const {
         urlState,
@@ -36,14 +36,21 @@ export function WorkspaceHomePage() {
         accountProfileQuery,
         dashboardQuery,
         refreshing,
-        focusedStableNumber,
         activeMetric,
         hasActiveFilter,
+        searchDraft,
+        setSearchDraft,
+        narrowDetailOpen,
+        setNarrowDetailOpen,
+        selected,
         onMetricClick,
         clearFilters,
-        onOpenTask,
+        onSelectTask,
+        selectNextAfter,
+        onFamilyChange,
+        onSortChange,
+        applySearch,
         refresh,
-        onScopeChange,
     } = useWorkspaceHome()
 
     if ((accountProfileQuery.isPending || dashboardQuery.isPending) && !view) {
@@ -88,17 +95,15 @@ export function WorkspaceHomePage() {
         )
     }
 
-    if (!view) {
-        return <WorkspaceHomeSkeleton />
-    }
+    if (!view) return <WorkspaceHomeSkeleton />
 
     if (view.access === "forbidden") {
         return (
             <PageScaffold>
                 <BusinessFailureState
                     kind="permission"
-                    title="无今日工作台权限"
-                    description="当前账号没有今日工作台模块权限。入口应已隐藏；若通过链接直接访问，请联系管理员开通权限。"
+                    title="无工作台权限"
+                    description="当前账号没有工作台模块权限。入口应已隐藏；若通过链接直接访问，请联系管理员开通权限。"
                 />
             </PageScaffold>
         )
@@ -126,26 +131,44 @@ export function WorkspaceHomePage() {
     const workItemsFreshness = deriveWorkItemsFreshness(view.freshness, {
         refreshing,
     })
-
-    const visibleCount = view.groups.reduce(
-        (sum, group) => sum + group.total,
-        0,
-    )
-    const filterLabel = filterSummaryFor(activeMetric, urlState.scope)
-    const taskQueueHref = buildTaskQueueHref(urlState)
+    const filterLabel = filterSummaryFor(activeMetric)
     const metrics = view.metrics.filter((metric) => metric.visible)
-
-    const asyncStatus = dashboardQuery.isError
-        ? "error"
-        : refreshing
-          ? "refreshing"
-          : "success"
+    const items = view.items
+    const detail = selected ? (
+        <WorkspaceTaskDetail
+            item={selected}
+            onDecisionApplied={(_view, workItemId) =>
+                selectNextAfter(workItemId)
+            }
+        />
+    ) : (
+        <BusinessEmptyState
+            kind="no-tasks"
+            title={hasActiveFilter ? "当前筛选没有待办" : "当前没有待处理事项"}
+            description={
+                hasActiveFilter
+                    ? "可清除筛选后回到待我处理。"
+                    : "新任务到达后会出现在左侧列表。"
+            }
+            action={
+                hasActiveFilter ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={clearFilters}
+                    >
+                        回到待我处理
+                    </Button>
+                ) : undefined
+            }
+        />
+    )
 
     return (
         <PageScaffold>
             <PageHeader
                 title={greetingForNow(view.viewer.displayName)}
-                description={`${view.viewer.activeRoleLabel}工作台 · 先处理超期项，再完成今日到期任务。`}
+                description={`${view.viewer.activeRoleLabel}工作台`}
                 metadata={
                     <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
                         <DataFreshness
@@ -165,31 +188,22 @@ export function WorkspaceHomePage() {
                     </div>
                 }
                 actions={
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                        <ScopeSwitcher
-                            scope={urlState.scope}
-                            onScopeChange={onScopeChange}
-                        />
-                        <PageActions
-                            actions={[
-                                {
-                                    actionKey: "refresh",
-                                    label: refreshing ? "刷新中" : "刷新",
-                                    icon: RefreshCwIcon,
-                                    variant: "ghost",
-                                    disabled: refreshing,
-                                    onClick: refresh,
-                                    className:
-                                        "text-muted-foreground hover:text-foreground",
-                                },
-                            ]}
-                        />
-                    </div>
+                    <PageActions
+                        actions={[
+                            {
+                                actionKey: "refresh",
+                                label: refreshing ? "刷新中" : "刷新",
+                                icon: RefreshCwIcon,
+                                variant: "ghost",
+                                disabled: refreshing,
+                                onClick: refresh,
+                                className:
+                                    "text-muted-foreground hover:text-foreground",
+                            },
+                        ]}
+                    />
                 }
             />
-
-            {/* 数据新鲜度由页头 DataFreshness 徽章统一表达；刷新失败由任务卡内
-          AsyncSectionState 错误卡承载，避免同一故障两处噪音（P2-8/P2-10）。 */}
 
             <MetricStrip columns={4} aria-label="待办筛选">
                 {metrics.map((metric) => (
@@ -210,26 +224,85 @@ export function WorkspaceHomePage() {
                 ))}
             </MetricStrip>
 
-            <div className="grid min-w-0 gap-3 md:gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
-                <TaskListCard
-                    view={view}
-                    urlState={urlState}
-                    filterLabel={filterLabel}
-                    visibleCount={visibleCount}
-                    hasActiveFilter={hasActiveFilter}
-                    taskQueueHref={taskQueueHref}
-                    asyncStatus={asyncStatus}
-                    hasRefreshError={dashboardQuery.isError}
-                    focusStableNumber={focusedStableNumber ?? undefined}
-                    onOpenTask={onOpenTask}
-                    clearFilters={clearFilters}
-                    refresh={refresh}
-                />
+            <WorkspaceFilterBar
+                urlState={urlState}
+                searchDraft={searchDraft}
+                onSearchDraftChange={setSearchDraft}
+                onFamilyChange={onFamilyChange}
+                onSortChange={onSortChange}
+                onSearch={applySearch}
+            />
 
-                <div className="space-y-3 md:space-y-4">
-                    <WarningsPanel warnings={view.warnings} />
-                    <RecentPanel recent={view.recent} />
+            <div className="hidden min-h-[32rem] gap-4 lg:grid lg:grid-cols-[minmax(18rem,38%)_minmax(0,62%)]">
+                <section
+                    className="overflow-hidden rounded-lg border border-border/60"
+                    aria-labelledby="workspace-task-main-title"
+                >
+                    <header className="border-b border-border/30 px-3 py-2">
+                        <h2
+                            id="workspace-task-main-title"
+                            className="text-sm font-medium"
+                        >
+                            {filterLabel}
+                        </h2>
+                        <p
+                            className="text-xs text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            当前共 {view.total} 项
+                        </p>
+                    </header>
+                    {items.length === 0 ? (
+                        <div className="p-4">
+                            <BusinessEmptyState
+                                kind="no-tasks"
+                                title={
+                                    hasActiveFilter
+                                        ? "当前筛选没有待办"
+                                        : "当前没有待处理事项"
+                                }
+                            />
+                        </div>
+                    ) : (
+                        <WorkspaceTaskList
+                            items={items}
+                            selectedWorkItemId={selected?.workItemId}
+                            onSelect={onSelectTask}
+                        />
+                    )}
+                </section>
+                <div className="rounded-lg border border-border/60 p-4">
+                    {detail}
                 </div>
+            </div>
+
+            <div className="lg:hidden">
+                <section className="overflow-hidden rounded-lg border border-border/60">
+                    <header className="border-b border-border/30 px-3 py-2">
+                        <h2 className="text-sm font-medium">{filterLabel}</h2>
+                    </header>
+                    <WorkspaceTaskList
+                        items={items}
+                        selectedWorkItemId={selected?.workItemId}
+                        onSelect={onSelectTask}
+                    />
+                </section>
+                <Sheet
+                    open={narrowDetailOpen && Boolean(selected)}
+                    onOpenChange={setNarrowDetailOpen}
+                >
+                    <SheetContent side="right" className="w-full sm:max-w-lg">
+                        {selected ? (
+                            <WorkspaceTaskDetail
+                                item={selected}
+                                onDecisionApplied={(_view, workItemId) => {
+                                    selectNextAfter(workItemId)
+                                    setNarrowDetailOpen(false)
+                                }}
+                            />
+                        ) : null}
+                    </SheetContent>
+                </Sheet>
             </div>
         </PageScaffold>
     )

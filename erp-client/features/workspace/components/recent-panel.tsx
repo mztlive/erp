@@ -31,10 +31,7 @@ export function RecentPanel({
                         暂无最近记录。
                     </p>
                 ) : (
-                    <nav
-                        aria-label="最近打开的任务"
-                        className="space-y-1"
-                    >
+                    <nav aria-label="最近打开的任务" className="space-y-1">
                         {recent.map((item) => (
                             <Button
                                 key={item.id}
@@ -42,9 +39,7 @@ export function RecentPanel({
                                 className="w-full justify-between"
                                 render={<Link href={item.href} />}
                             >
-                                <span className="truncate">
-                                    {item.label}
-                                </span>
+                                <span className="truncate">{item.label}</span>
                                 <ArrowRightIcon aria-hidden="true" />
                             </Button>
                         ))}

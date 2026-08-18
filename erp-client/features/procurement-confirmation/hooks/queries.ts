@@ -7,7 +7,7 @@ import {
     type QueryClient,
 } from "@tanstack/react-query"
 
-import { unifiedQueueKeys } from "@/features/unified-task-queue/queries"
+import { workItemKeys } from "@/features/work-items/queries"
 import {
     completeProcurementDecision,
     fetchProcurementQueue,
@@ -135,7 +135,7 @@ export function useCompleteProcurementMutation() {
                 })
                 // 同一终态存储也作用于 W02 采购确认族：同步角标与队列视图
                 await queryClient.invalidateQueries({
-                    queryKey: unifiedQueueKeys.all,
+                    queryKey: workItemKeys.all,
                 })
             }
         },
