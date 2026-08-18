@@ -71,7 +71,7 @@
           "id": "DOC-C",
           "planDoc": "10-contract-document-synchronization.md",
           "branch": "docs/erp-approval-workflow-workspaces",
-          "status": "ready_to_merge",
+          "status": "merged",
           "dependsOn": ["DOC-A"],
           "unlocks": ["P4-DEFINITION", "P4-WORKFLOW"],
           "owns": [

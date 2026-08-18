@@ -12,7 +12,7 @@
 | --- | --- | --- | --- | --- |
 | DOC-A | 权威合同、`erp-phase-1.md`、`erp-phase-2.md`、`docs/dev-plan/**`、实施计划 | — | P0-A | 已合并 |
 | DOC-B | `erp-data-model.md` | DOC-A | P2 | 已合并 |
-| DOC-C | `erp-ui-flows.md`、`erp-ui-design.md`、`ui-glossary.md`、`docs/ui-workspaces/**` | DOC-A | P4-DEFINITION、P4-WORKFLOW | 内容就绪，待 DOC-A 后独立合并 |
+| DOC-C | `erp-ui-flows.md`、`erp-ui-design.md`、`ui-glossary.md`、`docs/ui-workspaces/**` | DOC-A | P4-DEFINITION、P4-WORKFLOW | 已合并 |
 | DOC-D | `approval-workflow-openapi.yaml`、错误目录、`runbooks/approval-workflow.md`、`openapi:lint` 与 `@redocly/cli` 锁定 | P3-HTTP | P6-PILOT | 未开始 |
 
 DOC-A 已合并，P0-A 已解锁。其余三段各自只阻断自己的下游阶段，不阻断其他阶段。DOC-D 依赖 P3-HTTP 的端点稳定，因此排在 P3 之后。
@@ -238,7 +238,7 @@ rg -n '[补]签|二次[补]签' \
 - [x] 审批节点的 `assignment_mode = DIRECT/POOL` 描述已删除；全系统 WorkItem 不再存在 `POOL` 模型，任何 `OPEN` 任务的 `owner_user_id` 必填。
 - [x] 已新增第 4.2 节列出的目标字段、版本、索引和开发环境删除范围。
 
-### 11.3 DOC-C（内容就绪，待 DOC-A 后合并；继续阻断 P4）
+### 11.3 DOC-C（已合并；P4 前置已解除）
 
 - [x] W01 已扩写为唯一工作台（合同 §16.4），W02 已标记废止，W05/W19 已同步，`w24-approval-processes.md` 已新增。
 - [x] `ui-glossary.md` 已收录第 5.3 节术语，并删除「团队待处理」「领取」「开始处理」「退回团队」；界面不出现 `POOL`、`DIRECT`、instance、execution、binding、retry、幂等键和内部 ID。

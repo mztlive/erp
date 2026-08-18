@@ -1,6 +1,6 @@
 # 审批流程改造：阶段矩阵与切换状态
 
-> 状态：DOC-A、DOC-B 已合并，P0-A 已解锁；DOC-C 合同就绪，待独立 PR 合并；DOC-D 等待 P3-HTTP。
+> 状态：DOC-A、DOC-B、DOC-C 已合并，P0-A 已解锁；DOC-D 等待 P3-HTTP。
 >
 > 权威业务合同：[`docs/approval-workflow-contract.md`](../approval-workflow-contract.md)
 >
@@ -43,7 +43,7 @@ P0 的全部前置输入已在权威业务合同中生效：
 | --- | --- | --- | --- |
 | 权威合同、phase、实施计划与 `docs/dev-plan` | DOC-A | P0-A | 已合并 |
 | `erp-data-model.md` 目标集合、索引、版本和删除范围 | DOC-B | P2 | 已合并 |
-| 全部受影响 W 文档、W24、流程与术语 | DOC-C | P4-DEFINITION、P4-WORKFLOW | 合同就绪，待 DOC-A 后合并 |
+| 全部受影响 W 文档、W24、流程与术语 | DOC-C | P4-DEFINITION、P4-WORKFLOW | 已合并 |
 | `approval-workflow-openapi.yaml`、错误目录、`runbooks/approval-workflow.md`、`openapi:lint` 脚本与 `@redocly/cli` 锁定 | DOC-D | P6-PILOT | 阻塞于 P3-HTTP |
 
 DOC-D 依赖 P3-HTTP 的端点稳定，因此排在 P3 之后、P6-PILOT 之前，不阻断 P0—P3。

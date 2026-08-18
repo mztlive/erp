@@ -1,6 +1,6 @@
 # 审批流程合同技术落地总纲
 
-> 状态：执行合同；DOC-A、DOC-B 已合并，P0-A 已解锁；DOC-C 内容就绪，待独立 PR 合并后解锁 P4。DOC-D 等待 P3-HTTP
+> 状态：执行合同；DOC-A、DOC-B、DOC-C 已合并，P0-A 已解锁；DOC-D 等待 P3-HTTP
 >
 > 权威输入：`docs/approval-workflow-contract.md`、`docs/dev-plan/approval-workflow.md`
 >
