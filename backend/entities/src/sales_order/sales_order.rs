@@ -140,10 +140,11 @@ impl ReviewStatus {
 }
 
 impl DocumentState for ReviewStatus {
-    /// 审核轨固定邻接（数据模型 §7.1/§7.3）：
-    /// 未提交进入待采购确认（实物及服务）或待销售领导（卡券）；待采购确认可转
-    /// 待低毛利上级确认、通过或驳回；低毛利上级确认完成后再入待采购确认；
-    /// 待销售领导 → 待运营 → 通过/驳回；驳回后修改重新提交回未提交。
+    /// 审核轨固定邻接。
+    ///
+    /// 实物及服务目标路径：`NOT_SUBMITTED → IN_APPROVAL → APPROVED`，
+    /// 撤回 `IN_APPROVAL → NOT_SUBMITTED`。旧逐节点复核态与 `REJECTED`
+    /// 不得由新提交写入；邻接仅保留给未删除旧数据与卡券子阶段。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::NotSubmitted => &[
@@ -531,11 +532,51 @@ impl SalesOrder {
         ensure_transition(self.review_status, ReviewStatus::NotSubmitted)?;
         self.transition_commercial_status(CommercialStatus::PendingReview)?;
         self.review_status = match self.business_type {
-            BusinessType::GoodsService => ReviewStatus::PendingProcurementConfirmation,
+            BusinessType::GoodsService => ReviewStatus::InApproval,
             BusinessType::Voucher => ReviewStatus::PendingSalesLeader,
         };
         self.stable.touch(updated_by);
         Ok(())
+    }
+
+    /// 实物及服务销售单提交并进入统一审批。
+    ///
+    /// 商业主状态变为 `PENDING_REVIEW`，审核轨只允许 `IN_APPROVAL`。
+    /// 卡券销售单不得走本端口。
+    ///
+    /// # 参数
+    /// * `updated_by` - 提交人
+    ///
+    /// # 返回
+    /// 迁移成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 非实物及服务、非草稿或审核轨非未提交时返回冲突或非法迁移。
+    pub fn start_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.business_type != BusinessType::GoodsService {
+            return Err(Error::from("只有实物及服务销售单可以由本端口启动审批"));
+        }
+        self.submit_for_review(updated_by)
+    }
+
+    /// 撤回统一审批提交，回到可修正草稿。
+    ///
+    /// 只允许从 `IN_APPROVAL` 撤回；`subject_version` 不回退。
+    /// 不得经 `REJECTED` 或逐节点复核态。
+    ///
+    /// # 参数
+    /// * `updated_by` - 操作人
+    ///
+    /// # 返回
+    /// 迁移成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 审核轨不是审批中时返回冲突。
+    pub fn cancel_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.review_status != ReviewStatus::InApproval {
+            return Err(Error::from("只有审批中的销售单可以撤回审批提交"));
+        }
+        self.return_to_draft(updated_by)
     }
 
     /// 驳回后回到可处理草稿（主状态 `PENDING_REVIEW → DRAFT`，§7.1）。
@@ -557,7 +598,8 @@ impl SalesOrder {
 
     /// 审批通过并生效（主状态 `PENDING_REVIEW → EFFECTIVE`）。
     ///
-    /// 审核轨同时推进到 `Approved`；生效时间由调用方以服务端时间给出。
+    /// 审核轨同时推进到 `Approved`。实物及服务目标路径只接受 `IN_APPROVAL`。
+    /// 生效时间由调用方以服务端时间给出。
     ///
     /// # 参数
     /// * `effective_at` - 生效时间
@@ -879,33 +921,31 @@ mod tests {
     fn full_approval_flow_and_rejection_flow() {
         let mut order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
 
-        // 实物及服务：提交 → 待采购确认 → 低毛利上级 → 再入采购确认 → 通过生效
-        order.submit_for_review("admin-1").unwrap();
-        assert_eq!(order.review_status, ReviewStatus::PendingProcurementConfirmation);
+        // 实物及服务：提交直接进入统一审批，最终通过生效；撤回回到草稿。
+        order.start_approval_submission("admin-1").unwrap();
+        assert_eq!(order.commercial_status, CommercialStatus::PendingReview);
+        assert_eq!(order.review_status, ReviewStatus::InApproval);
+        assert!(order
+            .transition_review(ReviewStatus::Rejected, "approver")
+            .is_err());
+        assert!(order
+            .transition_review(ReviewStatus::PendingProcurementConfirmation, "approver")
+            .is_err());
         order
-            .transition_review(ReviewStatus::PendingLowMarginSuperior, "procurement")
-            .unwrap();
-        order
-            .transition_review(ReviewStatus::PendingProcurementConfirmation, "manager")
-            .unwrap();
-        order
-            .transition_review(ReviewStatus::Approved, "procurement")
-            .and_then(|()| order.approve(Instant::from_unix_secs(1_800_000_000), "procurement"))
+            .transition_review(ReviewStatus::Approved, "approver")
+            .and_then(|()| order.approve(Instant::from_unix_secs(1_800_000_000), "approver"))
             .unwrap();
         assert_eq!(order.commercial_status, CommercialStatus::Effective);
         assert_eq!(order.review_status, ReviewStatus::Approved);
         assert_eq!(order.effective_at.unwrap().unix_secs(), 1_800_000_000);
 
-        // 驳回 → 回草稿
-        let mut rejected = SalesOrder::new(SalesOrderId::new("o-2"), data(), "admin-1").unwrap();
-        rejected.submit_for_review("admin-1").unwrap();
-        rejected
-            .transition_review(ReviewStatus::Rejected, "procurement")
-            .and_then(|()| rejected.return_to_draft("procurement"))
-            .unwrap();
-        assert_eq!(rejected.commercial_status, CommercialStatus::Draft);
-        assert_eq!(rejected.stable.status, rejected.commercial_status);
-        assert_eq!(rejected.review_status, ReviewStatus::NotSubmitted);
+        let mut withdrawn = SalesOrder::new(SalesOrderId::new("o-2"), data(), "admin-1").unwrap();
+        withdrawn.start_approval_submission("admin-1").unwrap();
+        withdrawn.cancel_approval_submission("admin-1").unwrap();
+        assert_eq!(withdrawn.commercial_status, CommercialStatus::Draft);
+        assert_eq!(withdrawn.stable.status, withdrawn.commercial_status);
+        assert_eq!(withdrawn.review_status, ReviewStatus::NotSubmitted);
+        assert!(withdrawn.cancel_approval_submission("admin-1").is_err());
     }
 
     #[test]

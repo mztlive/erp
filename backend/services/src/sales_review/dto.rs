@@ -406,6 +406,7 @@ pub enum ProcurementConfirmationDecision {
     },
 }
 
+#[allow(dead_code)]
 impl ProcurementConfirmationDecision {
     /// 返回采购确认 ID。
     pub(crate) fn confirmation_id(&self) -> &str {

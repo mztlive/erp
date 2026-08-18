@@ -19,24 +19,30 @@
 //! 幂等：提交入口先按服务端摘要后的业务幂等键读取事务收据，同键同载荷在
 //! 工作副本版本校验之前返回原提交，同键异载荷冲突；建单按 `order_no` 唯一索引兜底（409）。
 
+use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 use mongodb::Database;
 
+mod adapter;
+mod cancel_approval;
 mod command;
 mod draft_working_copy;
 mod dto;
+mod formalize;
 mod mapper;
 mod pricing;
 mod procurement_rejection;
 mod query;
+mod start_approval;
 mod status;
 
+pub use self::adapter::sales_order_object_readable;
 pub use self::dto::{
-    ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CardSalesApprovalAllowedAction,
-    CloseEligibilityView, CreateSalesOrderRequest, LowMarginManagerAllowedAction,
-    OpenProcurementRejectionView, PageView, ProcurementRejectionAllowedAction, RevisionView,
-    SalesOrderCreateIntent, SalesOrderDetailView, SalesOrderDraftLineRequest, SalesOrderDraftRequest,
-    SalesOrderLineView, SalesOrderListParams, SalesOrderStageSummary, SalesOrderView,
+    ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CancelSalesOrderApprovalRequest,
+    CardSalesApprovalAllowedAction, CloseEligibilityView, CreateSalesOrderRequest, DocumentApprovalView,
+    LowMarginManagerAllowedAction, OpenProcurementRejectionView, PageView, ProcurementRejectionAllowedAction,
+    RevisionView, SalesOrderCreateIntent, SalesOrderDetailView, SalesOrderDraftLineRequest,
+    SalesOrderDraftRequest, SalesOrderLineView, SalesOrderListParams, SalesOrderStageSummary, SalesOrderView,
     SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
     VoidSalesOrderRequest, WorkingCopyView,
 };
@@ -70,5 +76,15 @@ impl SalesOrderService {
     /// 返回同时绑定数据库和当前应用授权源的服务。
     pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac: Some(rbac) }
+    }
+
+    /// 读取创建绑定所需的授权源。
+    ///
+    /// # 错误
+    /// 未注入 RBAC 时返回内部错误，不得跳过绑定。
+    pub(super) fn require_rbac(&self) -> Result<&SharedRbacService> {
+        self.rbac
+            .as_ref()
+            .ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".to_string()))
     }
 }

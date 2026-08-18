@@ -26,6 +26,7 @@ use services::{
     },
 };
 
+#[allow(dead_code)]
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",
@@ -33,7 +34,7 @@ use services::{
     resource = "sales_order_review",
     action = "low_margin_decide"
 )]
-/// 提交 `LOW_MARGIN_MANAGER_CONFIRMATION` 的唯一强类型决定。
+/// 低毛利上级确认端点已禁用，保留至 P0-D 删除。
 pub async fn low_margin_manager_confirmation_decide(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -144,6 +145,7 @@ pub async fn sales_order_review_cancel(
     Ok(ApiResponse::ok_with_data(view))
 }
 
+#[allow(dead_code)]
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",
@@ -170,6 +172,7 @@ pub async fn procurement_confirmation_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
+#[allow(dead_code)]
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",
@@ -200,6 +203,7 @@ pub async fn procurement_confirmation_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
+#[allow(dead_code)]
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",
@@ -226,6 +230,7 @@ pub async fn procurement_confirmation_recommendation(
     Ok(ApiResponse::ok_with_data(view))
 }
 
+#[allow(dead_code)]
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",
@@ -256,6 +261,7 @@ pub async fn procurement_confirmation_save_lines(
     Ok(ApiResponse::ok_with_data(view))
 }
 
+#[allow(dead_code)]
 #[permission_macros::permission(
     group = "销售复核",
     group_desc = "销售审批与采购二次确认（W05/W07）管理",

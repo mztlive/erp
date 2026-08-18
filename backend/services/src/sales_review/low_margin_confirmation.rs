@@ -1,4 +1,5 @@
-//! `LOW_MARGIN_MANAGER_CONFIRMATION` 的唯一强类型领域决定。
+//! `LOW_MARGIN_MANAGER_CONFIRMATION` 的唯一强类型领域决定。新写入已失败关闭。
+#![allow(dead_code)]
 
 use database::{
     AccessControlExt, DocumentRegistryExt, NoTransaction, SalesOrderExt, SalesReviewExt, Transactional,
@@ -247,7 +248,11 @@ impl SalesReviewService {
         actor: &AuditActor,
         rbac: SharedRbacService,
     ) -> Result<CompleteLowMarginManagerConfirmationResult> {
-        command.validate()?;
+        let _ = (self, command, actor, rbac);
+        return Err(Error::ConflictError(
+            "低毛利上级确认已停止新写入，不保留替代环节".to_string(),
+        ));
+        #[allow(unreachable_code)]
         let expected_task_version = parse_task_version(&command.expected_task_version)?;
         let fingerprint = decision_fingerprint(actor.id(), &command)?;
         let audit_id = decision_audit_id(actor.id(), &command.idempotency_key);

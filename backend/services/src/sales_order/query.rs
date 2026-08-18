@@ -14,6 +14,7 @@ use entities::work_item::{WorkItem, WorkItemStatus};
 use entities::Permission;
 use validator::Validate;
 
+use super::adapter::{document_approval_view, is_goods_service_sales_order};
 use super::dto;
 use super::dto::{
     ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CardSalesApprovalAllowedAction,
@@ -27,6 +28,7 @@ use super::status::{
     compute_can_start_sales_change, compute_close_eligibility, detail_owner_user_id, stage_code_label_tone,
 };
 use super::SalesOrderService;
+use crate::document_registry::find_approval_binding;
 use crate::{
     approval::{CARD_SALES_APPROVAL, OPERATIONS_APPROVAL, SALES_MANAGER_APPROVAL},
     audit::AuditActor,
@@ -344,6 +346,21 @@ impl SalesOrderService {
             has_active_change_order,
         );
 
+        let approval = if is_goods_service_sales_order(order.business_type) {
+            let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+                .await
+                .ok()
+                .flatten();
+            Some(document_approval_view(
+                binding.as_ref(),
+                None,
+                order.commercial_status,
+                order.review_status,
+            ))
+        } else {
+            None
+        };
+
         Ok(SalesOrderDetailView {
             id: order.base.id.clone(),
             order_no: order.order_no.clone(),
@@ -403,6 +420,7 @@ impl SalesOrderService {
             open_procurement_rejection,
             active_card_sales_approval,
             active_low_margin_manager_confirmation,
+            approval,
         })
     }
 

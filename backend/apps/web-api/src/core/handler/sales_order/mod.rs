@@ -10,10 +10,10 @@ use axum::{
 use services::{
     audit::AuditActor,
     sales_order::{
-        CreateSalesOrderRequest, PageView, ResolveProcurementRejectionCommand,
-        ResolveProcurementRejectionResult, SalesOrderDetailView, SalesOrderListParams, SalesOrderService,
-        SalesOrderView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
-        VoidSalesOrderRequest, WorkingCopyView,
+        CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, PageView,
+        ResolveProcurementRejectionCommand, ResolveProcurementRejectionResult, SalesOrderDetailView,
+        SalesOrderListParams, SalesOrderService, SalesOrderView, SaveWorkingCopyRequest, SubmissionView,
+        SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
     },
 };
 
@@ -51,6 +51,7 @@ pub async fn sales_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
+#[allow(dead_code)]
 #[permission_macros::permission(
     group = "销售单",
     group_desc = "销售单（W05）管理",
@@ -58,7 +59,7 @@ pub async fn sales_order_list(
     resource = "sales_order",
     action = "resolve_procurement_rejection"
 )]
-/// 以固定三路强类型命令处置采购驳回。
+/// 采购驳回处置端点已禁用，保留至 P0-D 删除。
 pub async fn sales_order_resolve_procurement_rejection(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -95,7 +96,7 @@ pub async fn sales_order_create(
     Json(req): Json<CreateSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
     ensure_customer_access(&state, &subject, &user_id, &req.customer_id).await?;
-    let view = SalesOrderService::new(state.db())
+    let view = SalesOrderService::with_rbac(state.db(), state.rbac())
         .create_sales_order(req, &actor)
         .await?;
 
@@ -182,8 +183,38 @@ pub async fn sales_order_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitSalesOrderRequest>,
 ) -> Result<SubmissionView> {
-    let view = SalesOrderService::new(state.db())
+    let view = SalesOrderService::with_rbac(state.db(), state.rbac())
         .submit_sales_order(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "撤回销售单审批",
+    resource = "sales_order",
+    action = "cancel_approval"
+)]
+/// 撤回尚未最终通过的实物及服务销售单审批。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 销售单 ID
+/// * `req` - 撤回请求（原因必填）
+///
+/// # 返回
+/// 返回撤回后的销售单详情。
+pub async fn sales_order_cancel_approval(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CancelSalesOrderApprovalRequest>,
+) -> Result<SalesOrderDetailView> {
+    let view = SalesOrderService::with_rbac(state.db(), state.rbac())
+        .cancel_approval_submission(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
