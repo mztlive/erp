@@ -319,15 +319,10 @@ pub fn adapter_object_read_decision(
             assignee_user_id,
         )?));
     }
-    if spec.document_type == DocumentType::SalesOrder || spec.document_type == DocumentType::VoucherSalesOrder
+    if spec.document_type == DocumentType::SalesOrder
+        || spec.document_type == DocumentType::VoucherSalesOrder
     {
         return Ok(Some(crate::sales_order::sales_order_object_readable(
-            &context.organization_id,
-            assignee_user_id,
-        )?));
-    }
-    if spec.document_type == DocumentType::SalesChangeOrder {
-        return Ok(Some(crate::sales_review::sales_change_order_object_readable(
             &context.organization_id,
             assignee_user_id,
         )?));
@@ -598,11 +593,6 @@ mod tests {
         let voucher = adapter_spec_of(DocumentType::VoucherSalesOrder).expect("卡券销售单必须有适配器");
         assert_eq!(
             adapter_object_read_decision(&voucher, &context, "u1").expect("卡券读取权已接线"),
-            Some(true)
-        );
-        let change = adapter_spec_of(DocumentType::SalesChangeOrder).expect("销售变更单必须有适配器");
-        assert_eq!(
-            adapter_object_read_decision(&change, &context, "u1").expect("销售变更读取权已接线"),
             Some(true)
         );
         assert_eq!(

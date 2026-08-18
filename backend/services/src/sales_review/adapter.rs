@@ -421,7 +421,11 @@ fn allowed_document_actions(status: SalesChangeOrderStatus) -> Vec<String> {
     match status {
         SalesChangeOrderStatus::Draft => vec!["SUBMIT".to_string()],
         SalesChangeOrderStatus::InApproval => vec!["CANCEL".to_string()],
-        SalesChangeOrderStatus::Effective | SalesChangeOrderStatus::Voided => Vec::new(),
+        SalesChangeOrderStatus::Effective
+        | SalesChangeOrderStatus::Voided
+        | SalesChangeOrderStatus::PendingImpactConfirmation
+        | SalesChangeOrderStatus::PendingFinanceReview
+        | SalesChangeOrderStatus::Rejected => Vec::new(),
     }
 }
 

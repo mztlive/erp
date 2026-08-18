@@ -74,10 +74,11 @@ impl SalesChangeType {
     }
 }
 
-/// 销售变更单状态（合同 §4.4.2：草稿、审批中、已生效、已作废）。
+/// 销售变更单状态（合同 §4.4.2：目标邻接仅草稿、审批中、已生效、已作废）。
 ///
-/// `PENDING_IMPACT_CONFIRMATION` 与 `PENDING_FINANCE_REVIEW` 已合并为唯一
-/// `IN_APPROVAL`；审批驳回不改变业务状态，因此删除 `Rejected`。
+/// 新写入只使用 `Draft` / `InApproval` / `Effective` / `Voided`。
+/// `PendingImpactConfirmation`、`PendingFinanceReview` 与 `Rejected` 仅保留稳定
+/// 字面量，供未改仓储查询编译；不得再作为目标状态机后继。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SalesChangeOrderStatus {
@@ -89,6 +90,12 @@ pub enum SalesChangeOrderStatus {
     Effective,
     /// 已作废。
     Voided,
+    /// 残留字面量：原待影响确认，已合并入 `InApproval`。
+    PendingImpactConfirmation,
+    /// 残留字面量：原待财务复核，已合并入 `InApproval`。
+    PendingFinanceReview,
+    /// 残留字面量：原驳回态，审批驳回不再改业务状态。
+    Rejected,
 }
 
 impl SalesChangeOrderStatus {
@@ -102,6 +109,9 @@ impl SalesChangeOrderStatus {
             Self::InApproval => "审批中",
             Self::Effective => "已生效",
             Self::Voided => "已作废",
+            Self::PendingImpactConfirmation => "待影响确认",
+            Self::PendingFinanceReview => "待财务复核",
+            Self::Rejected => "已驳回",
         }
     }
 
@@ -115,18 +125,25 @@ impl SalesChangeOrderStatus {
             Self::InApproval => "IN_APPROVAL",
             Self::Effective => "EFFECTIVE",
             Self::Voided => "VOIDED",
+            Self::PendingImpactConfirmation => "PENDING_IMPACT_CONFIRMATION",
+            Self::PendingFinanceReview => "PENDING_FINANCE_REVIEW",
+            Self::Rejected => "REJECTED",
         }
     }
 }
 
 impl DocumentState for SalesChangeOrderStatus {
     /// 合同 §4.4.1 / §4.4.2：草稿可提交进入审批或作废；审批中可最终生效或
-    /// 撤回回草稿；驳回不改变业务状态；生效/作废为终态。
+    /// 撤回回草稿；残留确认/驳回态无新后继。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval, Self::Voided],
             Self::InApproval => &[Self::Effective, Self::Draft],
-            Self::Effective | Self::Voided => &[],
+            Self::Effective
+            | Self::Voided
+            | Self::PendingImpactConfirmation
+            | Self::PendingFinanceReview
+            | Self::Rejected => &[],
         }
     }
 }
@@ -457,6 +474,23 @@ mod tests {
         assert!(ensure_transition(SalesChangeOrderStatus::Voided, SalesChangeOrderStatus::Draft).is_err());
         assert!(SalesChangeOrderStatus::Effective.allowed_next().is_empty());
         assert!(SalesChangeOrderStatus::Voided.allowed_next().is_empty());
+        assert!(SalesChangeOrderStatus::PendingImpactConfirmation
+            .allowed_next()
+            .is_empty());
+        assert!(SalesChangeOrderStatus::PendingFinanceReview
+            .allowed_next()
+            .is_empty());
+        assert!(SalesChangeOrderStatus::Rejected.allowed_next().is_empty());
+        assert!(ensure_transition(
+            SalesChangeOrderStatus::Draft,
+            SalesChangeOrderStatus::PendingImpactConfirmation
+        )
+        .is_err());
+        assert!(ensure_transition(
+            SalesChangeOrderStatus::InApproval,
+            SalesChangeOrderStatus::Rejected
+        )
+        .is_err());
     }
 
     #[test]

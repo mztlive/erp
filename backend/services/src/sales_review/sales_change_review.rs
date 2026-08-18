@@ -440,4 +440,12 @@ mod tests {
         assert!(!audit_id.contains("raw-secret-key"));
         assert!(message.len() <= 256);
     }
+
+    /// 履约影响确认与财务复核不得充当流程节点。
+    #[test]
+    fn confirm_and_reject_actions_fail_closed() {
+        let error = super::fail_closed_change_review_node().unwrap_err();
+        assert!(error.to_string().contains("不得充当审批流程节点"));
+        assert!(super::super::adapter::reject_legacy_change_review_node().is_err());
+    }
 }

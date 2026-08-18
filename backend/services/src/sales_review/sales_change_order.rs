@@ -146,6 +146,41 @@ impl SalesReviewService {
         }
     }
 
+    /// 同一销售单同一基准版本是否已有进行中变更。
+    ///
+    /// 仓储 `find_in_progress` 仍按旧确认态查询；目标 `IN_APPROVAL` 在本方法内补查。
+    ///
+    /// # 错误
+    /// 仓储失败时返回错误。
+    async fn has_in_progress_change(
+        &self,
+        sales_order_id: &SalesOrderId,
+        base_revision_id: &str,
+    ) -> Result<bool> {
+        let base_revision = entities::sales_order::SalesOrderRevisionId::new(base_revision_id);
+        let legacy = self
+            .db
+            .sales_change_orders()
+            .find_in_progress_by_order_and_base(sales_order_id, &base_revision, &mut NoTransaction)
+            .await?;
+        if legacy.is_some() {
+            return Ok(true);
+        }
+        let in_approval = self
+            .db
+            .sales_change_orders()
+            .find_one(
+                mongodb::bson::doc! {
+                    "sales_order_id": sales_order_id.to_string(),
+                    "base_revision_id": base_revision_id,
+                    "status": SalesChangeOrderStatus::InApproval.as_str(),
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        Ok(in_approval.is_some())
+    }
+
     /// 创建销售变更单（草稿 + 变更工作副本 + `BusinessDocument` 绑定原子形成）。
     ///
     /// `PROCESS_REQUIRED` 无发布定义时返回 `APPROVAL_PROCESS_NOT_CONFIGURED`，
@@ -191,16 +226,10 @@ impl SalesReviewService {
             .find_by_id(&base_revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
-        let existing = self
-            .db
-            .sales_change_orders()
-            .find_in_progress_by_order_and_base(
-                &req.sales_order_id,
-                &base_revision_id.clone().into(),
-                &mut NoTransaction,
-            )
-            .await?;
-        if existing.is_some() {
+        if self
+            .has_in_progress_change(&req.sales_order_id, &base_revision_id)
+            .await?
+        {
             return Err(Error::ConflictError(
                 "同一基准版本已有进行中的销售变更单".to_string(),
             ));
@@ -925,6 +954,8 @@ async fn persist_bound_change_document(
 
 /// 加载变更工作副本及其明细。
 ///
+/// 先取可编辑副本；撤回后再提交时按变更单定位已提交副本。
+///
 /// # 错误
 /// 工作副本不存在时返回 `NotFound`。
 async fn load_change_working_copy(
@@ -934,15 +965,25 @@ async fn load_change_working_copy(
     entities::sales_order::SalesOrderWorkingCopy,
     Vec<entities::sales_order::SalesOrderWorkingCopyLine>,
 )> {
-    let working_copy = db
+    let active = db
         .sales_order_working_copies()
         .find_active_by_order_and_purpose(
             &change_order.sales_order_id,
             WorkingPurpose::SalesChange,
             &mut NoTransaction,
         )
-        .await?
-        .ok_or_else(|| Error::NotFound("变更工作副本不存在".to_string()))?;
+        .await?;
+    let bound = db
+        .sales_order_working_copies()
+        .find_one(
+            mongodb::bson::doc! {
+                "sales_change_order_id": change_order.base.id.clone(),
+                "working_purpose": WorkingPurpose::SalesChange.as_str(),
+            },
+            &mut NoTransaction,
+        )
+        .await?;
+    let working_copy = choose_resubmit_source(active, bound)?;
     let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
     let copy_lines = db
         .sales_order_working_copy_lines()
@@ -951,28 +992,57 @@ async fn load_change_working_copy(
     Ok((working_copy, copy_lines))
 }
 
-/// 仅在编辑中时锁定工作副本。
+/// 撤回后再提交时优先可编辑副本，否则使用已绑定该变更单的已提交副本。
+///
+/// # 错误
+/// 两者皆空时返回 `NotFound`。
+pub(super) fn choose_resubmit_source<T>(active: Option<T>, bound: Option<T>) -> Result<T> {
+    if let Some(active) = active {
+        return Ok(active);
+    }
+    bound.ok_or_else(|| Error::NotFound("变更工作副本不存在".to_string()))
+}
+
+/// 仅在编辑中时锁定工作副本；已提交副本可直接用于新 `submission_no`。
 ///
 /// # 错误
 /// 状态不允许提交时返回错误。
 fn lock_working_copy_if_editing(
     working_copy: &mut entities::sales_order::SalesOrderWorkingCopy,
 ) -> Result<()> {
-    if working_copy.stable.status() == WorkingCopyStatus::Submitted {
+    if working_copy_already_submitted(working_copy.stable.status()) {
         return Ok(());
     }
     Ok(working_copy.submit()?)
 }
 
+/// 已提交工作副本不必再锁定。
+///
+/// # 参数
+/// * `status` - 工作副本状态
+///
+/// # 返回
+/// `Submitted` 为 `true`。
+pub(super) fn working_copy_already_submitted(status: WorkingCopyStatus) -> bool {
+    status == WorkingCopyStatus::Submitted
+}
+
+/// 由已冻结最大序号计算下一次提交号。
+///
+/// # 错误
+/// 溢出时返回冲突。
+pub(super) fn next_submission_no_from(current_max: u32) -> Result<u32> {
+    current_max
+        .checked_add(1)
+        .ok_or_else(|| Error::ConflictError("变更提交序号溢出".to_string()))
+}
+
 /// 计算下一次变更提交序号。
 ///
 /// # 错误
-/// 仓储失败时返回错误。
+/// 仓储失败或序号溢出时返回错误。
 async fn next_change_submission_no(db: &mongodb::Database, change_order_id: &str) -> Result<u32> {
-    Ok(latest_change_submission_no(db, change_order_id)
-        .await?
-        .saturating_add(1)
-        .max(1))
+    next_submission_no_from(latest_change_submission_no(db, change_order_id).await?)
 }
 
 /// 读取已冻结的最大提交序号；尚无提交时返回 0。
@@ -1195,5 +1265,28 @@ mod tests {
         assert!(source.contains("pub async fn cancel_approval"));
         assert!(source.contains("prepare_cancel"));
         assert!(source.contains("adapter.cancel_action"));
+    }
+
+    /// 撤回后可定位已提交工作副本，并递增 submission_no。
+    #[test]
+    fn cancel_then_resubmit_uses_bound_copy_and_increments_submission_no() {
+        assert_eq!(super::next_submission_no_from(0).unwrap(), 1);
+        assert_eq!(super::next_submission_no_from(1).unwrap(), 2);
+        assert!(super::next_submission_no_from(u32::MAX).is_err());
+        assert!(super::working_copy_already_submitted(
+            entities::sales_order::WorkingCopyStatus::Submitted
+        ));
+        assert!(!super::working_copy_already_submitted(
+            entities::sales_order::WorkingCopyStatus::Editing
+        ));
+        assert_eq!(
+            super::choose_resubmit_source(None, Some("submitted-copy")).unwrap(),
+            "submitted-copy"
+        );
+        assert_eq!(
+            super::choose_resubmit_source(Some("editing-copy"), Some("submitted-copy")).unwrap(),
+            "editing-copy"
+        );
+        assert!(super::choose_resubmit_source::<&str>(None, None).is_err());
     }
 }
