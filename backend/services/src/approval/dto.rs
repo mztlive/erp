@@ -366,6 +366,128 @@ const fn default_page_size() -> u32 {
     20
 }
 
+/// 目标运行编排的启动命令。不得包含 definition key 或审批人。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalStartCommand {
+    /// 业务对象种类。
+    pub subject_kind: String,
+    /// 业务对象 ID。
+    pub subject_id: String,
+    /// 冻结提交版本。
+    pub subject_version: u32,
+    /// 启动人。
+    #[serde(skip)]
+    pub actor_id: String,
+    /// 幂等键。
+    pub idempotency_key: String,
+}
+
+/// 目标决定命令。只允许合同 §14.3 字段。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalDecisionCommand {
+    /// 当前待办。
+    pub work_item_id: String,
+    /// 通过或驳回。
+    pub decision: bpm::model::types::ApprovalDecision,
+    /// 驳回必填原因。
+    pub reason: Option<String>,
+    /// 期望任务版本。
+    pub expected_task_version: u64,
+    /// 幂等键。
+    pub idempotency_key: String,
+    /// 已认证决定人。
+    #[serde(skip)]
+    pub actor_id: String,
+}
+
+/// 目标取消命令。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalCancelCommand {
+    /// 实例 ID。
+    pub approval_process_instance_id: String,
+    /// 冻结提交版本。
+    pub expected_subject_version: u32,
+    /// 期望实例版本。
+    pub expected_instance_version: u64,
+    /// 期望执行版本。
+    pub expected_execution_version: u64,
+    /// 可空任务版本。
+    pub expected_task_version: Option<u64>,
+    /// 非空撤回原因。
+    pub reason: String,
+    /// 幂等键。
+    pub idempotency_key: String,
+    /// 已认证取消人。
+    #[serde(skip)]
+    pub actor_id: String,
+}
+
+/// 恢复原审批人命令。不接受目标用户或恢复动作枚举。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalResumeCommand {
+    /// 实例 ID。
+    pub approval_process_instance_id: String,
+    /// 期望实例版本。
+    pub expected_instance_version: u64,
+    /// 期望执行版本。
+    pub expected_execution_version: u64,
+    /// 期望绑定版本。
+    pub expected_assignment_version: u64,
+    /// 可空已关闭任务版本。
+    pub expected_closed_task_version: Option<u64>,
+    /// 幂等键。
+    pub idempotency_key: String,
+    /// 已认证恢复人。
+    #[serde(skip)]
+    pub actor_id: String,
+}
+
+/// 管理员改派命令。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalReassignCommand {
+    /// 实例 ID。
+    pub approval_process_instance_id: String,
+    /// 目标用户。
+    pub target_user_id: String,
+    /// 非空原因。
+    pub reason: String,
+    /// 期望实例版本。
+    pub expected_instance_version: u64,
+    /// 期望执行版本。
+    pub expected_execution_version: u64,
+    /// 期望绑定版本。
+    pub expected_assignment_version: u64,
+    /// 可空已关闭任务版本。
+    pub expected_task_version: Option<u64>,
+    /// 幂等键。
+    pub idempotency_key: String,
+    /// 已认证改派人。
+    #[serde(skip)]
+    pub actor_id: String,
+}
+
+/// 受阻取消命令。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalCancelBlockedCommand {
+    /// 实例 ID。
+    pub approval_process_instance_id: String,
+    /// 当前 blocker。
+    pub blocker_code: String,
+    /// 期望实例版本。
+    pub expected_instance_version: u64,
+    /// 期望执行版本。
+    pub expected_execution_version: u64,
+    /// 可空任务版本。
+    pub expected_task_version: Option<u64>,
+    /// 非空原因。
+    pub reason: String,
+    /// 幂等键。
+    pub idempotency_key: String,
+    /// 已认证管理员。
+    #[serde(skip)]
+    pub actor_id: String,
+}
+
 #[cfg(test)]
 mod tests {
     use entities::{approval::ApprovalDecision, common::time::Instant};
@@ -434,6 +556,75 @@ mod tests {
         assert!(!object.contains_key("owner_organization_id"));
         assert_eq!(value["instance_version"], "2");
         assert_eq!(value["allowed_actions"], json!(["RETRY_CURRENT_STEP"]));
+    }
+
+    #[test]
+    fn target_runtime_commands_omit_retry_current_step() {
+        use super::{
+            ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand,
+            ApprovalReassignCommand, ApprovalResumeCommand, ApprovalStartCommand,
+        };
+        use bpm::model::types::ApprovalDecision;
+
+        let start = ApprovalStartCommand {
+            subject_kind: "stock_adjustment".into(),
+            subject_id: "adj-1".into(),
+            subject_version: 1,
+            actor_id: "u1".into(),
+            idempotency_key: "k1".into(),
+        };
+        let decision = ApprovalDecisionCommand {
+            work_item_id: "wi-1".into(),
+            decision: ApprovalDecision::Approve,
+            reason: None,
+            expected_task_version: 1,
+            idempotency_key: "k2".into(),
+            actor_id: "u1".into(),
+        };
+        let _ = (
+            start,
+            decision,
+            ApprovalCancelCommand {
+                approval_process_instance_id: "inst".into(),
+                expected_subject_version: 1,
+                expected_instance_version: 1,
+                expected_execution_version: 1,
+                expected_task_version: Some(1),
+                reason: "撤回".into(),
+                idempotency_key: "k3".into(),
+                actor_id: "u1".into(),
+            },
+            ApprovalResumeCommand {
+                approval_process_instance_id: "inst".into(),
+                expected_instance_version: 1,
+                expected_execution_version: 1,
+                expected_assignment_version: 1,
+                expected_closed_task_version: None,
+                idempotency_key: "k4".into(),
+                actor_id: "admin".into(),
+            },
+            ApprovalReassignCommand {
+                approval_process_instance_id: "inst".into(),
+                target_user_id: "u9".into(),
+                reason: "换人".into(),
+                expected_instance_version: 1,
+                expected_execution_version: 1,
+                expected_assignment_version: 1,
+                expected_task_version: None,
+                idempotency_key: "k5".into(),
+                actor_id: "admin".into(),
+            },
+            ApprovalCancelBlockedCommand {
+                approval_process_instance_id: "inst".into(),
+                blocker_code: "OPEN_TASK_CONFLICT".into(),
+                expected_instance_version: 1,
+                expected_execution_version: 1,
+                expected_task_version: None,
+                reason: "冻结退出".into(),
+                idempotency_key: "k6".into(),
+                actor_id: "admin".into(),
+            },
+        );
     }
 
     #[test]

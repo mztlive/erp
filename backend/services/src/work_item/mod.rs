@@ -963,127 +963,43 @@ impl WorkItemService {
         Ok(view)
     }
 
-    /// 从责任池原子建立本人责任。
+    /// 旧责任池领取入口。已失败关闭。
     ///
     /// # 错误
-    /// 非 POOL 开放任务、资格已失效、处理权冲突或任务版本陈旧时返回错误。
-    pub async fn start_processing(
+    /// 始终返回稳定失败关闭错误。
+    pub async fn claim(
         &self,
-        id: &str,
-        req: StartProcessingRequest,
-        actor: &AuditActor,
+        _id: &str,
+        _req: StartProcessingRequest,
+        _actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        req.validate()?;
-        let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
-        let action = "work_item.start_processing";
-        let expected_task_version = expected_task_version(&req.expected_task_version)?;
-        let version = expected_task_version.to_string();
-        let fingerprint = command_fingerprint(&[&version]);
-        let audit_id = idempotency_audit_id(actor.id(), action, id, &idempotency_key);
-        if let Some(item) = self.idempotent_replay(&audit_id, &fingerprint, id).await? {
-            return self.applied_outcome(item, actor).await;
-        }
-        let current = self.load(id).await?;
-        let authorization = self
-            .assignment_authorization_snapshot(actor, actor.id(), &current, false)
-            .await?;
-        let outcome = self
-            .start_processing_with_audit(
-                current,
-                expected_task_version,
-                actor,
-                action,
-                audit_id,
-                command_audit_message(&fingerprint, None),
-                authorization,
-            )
-            .await?;
-        let item = match outcome {
-            StartProcessingOutcome::Started(item) => item,
-            StartProcessingOutcome::AlreadyOwned(item) => item,
-            StartProcessingOutcome::OwnershipConflict(item) => {
-                return self
-                    .conflict_outcome(&item.base.id, WorkItemConflictKind::Responsibility, actor)
-                    .await;
-            }
-            StartProcessingOutcome::VersionConflict(item) => {
-                return self
-                    .conflict_outcome(&item.base.id, WorkItemConflictKind::Version, actor)
-                    .await;
-            }
-            StartProcessingOutcome::NotStartable(None) => {
-                return Err(Error::NotFound("任务不存在".to_string()));
-            }
-            StartProcessingOutcome::NotStartable(Some(item)) => {
-                if item.base.version != expected_task_version {
-                    return self
-                        .conflict_outcome(&item.base.id, WorkItemConflictKind::Version, actor)
-                        .await;
-                }
-                return Err(Error::BusinessLogicError(format!(
-                    "当前任务不可开始处理（状态 {}，任务版本 {}）",
-                    item.status.as_str(),
-                    item.base.version
-                )));
-            }
-        };
-        self.applied_outcome(item, actor).await
+        Err(pool_command_closed("claim"))
     }
 
-    /// 将本人负责的开放 POOL 任务退回团队。
+    /// 从责任池原子建立本人责任。已失败关闭。
     ///
     /// # 错误
-    /// 非当前责任人、任务受阻、原因非法或任务版本陈旧时返回错误。
+    /// 始终返回稳定失败关闭错误。
+    pub async fn start_processing(
+        &self,
+        _id: &str,
+        _req: StartProcessingRequest,
+        _actor: &AuditActor,
+    ) -> Result<WorkItemMutationOutcome> {
+        Err(pool_command_closed("start_processing"))
+    }
+
+    /// 将本人负责的开放 POOL 任务退回团队。已失败关闭。
+    ///
+    /// # 错误
+    /// 始终返回稳定失败关闭错误。
     pub async fn release_to_team(
         &self,
-        id: &str,
-        req: ReleaseToTeamRequest,
-        actor: &AuditActor,
+        _id: &str,
+        _req: ReleaseToTeamRequest,
+        _actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        req.validate()?;
-        let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
-        let action = "work_item.release_to_team";
-        let reason = required_text(&req.reason, "退回原因不能为空")?;
-        let expected_task_version = expected_task_version(&req.expected_task_version)?;
-        let version = expected_task_version.to_string();
-        let fingerprint = command_fingerprint(&[&version, &reason]);
-        let audit_id = idempotency_audit_id(actor.id(), action, id, &idempotency_key);
-        if let Some(item) = self.idempotent_replay(&audit_id, &fingerprint, id).await? {
-            return self.applied_outcome(item, actor).await;
-        }
-        let item = self.load(id).await?;
-        if item.base.version != expected_task_version {
-            return self
-                .conflict_outcome(id, WorkItemConflictKind::Version, actor)
-                .await;
-        }
-        if !item.is_owned_by(actor.id()) {
-            return self
-                .conflict_outcome(id, WorkItemConflictKind::Responsibility, actor)
-                .await;
-        }
-        let authorization = self
-            .assignment_authorization_snapshot(actor, actor.id(), &item, false)
-            .await?;
-        self.ensure_approval_not_blocked(&item).await?;
-        let updated = self
-            .release_with_assignment_policy_audit(
-                item,
-                expected_task_version,
-                actor,
-                action,
-                audit_id,
-                command_audit_message(&fingerprint, Some(&reason)),
-                authorization,
-            )
-            .await?;
-        match updated {
-            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, actor).await,
-            WorkItemWriteOutcome::VersionConflict => {
-                self.conflict_outcome(id, WorkItemConflictKind::Version, actor)
-                    .await
-            }
-        }
+        Err(pool_command_closed("release_to_team"))
     }
 
     /// 受控转交开放任务。
@@ -1110,6 +1026,7 @@ impl WorkItemService {
             return self.applied_outcome(item, actor).await;
         }
         let item = self.load(id).await?;
+        forbid_approval_generic_mutation(&item)?;
         if item.base.version != expected_task_version {
             return self
                 .conflict_outcome(id, WorkItemConflictKind::Version, actor)
@@ -1173,6 +1090,7 @@ impl WorkItemService {
             return self.applied_outcome(item, actor).await;
         }
         let item = self.load(id).await?;
+        forbid_approval_generic_mutation(&item)?;
         if item.base.version != expected_task_version {
             return self
                 .conflict_outcome(id, WorkItemConflictKind::Version, actor)
@@ -1427,6 +1345,7 @@ impl WorkItemService {
         )))
     }
 
+    #[allow(dead_code)]
     async fn ensure_approval_not_blocked(&self, item: &WorkItem) -> Result<()> {
         let Some(step_id) = item.approval_step_instance_id.as_deref() else {
             return Ok(());
@@ -2227,6 +2146,7 @@ impl WorkItemService {
 
     /// 在同一 MongoDB 事务内执行单文档原子开始处理并写入审计。
     #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code)]
     async fn start_processing_with_audit(
         &self,
         current: WorkItem,
@@ -2426,6 +2346,7 @@ impl WorkItemService {
 
     /// 在同一事务内重验当前责任人的账号、授权、参与权和岗位分离后退回责任池。
     #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code)]
     async fn release_with_assignment_policy_audit(
         &self,
         item: WorkItem,
@@ -3005,7 +2926,7 @@ type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
 
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
-const OBJECT_POLICIES: [ObjectPolicy; 20] = [
+const OBJECT_POLICIES: [ObjectPolicy; 32] = [
     ObjectPolicy {
         kind: ObjectKind::SalesOrder,
         work_item_type: WorkItemType::LowMarginManagerConfirmation,
@@ -3126,6 +3047,78 @@ const OBJECT_POLICIES: [ObjectPolicy; 20] = [
         business_object_type: "SUPPLIER_OFFERING",
         read_permission: "supplier_offering:list",
     },
+    ObjectPolicy {
+        kind: ObjectKind::SalesOrder,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "sales_order",
+        read_permission: "sales_order:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::SalesOrder,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "voucher_sales_order",
+        read_permission: "sales_order:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::SalesChangeReview,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "sales_change_order",
+        read_permission: "sales_change_order:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::PurchaseOrder,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "purchase_order",
+        read_permission: "purchase_order:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::PurchaseOrder,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "purchase_change_order",
+        read_permission: "purchase_order:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::StockAdjustment,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "stock_adjustment",
+        read_permission: "stock_adjustment:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::ReceivableAccount,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "customer_receipt",
+        read_permission: "receivable_account:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::ReceivableAccount,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "customer_refund",
+        read_permission: "receivable_account:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::ReceivableAccount,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "receipt_reversal",
+        read_permission: "receivable_account:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::PurchaseOrder,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "supplier_payment",
+        read_permission: "purchase_order:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::PurchaseOrder,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "supplier_refund",
+        read_permission: "purchase_order:detail",
+    },
+    ObjectPolicy {
+        kind: ObjectKind::PurchaseOrder,
+        work_item_type: WorkItemType::DocumentApproval,
+        business_object_type: "payment_reversal",
+        read_permission: "purchase_order:detail",
+    },
 ];
 
 fn object_policy(work_item_type: WorkItemType, business_object_type: &str) -> Option<&'static ObjectPolicy> {
@@ -3156,6 +3149,33 @@ fn assignment_separation_policy(work_item_type: WorkItemType) -> AssignmentSepar
         | WorkItemType::FinanceCorrectionReview => AssignmentSeparationPolicy::FailClosed,
         WorkItemType::DocumentApproval => AssignmentSeparationPolicy::ApprovalHistory,
     }
+}
+
+/// 旧责任池命令的稳定失败关闭错误。
+///
+/// # 参数
+/// * `command` - 命令名
+///
+/// # 返回
+/// 返回不含默认责任人的业务错误。
+fn pool_command_closed(command: &str) -> Error {
+    Error::BusinessLogicError(format!("全系统已取消责任池语义，命令 {command} 已失败关闭"))
+}
+
+/// 审批任务不得走通用工作项写接口。
+///
+/// # 参数
+/// * `item` - 当前任务
+///
+/// # 错误
+/// 带 `approval_node_execution_id` 或类型为 `DocumentApproval` 时返回固定错误码。
+fn forbid_approval_generic_mutation(item: &WorkItem) -> Result<()> {
+    if item.approval_node_execution_id.is_some() || item.work_item_type == WorkItemType::DocumentApproval {
+        return Err(Error::BusinessLogicError(
+            "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn optional_actors<const N: usize>(actors: [Option<String>; N]) -> Vec<String> {
@@ -4447,6 +4467,11 @@ mod tests {
             assignment_separation_policy(WorkItemType::FinanceCorrectionReview),
             AssignmentSeparationPolicy::FailClosed
         );
+        assert_eq!(
+            assignment_separation_policy(WorkItemType::DocumentApproval),
+            AssignmentSeparationPolicy::ApprovalHistory
+        );
+        assert!(object_policy(WorkItemType::DocumentApproval, "stock_adjustment").is_some());
     }
 
     #[test]
