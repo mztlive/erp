@@ -25,6 +25,8 @@
 use database::SalesReviewExt;
 use mongodb::Database;
 
+mod adapter;
+mod cancel_approval;
 mod dto;
 mod formalization;
 mod low_margin_confirmation;
@@ -35,17 +37,20 @@ mod sales_change_order;
 mod sales_change_review;
 mod sales_order_review;
 mod sourcing;
+mod start_approval;
 
+pub use self::adapter::sales_change_order_object_readable;
 pub use self::dto::{
-    ApprovedPurchaseOrderDraftView, ChangeReviewDecisionRequest, CompleteProcurementConfirmationCommand,
-    CompleteProcurementConfirmationResult, CreateSalesChangeOrderRequest, PageView,
-    ProcurementConfirmationActionBlockerView, ProcurementConfirmationAllowedAction,
-    ProcurementConfirmationBusinessResult, ProcurementConfirmationDecision,
-    ProcurementConfirmationDetailParams, ProcurementConfirmationDetailView, ProcurementConfirmationLineView,
-    ProcurementConfirmationListParams, ProcurementConfirmationView, ProcurementRecommendationIssueView,
-    ProcurementRecommendationLineView, ProcurementRecommendationOrderView, ProcurementRecommendationView,
-    ProcurementSalesResolution, SalesChangeDraftRequest, SalesChangeLineRequest, SalesChangeOrderDetailView,
-    SalesChangeOrderListParams, SalesChangeOrderView, SalesOrderReviewListParams, SalesOrderReviewView,
+    ApprovedPurchaseOrderDraftView, CancelSalesChangeApprovalRequest, ChangeReviewDecisionRequest,
+    CompleteProcurementConfirmationCommand, CompleteProcurementConfirmationResult,
+    CreateSalesChangeOrderRequest, DocumentApprovalView, PageView, ProcurementConfirmationActionBlockerView,
+    ProcurementConfirmationAllowedAction, ProcurementConfirmationBusinessResult,
+    ProcurementConfirmationDecision, ProcurementConfirmationDetailParams, ProcurementConfirmationDetailView,
+    ProcurementConfirmationLineView, ProcurementConfirmationListParams, ProcurementConfirmationView,
+    ProcurementRecommendationIssueView, ProcurementRecommendationLineView,
+    ProcurementRecommendationOrderView, ProcurementRecommendationView, ProcurementSalesResolution,
+    SalesChangeDraftRequest, SalesChangeLineRequest, SalesChangeOrderDetailView, SalesChangeOrderListParams,
+    SalesChangeOrderView, SalesOrderReviewListParams, SalesOrderReviewView,
     SaveProcurementConfirmationAction, SaveProcurementConfirmationLinesRequest,
     SaveProcurementConfirmationResult, SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
 };
@@ -86,3 +91,6 @@ impl SalesReviewService {
         Self { db }
     }
 }
+
+/// 合同 §4.4.4 目标端口名；落地于本域 `SalesReviewService`。
+pub type SalesChangeOrderService = SalesReviewService;

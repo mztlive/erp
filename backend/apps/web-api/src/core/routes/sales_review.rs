@@ -122,4 +122,12 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 sales_review::sales_change_order_void_permission_key(),
             ),
         )
+        .route(
+            "/sales-change-orders/{id}/cancel-approval",
+            with_permission(
+                post(sales_review::sales_change_order_cancel_approval),
+                rbac,
+                sales_review::sales_change_order_cancel_approval_permission_key(),
+            ),
+        )
 }

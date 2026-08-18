@@ -74,25 +74,28 @@ impl SalesChangeType {
     }
 }
 
-/// 销售变更单状态（数据模型 §6.5：草稿、待影响确认、待财务复核、已生效、已驳回、
-/// 已作废）。
+/// 销售变更单状态（合同 §4.4.2：目标邻接仅草稿、审批中、已生效、已作废）。
+///
+/// 新写入只使用 `Draft` / `InApproval` / `Effective` / `Voided`。
+/// `PendingImpactConfirmation`、`PendingFinanceReview` 与 `Rejected` 仅保留稳定
+/// 字面量，供未改仓储查询编译；不得再作为目标状态机后继。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SalesChangeOrderStatus {
     /// 草稿。
     Draft,
-    /// 待影响确认（采购或运营的履约影响确认）。
-    PendingImpactConfirmation,
-    /// 待财务复核。
-    PendingFinanceReview,
-    /// 已生效。
-    Effective,
-    /// 已驳回。
-    Rejected,
-    /// 已作废。
-    Voided,
     /// 审批中。
     InApproval,
+    /// 已生效。
+    Effective,
+    /// 已作废。
+    Voided,
+    /// 残留字面量：原待影响确认，已合并入 `InApproval`。
+    PendingImpactConfirmation,
+    /// 残留字面量：原待财务复核，已合并入 `InApproval`。
+    PendingFinanceReview,
+    /// 残留字面量：原驳回态，审批驳回不再改业务状态。
+    Rejected,
 }
 
 impl SalesChangeOrderStatus {
@@ -103,12 +106,12 @@ impl SalesChangeOrderStatus {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
+            Self::InApproval => "审批中",
+            Self::Effective => "已生效",
+            Self::Voided => "已作废",
             Self::PendingImpactConfirmation => "待影响确认",
             Self::PendingFinanceReview => "待财务复核",
-            Self::Effective => "已生效",
             Self::Rejected => "已驳回",
-            Self::Voided => "已作废",
-            Self::InApproval => "审批中",
         }
     }
 
@@ -119,28 +122,28 @@ impl SalesChangeOrderStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
+            Self::InApproval => "IN_APPROVAL",
+            Self::Effective => "EFFECTIVE",
+            Self::Voided => "VOIDED",
             Self::PendingImpactConfirmation => "PENDING_IMPACT_CONFIRMATION",
             Self::PendingFinanceReview => "PENDING_FINANCE_REVIEW",
-            Self::Effective => "EFFECTIVE",
             Self::Rejected => "REJECTED",
-            Self::Voided => "VOIDED",
-            Self::InApproval => "IN_APPROVAL",
         }
     }
 }
 
 impl DocumentState for SalesChangeOrderStatus {
-    /// §6.5 固定邻接：草稿发起影响确认或作废；影响确认通过后进入财务复核；
-    /// 财务复核通过后生效；影响确认/财务复核可驳回；驳回后修改内容形成新变更
-    /// 提交并重新发起影响确认；生效/作废为终态。
+    /// 合同 §4.4.1 / §4.4.2：草稿可提交进入审批或作废；审批中可最终生效或
+    /// 撤回回草稿；残留确认/驳回态无新后继。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::PendingImpactConfirmation, Self::Voided, Self::InApproval],
+            Self::Draft => &[Self::InApproval, Self::Voided],
             Self::InApproval => &[Self::Effective, Self::Draft],
-            Self::PendingImpactConfirmation => &[Self::PendingFinanceReview, Self::Rejected],
-            Self::PendingFinanceReview => &[Self::Effective, Self::Rejected],
-            Self::Rejected => &[Self::PendingImpactConfirmation],
-            Self::Effective | Self::Voided => &[],
+            Self::Effective
+            | Self::Voided
+            | Self::PendingImpactConfirmation
+            | Self::PendingFinanceReview
+            | Self::Rejected => &[],
         }
     }
 }
@@ -215,7 +218,7 @@ impl PartialEq for SalesChangeOrder {
 impl Eq for SalesChangeOrder {}
 
 impl SalesChangeOrder {
-    /// 创建销售变更单（初始 `Draft`；目标提交在发起影响确认时形成）。
+    /// 创建销售变更单（初始 `Draft`；目标提交在提交审批时形成）。
     ///
     /// 完成变更原因的校验与规范化（trim、非空、长度上限）。
     ///
@@ -261,7 +264,12 @@ impl SalesChangeOrder {
     /// # 错误
     /// 状态非 `Draft`，或变更原因为空、超长时返回错误。
     pub fn update(&mut self, update: SalesChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
-        ensure_transition(self.stable.status, SalesChangeOrderStatus::Draft)?;
+        if self.stable.status != SalesChangeOrderStatus::Draft {
+            return Err(crate::errors::Error::InvalidStateTransition {
+                from: format!("{:?}", self.stable.status),
+                to: format!("{:?}", SalesChangeOrderStatus::Draft),
+            });
+        }
         if let Some(change_type) = update.change_type {
             self.change_type = change_type;
         }
@@ -273,10 +281,10 @@ impl SalesChangeOrder {
         Ok(())
     }
 
-    /// 发起影响确认（`Draft → PendingImpactConfirmation`）。
+    /// 提交并启动审批（`Draft → InApproval`）。
     ///
-    /// 目标提交与内容指纹必须同时提供（§6.5：所有复核引用同一个
-    /// `sales_change_submission_id`）。
+    /// 目标提交与内容指纹必须同时提供。`subject_version` 取提交序号，本方法
+    /// 不回退已绑定的提交引用。
     ///
     /// # 参数
     /// * `submission_id` - 不可变目标变更提交
@@ -287,17 +295,20 @@ impl SalesChangeOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态非法、提交与指纹缺一，或指纹为空、超长时返回错误。
-    pub fn submit_impact(
+    /// 状态非法，或指纹为空、超长时返回错误。
+    pub fn start_approval(
         &mut self,
         submission_id: SalesChangeSubmissionId,
         target_content_hash: impl Into<String>,
         updated_by: impl Into<String>,
     ) -> Result<()> {
-        ensure_transition(
-            self.stable.status,
-            SalesChangeOrderStatus::PendingImpactConfirmation,
-        )?;
+        if self.stable.status != SalesChangeOrderStatus::Draft {
+            return Err(crate::errors::Error::InvalidStateTransition {
+                from: format!("{:?}", self.stable.status),
+                to: format!("{:?}", SalesChangeOrderStatus::InApproval),
+            });
+        }
+        ensure_transition(self.stable.status, SalesChangeOrderStatus::InApproval)?;
         let target_content_hash = normalize_required_text(
             target_content_hash.into(),
             "目标内容指纹不能为空",
@@ -306,30 +317,12 @@ impl SalesChangeOrder {
         )?;
         self.current_submission_id = Some(submission_id);
         self.target_content_hash = Some(target_content_hash);
-        self.stable.status = SalesChangeOrderStatus::PendingImpactConfirmation;
+        self.stable.status = SalesChangeOrderStatus::InApproval;
         self.stable.touch(updated_by);
         Ok(())
     }
 
-    /// 影响确认通过进入财务复核（`PendingImpactConfirmation → PendingFinanceReview`；
-    /// 卡券变更完成运营确认后再做财务影响复核，§6.5）。
-    ///
-    /// # 参数
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非待影响确认状态时返回 [`Error::InvalidStateTransition`]。
-    pub fn to_finance_review(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        ensure_transition(self.stable.status, SalesChangeOrderStatus::PendingFinanceReview)?;
-        self.stable.status = SalesChangeOrderStatus::PendingFinanceReview;
-        self.stable.touch(updated_by);
-        Ok(())
-    }
-
-    /// 财务复核通过并生效（`PendingFinanceReview → Effective`）。
+    /// 最终通过并生效（`InApproval → Effective`）。
     ///
     /// # 参数
     /// * `effective_revision_id` - 生效后生成的新销售版本
@@ -339,8 +332,8 @@ impl SalesChangeOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态非法或缺少生效版本时返回错误。
-    pub fn approve(
+    /// 状态非法时返回 [`Error::InvalidStateTransition`]。
+    pub fn apply_effective(
         &mut self,
         effective_revision_id: SalesOrderRevisionId,
         updated_by: impl Into<String>,
@@ -352,8 +345,9 @@ impl SalesChangeOrder {
         Ok(())
     }
 
-    /// 驳回变更（`PendingImpactConfirmation`/`PendingFinanceReview → Rejected`；
-    /// 修改拟变更内容后形成新变更提交，从影响确认重新开始）。
+    /// 撤回或受阻取消（`InApproval → Draft`）。
+    ///
+    /// 成功后回到可修正草稿；已冻结的提交引用与 `subject_version` 不回退。
     ///
     /// # 参数
     /// * `updated_by` - 操作人
@@ -362,10 +356,10 @@ impl SalesChangeOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态非法时返回 [`Error::InvalidStateTransition`]。
-    pub fn reject(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        ensure_transition(self.stable.status, SalesChangeOrderStatus::Rejected)?;
-        self.stable.status = SalesChangeOrderStatus::Rejected;
+    /// 非审批中时返回 [`Error::InvalidStateTransition`]。
+    pub fn cancel_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        ensure_transition(self.stable.status, SalesChangeOrderStatus::Draft)?;
+        self.stable.status = SalesChangeOrderStatus::Draft;
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -428,35 +422,35 @@ mod tests {
     }
 
     #[test]
-    fn full_change_flow_and_rework_after_rejection() {
+    fn submit_enters_in_approval_and_cancel_returns_draft_without_rolling_back_submission() {
         let mut order = SalesChangeOrder::new(SalesChangeOrderId::new("co-1"), data(), "admin-1").unwrap();
         order
-            .submit_impact(
+            .start_approval(
                 SalesChangeSubmissionId::new("cs-1"),
                 " hash-1 ".to_string(),
                 "admin-1",
             )
             .unwrap();
-        assert_eq!(
-            order.stable.status(),
-            SalesChangeOrderStatus::PendingImpactConfirmation
-        );
+        assert_eq!(order.stable.status(), SalesChangeOrderStatus::InApproval);
         assert_eq!(order.target_content_hash.as_deref(), Some("hash-1"));
-
-        order.reject("procurement").unwrap();
-        assert_eq!(order.stable.status(), SalesChangeOrderStatus::Rejected);
-
-        // 驳回后形成新变更提交，从影响确认重新开始（§6.5）
-        order
-            .submit_impact(SalesChangeSubmissionId::new("cs-2"), "hash-2", "admin-1")
-            .unwrap();
-        order.to_finance_review("operations").unwrap();
         assert_eq!(
-            order.stable.status(),
-            SalesChangeOrderStatus::PendingFinanceReview
+            order.current_submission_id,
+            Some(SalesChangeSubmissionId::new("cs-1"))
         );
+
+        order.cancel_approval("admin-1").unwrap();
+        assert_eq!(order.stable.status(), SalesChangeOrderStatus::Draft);
+        assert_eq!(
+            order.current_submission_id,
+            Some(SalesChangeSubmissionId::new("cs-1")),
+            "撤回不得回退 subject_version / 提交引用"
+        );
+
         order
-            .approve(SalesOrderRevisionId::new("rev-2"), "finance")
+            .start_approval(SalesChangeSubmissionId::new("cs-2"), "hash-2", "admin-1")
+            .unwrap();
+        order
+            .apply_effective(SalesOrderRevisionId::new("rev-2"), "finance")
             .unwrap();
         assert_eq!(order.stable.status(), SalesChangeOrderStatus::Effective);
         assert_eq!(
@@ -467,64 +461,56 @@ mod tests {
 
     #[test]
     fn status_machine_edges_are_directed() {
-        assert!(ensure_transition(
-            SalesChangeOrderStatus::Draft,
-            SalesChangeOrderStatus::PendingImpactConfirmation
-        )
-        .is_ok());
+        assert!(ensure_transition(SalesChangeOrderStatus::Draft, SalesChangeOrderStatus::InApproval).is_ok());
         assert!(ensure_transition(SalesChangeOrderStatus::Draft, SalesChangeOrderStatus::Voided).is_ok());
         assert!(ensure_transition(
-            SalesChangeOrderStatus::PendingImpactConfirmation,
-            SalesChangeOrderStatus::PendingFinanceReview
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            SalesChangeOrderStatus::PendingImpactConfirmation,
-            SalesChangeOrderStatus::Rejected
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            SalesChangeOrderStatus::PendingFinanceReview,
+            SalesChangeOrderStatus::InApproval,
             SalesChangeOrderStatus::Effective
         )
         .is_ok());
-        assert!(ensure_transition(
-            SalesChangeOrderStatus::PendingFinanceReview,
-            SalesChangeOrderStatus::Rejected
-        )
-        .is_ok());
-        assert!(ensure_transition(
-            SalesChangeOrderStatus::Rejected,
-            SalesChangeOrderStatus::PendingImpactConfirmation
-        )
-        .is_ok());
-        // 非法迁移
+        assert!(ensure_transition(SalesChangeOrderStatus::InApproval, SalesChangeOrderStatus::Draft).is_ok());
         assert!(ensure_transition(SalesChangeOrderStatus::Draft, SalesChangeOrderStatus::Effective).is_err());
         assert!(ensure_transition(SalesChangeOrderStatus::Effective, SalesChangeOrderStatus::Draft).is_err());
         assert!(ensure_transition(SalesChangeOrderStatus::Voided, SalesChangeOrderStatus::Draft).is_err());
         assert!(SalesChangeOrderStatus::Effective.allowed_next().is_empty());
         assert!(SalesChangeOrderStatus::Voided.allowed_next().is_empty());
+        assert!(SalesChangeOrderStatus::PendingImpactConfirmation
+            .allowed_next()
+            .is_empty());
+        assert!(SalesChangeOrderStatus::PendingFinanceReview
+            .allowed_next()
+            .is_empty());
+        assert!(SalesChangeOrderStatus::Rejected.allowed_next().is_empty());
+        assert!(ensure_transition(
+            SalesChangeOrderStatus::Draft,
+            SalesChangeOrderStatus::PendingImpactConfirmation
+        )
+        .is_err());
+        assert!(ensure_transition(
+            SalesChangeOrderStatus::InApproval,
+            SalesChangeOrderStatus::Rejected
+        )
+        .is_err());
     }
 
     #[test]
-    fn submit_impact_requires_paired_submission_and_hash() {
+    fn start_approval_requires_paired_submission_and_hash() {
         let mut order = SalesChangeOrder::new(SalesChangeOrderId::new("co-1"), data(), "admin-1").unwrap();
         assert!(
             order
-                .submit_impact(SalesChangeSubmissionId::new("cs-1"), "  ", "admin-1")
+                .start_approval(SalesChangeSubmissionId::new("cs-1"), "  ", "admin-1")
                 .is_err(),
             "内容指纹必填"
         );
 
         order
-            .submit_impact(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-1")
+            .start_approval(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-1")
             .unwrap();
-        order.to_finance_review("operations").unwrap();
         assert!(
             order
-                .submit_impact(SalesChangeSubmissionId::new("cs-2"), "hash-2", "admin-1")
+                .start_approval(SalesChangeSubmissionId::new("cs-2"), "hash-2", "admin-1")
                 .is_err(),
-            "待财务复核不可重新发起影响确认"
+            "审批中不可再次提交"
         );
     }
 
@@ -544,7 +530,7 @@ mod tests {
         assert_eq!(order.reason, "调整金额");
 
         order
-            .submit_impact(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-2")
+            .start_approval(SalesChangeSubmissionId::new("cs-1"), "hash-1", "admin-2")
             .unwrap();
         assert!(order
             .update(SalesChangeOrderUpdate::default(), "admin-3")
