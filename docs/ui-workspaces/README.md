@@ -7,7 +7,7 @@
 - `erp-ui-design.md`：全局视觉语言、应用壳、M1–M7 页面模式、权限和状态通用契约。
 - 本目录的 `wxx-*.md`：单个工作面的布局、内容、操作、数据和验收标准。
 - `erp-phase-1.md` / `erp-phase-2.md`：业务范围、状态机和职责边界。
-- `approval-workflow-contract.md`：审批实例、步骤推进、待办责任、分派模式和 BPM 接入边界。
+- `approval-workflow-contract.md`：审批实例、节点执行、待办责任和 BPM 接入边界。全系统只有指定到人一种责任模型。
 - `erp-data-model.md`：实体、字段、不变量和查询投影。
 - `erp-ui-flows.md`：跨工作面的高频完整流程。
 
@@ -31,8 +31,8 @@ W 文件不得重定义业务状态机、审批步骤推进或待办责任语义
    - 界面上的按钮、状态、提示、空态、错误恢复一律使用业务语言。任务分派、动作命令、
      work_item、对象版本、幂等键等实现词只出现在本目录正文、代码注释和字段名里；
      租约、令牌、信封、指纹等分布式协议概念已从契约中移除。
-   - 待办范围和动作固定使用「我的待办 / 团队待处理 / 团队任务 / 处理历史 / 开始处理 / 退回团队 / 转交」；
-     页面不得出现「领取 / 重新领取 / 团队待认领」。
+   - 待办范围和动作固定使用「待我处理 / 已超期 / 受阻 / 我发起的 / 通过 / 驳回 / 打开单据」；
+     页面不得出现「团队待处理 / 领取 / 重新领取 / 开始处理 / 退回团队 / 团队待认领」。
    - **枚举原值**（`POSTED`、`BLOCKED`…）和**内部 ID**（`rsv_*`、`pla_*`…）不得进入界面；
      新增枚举必须同时提供中文映射。
    - 跨角色的措辞差异用**组件 props** 表达，不得修改 `components/business` 的默认文案 ——
@@ -57,13 +57,13 @@ W 文件不得重定义业务状态机、审批步骤推进或待办责任语义
 
 | ID | 工作面 | 模式 | 主要路由 | 文档 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| W01 | 今日工作台 | M1 | `/workspace` | [w01-today-workspace.md](w01-today-workspace.md) | 已实现 |
-| W02 | 待办队列（统一） | M3 | `/workspace/tasks` | [w02-unified-task-queue.md](w02-unified-task-queue.md) | 已确认 |
+| W01 | 我的工作台 | M1 + 页内主从 | `/workspace` | [w01-today-workspace.md](w01-today-workspace.md) | 已确认 |
+| W02 | 待办队列（统一） | — | `/workspace/tasks` → `/workspace` | [w02-unified-task-queue.md](w02-unified-task-queue.md) | 已废止 |
 | W03 | 客户中心 | M4 | `/sales/customers` | [w03-customer-center.md](w03-customer-center.md) | 已实现 |
 | W04 | 合同 | M2 + M4 | `/sales/contracts` | [w04-contracts.md](w04-contracts.md) | 已实现 |
 | W05 | 销售单（统一） | M2 + M4 + M5 | `/sales/orders`（列表行点纸质预览，无侧栏 Sheet） | [w05-sales-orders.md](w05-sales-orders.md) | 已实现 |
 | W06 | 客户验收 | 挂 W05 + 作业 | `/sales/orders/:salesOrderId?section=acceptance` | [w06-customer-acceptance.md](w06-customer-acceptance.md) | 已实现 |
-| W07 | 二次确认队列 | M3 | `/procurement/confirm` | [w07-procurement-confirmation-queue.md](w07-procurement-confirmation-queue.md) | 已实现 |
+| W07 | 二次确认队列 | — | `/procurement/confirm` | [w07-procurement-confirmation-queue.md](w07-procurement-confirmation-queue.md) | 已废止 |
 | W08 | 采购单 | M2 + M4 + M5 | `/procurement/orders` | [w08-purchase-orders.md](w08-purchase-orders.md) | 已实现 |
 | W10 | 库存台账 | M2 + M6 | `/inventory` | [w10-inventory-ledger.md](w10-inventory-ledger.md) | 已实现 |
 | W11 | 客户往来 | M2 + M5 | `/finance/customer-accounts` | [w11-customer-receivables.md](w11-customer-receivables.md) | 已实现 |
@@ -79,6 +79,7 @@ W 文件不得重定义业务状态机、审批步骤推进或待办责任语义
 | W21 | 供应商供给 | M2 + M4 | `/procurement/supplier-offerings` | [w21-supplier-offerings.md](w21-supplier-offerings.md) | 已实现 |
 | W22 | 商品发布 | M2 + M4 | `/commerce/publications` | [w22-product-publication.md](w22-product-publication.md) | 已实现 |
 | W23 | 执行投影 | M2 + M4 | `/commerce/execution-projections` | [w23-execution-projection.md](w23-execution-projection.md) | 已实现 |
+| W24 | 审批流程配置 | M2 + M4 | `/system/approval-processes` | [w24-approval-processes.md](w24-approval-processes.md) | 已确认 |
 | W25 | 商城消费订单 | M2 + M4 | `/commerce/consumption-orders` | [w25-mall-consumption-orders.md](w25-mall-consumption-orders.md) | 已实现 |
 | W26 | 供应商订单 | M2 + M4 | `/supplier-api/orders` | [w26-supplier-orders.md](w26-supplier-orders.md) | 已实现 |
 | W27 | API 结算 | M2 + M4 | `/supplier-api/settlements` | [w27-api-settlement.md](w27-api-settlement.md) | 已实现 |

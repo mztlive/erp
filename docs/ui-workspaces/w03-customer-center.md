@@ -4,7 +4,7 @@
 > 页面模式：M4 对象中心
 > 主要路由：`/sales/customers`；对象路由 `/sales/customers/:customerId`
 > 主要角色：销售、销售领导；财务、管理层和历史参与者按权限只读
-> 最后更新：2026-08-05
+> 最后更新：2026-08-17
 
 ## 1. 定位与目标
 
@@ -318,7 +318,7 @@ type ChangeCustomerAssignmentCommand = {
 
 | 来源 / 去向 | Wxx | 携带上下文 | 返回规则 |
 | --- | --- | --- | --- |
-| 待办/映射任务 | W01 / W02 / W17 | `customerId`、`workItemId`、来源焦点 | 完成客户修正后回原任务验证 |
+| 待办/映射任务 | W01 / W17 | `customerId`、`workItemId`、来源焦点 | 完成客户修正后回原任务验证 |
 | 合同 | W04 | `customerId`、可选 `contractId` | 返回时刷新合同摘要 |
 | 销售单 | W05 | `customerId`、可选 `contractId`、来源任务 | 返回时刷新销售摘要 |
 | 客户往来 | W11 | 客户稳定 ID、可选应收筛选 | 关闭往来页签回票款摘要 |

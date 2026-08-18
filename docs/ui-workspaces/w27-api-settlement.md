@@ -4,7 +4,7 @@
 > 页面模式：M2 高密度查询列表 + M4 对象中心
 > 主要路由：`/supplier-api/settlements`、`/supplier-api/settlements/:statementId`
 > 主要角色：财务；采购协同，管理层只读
-> 最后更新：2026-08-01
+> 最后更新：2026-08-17
 
 ## 1. 定位与目标
 
@@ -54,8 +54,8 @@
 | 场景 | 入口 | URL / 页签行为 | 返回位置 |
 | --- | --- | --- | --- |
 | 浏览结算 | 侧栏“API 供应商结算” | `/supplier-api/settlements?view=pending` | 恢复筛选、分页和滚动位置 |
-| 财务待办 | W01 / W02 `SUPPLIER_SETTLEMENT_REVIEW` | 打开对象中心，只携带 `workItemId`、`statementId`和 `queueContextId`；目标页重新查询当前主题版本和责任状态 | 返回待办队列原位置 |
-| 开始处理复核 | 复核记录 Tab | 财务复核且非经办人；开放 `POOL` 任务尚无个人责任人（`START_PROCESSING`） | 「开始处理」按钮 | 原任务写入当前用户责任，可确认/驳回 | 冲突时显示当前处理人并刷新任务 |
+| 财务待办 | W01 `SUPPLIER_SETTLEMENT_REVIEW` | 打开对象中心，只携带 `workItemId`、`statementId` 和 `queueContextId`；目标页重新查询当前主题版本和责任状态；任务创建即指定到人 | 返回 W01 原任务位置 |
+| 财务复核 | W01 已指定到人的复核任务 | 当前责任人为本人且非经办人；直接确认或驳回。不得提供已废止的“开始处理”、领取、退回团队或 `POOL` 能力 | 完成后回 W01 原任务位置 |
 | 从供应商订单钻取 | W26 成本与结算 | 聚焦已有结算页签或新建 | 返回 W26 原订单 |
 | 从供应商往来钻取 | W12 应付来源 | 打开已确认结算单只读中心 | 返回 W12 原应付会话 |
 | 列表核对 | W27 单击行 / Enter | 打开 `detail` 半屏，URL 增加 `preview={id}` | 关闭焦点回原行 |
@@ -402,7 +402,7 @@ type SettlementReviewCommand = {
 - `SUBMIT_REVIEW` 按服务端 `sourceAsOf` 冻结来源快照、结算明细和差异结论，并在同一事务创建唯一 `SUPPLIER_SETTLEMENT_REVIEW`；复核任务唯一，不得重复创建。仅当全部差异均已有完整处理结论且金额影响已进入试算时允许提交；未知金额差异必须阻断提交，禁止“带未知金额差异”进入复核。
 - `CONFIRM` 必须同时校验岗位分离、当前指纹、差异状态和供应商/期间重复覆盖约束。外部账单已同步时按账单与试算结果确认；仅当供应商商务资料明确「无账单」且已登记人工对账证据时，允许仅按 ERP 计算额确认；否则账单缺失必须阻断确认。
 - `REJECT` 和 `CONFIRM` 只能使用独立的 `SettlementReviewCommand`，携带 `workItemId`、`expectedTaskVersion`、`expectedSubjectVersion` 和强类型 `decision`；服务端校验当前责任人、结算单版本及已注册任务类型。正式结算状态变化与该 `work_item` 完成在同一事务，任一失败均不留下半完成；任务完成本身不能单独追加成本或形成应付。
-- `SUBMIT_REVIEW` 与 `VOID_DRAFT` 使用独立 `SettlementObjectCommand`，不接受任务命令。普通对象入口即使读到已有复核任务，也必须按分派模式建立个人责任后再用 `SettlementReviewCommand` 决策，不能绕过任务直接确认。
+- `SUBMIT_REVIEW` 与 `VOID_DRAFT` 使用独立 `SettlementObjectCommand`，不接受任务命令。普通对象入口即使读到已有复核任务，也必须先重新查询 W01 当前责任人与任务版本，只有当前责任人为本人时才可用 `SettlementReviewCommand` 决策；不得通过对象入口取得责任或绕过任务直接确认。
 - 正式确认返回成本调整事实、应付账户、应付分录、确认时间和下一步，不只返回成功布尔值。
 - 网络失败时先用 `operationId` 查询原结果；结果不确定期间不得重复提交。
 
@@ -473,7 +473,7 @@ type SettlementReviewCommand = {
 | API 连接 | W20 | 供应商、连接、外部账单版本 | 返回保持结算页签 |
 | 接口错误与对账 | W29 | 账单消息、同步任务、差异证据 | 解决后重新试算，不直接改结算事实 |
 | 卡券经营分析 | W28 | 期间、供应商、成本调整来源 | 返回分析筛选不丢失 |
-| 工作台 / 待办 | W01 / W02 | `workItemId`、`statementId`、`queueContextId`；不跨页传递 `subjectHash` 等可变事实 | 目标页重查主题版本与责任状态；处理完成后原任务刷新 |
+| 工作台 / 待办 | W01 | `workItemId`、`statementId`、`queueContextId`；不跨页传递 `subjectHash` 等可变事实 | 目标页重查主题版本与责任状态；处理完成后 W01 原任务刷新 |
 
 ## 12. 验收清单
 

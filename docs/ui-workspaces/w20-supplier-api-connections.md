@@ -61,7 +61,7 @@
 - 系统管理员负责接口权限和连接启停治理，执行启用/停用；不得代替采购确认供应关系或成本，也不得代替运维完成健康确认。
 - 生产环境启用必须至少双角色完成：采购业务能力确认与研发运维技术健康确认均已满足后，仅系统管理员可执行启用。非生产环境启用仍须服务端前置全部满足，但不得降低生产双角色要求。
 - Supplier Connector 负责把供应商协议转换为统一命令/事件；前端不展示也不允许编辑供应商专用鉴权逻辑。
-- “确认业务能力需求”是连接/能力对象上的追加式业务确认：采购只能记录需求、适用范围和证据，不能写 `supplier_api_capability` 的启停状态。该动作不进入 W01/W02，也不创建、开始处理或完成 `work_item`。
+- “确认业务能力需求”是连接/能力对象上的追加式业务确认：采购只能记录需求、适用范围和证据，不能写 `supplier_api_capability` 的启停状态。该动作不进入 W01，也不创建或完成 `work_item`。
 - “配置能力”是系统管理员的独立对象动作；服务端分别校验连接版本和每条能力版本，不能把采购确认当作能力状态变更命令复用。
 
 ## 3. 入口、路由与任务页签
@@ -291,7 +291,7 @@ type UpdateSupplierCapabilitiesCommand = {
 
 - `payloadReference` 是服务端签发、短时、仅绑定用途的不透明引用，不能是用户输入的秘密正文。
 - 配置表单使用 TanStack Form；服务端校验固定能力代码、引用权限、环境、版本和关联业务影响。
-- `ConfirmBusinessCapabilityRequirementCommand` 只追加采购业务确认及审计事件；服务端同时校验 `expectedConnectionVersion`、`expectedCapabilityVersion` 和稳定 `operationId` / `idempotencyKey`，不得更新能力启停状态，也不得产生任何 W01/W02 任务生命周期。
+- `ConfirmBusinessCapabilityRequirementCommand` 只追加采购业务确认及审计事件；服务端同时校验 `expectedConnectionVersion`、`expectedCapabilityVersion` 和稳定 `operationId` / `idempotencyKey`，不得更新能力启停状态，也不得产生任何 W01 任务生命周期。
 - `UpdateSupplierCapabilitiesCommand` 仅接受系统管理员的 `UPDATE_CAPABILITIES` 权限；它独立校验连接/能力版本并追加配置审计，不能由采购角色提交，也不能把业务确认记录伪装成配置结果。
 - 返回 `CONFIRMED | REJECTED | UNKNOWN`、对应对象新版本、后台任务号（仅健康检查/目录同步等异步动作）、审计编号和下一步。
 - 正式结果不确定时不乐观启停、不切换引用显示；使用同一请求身份查询最终结果。
@@ -382,7 +382,7 @@ type UpdateSupplierCapabilitiesCommand = {
 - [x] 鉴权/签名失败停止自动重试并显著告警。
 - [ ] 配置动作有版本和幂等键；冲突不覆盖，结果未知可查询最终结果。
 - [ ] `connectionCode` 全局唯一且环境不是唯一键组成部分；采购不能直接写能力状态。
-- [ ] 采购业务能力需求以连接/能力版本、`operationId` 和幂等键追加确认并留下审计；不进入 W01/W02，也不创建或完成 `work_item`。
+- [ ] 采购业务能力需求以连接/能力版本、`operationId` 和幂等键追加确认并留下审计；不进入 W01，也不创建或完成 `work_item`。
 - [ ] 系统管理员配置能力使用独立对象命令和能力版本校验，采购确认与能力状态变更没有共用写入口。
 - [ ] 生产环境启用必须双角色完成：采购业务确认 + 运维技术健康确认后，仅系统管理员执行启用；缺任一确认必须拒绝。
 - [x] 健康检查类型仅允许服务端固定白名单；生产检查不得创建真实订单或退款。

@@ -1,0 +1,674 @@
+{
+  "version": 2,
+  "updatedAt": "2026-08-17",
+  "ownershipRules": {
+    "owns": "阶段分支只能修改所属 owns 前缀内的文件。",
+    "ownsWithin": "同一文件被多个阶段按顺序分段负责时，用 ownsWithin 标注各阶段负责的符号范围。只有存在依赖顺序（后者 dependsOn 前者）的阶段之间允许分段；并行阶段仍然禁止共享文件。",
+    "creates": "P0-A 必须为后续阶段将要填充的每个目标模块创建失败关闭的最小占位文件，并在共享声明文件中完成模块声明，使 P1—P5 不需要再修改冻结的声明文件。",
+    "deletes": "阶段必须删除的旧文件。删除也是所有权，未登记删除责任的旧文件视为无主，必须先修订本目录。",
+    "rolloutStages": "projects.<project>.perDocumentTypeStages 中每个 p3/p4 对象都是完整阶段；其 id、branch、dependsOn、owns/ownsWithin、deletes 和 acceptance 与 stages 数组中的对象具有同等效力。",
+    "mergeGate": "任何阶段合并前必须执行与改动面匹配的全仓质量门禁；阶段 acceptance 是额外门禁，不替代全仓门禁。"
+  },
+  "qualityGates": {
+    "backendMerge": [
+      "cargo fmt --all -- --check",
+      "cargo check --workspace",
+      "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+      "cargo test --workspace"
+    ],
+    "frontendMerge": [
+      "npm run format:check",
+      "npm run lint",
+      "npm run test",
+      "npm run test:node",
+      "npm exec -- tsc --noEmit",
+      "npm run build"
+    ],
+    "docsMerge": [
+      "git diff --check",
+      "jq empty docs/dev-plan/_meta.json",
+      "相对 Markdown 链接检查",
+      "阶段 10 文档语义扫描"
+    ]
+  },
+  "projects": {
+    "approval-workflow": {
+      "contract": "docs/approval-workflow-contract.md",
+      "planDir": "docs/approval-workflow-implementation-plan",
+      "stageFile": "docs/dev-plan/approval-workflow.md",
+      "pilotDocumentType": "StockAdjustment",
+      "stages": [
+        {
+          "id": "DOC-A",
+          "planDoc": "10-contract-document-synchronization.md",
+          "branch": "docs/erp-approval-workflow-contract",
+          "status": "ready_to_merge",
+          "dependsOn": [],
+          "unlocks": ["P0-A"],
+          "owns": [
+            "docs/approval-workflow-contract.md",
+            "docs/erp-phase-1.md",
+            "docs/erp-phase-2.md",
+            "docs/dev-plan/**",
+            "docs/approval-workflow-implementation-plan/**"
+          ],
+          "acceptance": ["人工核对：合同 §4.3—§4.6、§12.2—§12.5、§13.3、§15.2、§16.5、§17 无空值与二选一"]
+        },
+        {
+          "id": "DOC-B",
+          "planDoc": "10-contract-document-synchronization.md",
+          "branch": "docs/erp-approval-workflow-data-model",
+          "status": "ready_to_merge",
+          "dependsOn": ["DOC-A"],
+          "unlocks": ["P2"],
+          "owns": ["docs/erp-data-model.md"],
+          "acceptance": [
+            "人工核对：旧 approval_definition/approval_step_definition/approval_instance/approval_step_instance 模型已被目标集合替换",
+            "人工核对：work_items.approval_step_instance_id 已替换为 approval_node_execution_id"
+          ]
+        },
+        {
+          "id": "DOC-C",
+          "planDoc": "10-contract-document-synchronization.md",
+          "branch": "docs/erp-approval-workflow-workspaces",
+          "status": "ready_to_merge",
+          "dependsOn": ["DOC-A"],
+          "unlocks": ["P4-DEFINITION", "P4-WORKFLOW"],
+          "owns": [
+            "docs/erp-ui-flows.md",
+            "docs/erp-ui-design.md",
+            "docs/ui-glossary.md",
+            "docs/ui-workspaces/**"
+          ],
+          "acceptance": ["人工核对：W01 已扩写为唯一工作台、W02 已标记废止、W05/W19/W24 与 ui-glossary.md 术语已同步"]
+        },
+        {
+          "id": "DOC-D",
+          "planDoc": "10-contract-document-synchronization.md",
+          "branch": "docs/erp-approval-workflow-protocol",
+          "status": "not_started",
+          "dependsOn": ["P3-HTTP"],
+          "unlocks": ["P6-PILOT"],
+          "owns": [
+            "docs/approval-workflow-openapi.yaml",
+            "docs/approval-workflow-error-catalog.md",
+            "docs/runbooks/approval-workflow.md",
+            "erp-client/package.json",
+            "erp-client/package-lock.json"
+          ],
+          "acceptance": ["npm run openapi:lint"]
+        },
+        {
+          "id": "P0-A",
+          "planDoc": "00-foundation-and-shared-contracts.md",
+          "branch": "chore/erp-p0-amend-approval-workflow-foundation",
+          "dependsOn": ["DOC-A"],
+          "owns": [
+            "backend/Cargo.toml",
+            "backend/AGENTS.md",
+            "backend/crates/bpm/Cargo.toml",
+            "backend/crates/bpm/src/lib.rs",
+            "backend/crates/bpm/src/ids.rs",
+            "backend/crates/bpm/src/error.rs",
+            "backend/crates/entity-macros/src/lib.rs",
+            "backend/{entities,database,services}/Cargo.toml",
+            "backend/entities/src/lib.rs",
+            "backend/entities/src/ids.rs",
+            "backend/database/src/lib.rs",
+            "backend/database/src/repository/mod.rs",
+            "backend/database/src/repository/extensions/mod.rs",
+            "backend/database/src/indexes/mod.rs",
+            "backend/services/src/approval/mod.rs",
+            "backend/services/src/approval/process_kind.rs",
+            "backend/scripts/check-bpm-boundaries.sh"
+          ],
+          "ownsWithin": [
+            {
+              "path": "backend/entities/src/document_registry/business_document.rs",
+              "scope": "仅 DocumentType 枚举及其 label/as_str 穷尽分支（新增 VoucherSalesOrder，共 20 值）。ApprovalDefinitionBinding 值对象归 P1。"
+            }
+          ],
+          "creates": [
+            "backend/crates/bpm/src/{model,graph,engine}/mod.rs 空模块入口",
+            "backend/entities/src/approval_integration/mod.rs 占位",
+            "backend/database/src/repository/{bpm,approval_integration}.rs 占位",
+            "backend/database/src/repository/extensions/{bpm,approval_integration}.rs 占位",
+            "backend/database/src/indexes/{bpm,approval_integration}.rs 占位",
+            "backend/services/src/approval/{definition,definition_dto,policy,binding,business_adapter}.rs 与 execution/mod.rs 占位"
+          ],
+          "notes": "id_type! 必须实现为 entity-macros 的函数式过程宏。占位必须失败关闭，不得返回伪造成功、Noop 领域动作或默认审批人。现有 approval/runtime.rs 与 approval/resolver.rs 不在 P0-A 创建或删除；目标运行编排使用 approval/execution/**。P1—P5 不得再修改上表的共享声明文件；确需修改时按 conventions.md §3 提交独立 P0 amendment。",
+          "acceptance": [
+            "cargo fmt --all -- --check",
+            "cargo test -p bpm --lib",
+            "cargo check --workspace",
+            "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+            "cargo test --workspace",
+            "./scripts/check-bpm-boundaries.sh"
+          ]
+        },
+        {
+          "id": "P1",
+          "planDoc": "01-policy-and-domain-model.md",
+          "branch": "feat/erp-approval-workflow-p1-domain-model",
+          "dependsOn": ["P0-A"],
+          "owns": [
+            "backend/crates/bpm/src/model/**",
+            "backend/crates/bpm/src/graph/**",
+            "backend/entities/src/approval_integration/**",
+            "backend/entities/src/document_registry/workflow_action.rs",
+            "backend/entities/src/work_item/work_item.rs"
+          ],
+          "ownsWithin": [
+            {
+              "path": "backend/entities/src/document_registry/business_document.rs",
+              "scope": "仅 ApprovalDefinitionBinding 值对象及其校验与整体设置/整体为空规则，以及草稿延后编号所需的 document_no 可空化、document_no_assigned_at 和一次性 assign_document_no 行为。不得修改 DocumentType 枚举。"
+            },
+            {
+              "path": "backend/entities/src/{sales_order/sales_order,sales_review/sales_change_order,purchase_order/{order,change_order},inventory/stock_adjustment,receivable/customer_receipt,payable/supplier_payment,returns/{customer_refund,supplier_refund,receipt_reversal,payment_reversal}}.rs",
+              "scope": "仅新增合同 §4.4.1 的 approval_subject_version 和目标 IN_APPROVAL 值；不得删除未切换调用方仍引用的旧值。旧状态和字段由对应 DocumentType 阶段切换，跨域残留由 P0-D 删除。"
+            }
+          ],
+          "acceptance": [
+            "cargo fmt --all -- --check",
+            "cargo test -p bpm --lib",
+            "cargo test -p entities --lib",
+            "./scripts/check-bpm-boundaries.sh"
+          ]
+        },
+        {
+          "id": "P2",
+          "planDoc": "02-persistence-and-indexes.md",
+          "branch": "feat/erp-approval-workflow-p2-persistence",
+          "dependsOn": ["P1", "DOC-B"],
+          "owns": [
+            "backend/database/src/repository/bpm.rs",
+            "backend/database/src/repository/approval_integration.rs",
+            "backend/database/src/repository/work_item.rs",
+            "backend/database/src/repository/document_registry.rs",
+            "backend/database/src/repository/extensions/bpm.rs",
+            "backend/database/src/repository/extensions/approval_integration.rs",
+            "backend/database/src/indexes/bpm.rs",
+            "backend/database/src/indexes/approval_integration.rs",
+            "backend/database/src/indexes/work_item.rs",
+            "backend/database/src/indexes/document_registry.rs"
+          ],
+          "forbids": ["backend/database/tests/**"],
+          "acceptance": [
+            "cargo fmt --all -- --check",
+            "cargo test -p database --lib",
+            "./scripts/check-bpm-boundaries.sh"
+          ]
+        },
+        {
+          "id": "P3-DEFINITION",
+          "planDoc": "03-definition-management-service.md",
+          "branch": "feat/erp-approval-workflow-p3-definition",
+          "dependsOn": ["P2"],
+          "owns": [
+            "backend/services/src/approval/definition.rs",
+            "backend/services/src/approval/definition_dto.rs",
+            "backend/services/src/approval/policy.rs",
+            "backend/services/src/approval/scope.rs",
+            "backend/services/src/approval/registry.rs"
+          ],
+          "acceptance": [
+            "cargo test -p bpm graph",
+            "cargo test -p services approval::definition",
+            "./scripts/check-bpm-boundaries.sh"
+          ]
+        },
+        {
+          "id": "P3-RUNTIME",
+          "planDoc": "05-runtime-rejection-and-reassignment.md",
+          "branch": "feat/erp-approval-workflow-p3-runtime",
+          "dependsOn": ["P2"],
+          "owns": [
+            "backend/crates/bpm/src/engine/**",
+            "backend/services/src/approval/execution/**",
+            "backend/services/src/approval/runtime.rs",
+            "backend/services/src/approval/dto.rs",
+            "backend/services/src/work_item/**"
+          ],
+          "notes": "目标运行编排只写 approval/execution/**。runtime.rs 中旧公开命令必须改为稳定失败关闭，保证未切换 DocumentType 不回退旧运行时；resolver.rs 保持只读并由 P0-D 删除。claim/start_processing/release_to_team 在 Service 层立即失败关闭，HTTP 端点由 P3-HTTP 删除。",
+          "acceptance": [
+            "cargo test -p bpm engine",
+            "cargo test -p services approval::execution",
+            "./scripts/check-bpm-boundaries.sh"
+          ]
+        },
+        {
+          "id": "P3-ADAPTER-BASE",
+          "planDoc": "04-document-binding-and-business-adapters.md",
+          "branch": "feat/erp-approval-workflow-p3-adapter-base",
+          "dependsOn": ["P3-DEFINITION", "P3-RUNTIME"],
+          "owns": [
+            "backend/services/src/approval/binding.rs",
+            "backend/services/src/approval/business_adapter.rs",
+            "backend/services/src/approval/action.rs",
+            "backend/services/src/document_registry/**"
+          ],
+          "ownsWithin": [
+            {
+              "path": "backend/services/src/{purchase_order,inventory,payable,returns,fulfillment}/**",
+              "scope": "仅 BusinessDocument 注册补齐：在各类型现有创建事务内注册稳定 document_id、document_type 与按生命周期可空的 document_no，使统一绑定端口有落地点。不得在本阶段修改这些域的状态机、审批适配或提交命令——那属于各 DocumentType 子阶段。"
+            }
+          ],
+          "notes": "本阶段完成目标运行时接线后，除 StockAdjustment 外的 PROCESS_REQUIRED 类型在各自 rollout 前必须返回 APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER，不得调用旧运行时。",
+          "acceptance": ["cargo test -p services approval::binding"]
+        },
+        {
+          "id": "P3-ADAPTER-PILOT",
+          "planDoc": "04-document-binding-and-business-adapters.md",
+          "branch": "feat/erp-approval-workflow-p3-adapter-stock-adjustment",
+          "documentType": "StockAdjustment",
+          "dependsOn": ["P3-ADAPTER-BASE"],
+          "owns": [
+            "backend/services/src/inventory/**",
+            "backend/apps/web-api/src/core/handler/inventory/**",
+            "backend/apps/web-api/src/core/routes/inventory.rs"
+          ],
+          "notes": "必须删除 approve_stock_adjustment / reject_stock_adjustment 的 Service 方法、Handler 与路由；submit 改为调用统一审批启动端口；post 改为最终通过动作。",
+          "acceptance": ["cargo test -p services inventory", "cargo test -p web-api --lib"]
+        },
+        {
+          "id": "P3-HTTP",
+          "planDoc": "06-http-permissions-and-errors.md",
+          "branch": "feat/erp-approval-workflow-p3-http",
+          "dependsOn": ["P3-DEFINITION", "P3-RUNTIME"],
+          "owns": [
+            "backend/apps/web-api/src/core/handler/approval_process/**",
+            "backend/apps/web-api/src/core/handler/approval_instance/**",
+            "backend/apps/web-api/src/core/handler/work_item/**",
+            "backend/apps/web-api/src/core/routes/approval_process.rs",
+            "backend/apps/web-api/src/core/routes/approval_instance.rs",
+            "backend/apps/web-api/src/core/routes/work_item.rs",
+            "backend/services/src/iam/predefined_roles.rs"
+          ],
+          "forbids": ["backend/apps/web-api/tests/**"],
+          "acceptance": ["cargo test -p web-api --lib"]
+        },
+        {
+          "id": "P0-B",
+          "planDoc": "00-foundation-and-shared-contracts.md",
+          "branch": "chore/erp-p0-amend-approval-workflow-wiring",
+          "dependsOn": ["P3-HTTP", "P3-ADAPTER-PILOT"],
+          "owns": [
+            "backend/apps/web-api/src/main.rs",
+            "backend/apps/web-api/src/app_state.rs",
+            "backend/apps/web-api/src/core/handler/mod.rs",
+            "backend/apps/web-api/src/core/routes/mod.rs",
+            "backend/apps/web-api/src/core/routes/admin.rs",
+            "backend/apps/web-api/build.rs",
+            "backend/services/src/errors.rs"
+          ],
+          "ownsWithin": [
+            {
+              "path": "backend/services/src/lib.rs",
+              "scope": "仅审批相关共享导出的最终形态。"
+            }
+          ],
+          "acceptance": [
+            "cargo check --workspace",
+            "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+            "cargo test --workspace",
+            "./scripts/check-bpm-boundaries.sh"
+          ]
+        },
+        {
+          "id": "P4-DEFINITION",
+          "planDoc": "07-frontend-definition-management.md",
+          "branch": "feat/erp-approval-workflow-p4-definition-ui",
+          "dependsOn": ["P3-HTTP", "DOC-C"],
+          "owns": [
+            "erp-client/features/approval-processes/**",
+            "erp-client/app/(workspace)/system/approval-processes/**"
+          ],
+          "acceptance": ["npm run lint", "npm run test", "npm exec -- tsc --noEmit"]
+        },
+        {
+          "id": "P4-WORKFLOW",
+          "planDoc": "08-frontend-document-and-workbench.md",
+          "branch": "feat/erp-approval-workflow-p4-workflow-ui",
+          "dependsOn": ["P3-HTTP", "DOC-C"],
+          "owns": [
+            "erp-client/features/approval-workflow/**",
+            "erp-client/features/work-items/**",
+            "erp-client/features/unified-task-queue/**",
+            "erp-client/features/workspace/**",
+            "erp-client/app/(workspace)/workspace/tasks/page.tsx"
+          ],
+          "deletes": ["erp-client/features/unified-task-queue/**"],
+          "acceptance": ["npm run lint", "npm run test", "npm exec -- tsc --noEmit"]
+        },
+        {
+          "id": "P4-PILOT",
+          "planDoc": "08-frontend-document-and-workbench.md",
+          "branch": "feat/erp-approval-workflow-p4-stock-adjustment-ui",
+          "documentType": "StockAdjustment",
+          "dependsOn": ["P4-WORKFLOW"],
+          "owns": [
+            "erp-client/features/inventory/**",
+            "erp-client/app/(workspace)/inventory/**"
+          ],
+          "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]
+        },
+        {
+          "id": "P0-C",
+          "planDoc": "00-foundation-and-shared-contracts.md",
+          "branch": "chore/erp-p0-amend-approval-workflow-frontend-registry",
+          "dependsOn": ["P4-DEFINITION", "P4-WORKFLOW"],
+          "owns": [
+            "erp-client/lib/workspace-registry.ts",
+            "erp-client/lib/permissions.generated.ts"
+          ],
+          "workspaceId": "W24",
+          "acceptance": ["npm run lint", "npm run build", "npm exec -- tsc --noEmit"]
+        },
+        {
+          "id": "P5",
+          "planDoc": "09-development-reset-and-cutover.md",
+          "branch": "feat/erp-approval-workflow-p5-reset",
+          "dependsOn": ["P2"],
+          "owns": [
+            "backend/scripts/reset-dev-business-data.sh",
+            "backend/scripts/reset-dev-business-data.mongosh.js",
+            "backend/scripts/reset-dev-business-data.md",
+            "backend/scripts/test-reset-dev-business-data.sh"
+          ],
+          "acceptance": ["./scripts/test-reset-dev-business-data.sh"]
+        },
+        {
+          "id": "P6-PILOT",
+          "planDoc": "11-integration-and-acceptance.md",
+          "branch": "test/erp-approval-workflow-p6-pilot",
+          "dependsOn": [
+            "P0-B",
+            "P0-C",
+            "P3-ADAPTER-PILOT",
+            "P4-PILOT",
+            "P5",
+            "DOC-D"
+          ],
+          "owns": [
+            "backend/database/tests/approval_workflow_repository.rs",
+            "backend/apps/web-api/tests/approval_workflow_api.rs",
+            "backend/apps/web-api/tests/approval_workflow_invariants.rs",
+            "backend/apps/web-api/tests/approval_workflow_concurrency.rs",
+            "backend/apps/web-api/tests/approval_workflow_cutover.rs"
+          ],
+          "deletes": [
+            "backend/database/tests/approval_runtime_repository.rs",
+            "backend/apps/web-api/tests/approval_runtime_api.rs"
+          ],
+          "acceptance": ["cargo test --workspace -- --include-ignored"]
+        },
+        {
+          "id": "P0-D",
+          "planDoc": "11-integration-and-acceptance.md",
+          "branch": "chore/erp-p0-amend-approval-workflow-hard-cutover-cleanup",
+          "dependsOn": ["P6-PILOT", "P4-CUSTOMER-ACCEPTANCE"],
+          "dependsOnGroups": ["ALL_DOCUMENT_TYPE_ROLLOUTS"],
+          "owns": [
+            "backend/entities/src/lib.rs",
+            "backend/entities/src/ids.rs",
+            "backend/entities/src/approval/**",
+            "backend/entities/src/sales_review/**",
+            "backend/entities/src/work_item/work_item.rs",
+            "backend/database/src/lib.rs",
+            "backend/database/src/repository/mod.rs",
+            "backend/database/src/repository/extensions/mod.rs",
+            "backend/database/src/indexes/mod.rs",
+            "backend/database/src/repository/approval.rs",
+            "backend/database/src/repository/extensions/approval.rs",
+            "backend/database/src/indexes/approval.rs",
+            "backend/database/src/repository/sales_review.rs",
+            "backend/database/src/repository/extensions/sales_review.rs",
+            "backend/database/src/indexes/sales_review.rs",
+            "backend/services/src/approval/mod.rs",
+            "backend/services/src/approval/bootstrap.rs",
+            "backend/services/src/approval/registry.rs",
+            "backend/services/src/approval/resolver.rs",
+            "backend/services/src/approval/runtime.rs",
+            "backend/services/src/work_item/**",
+            "backend/services/src/sales_review/**",
+            "backend/services/src/sales_order/procurement_rejection.rs",
+            "backend/apps/web-api/src/main.rs",
+            "backend/apps/web-api/src/core/handler/work_item/**",
+            "backend/apps/web-api/src/core/routes/work_item.rs",
+            "backend/apps/web-api/src/core/handler/sales_review/**",
+            "backend/apps/web-api/src/core/routes/sales_review.rs",
+            "backend/services/src/iam/predefined_roles.rs",
+            "erp-client/lib/workspace-registry.ts",
+            "erp-client/lib/permissions.generated.ts"
+          ],
+          "deletes": [
+            "backend/entities/src/approval/definition.rs",
+            "backend/entities/src/approval/step_definition.rs",
+            "backend/entities/src/approval/instance.rs",
+            "backend/entities/src/approval/step_instance.rs",
+            "backend/entities/src/approval/types.rs",
+            "backend/entities/src/sales_review/procurement_confirmation.rs",
+            "backend/entities/src/sales_review/low_margin_manager_confirmation.rs",
+            "backend/entities/src/sales_review/sales_order_review.rs",
+            "backend/entities/src/sales_review/sales_change_review.rs",
+            "backend/database/src/repository/approval.rs",
+            "backend/database/src/repository/extensions/approval.rs",
+            "backend/database/src/indexes/approval.rs",
+            "backend/services/src/approval/bootstrap.rs",
+            "backend/services/src/approval/registry.rs",
+            "backend/services/src/approval/resolver.rs",
+            "backend/services/src/approval/runtime.rs",
+            "backend/services/src/sales_review/procurement_decision.rs",
+            "backend/services/src/sales_review/low_margin_confirmation.rs",
+            "backend/services/src/sales_review/sales_order_review.rs",
+            "backend/services/src/sales_review/sales_change_review.rs",
+            "backend/services/src/sales_order/procurement_rejection.rs"
+          ],
+          "notes": "本阶段是硬切换清理，不是兼容阶段。开始前全部 DocumentType 的 P3/P4 rollout 必须完成；删除后不允许旧类型、旧集合、旧端点、旧权限、旧责任动作或 fallback 残留。",
+          "acceptance": [
+            "cargo fmt --all -- --check",
+            "cargo check --workspace",
+            "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+            "cargo test --workspace",
+            "npm run format:check",
+            "npm run lint",
+            "npm run test",
+            "npm run test:node",
+            "npm exec -- tsc --noEmit",
+            "npm run build",
+            "./scripts/check-bpm-boundaries.sh",
+            "阶段 10 生产代码旧语义扫描零命中"
+          ]
+        },
+        {
+          "id": "P6-FINAL",
+          "planDoc": "11-integration-and-acceptance.md",
+          "branch": "test/erp-approval-workflow-p6-final",
+          "dependsOn": ["P0-D"],
+          "owns": [
+            "backend/database/tests/approval_workflow_repository.rs",
+            "backend/apps/web-api/tests/approval_workflow_api.rs",
+            "backend/apps/web-api/tests/approval_workflow_invariants.rs",
+            "backend/apps/web-api/tests/approval_workflow_concurrency.rs",
+            "backend/apps/web-api/tests/approval_workflow_cutover.rs"
+          ],
+          "acceptance": [
+            "cargo test --workspace -- --include-ignored",
+            "npm run build",
+            "npm run openapi:lint"
+          ]
+        }
+      ],
+      "dependencyGroups": {
+        "ALL_DOCUMENT_TYPE_ROLLOUTS": {
+          "completeWhen": "all",
+          "members": [
+            "P3-ADAPTER-SALES-ORDER", "P4-SALES-ORDER",
+            "P3-ADAPTER-VOUCHER-SALES-ORDER", "P4-VOUCHER-SALES-ORDER",
+            "P3-ADAPTER-SALES-CHANGE-ORDER", "P4-SALES-CHANGE-ORDER",
+            "P3-ADAPTER-PURCHASE-ORDER", "P4-PURCHASE-ORDER",
+            "P3-ADAPTER-PURCHASE-CHANGE-ORDER", "P4-PURCHASE-CHANGE-ORDER",
+            "P3-ADAPTER-CUSTOMER-RECEIPT", "P4-CUSTOMER-RECEIPT",
+            "P3-NO-APPROVAL-INVOICE", "P4-INVOICE",
+            "P3-ADAPTER-SUPPLIER-PAYMENT", "P4-SUPPLIER-PAYMENT",
+            "P3-ADAPTER-CUSTOMER-REFUND", "P4-CUSTOMER-REFUND",
+            "P3-ADAPTER-SUPPLIER-REFUND", "P4-SUPPLIER-REFUND",
+            "P3-ADAPTER-RECEIPT-REVERSAL", "P4-RECEIPT-REVERSAL",
+            "P3-ADAPTER-PAYMENT-REVERSAL", "P4-PAYMENT-REVERSAL",
+            "P3-NO-APPROVAL-SALES-RETURN-CASE", "P4-SALES-RETURN-CASE",
+            "P3-NO-APPROVAL-PURCHASE-RETURN-ORDER", "P4-PURCHASE-RETURN-ORDER",
+            "P3-NO-APPROVAL-PURCHASE-RECEIPT", "P4-PURCHASE-RECEIPT",
+            "P3-NO-APPROVAL-DELIVERY", "P4-DELIVERY",
+            "P3-NO-APPROVAL-ELECTRONIC-DELIVERY", "P4-ELECTRONIC-DELIVERY",
+            "P3-NO-APPROVAL-SERVICE-FULFILLMENT", "P4-SERVICE-FULFILLMENT",
+            "P3-NO-APPROVAL-CUSTOMER-ACCEPTANCE", "P4-CUSTOMER-ACCEPTANCE"
+          ]
+        }
+      },
+      "perDocumentTypeStageDefaults": {
+        "p3PlanDoc": "04-document-binding-and-business-adapters.md",
+        "p4PlanDoc": "08-frontend-document-and-workbench.md",
+        "mergeGatesFrom": "qualityGates",
+        "status": "not_started"
+      },
+      "perDocumentTypeStages": [
+        {
+          "documentType": "SalesOrder",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {
+            "id": "P3-ADAPTER-SALES-ORDER",
+            "branch": "feat/erp-approval-workflow-p3-sales-order",
+            "dependsOn": ["P6-PILOT"],
+            "ownsWithin": [
+              {"path": "backend/entities/src/sales_order/**", "scope": "SalesOrder 目标状态机与提交版本"},
+              {"path": "backend/entities/src/sales_review/**", "scope": "停止采购确认和低毛利实体的新写入"},
+              {"path": "backend/services/src/sales_order/**", "scope": "GoodsService 创建、提交、撤回和最终生效"},
+              {"path": "backend/services/src/sales_review/**", "scope": "移除采购确认和低毛利调用链"},
+              {"path": "backend/apps/web-api/src/core/handler/sales_order/**", "scope": "SalesOrder HTTP 调用方"},
+              {"path": "backend/apps/web-api/src/core/handler/sales_review/**", "scope": "禁用采购确认和低毛利端点"},
+              {"path": "backend/apps/web-api/src/core/routes/sales_order.rs", "scope": "SalesOrder 路由"},
+              {"path": "backend/apps/web-api/src/core/routes/sales_review.rs", "scope": "移除采购确认和低毛利路由"}
+            ],
+            "acceptance": ["cargo test -p services sales_order", "cargo test -p web-api --lib"]
+          },
+          "p4": {
+            "id": "P4-SALES-ORDER",
+            "branch": "feat/erp-approval-workflow-p4-sales-order",
+            "dependsOn": ["P3-ADAPTER-SALES-ORDER", "P6-PILOT"],
+            "owns": ["erp-client/features/sales-orders/**", "erp-client/app/(workspace)/sales/orders/**", "erp-client/features/procurement-confirmation/**", "erp-client/app/(workspace)/procurement/confirm/**"],
+            "deletes": ["erp-client/features/procurement-confirmation/**", "erp-client/app/(workspace)/procurement/confirm/**"],
+            "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]
+          }
+        },
+        {
+          "documentType": "VoucherSalesOrder",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-VOUCHER-SALES-ORDER", "branch": "feat/erp-approval-workflow-p3-voucher-sales-order", "dependsOn": ["P3-ADAPTER-SALES-ORDER"], "ownsWithin": [{"path": "backend/entities/src/sales_order/**", "scope": "VoucherSalesOrder 目标状态机"}, {"path": "backend/services/src/sales_order/**", "scope": "Voucher 创建、提交、撤回、最终生效与投影"}, {"path": "backend/apps/web-api/src/core/handler/sales_order/**", "scope": "VoucherSalesOrder HTTP 调用方"}, {"path": "backend/apps/web-api/src/core/routes/sales_order.rs", "scope": "VoucherSalesOrder 路由"}], "acceptance": ["cargo test -p services sales_order", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-VOUCHER-SALES-ORDER", "branch": "feat/erp-approval-workflow-p4-voucher-sales-order", "dependsOn": ["P3-ADAPTER-VOUCHER-SALES-ORDER", "P4-SALES-ORDER"], "ownsWithin": [{"path": "erp-client/features/sales-orders/**", "scope": "VoucherSalesOrder 审批区和历史"}, {"path": "erp-client/app/(workspace)/sales/orders/**", "scope": "VoucherSalesOrder 页面"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "SalesChangeOrder",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-SALES-CHANGE-ORDER", "branch": "feat/erp-approval-workflow-p3-sales-change-order", "dependsOn": ["P3-ADAPTER-VOUCHER-SALES-ORDER"], "ownsWithin": [{"path": "backend/entities/src/sales_review/**", "scope": "SalesChangeOrder 目标状态机"}, {"path": "backend/services/src/sales_review/**", "scope": "SalesChangeOrder 提交、撤回和生效"}, {"path": "backend/apps/web-api/src/core/handler/sales_review/**", "scope": "SalesChangeOrder HTTP 调用方"}, {"path": "backend/apps/web-api/src/core/routes/sales_review.rs", "scope": "SalesChangeOrder 路由"}], "acceptance": ["cargo test -p services sales_review", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-SALES-CHANGE-ORDER", "branch": "feat/erp-approval-workflow-p4-sales-change-order", "dependsOn": ["P3-ADAPTER-SALES-CHANGE-ORDER", "P4-VOUCHER-SALES-ORDER"], "ownsWithin": [{"path": "erp-client/features/sales-orders/**", "scope": "SalesChangeOrder 审批区"}, {"path": "erp-client/app/(workspace)/sales/orders/**", "scope": "SalesChangeOrder 页面"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "PurchaseOrder",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-PURCHASE-ORDER", "branch": "feat/erp-approval-workflow-p3-purchase-order", "dependsOn": ["P3-ADAPTER-SALES-CHANGE-ORDER"], "owns": ["backend/entities/src/purchase_order/**", "backend/services/src/purchase_order/**", "backend/apps/web-api/src/core/handler/purchase_order/**", "backend/apps/web-api/src/core/routes/purchase_order.rs"], "acceptance": ["cargo test -p services purchase_order", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-PURCHASE-ORDER", "branch": "feat/erp-approval-workflow-p4-purchase-order", "dependsOn": ["P3-ADAPTER-PURCHASE-ORDER", "P4-SALES-CHANGE-ORDER"], "owns": ["erp-client/features/purchase-orders/**", "erp-client/app/(workspace)/procurement/orders/**"], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "PurchaseChangeOrder",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-PURCHASE-CHANGE-ORDER", "branch": "feat/erp-approval-workflow-p3-purchase-change-order", "dependsOn": ["P3-ADAPTER-PURCHASE-ORDER"], "ownsWithin": [{"path": "backend/entities/src/purchase_order/**", "scope": "PurchaseChangeOrder 目标状态机"}, {"path": "backend/services/src/purchase_order/**", "scope": "PurchaseChangeOrder 提交、撤回和生效"}, {"path": "backend/apps/web-api/src/core/handler/purchase_order/**", "scope": "PurchaseChangeOrder HTTP 调用方"}, {"path": "backend/apps/web-api/src/core/routes/purchase_order.rs", "scope": "PurchaseChangeOrder 路由"}], "acceptance": ["cargo test -p services purchase_order", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-PURCHASE-CHANGE-ORDER", "branch": "feat/erp-approval-workflow-p4-purchase-change-order", "dependsOn": ["P3-ADAPTER-PURCHASE-CHANGE-ORDER", "P4-PURCHASE-ORDER"], "ownsWithin": [{"path": "erp-client/features/purchase-orders/**", "scope": "PurchaseChangeOrder 审批区"}, {"path": "erp-client/app/(workspace)/procurement/orders/**", "scope": "PurchaseChangeOrder 页面"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "CustomerReceipt",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-CUSTOMER-RECEIPT", "branch": "feat/erp-approval-workflow-p3-customer-receipt", "dependsOn": ["P3-ADAPTER-PURCHASE-CHANGE-ORDER"], "ownsWithin": [{"path": "backend/entities/src/receivable/**", "scope": "CustomerReceipt 目标状态机"}, {"path": "backend/services/src/receivable/**", "scope": "CustomerReceipt 提交、撤回和过账"}, {"path": "backend/apps/web-api/src/core/handler/receivable/**", "scope": "CustomerReceipt HTTP 调用方"}, {"path": "backend/apps/web-api/src/core/routes/receivable.rs", "scope": "CustomerReceipt 路由"}], "acceptance": ["cargo test -p services receivable", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-CUSTOMER-RECEIPT", "branch": "feat/erp-approval-workflow-p4-customer-receipt", "dependsOn": ["P3-ADAPTER-CUSTOMER-RECEIPT", "P4-PURCHASE-CHANGE-ORDER"], "owns": ["erp-client/features/customer-receivables/**", "erp-client/app/(workspace)/finance/customer-accounts/**"], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "Invoice",
+          "approvalRequirement": "NO_APPROVAL",
+          "p3": {"id": "P3-NO-APPROVAL-INVOICE", "branch": "feat/erp-approval-workflow-p3-invoice-no-approval", "dependsOn": ["P3-ADAPTER-CUSTOMER-RECEIPT"], "ownsWithin": [{"path": "backend/entities/src/receivable/**", "scope": "Invoice 无审批约束"}, {"path": "backend/services/src/receivable/**", "scope": "Invoice 注册且不绑定流程"}, {"path": "backend/apps/web-api/src/core/handler/receivable/**", "scope": "Invoice HTTP 证明"}], "acceptance": ["cargo test -p services receivable", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-INVOICE", "branch": "feat/erp-approval-workflow-p4-invoice-no-approval", "dependsOn": ["P3-NO-APPROVAL-INVOICE", "P4-CUSTOMER-RECEIPT"], "ownsWithin": [{"path": "erp-client/features/customer-receivables/**", "scope": "Invoice 不显示审批区"}, {"path": "erp-client/app/(workspace)/finance/customer-accounts/**", "scope": "Invoice 页面证明"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "SupplierPayment",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-SUPPLIER-PAYMENT", "branch": "feat/erp-approval-workflow-p3-supplier-payment", "dependsOn": ["P3-NO-APPROVAL-INVOICE"], "owns": ["backend/entities/src/payable/**", "backend/services/src/payable/**", "backend/apps/web-api/src/core/handler/payable/**", "backend/apps/web-api/src/core/routes/payable.rs"], "acceptance": ["cargo test -p services payable", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-SUPPLIER-PAYMENT", "branch": "feat/erp-approval-workflow-p4-supplier-payment", "dependsOn": ["P3-ADAPTER-SUPPLIER-PAYMENT", "P4-INVOICE"], "owns": ["erp-client/features/supplier-payables/**", "erp-client/app/(workspace)/finance/supplier-accounts/**"], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "CustomerRefund",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-CUSTOMER-REFUND", "branch": "feat/erp-approval-workflow-p3-customer-refund", "dependsOn": ["P3-ADAPTER-SUPPLIER-PAYMENT"], "ownsWithin": [{"path": "backend/entities/src/returns/**", "scope": "CustomerRefund 目标状态机"}, {"path": "backend/services/src/returns/**", "scope": "CustomerRefund 提交、撤回和过账"}, {"path": "backend/apps/web-api/src/core/handler/returns/**", "scope": "CustomerRefund HTTP 调用方"}, {"path": "backend/apps/web-api/src/core/routes/returns.rs", "scope": "CustomerRefund 路由"}], "acceptance": ["cargo test -p services returns", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-CUSTOMER-REFUND", "branch": "feat/erp-approval-workflow-p4-customer-refund", "dependsOn": ["P3-ADAPTER-CUSTOMER-REFUND", "P4-SUPPLIER-PAYMENT"], "ownsWithin": [{"path": "erp-client/features/customer-receivables/**", "scope": "CustomerRefund 审批区"}, {"path": "erp-client/app/(workspace)/finance/customer-accounts/**", "scope": "CustomerRefund 页面"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "SupplierRefund",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-SUPPLIER-REFUND", "branch": "feat/erp-approval-workflow-p3-supplier-refund", "dependsOn": ["P3-ADAPTER-CUSTOMER-REFUND"], "ownsWithin": [{"path": "backend/entities/src/returns/**", "scope": "SupplierRefund 目标状态机"}, {"path": "backend/services/src/returns/**", "scope": "SupplierRefund 提交、撤回和过账"}, {"path": "backend/apps/web-api/src/core/handler/returns/**", "scope": "SupplierRefund HTTP 调用方"}, {"path": "backend/apps/web-api/src/core/routes/returns.rs", "scope": "SupplierRefund 路由"}], "acceptance": ["cargo test -p services returns", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-SUPPLIER-REFUND", "branch": "feat/erp-approval-workflow-p4-supplier-refund", "dependsOn": ["P3-ADAPTER-SUPPLIER-REFUND", "P4-CUSTOMER-REFUND"], "ownsWithin": [{"path": "erp-client/features/supplier-payables/**", "scope": "SupplierRefund 审批区"}, {"path": "erp-client/app/(workspace)/finance/supplier-accounts/**", "scope": "SupplierRefund 页面"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "ReceiptReversal",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-RECEIPT-REVERSAL", "branch": "feat/erp-approval-workflow-p3-receipt-reversal", "dependsOn": ["P3-ADAPTER-SUPPLIER-REFUND"], "ownsWithin": [{"path": "backend/entities/src/returns/**", "scope": "ReceiptReversal 目标状态机"}, {"path": "backend/services/src/returns/**", "scope": "ReceiptReversal 提交、撤回和过账"}, {"path": "backend/apps/web-api/src/core/handler/returns/**", "scope": "ReceiptReversal HTTP 调用方"}], "acceptance": ["cargo test -p services returns", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-RECEIPT-REVERSAL", "branch": "feat/erp-approval-workflow-p4-receipt-reversal", "dependsOn": ["P3-ADAPTER-RECEIPT-REVERSAL", "P4-SUPPLIER-REFUND"], "ownsWithin": [{"path": "erp-client/features/customer-receivables/**", "scope": "ReceiptReversal 审批区"}, {"path": "erp-client/app/(workspace)/finance/customer-accounts/**", "scope": "ReceiptReversal 页面"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "PaymentReversal",
+          "approvalRequirement": "PROCESS_REQUIRED",
+          "p3": {"id": "P3-ADAPTER-PAYMENT-REVERSAL", "branch": "feat/erp-approval-workflow-p3-payment-reversal", "dependsOn": ["P3-ADAPTER-RECEIPT-REVERSAL"], "ownsWithin": [{"path": "backend/entities/src/returns/**", "scope": "PaymentReversal 目标状态机"}, {"path": "backend/services/src/returns/**", "scope": "PaymentReversal 提交、撤回和过账"}, {"path": "backend/apps/web-api/src/core/handler/returns/**", "scope": "PaymentReversal HTTP 调用方"}], "acceptance": ["cargo test -p services returns", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-PAYMENT-REVERSAL", "branch": "feat/erp-approval-workflow-p4-payment-reversal", "dependsOn": ["P3-ADAPTER-PAYMENT-REVERSAL", "P4-RECEIPT-REVERSAL"], "ownsWithin": [{"path": "erp-client/features/supplier-payables/**", "scope": "PaymentReversal 审批区"}, {"path": "erp-client/app/(workspace)/finance/supplier-accounts/**", "scope": "PaymentReversal 页面"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "SalesReturnCase",
+          "approvalRequirement": "NO_APPROVAL",
+          "p3": {"id": "P3-NO-APPROVAL-SALES-RETURN-CASE", "branch": "feat/erp-approval-workflow-p3-sales-return-no-approval", "dependsOn": ["P3-ADAPTER-PAYMENT-REVERSAL"], "ownsWithin": [{"path": "backend/entities/src/returns/**", "scope": "SalesReturnCase 无审批约束"}, {"path": "backend/services/src/returns/**", "scope": "SalesReturnCase 注册且不绑定流程"}, {"path": "backend/apps/web-api/src/core/handler/returns/**", "scope": "SalesReturnCase HTTP 证明"}], "acceptance": ["cargo test -p services returns", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-SALES-RETURN-CASE", "branch": "feat/erp-approval-workflow-p4-sales-return-no-approval", "dependsOn": ["P3-NO-APPROVAL-SALES-RETURN-CASE", "P4-PAYMENT-REVERSAL"], "ownsWithin": [{"path": "erp-client/features/sales-orders/**", "scope": "SalesReturnCase 不显示审批区"}, {"path": "erp-client/app/(workspace)/sales/orders/**", "scope": "SalesReturnCase 页面证明"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "PurchaseReturnOrder",
+          "approvalRequirement": "NO_APPROVAL",
+          "p3": {"id": "P3-NO-APPROVAL-PURCHASE-RETURN-ORDER", "branch": "feat/erp-approval-workflow-p3-purchase-return-no-approval", "dependsOn": ["P3-NO-APPROVAL-SALES-RETURN-CASE"], "ownsWithin": [{"path": "backend/entities/src/returns/**", "scope": "PurchaseReturnOrder 无审批约束"}, {"path": "backend/services/src/returns/**", "scope": "PurchaseReturnOrder 注册且不绑定流程"}, {"path": "backend/apps/web-api/src/core/handler/returns/**", "scope": "PurchaseReturnOrder HTTP 证明"}], "acceptance": ["cargo test -p services returns", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-PURCHASE-RETURN-ORDER", "branch": "feat/erp-approval-workflow-p4-purchase-return-no-approval", "dependsOn": ["P3-NO-APPROVAL-PURCHASE-RETURN-ORDER", "P4-SALES-RETURN-CASE"], "ownsWithin": [{"path": "erp-client/features/purchase-orders/**", "scope": "PurchaseReturnOrder 不显示审批区"}, {"path": "erp-client/app/(workspace)/procurement/orders/**", "scope": "PurchaseReturnOrder 页面证明"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "PurchaseReceipt",
+          "approvalRequirement": "NO_APPROVAL",
+          "p3": {"id": "P3-NO-APPROVAL-PURCHASE-RECEIPT", "branch": "feat/erp-approval-workflow-p3-purchase-receipt-no-approval", "dependsOn": ["P3-NO-APPROVAL-PURCHASE-RETURN-ORDER"], "ownsWithin": [{"path": "backend/entities/src/fulfillment/**", "scope": "PurchaseReceipt 无审批约束"}, {"path": "backend/services/src/fulfillment/**", "scope": "PurchaseReceipt 注册且不绑定流程"}, {"path": "backend/apps/web-api/src/core/handler/fulfillment/**", "scope": "PurchaseReceipt HTTP 证明"}], "acceptance": ["cargo test -p services fulfillment", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-PURCHASE-RECEIPT", "branch": "feat/erp-approval-workflow-p4-purchase-receipt-no-approval", "dependsOn": ["P3-NO-APPROVAL-PURCHASE-RECEIPT", "P4-PURCHASE-RETURN-ORDER"], "owns": ["erp-client/features/fulfillment-operations/**", "erp-client/app/(workspace)/fulfillment/**"], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "Delivery",
+          "approvalRequirement": "NO_APPROVAL",
+          "p3": {"id": "P3-NO-APPROVAL-DELIVERY", "branch": "feat/erp-approval-workflow-p3-delivery-no-approval", "dependsOn": ["P3-NO-APPROVAL-PURCHASE-RECEIPT"], "ownsWithin": [{"path": "backend/entities/src/fulfillment/**", "scope": "Delivery 无审批约束"}, {"path": "backend/services/src/fulfillment/**", "scope": "Delivery 注册且不绑定流程"}, {"path": "backend/apps/web-api/src/core/handler/fulfillment/**", "scope": "Delivery HTTP 证明"}], "acceptance": ["cargo test -p services fulfillment", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-DELIVERY", "branch": "feat/erp-approval-workflow-p4-delivery-no-approval", "dependsOn": ["P3-NO-APPROVAL-DELIVERY", "P4-PURCHASE-RECEIPT"], "ownsWithin": [{"path": "erp-client/features/fulfillment-operations/**", "scope": "Delivery 不显示审批区"}, {"path": "erp-client/app/(workspace)/fulfillment/**", "scope": "Delivery 页面证明"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "ElectronicDelivery",
+          "approvalRequirement": "NO_APPROVAL",
+          "p3": {"id": "P3-NO-APPROVAL-ELECTRONIC-DELIVERY", "branch": "feat/erp-approval-workflow-p3-electronic-delivery-no-approval", "dependsOn": ["P3-NO-APPROVAL-DELIVERY"], "ownsWithin": [{"path": "backend/entities/src/fulfillment/**", "scope": "ElectronicDelivery 无审批约束"}, {"path": "backend/services/src/fulfillment/**", "scope": "ElectronicDelivery 注册且不绑定流程"}, {"path": "backend/apps/web-api/src/core/handler/fulfillment/**", "scope": "ElectronicDelivery HTTP 证明"}], "acceptance": ["cargo test -p services fulfillment", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-ELECTRONIC-DELIVERY", "branch": "feat/erp-approval-workflow-p4-electronic-delivery-no-approval", "dependsOn": ["P3-NO-APPROVAL-ELECTRONIC-DELIVERY", "P4-DELIVERY"], "ownsWithin": [{"path": "erp-client/features/fulfillment-operations/**", "scope": "ElectronicDelivery 不显示审批区"}, {"path": "erp-client/app/(workspace)/fulfillment/**", "scope": "ElectronicDelivery 页面证明"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "ServiceFulfillment",
+          "approvalRequirement": "NO_APPROVAL",
+          "p3": {"id": "P3-NO-APPROVAL-SERVICE-FULFILLMENT", "branch": "feat/erp-approval-workflow-p3-service-fulfillment-no-approval", "dependsOn": ["P3-NO-APPROVAL-ELECTRONIC-DELIVERY"], "ownsWithin": [{"path": "backend/entities/src/fulfillment/**", "scope": "ServiceFulfillment 无审批约束"}, {"path": "backend/services/src/fulfillment/**", "scope": "ServiceFulfillment 注册且不绑定流程"}, {"path": "backend/apps/web-api/src/core/handler/fulfillment/**", "scope": "ServiceFulfillment HTTP 证明"}], "acceptance": ["cargo test -p services fulfillment", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-SERVICE-FULFILLMENT", "branch": "feat/erp-approval-workflow-p4-service-fulfillment-no-approval", "dependsOn": ["P3-NO-APPROVAL-SERVICE-FULFILLMENT", "P4-ELECTRONIC-DELIVERY"], "ownsWithin": [{"path": "erp-client/features/fulfillment-operations/**", "scope": "ServiceFulfillment 不显示审批区"}, {"path": "erp-client/app/(workspace)/fulfillment/**", "scope": "ServiceFulfillment 页面证明"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        },
+        {
+          "documentType": "CustomerAcceptance",
+          "approvalRequirement": "NO_APPROVAL",
+          "p3": {"id": "P3-NO-APPROVAL-CUSTOMER-ACCEPTANCE", "branch": "feat/erp-approval-workflow-p3-customer-acceptance-no-approval", "dependsOn": ["P3-NO-APPROVAL-SERVICE-FULFILLMENT"], "ownsWithin": [{"path": "backend/entities/src/fulfillment/**", "scope": "CustomerAcceptance 无审批约束"}, {"path": "backend/services/src/fulfillment/**", "scope": "CustomerAcceptance 注册且不绑定流程"}, {"path": "backend/apps/web-api/src/core/handler/fulfillment/**", "scope": "CustomerAcceptance HTTP 证明"}], "acceptance": ["cargo test -p services fulfillment", "cargo test -p web-api --lib"]},
+          "p4": {"id": "P4-CUSTOMER-ACCEPTANCE", "branch": "feat/erp-approval-workflow-p4-customer-acceptance-no-approval", "dependsOn": ["P3-NO-APPROVAL-CUSTOMER-ACCEPTANCE", "P4-SERVICE-FULFILLMENT"], "ownsWithin": [{"path": "erp-client/features/fulfillment-operations/**", "scope": "CustomerAcceptance 不显示审批区"}, {"path": "erp-client/app/(workspace)/fulfillment/**", "scope": "CustomerAcceptance 页面证明"}], "acceptance": ["npm run test", "npm exec -- tsc --noEmit"]}
+        }
+      ]
+    }
+  }
+}
