@@ -213,7 +213,6 @@ export function useSalesOrderDetailStartChange() {
         commandLedger: FormalCommandKeyLedger
         onResult: (next: SalesOrderDetailActionResult) => void
     }) => {
-        const isCard = order.nature === "card_voucher"
         let command =
             commandLedger.peek<StartSalesChangeOrderPayload>("start-change")
         try {
@@ -240,7 +239,9 @@ export function useSalesOrderDetailStartChange() {
                 title: "改单已创建",
                 description: `已进入「${change.statusLabel}」。当前版本对客户仍然有效。`,
                 reference: change.id,
-                nextResponsible: isCard ? "运营与财务" : "采购与财务",
+                nextResponsible:
+                    change.approval?.instance?.currentAssigneeName ??
+                    change.approval?.instance?.currentAssignee,
             })
         } catch (error) {
             const settlement = command

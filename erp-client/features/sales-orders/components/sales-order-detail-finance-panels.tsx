@@ -6,12 +6,16 @@ import { WalletIcon } from "lucide-react"
 
 import { DocumentSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
 import { RevisionHistoryCard } from "@/features/sales-orders/components/revision-history-card"
 import { SalesOrderCollaborationCard } from "@/features/execution-projections/collaboration-card"
 import { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"
 import { SectionLead } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
-import { receivableWorkspaceHref } from "@/features/sales-orders/lib/sales-order-detail-model"
+import {
+    receivableWorkspaceHref,
+    type SalesOrderDetailActionResult,
+} from "@/features/sales-orders/lib/sales-order-detail-model"
 
 export function ReceivablePanel({
     order,
@@ -60,7 +64,13 @@ export function ReceivablePanel({
     )
 }
 
-export function VersionsPanel({ order }: { order: SalesOrderDetailView }) {
+export function VersionsPanel({
+    order,
+    onApprovalResult,
+}: {
+    order: SalesOrderDetailView
+    onApprovalResult?: (result: SalesOrderDetailActionResult) => void
+}) {
     return (
         <div className="space-y-4">
             <SectionLead>
@@ -72,13 +82,12 @@ export function VersionsPanel({ order }: { order: SalesOrderDetailView }) {
                 contractRevisionLabel={order.contractRevisionLabel}
             />
             {order.activeChangeOrder ? (
-                <p className="text-sm text-muted-foreground">
-                    改单进行中：{order.activeChangeOrder.statusLabel}（基于 v
-                    {order.activeChangeOrder.baseRevisionNo}）。
-                    {order.activeChangeOrder.impactPath === "operations"
-                        ? "还需运营确认影响，再由财务复核后生效。"
-                        : "还需采购确认交付影响，再由财务复核后生效。"}
-                </p>
+                <SalesChangeOrderApprovalSection
+                    salesOrderId={order.id}
+                    nature={order.nature}
+                    changeOrder={order.activeChangeOrder}
+                    onResult={onApprovalResult}
+                />
             ) : null}
         </div>
     )

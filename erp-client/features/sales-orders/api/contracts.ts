@@ -332,6 +332,8 @@ export type BackendSalesChangeOrder = {
     current_submission_id?: string | null
     version: number
     created_at: number
+    reason?: string
+    approval?: DocumentApprovalViewDto | null
 }
 
 export type BackendBackgroundJob = {

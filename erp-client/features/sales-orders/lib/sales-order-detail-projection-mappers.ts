@@ -14,6 +14,10 @@ import type {
     SalesOrderNature,
 } from "@/features/sales-orders/types"
 import { personDisplayName } from "@/features/sales-orders/lib/labels"
+import {
+    mapSalesChangeOrderApproval,
+    salesChangeOrderStatusLabel,
+} from "@/features/sales-orders/lib/sales-change-order-approval"
 import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-approval"
 import { mapVoucherSalesOrderApproval } from "@/features/sales-orders/lib/voucher-sales-order-approval"
 import {
@@ -275,31 +279,29 @@ export function mapOpenProcurementRejection(
     }
 }
 
+/**
+ * 把销售变更单列表/详情行映射为页面摘要。
+ *
+ * 审批投影只透传服务端结构；状态中文由统一映射表产出，不按影响路径推导节点。
+ *
+ * @param row 后端变更单行或详情。
+ * @param nature 原销售单业务性质，仅保留旧摘要字段兼容。
+ */
 export function mapChangeOrder(
     row: BackendSalesChangeOrder,
     nature: SalesOrderNature,
 ): SalesChangeOrderSummary {
     const impactPath = nature === "card_voucher" ? "operations" : "procurement"
-    const statusLabel =
-        row.status === "PENDING_IMPACT_CONFIRMATION"
-            ? impactPath === "operations"
-                ? "待运营执行影响确认"
-                : "待采购履约影响确认"
-            : row.status === "PENDING_FINANCE_REVIEW"
-              ? "待财务复核"
-              : row.status === "DRAFT"
-                ? "草稿"
-                : row.status === "EFFECTIVE"
-                  ? "已生效"
-                  : row.status === "VOIDED"
-                    ? "已作废"
-                    : row.status
+    const statusLabel = salesChangeOrderStatusLabel(row.status)
     return {
         id: row.id,
         statusLabel,
         statusTone: toneForStatus(statusLabel),
+        statusCode: row.status,
+        version: row.version,
         baseRevisionNo: 0,
         createdAt: new Date(row.created_at * 1000).toISOString(),
         impactPath,
+        approval: mapSalesChangeOrderApproval(row.approval),
     }
 }

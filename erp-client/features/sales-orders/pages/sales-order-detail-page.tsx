@@ -14,7 +14,7 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SalesOrderMarginRiskHint } from "@/features/sales-orders/components/sales-order-margin-risk-hint"
-import { SalesChangeReviewPanel } from "@/features/sales-orders/components/sales-change-review-panel"
+import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
 import {
     SalesOrderDetailCommandDialogs,
     SalesOrderDetailSecondaryActions,
@@ -54,7 +54,6 @@ export function SalesOrderDetailPage({
         fromWorkspace,
         pageMode,
         focusedWorkItemId,
-        workItemReturnTo,
         fromQueue,
         backHref,
         backLabel,
@@ -275,12 +274,14 @@ export function SalesOrderDetailPage({
 
             {marginHint ? <SalesOrderMarginRiskHint hint={marginHint} /> : null}
 
-            {section === "change-review" && focusedWorkItemId ? (
-                <SalesChangeReviewPanel
+            {section === "change-review" ? (
+                <SalesChangeOrderApprovalSection
                     salesOrderId={order.id}
+                    nature={order.nature}
                     changeOrder={order.activeChangeOrder ?? null}
-                    workItemId={focusedWorkItemId}
-                    returnTo={workItemReturnTo}
+                    workItemId={focusedWorkItem?.workItemId}
+                    expectedTaskVersion={focusedWorkItem?.taskVersion}
+                    workItemAllowedActions={focusedWorkItem?.allowedActions}
                     onResult={setResult}
                 />
             ) : null}
@@ -322,9 +323,21 @@ export function SalesOrderDetailPage({
                     acceptanceExpanded={derived.acceptanceExpanded}
                     showApproval={derived.showApproval}
                     selfReturn={derived.selfReturn}
-                    workItemId={focusedWorkItem?.workItemId}
-                    expectedTaskVersion={focusedWorkItem?.taskVersion}
-                    workItemAllowedActions={focusedWorkItem?.allowedActions}
+                    workItemId={
+                        section === "change-review"
+                            ? undefined
+                            : focusedWorkItem?.workItemId
+                    }
+                    expectedTaskVersion={
+                        section === "change-review"
+                            ? undefined
+                            : focusedWorkItem?.taskVersion
+                    }
+                    workItemAllowedActions={
+                        section === "change-review"
+                            ? undefined
+                            : focusedWorkItem?.allowedActions
+                    }
                     onSelectSection={selectSection}
                     onApprovalResult={setResult}
                 />
@@ -332,7 +345,6 @@ export function SalesOrderDetailPage({
 
             <SalesOrderDetailCommandDialogs
                 order={order}
-                isCard={derived.isCard}
                 voidOpen={voidOpen}
                 onVoidOpenChange={setVoidOpen}
                 voidPending={rejectionResolution.isPending}

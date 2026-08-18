@@ -14,6 +14,7 @@ import {
     useSalesOrdersQuery,
     useSaveSalesOrderDraftMutation,
     useStartSalesChangeOrderMutation,
+    useSubmitSalesChangeOrderMutation,
     useSubmitSalesOrderMutation,
 } from "@/features/sales-orders/hooks/queries"
 import type { CreateSalesOrderResult } from "@/features/sales-orders/types"
@@ -36,6 +37,7 @@ vi.mock("@/features/sales-orders/api/sales-orders", () => ({
     resolveProcurementRejection: vi.fn(),
     saveSalesOrderDraft: vi.fn(),
     startSalesChangeOrder: vi.fn(),
+    submitSalesChangeOrder: vi.fn(),
     submitSalesChangeReviewDecision: vi.fn(),
     submitSalesOrder: vi.fn(),
 }))
@@ -449,6 +451,48 @@ describe("sales order mutations", () => {
         })
 
         expect(mockedApi.startSalesChangeOrder).toHaveBeenCalledWith(
+            input,
+            expect.anything(),
+        )
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: salesOrderKeys.detail("so-1"),
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: salesOrderKeys.all,
+        })
+    })
+
+    it("useSubmitSalesChangeOrderMutation invalidates detail, approval and work items", async () => {
+        mockedApi.submitSalesChangeOrder.mockResolvedValue({
+            id: "co-1",
+            statusLabel: "审批中",
+            statusTone: "warning",
+            statusCode: "IN_APPROVAL",
+            version: 2,
+            baseRevisionNo: 2,
+            createdAt: "2026-08-14",
+            impactPath: "procurement",
+        })
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, "invalidateQueries")
+
+        const { result } = renderHookWithProviders(
+            () => useSubmitSalesChangeOrderMutation(),
+            { queryClient: client },
+        )
+
+        const input = {
+            salesChangeOrderId: "co-1",
+            salesOrderId: "so-1",
+            version: 2,
+            nature: "physical_service" as const,
+            idempotencyKey: "key-submit-sc",
+        }
+        await act(async () => {
+            await result.current.mutateAsync(input)
+        })
+
+        expect(mockedApi.submitSalesChangeOrder).toHaveBeenCalledWith(
             input,
             expect.anything(),
         )
