@@ -915,30 +915,36 @@ if !blocked {
             }
         }
     }
-    for gate in stage_plan.backend_merge_gates {
-        if !excluded_external_test(gate) {
-            if executable_acceptance_item(gate) {
-                expected_commands = add_unique_text(expected_commands, gate);
-            } else {
-                expected_acceptance_checks = add_unique_text(expected_acceptance_checks, gate);
+    if backend_surface {
+        for gate in stage_plan.backend_merge_gates {
+            if !excluded_external_test(gate) {
+                if executable_acceptance_item(gate) {
+                    expected_commands = add_unique_text(expected_commands, gate);
+                } else {
+                    expected_acceptance_checks = add_unique_text(expected_acceptance_checks, gate);
+                }
             }
         }
     }
-    for gate in stage_plan.frontend_merge_gates {
-        if !excluded_external_test(gate) {
-            if executable_acceptance_item(gate) {
-                expected_commands = add_unique_text(expected_commands, gate);
-            } else {
-                expected_acceptance_checks = add_unique_text(expected_acceptance_checks, gate);
+    if frontend_surface {
+        for gate in stage_plan.frontend_merge_gates {
+            if !excluded_external_test(gate) {
+                if executable_acceptance_item(gate) {
+                    expected_commands = add_unique_text(expected_commands, gate);
+                } else {
+                    expected_acceptance_checks = add_unique_text(expected_acceptance_checks, gate);
+                }
             }
         }
     }
-    for gate in stage_plan.docs_merge_gates {
-        if !excluded_external_test(gate) {
-            if executable_acceptance_item(gate) {
-                expected_commands = add_unique_text(expected_commands, gate);
-            } else {
-                expected_acceptance_checks = add_unique_text(expected_acceptance_checks, gate);
+    if docs_surface {
+        for gate in stage_plan.docs_merge_gates {
+            if !excluded_external_test(gate) {
+                if executable_acceptance_item(gate) {
+                    expected_commands = add_unique_text(expected_commands, gate);
+                } else {
+                    expected_acceptance_checks = add_unique_text(expected_acceptance_checks, gate);
+                }
             }
         }
     }
