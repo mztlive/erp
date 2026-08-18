@@ -9,7 +9,9 @@ use mongodb::Database;
 use validator::Validate;
 
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
+use entities::document_registry::DocumentType;
 
 use super::dto::SortDir;
 use super::{
@@ -153,6 +155,7 @@ impl FulfillmentService {
         let audit = actor
             .clone()
             .resource_log("delivery.create", "delivery", id.to_string())?;
+        let document = new_registered_document(&id, DocumentType::Delivery, delivery.delivery_no.clone())?;
         let db = self.db.clone();
         let client = db.client().clone();
         let delivery_for_tx = delivery.clone();
@@ -163,6 +166,7 @@ impl FulfillmentService {
                     db.fulfillment()
                         .create_delivery_with_lines(&delivery_for_tx, &lines_for_tx, session)
                         .await?;
+                    persist_registered_document(&db, &document, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })

@@ -4,8 +4,10 @@ use super::dto::{
 };
 use super::ReturnsService;
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use database::{AccessControlExt, NoTransaction, ReturnsExt, Transactional};
+use entities::document_registry::DocumentType;
 use entities::ids::{PurchaseReturnLineId, PurchaseReturnOrderId};
 use entities::returns::{
     PurchaseReturnLine, PurchaseReturnLineData, PurchaseReturnOrder, PurchaseReturnOrderData,
@@ -118,6 +120,11 @@ impl ReturnsService {
             "purchase_return_order",
             order_id.to_string(),
         )?;
+        let document = new_registered_document(
+            &order_id,
+            DocumentType::PurchaseReturnOrder,
+            order.purchase_return_no.clone(),
+        )?;
 
         let db = self.db.clone();
         let client = db.client().clone();
@@ -127,6 +134,7 @@ impl ReturnsService {
                     db.returns()
                         .create_purchase_return_with_line(&order, &line, session)
                         .await?;
+                    persist_registered_document(&db, &document, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })

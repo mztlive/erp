@@ -3,8 +3,10 @@ use super::dto::{
 };
 use super::ReturnsService;
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use database::{AccessControlExt, NoTransaction, ReturnsExt, Transactional};
+use entities::document_registry::DocumentType;
 use entities::ids::{SalesReturnCaseId, SalesReturnLineId};
 use entities::returns::{SalesReturnCase, SalesReturnCaseData, SalesReturnLine, SalesReturnLineData};
 use id_generator::next_id;
@@ -121,6 +123,8 @@ impl ReturnsService {
             "sales_return_case",
             case_id.to_string(),
         )?;
+        let document =
+            new_registered_document(&case_id, DocumentType::SalesReturnCase, case.return_no.clone())?;
 
         let db = self.db.clone();
         let client = db.client().clone();
@@ -130,6 +134,7 @@ impl ReturnsService {
                     db.returns()
                         .create_sales_return_with_line(&case, &line, session)
                         .await?;
+                    persist_registered_document(&db, &document, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })

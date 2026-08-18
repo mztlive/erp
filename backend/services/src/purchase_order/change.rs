@@ -18,7 +18,9 @@ use super::dto::{
 };
 use super::PurchaseOrderService;
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
+use entities::document_registry::DocumentType;
 
 impl PurchaseOrderService {
     /// 发起采购变更（基于当前生效版本创建变更单）。
@@ -102,6 +104,7 @@ impl PurchaseOrderService {
             "purchase_change_order",
             change.base.id.clone(),
         )?;
+        let document = new_registered_document(&change.base.id, DocumentType::PurchaseChangeOrder, "")?;
         let db = self.db.clone();
         let client = db.client().clone();
         let change_for_tx = change.clone();
@@ -111,6 +114,7 @@ impl PurchaseOrderService {
                     db.purchase_change_orders()
                         .create(&change_for_tx, session)
                         .await?;
+                    persist_registered_document(&db, &document, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })

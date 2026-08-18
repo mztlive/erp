@@ -5,9 +5,11 @@ use super::dto::{
 use super::reversal_plan::{plan_receipt_reverse, zero_amount};
 use super::ReturnsService;
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use database::{AccessControlExt, NoTransaction, ReceivableExt, ReturnsExt, Transactional};
 use entities::common::time::Instant;
+use entities::document_registry::DocumentType;
 use entities::ids::{CustomerRefundId, ReceiptAllocationId, ReceivableEntryId, ReceivableEntryOffsetId};
 use entities::money::Amount;
 use entities::receivable::{
@@ -138,11 +140,24 @@ impl ReturnsService {
             "customer_refund",
             refund.base.id.clone(),
         )?;
-        self.db
-            .customer_refunds()
-            .create(&refund, &mut NoTransaction)
+        let document = new_registered_document(
+            &refund.base.id,
+            DocumentType::CustomerRefund,
+            refund.refund_no.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let refund_for_tx = refund.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.customer_refunds().create(&refund_for_tx, session).await?;
+                    persist_registered_document(&db, &document, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
             .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
 
         self.customer_refund_detail(&refund.base.id).await
     }

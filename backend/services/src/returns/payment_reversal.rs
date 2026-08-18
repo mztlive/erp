@@ -2,8 +2,10 @@ use super::dto::{CreatePaymentReversalRequest, PaymentReversalView, PostPaymentR
 use super::reversal_plan::{plan_payment_reverse, zero_amount};
 use super::ReturnsService;
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use database::{AccessControlExt, NoTransaction, PayableExt, ReturnsExt, Transactional};
+use entities::document_registry::DocumentType;
 use entities::ids::{PaymentAllocationId, PaymentReversalId};
 use entities::money::Amount;
 use entities::payable::{
@@ -51,11 +53,24 @@ impl ReturnsService {
             "payment_reversal",
             reversal.base.id.clone(),
         )?;
-        self.db
-            .payment_reversals()
-            .create(&reversal, &mut NoTransaction)
+        let document = new_registered_document(
+            &reversal.base.id,
+            DocumentType::PaymentReversal,
+            reversal.reversal_no.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let reversal_for_tx = reversal.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.payment_reversals().create(&reversal_for_tx, session).await?;
+                    persist_registered_document(&db, &document, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
             .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
 
         self.payment_reversal_view(reversal.base.id.clone()).await
     }

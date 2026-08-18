@@ -9,7 +9,9 @@ use id_generator::next_id;
 use validator::Validate;
 
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
+use entities::document_registry::DocumentType;
 
 use super::dto::SortDir;
 use super::{
@@ -151,6 +153,11 @@ impl FulfillmentService {
             "customer_acceptance",
             id.to_string(),
         )?;
+        let document = new_registered_document(
+            &id,
+            DocumentType::CustomerAcceptance,
+            acceptance.acceptance_no.clone(),
+        )?;
         let db = self.db.clone();
         let client = db.client().clone();
         let acceptance_for_tx = acceptance.clone();
@@ -161,6 +168,7 @@ impl FulfillmentService {
                     db.fulfillment()
                         .create_customer_acceptance_with_lines(&acceptance_for_tx, &lines_for_tx, session)
                         .await?;
+                    persist_registered_document(&db, &document, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
