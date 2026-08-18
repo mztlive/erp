@@ -87,7 +87,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     let state = AppState::new(db, cfg.clone(), storage);
     database::ensure_transaction_support(&state.db()).await?;
     database::ensure_indexes(&state.db()).await?;
-    services::approval::ensure_approval_definitions(&state.db()).await?;
+    ensure_registered_approval_policies()?;
     services::iam::ensure_root_role(&state.rbac()).await?;
     services::iam::ensure_predefined_roles(&state.rbac()).await?;
 
@@ -98,7 +98,23 @@ async fn start(cfg: SafeConfig) -> Result<()> {
         config.s3.clone(),
     );
 
-    run_app(app_port, state).await
+    let outbox_worker = state.start_approval_outbox_worker();
+    let result = run_app(app_port, state).await;
+    outbox_worker.stop().await;
+    result
+}
+
+/// 启动前穷尽校验全部固定单据类型政策。
+///
+/// 任一类型缺少政策时按部署不变量失败关闭，不得启动旧定义 bootstrap。
+///
+/// # 错误
+/// 政策缺失或权限字符串无法解析时返回服务错误。
+fn ensure_registered_approval_policies() -> std::result::Result<(), services::Error> {
+    for document_type in services::approval::policy::ALL_DOCUMENT_TYPES {
+        services::approval::policy::policy_of(document_type)?;
+    }
+    Ok(())
 }
 
 /// 根据已校验的启动配置构建 S3 存储客户端。
@@ -276,8 +292,8 @@ async fn run_app(app_port: u16, state: AppState) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        database_change_requires_restart, env_flag, jwt_secret_changed, storage_change_requires_restart,
-        DbConfigKey,
+        database_change_requires_restart, ensure_registered_approval_policies, env_flag, jwt_secret_changed,
+        storage_change_requires_restart, DbConfigKey,
     };
     use config::S3Config;
 
@@ -304,6 +320,11 @@ mod tests {
     fn jwt_secret_change_should_remain_hot_reloadable() {
         assert!(jwt_secret_changed("old-secret", "new-secret"));
         assert!(!jwt_secret_changed("same-secret", "same-secret"));
+    }
+
+    #[test]
+    fn registered_approval_policies_are_exhaustive_at_startup() {
+        ensure_registered_approval_policies().expect("20 个固定类型必须已注册政策");
     }
 
     #[test]

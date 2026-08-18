@@ -1,9 +1,16 @@
 //! 通知 outbox worker：租约、幂等发送、退避与死信。
 
-use entities::approval_integration::{ApprovalNotificationOutbox, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS};
+use database::{ApprovalIntegrationExt, NoTransaction};
+use entities::approval_integration::{
+    ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS,
+};
 use entities::common::time::Instant;
+use mongodb::Database;
 
 use crate::errors::{Error, Result};
+
+/// 单次 outbox 领取上限。
+const OUTBOX_BATCH_LIMIT: u32 = 20;
 
 /// 发送结果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,6 +203,130 @@ where
     Ok(outcome)
 }
 
+/// 未接入通知提供方时失败关闭，不得伪造成功投递。
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FailClosedNotificationSender;
+
+impl NotificationSender for FailClosedNotificationSender {
+    /// 以去重键调用发送口；提供方未接线时返回致命失败。
+    ///
+    /// # 参数
+    /// * `dedup_key` - outbox 业务去重键
+    ///
+    /// # 返回
+    /// 始终返回 `Fatal`，由 worker 按退避或死信落库。
+    fn send_idempotent(&self, dedup_key: &str) -> DeliveryAttempt {
+        tracing::error!(dedup_key = %dedup_key, "审批通知提供方未接入，投递失败关闭");
+        DeliveryAttempt::Fatal
+    }
+}
+
+/// Mongo 审批通知 outbox 应用端口。HTTP 只持有并启停，不得直连仓储。
+pub struct ApprovalNotificationOutboxPort {
+    db: Database,
+    sender: FailClosedNotificationSender,
+}
+
+impl ApprovalNotificationOutboxPort {
+    /// 构造失败关闭的通知 outbox 端口。
+    ///
+    /// # 参数
+    /// * `db` - MongoDB
+    ///
+    /// # 返回
+    /// 返回真实仓储端口，发送口未接入时失败关闭。
+    pub fn new(db: Database) -> Self {
+        Self {
+            db,
+            sender: FailClosedNotificationSender,
+        }
+    }
+
+    /// 领取并处理一批到期消息。
+    ///
+    /// # 参数
+    /// * `worker_id` - 本进程租约持有者
+    ///
+    /// # 错误
+    /// 租约或 CAS 落库失败时返回服务错误。
+    pub async fn process_tick(&self, worker_id: &str) -> Result<()> {
+        let now = Instant::now();
+        let until = lease_until(now);
+        let leased = self
+            .db
+            .approval_notification_outbox()
+            .lease_outbox_batch(worker_id, now, until, OUTBOX_BATCH_LIMIT, &mut NoTransaction)
+            .await?;
+        for item in leased {
+            self.persist_attempt(worker_id, item, now).await?;
+        }
+        Ok(())
+    }
+
+    /// 对已租约消息应用一次发送结果并 CAS 写回。
+    ///
+    /// # 参数
+    /// * `worker_id` - 租约持有者
+    /// * `item` - 已领取消息
+    /// * `now` - 当前时间
+    ///
+    /// # 错误
+    /// 实体状态或仓储 CAS 失败时返回错误。
+    async fn persist_attempt(
+        &self,
+        worker_id: &str,
+        mut item: ApprovalNotificationOutbox,
+        now: Instant,
+    ) -> Result<()> {
+        let attempt = self.sender.send_idempotent(&item.dedup_key);
+        if attempt == DeliveryAttempt::Delivered {
+            self.mark_delivered(&item.base.id, worker_id, now).await?;
+            return Ok(());
+        }
+        apply_delivery_attempt(&mut item, attempt, now)?;
+        self.save_failure(worker_id, item, attempt).await
+    }
+
+    /// 按租约 owner CAS 标记投递成功。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回错误。
+    async fn mark_delivered(&self, outbox_id: &str, worker_id: &str, now: Instant) -> Result<()> {
+        self.db
+            .approval_notification_outbox()
+            .mark_outbox_delivered(outbox_id, worker_id, now, &mut NoTransaction)
+            .await?;
+        Ok(())
+    }
+
+    /// 按发送结果写回退避或死信。
+    ///
+    /// # 错误
+    /// 仓储 CAS 失败时返回错误。
+    async fn save_failure(
+        &self,
+        worker_id: &str,
+        item: ApprovalNotificationOutbox,
+        attempt: DeliveryAttempt,
+    ) -> Result<()> {
+        let repo = self.db.approval_notification_outbox();
+        if item.delivery_status == ApprovalNotificationDeliveryStatus::DeadLetter {
+            repo.dead_letter_outbox(&item.base.id, worker_id, error_class(attempt), &mut NoTransaction)
+                .await?;
+            return Ok(());
+        }
+        repo.reschedule_outbox(
+            &item.base.id,
+            worker_id,
+            item.next_attempt_at,
+            error_class(attempt),
+            &mut NoTransaction,
+        )
+        .await?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -208,6 +339,16 @@ mod tests {
     };
     use entities::common::time::Instant;
     use entities::ids::ApprovalNotificationOutboxId;
+
+    /// 未接线发送口必须失败关闭，不得伪造成功。
+    #[test]
+    fn unconfigured_sender_fails_closed() {
+        let sender = super::FailClosedNotificationSender;
+        assert_eq!(
+            super::NotificationSender::send_idempotent(&sender, "started:inst-1"),
+            DeliveryAttempt::Fatal
+        );
+    }
 
     /// 退避表与死信次数符合合同。
     #[test]
