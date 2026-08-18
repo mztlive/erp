@@ -45,8 +45,8 @@ use entities::document_registry::{BusinessDocument, DocumentType};
 use self::adapter::{
     build_stock_adjustment_snapshot, document_approval_view, ensure_final_approve_posting,
     execute_stock_adjustment_domain_action, require_frozen_binding, start_approval_command_kind,
-    stock_adjustment_adapter, stock_adjustment_object_readable, stock_adjustment_start_command,
-    stock_adjustment_subject_ref, RECENT_HISTORY_LIMIT,
+    stock_adjustment_adapter, stock_adjustment_start_command, stock_adjustment_subject_ref,
+    RECENT_HISTORY_LIMIT,
 };
 use self::dto::SortDir;
 pub use self::dto::{
@@ -59,6 +59,8 @@ pub use self::dto::{
 
 mod adapter;
 mod dto;
+
+pub use adapter::stock_adjustment_object_readable;
 
 /// 库存余额列表筛选条件类型（经 `InventoryExt` 关联类型跨 crate 可达）。
 type StockBalanceFilter = <mongodb::Database as InventoryExt>::StockBalanceFilter;
