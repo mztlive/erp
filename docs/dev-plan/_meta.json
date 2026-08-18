@@ -192,6 +192,13 @@
             "backend/database/src/indexes/work_item.rs",
             "backend/database/src/indexes/document_registry.rs"
           ],
+          "ownsWithin": [
+            {
+              "path": "backend/services/src/work_item/mod.rs",
+              "scope": "仅测试辅助 w13_delta_row() 增加 approval_node_execution_id 字面量，使 WorkItemRow 新增可选字段后 workspace 仍可编译。不得改 Service 编排、DTO、旧责任动作或其它测试。"
+            }
+          ],
+          "notes": "P0 amendment chore/erp-p0-amend-work-item-row-execution-id 授权 P2 同步 services 测试字面量。列表行映射到 WorkItemFields / HTTP DTO 仍归 P3-RUNTIME。",
           "forbids": ["backend/database/tests/**"],
           "acceptance": [
             "cargo fmt --all -- --check",
