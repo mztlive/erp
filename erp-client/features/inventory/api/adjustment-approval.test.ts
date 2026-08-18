@@ -12,9 +12,13 @@ import {
 import {
     adjustmentStatusMap,
     isDraftAdjustmentStatus,
+    isRuntimeAdjustmentStatus,
 } from "@/features/inventory/api/display"
 import { mapAdjustmentApproval } from "@/features/inventory/api/mappers"
-import { buildAdjustmentSubmitRequest } from "@/features/inventory/api/adjustment"
+import {
+    buildAdjustmentSubmitRequest,
+    readInstanceResponsibility,
+} from "@/features/inventory/api/adjustment"
 
 describe("adjustmentStatusMap", () => {
     it("converges the page to DRAFT / IN_APPROVAL / POSTED", () => {
@@ -43,6 +47,60 @@ describe("adjustmentStatusMap", () => {
             statusLabel: "草稿",
         })
         expect(isDraftAdjustmentStatus("REJECTED")).toBe(true)
+        expect(adjustmentStatusMap("SOMETHING_ELSE")).toMatchObject({
+            status: "UNCONFIRMED",
+            statusLabel: "状态未确认",
+        })
+        expect(isDraftAdjustmentStatus("SOMETHING_ELSE")).toBe(false)
+        expect(isRuntimeAdjustmentStatus("SOMETHING_ELSE")).toBe(false)
+        expect(isRuntimeAdjustmentStatus("IN_APPROVAL")).toBe(true)
+    })
+})
+
+describe("readInstanceResponsibility", () => {
+    it("reads only instance fields and does not fall back to the first definition node", () => {
+        const view = mapAdjustmentApproval({
+            requirement: "PROCESS_REQUIRED",
+            definition: {
+                id: "def-1",
+                name: "库存调整审批",
+                version: 3,
+                nodes: [{ key: "n1", name: "仓储审核", assignee_name: "张三" }],
+            },
+            instance: {
+                id: "inst-1",
+                status: "RUNNING",
+                current_round_no: 1,
+                current_node: "财务审核",
+                current_assignee: "李四",
+            },
+            recent_history: [],
+            allowed_actions: ["CANCEL"],
+        })
+        expect(readInstanceResponsibility(view)).toEqual({
+            nextResponsible: "李四",
+            currentNodeLabel: "财务审核",
+        })
+        expect(
+            readInstanceResponsibility({
+                requirement: "PROCESS_REQUIRED",
+                definition: {
+                    id: "def-1",
+                    name: "库存调整审批",
+                    version: 3,
+                    nodes: [
+                        { key: "n1", name: "仓储审核", assigneeName: "张三" },
+                    ],
+                    publishedNodes: [],
+                },
+                recentHistory: [],
+                historyHasMore: false,
+                allowedActions: [],
+            }),
+        ).toEqual({
+            nextResponsible: undefined,
+            currentNodeLabel: undefined,
+        })
     })
 })
 

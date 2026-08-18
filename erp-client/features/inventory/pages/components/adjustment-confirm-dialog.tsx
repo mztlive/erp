@@ -45,11 +45,6 @@ export function AdjustmentConfirmDialog({
                 "不立即修改账面、预占和可用数量",
                 "经办人不得自行审批本单",
             ]}
-            nextDepartment={
-                meta?.approval?.definition?.nodes[0]?.assigneeName ??
-                meta?.approval?.definition?.nodes[0]?.name ??
-                "当前审批人"
-            }
             irreversibleEffects={["形成调整单号并进入审批"]}
             pending={pending}
             onConfirm={() => void onConfirm()}

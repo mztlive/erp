@@ -249,7 +249,7 @@ export type AdjustmentSubmitResponse =
               kind: "SUBMITTED_FOR_APPROVAL"
               stockAdjustmentId: string
               adjustmentNo: string
-              nextResponsible: string
+              nextResponsible?: string
               currentNodeLabel?: string
               reference: string
               submittedAt: string

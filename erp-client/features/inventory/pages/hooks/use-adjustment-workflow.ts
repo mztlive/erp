@@ -50,6 +50,28 @@ export type AdjustmentPendingPayload = {
     forceUnknown?: boolean
 }
 
+/**
+ * 只拼接服务端已给出的当前节点/审批人，缺失字段省略。
+ */
+export const formatSubmittedResult = (
+    outcome: {
+        adjustmentNo: string
+        currentNodeLabel?: string
+        nextResponsible?: string
+    },
+    suffix?: string,
+): string => {
+    const parts = [`单号 ${outcome.adjustmentNo}`]
+    if (outcome.currentNodeLabel) {
+        parts.push(`当前节点：${outcome.currentNodeLabel}`)
+    }
+    if (outcome.nextResponsible) {
+        parts.push(`当前审批人：${outcome.nextResponsible}`)
+    }
+    if (suffix) parts.push(suffix.replace(/。$/, ""))
+    return `${parts.join("。")}。`
+}
+
 export interface AdjustmentWorkflowInput {
     isPhoneNarrow: boolean
     /** 发起前记录焦点行（详情/调整关闭后恢复）。 */
@@ -198,9 +220,10 @@ export function useAdjustmentWorkflow({
             setLastResult({
                 status: "succeeded",
                 title: "调整已提交审批",
-                description: result.outcome.currentNodeLabel
-                    ? `单号 ${result.outcome.adjustmentNo}。当前节点：${result.outcome.currentNodeLabel}。当前审批人：${result.outcome.nextResponsible}。余额尚未变化，审批通过后由系统更新。`
-                    : `单号 ${result.outcome.adjustmentNo}。当前审批人：${result.outcome.nextResponsible}。余额尚未变化，审批通过后由系统更新。`,
+                description: formatSubmittedResult(
+                    result.outcome,
+                    "余额尚未变化，审批通过后由系统更新。",
+                ),
                 reference: result.outcome.reference,
             })
             setConfirmOpen(false)
@@ -251,9 +274,7 @@ export function useAdjustmentWorkflow({
             setLastResult({
                 status: "succeeded",
                 title: "调整已提交审批",
-                description: r.outcome.currentNodeLabel
-                    ? `单号 ${r.outcome.adjustmentNo}。当前节点：${r.outcome.currentNodeLabel}。当前审批人：${r.outcome.nextResponsible}。`
-                    : `单号 ${r.outcome.adjustmentNo}。当前审批人：${r.outcome.nextResponsible}。`,
+                description: formatSubmittedResult(r.outcome),
                 reference: r.outcome.reference,
             })
             closeAdjustment()

@@ -8,6 +8,7 @@ export {
     createAdjustmentDraft,
     fetchAdjustmentDetail,
     fetchBalanceDetail,
+    readInstanceResponsibility,
     fetchInventoryList,
     resolveAdjustmentUnknown,
     startInventoryExport,

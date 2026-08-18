@@ -21,6 +21,7 @@ import {
     toAdjustmentDetailView,
     toDraftView,
 } from "@/features/inventory/api/mappers"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import { fetchBalanceDetail } from "@/features/inventory/api/detail"
 import type {
     BackendStockAdjustment,
@@ -39,6 +40,24 @@ export const buildAdjustmentSubmitRequest = (input: {
 }): Readonly<{ expected_version: number; idempotency_key: string }> => ({
     expected_version: input.expectedVersion,
     idempotency_key: input.idempotencyKey,
+})
+
+/**
+ * 只读取实例投影上的当前节点与当前审批人。
+ *
+ * 缺失时省略，不得用定义首节点或默认称谓补位。
+ */
+export const readInstanceResponsibility = (
+    approval?: DocumentApprovalView,
+): {
+    nextResponsible?: string
+    currentNodeLabel?: string
+} => ({
+    nextResponsible:
+        approval?.instance?.currentAssigneeName ??
+        approval?.instance?.currentAssignee,
+    currentNodeLabel:
+        approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
 })
 
 /**
@@ -139,24 +158,15 @@ export async function submitAdjustment(input: {
             `/admin/stock-adjustments/${encodeURIComponent(submitted.id)}`,
         )
         const approval = toAdjustmentDetailView(afterSubmit).approval
-        const nextResponsible =
-            approval.instance?.currentAssigneeName ??
-            approval.instance?.currentAssignee ??
-            approval.instance?.currentNodeName ??
-            approval.definition?.nodes[0]?.assigneeName ??
-            approval.definition?.nodes[0]?.name ??
-            "当前审批人"
+        const responsibility = readInstanceResponsibility(approval)
         return {
             status: "succeeded",
             outcome: {
                 kind: "SUBMITTED_FOR_APPROVAL",
                 stockAdjustmentId: submitted.id,
                 adjustmentNo: submitted.adjustment_no,
-                nextResponsible,
-                currentNodeLabel:
-                    approval.instance?.currentNodeName ??
-                    approval.instance?.currentNode ??
-                    approval.definition?.nodes[0]?.name,
+                nextResponsible: responsibility.nextResponsible,
+                currentNodeLabel: responsibility.currentNodeLabel,
                 reference: submitted.adjustment_no,
                 submittedAt: new Date().toISOString(),
                 balanceLockVersion: input.expectedBalanceLockVersion,
@@ -206,22 +216,17 @@ export async function resolveAdjustmentUnknown(input: {
             )
             const st = adjustmentStatusMap(detail.adjustment.status)
             if (st.status === "IN_APPROVAL" || st.status === "POSTED") {
-                const approval = toAdjustmentDetailView(detail).approval
-                const nextResponsible =
-                    approval.instance?.currentAssigneeName ??
-                    approval.instance?.currentAssignee ??
-                    approval.instance?.currentNodeName ??
-                    "当前审批人"
+                const responsibility = readInstanceResponsibility(
+                    toAdjustmentDetailView(detail).approval,
+                )
                 return {
                     status: "succeeded",
                     outcome: {
                         kind: "SUBMITTED_FOR_APPROVAL",
                         stockAdjustmentId: detail.adjustment.id,
                         adjustmentNo: detail.adjustment.adjustment_no,
-                        nextResponsible,
-                        currentNodeLabel:
-                            approval.instance?.currentNodeName ??
-                            approval.instance?.currentNode,
+                        nextResponsible: responsibility.nextResponsible,
+                        currentNodeLabel: responsibility.currentNodeLabel,
                         reference: detail.adjustment.adjustment_no,
                         submittedAt: secsToIso(detail.adjustment.created_at),
                         balanceLockVersion:

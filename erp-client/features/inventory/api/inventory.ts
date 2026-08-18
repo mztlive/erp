@@ -10,6 +10,7 @@ export {
     buildAdjustmentSubmitRequest,
     createAdjustmentDraft,
     fetchAdjustmentDetail,
+    readInstanceResponsibility,
     resolveAdjustmentUnknown,
     STOCK_ADJUSTMENT_DOCUMENT_TYPE,
     submitAdjustment,

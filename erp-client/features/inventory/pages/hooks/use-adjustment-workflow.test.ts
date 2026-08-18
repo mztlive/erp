@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { act } from "@testing-library/react"
 
 import { renderHookWithProviders } from "@/features/test-utils"
-import { useAdjustmentWorkflow } from "./use-adjustment-workflow"
+import {
+    formatSubmittedResult,
+    useAdjustmentWorkflow,
+} from "./use-adjustment-workflow"
 import type { StockBalanceRow } from "@/features/inventory/types"
 
 const mocks = vi.hoisted(() => ({
@@ -102,6 +105,17 @@ async function startAdjustmentSuccess(
 
 beforeEach(() => {
     vi.clearAllMocks()
+})
+
+describe("formatSubmittedResult", () => {
+    it("omits missing current node and assignee instead of inventing a default", () => {
+        expect(
+            formatSubmittedResult(
+                { adjustmentNo: "TZ-1" },
+                "余额尚未变化，审批通过后由系统更新。",
+            ),
+        ).toBe("单号 TZ-1。余额尚未变化，审批通过后由系统更新。")
+    })
 })
 
 describe("useAdjustmentWorkflow", () => {

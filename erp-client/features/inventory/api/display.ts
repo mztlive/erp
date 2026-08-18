@@ -199,24 +199,30 @@ export function adjustmentStatusMap(status: string): {
             }
         default:
             return {
-                status: "IN_APPROVAL",
-                statusLabel: "审批中",
+                status: "UNCONFIRMED",
+                statusLabel: "状态未确认",
                 statusTone: "neutral",
             }
     }
 }
 
 /**
- * 判断调整单是否仍处于未提交草稿。
+ * 判断调整单是否仍处于未提交草稿。未知态不可提交。
  */
 export const isDraftAdjustmentStatus = (status?: string): boolean =>
     adjustmentStatusMap(status ?? "").status === "DRAFT"
 
 /**
- * 判断调整单是否已进入运行中或终态审批区。
+ * 判断调整单是否已进入合同运行中或过账/冲正终态。
+ *
+ * 未知态不得伪装为审批中。
  */
-export const isRuntimeAdjustmentStatus = (status?: string): boolean =>
-    !isDraftAdjustmentStatus(status)
+export const isRuntimeAdjustmentStatus = (status?: string): boolean => {
+    const mapped = adjustmentStatusMap(status ?? "").status
+    return (
+        mapped === "IN_APPROVAL" || mapped === "POSTED" || mapped === "REVERSED"
+    )
+}
 
 export function filterSummary(
     query: InventoryQuery,
