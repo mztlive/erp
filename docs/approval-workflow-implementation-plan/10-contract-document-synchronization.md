@@ -11,7 +11,7 @@
 | 段 | 交付 | 前置 | 卡住的阶段 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-A | 权威合同、`erp-phase-1.md`、`erp-phase-2.md`、`docs/dev-plan/**`、实施计划 | — | P0-A | 已合并 |
-| DOC-B | `erp-data-model.md` | DOC-A | P2 | 内容就绪，待 DOC-A 后独立合并 |
+| DOC-B | `erp-data-model.md` | DOC-A | P2 | 已合并 |
 | DOC-C | `erp-ui-flows.md`、`erp-ui-design.md`、`ui-glossary.md`、`docs/ui-workspaces/**` | DOC-A | P4-DEFINITION、P4-WORKFLOW | 内容就绪，待 DOC-A 后独立合并 |
 | DOC-D | `approval-workflow-openapi.yaml`、错误目录、`runbooks/approval-workflow.md`、`openapi:lint` 与 `@redocly/cli` 锁定 | P3-HTTP | P6-PILOT | 未开始 |
 
@@ -231,7 +231,7 @@ rg -n '[补]签|二次[补]签' \
 - [x] `erp-phase-1.md`、`erp-phase-2.md` 的「不建设可配置审批流」「审批定义按代码注册」「`CARD_SALES_APPROVAL` 固定步骤」「运营 `POOL` 审批节点」「驳回后改单重提」已全部重写，包括 §8.1.1 的固定顺序代码块、§16 页面规则、§17.2 切换步骤和时序图。
 - [x] 合同旧「数据迁移与应用切换」章节已整节替换为「开发环境硬切换」。
 
-### 11.2 DOC-B（内容就绪，待 DOC-A 后合并；继续阻断 P2）
+### 11.2 DOC-B（已合并；P2 前置已解除）
 
 - [x] `erp-data-model.md` 已用目标集合替换旧 `approval_definition` / `approval_step_definition` / `approval_instance` / `approval_step_instance` 模型。
 - [x] `work_items.approval_step_instance_id` 与 `uk_work_items_open_approval_step` 已替换为 `approval_node_execution_id` 与 `uk_work_items_approval_execution`。
