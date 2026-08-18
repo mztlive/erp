@@ -1,4 +1,7 @@
-//! D03 阻塞审批管理路由。
+//! 审批实例、决定、恢复、改派与受阻取消路由。
+//!
+//! 已删除 `POST /approval-instances/{id}/recover`。定义管理路由经 `#[path]` 合并，
+//! P0-B 接线 `routes/mod.rs` 后应改为独立 merge。
 
 use axum::{
     routing::{get, post},
@@ -11,27 +14,98 @@ use crate::{
     core::{handler::approval_instance, middleware::with_permission},
 };
 
-/// 返回阻塞审批诊断与固定恢复动作路由。
+/// P0-B 声明 `mod approval_process` 后应删除此 `#[path]`。
+#[path = "approval_process.rs"]
+mod approval_process;
+
+/// 返回审批实例与定义管理路由。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务
 ///
 /// # 返回
-/// 返回 `GET /approval-instances` 与
-/// `POST /approval-instances/{id}/recover` 路由。
+/// 返回合同 §3 运行 API 与定义管理 API。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(approval_process::routes(rbac))
         .route(
-            "/approval-instances",
+            "/approval-decisions",
             with_permission(
-                get(approval_instance::blocked_approval_list),
+                post(approval_instance::submit_decision),
                 rbac,
-                approval_instance::blocked_approval_list_permission_key(),
+                approval_instance::submit_decision_permission_key(),
             ),
         )
         .route(
-            "/approval-instances/{id}/recover",
+            "/approval-instances",
             with_permission(
-                post(approval_instance::recover_blocked_approval),
+                get(approval_instance::instance_list),
                 rbac,
-                approval_instance::recover_blocked_approval_permission_key(),
+                approval_instance::instance_list_permission_key(),
+            ),
+        )
+        .route(
+            "/approval-instances/{id}",
+            with_permission(
+                get(approval_instance::instance_detail),
+                rbac,
+                approval_instance::instance_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/approval-instances/{id}/history",
+            with_permission(
+                get(approval_instance::instance_history),
+                rbac,
+                approval_instance::instance_history_permission_key(),
+            ),
+        )
+        .route(
+            "/approval-instances/{id}/recovery-options",
+            with_permission(
+                get(approval_instance::recovery_options),
+                rbac,
+                approval_instance::recovery_options_permission_key(),
+            ),
+        )
+        .route(
+            "/approval-instances/{id}/eligible-reassignees",
+            with_permission(
+                get(approval_instance::eligible_reassignees),
+                rbac,
+                approval_instance::eligible_reassignees_permission_key(),
+            ),
+        )
+        .route(
+            "/approval-instances/{id}/resume-current-approver",
+            with_permission(
+                post(approval_instance::resume_current_approver),
+                rbac,
+                approval_instance::resume_current_approver_permission_key(),
+            ),
+        )
+        .route(
+            "/approval-instances/{id}/reassign-current-approver",
+            with_permission(
+                post(approval_instance::reassign_current_approver),
+                rbac,
+                approval_instance::reassign_current_approver_permission_key(),
+            ),
+        )
+        .route(
+            "/approval-instances/{id}/cancel-blocked",
+            with_permission(
+                post(approval_instance::cancel_blocked),
+                rbac,
+                approval_instance::cancel_blocked_permission_key(),
+            ),
+        )
+        .route(
+            "/business-documents/{document_type}/{id}/approval-definition/upgrade",
+            with_permission(
+                post(approval_instance::upgrade_binding),
+                rbac,
+                approval_instance::upgrade_binding_permission_key(),
             ),
         )
 }

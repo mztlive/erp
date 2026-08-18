@@ -86,8 +86,9 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
 const SALES_PERMISSIONS: &[&str] = &[
     "work_item:list",
     "work_item:detail",
-    "work_item:start_processing",
-    "work_item:release_to_team",
+    "approval_instance:read",
+    "approval_instance:decide",
+    "approval_instance:cancel",
     "integration_task:process",
     "integration_task:complete",
     "legacy_import_confirmation:list",
@@ -141,8 +142,9 @@ const SALES_PERMISSIONS: &[&str] = &[
 const SALES_LEADER_PERMISSIONS: &[&str] = &[
     "work_item:list",
     "work_item:detail",
-    "work_item:start_processing",
-    "work_item:release_to_team",
+    "approval_instance:read",
+    "approval_instance:decide",
+    "approval_instance:cancel",
     "file_asset:list",
     "file_asset:detail",
     "document_attachment:list",
@@ -177,8 +179,9 @@ const SALES_LEADER_PERMISSIONS: &[&str] = &[
 const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "work_item:list",
     "work_item:detail",
-    "work_item:start_processing",
-    "work_item:release_to_team",
+    "approval_instance:read",
+    "approval_instance:decide",
+    "approval_instance:cancel",
     "integration_task:process",
     "integration_task:complete",
     // W29 责任任务对象读取；不授 list，治理菜单仍只对系统管理员开放。
@@ -288,8 +291,9 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
 const OPERATIONS_PERMISSIONS: &[&str] = &[
     "work_item:list",
     "work_item:detail",
-    "work_item:start_processing",
-    "work_item:release_to_team",
+    "approval_instance:read",
+    "approval_instance:decide",
+    "approval_instance:cancel",
     "integration_task:process",
     "integration_task:complete",
     "legacy_import_confirmation:list",
@@ -349,8 +353,9 @@ const OPERATIONS_PERMISSIONS: &[&str] = &[
 const WAREHOUSE_PERMISSIONS: &[&str] = &[
     "work_item:list",
     "work_item:detail",
-    "work_item:start_processing",
-    "work_item:release_to_team",
+    "approval_instance:read",
+    "approval_instance:decide",
+    "approval_instance:cancel",
     "legacy_import_confirmation:list",
     "legacy_import_confirmation:detail",
     "legacy_import_confirmation:complete",
@@ -383,8 +388,9 @@ const WAREHOUSE_PERMISSIONS: &[&str] = &[
 const FINANCE_PERMISSIONS: &[&str] = &[
     "work_item:list",
     "work_item:detail",
-    "work_item:start_processing",
-    "work_item:release_to_team",
+    "approval_instance:read",
+    "approval_instance:decide",
+    "approval_instance:cancel",
     "integration_task:process",
     "integration_task:complete",
     "legacy_import_confirmation:list",
@@ -456,6 +462,12 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "work_item:detail",
     "work_item:manage",
     "work_item:reassign",
+    "approval_process:read",
+    "approval_instance:read",
+    "approval_instance:cancel",
+    "approval_instance:resume",
+    "approval_instance:reassign",
+    "approval_instance:cancel_blocked",
     "file_asset:list",
     "file_asset:detail",
     "document_attachment:list",
@@ -506,8 +518,18 @@ const SYSADMIN_PERMISSIONS: &[&str] = &[
     "work_item:close",
     "integration_task:process",
     "integration_task:complete",
-    "approval_instance:diagnose",
-    "approval_instance:recover",
+    "approval_process:read",
+    "approval_process:create",
+    "approval_process:edit",
+    "approval_process:publish",
+    "approval_process:retire",
+    "approval_instance:read",
+    "approval_instance:decide",
+    "approval_instance:cancel",
+    "approval_instance:resume",
+    "approval_instance:reassign",
+    "approval_instance:cancel_blocked",
+    "approval_instance:upgrade_binding",
     "file_asset:list",
     "file_asset:detail",
     "document_attachment:list",
@@ -589,6 +611,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     upgrade_import_confirmation_permissions(rbac).await?;
     upgrade_integration_task_permissions(rbac).await?;
     upgrade_supplier_connection_governance_permissions(rbac).await?;
+    upgrade_approval_http_permissions(rbac).await?;
     ensure_missing_permissions(rbac).await?;
     super::predefined_data_scopes::ensure_predefined_role_data_scopes(rbac).await?;
     Ok(())
@@ -683,14 +706,53 @@ async fn upgrade_low_margin_confirmation_permissions(rbac: &SharedRbacService) -
 
 /// 从目标权限还原低毛利确认上线前的销售领导精确快照。
 fn low_margin_confirmation_legacy_snapshot(desired: &[Permission]) -> Vec<Permission> {
-    remove_permissions(
-        desired,
-        &[
-            "work_item:start_processing",
-            "work_item:release_to_team",
-            "sales_order_review:low_margin_decide",
-        ],
-    )
+    remove_permissions(desired, &["sales_order_review:low_margin_decide"])
+}
+
+/// 本轮审批 HTTP 动作级权限。
+const APPROVAL_HTTP_ACTION_PERMISSIONS: &[&str] = &[
+    "approval_process:read",
+    "approval_process:create",
+    "approval_process:edit",
+    "approval_process:publish",
+    "approval_process:retire",
+    "approval_instance:read",
+    "approval_instance:decide",
+    "approval_instance:cancel",
+    "approval_instance:resume",
+    "approval_instance:reassign",
+    "approval_instance:cancel_blocked",
+    "approval_instance:upgrade_binding",
+];
+
+/// 将仍保持领取/诊断/恢复种子的角色精确升级到 12 个审批动作权限。
+///
+/// # 错误
+/// 权限解析或 Casbin 写入失败时返回错误。
+async fn upgrade_approval_http_permissions(rbac: &SharedRbacService) -> Result<()> {
+    for role in PREDEFINED_ROLES {
+        let desired = parse_permissions(role.permissions)?;
+        let previous = approval_http_legacy_snapshot(role.id, &desired)?;
+        upgrade_exact(rbac, role.id, previous, desired).await?;
+    }
+    Ok(())
+}
+
+/// 从当前目标权限还原删除领取/诊断权限前的精确快照。
+///
+/// # 错误
+/// 旧权限字符串无法解析时返回错误。
+fn approval_http_legacy_snapshot(role_id: &str, desired: &[Permission]) -> Result<Vec<Permission>> {
+    let mut previous = remove_permissions(desired, APPROVAL_HTTP_ACTION_PERMISSIONS);
+    if !matches!(role_id, "role-management" | "role-sysadmin") {
+        previous.push(Permission::parse("work_item:start_processing")?);
+        previous.push(Permission::parse("work_item:release_to_team")?);
+    }
+    if role_id == "role-sysadmin" {
+        previous.push(Permission::parse("approval_instance:diagnose")?);
+        previous.push(Permission::parse("approval_instance:recover")?);
+    }
+    Ok(previous)
 }
 
 /// 将仍保持旧工作流权限种子的角色收紧为显式最小动作。
@@ -1017,11 +1079,11 @@ pub(super) fn predefined_role_ids() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        integration_task_legacy_snapshot, legacy_workflow_permission_snapshot,
+        approval_http_legacy_snapshot, integration_task_legacy_snapshot, legacy_workflow_permission_snapshot,
         low_margin_confirmation_legacy_snapshot, parse_permissions, predefined_role_ids,
         procurement_legacy_permission_snapshots, purchase_review_legacy_snapshot,
-        sales_legacy_permission_snapshots, FINANCE_PERMISSIONS, PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS,
-        SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS,
+        sales_legacy_permission_snapshots, APPROVAL_HTTP_ACTION_PERMISSIONS, FINANCE_PERMISSIONS,
+        PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS, SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS,
     };
     use entities::{Permission, PermissionSet};
 
@@ -1194,11 +1256,7 @@ mod tests {
 
     #[test]
     fn low_margin_permissions_are_owned_only_by_sales_leader_and_upgrade_is_exact() {
-        let required = [
-            "work_item:start_processing",
-            "work_item:release_to_team",
-            "sales_order_review:low_margin_decide",
-        ];
+        let required = ["sales_order_review:low_margin_decide"];
         let leader = PREDEFINED_ROLES
             .iter()
             .find(|role| role.id == "role-sales-leader")
@@ -1222,7 +1280,7 @@ mod tests {
 
         let desired = parse_permissions(SALES_LEADER_PERMISSIONS).unwrap();
         let previous = low_margin_confirmation_legacy_snapshot(&desired);
-        assert_eq!(previous.len() + 3, desired.len());
+        assert_eq!(previous.len() + 1, desired.len());
         for permission in required {
             assert!(
                 previous
@@ -1407,7 +1465,17 @@ mod tests {
             .unwrap();
         for raw in management.permissions {
             let permission = Permission::parse(*raw).unwrap();
-            if matches!(raw, &"work_item:manage" | &"work_item:reassign") {
+            if matches!(
+                raw,
+                &"work_item:manage"
+                    | &"work_item:reassign"
+                    | &"approval_process:read"
+                    | &"approval_instance:read"
+                    | &"approval_instance:cancel"
+                    | &"approval_instance:resume"
+                    | &"approval_instance:reassign"
+                    | &"approval_instance:cancel_blocked"
+            ) {
                 continue;
             }
             assert!(
@@ -1443,6 +1511,43 @@ mod tests {
                 assert!(previous
                     .iter()
                     .all(|permission| permission.to_string() != "sales_order_review:decide"));
+            }
+        }
+    }
+
+    #[test]
+    fn approval_http_permissions_replace_recover_diagnose_and_team_actions() {
+        assert_eq!(APPROVAL_HTTP_ACTION_PERMISSIONS.len(), 12);
+        for role in PREDEFINED_ROLES {
+            for forbidden in [
+                "work_item:start_processing",
+                "work_item:release_to_team",
+                "approval_instance:diagnose",
+                "approval_instance:recover",
+            ] {
+                assert!(
+                    !role.permissions.contains(&forbidden),
+                    "{} 不得继续授予 {forbidden}",
+                    role.id
+                );
+            }
+            let desired = parse_permissions(role.permissions).unwrap();
+            let previous = approval_http_legacy_snapshot(role.id, &desired).unwrap();
+            assert!(
+                previous
+                    .iter()
+                    .all(|permission| !APPROVAL_HTTP_ACTION_PERMISSIONS
+                        .contains(&permission.to_string().as_str())),
+                "{} 旧快照不得包含新动作权限",
+                role.id
+            );
+            if role.id == "role-sysadmin" {
+                assert!(previous
+                    .iter()
+                    .any(|permission| permission.to_string() == "approval_instance:diagnose"));
+                for required in APPROVAL_HTTP_ACTION_PERMISSIONS {
+                    assert!(role.permissions.contains(required), "系统管理员缺少 {required}");
+                }
             }
         }
     }
