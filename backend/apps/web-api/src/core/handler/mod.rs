@@ -4,6 +4,7 @@ pub mod upload;
 
 pub mod access_control;
 pub mod approval_instance;
+pub mod approval_process;
 pub mod bulk_job;
 pub mod card_instance;
 pub mod catalog;

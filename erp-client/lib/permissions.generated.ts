@@ -334,28 +334,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/work-items/{id}/start-processing",
-                description: "从团队待处理建立本人责任",
-                permission: {
-                    resource: "work_item",
-                    action: "start_processing",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/work-items/{id}/release-to-team",
-                description: "将本人负责的责任池任务退回团队",
-                permission: {
-                    resource: "work_item",
-                    action: "release_to_team",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
                 path: "/admin/work-items/{id}/reassign",
-                description: "在授权范围内受控转交任务",
+                description: "在授权范围内受控转交非审批任务",
                 permission: {
                     resource: "work_item",
                     action: "reassign",
@@ -365,7 +345,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/work-items/{id}/close",
-                description: "关闭重复、误派或已有替代的任务",
+                description: "关闭重复、误派或已有替代的非审批任务",
                 permission: {
                     resource: "work_item",
                     action: "close",
@@ -374,27 +354,193 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
-        name: "阻塞审批管理",
-        description: "诊断并受控恢复无法安全路由的审批实例",
+        name: "审批实例",
+        description: "审批运行、决定、恢复与改派",
         permissions: [
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-decisions",
+                description: "提交当前开放审批任务的通过或驳回",
+                permission: {
+                    resource: "approval_instance",
+                    action: "decide",
+                },
+            },
             {
                 module: "admin",
                 method: "GET",
                 path: "/admin/approval-instances",
-                description: "按授权组织查询阻塞审批",
+                description: "按固定 view 查询审批实例",
                 permission: {
                     resource: "approval_instance",
-                    action: "diagnose",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances/{id}",
+                description: "查询审批实例详情",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances/{id}/history",
+                description: "按轮次读取审批历史",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances/{id}/recovery-options",
+                description: "查询当前 blocker 的唯一合法恢复方式",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances/{id}/eligible-reassignees",
+                description: "按当前单据与岗位分离搜索改派候选人",
+                permission: {
+                    resource: "approval_instance",
+                    action: "reassign",
                 },
             },
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/approval-instances/{id}/recover",
-                description: "重新解析并恢复原当前审批步骤",
+                path: "/admin/approval-instances/{id}/resume-current-approver",
+                description: "原审批人重新合格后恢复当前节点",
                 permission: {
                     resource: "approval_instance",
-                    action: "recover",
+                    action: "resume",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-instances/{id}/reassign-current-approver",
+                description: "仅对人员失效 blocker 改派当前审批人",
+                permission: {
+                    resource: "approval_instance",
+                    action: "reassign",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-instances/{id}/cancel-blocked",
+                description: "取消非人员一致性 blocker",
+                permission: {
+                    resource: "approval_instance",
+                    action: "cancel_blocked",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/business-documents/{document_type}/{id}/approval-definition/upgrade",
+                description: "升级未提交单据的审批定义绑定",
+                permission: {
+                    resource: "approval_instance",
+                    action: "upgrade_binding",
+                },
+            },
+        ],
+    },
+    {
+        name: "审批流程",
+        description: "固定单据类型审批流程定义管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-processes/catalog",
+                description: "读取固定单据类型审批目录",
+                permission: {
+                    resource: "approval_process",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-processes/{document_type}/versions",
+                description: "读取某单据类型的定义版本",
+                permission: {
+                    resource: "approval_process",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-processes/{document_type}/eligible-assignees",
+                description: "按定义期规则搜索可选审批人",
+                permission: {
+                    resource: "approval_process",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-process-definitions/drafts",
+                description: "创建更高版本审批流程草稿",
+                permission: {
+                    resource: "approval_process",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-process-definitions/{id}",
+                description: "读取审批流程定义详情",
+                permission: {
+                    resource: "approval_process",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/approval-process-definitions/{id}/nodes",
+                description: "整组替换草稿节点",
+                permission: {
+                    resource: "approval_process",
+                    action: "edit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-process-definitions/{id}/publish",
+                description: "发布审批流程草稿",
+                permission: {
+                    resource: "approval_process",
+                    action: "publish",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-process-definitions/{id}/retire",
+                description: "退役当前已发布审批流程",
+                permission: {
+                    resource: "approval_process",
+                    action: "retire",
                 },
             },
         ],
@@ -2289,30 +2435,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/stock-adjustments/{id}/submit",
-                description: "提交库存调整仓储复核",
+                description: "提交库存调整审批",
                 permission: {
                     resource: "stock_adjustment",
                     action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/stock-adjustments/{id}/approve",
-                description: "库存调整仓储复核通过",
-                permission: {
-                    resource: "stock_adjustment",
-                    action: "approve",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/stock-adjustments/{id}/reject",
-                description: "驳回库存调整",
-                permission: {
-                    resource: "stock_adjustment",
-                    action: "reject",
                 },
             },
             {

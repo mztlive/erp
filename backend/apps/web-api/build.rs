@@ -17,12 +17,13 @@ struct PermissionMeta {
     action: Option<String>,
 }
 
-/// P0 预声明的 34 个业务域模块（与 docs/dev-plan/domains.md 对齐，P0 后冻结）。
+/// 权限扫描覆盖的业务域模块：既有 34 域加上独立的审批定义管理模块。
 const DOMAIN_MODULES: &[&str] = &[
     "source_registry",
     "document_registry",
     "work_item",
     "approval_instance",
+    "approval_process",
     "bulk_job",
     "file_asset",
     "access_control",
@@ -453,7 +454,7 @@ fn module_path_for_file(handler_root: &Path, file_path: &Path) -> Option<String>
     Some(segments.join("::"))
 }
 
-/// 递归收集 `handler/admin` 与全部 34 个域 handler 目录下的 Rust 文件。
+/// 递归收集 `handler/admin` 与全部域 handler 目录下的 Rust 文件。
 ///
 /// `auth`、`upload` 等非域 handler 不在扫描范围（权限产物只覆盖管理端路由）。
 ///
@@ -473,8 +474,8 @@ fn collect_handler_files(root: &Path) -> io::Result<Vec<PathBuf>> {
 
 /// 收集管理端路由文件中的全部 `.route()` 处理器引用。
 ///
-/// 覆盖 `admin.rs`（既有聚合路由）与全部 34 个域路由文件
-/// （`routes/<domain>.rs`，P0 起每域一个文件）。
+/// 覆盖 `admin.rs`（既有聚合路由）与全部域路由文件
+/// （`routes/<domain>.rs`，含独立的审批定义管理路由）。
 ///
 /// # 参数
 /// * `manifest_dir` - web-api crate 目录

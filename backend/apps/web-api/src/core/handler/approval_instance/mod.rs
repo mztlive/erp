@@ -2,9 +2,6 @@
 //!
 //! 删除 `recover` 与 `RETRY_CURRENT_STEP`。Handler 只做协议适配，不解释 ProcessKind。
 
-/// P0-B 在 `handler/mod.rs` 正式声明本模块后应删除此 `#[path]`。
-#[path = "../approval_process/mod.rs"]
-pub mod approval_process;
 pub mod error;
 pub mod http;
 
