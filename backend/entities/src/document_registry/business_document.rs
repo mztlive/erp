@@ -22,6 +22,8 @@ const DOCUMENT_NO_MAX_LEN: usize = 128;
 pub enum DocumentType {
     /// 销售单。
     SalesOrder,
+    /// 卡券销售单。
+    VoucherSalesOrder,
     /// 销售变更单。
     SalesChangeOrder,
     /// 采购单。
@@ -68,6 +70,7 @@ impl DocumentType {
     pub fn label(&self) -> &'static str {
         match self {
             Self::SalesOrder => "销售单",
+            Self::VoucherSalesOrder => "卡券销售单",
             Self::SalesChangeOrder => "销售变更单",
             Self::PurchaseOrder => "采购单",
             Self::PurchaseChangeOrder => "采购变更单",
@@ -96,6 +99,7 @@ impl DocumentType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::SalesOrder => "sales_order",
+            Self::VoucherSalesOrder => "voucher_sales_order",
             Self::SalesChangeOrder => "sales_change_order",
             Self::PurchaseOrder => "purchase_order",
             Self::PurchaseChangeOrder => "purchase_change_order",
@@ -245,16 +249,72 @@ mod tests {
         assert_eq!(doc.formalized_at.unwrap(), first);
     }
 
-    /// 枚举序列化与标签稳定。
+    /// 合同 §4.3 的 20 个固定类型：as_str、label 与 serde 必须穷尽一致。
     #[test]
     fn document_type_codes_and_labels_are_stable() {
+        const ROWS: &[(DocumentType, &str, &str)] = &[
+            (DocumentType::SalesOrder, "sales_order", "销售单"),
+            (
+                DocumentType::VoucherSalesOrder,
+                "voucher_sales_order",
+                "卡券销售单",
+            ),
+            (DocumentType::SalesChangeOrder, "sales_change_order", "销售变更单"),
+            (DocumentType::PurchaseOrder, "purchase_order", "采购单"),
+            (
+                DocumentType::PurchaseChangeOrder,
+                "purchase_change_order",
+                "采购变更单",
+            ),
+            (DocumentType::PurchaseReceipt, "purchase_receipt", "采购收货单"),
+            (DocumentType::Delivery, "delivery", "仓发单"),
+            (
+                DocumentType::ElectronicDelivery,
+                "electronic_delivery",
+                "电子交付单",
+            ),
+            (
+                DocumentType::ServiceFulfillment,
+                "service_fulfillment",
+                "服务履约单",
+            ),
+            (
+                DocumentType::CustomerAcceptance,
+                "customer_acceptance",
+                "客户验收单",
+            ),
+            (DocumentType::StockAdjustment, "stock_adjustment", "库存调整单"),
+            (DocumentType::CustomerReceipt, "customer_receipt", "客户回款单"),
+            (DocumentType::SupplierPayment, "supplier_payment", "供应商付款单"),
+            (DocumentType::Invoice, "invoice", "发票"),
+            (DocumentType::SalesReturnCase, "sales_return_case", "销售退货单"),
+            (
+                DocumentType::PurchaseReturnOrder,
+                "purchase_return_order",
+                "采购退货单",
+            ),
+            (DocumentType::CustomerRefund, "customer_refund", "客户退款单"),
+            (DocumentType::SupplierRefund, "supplier_refund", "供应商退款单"),
+            (DocumentType::ReceiptReversal, "receipt_reversal", "回款冲正单"),
+            (DocumentType::PaymentReversal, "payment_reversal", "付款冲正单"),
+        ];
+        assert_eq!(ROWS.len(), 20);
+
+        for (variant, code, label) in ROWS {
+            assert_eq!(variant.as_str(), *code);
+            assert_eq!(variant.label(), *label);
+            let json = serde_json::to_string(variant).unwrap();
+            assert_eq!(json, format!("\"{code}\""));
+            let back: DocumentType = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, *variant);
+        }
+
         assert_eq!(
-            serde_json::to_string(&DocumentType::SalesChangeOrder).unwrap(),
-            "\"sales_change_order\""
+            serde_json::to_string(&DocumentType::VoucherSalesOrder).unwrap(),
+            "\"voucher_sales_order\""
         );
-        assert_eq!(DocumentType::ReceiptReversal.as_str(), "receipt_reversal");
-        assert_eq!(DocumentType::Invoice.label(), "发票");
-        assert_eq!(DocumentType::PaymentReversal.label(), "付款冲正单");
+        let voucher: DocumentType = serde_json::from_str("\"voucher_sales_order\"").unwrap();
+        assert_eq!(voucher, DocumentType::VoucherSalesOrder);
     }
 
     /// BSON 往返（实体层持久化形态与 P0 约定一致）。

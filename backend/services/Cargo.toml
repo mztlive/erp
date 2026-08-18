@@ -5,6 +5,7 @@ edition = "2021"
 
 
 [dependencies]
+bpm = { workspace = true }
 entities = { workspace = true }
 id-generator = { workspace = true }
 database = { workspace = true }

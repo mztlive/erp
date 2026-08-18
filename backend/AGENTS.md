@@ -2,16 +2,20 @@
 
 ## 架构概览
 - HTTP Handler -> Service -> Repository -> MongoDB，遵循类 DDD 分层：Handler 只做协议适配，Service 负责编排，Repository 屏蔽持久化细节。
-- 领域实体/值对象集中在 `entities`，统一放不变式与业务规则（含 RBAC 域逻辑）。
+- `crates/bpm` 是纯流程领域与状态引擎：拥有流程定义、节点、连线、运行实例、节点执行、实例审批人和命令收据，以及图规则与状态计算。禁止依赖或引用 `entities`、`database`、`services`、`apps/web-api`、`config`、`mongodb`、`axum`、`id-generator`、权限宏或通知客户端。
+- `entities` 是 ERP 业务实体及 BPM 集成引用（单据绑定、业务对象快照、WorkItem、通知 outbox）。目标审批流程模型不得放在 `entities/src/approval`。
+- `services::approval` 是政策、授权、事务和业务副作用适配层；BPM 状态计算必须留在 `bpm`，不得下沉到 Service。
+- `database` 是 BPM 模型与 ERP 业务/集成模型的 MongoDB 适配层；禁止把 MongoDB 类型或 `Executor` 反向引入 `bpm`。
+- 依赖只允许单向：`apps/web-api` → `services` → `{database,entities,bpm}`，以及 `database` → `{entities,bpm}`、`entities` → `bpm`。禁止 `bpm` 反向依赖任何 ERP crate。
 - 权限体系：Handler 使用 `#[permission_macros::permission(...)]` 标注，`apps/web-api/build.rs` 会解析路由并生成前端权限定义。
 - 配置统一走 `config::SafeConfig`（CLI 参数 + 可选 Nacos 热更新），Web API 日志/Tracing 位于 `apps/web-api/src/core/tracing`。
 
 ## 项目结构与归属
 - `apps/web-api`：Axum HTTP API。Handlers 位于 `src/core/handler/{auth,admin}` 及 `handler/upload.rs`；路由注册在 `src/core/routes/{public,admin,account}.rs`；统一返回 `ApiResponse`。管理员路由固定走 JWT + RBAC 中间件。
-- `services`：领域服务编排层，按域分目录（如 `iam`、`consumer`、`audit`）。新增领域需提供 `dto.rs`；如果只有一个 service 文件，代码直接写在 `mod.rs` 中；如果有多个 service 文件，再创建独立 `service.rs` 文件。业务规则优先放在实体/值对象中。
-- `entities`：领域实体与值对象（如 `account_core`、`consumer`、`role`、`rbac`、`auth`）。
-- `database`：MongoDB 仓储层与 `DatabaseExt` 访问器（如 `account_core`、`role`、`consumer`）。
-- `crates`：共享工具与基础设施（`id-generator` ID、`storage` 上传、`entity-core`/`entity-macros`、`permission-macros`）。
+- `services`：领域服务编排层，按域分目录（如 `iam`、`consumer`、`audit`）。`services::approval` 只做政策/授权/事务/副作用适配，不得实现流程状态机。新增领域需提供 `dto.rs`；如果只有一个 service 文件，代码直接写在 `mod.rs` 中；如果有多个 service 文件，再创建独立 `service.rs` 文件。业务规则优先放在实体/值对象中。
+- `entities`：ERP 业务实体、值对象及 BPM 集成引用（如 `account_core`、`consumer`、`role`、`rbac`、`auth`、`approval_integration`）。目标审批领域模型不在本 crate。
+- `database`：MongoDB 仓储层与 `DatabaseExt` 访问器（如 `account_core`、`role`、`consumer`），同时承担 BPM 模型与 ERP 集成模型的持久化适配。
+- `crates`：共享工具与基础设施（`bpm` 纯流程领域与状态引擎、`id-generator` ID、`storage` 上传、`entity-core`/`entity-macros`、`permission-macros`）。
 - `config`：配置加载与 Nacos 热更新（`SafeConfig`）。
 - `docs`：专项说明（Casbin RBAC、权限生成等）。
 - `scripts`：脚本与自动化工具。
@@ -24,7 +28,7 @@
 4. **HTTP 层**：在 `apps/web-api/src/core/handler` 新增 handler，默认必须复用 service DTO，禁止重复定义等价请求/响应类型；仅在 HTTP 形态差异时允许最小薄包装并实现 `From/Into`。
 5. **路由/权限**：将新接口挂到 `apps/web-api/src/core/routes`；管理员路由必须位于 `admin` 并走 JWT + RBAC；为 handler 添加 `#[permission_macros::permission(...)]`。
 6. **测试**：新增至少一个 happy-path 测试，并补充至少一个失败/边界路径测试。
-7. **检查**：执行 `cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`。
+7. **检查**：执行 `cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`./scripts/check-bpm-boundaries.sh`。
 8. **回归**：执行 `cargo test --workspace`，确保变更无回归。
 
 ## 编码约定
@@ -77,7 +81,7 @@
 - **迁移与验收要求**：
   - 下沉后必须删除原 Service 重复私有 helper，避免双份规则源。
   - 至少补充一条实体/值对象单元测试覆盖该规则（happy-path + 失败路径）。
-  - 变更后必须通过：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`。
+  - 变更后必须通过：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
 
 ## 性能优化约定（社区最佳实践）
 - **先度量后优化**：在改性能前先用 `tracing`/指标/基准确认热点；优先解决高频路径与大对象分配。
@@ -99,7 +103,7 @@
 - 初始化配置：`cp config.toml.example config.toml`，填写 `app`、`database` 与 `s3`。
 - API：`cargo run -p web-api -- --config-path ./config.toml`（支持 `RUST_LOG=info|debug`、`LOG_FORMAT=json`）。
 - Workspace：`cargo build --workspace`、`cargo test --workspace`。
-- 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`。
+- 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
 - Docker：`./manage.sh start|status|logs` 封装 `docker compose`；仅按 `docker-compose.yml` 只读挂载 `config.toml`，文件对象写入 S3。
 
 ## 测试期望
@@ -110,7 +114,7 @@
 - 上传/临时产物不纳入版本控制，提交前清理大体积日志。
 
 ## CI 与质量门禁
-- CI 必须执行并通过：`cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -D warnings`、`cargo test --workspace`。
+- CI 必须执行并通过：`cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -D warnings`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
 - 任何生成文件（如权限定义）必须在 CI 中校验未漂移。
 
 ## API 契约与兼容性

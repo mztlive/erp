@@ -5,8 +5,10 @@
 mod access_control;
 mod account_core;
 mod approval;
+pub mod approval_integration;
 mod audit_log;
 mod base;
+pub mod bpm;
 mod bulk_job;
 mod card_instance;
 mod catalog;

@@ -1,0 +1,14 @@
+[package]
+name = "bpm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = { workspace = true }
+entity-core = { workspace = true }
+entity-macros = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

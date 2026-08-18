@@ -5,6 +5,8 @@
 
 mod access_control;
 mod approval;
+mod approval_integration;
+mod bpm;
 mod bulk_job;
 mod card_instance;
 mod catalog;
@@ -41,6 +43,8 @@ mod work_item;
 
 pub use access_control::AccessControlExt;
 pub use approval::ApprovalExt;
+pub use approval_integration::ApprovalIntegrationExt;
+pub use bpm::BpmExt;
 pub use bulk_job::BulkJobExt;
 pub use card_instance::CardInstanceExt;
 pub use catalog::CatalogExt;
@@ -82,6 +86,8 @@ pub use work_item::WorkItemExt;
 pub trait DatabaseExt:
     AccessControlExt
     + ApprovalExt
+    + ApprovalIntegrationExt
+    + BpmExt
     + BulkJobExt
     + CardInstanceExt
     + CatalogExt
@@ -121,6 +127,8 @@ pub trait DatabaseExt:
 impl<
         T: AccessControlExt
             + ApprovalExt
+            + ApprovalIntegrationExt
+            + BpmExt
             + BulkJobExt
             + CardInstanceExt
             + CatalogExt
