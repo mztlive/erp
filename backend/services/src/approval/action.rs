@@ -6,6 +6,7 @@ use database::Executor;
 
 use crate::errors::{Error, Result};
 
+use super::business_adapter::{document_type_from_subject_kind, ensure_runtime_cut_over};
 use super::registry::ApprovalBusinessAction;
 
 /// 强类型领域动作执行所需的冻结审批上下文。
@@ -86,15 +87,24 @@ impl ApprovalDomainActionPort for FailClosedApprovalActionPort {
     fn execute<'a>(
         &'a self,
         action: ApprovalBusinessAction,
-        _context: &'a ApprovalActionContext,
+        context: &'a ApprovalActionContext,
         _executor: &'a mut dyn Executor,
     ) -> ApprovalActionFuture<'a> {
-        Box::pin(async move {
-            Err(Error::BusinessLogicError(format!(
-                "审批领域动作 {action:?} 尚未绑定，已按安全策略拒绝推进"
-            )))
-        })
+        Box::pin(async move { refuse_legacy_or_uncut_action(&context.business_object_type, action) })
     }
+}
+
+/// 已知单据类型时先做 cut-over 闸门，再失败关闭；不得回退旧运行时。
+///
+/// # 错误
+/// 未接入的必须审批类型返回 `APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER`。
+fn refuse_legacy_or_uncut_action(business_object_type: &str, action: ApprovalBusinessAction) -> Result<()> {
+    if let Ok(document_type) = document_type_from_subject_kind(business_object_type) {
+        ensure_runtime_cut_over(document_type)?;
+    }
+    Err(Error::BusinessLogicError(format!(
+        "审批领域动作 {action:?} 尚未绑定，已按安全策略拒绝推进"
+    )))
 }
 
 #[cfg(test)]
@@ -126,5 +136,22 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(_)));
+    }
+
+    /// 未 cut-over 的必须审批类型不得调用旧运行时。
+    #[tokio::test]
+    async fn uncut_document_type_fails_closed_without_legacy_runtime() {
+        let error =
+            refuse_legacy_or_uncut_action("sales_order", ApprovalBusinessAction::SubmitCardSalesApproval)
+                .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains(super::super::business_adapter::APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER));
+        let pilot = refuse_legacy_or_uncut_action(
+            "stock_adjustment",
+            ApprovalBusinessAction::SubmitCardSalesApproval,
+        )
+        .unwrap_err();
+        assert!(matches!(pilot, Error::BusinessLogicError(_)));
     }
 }

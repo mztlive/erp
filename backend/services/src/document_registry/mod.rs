@@ -10,10 +10,13 @@
 //! D01：登记外部来源单据时，经 `db.external_identity_maps()` 校验来源身份映射
 //! 已登记（读取对方仓储，不经过对方 Service）。
 
-use database::{AccessControlExt, DocumentRegistryExt, NoTransaction, SourceRegistryExt, Transactional};
+use database::{
+    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, SourceRegistryExt, Transactional,
+};
+use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentData, BusinessDocumentId, DocumentParticipant, DocumentRelation,
-    DocumentRelationId, WorkflowAction, WorkflowActionId,
+    DocumentRelationId, DocumentType, WorkflowAction, WorkflowActionId,
 };
 use id_generator::next_id;
 use mongodb::Database;
@@ -30,6 +33,83 @@ pub use self::dto::{
     DocumentRelationView, PageView, RegisterBusinessDocumentRequest, WorkflowActionListParams,
     WorkflowActionView,
 };
+
+/// 构造跨域单据注册行。
+///
+/// 稳定 `document_id` 与业务实体主键一致；草稿尚未分配正式号时 `document_no` 可为空。
+///
+/// # 参数
+/// * `document_id` - 与业务实体相同的稳定主键
+/// * `document_type` - 合同固定单据类型
+/// * `document_no` - 正式编号；草稿传空
+///
+/// # 返回
+/// 返回尚未正式化、尚未绑定的注册实体。
+///
+/// # 错误
+/// 编号超长时返回校验错误。
+pub fn new_registered_document(
+    document_id: impl AsRef<str>,
+    document_type: DocumentType,
+    document_no: impl Into<String>,
+) -> Result<BusinessDocument> {
+    BusinessDocument::new(
+        BusinessDocumentId::new(document_id.as_ref()),
+        BusinessDocumentData {
+            document_type,
+            document_no: document_no.into(),
+        },
+    )
+    .map_err(Into::into)
+}
+
+/// 在调用方事务内持久化单据注册行。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `document` - 已构造的注册行
+/// * `executor` - 调用方执行器
+///
+/// # 错误
+/// 唯一键冲突或仓储失败时返回错误。
+pub async fn persist_registered_document(
+    db: &mongodb::Database,
+    document: &BusinessDocument,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    db.business_documents().create(document, executor).await?;
+    Ok(())
+}
+
+/// 按执行器查询注册行。
+///
+/// # 错误
+/// 仓储读取失败时返回错误。
+pub async fn find_registered_document(
+    db: &mongodb::Database,
+    document_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<BusinessDocument>> {
+    db.business_documents()
+        .find_by_id(document_id, executor)
+        .await
+        .map_err(Into::into)
+}
+
+/// 按执行器查询单据审批绑定。
+///
+/// # 错误
+/// 单据不存在或仓储失败时返回错误。
+pub async fn find_approval_binding(
+    db: &mongodb::Database,
+    document_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<ApprovalDefinitionBinding>> {
+    let document = find_registered_document(db, document_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
+    Ok(document.approval_binding)
+}
 
 /// 单据注册列表筛选条件类型（经 `DocumentRegistryExt` 关联类型跨 crate 可达）。
 type BusinessDocumentFilter = <mongodb::Database as DocumentRegistryExt>::BusinessDocumentFilter;
@@ -190,6 +270,20 @@ impl DocumentRegistryService {
             .await?
             .ok_or_else(|| Error::NotFound("单据注册不存在".to_string()))?;
         Ok(doc.into())
+    }
+
+    /// 查询注册行上的审批绑定。
+    ///
+    /// # 参数
+    /// * `id` - 单据注册 ID
+    ///
+    /// # 返回
+    /// 无绑定返回 `None`。
+    ///
+    /// # 错误
+    /// 单据未注册时返回 `NotFound`。
+    pub async fn approval_binding(&self, id: &str) -> Result<Option<ApprovalDefinitionBinding>> {
+        find_approval_binding(&self.db, id, &mut NoTransaction).await
     }
 
     /// 追加工作流动作。

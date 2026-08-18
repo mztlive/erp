@@ -10,7 +10,9 @@ use id_generator::next_id;
 use validator::Validate;
 
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
+use entities::document_registry::DocumentType;
 
 use super::dto::SortDir;
 use super::{
@@ -139,6 +141,8 @@ impl FulfillmentService {
             actor
                 .clone()
                 .resource_log("purchase_receipt.create", "purchase_receipt", id.to_string())?;
+        let document =
+            new_registered_document(&id, DocumentType::PurchaseReceipt, receipt.receipt_no.clone())?;
         let db = self.db.clone();
         let client = db.client().clone();
         let receipt_for_tx = receipt.clone();
@@ -149,6 +153,7 @@ impl FulfillmentService {
                     db.fulfillment()
                         .create_purchase_receipt_with_lines(&receipt_for_tx, &lines_for_tx, session)
                         .await?;
+                    persist_registered_document(&db, &document, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })

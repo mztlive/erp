@@ -27,7 +27,9 @@ use mongodb::Database;
 use super::shared::{fulfillment_from_mode, today_stamp, zero_amount};
 use super::submission::finance_review_work_item;
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
+use entities::document_registry::DocumentType;
 
 /// 确认拆单后落库（或幂等复用）的采购草稿身份。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,7 +298,13 @@ async fn write_prepared_draft(
         "purchase_order",
         prepared.order.base.id.clone(),
     )?;
+    let document = new_registered_document(
+        &prepared.order.base.id,
+        DocumentType::PurchaseOrder,
+        prepared.order.purchase_no.clone(),
+    )?;
     db.purchase_orders().create(&prepared.order, executor).await?;
+    persist_registered_document(db, &document, executor).await?;
     db.purchase_order_submissions()
         .create(&prepared.submission, executor)
         .await?;

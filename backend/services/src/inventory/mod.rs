@@ -33,7 +33,9 @@ use std::str::FromStr;
 use validator::Validate;
 
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
+use entities::document_registry::DocumentType;
 
 use self::dto::SortDir;
 pub use self::dto::{
@@ -510,6 +512,11 @@ impl InventoryService {
             actor
                 .clone()
                 .resource_log("stock_adjustment.create", "stock_adjustment", id.to_string())?;
+        let document = new_registered_document(
+            &id,
+            DocumentType::StockAdjustment,
+            adjustment.adjustment_no.clone(),
+        )?;
         let db = self.db.clone();
         let client = db.client().clone();
         let adjustment_for_tx = adjustment.clone();
@@ -520,6 +527,7 @@ impl InventoryService {
                     db.inventory()
                         .create_stock_adjustment_with_lines(&adjustment_for_tx, &lines_for_tx, session)
                         .await?;
+                    persist_registered_document(&db, &document, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })

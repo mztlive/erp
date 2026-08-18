@@ -37,7 +37,9 @@ use mongodb::Database;
 use validator::Validate;
 
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
+use entities::document_registry::DocumentType;
 
 mod dto;
 
@@ -306,11 +308,24 @@ impl PayableService {
             "supplier_payment",
             payment.base.id.clone(),
         )?;
-        self.db
-            .supplier_payments()
-            .create(&payment, &mut NoTransaction)
+        let document = new_registered_document(
+            &payment.base.id,
+            DocumentType::SupplierPayment,
+            payment.payment_no.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let payment_for_tx = payment.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.supplier_payments().create(&payment_for_tx, session).await?;
+                    persist_registered_document(&db, &document, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
             .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
 
         self.supplier_payment_detail(&payment.base.id).await
     }

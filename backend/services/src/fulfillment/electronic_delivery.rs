@@ -11,7 +11,9 @@ use mongodb::Database;
 use validator::Validate;
 
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
+use entities::document_registry::DocumentType;
 
 use super::dto::SortDir;
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
@@ -137,11 +139,24 @@ impl FulfillmentService {
             "electronic_delivery",
             record.base.id.clone(),
         )?;
-        self.db
-            .electronic_deliveries()
-            .create(&record, &mut NoTransaction)
+        let document = new_registered_document(
+            &record.base.id,
+            DocumentType::ElectronicDelivery,
+            record.fulfillment_no.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let record_for_tx = record.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.electronic_deliveries().create(&record_for_tx, session).await?;
+                    persist_registered_document(&db, &document, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
             .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
         Ok(record.into())
     }
 

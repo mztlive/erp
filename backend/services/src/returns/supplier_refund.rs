@@ -2,8 +2,10 @@ use super::dto::{CreateSupplierRefundRequest, PostSupplierRefundRequest, Supplie
 use super::reversal_plan::{plan_payment_reverse, zero_amount};
 use super::ReturnsService;
 use crate::audit::AuditActor;
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use database::{AccessControlExt, NoTransaction, PayableExt, ReturnsExt, Transactional};
+use entities::document_registry::DocumentType;
 use entities::ids::{PayableEntryId, PayableEntryOffsetId, PaymentAllocationId, SupplierRefundId};
 use entities::money::Amount;
 use entities::payable::{
@@ -75,11 +77,24 @@ impl ReturnsService {
             "supplier_refund",
             refund.base.id.clone(),
         )?;
-        self.db
-            .supplier_refunds()
-            .create(&refund, &mut NoTransaction)
+        let document = new_registered_document(
+            &refund.base.id,
+            DocumentType::SupplierRefund,
+            refund.refund_no.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let refund_for_tx = refund.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.supplier_refunds().create(&refund_for_tx, session).await?;
+                    persist_registered_document(&db, &document, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
             .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
 
         self.supplier_refund_detail(&refund.base.id).await
     }
