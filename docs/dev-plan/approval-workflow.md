@@ -124,7 +124,7 @@ services/src/file_asset/**
 | P0-B | 共享接线与权限生成 | `chore/erp-p0-amend-approval-workflow-wiring` | 未开始 |
 | P0-C | 前端 W24 与权限生成 | `chore/erp-p0-amend-approval-workflow-frontend-registry` | 未开始 |
 | P0-D | 全类型硬切换清理 | `chore/erp-p0-amend-approval-workflow-hard-cutover-cleanup` | 阻塞于全部逐类型阶段 |
-| P0-A-2 | 授权 P2 同步 `WorkItemRow.approval_node_execution_id` 测试字面量 | `chore/erp-p0-amend-work-item-row-execution-id` | 本分支 |
+| P0-A-2 | 授权 P2 同步 `WorkItemRow.approval_node_execution_id` 测试字面量 | `chore/erp-p0-amend-work-item-row-execution-id` | 已合并 |
 
 新增冻结修改必须追加一行单主题 amendment，合并后所有在途分支 rebase。
 
