@@ -10,12 +10,12 @@
 
 | 段 | 交付 | 前置 | 卡住的阶段 | 状态 |
 | --- | --- | --- | --- | --- |
-| DOC-A | 权威合同、`erp-phase-1.md`、`erp-phase-2.md`、`docs/dev-plan/**`、实施计划 | — | P0-A | 内容就绪，待独立合并 |
+| DOC-A | 权威合同、`erp-phase-1.md`、`erp-phase-2.md`、`docs/dev-plan/**`、实施计划 | — | P0-A | 已合并 |
 | DOC-B | `erp-data-model.md` | DOC-A | P2 | 内容就绪，待 DOC-A 后独立合并 |
 | DOC-C | `erp-ui-flows.md`、`erp-ui-design.md`、`ui-glossary.md`、`docs/ui-workspaces/**` | DOC-A | P4-DEFINITION、P4-WORKFLOW | 内容就绪，待 DOC-A 后独立合并 |
 | DOC-D | `approval-workflow-openapi.yaml`、错误目录、`runbooks/approval-workflow.md`、`openapi:lint` 与 `@redocly/cli` 锁定 | P3-HTTP | P6-PILOT | 未开始 |
 
-DOC-A 未合并时禁止开始 P0；其余三段各自只阻断自己的下游阶段，不阻断其他阶段。DOC-D 依赖 P3-HTTP 的端点稳定，因此排在 P3 之后。
+DOC-A 已合并，P0-A 已解锁。其余三段各自只阻断自己的下游阶段，不阻断其他阶段。DOC-D 依赖 P3-HTTP 的端点稳定，因此排在 P3 之后。
 
 DOC-A 的生效决定固定如下：
 
@@ -222,7 +222,7 @@ rg -n '[补]签|二次[补]签' \
 
 ## 11. 完成条件
 
-### 11.1 DOC-A（内容就绪，待合并；P0-A 未解锁）
+### 11.1 DOC-A（已合并；P0-A 已解锁）
 
 - [x] 政策、生命周期、试点、权限、WorkItem、BLOCKED 和通知合同已签署。
 - [x] 第 0 节生效决定已写入合同，销售提交、`ReviewStatus`、采购确认 purpose、责任模型和工作台取值唯一。

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-08-17",
+  "updatedAt": "2026-08-18",
   "ownershipRules": {
     "owns": "阶段分支只能修改所属 owns 前缀内的文件。",
     "ownsWithin": "同一文件被多个阶段按顺序分段负责时，用 ownsWithin 标注各阶段负责的符号范围。只有存在依赖顺序（后者 dependsOn 前者）的阶段之间允许分段；并行阶段仍然禁止共享文件。",
@@ -42,7 +42,7 @@
           "id": "DOC-A",
           "planDoc": "10-contract-document-synchronization.md",
           "branch": "docs/erp-approval-workflow-contract",
-          "status": "ready_to_merge",
+          "status": "merged",
           "dependsOn": [],
           "unlocks": ["P0-A"],
           "owns": [
