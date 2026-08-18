@@ -60,4 +60,4 @@ docs/dev-plan/<专项>.md            专项阶段矩阵
 
 | 专项 | 阶段文件 | 实施计划目录 | 状态 |
 | --- | --- | --- | --- |
-| 审批流程改造 | [approval-workflow.md](./approval-workflow.md) | `docs/approval-workflow-implementation-plan/` | DOC-A 已合并，P0-A 已解锁；DOC-B / DOC-C 合同就绪、待按独立 PR 合并；DOC-D 等待 P3-HTTP |
+| 审批流程改造 | [approval-workflow.md](./approval-workflow.md) | `docs/approval-workflow-implementation-plan/` | DOC-A / DOC-B 已合并，P0-A 已解锁；DOC-C 合同就绪、待独立 PR 合并；DOC-D 等待 P3-HTTP |

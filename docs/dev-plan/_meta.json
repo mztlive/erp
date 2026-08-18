@@ -58,7 +58,7 @@
           "id": "DOC-B",
           "planDoc": "10-contract-document-synchronization.md",
           "branch": "docs/erp-approval-workflow-data-model",
-          "status": "ready_to_merge",
+          "status": "merged",
           "dependsOn": ["DOC-A"],
           "unlocks": ["P2"],
           "owns": ["docs/erp-data-model.md"],
