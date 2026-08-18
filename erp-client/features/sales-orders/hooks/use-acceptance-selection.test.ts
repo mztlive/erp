@@ -100,9 +100,9 @@ describe("useAcceptanceSelection", () => {
                 acceptedQuantity: "30",
             }),
         )
-        expect(
-            result.current.lineResults.get("sl_1")?.acceptedManual,
-        ).toBe(true)
+        expect(result.current.lineResults.get("sl_1")?.acceptedManual).toBe(
+            true,
+        )
 
         act(() => result.current.setAllocQty("fl_1", "60"))
 
@@ -144,16 +144,16 @@ describe("useAcceptanceSelection", () => {
         )
         expect(result.current.overallPreview).toBe("REJECT")
 
-        act(() => result.current.updateLineResult("sl_a", { serviceFail: true }))
+        act(() =>
+            result.current.updateLineResult("sl_a", { serviceFail: true }),
+        )
         expect(result.current.overallPreview).toBe("SERVICE_FAIL")
     })
 
     it("updating an unknown line creates it with defaults", () => {
         const { result } = renderHook(() => useAcceptanceSelection())
 
-        act(() =>
-            result.current.updateLineResult("sl_new", { reason: "少发" }),
-        )
+        act(() => result.current.updateLineResult("sl_new", { reason: "少发" }))
 
         expect(result.current.lineResults.get("sl_new")).toEqual({
             ...emptyLineResult(),
@@ -179,9 +179,7 @@ describe("useAcceptanceSelection", () => {
             },
         ]
 
-        act(() =>
-            result.current.restoreDraft(draftLines, [makeGroup([kept])]),
-        )
+        act(() => result.current.restoreDraft(draftLines, [makeGroup([kept])]))
 
         expect(result.current.selected.size).toBe(1)
         expect(result.current.selected.get("fl_1")).toEqual({

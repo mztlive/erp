@@ -94,8 +94,8 @@ export function createEmptyLine(
         unit: nature === "card_voucher" ? "张" : "",
         unitPriceGross: "0.00",
         /**
-         * 建单页不提供仓发/直发选择；履约方式由后续采购二次确认写入正式结论。
-         * 提交仍带占位值以满足契约，服务端以确认结果为准。
+         * 建单页不提供仓发/直发选择；履约方式由后续审批节点写入结论。
+         * 提交仍带占位值以满足契约，服务端以审批结果为准。
          */
         fulfillmentMode: nature === "physical_service" ? "公司仓发" : "",
         dueDate: "",

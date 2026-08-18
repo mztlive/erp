@@ -2,16 +2,10 @@
 
 import * as React from "react"
 
-import {
-    DocumentHeader,
-    MoneyValue,
-} from "@/components/business"
+import { DocumentHeader, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
-import {
-    NATURE_LABEL,
-    ORIGIN_LABEL,
-} from "@/features/sales-orders/lib/labels"
+import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
 import { sumFixed } from "@/lib/fixed-decimal"
 
 function remainingReceivable(gross: string, received: string) {

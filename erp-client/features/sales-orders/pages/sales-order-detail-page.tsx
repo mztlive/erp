@@ -13,7 +13,7 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { LowMarginManagerPanel } from "@/features/sales-orders/components/low-margin-manager-panel"
+import { SalesOrderMarginRiskHint } from "@/features/sales-orders/components/sales-order-margin-risk-hint"
 import { SalesChangeReviewPanel } from "@/features/sales-orders/components/sales-change-review-panel"
 import {
     SalesOrderDetailCommandDialogs,
@@ -33,8 +33,11 @@ import {
 } from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
 import { useSalesOrderDetailModeGuard } from "@/features/sales-orders/hooks/use-sales-order-detail-mode-guard"
 import { useSalesOrderDetailUrlState } from "@/features/sales-orders/hooks/use-sales-order-detail-url-state"
+import { salesOrderMarginRiskHint } from "@/features/sales-orders/lib/sales-order-approval"
 import { deriveSalesOrderDetailState } from "@/features/sales-orders/lib/sales-order-detail-derived"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
+import { mapWorkItemDto } from "@/features/work-items/types"
+import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { cn } from "@/lib/utils"
 
@@ -62,6 +65,10 @@ export function SalesOrderDetailPage({
     } = useSalesOrderDetailUrlState({ salesOrderId })
     const rejectionResolution = useSalesOrderDetailRejectionResolution()
     const startChangeCommand = useSalesOrderDetailStartChange()
+    const focusedWorkItemQuery = useWorkItemDetailQuery(focusedWorkItemId)
+    const focusedWorkItem = focusedWorkItemQuery.data
+        ? mapWorkItemDto(focusedWorkItemQuery.data)
+        : undefined
 
     const [voidOpen, setVoidOpen] = React.useState(false)
     const [lowMarginOpen, setLowMarginOpen] = React.useState(false)
@@ -140,6 +147,7 @@ export function SalesOrderDetailPage({
         fromWorkspace,
         returnTo,
     })
+    const marginHint = salesOrderMarginRiskHint(order)
 
     if (derived.showEditor) {
         return (
@@ -160,12 +168,18 @@ export function SalesOrderDetailPage({
     }
 
     const primaryTaskAction =
-        derived.openRejection && derived.canResubmit ? (
+        order.nature !== "physical_service" &&
+        derived.openRejection &&
+        derived.canResubmit ? (
             <Button type="button" size="sm" onClick={enterRejectionEdit}>
                 改完再报
             </Button>
         ) : derived.actionableFocusTask &&
-          !(derived.openRejection && derived.navSection === "overview") ? (
+          !(
+              order.nature !== "physical_service" &&
+              derived.openRejection &&
+              derived.navSection === "overview"
+          ) ? (
             <Button
                 type="button"
                 size="sm"
@@ -195,7 +209,7 @@ export function SalesOrderDetailPage({
                                 ? "从履约处理打开 · 处理完可点返回，回到列表原位"
                                 : fromWorkspace === "W08"
                                   ? "从采购单打开 · 处理完可点返回，回到列表原位"
-                                  : "从采购确认打开 · 处理完可点返回，回到列表原位"}
+                                  : "从工作台打开 · 处理完可点返回，回到列表原位"}
                         </span>
                     ) : undefined
                 }
@@ -218,9 +232,7 @@ export function SalesOrderDetailPage({
                 <FocusTaskBanner
                     order={order}
                     focusTask={derived.focusTask}
-                    canActOnRejection={
-                        derived.canResubmit || derived.canVoid
-                    }
+                    canActOnRejection={derived.canResubmit || derived.canVoid}
                     action={
                         derived.bannerJump ? (
                             <Button
@@ -261,13 +273,7 @@ export function SalesOrderDetailPage({
                 />
             ) : null}
 
-            {order.activeLowMarginManagerConfirmation ? (
-                <LowMarginManagerPanel
-                    order={order}
-                    confirmation={order.activeLowMarginManagerConfirmation}
-                    onResult={setResult}
-                />
-            ) : null}
+            {marginHint ? <SalesOrderMarginRiskHint hint={marginHint} /> : null}
 
             {section === "change-review" && focusedWorkItemId ? (
                 <SalesChangeReviewPanel
@@ -286,7 +292,9 @@ export function SalesOrderDetailPage({
                     <SalesOrderDetailSecondaryActions
                         order={order}
                         openRejection={derived.openRejection}
-                        canRequestLowMargin={derived.canRequestLowMargin}
+                        canRequestLowMargin={
+                            derived.isCard && derived.canRequestLowMargin
+                        }
                         canVoid={derived.canVoid}
                         canStartChange={derived.canStartChange}
                         changeBlocker={derived.changeBlocker}
@@ -314,6 +322,9 @@ export function SalesOrderDetailPage({
                     acceptanceExpanded={derived.acceptanceExpanded}
                     showApproval={derived.showApproval}
                     selfReturn={derived.selfReturn}
+                    workItemId={focusedWorkItem?.workItemId}
+                    expectedTaskVersion={focusedWorkItem?.taskVersion}
+                    workItemAllowedActions={focusedWorkItem?.allowedActions}
                     onSelectSection={selectSection}
                     onApprovalResult={setResult}
                 />

@@ -33,10 +33,7 @@ export function CardApprovalApproveConfirmDialog({
             effects={
                 isManager
                     ? ["记录领导审批通过", "激活唯一运营审批步骤"]
-                    : [
-                          "记录运营审批通过",
-                          "原子形成销售版本、应收和执行投影",
-                      ]
+                    : ["记录运营审批通过", "原子形成销售版本、应收和执行投影"]
             }
             nextDepartment={isManager ? "运营" : "票款与商城执行"}
             onConfirm={onConfirm}

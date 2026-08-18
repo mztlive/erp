@@ -2,10 +2,7 @@
 
 import { useSelector } from "@tanstack/react-form"
 
-import {
-    EditableLineItemTable,
-    ValidationSummary,
-} from "@/components/business"
+import { EditableLineItemTable, ValidationSummary } from "@/components/business"
 import { toFieldErrors } from "@/components/form"
 import { createEmptyLine } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"

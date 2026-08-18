@@ -27,6 +27,8 @@ import {
     rateToPercent,
     throwValidation,
 } from "@/features/sales-orders/api/mappers"
+import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-approval"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     CreateSalesOrderInput,
     CreateSalesOrderResult,
@@ -224,6 +226,7 @@ export async function createSalesOrder(
         createdAt: new Date(created.created_at * 1000).toISOString(),
         reference: `SO-CREATE-${created.order_no}`,
         workingCopyVersion: created.working_copy?.version,
+        approval: mapSalesOrderApproval(created.approval),
     }
 }
 
@@ -290,6 +293,8 @@ export type SalesOrderDraftResumeData = {
     taxRatePercent: string
     remark: string
     lineItems: SalesOrderDraftLineInput[]
+    /** 续编草稿时带回的只读审批绑定，供创建结果区展示。 */
+    approval?: DocumentApprovalView
 }
 
 function mapDraftLines(
@@ -380,5 +385,6 @@ export async function fetchSalesOrderDraftForResume(
         taxRatePercent: rateToPercent(lines[0]?.sales_tax_rate),
         remark: remark ?? "",
         lineItems: mapDraftLines(lines, voucherCategorySkuId),
+        approval: mapSalesOrderApproval(detail.approval),
     }
 }

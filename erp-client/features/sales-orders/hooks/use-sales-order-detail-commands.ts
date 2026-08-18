@@ -45,10 +45,9 @@ export function useSalesOrderDetailRejectionResolution() {
         onResult: (next: SalesOrderDetailActionResult) => void
         reason: string
     }) => {
-        let command =
-            commandLedger.peek<ResolveProcurementRejectionPayload>(
-                "procurement-rejection-resolution",
-            )
+        let command = commandLedger.peek<ResolveProcurementRejectionPayload>(
+            "procurement-rejection-resolution",
+        )
         if (command && command.payload.action !== "VOID_AFTER_REJECTION") {
             onResult({
                 status: "unknown",
@@ -127,10 +126,9 @@ export function useSalesOrderDetailRejectionResolution() {
         if (!reason.trim()) throw new Error("请填写低毛利承接理由")
         if (evidenceReferenceIds.length === 0)
             throw new Error("请至少填写一项已登记证据 ID")
-        let command =
-            commandLedger.peek<ResolveProcurementRejectionPayload>(
-                "procurement-rejection-resolution",
-            )
+        let command = commandLedger.peek<ResolveProcurementRejectionPayload>(
+            "procurement-rejection-resolution",
+        )
         if (
             command &&
             command.payload.action !== "REQUEST_LOW_MARGIN_ACCEPTANCE"
@@ -216,9 +214,8 @@ export function useSalesOrderDetailStartChange() {
         onResult: (next: SalesOrderDetailActionResult) => void
     }) => {
         const isCard = order.nature === "card_voucher"
-        let command = commandLedger.peek<StartSalesChangeOrderPayload>(
-            "start-change",
-        )
+        let command =
+            commandLedger.peek<StartSalesChangeOrderPayload>("start-change")
         try {
             if (!command) {
                 const payload = await prepareStartSalesChangeOrder({

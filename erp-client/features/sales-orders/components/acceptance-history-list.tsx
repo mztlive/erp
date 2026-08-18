@@ -61,7 +61,11 @@ export function AcceptanceHistoryList({
                                         />
                                     </div>
                                     <span className="text-xs text-muted-foreground">
-                                        {OVERALL_RESULT_LABEL[item.overallResult]}
+                                        {
+                                            OVERALL_RESULT_LABEL[
+                                                item.overallResult
+                                            ]
+                                        }
                                     </span>
                                 </div>
                                 <p className="mt-1 text-xs text-muted-foreground">

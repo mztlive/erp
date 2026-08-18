@@ -159,9 +159,7 @@ export function CardSalesApprovalPanel({
                 ) : null}
 
                 {actions.canTerminate ? (
-                    <CardApprovalTerminateForm
-                        form={actions.terminateForm}
-                    />
+                    <CardApprovalTerminateForm form={actions.terminateForm} />
                 ) : null}
 
                 <CardApprovalApproveConfirmDialog

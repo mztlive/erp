@@ -16,6 +16,7 @@ import type {
     SalesOrderNature,
 } from "@/features/sales-orders/types"
 import { personDisplayName } from "@/features/sales-orders/lib/labels"
+import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-approval"
 import {
     formatEpochDate,
     formatInstant,
@@ -182,6 +183,7 @@ export function mapDetailToListItem(
                     !detail.active_card_sales_approval
                   ? "审批仍在进行，但审批进度和任务版本不完整；为避免错批，本页仅供查看。"
                   : null,
+            approval: mapSalesOrderApproval(detail.approval),
             activeChangeOrder: extras?.activeChangeOrder,
             settlementEntity:
                 commercial.settlementPartyName || detail.settlement_party_id,

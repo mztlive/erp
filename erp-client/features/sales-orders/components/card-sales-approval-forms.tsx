@@ -39,11 +39,7 @@ export function CardApprovalRejectForm({ form }: { form: RejectForm }) {
     )
 }
 
-export function CardApprovalTerminateForm({
-    form,
-}: {
-    form: TerminateForm
-}) {
+export function CardApprovalTerminateForm({ form }: { form: TerminateForm }) {
     return (
         <form
             className="max-w-md space-y-3 rounded-lg border border-destructive/40 p-3"

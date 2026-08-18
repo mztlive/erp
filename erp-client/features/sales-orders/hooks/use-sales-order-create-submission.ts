@@ -28,6 +28,7 @@ import type {
     SalesOrderEditorPurpose,
     SalesOrderEditorResult,
 } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     CreateSalesOrderInput,
     SalesOrderCreateIntent,
@@ -79,26 +80,30 @@ export function useSalesOrderCreateSubmission({
     const submitMutation = useSubmitSalesOrderMutation()
     const resubmitMutation = useResolveProcurementRejectionMutation()
     const submitIntentRef = React.useRef<SalesOrderCreateIntent>("SAVE_DRAFT")
-    const [resubmitConfirmOpen, setResubmitConfirmOpen] =
-        React.useState(false)
+    const [resubmitConfirmOpen, setResubmitConfirmOpen] = React.useState(false)
     const [resubmitEvidence, setResubmitEvidence] = React.useState("")
     const [formalFailure, setFormalFailure] =
         React.useState<FormalFailure | null>(null)
 
     /** 继续编辑场景：草稿在后端的身份与乐观锁版本，保存草稿从"新建"切到"更新"。 */
-    const [draftIdentity, setDraftIdentity] = React.useState<DraftIdentity | null>(
-        initialDraft
-            ? {
-                  salesOrderId: initialDraft.salesOrderId,
-                  documentNumber: initialDraft.documentNumber,
-                  version: initialDraft.version,
-              }
-            : null,
-    )
+    const [draftIdentity, setDraftIdentity] =
+        React.useState<DraftIdentity | null>(
+            initialDraft
+                ? {
+                      salesOrderId: initialDraft.salesOrderId,
+                      documentNumber: initialDraft.documentNumber,
+                      version: initialDraft.version,
+                  }
+                : null,
+        )
     const [draftSaved, setDraftSaved] = React.useState<{
         documentNumber: string
         savedAt: Date
     } | null>(null)
+    const [approval, setApproval] = React.useState<
+        DocumentApprovalView | undefined
+    >(initialDraft?.approval)
+    const [submitConfirmOpen, setSubmitConfirmOpen] = React.useState(false)
 
     const handleSubmit = async (
         value: CreateSalesOrderFormValues,
@@ -129,9 +134,10 @@ export function useSalesOrderCreateSubmission({
                 return
             }
 
-            let command = commandLedger.peek<
-                Omit<SubmitSalesOrderInput, "idempotencyKey">
-            >("submit-existing")
+            let command =
+                commandLedger.peek<
+                    Omit<SubmitSalesOrderInput, "idempotencyKey">
+                >("submit-existing")
             if (submitIntentRef.current === "SAVE_DRAFT" && !command) {
                 const saved = await saveDraftMutation.mutateAsync({
                     ...draftContent,
@@ -212,9 +218,10 @@ export function useSalesOrderCreateSubmission({
             return
         }
 
-        let command = commandLedger.peek<
-            Omit<CreateSalesOrderInput, "idempotencyKey">
-        >("create")
+        let command =
+            commandLedger.peek<Omit<CreateSalesOrderInput, "idempotencyKey">>(
+                "create",
+            )
         if (!command) {
             command = commandLedger.acquire("create", "sales:create", {
                 orderNo: localOrderNo(),
@@ -258,6 +265,7 @@ export function useSalesOrderCreateSubmission({
                 documentNumber: result.documentNumber,
                 savedAt: new Date(),
             })
+            setApproval(result.approval)
             return
         }
         form.reset()
@@ -303,7 +311,10 @@ export function useSalesOrderCreateSubmission({
                 ...command.payload,
                 idempotencyKey: command.idempotencyKey,
             })
-            commandLedger.settle("procurement-rejection-resolution", "succeeded")
+            commandLedger.settle(
+                "procurement-rejection-resolution",
+                "succeeded",
+            )
             onResult?.({
                 status: "succeeded",
                 title: "已改完并再报给采购",
@@ -316,10 +327,7 @@ export function useSalesOrderCreateSubmission({
             const settlement = command
                 ? classifyFormalCommandError(error)
                 : "failed"
-            commandLedger.settle(
-                "procurement-rejection-resolution",
-                settlement,
-            )
+            commandLedger.settle("procurement-rejection-resolution", settlement)
             onResult?.({
                 status: settlement === "unknown" ? "unknown" : "blocked",
                 title:
@@ -346,6 +354,9 @@ export function useSalesOrderCreateSubmission({
         setDraftIdentity,
         draftSaved,
         setDraftSaved,
+        approval,
+        submitConfirmOpen,
+        setSubmitConfirmOpen,
         formalFailure,
         setFormalFailure,
         resubmitConfirmOpen,
@@ -353,6 +364,10 @@ export function useSalesOrderCreateSubmission({
         resubmitEvidence,
         setResubmitEvidence,
         createMutation,
+        isSubmitting:
+            createMutation.isPending ||
+            saveDraftMutation.isPending ||
+            submitMutation.isPending,
         isResubmitting: resubmitMutation.isPending,
     }
 }

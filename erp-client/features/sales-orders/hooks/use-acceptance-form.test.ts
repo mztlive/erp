@@ -69,10 +69,7 @@ describe("useAcceptanceForm", () => {
             initialProps: {
                 selected: new Map([["fl_1", { fact, qty: "10" }]]),
                 lineResults: new Map([
-                    [
-                        "sl_1",
-                        { ...emptyLineResult(), acceptedQuantity: "5" },
-                    ],
+                    ["sl_1", { ...emptyLineResult(), acceptedQuantity: "5" }],
                 ]),
                 onValidSubmit,
             },
@@ -121,10 +118,7 @@ describe("useAcceptanceForm", () => {
             initialProps: {
                 selected: new Map([["fl_1", { fact, qty: "10" }]]),
                 lineResults: new Map([
-                    [
-                        "sl_1",
-                        { ...emptyLineResult(), acceptedQuantity: "10" },
-                    ],
+                    ["sl_1", { ...emptyLineResult(), acceptedQuantity: "10" }],
                 ]),
                 onValidSubmit,
             },

@@ -1,14 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { act, waitFor } from "@testing-library/react"
 
-import { renderHookWithProviders } from '@/features/test-utils'
-import type { SalesOrderDetailView } from '@/features/sales-orders/api/sales-orders'
+import { renderHookWithProviders } from "@/features/test-utils"
+import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import {
     useSalesOrderDetailRejectionResolution,
     useSalesOrderDetailStartChange,
-} from '@/features/sales-orders/hooks/use-sales-order-detail-commands'
-import type { SalesOrderDetailActionResult } from '@/features/sales-orders/lib/sales-order-detail-model'
-import { FormalCommandKeyLedger } from '@/lib/formal-command'
+} from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
+import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
+import { FormalCommandKeyLedger } from "@/lib/formal-command"
 
 const apiMocks = vi.hoisted(() => ({
     prepareProcurementRejectionResolution: vi.fn(),
@@ -17,9 +17,11 @@ const apiMocks = vi.hoisted(() => ({
     startSalesChangeOrder: vi.fn(),
 }))
 
-vi.mock('@/features/sales-orders/api/sales-orders', async (importOriginal) => {
+vi.mock("@/features/sales-orders/api/sales-orders", async (importOriginal) => {
     const actual =
-        await importOriginal<typeof import('@/features/sales-orders/api/sales-orders')>()
+        await importOriginal<
+            typeof import("@/features/sales-orders/api/sales-orders")
+        >()
     return {
         ...actual,
         prepareProcurementRejectionResolution:
@@ -34,10 +36,10 @@ function makeOrder(
     overrides: Partial<SalesOrderDetailView> = {},
 ): SalesOrderDetailView {
     return {
-        id: 'so-1',
-        documentNumber: 'XS-1',
+        id: "so-1",
+        documentNumber: "XS-1",
         version: 3,
-        nature: 'physical_service',
+        nature: "physical_service",
         ...overrides,
     } as unknown as SalesOrderDetailView
 }
@@ -53,28 +55,28 @@ function freshOnResult() {
 }
 
 const preparedVoidPayload = {
-    salesOrderId: 'so-1',
-    action: 'VOID_AFTER_REJECTION' as const,
-    voidReasonCode: 'SALES_DECISION_NOT_TO_PROCEED',
-    comment: '客户不再需要',
-    rejectedProcurementConfirmationId: 'pc-1',
-    rejectedSubmissionId: 'sub-1',
+    salesOrderId: "so-1",
+    action: "VOID_AFTER_REJECTION" as const,
+    voidReasonCode: "SALES_DECISION_NOT_TO_PROCEED",
+    comment: "客户不再需要",
+    rejectedProcurementConfirmationId: "pc-1",
+    rejectedSubmissionId: "sub-1",
     expectedSalesOrderLockVersion: 3,
 }
 
 const voidOutcome = {
-    outcome: 'VOIDED_AFTER_PROCUREMENT_REJECTION' as const,
-    reference: 'XS-1',
-    detail: '本单已作废。',
+    outcome: "VOIDED_AFTER_PROCUREMENT_REJECTION" as const,
+    reference: "XS-1",
+    detail: "本单已作废。",
 }
 
-describe('useSalesOrderDetailRejectionResolution', () => {
+describe("useSalesOrderDetailRejectionResolution", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         keySeq = 0
     })
 
-    it('voids after rejection with a prepared command and settles the ledger', async () => {
+    it("voids after rejection with a prepared command and settles the ledger", async () => {
         apiMocks.prepareProcurementRejectionResolution.mockResolvedValue(
             preparedVoidPayload,
         )
@@ -90,35 +92,35 @@ describe('useSalesOrderDetailRejectionResolution', () => {
                 order: makeOrder(),
                 commandLedger: ledger,
                 onResult,
-                reason: '客户不再需要',
+                reason: "客户不再需要",
             })
         })
 
-        expect(apiMocks.prepareProcurementRejectionResolution).toHaveBeenCalledWith(
-            {
-                salesOrderId: 'so-1',
-                action: 'VOID_AFTER_REJECTION',
-                voidReasonCode: 'SALES_DECISION_NOT_TO_PROCEED',
-                comment: '客户不再需要',
-            },
-        )
+        expect(
+            apiMocks.prepareProcurementRejectionResolution,
+        ).toHaveBeenCalledWith({
+            salesOrderId: "so-1",
+            action: "VOID_AFTER_REJECTION",
+            voidReasonCode: "SALES_DECISION_NOT_TO_PROCEED",
+            comment: "客户不再需要",
+        })
         expect(apiMocks.resolveProcurementRejection).toHaveBeenCalledWith(
             {
                 ...preparedVoidPayload,
-                idempotencyKey: 'key-1',
+                idempotencyKey: "key-1",
             },
             expect.anything(),
         )
         expect(onResult).toHaveBeenCalledWith({
-            status: 'rejected',
-            title: '本单已作废',
-            description: '本单已作废。',
-            reference: 'XS-1',
+            status: "rejected",
+            title: "本单已作废",
+            description: "本单已作废。",
+            reference: "XS-1",
         })
-        expect(ledger.peek('procurement-rejection-resolution')).toBeUndefined()
+        expect(ledger.peek("procurement-rejection-resolution")).toBeUndefined()
     })
 
-    it('rejects validation of the low-margin request before any call', async () => {
+    it("rejects validation of the low-margin request before any call", async () => {
         const { result } = renderHookWithProviders(() =>
             useSalesOrderDetailRejectionResolution(),
         )
@@ -131,19 +133,19 @@ describe('useSalesOrderDetailRejectionResolution', () => {
                     order: makeOrder(),
                     commandLedger: ledger,
                     onResult,
-                    reason: '   ',
-                    evidence: 'EV-1',
+                    reason: "   ",
+                    evidence: "EV-1",
                 }),
-            ).rejects.toThrow('请填写低毛利承接理由')
+            ).rejects.toThrow("请填写低毛利承接理由")
             await expect(
                 result.current.requestLowMargin({
                     order: makeOrder(),
                     commandLedger: ledger,
                     onResult,
-                    reason: '维持原价',
-                    evidence: '   ',
+                    reason: "维持原价",
+                    evidence: "   ",
                 }),
-            ).rejects.toThrow('请至少填写一项已登记证据 ID')
+            ).rejects.toThrow("请至少填写一项已登记证据 ID")
         })
 
         expect(
@@ -152,20 +154,20 @@ describe('useSalesOrderDetailRejectionResolution', () => {
         expect(onResult).not.toHaveBeenCalled()
     })
 
-    it('requests low-margin acceptance with trimmed reason and parsed evidence', async () => {
+    it("requests low-margin acceptance with trimmed reason and parsed evidence", async () => {
         apiMocks.prepareProcurementRejectionResolution.mockResolvedValue({
-            salesOrderId: 'so-1',
-            action: 'REQUEST_LOW_MARGIN_ACCEPTANCE',
-            lowMarginAcceptanceReason: '维持原价',
-            evidenceReferenceIds: ['EV-1', 'EV-2', 'EV-3'],
-            rejectedProcurementConfirmationId: 'pc-1',
-            rejectedSubmissionId: 'sub-1',
+            salesOrderId: "so-1",
+            action: "REQUEST_LOW_MARGIN_ACCEPTANCE",
+            lowMarginAcceptanceReason: "维持原价",
+            evidenceReferenceIds: ["EV-1", "EV-2", "EV-3"],
+            rejectedProcurementConfirmationId: "pc-1",
+            rejectedSubmissionId: "sub-1",
             expectedSalesOrderLockVersion: 3,
         })
         apiMocks.resolveProcurementRejection.mockResolvedValue({
-            outcome: 'LOW_MARGIN_MANAGER_CONFIRMATION_CREATED',
-            reference: 'PC-9',
-            detail: '已创建低毛利确认。',
+            outcome: "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED",
+            reference: "PC-9",
+            detail: "已创建低毛利确认。",
         })
         const { result } = renderHookWithProviders(() =>
             useSalesOrderDetailRejectionResolution(),
@@ -178,44 +180,44 @@ describe('useSalesOrderDetailRejectionResolution', () => {
                 order: makeOrder(),
                 commandLedger: ledger,
                 onResult,
-                reason: '  维持原价  ',
-                evidence: 'EV-1, EV-2，EV-1;EV-3',
+                reason: "  维持原价  ",
+                evidence: "EV-1, EV-2，EV-1;EV-3",
             })
         })
 
-        expect(apiMocks.prepareProcurementRejectionResolution).toHaveBeenCalledWith(
-            {
-                salesOrderId: 'so-1',
-                action: 'REQUEST_LOW_MARGIN_ACCEPTANCE',
-                lowMarginAcceptanceReason: '维持原价',
-                evidenceReferenceIds: ['EV-1', 'EV-2', 'EV-3'],
-            },
-        )
-        expect(onResult).toHaveBeenCalledWith({
-            status: 'succeeded',
-            title: '已申请低毛利承接',
-            description: '已创建低毛利确认。',
-            reference: 'PC-9',
-            nextResponsible: '销售上级',
+        expect(
+            apiMocks.prepareProcurementRejectionResolution,
+        ).toHaveBeenCalledWith({
+            salesOrderId: "so-1",
+            action: "REQUEST_LOW_MARGIN_ACCEPTANCE",
+            lowMarginAcceptanceReason: "维持原价",
+            evidenceReferenceIds: ["EV-1", "EV-2", "EV-3"],
         })
-        expect(ledger.peek('procurement-rejection-resolution')).toBeUndefined()
+        expect(onResult).toHaveBeenCalledWith({
+            status: "succeeded",
+            title: "已申请低毛利承接",
+            description: "已创建低毛利确认。",
+            reference: "PC-9",
+            nextResponsible: "销售上级",
+        })
+        expect(ledger.peek("procurement-rejection-resolution")).toBeUndefined()
     })
 
-    it('blocks a conflicting command and keeps the ledger untouched', async () => {
+    it("blocks a conflicting command and keeps the ledger untouched", async () => {
         const { result } = renderHookWithProviders(() =>
             useSalesOrderDetailRejectionResolution(),
         )
         const ledger = freshLedger()
         ledger.acquire(
-            'procurement-rejection-resolution',
-            'sales:so-1:procurement-rejection:low-margin',
+            "procurement-rejection-resolution",
+            "sales:so-1:procurement-rejection:low-margin",
             {
-                salesOrderId: 'so-1',
-                action: 'REQUEST_LOW_MARGIN_ACCEPTANCE',
-                lowMarginAcceptanceReason: '维持原价',
-                evidenceReferenceIds: ['EV-1'],
-                rejectedProcurementConfirmationId: 'pc-1',
-                rejectedSubmissionId: 'sub-1',
+                salesOrderId: "so-1",
+                action: "REQUEST_LOW_MARGIN_ACCEPTANCE",
+                lowMarginAcceptanceReason: "维持原价",
+                evidenceReferenceIds: ["EV-1"],
+                rejectedProcurementConfirmationId: "pc-1",
+                rejectedSubmissionId: "sub-1",
                 expectedSalesOrderLockVersion: 3,
             },
         )
@@ -227,28 +229,28 @@ describe('useSalesOrderDetailRejectionResolution', () => {
                     order: makeOrder(),
                     commandLedger: ledger,
                     onResult,
-                    reason: '作废',
+                    reason: "作废",
                 }),
-            ).rejects.toThrow('另一项处理的结果仍待确认，请先使用原操作重试。')
+            ).rejects.toThrow("另一项处理的结果仍待确认，请先使用原操作重试。")
         })
 
         expect(onResult).toHaveBeenCalledWith({
-            status: 'unknown',
-            title: '处理结果待确认',
-            description: '另一项处理的结果仍待确认，请先使用原操作重试。',
-            reference: 'XS-1',
+            status: "unknown",
+            title: "处理结果待确认",
+            description: "另一项处理的结果仍待确认，请先使用原操作重试。",
+            reference: "XS-1",
         })
         expect(
             apiMocks.prepareProcurementRejectionResolution,
         ).not.toHaveBeenCalled()
     })
 
-    it('keeps the command on an unknown outcome and retries with the same key', async () => {
+    it("keeps the command on an unknown outcome and retries with the same key", async () => {
         apiMocks.prepareProcurementRejectionResolution.mockResolvedValue(
             preparedVoidPayload,
         )
         apiMocks.resolveProcurementRejection
-            .mockRejectedValueOnce({ kind: 'Network', message: 'offline' })
+            .mockRejectedValueOnce({ kind: "Network", message: "offline" })
             .mockResolvedValueOnce(voidOutcome)
         const { result } = renderHookWithProviders(() =>
             useSalesOrderDetailRejectionResolution(),
@@ -263,16 +265,16 @@ describe('useSalesOrderDetailRejectionResolution', () => {
                     order,
                     commandLedger: ledger,
                     onResult,
-                    reason: '客户不再需要',
+                    reason: "客户不再需要",
                 }),
-            ).rejects.toEqual({ kind: 'Network', message: 'offline' })
+            ).rejects.toEqual({ kind: "Network", message: "offline" })
         })
 
         expect(onResult).toHaveBeenLastCalledWith({
-            status: 'unknown',
-            title: '处理结果待确认',
-            description: '当前原因已保留，请使用本次操作重试。',
-            reference: 'XS-1',
+            status: "unknown",
+            title: "处理结果待确认",
+            description: "当前原因已保留，请使用本次操作重试。",
+            reference: "XS-1",
         })
         expect(
             apiMocks.prepareProcurementRejectionResolution,
@@ -283,7 +285,7 @@ describe('useSalesOrderDetailRejectionResolution', () => {
                 order,
                 commandLedger: ledger,
                 onResult,
-                reason: '客户不再需要',
+                reason: "客户不再需要",
             })
         })
 
@@ -292,20 +294,20 @@ describe('useSalesOrderDetailRejectionResolution', () => {
             2,
             {
                 ...preparedVoidPayload,
-                idempotencyKey: 'key-1',
+                idempotencyKey: "key-1",
             },
             expect.anything(),
         )
         expect(onResult).toHaveBeenLastCalledWith({
-            status: 'rejected',
-            title: '本单已作废',
-            description: '本单已作废。',
-            reference: 'XS-1',
+            status: "rejected",
+            title: "本单已作废",
+            description: "本单已作废。",
+            reference: "XS-1",
         })
-        expect(ledger.peek('procurement-rejection-resolution')).toBeUndefined()
+        expect(ledger.peek("procurement-rejection-resolution")).toBeUndefined()
     })
 
-    it('exposes isPending while the mutation is in flight', async () => {
+    it("exposes isPending while the mutation is in flight", async () => {
         let release!: (value: typeof voidOutcome) => void
         apiMocks.prepareProcurementRejectionResolution.mockResolvedValue(
             preparedVoidPayload,
@@ -326,12 +328,10 @@ describe('useSalesOrderDetailRejectionResolution', () => {
                     order: makeOrder(),
                     commandLedger: freshLedger(),
                     onResult: freshOnResult(),
-                    reason: '客户不再需要',
+                    reason: "客户不再需要",
                 })
                 .catch(() => {})
-            await vi.waitFor(() =>
-                expect(result.current.isPending).toBe(true),
-            )
+            await vi.waitFor(() => expect(result.current.isPending).toBe(true))
         })
 
         await act(async () => {
@@ -342,26 +342,26 @@ describe('useSalesOrderDetailRejectionResolution', () => {
     })
 })
 
-describe('useSalesOrderDetailStartChange', () => {
+describe("useSalesOrderDetailStartChange", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         keySeq = 0
     })
 
-    it('starts a change order and reports the next responsible for goods orders', async () => {
+    it("starts a change order and reports the next responsible for goods orders", async () => {
         apiMocks.prepareStartSalesChangeOrder.mockResolvedValue({
-            salesOrderId: 'so-1',
+            salesOrderId: "so-1",
             baseRevisionNo: 3,
-            nature: 'physical_service',
+            nature: "physical_service",
             command: { draft: {} },
         })
         apiMocks.startSalesChangeOrder.mockResolvedValue({
-            id: 'sc-1',
-            statusLabel: '待财务复核',
-            statusTone: 'warning',
+            id: "sc-1",
+            statusLabel: "待财务复核",
+            statusTone: "warning",
             baseRevisionNo: 3,
-            createdAt: '2026-08-14T00:00:00.000Z',
-            impactPath: 'procurement',
+            createdAt: "2026-08-14T00:00:00.000Z",
+            impactPath: "procurement",
         })
         const { result } = renderHookWithProviders(() =>
             useSalesOrderDetailStartChange(),
@@ -378,44 +378,44 @@ describe('useSalesOrderDetailStartChange', () => {
         })
 
         expect(apiMocks.prepareStartSalesChangeOrder).toHaveBeenCalledWith({
-            salesOrderId: 'so-1',
+            salesOrderId: "so-1",
             baseRevisionNo: 3,
-            nature: 'physical_service',
+            nature: "physical_service",
         })
         expect(apiMocks.startSalesChangeOrder).toHaveBeenCalledWith(
             {
-                salesOrderId: 'so-1',
+                salesOrderId: "so-1",
                 baseRevisionNo: 3,
-                nature: 'physical_service',
+                nature: "physical_service",
                 command: { draft: {} },
-                idempotencyKey: 'key-1',
+                idempotencyKey: "key-1",
             },
             expect.anything(),
         )
         expect(onResult).toHaveBeenCalledWith({
-            status: 'succeeded',
-            title: '改单已创建',
-            description: '已进入「待财务复核」。当前版本对客户仍然有效。',
-            reference: 'sc-1',
-            nextResponsible: '采购与财务',
+            status: "succeeded",
+            title: "改单已创建",
+            description: "已进入「待财务复核」。当前版本对客户仍然有效。",
+            reference: "sc-1",
+            nextResponsible: "采购与财务",
         })
-        expect(ledger.peek('start-change')).toBeUndefined()
+        expect(ledger.peek("start-change")).toBeUndefined()
     })
 
-    it('routes card orders to operations and finance', async () => {
+    it("routes card orders to operations and finance", async () => {
         apiMocks.prepareStartSalesChangeOrder.mockResolvedValue({
-            salesOrderId: 'so-1',
+            salesOrderId: "so-1",
             baseRevisionNo: 3,
-            nature: 'card_voucher',
+            nature: "card_voucher",
             command: { draft: {} },
         })
         apiMocks.startSalesChangeOrder.mockResolvedValue({
-            id: 'sc-2',
-            statusLabel: '待运营执行影响确认',
-            statusTone: 'warning',
+            id: "sc-2",
+            statusLabel: "待运营执行影响确认",
+            statusTone: "warning",
             baseRevisionNo: 3,
-            createdAt: '2026-08-14T00:00:00.000Z',
-            impactPath: 'operations',
+            createdAt: "2026-08-14T00:00:00.000Z",
+            impactPath: "operations",
         })
         const { result } = renderHookWithProviders(() =>
             useSalesOrderDetailStartChange(),
@@ -424,37 +424,38 @@ describe('useSalesOrderDetailStartChange', () => {
 
         await act(async () => {
             await result.current.startChange({
-                order: makeOrder({ nature: 'card_voucher' }),
+                order: makeOrder({ nature: "card_voucher" }),
                 commandLedger: freshLedger(),
                 onResult,
             })
         })
 
         expect(onResult).toHaveBeenCalledWith({
-            status: 'succeeded',
-            title: '改单已创建',
-            description: '已进入「待运营执行影响确认」。当前版本对客户仍然有效。',
-            reference: 'sc-2',
-            nextResponsible: '运营与财务',
+            status: "succeeded",
+            title: "改单已创建",
+            description:
+                "已进入「待运营执行影响确认」。当前版本对客户仍然有效。",
+            reference: "sc-2",
+            nextResponsible: "运营与财务",
         })
     })
 
-    it('keeps the command on an unknown outcome and retries with the same key', async () => {
+    it("keeps the command on an unknown outcome and retries with the same key", async () => {
         apiMocks.prepareStartSalesChangeOrder.mockResolvedValue({
-            salesOrderId: 'so-1',
+            salesOrderId: "so-1",
             baseRevisionNo: 3,
-            nature: 'physical_service',
+            nature: "physical_service",
             command: { draft: {} },
         })
         apiMocks.startSalesChangeOrder
-            .mockRejectedValueOnce({ kind: 'Network', message: 'offline' })
+            .mockRejectedValueOnce({ kind: "Network", message: "offline" })
             .mockResolvedValueOnce({
-                id: 'sc-1',
-                statusLabel: '待财务复核',
-                statusTone: 'warning',
+                id: "sc-1",
+                statusLabel: "待财务复核",
+                statusTone: "warning",
                 baseRevisionNo: 3,
-                createdAt: '2026-08-14T00:00:00.000Z',
-                impactPath: 'procurement',
+                createdAt: "2026-08-14T00:00:00.000Z",
+                impactPath: "procurement",
             })
         const { result } = renderHookWithProviders(() =>
             useSalesOrderDetailStartChange(),
@@ -470,14 +471,14 @@ describe('useSalesOrderDetailStartChange', () => {
                     commandLedger: ledger,
                     onResult,
                 }),
-            ).rejects.toEqual({ kind: 'Network', message: 'offline' })
+            ).rejects.toEqual({ kind: "Network", message: "offline" })
         })
 
         expect(onResult).toHaveBeenLastCalledWith({
-            status: 'unknown',
-            title: '处理结果待确认',
-            description: '请使用本次操作重试；确认前不要重复创建改单。',
-            reference: 'XS-1',
+            status: "unknown",
+            title: "处理结果待确认",
+            description: "请使用本次操作重试；确认前不要重复创建改单。",
+            reference: "XS-1",
         })
 
         await act(async () => {
@@ -493,14 +494,14 @@ describe('useSalesOrderDetailStartChange', () => {
         expect(apiMocks.startSalesChangeOrder).toHaveBeenNthCalledWith(
             2,
             {
-                salesOrderId: 'so-1',
+                salesOrderId: "so-1",
                 baseRevisionNo: 3,
-                nature: 'physical_service',
+                nature: "physical_service",
                 command: { draft: {} },
-                idempotencyKey: 'key-1',
+                idempotencyKey: "key-1",
             },
             expect.anything(),
         )
-        expect(ledger.peek('start-change')).toBeUndefined()
+        expect(ledger.peek("start-change")).toBeUndefined()
     })
 })

@@ -77,7 +77,14 @@ export function SalesOrdersListTable(props: {
                 downloadContract,
                 openPaperPreview,
             }),
-        [downloadingContractId, downloadContract, focusedIndex, items, openPaperPreview, rowRefs],
+        [
+            downloadingContractId,
+            downloadContract,
+            focusedIndex,
+            items,
+            openPaperPreview,
+            rowRefs,
+        ],
     )
 
     if (isError) {

@@ -83,10 +83,10 @@ export function SalesOrderCreateTotalBar({
                     )
                     const flowNote =
                         purpose === "resubmit"
-                            ? "将按当前整单内容生成新一版，再交给采购确认。商品或价格需相对被驳回版本有改动。"
+                            ? "将按当前整单内容生成新一版并重新提交审批。商品或价格需相对被驳回版本有改动。"
                             : values.nature === "card_voucher"
                               ? "提交后进入销售领导 → 运营两级审批，运营通过后生效并形成应收。"
-                              : "提交后内容锁定并进入采购二次确认；生效以确认通过为准。"
+                              : "提交后内容锁定并进入审批；任一层驳回后将从第一节点开始下一轮。"
                     return (
                         <StickyTotalBar
                             className="rounded-none border-0 border-t border-border/30 px-4 py-4 shadow-none md:px-5 md:py-4"
@@ -114,15 +114,13 @@ export function SalesOrderCreateTotalBar({
                                 {
                                     id: "tax",
                                     label: "税额",
-                                    value: (
-                                        <MoneyValue value={totals.tax} />
-                                    ),
+                                    value: <MoneyValue value={totals.tax} />,
                                 },
                             ]}
                             note={
                                 <>
-                                    税率 {values.taxRatePercent || "0"}%
-                                    预估。{flowNote}
+                                    税率 {values.taxRatePercent || "0"}% 预估。
+                                    {flowNote}
                                 </>
                             }
                             actions={

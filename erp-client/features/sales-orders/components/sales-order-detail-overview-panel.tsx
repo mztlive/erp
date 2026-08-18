@@ -4,13 +4,12 @@ import * as React from "react"
 
 import { MoneyValue } from "@/components/business"
 import { welfareScenarioLabel } from "@/lib/business-options"
-import {
-    Alert,
-    AlertDescription,
-    AlertTitle,
-} from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { CardSalesApprovalPanel } from "@/features/sales-orders/components/card-sales-approval-panel"
+import { SalesOrderApprovalArea } from "@/features/sales-orders/components/sales-order-approval-area"
+import { salesOrderApprovalPhase } from "@/features/sales-orders/lib/sales-order-approval"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 import { cn } from "@/lib/utils"
 
@@ -110,16 +109,47 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
 export function OverviewPanel({
     order,
     showApproval,
+    workItemId,
+    expectedTaskVersion,
+    workItemAllowedActions,
     onApprovalResult,
 }: {
     order: SalesOrderDetailView
     showApproval: boolean
+    workItemId?: string
+    expectedTaskVersion?: string
+    workItemAllowedActions?: readonly string[]
     onApprovalResult?: (result: SalesOrderDetailActionResult) => void
 }) {
     const isCard = order.nature === "card_voucher"
 
     return (
         <div className="space-y-4">
+            {order.nature === "physical_service" && order.approval ? (
+                <SalesOrderApprovalArea
+                    phase={salesOrderApprovalPhase(
+                        order.approval,
+                        order.primaryStatus.code,
+                    )}
+                    approval={order.approval}
+                    documentId={order.id}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={(view: ApprovalCommandView) =>
+                        onApprovalResult?.({
+                            status: "succeeded",
+                            title: "审批决定已提交",
+                            description: view.latestRejectionReason
+                                ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                                : "已按当前任务提交决定。",
+                            reference: order.documentNumber,
+                            nextResponsible: view.currentAssigneeName,
+                        })
+                    }
+                />
+            ) : null}
+
             {showApproval && order.activeCardSalesApproval ? (
                 <CardSalesApprovalPanel
                     order={order}

@@ -25,7 +25,9 @@ import { useOwnerOptionsQuery } from "@/hooks/use-options"
 
 export function SalesOrdersListFilterPanel(props: {
     draft: SalesOrdersListFilterDraft
-    onDraftChange: React.Dispatch<React.SetStateAction<SalesOrdersListFilterDraft>>
+    onDraftChange: React.Dispatch<
+        React.SetStateAction<SalesOrdersListFilterDraft>
+    >
 }) {
     const { draft: filterDraft, onDraftChange: setFilterDraft } = props
     const ownerOptionsQuery = useOwnerOptionsQuery()
@@ -217,7 +219,8 @@ export function SalesOrdersListFilterPanel(props: {
                         value={
                             filterDraft.createdFrom || filterDraft.createdTo
                                 ? {
-                                      from: filterDraft.createdFrom || undefined,
+                                      from:
+                                          filterDraft.createdFrom || undefined,
                                       to: filterDraft.createdTo || undefined,
                                   }
                                 : undefined

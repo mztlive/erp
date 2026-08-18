@@ -26,6 +26,9 @@ export function SalesOrderDetailTabs({
     acceptanceExpanded,
     showApproval,
     selfReturn,
+    workItemId,
+    expectedTaskVersion,
+    workItemAllowedActions,
     onSelectSection,
     onApprovalResult,
 }: {
@@ -42,6 +45,9 @@ export function SalesOrderDetailTabs({
     acceptanceExpanded: boolean
     showApproval: boolean
     selfReturn: string
+    workItemId?: string
+    expectedTaskVersion?: string
+    workItemAllowedActions?: readonly string[]
     onSelectSection: (next: NavSectionId | WorkSectionId | "versions") => void
     onApprovalResult: (result: SalesOrderDetailActionResult) => void
 }) {
@@ -76,15 +82,11 @@ export function SalesOrderDetailTabs({
                             {todoOnFulfillment || changeOnVersions ? (
                                 <Badge
                                     variant={
-                                        changeOnVersions
-                                            ? "warning"
-                                            : "info"
+                                        changeOnVersions ? "warning" : "info"
                                     }
                                     className="ml-1 h-5 px-1.5 text-2xs font-normal"
                                 >
-                                    {changeOnVersions
-                                        ? "改单中"
-                                        : "待办"}
+                                    {changeOnVersions ? "改单中" : "待办"}
                                 </Badge>
                             ) : null}
                         </TabsTrigger>
@@ -92,41 +94,30 @@ export function SalesOrderDetailTabs({
                 })}
             </TabsList>
 
-            <TabsContent
-                value="overview"
-                className="px-3 pt-4 pb-4 md:px-4"
-            >
+            <TabsContent value="overview" className="px-3 pt-4 pb-4 md:px-4">
                 <OverviewPanel
                     order={order}
                     showApproval={showApproval}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
                     onApprovalResult={onApprovalResult}
                 />
             </TabsContent>
 
-            <TabsContent
-                value="fulfillment"
-                className="px-3 pt-4 pb-4 md:px-4"
-            >
+            <TabsContent value="fulfillment" className="px-3 pt-4 pb-4 md:px-4">
                 <FulfillmentPanel
                     order={order}
                     selfReturn={selfReturn}
                     acceptanceExpanded={acceptanceExpanded}
                     canAccept={Boolean(canAccept)}
                     onExpandAcceptance={() => onSelectSection("acceptance")}
-                    onCollapseAcceptance={() =>
-                        onSelectSection("fulfillment")
-                    }
+                    onCollapseAcceptance={() => onSelectSection("fulfillment")}
                 />
             </TabsContent>
 
-            <TabsContent
-                value="receivable"
-                className="px-3 pt-4 pb-4 md:px-4"
-            >
-                <ReceivablePanel
-                    order={order}
-                    selfReturn={selfReturn}
-                />
+            <TabsContent value="receivable" className="px-3 pt-4 pb-4 md:px-4">
+                <ReceivablePanel order={order} selfReturn={selfReturn} />
             </TabsContent>
 
             <TabsContent
@@ -136,10 +127,7 @@ export function SalesOrderDetailTabs({
                 <CollaborationPanel order={order} />
             </TabsContent>
 
-            <TabsContent
-                value="versions"
-                className="px-3 pt-4 pb-4 md:px-4"
-            >
+            <TabsContent value="versions" className="px-3 pt-4 pb-4 md:px-4">
                 <VersionsPanel order={order} />
             </TabsContent>
         </Tabs>

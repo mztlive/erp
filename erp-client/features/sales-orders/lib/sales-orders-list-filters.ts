@@ -40,22 +40,24 @@ export function hasStructuredSalesOrdersFilters(
 ): boolean {
     return Boolean(
         url.customerId ||
-            url.contractId ||
-            url.createdBy ||
-            url.nature !== "all" ||
-            url.origin !== "all" ||
-            url.commercialStatus !== "all" ||
-            url.reviewStatus !== "all" ||
-            url.fulfillment !== "all" ||
-            url.collection !== "all" ||
-            url.invoice !== "all" ||
-            url.closeStatus !== "all" ||
-            url.createdFrom ||
-            url.createdTo,
+        url.contractId ||
+        url.createdBy ||
+        url.nature !== "all" ||
+        url.origin !== "all" ||
+        url.commercialStatus !== "all" ||
+        url.reviewStatus !== "all" ||
+        url.fulfillment !== "all" ||
+        url.collection !== "all" ||
+        url.invoice !== "all" ||
+        url.closeStatus !== "all" ||
+        url.createdFrom ||
+        url.createdTo,
     )
 }
 
-export function salesOrdersListFiltersActive(url: SalesOrdersUrlState): boolean {
+export function salesOrdersListFiltersActive(
+    url: SalesOrdersUrlState,
+): boolean {
     return Boolean(url.search) || hasStructuredSalesOrdersFilters(url)
 }
 
@@ -97,21 +99,22 @@ export function filterDraftFromUrl(
     }
 }
 
-export const EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT: SalesOrdersListFilterDraft = {
-    customerId: "",
-    contractId: "",
-    createdBy: "",
-    nature: "all",
-    origin: "all",
-    commercialStatus: "all",
-    reviewStatus: "all",
-    fulfillment: "all",
-    collection: "all",
-    invoice: "all",
-    closeStatus: "all",
-    createdFrom: "",
-    createdTo: "",
-}
+export const EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT: SalesOrdersListFilterDraft =
+    {
+        customerId: "",
+        contractId: "",
+        createdBy: "",
+        nature: "all",
+        origin: "all",
+        commercialStatus: "all",
+        reviewStatus: "all",
+        fulfillment: "all",
+        collection: "all",
+        invoice: "all",
+        closeStatus: "all",
+        createdFrom: "",
+        createdTo: "",
+    }
 
 /**
  * 草稿落定到 URL 的补丁：交换反向日期区间、清空空白搜索词，并在草稿与固定
@@ -178,9 +181,13 @@ export function salesOrdersListFilterDescription(
         url.fulfillment !== "all"
             ? salesOrderFulfillmentLabel(url.fulfillment)
             : null,
-        url.collection !== "all" ? salesOrderCollectionLabel(url.collection) : null,
+        url.collection !== "all"
+            ? salesOrderCollectionLabel(url.collection)
+            : null,
         url.invoice !== "all" ? salesOrderInvoiceLabel(url.invoice) : null,
-        url.closeStatus !== "all" ? salesOrderCloseLabel(url.closeStatus) : null,
+        url.closeStatus !== "all"
+            ? salesOrderCloseLabel(url.closeStatus)
+            : null,
         url.customerId ? "已选客户" : null,
         url.contractId ? "已选合同" : null,
         url.createdBy ? "已选创建人" : null,

@@ -67,8 +67,7 @@ describe("useSalesOrdersListQuery", () => {
                 sortBy: "amountGross",
                 sortDir: "desc",
                 createdFrom: Date.UTC(2026, 0, 2, 0, 0, 0) / 1000 - 8 * 3600,
-                createdTo:
-                    Date.UTC(2026, 0, 3, 23, 59, 59) / 1000 - 8 * 3600,
+                createdTo: Date.UTC(2026, 0, 3, 23, 59, 59) / 1000 - 8 * 3600,
             }),
         )
 

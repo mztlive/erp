@@ -1,8 +1,5 @@
 import type { ComponentType, ReactNode } from "react"
-import type {
-    FieldComponent,
-    ReactFormExtendedApi,
-} from "@tanstack/react-form"
+import type { FieldComponent, ReactFormExtendedApi } from "@tanstack/react-form"
 
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
 

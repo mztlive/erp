@@ -41,11 +41,14 @@ export function deriveSalesOrderDetailState(
         isCard,
     })
     const acceptanceExpanded = section === "acceptance"
-    const showApproval =
+    const showGoodsApproval =
+        order.nature === "physical_service" && Boolean(order.approval)
+    const showCardApproval =
         Boolean(
             order.activeCardSalesApproval ||
             order.cardApprovalProjectionBlocker,
         ) && section === "approval"
+    const showApproval = showGoodsApproval || showCardApproval
     const canResubmit = rejectionAllowsResubmit(order)
     const canVoid = rejectionAllowsVoid(order)
     const canRequestLowMargin = Boolean(
@@ -75,10 +78,16 @@ export function deriveSalesOrderDetailState(
 
     const openRejection = isOpenProcurementRejection(order)
     const hasPrimaryTaskAction =
-        Boolean(openRejection && canResubmit) ||
+        Boolean(
+            order.nature !== "physical_service" && openRejection && canResubmit,
+        ) ||
         Boolean(
             actionableFocusTask &&
-                !(openRejection && navSection === "overview"),
+            !(
+                order.nature !== "physical_service" &&
+                openRejection &&
+                navSection === "overview"
+            ),
         )
     const bannerJump =
         Boolean(focusTask) &&

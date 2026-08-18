@@ -85,7 +85,7 @@ export function SalesOrderEditableCenter({
                                 ? "从履约处理打开 · 处理完可点返回，回到列表原位"
                                 : fromWorkspace === "W08"
                                   ? "从采购单打开 · 处理完可点返回，回到列表原位"
-                                  : "从采购确认打开 · 处理完可点返回，回到列表原位"}
+                                  : "从工作台打开 · 处理完可点返回，回到列表原位"}
                         </span>
                     ) : undefined
                 }

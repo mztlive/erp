@@ -37,6 +37,8 @@ import { SalesOrderCreateLineItemsSection } from "@/features/sales-orders/compon
 import { SalesOrderCreateTotalBar } from "@/features/sales-orders/components/sales-order-create-total-bar"
 import { SalesOrderCreateSummaryPanel } from "@/features/sales-orders/components/sales-order-create-summary-panel"
 import { SalesOrderCreateResubmitDialog } from "@/features/sales-orders/components/sales-order-create-resubmit-dialog"
+import { SalesOrderApprovalArea } from "@/features/sales-orders/components/sales-order-approval-area"
+import { SalesOrderSubmitConfirmDialog } from "@/features/sales-orders/components/sales-order-submit-confirm-dialog"
 
 import type {
     SalesOrderEditorPurpose,
@@ -121,11 +123,19 @@ export function SalesOrderCreateForm({
                 ),
         },
         onSubmit: async ({ value }) => {
+            if (
+                value.nature === "physical_service" &&
+                submission.submitIntentRef.current === "SUBMIT"
+            ) {
+                submission.setSubmitConfirmOpen(true)
+                return
+            }
             await submission.handleSubmit(value, form)
         },
     })
 
     const dirty = useSelector(form.store, (state) => state.isDirty)
+    const nature = useSelector(form.store, (state) => state.values.nature)
     useSalesOrderCreateUnloadGuard(dirty)
 
     React.useEffect(() => {
@@ -235,6 +245,15 @@ export function SalesOrderCreateForm({
                 draftSaved={submission.draftSaved}
             />
 
+            {nature !== "card_voucher" &&
+            (submission.approval || submission.draftIdentity) ? (
+                <SalesOrderApprovalArea
+                    phase="draft"
+                    approval={submission.approval}
+                    documentId={submission.draftIdentity?.salesOrderId}
+                />
+            ) : null}
+
             <form
                 onSubmit={(event) => {
                     event.preventDefault()
@@ -327,6 +346,17 @@ export function SalesOrderCreateForm({
                 onEvidenceChange={submission.setResubmitEvidence}
                 pending={submission.isResubmitting}
                 onConfirm={() => submission.confirmResubmit()}
+            />
+
+            <SalesOrderSubmitConfirmDialog
+                open={submission.submitConfirmOpen}
+                onOpenChange={submission.setSubmitConfirmOpen}
+                approval={submission.approval}
+                pending={submission.isSubmitting}
+                onConfirm={() => {
+                    submission.setSubmitConfirmOpen(false)
+                    void submission.handleSubmit(form.state.values, form)
+                }}
             />
         </>
     )

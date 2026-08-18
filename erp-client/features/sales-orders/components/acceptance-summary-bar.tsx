@@ -1,10 +1,6 @@
 "use client"
 
-import {
-    DataFreshness,
-    MetricItem,
-    MetricStrip,
-} from "@/components/business"
+import { DataFreshness, MetricItem, MetricStrip } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { freshnessText } from "@/lib/ui-text"
 import { formatOccurredAt } from "@/features/sales-orders/lib/acceptance-model"

@@ -2,16 +2,12 @@
 
 import { PlusIcon } from "lucide-react"
 
-import {
-    surfaceInsetClassName,
-} from "@/components/business"
+import { surfaceInsetClassName } from "@/components/business"
 import { cn } from "@/lib/utils"
 import { toFieldErrors } from "@/components/form"
 import { validateSalesOrderContractId } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
-import {
-    ContractSearchCombobox,
-} from "@/features/entity-selectors"
+import { ContractSearchCombobox } from "@/features/entity-selectors"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -83,9 +79,7 @@ export function SalesOrderCreateContractSection({
                                     <PlusIcon aria-hidden="true" />
                                 </Button>
                             </div>
-                            {isInvalid ? (
-                                <FieldError errors={errors} />
-                            ) : null}
+                            {isInvalid ? <FieldError errors={errors} /> : null}
                         </Field>
                     )
                 }}

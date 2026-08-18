@@ -4,10 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { PackageIcon } from "lucide-react"
 
-import {
-    DocumentSection,
-    surfaceInsetClassName,
-} from "@/components/business"
+import { DocumentSection, surfaceInsetClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
 import { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"

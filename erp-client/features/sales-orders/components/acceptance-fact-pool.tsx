@@ -127,8 +127,7 @@ export function AcceptanceFactPool({
                                                         {
                                                             fact.netSuccessfulQuantity
                                                         }{" "}
-                                                        {fact.unitCode} ·
-                                                        已验收{" "}
+                                                        {fact.unitCode} · 已验收{" "}
                                                         {
                                                             fact.netAcceptedAllocatedQuantity
                                                         }{" "}
@@ -149,7 +148,8 @@ export function AcceptanceFactPool({
                                                         </div>
                                                     ) : null}
                                                     <div className="mt-0.5 text-2xs uppercase tracking-wide opacity-70">
-                                                        来源：履约记录 · 可验收量以系统记录为准
+                                                        来源：履约记录 ·
+                                                        可验收量以系统记录为准
                                                     </div>
                                                 </div>
                                                 {checked ? (
@@ -165,8 +165,7 @@ export function AcceptanceFactPool({
                                                             inputMode="decimal"
                                                             value={
                                                                 selected.get(
-                                                                    fact
-                                                                        .fulfillmentLineId,
+                                                                    fact.fulfillmentLineId,
                                                                 )?.qty ?? ""
                                                             }
                                                             aria-describedby={`alloc-unit-${fact.fulfillmentLineId}`}

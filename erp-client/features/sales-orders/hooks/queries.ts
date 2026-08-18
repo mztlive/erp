@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { approvalKeys } from "@/features/approval-workflow/queries"
+import { workItemKeys } from "@/features/work-items/queries"
 import {
     adjustProcurementRejectionDraft,
     cancelCardSalesApproval,
@@ -66,13 +68,18 @@ export function useCreateSalesOrderMutation() {
     return useMutation({
         mutationFn: createSalesOrder,
         onSuccess: async (data) => {
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.all,
-            })
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.detail(data.salesOrderId),
-            })
-            await queryClient.invalidateQueries({ queryKey: ["contracts"] })
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.detail(data.salesOrderId),
+                }),
+                queryClient.invalidateQueries({ queryKey: ["contracts"] }),
+                queryClient.invalidateQueries({
+                    queryKey: approvalKeys.all,
+                }),
+            ])
         },
     })
 }
@@ -94,12 +101,20 @@ export function useSubmitSalesOrderMutation() {
     return useMutation({
         mutationFn: submitSalesOrder,
         onSuccess: async (data) => {
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.all,
-            })
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.detail(data.salesOrderId),
-            })
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.detail(data.salesOrderId),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: approvalKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: workItemKeys.all,
+                }),
+            ])
         },
     })
 }

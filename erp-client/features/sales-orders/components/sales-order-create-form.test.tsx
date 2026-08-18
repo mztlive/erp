@@ -12,8 +12,8 @@ import { useAppForm } from "@/components/form"
 import { revalidateLogic } from "@tanstack/react-form"
 import { SalesOrderCreateForm } from "@/features/sales-orders/components/sales-order-create-form"
 import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders-create"
+import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
 import { validateSalesOrderForm } from "@/features/sales-orders/lib/sales-order-create-validation"
-import type { SalesOrderCreateFormValues } from "@/features/sales-orders/lib/sales-order-create-validation"
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -263,7 +263,7 @@ function IsolatedRecoveryForm() {
         defaultValues: {
             ...completeHeader,
             lineItems: [{ ...incompleteLine }],
-        } satisfies SalesOrderCreateFormValues,
+        } as CreateSalesOrderFormValues,
         validationLogic: revalidateLogic(),
         validators: {
             onDynamic: ({ value }) => validateSalesOrderForm(value, "SUBMIT"),

@@ -1,6 +1,10 @@
 "use client"
 
-import { MoneyValue, surfaceInsetClassName, surfacePanelClassName } from "@/components/business"
+import {
+    MoneyValue,
+    surfaceInsetClassName,
+    surfacePanelClassName,
+} from "@/components/business"
 import { cn } from "@/lib/utils"
 import { calculateTotals } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
@@ -20,13 +24,11 @@ export function SalesOrderCreateSummaryPanel({
                     values.taxRatePercent,
                 )
                 const natureLabel =
-                    values.nature === "card_voucher"
-                        ? "卡券"
-                        : "实物/服务"
+                    values.nature === "card_voucher" ? "卡券" : "实物/服务"
                 const nextStep =
                     values.nature === "card_voucher"
                         ? "提交后进入销售领导 → 运营两级审批"
-                        : "提交后进入采购二次确认"
+                        : "提交后进入审批"
                 return (
                     <div
                         className={cn(
@@ -44,26 +46,19 @@ export function SalesOrderCreateSummaryPanel({
                         </div>
                         <dl className="space-y-2.5 text-xs">
                             <div className="flex justify-between gap-2">
-                                <dt className="text-muted-foreground">
-                                    合同
-                                </dt>
+                                <dt className="text-muted-foreground">合同</dt>
                                 <dd className="max-w-[10rem] truncate text-right font-medium">
-                                    {values.contractRevisionLabel ||
-                                        "未选择"}
+                                    {values.contractRevisionLabel || "未选择"}
                                 </dd>
                             </div>
                             <div className="flex justify-between gap-2">
-                                <dt className="text-muted-foreground">
-                                    客户
-                                </dt>
+                                <dt className="text-muted-foreground">客户</dt>
                                 <dd className="max-w-[10rem] truncate text-right font-medium">
                                     {values.customerName || "—"}
                                 </dd>
                             </div>
                             <div className="flex justify-between gap-2">
-                                <dt className="text-muted-foreground">
-                                    结算
-                                </dt>
+                                <dt className="text-muted-foreground">结算</dt>
                                 <dd className="max-w-[10rem] truncate text-right font-medium">
                                     {values.settlementEntity || "—"}
                                 </dd>
