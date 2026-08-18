@@ -54,10 +54,11 @@ fn uncut_over_types_do_not_fall_back_to_legacy_runtime() {
 /// 旧集成测试入口必须删除，不得与新入口并存。
 #[test]
 fn old_runtime_integration_entries_are_removed() {
-    let database_tests = include_str!("../../../database/tests/README.md");
-    let web_tests = include_str!("README.md");
-    assert!(!database_tests.contains("approval_runtime_repository.rs"));
-    let _ = web_tests;
+    let web_api_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let old_api = web_api_root.join("tests/approval_runtime_api.rs");
+    let old_repo = web_api_root.join("../../database/tests/approval_runtime_repository.rs");
+    assert!(!old_api.exists(), "旧入口 {} 必须删除", old_api.display());
+    assert!(!old_repo.exists(), "旧入口 {} 必须删除", old_repo.display());
 }
 
 /// 开发重置脚本必须 drop 新旧审批集合，并删除冲突旧索引。

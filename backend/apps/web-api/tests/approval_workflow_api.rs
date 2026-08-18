@@ -3,6 +3,9 @@
 //! 真实 MongoDB 用例一律 `#[ignore]` + `require_mongo!()`。客户端不得提交 node key、
 //! 连线、角色、handler 或 action。未提供数据库时不得把 ignored 表述为通过。
 
+use axum::body::{to_bytes, Body};
+use axum::http::{header::AUTHORIZATION, HeaderValue, Method, Request};
+use axum::Router;
 use config::{AppConfig, Config, DatabaseConfig, S3Config, SafeConfig};
 use database::ensure_indexes;
 use mongodb::bson::{doc, Document};
@@ -10,6 +13,7 @@ use mongodb::Database;
 use serde_json::{json, Value};
 use storage::{S3Storage, S3StorageConfig};
 use test_support::{mint_jwt, require_mongo, seed_admin_account, TestApi, TestDb};
+use tower::ServiceExt;
 use web_api::{app_state::AppState, core::routes};
 
 const JWT_SECRET: &str = "approval-workflow-api-test-secret-32b";
@@ -110,6 +114,28 @@ fn token(account_id: &str) -> String {
 /// 从响应信封读取稳定错误码。
 fn error_code(body: &Value) -> &str {
     body.get("code").and_then(Value::as_str).unwrap_or("")
+}
+
+/// 发送 PUT JSON。`TestApi` 未暴露 PUT，本文件自行覆盖节点替换合同。
+///
+/// # 错误
+/// 请求构造或路由调用失败时测试失败。
+async fn put_json(router: Router, path: &str, token: &str, json: Value) -> (u16, Value) {
+    let mut builder = Request::builder().method(Method::PUT).uri(path);
+    let value = HeaderValue::from_str(&format!("Bearer {token}")).expect("Bearer token 应合法");
+    builder = builder
+        .header(AUTHORIZATION, value)
+        .header("content-type", "application/json");
+    let request = builder
+        .body(Body::from(json.to_string()))
+        .expect("HTTP 请求构造失败");
+    let response = router.oneshot(request).await.expect("路由调用失败");
+    let status = response.status().as_u16();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("响应体读取失败");
+    let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, value)
 }
 
 /// 客户端写请求不得夹带节点键、连线、角色、handler 或 action。
@@ -408,11 +434,12 @@ async fn replace_nodes_rejects_client_node_key_and_sales_purpose() {
             ],
         )
         .await;
-        let api = TestApi::new(routes::create(test_app_state(
+        let router = routes::create(test_app_state(
             fixture.db().clone(),
             "mongodb://localhost".to_string(),
             fixture.name().to_string(),
-        )));
+        ));
+        let api = TestApi::new(router.clone());
         let (status, body) = api
             .post(
                 "/admin/approval-process-definitions/drafts",
@@ -427,14 +454,47 @@ async fn replace_nodes_rejects_client_node_key_and_sales_purpose() {
             .await;
         assert_eq!(status, 200, "{body}");
         let definition_id = body["data"]["definition_id"].as_str().expect("定义 ID");
-        let (status, detail) = api
-            .get(
-                &format!("/admin/approval-process-definitions/{definition_id}"),
-                Some(&token(&admin)),
-            )
-            .await;
-        assert_eq!(status, 200, "{detail}");
-        assert!(detail["data"]["nodes"].as_array().expect("节点").is_empty());
-        assert_eq!(detail["data"]["document_type"], "stock_adjustment");
+        let lock = body["data"]["definition_lock_version"]
+            .as_u64()
+            .or_else(|| body["data"]["definition_lock_version"].as_str()?.parse().ok())
+            .unwrap_or(1);
+        let (status, body) = put_json(
+            router.clone(),
+            &format!("/admin/approval-process-definitions/{definition_id}/nodes"),
+            &token(&admin),
+            json!({
+                "expected_definition_lock_version": lock.to_string(),
+                "nodes": [{
+                    "node_name": "仓储",
+                    "display_order": 1,
+                    "assignee_user_id": admin,
+                    "node_key": "forged"
+                }]
+            }),
+        )
+        .await;
+        assert!(
+            status == 400 || status == 422,
+            "node_key 必须拒绝: {status} {body}"
+        );
+        let (status, body) = put_json(
+            router,
+            &format!("/admin/approval-process-definitions/{definition_id}/nodes"),
+            &token(&admin),
+            json!({
+                "expected_definition_lock_version": lock.to_string(),
+                "nodes": [{
+                    "node_name": "仓储",
+                    "display_order": 1,
+                    "assignee_user_id": admin,
+                    "node_purpose": "SALES_ORDER_PROCUREMENT_CONFIRMATION"
+                }]
+            }),
+        )
+        .await;
+        assert!(
+            status == 400 || status == 422,
+            "purpose 必须拒绝: {status} {body}"
+        );
     });
 }

@@ -7,8 +7,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use bpm::engine::{
-    cancel, decide, plan_enter_node, reassign, start, CancelCommand, DecideCommand, DefinitionGraph,
-    Eligibility, ReassignCommand, StartAssigneeBinding, StartCommand,
+    cancel, decide, plan_enter_node, reassign, resume, start, CancelCommand, DecideCommand, DefinitionGraph,
+    Eligibility, ReassignCommand, ResumeCommand, StartAssigneeBinding, StartCommand,
 };
 use bpm::graph::generate_linear_transitions;
 use bpm::ids::{
@@ -16,7 +16,8 @@ use bpm::ids::{
     ApprovalProcessDefinitionId, ApprovalProcessInstanceId, ApprovalTransitionDefinitionId,
 };
 use bpm::model::types::{
-    ApprovalCommandKind, ApprovalDecision, ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus,
+    ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision, ApprovalExecutionAssignmentSource,
+    ApprovalExecutionEndReason, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
     ApprovalTransitionEvent,
 };
 use bpm::model::{
@@ -593,14 +594,168 @@ fn next_assignee_invalid_keeps_approval_and_blocks() {
 /// 1 节点与 20 节点完整通过路径都产生确定终态。
 #[test]
 fn one_and_twenty_node_graphs_complete() {
-    let one = start_stock(&single_node_graph(), "inst-one", "adj-one");
-    assert_eq!(one.created_executions.len(), 1);
+    let single = single_node_graph();
+    let one = start_stock(&single, "inst-one", "adj-one");
+    let one_approved = decide(
+        one.instance,
+        one.created_executions[0].clone(),
+        &single,
+        DecideCommand {
+            decision: ApprovalDecision::Approve,
+            reason: None,
+            actor: participant("u1"),
+            current_eligibility: eligible("u1", "仓储复核"),
+            next_eligibility: eligible("u1", "仓储复核"),
+            next_execution_id: ApprovalNodeExecutionId::new("exec-one-2"),
+            next_execution_no: 2,
+            now: at(20),
+        },
+    )
+    .expect("单节点通过必须可计算");
+    assert_eq!(
+        one_approved.instance.status,
+        ApprovalProcessInstanceStatus::Approved
+    );
+
     let twenty = twenty_node_graph();
     assert_eq!(twenty.nodes.len(), 20);
     assert_eq!(twenty.transitions.len(), 40);
-    let started = start_stock(&twenty, "inst-20", "adj-20");
-    assert_eq!(started.created_executions[0].node_key, "n1");
-    assert_eq!(started.created_assignees.len(), 20);
+    let mut plan = start_stock(&twenty, "inst-20", "adj-20");
+    assert_eq!(plan.created_assignees.len(), 20);
+    let mut execution_no = 1_u32;
+    for step in 1_u32..=20 {
+        let current = plan
+            .created_executions
+            .first()
+            .cloned()
+            .expect("每步必须有当前执行");
+        assert_eq!(current.node_key, format!("n{step}"));
+        let current_user = format!("u{}", step - 1);
+        let next_user = if step < 20 {
+            format!("u{step}")
+        } else {
+            current_user.clone()
+        };
+        execution_no += 1;
+        plan = decide(
+            plan.instance,
+            current,
+            &twenty,
+            DecideCommand {
+                decision: ApprovalDecision::Approve,
+                reason: None,
+                actor: participant(&current_user),
+                current_eligibility: eligible(&current_user, &format!("节点{}", step - 1)),
+                next_eligibility: eligible(&next_user, &format!("节点{}", step.min(19))),
+                next_execution_id: ApprovalNodeExecutionId::new(format!("exec-{execution_no}")),
+                next_execution_no: execution_no,
+                now: at(10 + i64::from(execution_no)),
+            },
+        )
+        .unwrap_or_else(|_| panic!("第 {step} 步通过必须产生确定计划"));
+    }
+    assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Approved);
+}
+
+/// 中间节点驳回开启下一轮入口新执行，subject_version 不变。
+#[test]
+fn middle_node_reject_opens_next_round_at_entry() {
+    let graph = two_node_graph();
+    let started = start_stock(&graph, "inst-mid-reject", "adj-mid-reject");
+    let subject_version = started.instance.subject_version;
+    let approved = decide(
+        started.instance,
+        started.created_executions[0].clone(),
+        &graph,
+        DecideCommand {
+            decision: ApprovalDecision::Approve,
+            reason: None,
+            actor: participant("u1"),
+            current_eligibility: eligible("u1", "仓储"),
+            next_eligibility: eligible("u2", "财务"),
+            next_execution_id: ApprovalNodeExecutionId::new("exec-mid-2"),
+            next_execution_no: 2,
+            now: at(20),
+        },
+    )
+    .expect("第一节点通过");
+    assert_eq!(approved.created_executions[0].node_key, "n2");
+    let rejected = decide(
+        approved.instance,
+        approved.created_executions[0].clone(),
+        &graph,
+        DecideCommand {
+            decision: ApprovalDecision::Reject,
+            reason: Some("财务资料不全".to_string()),
+            actor: participant("u2"),
+            current_eligibility: eligible("u2", "财务"),
+            next_eligibility: eligible("u1", "仓储"),
+            next_execution_id: ApprovalNodeExecutionId::new("exec-mid-3"),
+            next_execution_no: 3,
+            now: at(21),
+        },
+    )
+    .expect("中间节点驳回必须开新一轮");
+    assert_eq!(rejected.instance.current_round_no, 2);
+    assert_eq!(rejected.instance.subject_version, subject_version);
+    assert_eq!(rejected.created_executions[0].node_key, "n1");
+    assert_eq!(rejected.created_executions[0].round_no, 2);
+    assert_eq!(rejected.instance.status, ApprovalProcessInstanceStatus::Running);
+}
+
+/// 人员失效后只能 resume；旧执行 SUPERSEDED/ASSIGNEE_RECOVERED，新执行为 ASSIGNEE_RECOVERY。
+#[test]
+fn resume_supersedes_personnel_blocked_execution() {
+    let graph = two_node_graph();
+    let started = start_stock(&graph, "inst-resume", "adj-resume");
+    let assignees = started.created_assignees.clone();
+    let blocked = decide(
+        started.instance,
+        started.created_executions[0].clone(),
+        &graph,
+        DecideCommand {
+            decision: ApprovalDecision::Approve,
+            reason: None,
+            actor: participant("u1"),
+            current_eligibility: Eligibility::Blocked {
+                participant: participant("u1"),
+                code: ApprovalBlockerCode::ApproverEmploymentInvalid,
+                assignee_name_snapshot: "仓储".to_string(),
+            },
+            next_eligibility: eligible("u2", "财务"),
+            next_execution_id: ApprovalNodeExecutionId::new("exec-resume-2"),
+            next_execution_no: 2,
+            now: at(30),
+        },
+    )
+    .expect("当前审批人失效必须提交 BLOCKED");
+    assert_eq!(blocked.instance.status, ApprovalProcessInstanceStatus::Blocked);
+    let resumed = resume(
+        blocked.instance,
+        blocked.updated_executions[0].clone(),
+        &assignees[0],
+        &graph,
+        ResumeCommand {
+            next_execution_id: ApprovalNodeExecutionId::new("exec-resume-3"),
+            next_execution_no: 3,
+            eligibility: eligible("u1", "仓储"),
+            now: at(31),
+        },
+    )
+    .expect("恢复必须可计算");
+    assert_eq!(
+        resumed.updated_executions[0].status,
+        ApprovalNodeExecutionStatus::Superseded
+    );
+    assert_eq!(
+        resumed.updated_executions[0].ended_reason,
+        Some(ApprovalExecutionEndReason::AssigneeRecovered)
+    );
+    assert_eq!(
+        resumed.created_executions[0].assignment_source,
+        ApprovalExecutionAssignmentSource::AssigneeRecovery
+    );
+    assert_eq!(resumed.instance.status, ApprovalProcessInstanceStatus::Running);
 }
 
 /// 人员失效改派只能替换受阻执行；ACTIVE 不得改派。
@@ -624,6 +779,62 @@ fn reassign_only_replaces_personnel_blocked_execution() {
         },
     );
     assert!(active.is_err(), "ACTIVE 不得改派");
+
+    let assignees = started.created_assignees.clone();
+    let blocked = decide(
+        started.instance,
+        started.created_executions[0].clone(),
+        &graph,
+        DecideCommand {
+            decision: ApprovalDecision::Approve,
+            reason: None,
+            actor: participant("u1"),
+            current_eligibility: Eligibility::Blocked {
+                participant: participant("u1"),
+                code: ApprovalBlockerCode::ApproverAccountInactive,
+                assignee_name_snapshot: "仓储".to_string(),
+            },
+            next_eligibility: eligible("u2", "财务"),
+            next_execution_id: ApprovalNodeExecutionId::new("exec-re-2"),
+            next_execution_no: 2,
+            now: at(41),
+        },
+    )
+    .expect("人员失效必须提交 BLOCKED");
+    let reassigned = reassign(
+        blocked.instance,
+        blocked.updated_executions[0].clone(),
+        assignees[0].clone(),
+        &graph,
+        ReassignCommand {
+            target: participant("u9"),
+            actor: participant("admin"),
+            reason: "原审批人离职".to_string(),
+            target_eligibility: eligible("u9", "新人"),
+            next_execution_id: ApprovalNodeExecutionId::new("exec-re-3"),
+            next_execution_no: 3,
+            now: at(42),
+        },
+    )
+    .expect("人员失效后改派必须成功");
+    assert_eq!(
+        reassigned.updated_executions[0].ended_reason,
+        Some(ApprovalExecutionEndReason::AdminReassigned)
+    );
+    assert_eq!(
+        reassigned.updated_executions[0].status,
+        ApprovalNodeExecutionStatus::Superseded
+    );
+    assert_eq!(
+        reassigned.created_executions[0].assignment_source,
+        ApprovalExecutionAssignmentSource::AdminReassign
+    );
+    assert_eq!(
+        reassigned.updated_assignees[0]
+            .current_assignee_participant_id
+            .as_str(),
+        "u9"
+    );
 }
 
 /// 同一 SubjectRef + subject_version 只能有一条活动链；定义 ID 不得拆分唯一性。

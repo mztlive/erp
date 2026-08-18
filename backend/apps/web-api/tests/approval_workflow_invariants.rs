@@ -93,11 +93,11 @@ fn create_binds_and_submit_starts_for_stock_adjustment() {
         .nth(1)
         .and_then(|body| body.split("async fn ").next())
         .expect("提交方法");
+    let starts_via_prepare = submit.contains("prepare_start(");
+    let starts_via_runtime = submit.contains("ApprovalRuntimeService") && submit.contains(".start(");
     assert!(
-        submit.contains("prepare_start")
-            || submit.contains("start_approval")
-            || submit.contains("ApprovalRuntimeService")
-            || submit.contains("approval")
+        starts_via_prepare || starts_via_runtime,
+        "§8.2.2 提交才启动：submit_stock_adjustment 必须调用 prepare_start 或 ApprovalRuntimeService::start；当前未接线，退回 P3-ADAPTER-PILOT"
     );
 }
 
