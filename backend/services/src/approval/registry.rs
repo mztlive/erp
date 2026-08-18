@@ -1,4 +1,8 @@
 //! 编译期审批定义、处理器、解析器与强类型领域动作注册表。
+//!
+//! 目标定义管理不得再调用 `CARD_SALES_APPROVAL`、步骤结构或 bootstrap。
+//! 强类型政策与领域动作注册已迁入 `policy.rs`。本文件旧公开常量保留给未切换调用方，
+//! 删除责任在 P0-D。
 
 use entities::{
     approval::{ApprovalAssignmentMode, ApprovalDecision},

@@ -1,28 +1,3280 @@
-//! 审批流程定义管理。P3-DEFINITION 填充实现。
+//! 审批流程定义管理：草稿、节点替换、发布、退役与版本查询。
+//!
+//! 图算法只编排 `bpm::graph` 已交付原语，不在本模块复制或另立定义源。
 
+use std::collections::{HashMap, HashSet};
+
+use bpm::graph::{generate_linear_transitions, validate_entry_node, validate_transition};
+use bpm::ids::{
+    ApprovalCommandReceiptId, ApprovalNodeDefinitionId, ApprovalProcessDefinitionId,
+    ApprovalTransitionDefinitionId,
+};
+use bpm::model::types::{ApprovalCommandKind, ModelError, NAME_MAX_LEN};
+use bpm::model::{
+    ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition,
+};
+use bpm::{ParticipantId, Timestamp};
+use chrono::Utc;
+use database::repository::bpm::{CasWriteOutcome, DefinitionGraph};
+use database::{AccessControlExt, BpmExt, Executor, NoTransaction, Transactional};
+use entities::document_registry::DocumentType;
+use entities::{AccountCore, AccountKind, Permission};
+use id_generator::next_id;
+use mongodb::bson::doc;
+use mongodb::Database;
+use sha2::{Digest, Sha256};
+
+use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use crate::iam::{subject, SharedRbacService};
 
-/// 拒绝尚未接线的定义管理调用。
+use super::definition_dto::{
+    ApprovalRequirementView, CreateDefinitionDraftRequest, DefinitionAllowedAction, DefinitionCatalogItem,
+    DefinitionConfigurationStatus, DefinitionDetailView, DefinitionNodeRequest, DefinitionNodeView,
+    DefinitionVersionItem, DraftSource, PublishDefinitionRequest, ReplaceDefinitionNodesRequest,
+    RetireDefinitionRequest,
+};
+use super::policy::{
+    ensure_actions_registered, policy_of, require_process_required, validate_required_purposes,
+    ApprovalRequirement, ApproverEligibilityPolicy, DocumentApprovalPolicy, ProcessRequiredApprovalPolicy,
+    SeparationOfDutiesPolicy, ALL_DOCUMENT_TYPES, SALES_ORDER_PROCUREMENT_CONFIRMATION,
+    STATIC_APPROVE_PERMISSION,
+};
+use super::process_kind::{document_type_of, process_kind_of};
+
+pub use super::scope::{definition_management_visibility, DefinitionManagementVisibility};
+
+/// 定义内节点数量上限。
+const MAX_DEFINITION_NODES: usize = 20;
+
+/// 审批流程定义管理服务。
+pub struct ApprovalDefinitionService {
+    db: Database,
+    rbac: SharedRbacService,
+}
+
+impl ApprovalDefinitionService {
+    /// 创建定义管理服务。
+    ///
+    /// # 参数
+    /// * `db` - MongoDB 数据库
+    /// * `rbac` - 共享 RBAC 服务
+    ///
+    /// # 返回
+    /// 返回尚未接线 HTTP 的应用端口。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac }
+    }
+
+    /// 返回固定 20 行非敏感目录。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `visibility` - 类型级可见范围
+    ///
+    /// # 错误
+    /// 政策或仓储读取失败时返回错误。
+    pub async fn definition_catalog(
+        &self,
+        actor: &AuditActor,
+        visibility: &DefinitionManagementVisibility,
+    ) -> Result<Vec<DefinitionCatalogItem>> {
+        let visibility = enforce_visibility(&self.rbac, actor, visibility).await?;
+        let mut items = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
+        for document_type in ALL_DOCUMENT_TYPES {
+            items.push(self.catalog_item(document_type, &visibility).await?);
+        }
+        Ok(items)
+    }
+
+    /// 创建定义草稿。
+    ///
+    /// # 参数
+    /// * `request` - 写请求
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 错误
+    /// 政策、权限、幂等冲突或已有活动草稿时返回错误。
+    pub async fn create_definition_draft(
+        &self,
+        request: CreateDefinitionDraftRequest,
+        actor: &AuditActor,
+    ) -> Result<DefinitionDetailView> {
+        let policy = require_process_required(request.document_type)?;
+        self.ensure_definition_admin(actor, &policy).await?;
+        let name = normalize_definition_name(&request.name)?;
+        let digest = create_draft_digest(request.document_type, &name, request.draft_source, actor.id());
+        if let Some(view) = self
+            .replay_if_receipt(
+                ApprovalCommandKind::DefinitionWrite,
+                policy.process_kind.as_str(),
+                &request.idempotency_key,
+                &digest,
+                visibility_for_define(request.document_type),
+            )
+            .await?
+        {
+            return Ok(view);
+        }
+        self.commit_create_draft(&policy, &name, &request, actor, &digest)
+            .await
+    }
+
+    /// 整组替换草稿节点。
+    ///
+    /// # 参数
+    /// * `request` - 节点替换请求
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 错误
+    /// 锁版本冲突、节点不合法或账号校验失败时返回错误。
+    pub async fn replace_definition_nodes(
+        &self,
+        request: ReplaceDefinitionNodesRequest,
+        actor: &AuditActor,
+    ) -> Result<DefinitionDetailView> {
+        let graph = self.require_graph(&request.definition_id).await?;
+        let policy = policy_for_definition(&graph.definition)?;
+        self.ensure_definition_admin(actor, &policy).await?;
+        ensure_draft_lock(&graph.definition, request.expected_definition_lock_version)?;
+        self.commit_replace_nodes(graph, policy, request, actor).await
+    }
+
+    /// 发布草稿为当前唯一已发布版本。
+    ///
+    /// # 参数
+    /// * `request` - 发布请求
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 错误
+    /// 图、用途、账号或权限校验失败时零写入返回错误。
+    pub async fn publish_definition(
+        &self,
+        request: PublishDefinitionRequest,
+        actor: &AuditActor,
+    ) -> Result<DefinitionDetailView> {
+        let graph = self.require_graph(&request.definition_id).await?;
+        let policy = policy_for_definition(&graph.definition)?;
+        self.ensure_definition_admin(actor, &policy).await?;
+        let digest = lock_command_digest(request.expected_definition_lock_version, actor.id());
+        if let Some(view) = self
+            .replay_if_receipt(
+                ApprovalCommandKind::PublishDefinition,
+                &request.definition_id,
+                &request.idempotency_key,
+                &digest,
+                visibility_for_define(policy.document_type),
+            )
+            .await?
+        {
+            return Ok(view);
+        }
+        self.commit_publish(graph, policy, &request, actor, &digest).await
+    }
+
+    /// 退役当前已发布定义。
+    ///
+    /// # 参数
+    /// * `request` - 退役请求
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 错误
+    /// 目标不是当前发布版本或锁冲突时返回错误。
+    pub async fn retire_definition(
+        &self,
+        request: RetireDefinitionRequest,
+        actor: &AuditActor,
+    ) -> Result<DefinitionDetailView> {
+        let graph = self.require_graph(&request.definition_id).await?;
+        let policy = policy_for_definition(&graph.definition)?;
+        self.ensure_definition_admin(actor, &policy).await?;
+        let digest = lock_command_digest(request.expected_definition_lock_version, actor.id());
+        if let Some(view) = self
+            .replay_if_receipt(
+                ApprovalCommandKind::RetireDefinition,
+                &request.definition_id,
+                &request.idempotency_key,
+                &digest,
+                visibility_for_define(policy.document_type),
+            )
+            .await?
+        {
+            return Ok(view);
+        }
+        self.commit_retire(graph, policy, &request, actor, &digest).await
+    }
+
+    /// 列出某单据类型的定义版本。
+    ///
+    /// # 参数
+    /// * `document_type` - 固定单据类型
+    /// * `actor` - 已认证操作人
+    /// * `visibility` - 类型级可见范围
+    ///
+    /// # 错误
+    /// 无读取权或类型无需审批时返回错误。
+    pub async fn definition_versions(
+        &self,
+        document_type: DocumentType,
+        actor: &AuditActor,
+        visibility: &DefinitionManagementVisibility,
+    ) -> Result<Vec<DefinitionVersionItem>> {
+        let visibility = enforce_visibility(&self.rbac, actor, visibility).await?;
+        require_process_required(document_type)?;
+        ensure_can_read_detail(&visibility, document_type)?;
+        let versions = self
+            .db
+            .bpm_workflow()
+            .list_definition_versions(process_kind_of(document_type), &mut NoTransaction)
+            .await?;
+        Ok(versions.iter().map(version_item).collect())
+    }
+
+    /// 返回定义详情。
+    ///
+    /// # 参数
+    /// * `definition_id` - 定义主键
+    /// * `actor` - 已认证操作人
+    /// * `visibility` - 类型级可见范围
+    ///
+    /// # 错误
+    /// 不存在或无权读取时返回不泄露存在性的错误。
+    pub async fn definition_detail(
+        &self,
+        definition_id: &str,
+        actor: &AuditActor,
+        visibility: &DefinitionManagementVisibility,
+    ) -> Result<DefinitionDetailView> {
+        let visibility = enforce_visibility(&self.rbac, actor, visibility).await?;
+        let graph = self
+            .db
+            .bpm_workflow()
+            .load_definition_graph(
+                &ApprovalProcessDefinitionId::new(definition_id.to_string()),
+                &mut NoTransaction,
+            )
+            .await?
+            .ok_or_else(definition_not_found)?;
+        let document_type = document_type_of(graph.definition.process_kind);
+        ensure_can_read_detail(&visibility, document_type)?;
+        Ok(detail_view(&graph))
+    }
+
+    /// 校验操作人具备该类型定义管理权。
+    ///
+    /// # 错误
+    /// 缺少类型级权限时返回禁止。
+    async fn ensure_definition_admin(
+        &self,
+        actor: &AuditActor,
+        policy: &ProcessRequiredApprovalPolicy,
+    ) -> Result<()> {
+        let allowed = self
+            .rbac
+            .enforce(
+                &subject(actor.kind(), actor.id()),
+                &policy.definition_admin_permission,
+            )
+            .await?;
+        ensure_definition_admin_allowed(allowed)
+    }
+
+    /// 组装单行目录。
+    ///
+    /// # 错误
+    /// 政策或仓储读取失败时返回错误。
+    async fn catalog_item(
+        &self,
+        document_type: DocumentType,
+        visibility: &DefinitionManagementVisibility,
+    ) -> Result<DefinitionCatalogItem> {
+        let policy = policy_of(document_type)?;
+        let (published_version, draft_version) = self.catalog_versions(&policy).await?;
+        Ok(DefinitionCatalogItem {
+            document_type,
+            document_type_label: document_type.label().to_string(),
+            approval_requirement: requirement_view(policy.requirement()),
+            published_version,
+            draft_version,
+            configuration_status: configuration_status(
+                policy.requirement(),
+                published_version,
+                draft_version,
+            ),
+            allowed_actions: allowed_actions(
+                policy.requirement(),
+                visibility.can_define(document_type),
+                published_version,
+                draft_version,
+            ),
+        })
+    }
+
+    /// 读取目录所需的发布与草稿版本。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回错误。
+    async fn catalog_versions(&self, policy: &DocumentApprovalPolicy) -> Result<(Option<u32>, Option<u32>)> {
+        if !matches!(policy, DocumentApprovalPolicy::ProcessRequired(_)) {
+            return Ok((None, None));
+        }
+        let published = self
+            .db
+            .bpm_workflow()
+            .find_published_by_process_kind(policy.process_kind(), &mut NoTransaction)
+            .await?;
+        let draft = self
+            .db
+            .bpm_workflow()
+            .find_active_draft(policy.process_kind(), &mut NoTransaction)
+            .await?;
+        Ok((
+            published.map(|item| item.definition_version),
+            draft.map(|item| item.definition_version),
+        ))
+    }
+
+    /// 读取定义图，缺失时失败关闭。
+    ///
+    /// # 错误
+    /// 定义不存在时返回未找到。
+    async fn require_graph(&self, definition_id: &str) -> Result<DefinitionGraph> {
+        self.db
+            .bpm_workflow()
+            .load_definition_graph(
+                &ApprovalProcessDefinitionId::new(definition_id.to_string()),
+                &mut NoTransaction,
+            )
+            .await?
+            .ok_or_else(definition_not_found)
+    }
+
+    /// 同键同载荷回读详情。
+    ///
+    /// # 错误
+    /// 异载荷返回冲突；结果引用丢失返回内部错误。
+    async fn replay_if_receipt(
+        &self,
+        command_kind: ApprovalCommandKind,
+        scope_id: &str,
+        idempotency_key: &str,
+        digest: &str,
+        visibility: DefinitionManagementVisibility,
+    ) -> Result<Option<DefinitionDetailView>> {
+        let Some(receipt) = self
+            .db
+            .bpm_workflow()
+            .find_command_receipt(command_kind, scope_id, idempotency_key, &mut NoTransaction)
+            .await?
+        else {
+            return Ok(None);
+        };
+        receipt.reconcile(digest).map_err(map_model_error)?;
+        let _ = visibility;
+        let graph = self
+            .db
+            .bpm_workflow()
+            .load_definition_graph(
+                &ApprovalProcessDefinitionId::new(receipt.result_ref.clone()),
+                &mut NoTransaction,
+            )
+            .await?
+            .ok_or_else(definition_not_found)?;
+        Ok(Some(detail_view(&graph)))
+    }
+
+    /// 在唯一事务中创建草稿。
+    ///
+    /// # 错误
+    /// 已有活动草稿、缺发布源或写入失败时返回错误。
+    async fn commit_create_draft(
+        &self,
+        policy: &ProcessRequiredApprovalPolicy,
+        name: &str,
+        request: &CreateDefinitionDraftRequest,
+        actor: &AuditActor,
+        digest: &str,
+    ) -> Result<DefinitionDetailView> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let policy = policy.clone();
+        let name = name.to_string();
+        let digest = digest.to_string();
+        let request = request.clone();
+        let replay_request = request.clone();
+        let replay_digest = digest.clone();
+        let replay_scope = policy.process_kind.as_str().to_string();
+        let client = db.client().clone();
+        let outcome = client.with_transaction(move |session| {
+            Box::pin(async move {
+                create_draft_tx(&db, &rbac, &policy, &name, &request, &actor, &digest, session).await
+            })
+        });
+        match outcome.await {
+            Ok(view) => Ok(view),
+            Err(error) if is_duplicate_conflict(&error) => {
+                self.replay_create_after_duplicate(&replay_scope, replay_request, &replay_digest)
+                    .await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// duplicate-key 回滚后在事务外重读收据或活动草稿。
+    ///
+    /// # 错误
+    /// 收据冲突或第二活动草稿时返回错误。
+    async fn replay_create_after_duplicate(
+        &self,
+        scope_id: &str,
+        request: CreateDefinitionDraftRequest,
+        digest: &str,
+    ) -> Result<DefinitionDetailView> {
+        if let Some(view) = self
+            .replay_if_receipt(
+                ApprovalCommandKind::DefinitionWrite,
+                scope_id,
+                &request.idempotency_key,
+                digest,
+                visibility_for_define(request.document_type),
+            )
+            .await?
+        {
+            return Ok(view);
+        }
+        if self
+            .db
+            .bpm_workflow()
+            .find_active_draft(process_kind_of(request.document_type), &mut NoTransaction)
+            .await?
+            .is_some()
+        {
+            return Err(second_draft_error());
+        }
+        Err(Error::ConflictError("数据已存在，请勿重复提交".to_string()))
+    }
+
+    /// 在唯一事务中替换草稿图。
+    ///
+    /// # 错误
+    /// 陈旧锁、节点非法或账号校验失败时返回错误。
+    async fn commit_replace_nodes(
+        &self,
+        graph: DefinitionGraph,
+        policy: ProcessRequiredApprovalPolicy,
+        request: ReplaceDefinitionNodesRequest,
+        actor: &AuditActor,
+    ) -> Result<DefinitionDetailView> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        db.client()
+            .clone()
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    replace_nodes_tx(&db, &rbac, graph, policy, request, &actor, session).await
+                })
+            })
+            .await
+    }
+
+    /// 在唯一事务中发布草稿并退役旧版本。
+    ///
+    /// # 错误
+    /// 任一校验失败时整体回滚。
+    async fn commit_publish(
+        &self,
+        graph: DefinitionGraph,
+        policy: ProcessRequiredApprovalPolicy,
+        request: &PublishDefinitionRequest,
+        actor: &AuditActor,
+        digest: &str,
+    ) -> Result<DefinitionDetailView> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let digest = digest.to_string();
+        let request = request.clone();
+        let replay_id = request.definition_id.clone();
+        let replay_key = request.idempotency_key.clone();
+        let replay_digest = digest.clone();
+        let replay_type = policy.document_type;
+        let client = db.client().clone();
+        let outcome = client.with_transaction(move |session| {
+            Box::pin(
+                async move { publish_tx(&db, &rbac, graph, policy, request, &actor, &digest, session).await },
+            )
+        });
+        self.recover_lock_command(
+            outcome.await,
+            ApprovalCommandKind::PublishDefinition,
+            &replay_id,
+            &replay_key,
+            &replay_digest,
+            replay_type,
+        )
+        .await
+    }
+
+    /// 在唯一事务中退役当前发布版本。
+    ///
+    /// # 错误
+    /// 目标不是当前发布版本或写入失败时返回错误。
+    async fn commit_retire(
+        &self,
+        graph: DefinitionGraph,
+        policy: ProcessRequiredApprovalPolicy,
+        request: &RetireDefinitionRequest,
+        actor: &AuditActor,
+        digest: &str,
+    ) -> Result<DefinitionDetailView> {
+        let db = self.db.clone();
+        let actor = actor.clone();
+        let digest = digest.to_string();
+        let request = request.clone();
+        let replay_id = request.definition_id.clone();
+        let replay_key = request.idempotency_key.clone();
+        let replay_digest = digest.clone();
+        let replay_type = policy.document_type;
+        let client = db.client().clone();
+        let outcome = client.with_transaction(move |session| {
+            Box::pin(async move { retire_tx(&db, graph, policy, request, &actor, &digest, session).await })
+        });
+        self.recover_lock_command(
+            outcome.await,
+            ApprovalCommandKind::RetireDefinition,
+            &replay_id,
+            &replay_key,
+            &replay_digest,
+            replay_type,
+        )
+        .await
+    }
+
+    /// 发布/退役 duplicate-key 后按收据回读。
+    ///
+    /// # 错误
+    /// 收据不存在时返回原冲突。
+    async fn recover_lock_command(
+        &self,
+        outcome: Result<DefinitionDetailView>,
+        command_kind: ApprovalCommandKind,
+        definition_id: &str,
+        idempotency_key: &str,
+        digest: &str,
+        document_type: DocumentType,
+    ) -> Result<DefinitionDetailView> {
+        let Err(error) = outcome else {
+            return outcome;
+        };
+        if !is_duplicate_conflict(&error) {
+            return Err(error);
+        }
+        if let Some(view) = self
+            .replay_if_receipt(
+                command_kind,
+                definition_id,
+                idempotency_key,
+                digest,
+                visibility_for_define(document_type),
+            )
+            .await?
+        {
+            return Ok(view);
+        }
+        Err(error)
+    }
+}
+
+/// 事务内创建草稿。
+#[allow(clippy::too_many_arguments)]
+async fn create_draft_tx(
+    db: &Database,
+    rbac: &SharedRbacService,
+    policy: &ProcessRequiredApprovalPolicy,
+    name: &str,
+    request: &CreateDefinitionDraftRequest,
+    actor: &AuditActor,
+    digest: &str,
+    session: &mut mongodb::ClientSession,
+) -> Result<DefinitionDetailView> {
+    if let Some(view) = replay_existing_receipt(
+        db,
+        ApprovalCommandKind::DefinitionWrite,
+        policy.process_kind.as_str(),
+        &request.idempotency_key,
+        digest,
+        session,
+    )
+    .await?
+    {
+        return Ok(view);
+    }
+    let CreateDraftWriteStep::PersistNewDraftAndReceipt = decide_create_draft_write(
+        db.bpm_workflow()
+            .find_active_draft(policy.process_kind, session)
+            .await?,
+    )?;
+    let graph = build_new_draft(db, rbac, policy, name, request.draft_source, actor, session).await?;
+    persist_new_draft(db, &graph, session).await?;
+    write_receipt(
+        db,
+        ApprovalCommandKind::DefinitionWrite,
+        policy.process_kind.as_str(),
+        &request.idempotency_key,
+        digest,
+        &graph.definition.base.id,
+        session,
+    )
+    .await?;
+    write_definition_audit(
+        db,
+        actor,
+        "approval_definition.create_draft",
+        &graph,
+        None,
+        None,
+        session,
+    )
+    .await?;
+    Ok(detail_view(&graph))
+}
+
+/// 事务内替换草稿节点。
+async fn replace_nodes_tx(
+    db: &Database,
+    rbac: &SharedRbacService,
+    graph: DefinitionGraph,
+    policy: ProcessRequiredApprovalPolicy,
+    request: ReplaceDefinitionNodesRequest,
+    actor: &AuditActor,
+    session: &mut mongodb::ClientSession,
+) -> Result<DefinitionDetailView> {
+    let reloaded = reload_draft_for_cas(
+        db,
+        &graph.definition,
+        request.expected_definition_lock_version,
+        session,
+    )
+    .await?;
+    let prepared = prepare_replacement(db, rbac, &reloaded, &policy, &request.nodes, actor, session).await?;
+    apply_draft_graph(
+        db,
+        prepared,
+        request.expected_definition_lock_version,
+        actor,
+        "approval_definition.replace_nodes",
+        Some(node_summary(&reloaded.nodes)),
+        session,
+    )
+    .await
+}
+
+/// 事务内发布草稿。
+#[allow(clippy::too_many_arguments)]
+async fn publish_tx(
+    db: &Database,
+    rbac: &SharedRbacService,
+    graph: DefinitionGraph,
+    policy: ProcessRequiredApprovalPolicy,
+    request: PublishDefinitionRequest,
+    actor: &AuditActor,
+    digest: &str,
+    session: &mut mongodb::ClientSession,
+) -> Result<DefinitionDetailView> {
+    if let Some(view) = replay_existing_receipt(
+        db,
+        ApprovalCommandKind::PublishDefinition,
+        &request.definition_id,
+        &request.idempotency_key,
+        digest,
+        session,
+    )
+    .await?
+    {
+        return Ok(view);
+    }
+    let mut current = reload_draft_for_cas(
+        db,
+        &graph.definition,
+        request.expected_definition_lock_version,
+        session,
+    )
+    .await?;
+    let PublishWriteStep::RefreshSnapshotsAndRetirePrevious = decide_publish_write(
+        validate_publish_graph(&current),
+        validate_required_purposes(&policy, &purpose_refs(&current.nodes)),
+        validate_assignees(db, rbac, &policy, &assignee_ids(&current.nodes), session).await,
+        ensure_actions_registered(&policy),
+    )?;
+    current = refresh_and_replace_for_publish(db, current, request.expected_definition_lock_version, session)
+        .await?;
+    publish_and_store(db, current, policy, request, actor, digest, session).await
+}
+
+/// 事务内退役当前发布版本。
+async fn retire_tx(
+    db: &Database,
+    graph: DefinitionGraph,
+    policy: ProcessRequiredApprovalPolicy,
+    request: RetireDefinitionRequest,
+    actor: &AuditActor,
+    digest: &str,
+    session: &mut mongodb::ClientSession,
+) -> Result<DefinitionDetailView> {
+    if let Some(view) = replay_existing_receipt(
+        db,
+        ApprovalCommandKind::RetireDefinition,
+        &request.definition_id,
+        &request.idempotency_key,
+        digest,
+        session,
+    )
+    .await?
+    {
+        return Ok(view);
+    }
+    let published = db
+        .bpm_workflow()
+        .find_published_by_process_kind(policy.process_kind, session)
+        .await?;
+    let RetireWriteStep::RetireCurrentPublished = decide_retire_write(
+        published.as_ref(),
+        &graph.definition.base.id,
+        request.expected_definition_lock_version,
+    )?;
+    let Some(mut retired) = published else {
+        return Err(Error::BusinessLogicError(
+            "当前没有可退役的已发布定义".to_string(),
+        ));
+    };
+    let expected = retired.definition_lock_version();
+    retired
+        .retire(participant(actor)?, now()?)
+        .map_err(map_model_error)?;
+    retired.base.version = expected;
+    db.approval_process_definitions()
+        .update(&mut retired, session)
+        .await?;
+    write_receipt(
+        db,
+        ApprovalCommandKind::RetireDefinition,
+        &request.definition_id,
+        &request.idempotency_key,
+        digest,
+        &retired.base.id,
+        session,
+    )
+    .await?;
+    let graph = DefinitionGraph {
+        definition: retired,
+        nodes: graph.nodes,
+        transitions: graph.transitions,
+    };
+    write_definition_audit(
+        db,
+        actor,
+        "approval_definition.retire",
+        &graph,
+        Some(request.expected_definition_lock_version),
+        None,
+        session,
+    )
+    .await?;
+    Ok(detail_view(&graph))
+}
+
+/// 构造空草稿或从当前发布复制。
+async fn build_new_draft(
+    db: &Database,
+    rbac: &SharedRbacService,
+    policy: &ProcessRequiredApprovalPolicy,
+    name: &str,
+    draft_source: DraftSource,
+    actor: &AuditActor,
+    session: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    let version = next_definition_version(db, policy.process_kind, session).await?;
+    match draft_source {
+        DraftSource::Empty => empty_draft(policy, name, version, actor),
+        DraftSource::CurrentPublished => {
+            copy_published_draft(db, rbac, policy, name, version, actor, session).await
+        }
+    }
+}
+
+/// 创建无节点草稿。
+fn empty_draft(
+    policy: &ProcessRequiredApprovalPolicy,
+    name: &str,
+    version: u32,
+    actor: &AuditActor,
+) -> Result<DefinitionGraph> {
+    let definition = ApprovalProcessDefinition::new_draft(
+        ApprovalProcessDefinitionId::new(next_id()),
+        policy.process_kind,
+        version,
+        name,
+        next_id(),
+        participant(actor)?,
+        now()?,
+    )
+    .map_err(map_model_error)?;
+    Ok(DefinitionGraph {
+        definition,
+        nodes: Vec::new(),
+        transitions: Vec::new(),
+    })
+}
+
+/// 从当前发布定义复制节点到新草稿。
+async fn copy_published_draft(
+    db: &Database,
+    rbac: &SharedRbacService,
+    policy: &ProcessRequiredApprovalPolicy,
+    name: &str,
+    version: u32,
+    actor: &AuditActor,
+    session: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    let published = require_current_published(
+        db.bpm_workflow()
+            .find_published_by_process_kind(policy.process_kind, session)
+            .await?,
+    )?;
+    let source = db
+        .bpm_workflow()
+        .load_definition_graph(
+            &ApprovalProcessDefinitionId::new(published.base.id.clone()),
+            session,
+        )
+        .await?
+        .ok_or_else(definition_not_found)?;
+    let nodes = copy_nodes(&source.nodes, next_id())?;
+    validate_assignees(db, rbac, policy, &assignee_ids(&nodes), session).await?;
+    finish_graph(policy.process_kind, version, name, actor, nodes)
+}
+
+/// 复制节点并生成新主键与不可预测 `node_key`。
+fn copy_nodes(
+    source: &[ApprovalNodeDefinition],
+    definition_id: String,
+) -> Result<Vec<ApprovalNodeDefinition>> {
+    let process_id = ApprovalProcessDefinitionId::new(definition_id);
+    let at = now()?;
+    let mut nodes = Vec::with_capacity(source.len());
+    for node in sorted_nodes(source)? {
+        nodes.push(
+            ApprovalNodeDefinition::new(
+                ApprovalNodeDefinitionId::new(next_id()),
+                process_id.clone(),
+                next_id(),
+                node.node_name.clone(),
+                node.node_purpose.clone(),
+                node.display_order,
+                node.assignee_participant_id.clone(),
+                node.assignee_label_snapshot.clone(),
+                at,
+            )
+            .map_err(map_model_error)?,
+        );
+    }
+    Ok(nodes)
+}
+
+/// 由节点生成入口、连线并构造草稿图。
+fn finish_graph(
+    process_kind: bpm::ProcessKind,
+    version: u32,
+    name: &str,
+    actor: &AuditActor,
+    nodes: Vec<ApprovalNodeDefinition>,
+) -> Result<DefinitionGraph> {
+    let keys = node_keys(&nodes);
+    let entry = keys
+        .first()
+        .cloned()
+        .ok_or_else(|| Error::ValidationError("已发布定义没有可复制的节点".to_string()))?;
+    let definition_id = nodes[0].process_definition_id.clone();
+    let definition = ApprovalProcessDefinition::new_draft(
+        definition_id.clone(),
+        process_kind,
+        version,
+        name,
+        entry,
+        participant(actor)?,
+        now()?,
+    )
+    .map_err(map_model_error)?;
+    let transitions = transitions_from_nodes(&definition_id, &nodes)?;
+    Ok(DefinitionGraph {
+        definition,
+        nodes,
+        transitions,
+    })
+}
+
+/// 持久化新建草稿及其图。
+async fn persist_new_draft(db: &Database, graph: &DefinitionGraph, session: &mut dyn Executor) -> Result<()> {
+    db.approval_process_definitions()
+        .create(&graph.definition, session)
+        .await?;
+    for node in &graph.nodes {
+        db.approval_node_definitions().create(node, session).await?;
+    }
+    for transition in &graph.transitions {
+        db.approval_transition_definitions()
+            .create(transition, session)
+            .await?;
+    }
+    Ok(())
+}
+
+/// 重新加载草稿并核对锁版本。
+async fn reload_draft_for_cas(
+    db: &Database,
+    original: &ApprovalProcessDefinition,
+    expected: u64,
+    session: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    let graph = db
+        .bpm_workflow()
+        .load_definition_graph(
+            &ApprovalProcessDefinitionId::new(original.base.id.clone()),
+            session,
+        )
+        .await?
+        .ok_or_else(definition_not_found)?;
+    let ReplaceNodesWriteStep::PrepareAndReplaceGraph =
+        allow_prepare_replacement(&graph.definition, expected)?;
+    Ok(graph)
+}
+
+/// 按请求构造替换后的草稿图。
+async fn prepare_replacement(
+    db: &Database,
+    rbac: &SharedRbacService,
+    graph: &DefinitionGraph,
+    policy: &ProcessRequiredApprovalPolicy,
+    requests: &[DefinitionNodeRequest],
+    actor: &AuditActor,
+    session: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    let _ = actor;
+    let planned = plan_nodes(graph, policy, requests)?;
+    let snapshots = load_assignee_snapshots(db, &assignee_ids(&planned), session).await?;
+    let ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph = allow_replace_after_assignees(
+        validate_assignees(db, rbac, policy, &assignee_ids(&planned), session).await,
+    )?;
+    let nodes = apply_snapshots(planned, &snapshots)?;
+    finish_existing_draft(&graph.definition, nodes)
+}
+
+/// 刷新快照后写回草稿图，供发布重验使用。
+async fn refresh_and_replace_for_publish(
+    db: &Database,
+    graph: DefinitionGraph,
+    expected: u64,
+    session: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    let snapshots = load_assignee_snapshots(db, &assignee_ids(&graph.nodes), session).await?;
+    let nodes = apply_snapshots(graph.nodes, &snapshots)?;
+    let prepared = finish_existing_draft(&graph.definition, nodes)?;
+    replace_graph(db, prepared, expected, session).await
+}
+
+/// 发布已重验的草稿并退役旧版本。
+async fn publish_and_store(
+    db: &Database,
+    mut graph: DefinitionGraph,
+    policy: ProcessRequiredApprovalPolicy,
+    request: PublishDefinitionRequest,
+    actor: &AuditActor,
+    digest: &str,
+    session: &mut dyn Executor,
+) -> Result<DefinitionDetailView> {
+    let previous = db
+        .bpm_workflow()
+        .find_published_by_process_kind(policy.process_kind, session)
+        .await?;
+    let previous_lock = previous.as_ref().map(|item| item.definition_lock_version());
+    let expected = graph.definition.definition_lock_version();
+    let (published, previous) =
+        orchestrate_publish_definitions(graph.definition, previous, participant(actor)?, now()?)?;
+    graph.definition = published;
+    let outcome = db
+        .bpm_workflow()
+        .publish_and_retire_previous(
+            &graph.definition,
+            previous.as_ref(),
+            expected,
+            previous_lock,
+            session,
+        )
+        .await?;
+    graph.definition = applied_definition(outcome)?;
+    write_receipt(
+        db,
+        ApprovalCommandKind::PublishDefinition,
+        &request.definition_id,
+        &request.idempotency_key,
+        digest,
+        &graph.definition.base.id,
+        session,
+    )
+    .await?;
+    write_definition_audit(
+        db,
+        actor,
+        "approval_definition.publish",
+        &graph,
+        Some(request.expected_definition_lock_version),
+        None,
+        session,
+    )
+    .await?;
+    Ok(detail_view(&graph))
+}
+
+/// 以 CAS 写回草稿图并记录审计。
+async fn apply_draft_graph(
+    db: &Database,
+    graph: DefinitionGraph,
+    expected: u64,
+    actor: &AuditActor,
+    action: &str,
+    before_summary: Option<String>,
+    session: &mut dyn Executor,
+) -> Result<DefinitionDetailView> {
+    let applied = replace_graph(db, graph, expected, session).await?;
+    write_definition_audit(
+        db,
+        actor,
+        action,
+        &applied,
+        Some(expected),
+        before_summary.as_deref(),
+        session,
+    )
+    .await?;
+    Ok(detail_view(&applied))
+}
+
+/// 调用仓储整组替换草稿图。
+async fn replace_graph(
+    db: &Database,
+    graph: DefinitionGraph,
+    expected: u64,
+    session: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    let outcome = db
+        .bpm_workflow()
+        .replace_draft_graph(
+            &graph.definition,
+            &graph.nodes,
+            &graph.transitions,
+            expected,
+            session,
+        )
+        .await?;
+    Ok(DefinitionGraph {
+        definition: allow_apply_replaced_definition(outcome)?,
+        nodes: graph.nodes,
+        transitions: graph.transitions,
+    })
+}
+
+/// 规划替换后的节点：校验请求、保持或生成 `node_key`、分配用途。
+fn plan_nodes(
+    graph: &DefinitionGraph,
+    policy: &ProcessRequiredApprovalPolicy,
+    requests: &[DefinitionNodeRequest],
+) -> Result<Vec<ApprovalNodeDefinition>> {
+    ensure_node_count(requests.len())?;
+    let existing = existing_nodes_by_id(&graph.nodes);
+    let mut seen_ids = HashSet::new();
+    let mut planned = Vec::with_capacity(requests.len());
+    for request in sorted_requests(requests)? {
+        planned.push(plan_one_node(
+            &graph.definition.base.id,
+            &existing,
+            &mut seen_ids,
+            request,
+        )?);
+    }
+    assign_purposes(policy, &graph.nodes, planned)
+}
+
+/// 规划单个节点。
+fn plan_one_node(
+    definition_id: &str,
+    existing: &HashMap<String, ApprovalNodeDefinition>,
+    seen_ids: &mut HashSet<String>,
+    request: &DefinitionNodeRequest,
+) -> Result<ApprovalNodeDefinition> {
+    let name = normalize_node_name(&request.node_name)?;
+    let assignee = ParticipantId::new(request.assignee_user_id.trim()).map_err(map_bpm_error)?;
+    let (node_id, node_key, purpose) = resolve_node_identity(existing, seen_ids, request)?;
+    ApprovalNodeDefinition::new(
+        node_id,
+        ApprovalProcessDefinitionId::new(definition_id.to_string()),
+        node_key,
+        name,
+        purpose,
+        request.display_order,
+        assignee,
+        "pending",
+        now()?,
+    )
+    .map_err(map_model_error)
+}
+
+/// 解析已有节点身份或为新节点生成不可预测键。
+fn resolve_node_identity(
+    existing: &HashMap<String, ApprovalNodeDefinition>,
+    seen_ids: &mut HashSet<String>,
+    request: &DefinitionNodeRequest,
+) -> Result<(ApprovalNodeDefinitionId, String, Option<String>)> {
+    let Some(node_id) = request
+        .node_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    else {
+        return Ok((ApprovalNodeDefinitionId::new(next_id()), next_id(), None));
+    };
+    if !seen_ids.insert(node_id.to_string()) {
+        return Err(Error::ValidationError("节点ID不能重复".to_string()));
+    }
+    let existing = existing.get(node_id).ok_or_else(|| {
+        Error::ValidationError("节点不属于当前草稿，不能跨定义引用或改写已删除节点".to_string())
+    })?;
+    Ok((
+        ApprovalNodeDefinitionId::new(existing.base.id.clone()),
+        existing.node_key.clone(),
+        existing.node_purpose.clone(),
+    ))
+}
+
+/// 按政策分配或保持节点用途。
+fn assign_purposes(
+    policy: &ProcessRequiredApprovalPolicy,
+    previous: &[ApprovalNodeDefinition],
+    mut nodes: Vec<ApprovalNodeDefinition>,
+) -> Result<Vec<ApprovalNodeDefinition>> {
+    if policy.document_type != DocumentType::SalesOrder {
+        for node in &mut nodes {
+            node.node_purpose = None;
+        }
+        return Ok(nodes);
+    }
+    if let Some(required) = previous
+        .iter()
+        .find(|node| node.node_purpose.as_deref() == Some(SALES_ORDER_PROCUREMENT_CONFIRMATION))
+    {
+        return keep_sales_order_purpose(&mut nodes, &required.base.id);
+    }
+    let first = nodes
+        .iter_mut()
+        .find(|node| node.display_order == 1)
+        .ok_or_else(|| Error::ValidationError("销售单首次保存必须包含顺序第一节点".to_string()))?;
+    first.node_purpose = Some(SALES_ORDER_PROCUREMENT_CONFIRMATION.to_string());
+    Ok(nodes)
+}
+
+/// 后续替换必须保留既有采购确认节点 ID 与用途。
+fn keep_sales_order_purpose(
+    nodes: &mut [ApprovalNodeDefinition],
+    required_id: &str,
+) -> Result<Vec<ApprovalNodeDefinition>> {
+    let Some(target) = nodes.iter_mut().find(|node| node.base.id == required_id) else {
+        return Err(Error::ValidationError(
+            "销售单必须保留既有采购确认用途节点".to_string(),
+        ));
+    };
+    target.node_purpose = Some(SALES_ORDER_PROCUREMENT_CONFIRMATION.to_string());
+    for node in nodes.iter_mut() {
+        if node.base.id != required_id {
+            node.node_purpose = None;
+        }
+    }
+    Ok(nodes.to_vec())
+}
+
+/// 批量读取审批人并校验账号、静态权限与可静态判断的岗位分离。
+async fn validate_assignees(
+    db: &Database,
+    rbac: &SharedRbacService,
+    policy: &ProcessRequiredApprovalPolicy,
+    user_ids: &[String],
+    session: &mut dyn Executor,
+) -> Result<()> {
+    let accounts = load_assignee_snapshots(db, user_ids, session).await?;
+    for user_id in user_ids {
+        let account = accounts.get(user_id);
+        ensure_assignee_account_ready(
+            account.is_some(),
+            account.is_some_and(|item| item.is_kind(AccountKind::Admin)),
+            account.is_some_and(AccountCore::can_login),
+        )?;
+        if let Some(account) = account {
+            ensure_static_eligibility(rbac, policy, account).await?;
+        }
+    }
+    validate_static_separation(policy.separation_of_duties_policy, user_ids)
+}
+
+/// 批量读取账号快照。
+async fn load_assignee_snapshots(
+    db: &Database,
+    user_ids: &[String],
+    session: &mut dyn Executor,
+) -> Result<HashMap<String, AccountCore>> {
+    if user_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let accounts = db
+        .accounts()
+        .find_many(doc! { "id": { "$in": user_ids } }, session)
+        .await?;
+    Ok(accounts
+        .into_iter()
+        .map(|account| (account.base.id.clone(), account))
+        .collect())
+}
+
+/// 校验后台有效账号与静态审批权限，不伪造实例 DataScope。
+async fn ensure_static_eligibility(
+    rbac: &SharedRbacService,
+    policy: &ProcessRequiredApprovalPolicy,
+    account: &AccountCore,
+) -> Result<()> {
+    match policy.approver_eligibility_policy {
+        ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission => {}
+    }
+    ensure_assignee_account_ready(true, account.is_kind(AccountKind::Admin), account.can_login())?;
+    let permission = Permission::parse(STATIC_APPROVE_PERMISSION)
+        .map_err(|error| Error::Internal(format!("静态审批权限不变量损坏: {error}")))?;
+    let allowed = rbac
+        .enforce(&subject(account.kind, &account.base.id), &permission)
+        .await?;
+    ensure_static_decide_permission(allowed)
+}
+
+/// 定义期只能判断节点间岗位分离；提交人隔离留到运行时。
+fn validate_static_separation(policy: SeparationOfDutiesPolicy, _user_ids: &[String]) -> Result<()> {
+    match policy {
+        SeparationOfDutiesPolicy::ForbidSubmitterAsApprover => Ok(()),
+    }
+}
+
+/// 把账号显示名写入节点快照。
+fn apply_snapshots(
+    nodes: Vec<ApprovalNodeDefinition>,
+    accounts: &HashMap<String, AccountCore>,
+) -> Result<Vec<ApprovalNodeDefinition>> {
+    let at = now()?;
+    let mut refreshed = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        let account = accounts
+            .get(node.assignee_participant_id.as_str())
+            .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
+        refreshed.push(
+            ApprovalNodeDefinition::new(
+                ApprovalNodeDefinitionId::new(node.base.id.clone()),
+                node.process_definition_id.clone(),
+                node.node_key.clone(),
+                node.node_name.clone(),
+                node.node_purpose.clone(),
+                node.display_order,
+                node.assignee_participant_id.clone(),
+                account.name.clone(),
+                at,
+            )
+            .map_err(map_model_error)?,
+        );
+    }
+    Ok(refreshed)
+}
+
+/// 保持草稿主键与版本，重写入口和连线。
+fn finish_existing_draft(
+    definition: &ApprovalProcessDefinition,
+    nodes: Vec<ApprovalNodeDefinition>,
+) -> Result<DefinitionGraph> {
+    let mut definition = definition.clone();
+    let keys = node_keys(&nodes);
+    let entry = keys
+        .first()
+        .cloned()
+        .ok_or_else(|| Error::ValidationError("草稿至少需要一个节点".to_string()))?;
+    definition
+        .set_entry_node_draft(entry, now()?)
+        .map_err(map_model_error)?;
+    let transitions = transitions_from_nodes(
+        &ApprovalProcessDefinitionId::new(definition.base.id.clone()),
+        &nodes,
+    )?;
+    Ok(DefinitionGraph {
+        definition,
+        nodes,
+        transitions,
+    })
+}
+
+/// 编排已交付图原语，核验发布图完整性。
+fn validate_publish_graph(graph: &DefinitionGraph) -> Result<()> {
+    let nodes = sorted_nodes(&graph.nodes)?;
+    ensure_node_count(nodes.len())?;
+    let keys = node_keys(&nodes);
+    validate_entry_node(&graph.definition.entry_node_key, &keys).map_err(map_model_error)?;
+    if graph.definition.entry_node_key.trim() != keys[0] {
+        return Err(Error::ValidationError("入口必须是顺序第一节点".to_string()));
+    }
+    let expected = generate_linear_transitions(&keys).map_err(map_model_error)?;
+    ensure_transitions_match(&graph.transitions, &expected)?;
+    for transition in &graph.transitions {
+        validate_transition(transition).map_err(map_model_error)?;
+    }
+    Ok(())
+}
+
+/// 由有序节点生成 APPROVE/REJECT 连线实体。
+fn transitions_from_nodes(
+    definition_id: &ApprovalProcessDefinitionId,
+    nodes: &[ApprovalNodeDefinition],
+) -> Result<Vec<ApprovalTransitionDefinition>> {
+    let drafts = generate_linear_transitions(&node_keys(nodes)).map_err(map_model_error)?;
+    let at = now()?;
+    let mut transitions = Vec::with_capacity(drafts.len());
+    for draft in drafts {
+        transitions.push(transition_from_draft(definition_id, draft, at)?);
+    }
+    Ok(transitions)
+}
+
+/// 把线性连线草稿转为实体。
+fn transition_from_draft(
+    definition_id: &ApprovalProcessDefinitionId,
+    draft: bpm::graph::LinearTransitionDraft,
+    at: Timestamp,
+) -> Result<ApprovalTransitionDefinition> {
+    if let Some(to) = draft.to_node_key {
+        return ApprovalTransitionDefinition::to_node(
+            ApprovalTransitionDefinitionId::new(next_id()),
+            definition_id.clone(),
+            draft.from_node_key,
+            draft.event,
+            to,
+            at,
+        )
+        .map_err(map_model_error);
+    }
+    ApprovalTransitionDefinition::to_approved(
+        ApprovalTransitionDefinitionId::new(next_id()),
+        definition_id.clone(),
+        draft.from_node_key,
+        draft.event,
+        at,
+    )
+    .map_err(map_model_error)
+}
+
+/// 比较已存连线与生成器输出，证明可达、单线无环、唯一终点和驳回回入口。
+fn ensure_transitions_match(
+    actual: &[ApprovalTransitionDefinition],
+    expected: &[bpm::graph::LinearTransitionDraft],
+) -> Result<()> {
+    if actual.len() != expected.len() {
+        return Err(Error::ValidationError("连线与线性生成器结果不一致".to_string()));
+    }
+    let mut actual_keys = actual.iter().map(transition_key).collect::<Vec<_>>();
+    let mut expected_keys = expected
+        .iter()
+        .map(|draft| {
+            (
+                draft.from_node_key.clone(),
+                draft.event.as_str(),
+                draft.to_node_key.clone(),
+                draft.terminal_result.map(|item| item.as_str()),
+            )
+        })
+        .collect::<Vec<_>>();
+    actual_keys.sort();
+    expected_keys.sort();
+    if actual_keys == expected_keys {
+        return Ok(());
+    }
+    Err(Error::ValidationError("连线与线性生成器结果不一致".to_string()))
+}
+
+/// 读取下一业务版本。
+async fn next_definition_version(
+    db: &Database,
+    process_kind: bpm::ProcessKind,
+    session: &mut dyn Executor,
+) -> Result<u32> {
+    let versions = db
+        .bpm_workflow()
+        .list_definition_versions(process_kind, session)
+        .await?;
+    let current = versions
+        .iter()
+        .map(|item| item.definition_version)
+        .max()
+        .unwrap_or(0);
+    next_version_from_max(current)
+}
+
+/// 由历史最高版本 checked add 得到下一 `definition_version`。
+///
+/// # 参数
+/// * `current` - 历史最高版本；无历史时传入 `0`
+///
+/// # 返回
+/// 返回 `current + 1`。
 ///
 /// # 错误
-/// 始终返回业务逻辑错误，不得创建、发布或退役流程。
-pub fn refuse_unwired() -> Result<()> {
-    Err(Error::BusinessLogicError(
-        "审批流程定义管理尚未接入，已按安全策略拒绝".to_string(),
+/// `u32` 溢出时返回业务错误，失败关闭。
+///
+/// # 约束
+/// 必须在 `persist_new_draft` 之前调用，不得回绕版本号。
+fn next_version_from_max(current: u32) -> Result<u32> {
+    current
+        .checked_add(1)
+        .ok_or_else(|| Error::BusinessLogicError("定义版本溢出".to_string()))
+}
+
+/// 事务内若已有同载荷收据则回读原结果。
+async fn replay_existing_receipt(
+    db: &Database,
+    command_kind: ApprovalCommandKind,
+    scope_id: &str,
+    idempotency_key: &str,
+    digest: &str,
+    session: &mut dyn Executor,
+) -> Result<Option<DefinitionDetailView>> {
+    let Some(receipt) = db
+        .bpm_workflow()
+        .find_command_receipt(command_kind, scope_id, idempotency_key, session)
+        .await?
+    else {
+        return Ok(None);
+    };
+    receipt.reconcile(digest).map_err(map_model_error)?;
+    let graph = db
+        .bpm_workflow()
+        .load_definition_graph(
+            &ApprovalProcessDefinitionId::new(receipt.result_ref.clone()),
+            session,
+        )
+        .await?
+        .ok_or_else(definition_not_found)?;
+    Ok(Some(detail_view(&graph)))
+}
+
+/// 写入命令收据。
+async fn write_receipt(
+    db: &Database,
+    command_kind: ApprovalCommandKind,
+    scope_id: &str,
+    idempotency_key: &str,
+    digest: &str,
+    result_ref: &str,
+    session: &mut dyn Executor,
+) -> Result<()> {
+    let receipt = ApprovalCommandReceipt::new(
+        ApprovalCommandReceiptId::new(next_id()),
+        command_kind,
+        scope_id,
+        idempotency_key,
+        digest,
+        result_ref,
+        now()?,
+    )
+    .map_err(map_model_error)?;
+    db.approval_command_receipts()
+        .create(&receipt, session)
+        .await
+        .map_err(Into::into)
+}
+
+/// 写入定义变更审计。
+async fn write_definition_audit(
+    db: &Database,
+    actor: &AuditActor,
+    action: &str,
+    graph: &DefinitionGraph,
+    expected_lock: Option<u64>,
+    extra: Option<&str>,
+    session: &mut dyn Executor,
+) -> Result<()> {
+    let document_type = document_type_of(graph.definition.process_kind);
+    let message = format!(
+        "document_type={} version={} expected_lock={:?} actual_lock={} nodes={} extra={:?}",
+        document_type.as_str(),
+        graph.definition.definition_version,
+        expected_lock,
+        graph.definition.definition_lock_version(),
+        node_summary(&graph.nodes),
+        extra
+    );
+    let audit = actor.clone().resource_log_with_message(
+        action,
+        "approval_process_definition",
+        graph.definition.base.id.clone(),
+        Some(message),
+    )?;
+    db.audit_logs().create(&audit, session).await?;
+    Ok(())
+}
+
+/// 取出 CAS 成功后的定义。
+fn applied_definition(
+    outcome: CasWriteOutcome<ApprovalProcessDefinition>,
+) -> Result<ApprovalProcessDefinition> {
+    match outcome {
+        CasWriteOutcome::Applied(definition) => Ok(definition),
+        CasWriteOutcome::VersionConflict(_) => Err(stale_lock_error()),
+        CasWriteOutcome::StatusChanged(_) => {
+            Err(Error::ConflictError("已发布或已退役的定义结构不可改".to_string()))
+        }
+        CasWriteOutcome::NotFound => Err(definition_not_found()),
+    }
+}
+
+/// 校验草稿且锁版本匹配。
+fn ensure_draft_lock(definition: &ApprovalProcessDefinition, expected: u64) -> Result<()> {
+    definition
+        .ensure_mutable()
+        .map_err(|_| Error::ConflictError("已发布或已退役的定义结构不可改".to_string()))?;
+    ensure_lock(definition, expected)
+}
+
+/// 校验锁版本。
+fn ensure_lock(definition: &ApprovalProcessDefinition, expected: u64) -> Result<()> {
+    if definition.definition_lock_version() == expected {
+        return Ok(());
+    }
+    Err(stale_lock_error())
+}
+
+/// 由定义的流程种类读取必须审批政策。
+fn policy_for_definition(definition: &ApprovalProcessDefinition) -> Result<ProcessRequiredApprovalPolicy> {
+    require_process_required(document_type_of(definition.process_kind))
+}
+
+/// 以当前 RBAC 重验类型级范围，禁止调用方扩大权限。
+async fn enforce_visibility(
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    visibility: &DefinitionManagementVisibility,
+) -> Result<DefinitionManagementVisibility> {
+    Ok(definition_management_visibility(rbac, actor)
+        .await?
+        .intersect(visibility))
+}
+
+/// 详情读取权。
+fn ensure_can_read_detail(
+    visibility: &DefinitionManagementVisibility,
+    document_type: DocumentType,
+) -> Result<()> {
+    if visibility.can_read_detail(document_type) {
+        return Ok(());
+    }
+    Err(definition_not_found())
+}
+
+/// 校验节点数量。
+fn ensure_node_count(count: usize) -> Result<()> {
+    if (1..=MAX_DEFINITION_NODES).contains(&count) {
+        return Ok(());
+    }
+    Err(Error::ValidationError(
+        "审批节点数量必须在 1 到 20 之间".to_string(),
     ))
+}
+
+/// 按展示顺序排序并要求从 1 连续。
+fn sorted_nodes(nodes: &[ApprovalNodeDefinition]) -> Result<Vec<ApprovalNodeDefinition>> {
+    let mut nodes = nodes.to_vec();
+    nodes.sort_by_key(|node| node.display_order);
+    for (index, node) in nodes.iter().enumerate() {
+        let expected =
+            u32::try_from(index + 1).map_err(|_| Error::ValidationError("节点顺序溢出".to_string()))?;
+        if node.display_order != expected {
+            return Err(Error::ValidationError(
+                "节点顺序必须从 1 连续且无重复".to_string(),
+            ));
+        }
+    }
+    Ok(nodes)
+}
+
+/// 按展示顺序排序请求。
+fn sorted_requests(requests: &[DefinitionNodeRequest]) -> Result<Vec<&DefinitionNodeRequest>> {
+    let mut requests = requests.iter().collect::<Vec<_>>();
+    requests.sort_by_key(|item| item.display_order);
+    for (index, request) in requests.iter().enumerate() {
+        let expected =
+            u32::try_from(index + 1).map_err(|_| Error::ValidationError("节点顺序溢出".to_string()))?;
+        if request.display_order != expected {
+            return Err(Error::ValidationError(
+                "节点顺序必须从 1 连续且无重复".to_string(),
+            ));
+        }
+    }
+    Ok(requests)
+}
+
+/// 提取有序节点键。
+fn node_keys(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
+    nodes.iter().map(|node| node.node_key.clone()).collect()
+}
+
+/// 提取审批人 ID。
+fn assignee_ids(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
+    let mut ids = nodes
+        .iter()
+        .map(|node| node.assignee_participant_id.as_str().to_string())
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+/// 提取用途引用。
+fn purpose_refs(nodes: &[ApprovalNodeDefinition]) -> Vec<Option<&str>> {
+    nodes.iter().map(|node| node.node_purpose.as_deref()).collect()
+}
+
+/// 按主键索引已有节点。
+fn existing_nodes_by_id(nodes: &[ApprovalNodeDefinition]) -> HashMap<String, ApprovalNodeDefinition> {
+    nodes
+        .iter()
+        .map(|node| (node.base.id.clone(), node.clone()))
+        .collect()
+}
+
+/// 节点摘要，供审计使用。
+fn node_summary(nodes: &[ApprovalNodeDefinition]) -> String {
+    nodes
+        .iter()
+        .map(|node| format!("{}:{}", node.display_order, node.node_key))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// 连线比较键。
+fn transition_key(
+    transition: &ApprovalTransitionDefinition,
+) -> (String, &'static str, Option<String>, Option<&'static str>) {
+    (
+        transition.from_node_key.clone(),
+        transition.event.as_str(),
+        transition.to_node_key.clone(),
+        transition.terminal_result.map(|item| item.as_str()),
+    )
+}
+
+/// 规范化定义名称。
+fn normalize_definition_name(name: &str) -> Result<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(Error::ValidationError("定义名称不能为空".to_string()));
+    }
+    if trimmed.len() > NAME_MAX_LEN {
+        return Err(Error::ValidationError("定义名称过长".to_string()));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// 规范化节点名称。
+fn normalize_node_name(name: &str) -> Result<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(Error::ValidationError("节点名称不能为空".to_string()));
+    }
+    if trimmed.len() > NAME_MAX_LEN {
+        return Err(Error::ValidationError("节点名称过长".to_string()));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// 创建草稿 canonical payload。
+fn create_draft_digest(
+    document_type: DocumentType,
+    name: &str,
+    draft_source: DraftSource,
+    actor_id: &str,
+) -> String {
+    payload_digest(&[document_type.as_str(), name, draft_source.as_str(), actor_id])
+}
+
+/// 发布/退役 canonical payload。
+fn lock_command_digest(expected_lock: u64, actor_id: &str) -> String {
+    payload_digest(&[&expected_lock.to_string(), actor_id])
+}
+
+/// 固定字段顺序生成摘要。
+fn payload_digest(parts: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    for (index, part) in parts.iter().enumerate() {
+        if index > 0 {
+            hasher.update([0x1f]);
+        }
+        hasher.update(part.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+/// 配置状态。
+fn configuration_status(
+    requirement: ApprovalRequirement,
+    published: Option<u32>,
+    draft: Option<u32>,
+) -> DefinitionConfigurationStatus {
+    let _ = draft;
+    match requirement {
+        ApprovalRequirement::NoApproval => DefinitionConfigurationStatus::NotApplicable,
+        ApprovalRequirement::ProcessRequired if published.is_some() => {
+            DefinitionConfigurationStatus::Published
+        }
+        ApprovalRequirement::ProcessRequired => DefinitionConfigurationStatus::MissingConfiguration,
+    }
+}
+
+/// 类型级允许动作。
+fn allowed_actions(
+    requirement: ApprovalRequirement,
+    can_define: bool,
+    published: Option<u32>,
+    draft: Option<u32>,
+) -> Vec<DefinitionAllowedAction> {
+    if !can_define || requirement != ApprovalRequirement::ProcessRequired {
+        return Vec::new();
+    }
+    let mut actions = Vec::new();
+    if draft.is_none() {
+        actions.push(DefinitionAllowedAction::CreateDraft);
+    } else {
+        actions.push(DefinitionAllowedAction::ReplaceNodes);
+        actions.push(DefinitionAllowedAction::Publish);
+    }
+    if published.is_some() {
+        actions.push(DefinitionAllowedAction::Retire);
+    }
+    actions
+}
+
+/// 审批要求视图。
+fn requirement_view(requirement: ApprovalRequirement) -> ApprovalRequirementView {
+    match requirement {
+        ApprovalRequirement::NoApproval => ApprovalRequirementView::NoApproval,
+        ApprovalRequirement::ProcessRequired => ApprovalRequirementView::ProcessRequired,
+    }
+}
+
+/// 构造详情视图。
+fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
+    let document_type = document_type_of(graph.definition.process_kind);
+    let mut nodes = graph.nodes.clone();
+    nodes.sort_by_key(|node| node.display_order);
+    DefinitionDetailView {
+        definition_id: graph.definition.base.id.clone(),
+        document_type,
+        document_type_label: document_type.label().to_string(),
+        name: graph.definition.name.clone(),
+        definition_version: graph.definition.definition_version,
+        status: graph.definition.status.as_str().to_string(),
+        entry_node_key: graph.definition.entry_node_key.clone(),
+        definition_lock_version: graph.definition.definition_lock_version(),
+        nodes: nodes.iter().map(node_view).collect(),
+        created_by: graph.definition.created_by.as_str().to_string(),
+        published_by: graph
+            .definition
+            .published_by
+            .as_ref()
+            .map(|item| item.as_str().to_string()),
+        published_at: graph.definition.published_at.map(|item| item.unix_secs()),
+        retired_by: graph
+            .definition
+            .retired_by
+            .as_ref()
+            .map(|item| item.as_str().to_string()),
+        retired_at: graph.definition.retired_at.map(|item| item.unix_secs()),
+    }
+}
+
+/// 构造节点视图。
+fn node_view(node: &ApprovalNodeDefinition) -> DefinitionNodeView {
+    DefinitionNodeView {
+        node_id: node.base.id.clone(),
+        node_key: node.node_key.clone(),
+        node_name: node.node_name.clone(),
+        node_type: node.node_type.as_str().to_string(),
+        node_purpose: node.node_purpose.clone(),
+        display_order: node.display_order,
+        assignee_user_id: node.assignee_participant_id.as_str().to_string(),
+        assignee_name_snapshot: node.assignee_label_snapshot.clone(),
+    }
+}
+
+/// 构造版本摘要。
+fn version_item(definition: &ApprovalProcessDefinition) -> DefinitionVersionItem {
+    DefinitionVersionItem {
+        definition_id: definition.base.id.clone(),
+        definition_version: definition.definition_version,
+        status: definition.status.as_str().to_string(),
+        name: definition.name.clone(),
+        definition_lock_version: definition.definition_lock_version(),
+    }
+}
+
+/// 仅用于回读详情的类型级范围。
+fn visibility_for_define(document_type: DocumentType) -> DefinitionManagementVisibility {
+    DefinitionManagementVisibility::from_type_permissions(vec![document_type], Vec::new())
+}
+
+/// 当前调用方时间。
+fn now() -> Result<Timestamp> {
+    Ok(Timestamp::from_utc(Utc::now()))
+}
+
+/// 构造处理人引用。
+fn participant(actor: &AuditActor) -> Result<ParticipantId> {
+    ParticipantId::new(actor.id().to_string()).map_err(map_bpm_error)
+}
+
+/// 映射 BPM 模型错误。
+fn map_model_error(error: ModelError) -> Error {
+    match error {
+        ModelError::CommandReceiptConflict => Error::ConflictError("幂等键载荷冲突".to_string()),
+        ModelError::InvalidField(message) | ModelError::InvalidTransition(message) => {
+            Error::ValidationError(message.to_string())
+        }
+        ModelError::InvalidStatus(message) => Error::ConflictError(message.to_string()),
+        ModelError::Overflow(message) => Error::BusinessLogicError(format!("计数溢出: {message}")),
+        other => Error::BusinessLogicError(other.to_string()),
+    }
+}
+
+/// 映射 BPM 边界错误。
+fn map_bpm_error(error: bpm::Error) -> Error {
+    Error::ValidationError(error.to_string())
+}
+
+/// 是否为唯一键冲突。
+fn is_duplicate_conflict(error: &Error) -> bool {
+    matches!(error, Error::ConflictError(message) if message.contains("数据已存在"))
+}
+
+/// 创建草稿写库步骤。仅在无活动草稿时允许持久化。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CreateDraftWriteStep {
+    /// 允许 persist_new_draft 与 write_receipt。
+    PersistNewDraftAndReceipt,
+}
+
+/// 已有活动草稿则冲突，不得进入 persist_new_draft / write_receipt。
+///
+/// # 错误
+/// 已存在活动草稿时返回冲突。
+fn decide_create_draft_write<T>(existing_active_draft: Option<T>) -> Result<CreateDraftWriteStep> {
+    if existing_active_draft.is_some() {
+        return Err(second_draft_error());
+    }
+    Ok(CreateDraftWriteStep::PersistNewDraftAndReceipt)
+}
+
+/// 草稿替换在锁通过后的下一步。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReplaceNodesWriteStep {
+    /// 允许 prepare_replacement 与 apply_draft_graph。
+    PrepareAndReplaceGraph,
+}
+
+/// 账号/静态权限校验通过后才允许写替换图。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReplaceAssigneesWriteStep {
+    /// 允许 apply_snapshots 与 finish_existing_draft。
+    ApplySnapshotsAndReplaceGraph,
+}
+
+/// 替换路径在审批人校验失败时不得写图。
+///
+/// # 参数
+/// * `assignees` - `validate_assignees` 的结果
+///
+/// # 返回
+/// 校验通过时返回写图步骤。
+///
+/// # 错误
+/// 透传账号不存在、不可登录、缺静态权限或岗位分离失败。
+///
+/// # 约束
+/// 必须先于 `apply_snapshots` / `replace_graph` 调用。
+fn allow_replace_after_assignees(assignees: Result<()>) -> Result<ReplaceAssigneesWriteStep> {
+    assignees?;
+    Ok(ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph)
+}
+
+/// 陈旧锁立即失败，替换路径不得继续规划或写图。
+///
+/// # 错误
+/// 非草稿或锁版本不匹配时返回冲突。
+fn allow_prepare_replacement(
+    definition: &ApprovalProcessDefinition,
+    expected: u64,
+) -> Result<ReplaceNodesWriteStep> {
+    ensure_draft_lock(definition, expected)?;
+    Ok(ReplaceNodesWriteStep::PrepareAndReplaceGraph)
+}
+
+/// CAS 冲突时不得把替换结果当成功写回。
+///
+/// # 错误
+/// `VersionConflict` 映射为陈旧锁，其它失败原样返回。
+fn allow_apply_replaced_definition(
+    outcome: CasWriteOutcome<ApprovalProcessDefinition>,
+) -> Result<ApprovalProcessDefinition> {
+    applied_definition(outcome)
+}
+
+/// 发布写库步骤。仅在全部重验通过后允许刷新快照并退役旧版本。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublishWriteStep {
+    /// 允许 refresh_and_replace_for_publish 与 publish_and_retire_previous。
+    RefreshSnapshotsAndRetirePrevious,
+}
+
+/// 退役写库步骤。仅当前 PUBLISHED 且锁匹配才允许写回。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RetireWriteStep {
+    /// 允许对当前已发布定义执行 retire + CAS 写回。
+    RetireCurrentPublished,
+}
+
+/// `CURRENT_PUBLISHED` 必须命中当前发布定义，缺失则失败关闭。
+///
+/// # 错误
+/// 当前没有已发布定义时返回校验错误。
+fn require_current_published<T>(published: Option<T>) -> Result<T> {
+    published.ok_or_else(|| Error::ValidationError("当前没有可复制的已发布定义".to_string()))
+}
+
+/// 只能退役当前已发布定义。
+///
+/// # 错误
+/// 无 PUBLISHED 或请求 ID 不是当前发布版时返回业务错误。
+fn ensure_retire_target(published_id: Option<&str>, requested_id: &str) -> Result<()> {
+    let Some(published_id) = published_id else {
+        return Err(Error::BusinessLogicError(
+            "当前没有可退役的已发布定义".to_string(),
+        ));
+    };
+    if published_id != requested_id {
+        return Err(Error::BusinessLogicError("只能退役当前已发布定义".to_string()));
+    }
+    Ok(())
+}
+
+/// 目标与锁均匹配后才允许退役写回。
+///
+/// # 错误
+/// 无发布版、ID 不匹配或锁版本陈旧时返回错误。
+fn decide_retire_write(
+    published: Option<&ApprovalProcessDefinition>,
+    requested_id: &str,
+    expected_lock: u64,
+) -> Result<RetireWriteStep> {
+    ensure_retire_target(published.map(|item| item.base.id.as_str()), requested_id)?;
+    let published =
+        published.ok_or_else(|| Error::BusinessLogicError("当前没有可退役的已发布定义".to_string()))?;
+    ensure_lock(published, expected_lock)?;
+    Ok(RetireWriteStep::RetireCurrentPublished)
+}
+
+/// 图、用途、账号或动作任一失败都不得进入发布写库。
+///
+/// # 错误
+/// 返回第一个失败的校验错误。
+fn decide_publish_write(
+    graph: Result<()>,
+    purposes: Result<()>,
+    assignees: Result<()>,
+    actions: Result<()>,
+) -> Result<PublishWriteStep> {
+    graph?;
+    purposes?;
+    assignees?;
+    actions?;
+    Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
+}
+
+/// 先退役旧 `PUBLISHED`，再把草稿置为 `PUBLISHED`。
+///
+/// # 错误
+/// 状态机拒绝退役或发布时返回错误。
+fn orchestrate_publish_definitions(
+    mut draft: ApprovalProcessDefinition,
+    previous: Option<ApprovalProcessDefinition>,
+    actor: ParticipantId,
+    at: Timestamp,
+) -> Result<(ApprovalProcessDefinition, Option<ApprovalProcessDefinition>)> {
+    let previous = match previous {
+        Some(mut previous) => {
+            previous.retire(actor.clone(), at).map_err(map_model_error)?;
+            Some(previous)
+        }
+        None => None,
+    };
+    draft.publish(actor, at).map_err(map_model_error)?;
+    Ok((draft, previous))
+}
+
+/// 写端口类型级定义管理权闸门。
+///
+/// # 错误
+/// 缺少 `definition_admin` 时禁止写入。
+fn ensure_definition_admin_allowed(allowed: bool) -> Result<()> {
+    if allowed {
+        return Ok(());
+    }
+    Err(Error::Forbidden("没有该单据类型的流程定义管理权限".to_string()))
+}
+
+/// 定义期账号资格：必须存在、后台且可登录。不读实例 DataScope。
+///
+/// # 错误
+/// 账号缺失、不可登录或非后台时返回校验错误。
+fn ensure_assignee_account_ready(exists: bool, is_backoffice: bool, can_login: bool) -> Result<()> {
+    if exists && is_backoffice && can_login {
+        return Ok(());
+    }
+    Err(Error::ValidationError(
+        "指定审批人账号不存在、已停用或任职失效".to_string(),
+    ))
+}
+
+/// 定义期静态 `approval_instance:decide` 闸门。
+///
+/// # 错误
+/// 缺少静态审批权限时返回业务错误。
+fn ensure_static_decide_permission(has_decide: bool) -> Result<()> {
+    if has_decide {
+        return Ok(());
+    }
+    Err(Error::BusinessLogicError(
+        "指定审批人不具备静态审批权限".to_string(),
+    ))
+}
+
+/// 第二活动草稿错误。
+fn second_draft_error() -> Error {
+    Error::ConflictError("该单据类型已有活动草稿".to_string())
+}
+
+/// 陈旧锁错误。
+fn stale_lock_error() -> Error {
+    Error::ConflictError("定义锁版本已过期，未写入任何节点".to_string())
+}
+
+/// 不泄露存在性的未找到错误。
+fn definition_not_found() -> Error {
+    Error::NotFound("审批流程定义不存在".to_string())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::refuse_unwired;
-    use crate::errors::Error;
+    use super::*;
+    use bpm::graph::LinearTransitionDraft;
+    use bpm::ids::ApprovalProcessDefinitionId;
+    use bpm::model::types::{ApprovalDefinitionStatus, ApprovalTerminalResult, ApprovalTransitionEvent};
+    use bpm::ProcessKind;
+    use entities::{AccountCoreData, AccountStatus, LoginAccount, Secret};
 
-    /// 定义管理占位必须失败关闭，并钉死稳定文案。
+    fn draft_definition(process_kind: ProcessKind, entry: &str) -> ApprovalProcessDefinition {
+        ApprovalProcessDefinition::new_draft(
+            ApprovalProcessDefinitionId::new("def-1"),
+            process_kind,
+            1,
+            "测试流程",
+            entry,
+            ParticipantId::new("admin").unwrap(),
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn node(id: &str, key: &str, order: u32, purpose: Option<&str>, user: &str) -> ApprovalNodeDefinition {
+        ApprovalNodeDefinition::new(
+            ApprovalNodeDefinitionId::new(id),
+            ApprovalProcessDefinitionId::new("def-1"),
+            key,
+            format!("节点{order}"),
+            purpose.map(ToOwned::to_owned),
+            order,
+            ParticipantId::new(user).unwrap(),
+            "张三",
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn request(node_id: Option<&str>, name: &str, display_order: u32, user: &str) -> DefinitionNodeRequest {
+        DefinitionNodeRequest {
+            node_id: node_id.map(ToOwned::to_owned),
+            node_name: name.to_string(),
+            display_order,
+            assignee_user_id: user.to_string(),
+        }
+    }
+
+    fn empty_graph(process_kind: ProcessKind) -> DefinitionGraph {
+        DefinitionGraph {
+            definition: draft_definition(process_kind, "pending"),
+            nodes: Vec::new(),
+            transitions: Vec::new(),
+        }
+    }
+
+    fn two_node_publish_graph() -> DefinitionGraph {
+        let nodes = vec![node("id1", "n1", 1, None, "u1"), node("id2", "n2", 2, None, "u2")];
+        let definition = draft_definition(ProcessKind::StockAdjustment, "n1");
+        let transitions = transitions_from_nodes(
+            &ApprovalProcessDefinitionId::new(definition.base.id.clone()),
+            &nodes,
+        )
+        .unwrap();
+        DefinitionGraph {
+            definition,
+            nodes,
+            transitions,
+        }
+    }
+
+    fn production_source() -> &'static str {
+        include_str!("definition.rs")
+            .split("mod tests {")
+            .next()
+            .expect("必须存在生产代码")
+    }
+
+    fn source_fn<'a>(source: &'a str, name: &str, next: &str) -> &'a str {
+        source
+            .split(name)
+            .nth(1)
+            .and_then(|body| body.split(next).next())
+            .unwrap_or(source)
+    }
+
+    /// 已有活动草稿时不得 persist_new_draft / write_receipt。
     #[test]
-    fn definition_placeholder_fails_closed() {
-        let Err(Error::BusinessLogicError(message)) = refuse_unwired() else {
-            panic!("定义占位必须返回 BusinessLogicError");
+    fn second_active_draft_is_conflict() {
+        assert!(matches!(
+            decide_create_draft_write(Some("draft-1")),
+            Err(Error::ConflictError(message)) if message.contains("活动草稿")
+        ));
+        assert!(matches!(
+            decide_create_draft_write::<&str>(None),
+            Ok(CreateDraftWriteStep::PersistNewDraftAndReceipt)
+        ));
+        let create_tx = source_fn(
+            production_source(),
+            "async fn create_draft_tx",
+            "async fn replace_nodes_tx",
+        );
+        let gate = create_tx.find("decide_create_draft_write").expect("创建闸门");
+        assert!(gate < create_tx.find("persist_new_draft").expect("persist"));
+        assert!(gate < create_tx.find("write_receipt").expect("receipt"));
+    }
+
+    /// 陈旧锁或 VersionConflict 立即失败，不得继续规划或写图。
+    #[test]
+    fn stale_lock_has_no_partial_write() {
+        let definition = draft_definition(ProcessKind::StockAdjustment, "n1");
+        let stale = allow_prepare_replacement(&definition, 99).unwrap_err();
+        assert!(matches!(stale, Error::ConflictError(message) if message.contains("未写入任何节点")));
+        let current = definition.definition_lock_version();
+        assert!(matches!(
+            allow_prepare_replacement(&definition, current),
+            Ok(ReplaceNodesWriteStep::PrepareAndReplaceGraph)
+        ));
+        assert!(matches!(
+            allow_apply_replaced_definition(CasWriteOutcome::VersionConflict(definition.clone())),
+            Err(Error::ConflictError(message)) if message.contains("未写入任何节点")
+        ));
+        let replace_tx = source_fn(
+            production_source(),
+            "async fn replace_nodes_tx",
+            "async fn publish_tx",
+        );
+        let lock = replace_tx.find("reload_draft_for_cas").expect("CAS 重载");
+        assert!(lock < replace_tx.find("prepare_replacement").expect("规划"));
+        assert!(lock < replace_tx.find("apply_draft_graph").expect("写图"));
+        let replace_graph_src = source_fn(production_source(), "async fn replace_graph", "fn plan_nodes");
+        assert!(replace_graph_src.contains("allow_apply_replaced_definition"));
+    }
+
+    /// 已发布结构不可改。
+    #[test]
+    fn published_and_retired_are_immutable() {
+        let mut definition = draft_definition(ProcessKind::StockAdjustment, "n1");
+        definition
+            .publish(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(2).unwrap(),
+            )
+            .unwrap();
+        let error = ensure_draft_lock(&definition, definition.definition_lock_version()).unwrap_err();
+        assert!(matches!(error, Error::ConflictError(message) if message.contains("不可改")));
+        definition
+            .retire(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(3).unwrap(),
+            )
+            .unwrap();
+        assert!(ensure_draft_lock(&definition, 1).is_err());
+    }
+
+    /// 新节点 key 仅服务端生成；跨定义 node_id 拒绝。
+    #[test]
+    fn node_keys_are_server_generated_and_not_cross_referenced() {
+        let existing = node("n1", "server-key", 1, None, "u1");
+        let graph = DefinitionGraph {
+            definition: draft_definition(ProcessKind::StockAdjustment, "server-key"),
+            nodes: vec![existing],
+            transitions: Vec::new(),
         };
-        assert_eq!(message, "审批流程定义管理尚未接入，已按安全策略拒绝");
+        let policy = require_process_required(DocumentType::StockAdjustment).unwrap();
+        let planned = plan_nodes(
+            &graph,
+            &policy,
+            &[
+                DefinitionNodeRequest {
+                    node_id: Some("n1".to_string()),
+                    node_name: "仓储".to_string(),
+                    display_order: 1,
+                    assignee_user_id: "u1".to_string(),
+                },
+                DefinitionNodeRequest {
+                    node_id: None,
+                    node_name: "财务".to_string(),
+                    display_order: 2,
+                    assignee_user_id: "u2".to_string(),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(planned[0].node_key, "server-key");
+        assert_ne!(planned[1].node_key, "server-key");
+        assert_ne!(planned[1].base.id, "n1");
+        let foreign = plan_nodes(
+            &graph,
+            &policy,
+            &[DefinitionNodeRequest {
+                node_id: Some("other-def-node".to_string()),
+                node_name: "仓储".to_string(),
+                display_order: 1,
+                assignee_user_id: "u1".to_string(),
+            }],
+        )
+        .unwrap_err();
+        assert!(matches!(foreign, Error::ValidationError(message) if message.contains("跨定义")));
+    }
+
+    /// 销售单首次保存赋予唯一采购确认用途，其它类型为零。
+    #[test]
+    fn sales_order_purpose_is_unique_and_other_types_have_none() {
+        let empty = DefinitionGraph {
+            definition: draft_definition(ProcessKind::SalesOrder, "pending"),
+            nodes: Vec::new(),
+            transitions: Vec::new(),
+        };
+        let sales = require_process_required(DocumentType::SalesOrder).unwrap();
+        let first = plan_nodes(
+            &empty,
+            &sales,
+            &[
+                DefinitionNodeRequest {
+                    node_id: None,
+                    node_name: "采购确认".to_string(),
+                    display_order: 1,
+                    assignee_user_id: "u1".to_string(),
+                },
+                DefinitionNodeRequest {
+                    node_id: None,
+                    node_name: "财务".to_string(),
+                    display_order: 2,
+                    assignee_user_id: "u2".to_string(),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            first[0].node_purpose.as_deref(),
+            Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)
+        );
+        assert!(first[1].node_purpose.is_none());
+        let kept = plan_nodes(
+            &DefinitionGraph {
+                definition: empty.definition.clone(),
+                nodes: first.clone(),
+                transitions: Vec::new(),
+            },
+            &sales,
+            &[
+                DefinitionNodeRequest {
+                    node_id: Some(first[1].base.id.clone()),
+                    node_name: "财务".to_string(),
+                    display_order: 1,
+                    assignee_user_id: "u2".to_string(),
+                },
+                DefinitionNodeRequest {
+                    node_id: Some(first[0].base.id.clone()),
+                    node_name: "采购确认".to_string(),
+                    display_order: 2,
+                    assignee_user_id: "u1".to_string(),
+                },
+            ],
+        )
+        .unwrap();
+        let purpose_node = kept.iter().find(|node| node.base.id == first[0].base.id).unwrap();
+        assert_eq!(
+            purpose_node.node_purpose.as_deref(),
+            Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)
+        );
+        let stock = require_process_required(DocumentType::StockAdjustment).unwrap();
+        let other = plan_nodes(
+            &DefinitionGraph {
+                definition: draft_definition(ProcessKind::StockAdjustment, "pending"),
+                nodes: Vec::new(),
+                transitions: Vec::new(),
+            },
+            &stock,
+            &[DefinitionNodeRequest {
+                node_id: None,
+                node_name: "仓储".to_string(),
+                display_order: 1,
+                assignee_user_id: "u1".to_string(),
+            }],
+        )
+        .unwrap();
+        assert!(other[0].node_purpose.is_none());
+    }
+
+    /// 1/2/20 节点生成器结果确定。
+    #[test]
+    fn linear_generator_is_deterministic_for_1_2_and_20_nodes() {
+        let one = generate_linear_transitions(&["n1".to_string()]).unwrap();
+        assert_eq!(one.len(), 2);
+        assert_eq!(one[0].terminal_result, Some(ApprovalTerminalResult::Approved));
+        assert_eq!(one[1].to_node_key.as_deref(), Some("n1"));
+
+        let two = generate_linear_transitions(&["n1".to_string(), "n2".to_string()]).unwrap();
+        assert_eq!(two.len(), 4);
+        assert_eq!(two[0].to_node_key.as_deref(), Some("n2"));
+        assert_eq!(two[2].terminal_result, Some(ApprovalTerminalResult::Approved));
+        assert!(two
+            .iter()
+            .filter(|item| item.event == ApprovalTransitionEvent::Reject)
+            .all(|item| item.to_node_key.as_deref() == Some("n1")));
+
+        let keys = (1..=20).map(|index| format!("n{index}")).collect::<Vec<_>>();
+        let twenty = generate_linear_transitions(&keys).unwrap();
+        assert_eq!(twenty.len(), 40);
+        assert_eq!(
+            twenty[38],
+            LinearTransitionDraft {
+                from_node_key: "n20".to_string(),
+                event: ApprovalTransitionEvent::Approve,
+                to_node_key: None,
+                terminal_result: Some(ApprovalTerminalResult::Approved),
+            }
+        );
+        assert!(twenty
+            .iter()
+            .filter(|item| item.event == ApprovalTransitionEvent::Reject)
+            .all(|item| item.to_node_key.as_deref() == Some("n1")));
+        assert_eq!(
+            generate_linear_transitions(&keys).unwrap(),
+            twenty,
+            "同一输入必须得到同一结果"
+        );
+    }
+
+    /// 发布图重验编排已交付原语，不另立图算法。
+    #[test]
+    fn publish_revalidates_with_delivered_graph_primitives() {
+        let graph = two_node_publish_graph();
+        validate_publish_graph(&graph).unwrap();
+        let mut wrong_entry = graph.clone();
+        wrong_entry.definition.entry_node_key = "n2".to_string();
+        assert!(validate_publish_graph(&wrong_entry).is_err());
+
+        let mut missing_reject = graph.clone();
+        missing_reject
+            .transitions
+            .retain(|item| item.event != ApprovalTransitionEvent::Reject);
+        assert!(validate_publish_graph(&missing_reject).is_err());
+
+        let mut extra = graph.clone();
+        extra.transitions.push(extra.transitions[0].clone());
+        assert!(validate_publish_graph(&extra).is_err());
+
+        assert!(validate_publish_graph(&empty_graph(ProcessKind::StockAdjustment)).is_err());
+        let twenty_one: Vec<_> = (1..=21)
+            .map(|index| {
+                node(
+                    &format!("id{index}"),
+                    &format!("n{index}"),
+                    index as u32,
+                    None,
+                    "u1",
+                )
+            })
+            .collect();
+        let definition = draft_definition(ProcessKind::StockAdjustment, "n1");
+        let transitions = transitions_from_nodes(
+            &ApprovalProcessDefinitionId::new(definition.base.id.clone()),
+            &twenty_one,
+        )
+        .unwrap();
+        assert!(validate_publish_graph(&DefinitionGraph {
+            definition,
+            nodes: twenty_one,
+            transitions,
+        })
+        .is_err());
+
+        let one_nodes = vec![node("id1", "n1", 1, None, "u1")];
+        let one_def = draft_definition(ProcessKind::StockAdjustment, "n1");
+        let one_transitions = transitions_from_nodes(
+            &ApprovalProcessDefinitionId::new(one_def.base.id.clone()),
+            &one_nodes,
+        )
+        .unwrap();
+        validate_publish_graph(&DefinitionGraph {
+            definition: one_def,
+            nodes: one_nodes,
+            transitions: one_transitions,
+        })
+        .unwrap();
+
+        let twenty_nodes: Vec<_> = (1..=20)
+            .map(|index| {
+                node(
+                    &format!("id{index}"),
+                    &format!("n{index}"),
+                    index as u32,
+                    None,
+                    "u1",
+                )
+            })
+            .collect();
+        let twenty_def = draft_definition(ProcessKind::StockAdjustment, "n1");
+        let twenty_transitions = transitions_from_nodes(
+            &ApprovalProcessDefinitionId::new(twenty_def.base.id.clone()),
+            &twenty_nodes,
+        )
+        .unwrap();
+        validate_publish_graph(&DefinitionGraph {
+            definition: twenty_def,
+            nodes: twenty_nodes,
+            transitions: twenty_transitions,
+        })
+        .unwrap();
+    }
+
+    /// 发布事务编排：成功时新 PUBLISHED + 旧 RETIRED；校验失败不得进入写库。
+    #[test]
+    fn publish_retires_previous_and_fails_closed() {
+        let actor = ParticipantId::new("admin").unwrap();
+        let at = Timestamp::from_unix_secs(4).unwrap();
+        let draft = draft_definition(ProcessKind::StockAdjustment, "n1");
+        let (published, none) =
+            orchestrate_publish_definitions(draft.clone(), None, actor.clone(), at).unwrap();
+        assert_eq!(published.status, ApprovalDefinitionStatus::Published);
+        assert!(none.is_none());
+
+        let mut previous = draft_definition(ProcessKind::StockAdjustment, "n1");
+        previous.base.id = "def-old".to_string();
+        previous
+            .publish(actor.clone(), Timestamp::from_unix_secs(2).unwrap())
+            .unwrap();
+        let (published, retired) = orchestrate_publish_definitions(draft, Some(previous), actor, at).unwrap();
+        assert_eq!(published.status, ApprovalDefinitionStatus::Published);
+        assert_eq!(retired.unwrap().status, ApprovalDefinitionStatus::Retired);
+
+        assert!(decide_publish_write(
+            Err(Error::ValidationError("连线与线性生成器结果不一致".into())),
+            Ok(()),
+            Ok(()),
+            Ok(()),
+        )
+        .is_err());
+        assert!(decide_publish_write(Ok(()), Ok(()), Ok(()), Err(Error::Internal("动作".into()))).is_err());
+        let sales = require_process_required(DocumentType::SalesOrder).unwrap();
+        for purposes in [
+            validate_required_purposes(&sales, &[]),
+            validate_required_purposes(&sales, &[None, None]),
+            validate_required_purposes(
+                &sales,
+                &[
+                    Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
+                    Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
+                ],
+            ),
+            validate_required_purposes(&sales, &[Some("WRONG_PURPOSE")]),
+        ] {
+            assert!(purposes.is_err());
+            assert!(!matches!(
+                decide_publish_write(Ok(()), purposes, Ok(()), Ok(())),
+                Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
+            ));
+        }
+        assert!(matches!(
+            decide_publish_write(Ok(()), Ok(()), Ok(()), Ok(())),
+            Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
+        ));
+        let publish_store = source_fn(
+            production_source(),
+            "async fn publish_and_store",
+            "async fn apply_draft_graph",
+        );
+        assert!(publish_store.contains("orchestrate_publish_definitions"));
+        assert!(publish_store.contains("publish_and_retire_previous"));
+        let publish_tx = source_fn(production_source(), "async fn publish_tx", "async fn retire_tx");
+        let gate = publish_tx.find("decide_publish_write").expect("发布闸门");
+        assert!(gate < publish_tx.find("publish_and_store").expect("写库"));
+    }
+
+    /// 政策与 ProcessKind 映射穷尽，Service 无 BPM 第二定义源。
+    #[test]
+    fn policy_mapping_is_exhaustive_and_service_has_no_second_bpm_source() {
+        for document_type in ALL_DOCUMENT_TYPES {
+            let process_kind = process_kind_of(document_type);
+            assert_eq!(document_type_of(process_kind), document_type);
+            let _ = policy_of(document_type).unwrap();
+        }
+        let production = include_str!("definition.rs")
+            .split("mod tests {")
+            .next()
+            .expect("必须存在生产代码");
+        assert!(production.contains("generate_linear_transitions"));
+        assert!(production.contains("validate_transition"));
+        assert!(production.contains("validate_entry_node"));
+        assert!(!production.contains("entities::approval::"));
+        assert!(!production.contains("CARD_SALES_APPROVAL"));
+        assert!(!production.contains("validate_definition("));
+        assert!(!production.contains("access_control::DataScope"));
+        assert!(!production.contains("approval_management_scope"));
+    }
+
+    /// 发布重验岗位分离不把提交人隔离伪装成实例 DataScope。
+    #[test]
+    fn publish_static_separation_does_not_forge_instance_data_scope() {
+        validate_static_separation(
+            SeparationOfDutiesPolicy::ForbidSubmitterAsApprover,
+            &["u1".to_string(), "u1".to_string()],
+        )
+        .unwrap();
+        assert!(production_source().contains("不伪造实例"));
+        assert!(!production_source().contains("access_control::DataScope"));
+        let failed_assignees = Err(Error::ValidationError(
+            "指定审批人账号不存在、已停用或任职失效".into(),
+        ));
+        assert!(decide_publish_write(Ok(()), Ok(()), failed_assignees, Ok(())).is_err());
+        let publish_tx = source_fn(production_source(), "async fn publish_tx", "async fn retire_tx");
+        let gate = publish_tx.find("decide_publish_write").expect("发布闸门");
+        assert!(gate < publish_tx.find("refresh_and_replace_for_publish").expect("刷新"));
+        assert!(gate < publish_tx.find("publish_and_store").expect("写库"));
+    }
+
+    /// 账号不存在/不可登录/非后台/缺 decide 时发布不得写库。
+    #[test]
+    fn publish_revalidates_account_and_static_permission() {
+        let missing = ensure_assignee_account_ready(false, true, true).unwrap_err();
+        assert!(matches!(missing, Error::ValidationError(message) if message.contains("不存在")));
+        let inactive = ensure_assignee_account_ready(true, true, false).unwrap_err();
+        assert!(matches!(inactive, Error::ValidationError(_)));
+        let not_backoffice = ensure_assignee_account_ready(true, false, true).unwrap_err();
+        assert!(matches!(not_backoffice, Error::ValidationError(_)));
+        ensure_assignee_account_ready(true, true, true).unwrap();
+        let no_decide = ensure_static_decide_permission(false).unwrap_err();
+        assert!(matches!(
+            no_decide,
+            Error::BusinessLogicError(message) if message.contains("approval") || message.contains("静态审批")
+        ));
+        ensure_static_decide_permission(true).unwrap();
+        assert!(decide_publish_write(
+            Ok(()),
+            Ok(()),
+            Err(Error::ValidationError(
+                "指定审批人账号不存在、已停用或任职失效".into()
+            )),
+            Ok(()),
+        )
+        .is_err());
+        assert!(decide_publish_write(
+            Ok(()),
+            Ok(()),
+            Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into())),
+            Ok(()),
+        )
+        .is_err());
+    }
+
+    /// 类型级权限由 Service 强制：无管理权不得进入写端口。
+    #[test]
+    fn type_level_permission_is_enforced_by_helpers() {
+        let denied = ensure_definition_admin_allowed(false).unwrap_err();
+        assert!(matches!(denied, Error::Forbidden(message) if message.contains("流程定义管理权限")));
+        ensure_definition_admin_allowed(true).unwrap();
+        let visibility = DefinitionManagementVisibility::from_type_permissions(
+            vec![DocumentType::StockAdjustment],
+            Vec::new(),
+        );
+        assert!(ensure_can_read_detail(&visibility, DocumentType::StockAdjustment).is_ok());
+        assert!(ensure_can_read_detail(&visibility, DocumentType::SalesOrder).is_err());
+        let claimed = DefinitionManagementVisibility::from_type_permissions(
+            vec![DocumentType::StockAdjustment, DocumentType::SalesOrder],
+            vec![DocumentType::SalesOrder],
+        );
+        let intersected = visibility.intersect(&claimed);
+        assert!(intersected.can_define(DocumentType::StockAdjustment));
+        assert!(!intersected.can_define(DocumentType::SalesOrder));
+        assert_eq!(
+            allowed_actions(ApprovalRequirement::ProcessRequired, false, None, None),
+            Vec::new()
+        );
+        assert_eq!(
+            allowed_actions(ApprovalRequirement::ProcessRequired, true, None, None),
+            vec![DefinitionAllowedAction::CreateDraft]
+        );
+        assert_eq!(
+            allowed_actions(ApprovalRequirement::ProcessRequired, true, None, Some(1)),
+            vec![
+                DefinitionAllowedAction::ReplaceNodes,
+                DefinitionAllowedAction::Publish
+            ]
+        );
+        assert_eq!(
+            allowed_actions(ApprovalRequirement::ProcessRequired, true, Some(2), Some(3)),
+            vec![
+                DefinitionAllowedAction::ReplaceNodes,
+                DefinitionAllowedAction::Publish,
+                DefinitionAllowedAction::Retire
+            ]
+        );
+        assert_eq!(
+            allowed_actions(ApprovalRequirement::ProcessRequired, true, Some(2), None),
+            vec![
+                DefinitionAllowedAction::CreateDraft,
+                DefinitionAllowedAction::Retire
+            ]
+        );
+        assert!(allowed_actions(ApprovalRequirement::NoApproval, true, None, None).is_empty());
+    }
+
+    /// 无已发布定义一律配置缺失，含从未发布仅有草稿、退役后仍留草稿。
+    #[test]
+    fn retired_catalog_status_is_missing_configuration() {
+        assert_eq!(
+            configuration_status(ApprovalRequirement::ProcessRequired, None, None),
+            DefinitionConfigurationStatus::MissingConfiguration
+        );
+        assert_eq!(
+            configuration_status(ApprovalRequirement::ProcessRequired, Some(1), Some(2)),
+            DefinitionConfigurationStatus::Published
+        );
+        assert_eq!(
+            configuration_status(ApprovalRequirement::ProcessRequired, None, Some(1)),
+            DefinitionConfigurationStatus::MissingConfiguration
+        );
+        assert_eq!(
+            configuration_status(ApprovalRequirement::NoApproval, None, None),
+            DefinitionConfigurationStatus::NotApplicable
+        );
+    }
+
+    /// 创建/发布/退役 canonical payload：固定字段顺序、异载荷不等、冲突与 duplicate-key 语义。
+    #[test]
+    fn canonical_payloads_are_stable() {
+        let first = create_draft_digest(
+            DocumentType::StockAdjustment,
+            "库存调整",
+            DraftSource::Empty,
+            "admin-1",
+        );
+        assert_eq!(
+            first,
+            payload_digest(&[
+                DocumentType::StockAdjustment.as_str(),
+                "库存调整",
+                DraftSource::Empty.as_str(),
+                "admin-1",
+            ])
+        );
+        assert_eq!(
+            first,
+            create_draft_digest(
+                DocumentType::StockAdjustment,
+                "库存调整",
+                DraftSource::Empty,
+                "admin-1",
+            )
+        );
+        assert_ne!(
+            first,
+            create_draft_digest(
+                DocumentType::SalesOrder,
+                "库存调整",
+                DraftSource::Empty,
+                "admin-1",
+            )
+        );
+        assert_ne!(
+            first,
+            create_draft_digest(
+                DocumentType::StockAdjustment,
+                "另一名称",
+                DraftSource::Empty,
+                "admin-1",
+            )
+        );
+        assert_ne!(
+            first,
+            create_draft_digest(
+                DocumentType::StockAdjustment,
+                "库存调整",
+                DraftSource::CurrentPublished,
+                "admin-1",
+            )
+        );
+        assert_ne!(
+            first,
+            create_draft_digest(
+                DocumentType::StockAdjustment,
+                "库存调整",
+                DraftSource::Empty,
+                "admin-2",
+            )
+        );
+        assert_eq!(
+            lock_command_digest(3, "admin-1"),
+            payload_digest(&["3", "admin-1"])
+        );
+        assert_eq!(
+            lock_command_digest(3, "admin-1"),
+            lock_command_digest(3, "admin-1")
+        );
+        assert_ne!(
+            lock_command_digest(3, "admin-1"),
+            lock_command_digest(4, "admin-1")
+        );
+        assert_ne!(
+            lock_command_digest(3, "admin-1"),
+            lock_command_digest(3, "admin-2")
+        );
+
+        assert!(matches!(
+            map_model_error(ModelError::CommandReceiptConflict),
+            Error::ConflictError(message) if message == "幂等键载荷冲突"
+        ));
+        let same = ApprovalCommandReceipt::new(
+            ApprovalCommandReceiptId::new("r1"),
+            ApprovalCommandKind::DefinitionWrite,
+            "stock_adjustment",
+            "k1",
+            "digest-a",
+            "def-1",
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap();
+        same.reconcile("digest-a").expect("同载荷必须回读");
+        assert!(matches!(
+            map_model_error(same.reconcile("digest-b").unwrap_err()),
+            Error::ConflictError(message) if message.contains("幂等键载荷冲突")
+        ));
+        assert!(is_duplicate_conflict(&Error::ConflictError("数据已存在".into())));
+        assert!(is_duplicate_conflict(&Error::ConflictError(
+            "数据已存在，请勿重复提交".into()
+        )));
+        assert!(!is_duplicate_conflict(&Error::ConflictError(
+            "幂等键载荷冲突".into()
+        )));
+        assert!(!is_duplicate_conflict(&Error::ValidationError(
+            "数据已存在".into()
+        )));
+
+        let create = source_fn(
+            production_source(),
+            "pub async fn create_definition_draft",
+            "pub async fn replace_definition_nodes",
+        );
+        assert!(
+            create.find("ensure_definition_admin").expect("创建权限")
+                < create.find("replay_if_receipt").expect("创建回放")
+        );
+        let publish = source_fn(
+            production_source(),
+            "pub async fn publish_definition",
+            "pub async fn retire_definition",
+        );
+        assert!(
+            publish.find("ensure_definition_admin").expect("发布权限")
+                < publish.find("replay_if_receipt").expect("发布回放")
+        );
+        let retire = source_fn(
+            production_source(),
+            "pub async fn retire_definition",
+            "pub async fn definition_versions",
+        );
+        assert!(
+            retire.find("ensure_definition_admin").expect("退役权限")
+                < retire.find("replay_if_receipt").expect("退役回放")
+        );
+        let create_commit = source_fn(
+            production_source(),
+            "async fn commit_create_draft",
+            "async fn replay_create_after_duplicate",
+        );
+        assert!(
+            create_commit
+                .find("is_duplicate_conflict")
+                .expect("创建 duplicate-key")
+                < create_commit
+                    .find("replay_create_after_duplicate")
+                    .expect("事务外重读")
+        );
+        let recover = source_fn(
+            production_source(),
+            "async fn recover_lock_command",
+            "async fn create_draft_tx",
+        );
+        assert!(
+            recover
+                .find("is_duplicate_conflict")
+                .expect("锁命令 duplicate-key")
+                < recover.find("replay_if_receipt").expect("锁命令回放")
+        );
+        let replay = source_fn(
+            production_source(),
+            "async fn replay_if_receipt",
+            "async fn commit_create_draft",
+        );
+        assert!(replay.contains("reconcile"));
+        assert!(replay.contains("map_model_error"));
+    }
+
+    /// replace/plan_nodes 边界：0/21、空名、顺序、重复 ID、删除采购确认。
+    #[test]
+    fn plan_nodes_rejects_invalid_replacements() {
+        let stock = require_process_required(DocumentType::StockAdjustment).unwrap();
+        let empty = empty_graph(ProcessKind::StockAdjustment);
+        assert!(plan_nodes(&empty, &stock, &[]).is_err());
+        let twenty_one: Vec<_> = (1..=21)
+            .map(|index| request(None, &format!("节点{index}"), index as u32, "u1"))
+            .collect();
+        assert!(plan_nodes(&empty, &stock, &twenty_one).is_err());
+        assert!(plan_nodes(&empty, &stock, &[request(None, "   ", 1, "u1")]).is_err());
+        assert!(plan_nodes(
+            &empty,
+            &stock,
+            &[request(None, "一", 1, "u1"), request(None, "三", 3, "u2")]
+        )
+        .is_err());
+        assert!(plan_nodes(
+            &empty,
+            &stock,
+            &[request(None, "一", 1, "u1"), request(None, "又一", 1, "u2")]
+        )
+        .is_err());
+
+        let existing = node("n1", "server-key", 1, None, "u1");
+        let graph = DefinitionGraph {
+            definition: draft_definition(ProcessKind::StockAdjustment, "server-key"),
+            nodes: vec![existing],
+            transitions: Vec::new(),
+        };
+        assert!(plan_nodes(
+            &graph,
+            &stock,
+            &[
+                request(Some("n1"), "一", 1, "u1"),
+                request(Some("n1"), "二", 2, "u2")
+            ]
+        )
+        .is_err());
+
+        let sales = require_process_required(DocumentType::SalesOrder).unwrap();
+        let first = plan_nodes(
+            &empty_graph(ProcessKind::SalesOrder),
+            &sales,
+            &[request(None, "采购确认", 1, "u1"), request(None, "财务", 2, "u2")],
+        )
+        .unwrap();
+        let dropped = plan_nodes(
+            &DefinitionGraph {
+                definition: draft_definition(ProcessKind::SalesOrder, "pending"),
+                nodes: first.clone(),
+                transitions: Vec::new(),
+            },
+            &sales,
+            &[request(Some(&first[1].base.id), "财务", 1, "u2")],
+        )
+        .unwrap_err();
+        assert!(matches!(
+            dropped,
+            Error::ValidationError(message) if message.contains("采购确认")
+        ));
+    }
+
+    /// EMPTY 零节点草稿允许持续到第一次 replace；copy 生成新主键与不可预测 node_key。
+    #[test]
+    fn empty_draft_and_copy_nodes_generate_new_identities() {
+        let actor = AuditActor::new("admin".into(), "admin".into(), AccountKind::Admin);
+        let sales = require_process_required(DocumentType::SalesOrder).unwrap();
+        let draft = empty_draft(&sales, "销售单草稿", 1, &actor).unwrap();
+        assert!(draft.nodes.is_empty());
+        assert!(draft.transitions.is_empty());
+        assert_ne!(draft.definition.base.id, "def-1");
+        assert!(plan_nodes(&draft, &sales, &[]).is_err());
+        assert_eq!(
+            plan_nodes(&draft, &sales, &[request(None, "采购确认", 1, "u1")]).unwrap()[0]
+                .node_purpose
+                .as_deref(),
+            Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)
+        );
+
+        let source = vec![
+            node(
+                "old-1",
+                "old-key-1",
+                1,
+                Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
+                "buyer",
+            ),
+            node("old-2", "old-key-2", 2, None, "cfo"),
+        ];
+        let copied = copy_nodes(&source, "new-def".to_string()).unwrap();
+        let again = copy_nodes(&source, "new-def-2".to_string()).unwrap();
+        assert_eq!(copied.len(), 2);
+        assert_eq!(copied[0].process_definition_id.as_ref(), "new-def");
+        assert_ne!(copied[0].base.id, source[0].base.id);
+        assert_ne!(copied[1].base.id, source[1].base.id);
+        assert_ne!(copied[0].node_key, source[0].node_key);
+        assert_ne!(copied[1].node_key, source[1].node_key);
+        assert_ne!(copied[0].node_key, again[0].node_key);
+        assert_eq!(
+            copied[0].node_purpose.as_deref(),
+            Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)
+        );
+        assert_eq!(copied[0].assignee_participant_id.as_str(), "buyer");
+        assert_eq!(copied[1].assignee_participant_id.as_str(), "cfo");
+        assert!(copied[1].node_purpose.is_none());
+    }
+
+    /// 只能退役当前 PUBLISHED；无发布版或非当前版失败，锁匹配才允许写回。
+    #[test]
+    fn retire_only_current_published() {
+        assert!(matches!(
+            ensure_retire_target(None, "def-1"),
+            Err(Error::BusinessLogicError(message)) if message.contains("没有可退役")
+        ));
+        assert!(matches!(
+            ensure_retire_target(Some("def-pub"), "def-draft"),
+            Err(Error::BusinessLogicError(message)) if message.contains("只能退役当前已发布定义")
+        ));
+        ensure_retire_target(Some("def-1"), "def-1").expect("ID 匹配应放行");
+
+        let published = {
+            let mut definition = draft_definition(ProcessKind::StockAdjustment, "n1");
+            definition
+                .publish(
+                    ParticipantId::new("admin").unwrap(),
+                    Timestamp::from_unix_secs(2).unwrap(),
+                )
+                .unwrap();
+            definition
+        };
+        let lock = published.definition_lock_version();
+        assert!(matches!(
+            decide_retire_write(None, "def-1", lock),
+            Err(Error::BusinessLogicError(message)) if message.contains("没有可退役")
+        ));
+        assert!(matches!(
+            decide_retire_write(Some(&published), "other-id", lock),
+            Err(Error::BusinessLogicError(message)) if message.contains("只能退役当前已发布定义")
+        ));
+        assert!(matches!(
+            decide_retire_write(Some(&published), &published.base.id, lock + 1),
+            Err(Error::ConflictError(message)) if message.contains("未写入任何节点")
+        ));
+        assert!(matches!(
+            decide_retire_write(Some(&published), &published.base.id, lock),
+            Ok(RetireWriteStep::RetireCurrentPublished)
+        ));
+        assert_eq!(
+            configuration_status(ApprovalRequirement::ProcessRequired, None, None),
+            DefinitionConfigurationStatus::MissingConfiguration
+        );
+        let retire_tx = source_fn(
+            production_source(),
+            "async fn retire_tx",
+            "async fn build_new_draft",
+        );
+        assert!(retire_tx.contains("decide_retire_write"));
+    }
+
+    /// draft_source=CURRENT_PUBLISHED 缺发布源必须失败关闭。
+    #[test]
+    fn current_published_requires_existing_definition() {
+        assert!(matches!(
+            require_current_published::<&str>(None),
+            Err(Error::ValidationError(message)) if message.contains("没有可复制的已发布定义")
+        ));
+        assert_eq!(require_current_published(Some("def-pub")).unwrap(), "def-pub");
+        let copy_src = source_fn(
+            production_source(),
+            "async fn copy_published_draft",
+            "fn copy_nodes",
+        );
+        assert!(copy_src.contains("require_current_published"));
+    }
+
+    /// 入口固定为 display_order=1 的节点键。
+    #[test]
+    fn replace_entry_is_first_display_order_node() {
+        let stock = require_process_required(DocumentType::StockAdjustment).unwrap();
+        let empty = empty_graph(ProcessKind::StockAdjustment);
+        let planned = plan_nodes(
+            &empty,
+            &stock,
+            &[request(None, "第二", 2, "u2"), request(None, "第一", 1, "u1")],
+        )
+        .unwrap();
+        assert_eq!(planned[0].display_order, 1);
+        let finished = finish_existing_draft(&empty.definition, planned.clone()).unwrap();
+        assert_eq!(finished.definition.entry_node_key, planned[0].node_key);
+        assert_eq!(
+            finished
+                .nodes
+                .iter()
+                .find(|node| node.display_order == 1)
+                .map(|node| node.node_key.as_str()),
+            Some(finished.definition.entry_node_key.as_str())
+        );
+    }
+
+    fn test_account(id: &str, name: &str) -> AccountCore {
+        AccountCore::new(
+            id.to_string(),
+            AccountCoreData {
+                secret: Secret::new(LoginAccount::new(format!("login{id}")).unwrap(), "password123").unwrap(),
+                name: name.to_string(),
+                kind: AccountKind::Admin,
+                status: AccountStatus::Active,
+                email: None,
+                phone: None,
+                avatar: None,
+            },
+        )
+        .unwrap()
+    }
+
+    /// 详情按 display_order 排序；版本摘要带状态、名称和锁。
+    #[test]
+    fn detail_and_version_views_assemble_sorted_nodes_and_audit() {
+        let mut graph = two_node_publish_graph();
+        graph.nodes.reverse();
+        let draft_view = detail_view(&graph);
+        assert_eq!(
+            draft_view
+                .nodes
+                .iter()
+                .map(|item| item.display_order)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert_eq!(draft_view.nodes[0].node_key, "n1");
+        assert_eq!(draft_view.nodes[0].node_type, "USER_APPROVAL");
+        assert_eq!(draft_view.nodes[1].node_type, "USER_APPROVAL");
+        assert_eq!(draft_view.entry_node_key, "n1");
+        assert_eq!(draft_view.created_by, "admin");
+        assert_eq!(
+            draft_view.definition_lock_version,
+            graph.definition.definition_lock_version()
+        );
+        assert!(draft_view.published_by.is_none());
+        assert!(draft_view.retired_by.is_none());
+
+        let actor = ParticipantId::new("admin").unwrap();
+        graph
+            .definition
+            .publish(actor.clone(), Timestamp::from_unix_secs(2).unwrap())
+            .unwrap();
+        let published_view = detail_view(&graph);
+        assert_eq!(published_view.status, "PUBLISHED");
+        assert_eq!(published_view.published_by.as_deref(), Some("admin"));
+        assert_eq!(published_view.published_at, Some(2));
+
+        graph
+            .definition
+            .retire(actor, Timestamp::from_unix_secs(3).unwrap())
+            .unwrap();
+        let retired_view = detail_view(&graph);
+        assert_eq!(retired_view.status, "RETIRED");
+        assert_eq!(retired_view.retired_by.as_deref(), Some("admin"));
+        assert_eq!(retired_view.retired_at, Some(3));
+
+        let item = version_item(&graph.definition);
+        assert_eq!(item.definition_id, graph.definition.base.id);
+        assert_eq!(item.definition_version, 1);
+        assert_eq!(item.status, "RETIRED");
+        assert_eq!(item.name, "测试流程");
+        assert_eq!(
+            item.definition_lock_version,
+            graph.definition.definition_lock_version()
+        );
+        assert_eq!(node_view(&graph.nodes[1]).node_id, "id1");
+    }
+
+    /// 名称必须 trim；空名与超长失败，trim 后摘要与字段顺序一致。
+    #[test]
+    fn normalize_definition_name_trims_before_digest() {
+        assert!(matches!(
+            normalize_definition_name(""),
+            Err(Error::ValidationError(message)) if message.contains("不能为空")
+        ));
+        assert!(matches!(
+            normalize_definition_name("   "),
+            Err(Error::ValidationError(message)) if message.contains("不能为空")
+        ));
+        assert!(matches!(
+            normalize_definition_name(&"x".repeat(NAME_MAX_LEN + 1)),
+            Err(Error::ValidationError(message)) if message.contains("过长")
+        ));
+        assert_eq!(normalize_definition_name(" 库存调整 ").unwrap(), "库存调整");
+        let trimmed = normalize_definition_name(" 库存调整 ").unwrap();
+        assert_eq!(
+            create_draft_digest(
+                DocumentType::StockAdjustment,
+                &trimmed,
+                DraftSource::Empty,
+                "admin-1",
+            ),
+            payload_digest(&[
+                DocumentType::StockAdjustment.as_str(),
+                "库存调整",
+                DraftSource::Empty.as_str(),
+                "admin-1",
+            ])
+        );
+        assert_ne!(
+            create_draft_digest(
+                DocumentType::StockAdjustment,
+                " 库存调整 ",
+                DraftSource::Empty,
+                "admin-1",
+            ),
+            create_draft_digest(
+                DocumentType::StockAdjustment,
+                &trimmed,
+                DraftSource::Empty,
+                "admin-1",
+            )
+        );
+        let create = source_fn(
+            production_source(),
+            "pub async fn create_definition_draft",
+            "pub async fn replace_definition_nodes",
+        );
+        let normalize = create.find("normalize_definition_name").expect("先规范化");
+        assert!(normalize < create.find("create_draft_digest").expect("再哈希"));
+    }
+
+    /// 历史最高版本 checked add；0→1，溢出失败关闭。
+    #[test]
+    fn next_version_from_max_fails_closed_on_overflow() {
+        assert_eq!(next_version_from_max(0).unwrap(), 1);
+        assert_eq!(next_version_from_max(7).unwrap(), 8);
+        assert!(matches!(
+            next_version_from_max(u32::MAX),
+            Err(Error::BusinessLogicError(message)) if message.contains("定义版本溢出")
+        ));
+        let create_tx = source_fn(
+            production_source(),
+            "async fn create_draft_tx",
+            "async fn replace_nodes_tx",
+        );
+        let build = create_tx.find("build_new_draft").expect("先构造草稿");
+        assert!(build < create_tx.find("persist_new_draft").expect("persist"));
+        let build_src = source_fn(production_source(), "async fn build_new_draft", "fn empty_draft");
+        assert!(build_src.contains("next_definition_version"));
+        let version_src = source_fn(
+            production_source(),
+            "async fn next_definition_version",
+            "async fn replay_existing_receipt",
+        );
+        assert!(version_src.contains("next_version_from_max"));
+    }
+
+    /// 发布刷新审批人名称快照；账号缺失不得进入发布写库。
+    #[test]
+    fn apply_snapshots_freezes_assignee_name_or_fails() {
+        let mut accounts = HashMap::new();
+        accounts.insert("u1".to_string(), test_account("u1", "李四"));
+        let frozen = apply_snapshots(vec![node("id1", "n1", 1, None, "u1")], &accounts).unwrap();
+        assert_eq!(frozen[0].assignee_label_snapshot, "李四");
+        assert_eq!(frozen[0].assignee_participant_id.as_str(), "u1");
+
+        let missing = apply_snapshots(vec![node("id1", "n1", 1, None, "missing")], &accounts);
+        assert!(matches!(
+            missing,
+            Err(Error::ValidationError(message)) if message.contains("账号不存在")
+        ));
+        assert!(!matches!(
+            decide_publish_write(
+                Ok(()),
+                Ok(()),
+                apply_snapshots(vec![node("id2", "n2", 1, None, "missing")], &accounts).map(|_| ()),
+                Ok(()),
+            ),
+            Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
+        ));
+    }
+
+    /// 替换路径账号/权限失败不得写图。
+    #[test]
+    fn replace_assignee_failure_does_not_write_graph() {
+        assert!(matches!(
+            allow_replace_after_assignees(Ok(())),
+            Ok(ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph)
+        ));
+        assert!(matches!(
+            allow_replace_after_assignees(Err(Error::ValidationError(
+                "指定审批人账号不存在、已停用或任职失效".into()
+            ))),
+            Err(Error::ValidationError(message)) if message.contains("账号不存在")
+        ));
+        assert!(matches!(
+            allow_replace_after_assignees(Err(Error::Forbidden("缺少静态审批权限".into()))),
+            Err(Error::Forbidden(_))
+        ));
+        let prepare = source_fn(
+            production_source(),
+            "async fn prepare_replacement",
+            "async fn refresh_and_replace_for_publish",
+        );
+        let gate = prepare
+            .find("allow_replace_after_assignees")
+            .expect("替换账号闸门");
+        assert!(gate < prepare.find("apply_snapshots").expect("快照"));
+        assert!(gate < prepare.find("finish_existing_draft").expect("写图规划"));
     }
 }

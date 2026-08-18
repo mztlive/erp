@@ -1,8 +1,9 @@
-//! 阻塞审批管理接口的数据范围解析。
+//! 阻塞审批管理接口的数据范围解析，以及定义管理的类型级可见范围。
 
 use database::{AccessControlExt, Executor, MongoCasbinAdapter, NoTransaction};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, DataScopeType},
+    document_registry::DocumentType,
     Permission,
 };
 use mongodb::Database;
@@ -14,6 +15,7 @@ use crate::{
 };
 
 use super::dto::ApprovalRecoveryAuthorization;
+use super::policy::{policy_of, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES};
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
@@ -24,6 +26,93 @@ pub enum ApprovalManagementScope {
     Company,
     /// 仅可查询显式授权的组织或团队标识。
     Organizations(Vec<String>),
+}
+
+/// 定义管理的类型级可见范围。不是具体单据 DataScope。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefinitionManagementVisibility {
+    definition_admin_types: Vec<DocumentType>,
+    runtime_admin_types: Vec<DocumentType>,
+}
+
+impl DefinitionManagementVisibility {
+    /// 由已判定的类型级权限构造可见范围。
+    ///
+    /// # 参数
+    /// * `definition_admin_types` - 具备定义管理权的类型
+    /// * `runtime_admin_types` - 具备运行管理权的类型
+    ///
+    /// # 返回
+    /// 返回类型级可见范围，不含单据 DataScope。
+    pub fn from_type_permissions(
+        definition_admin_types: Vec<DocumentType>,
+        runtime_admin_types: Vec<DocumentType>,
+    ) -> Self {
+        Self {
+            definition_admin_types,
+            runtime_admin_types,
+        }
+    }
+
+    /// 判断是否具备该类型的定义管理权。
+    ///
+    /// # 参数
+    /// * `document_type` - 固定单据类型
+    ///
+    /// # 返回
+    /// 拥有 `definition_admin_permission` 时返回 `true`。
+    pub fn can_define(&self, document_type: DocumentType) -> bool {
+        self.definition_admin_types.contains(&document_type)
+    }
+
+    /// 判断是否可读取该类型定义版本与详情。
+    ///
+    /// # 参数
+    /// * `document_type` - 固定单据类型
+    ///
+    /// # 返回
+    /// 拥有定义管理或运行管理权限时返回 `true`。
+    pub fn can_read_detail(&self, document_type: DocumentType) -> bool {
+        self.can_define(document_type) || self.runtime_admin_types.contains(&document_type)
+    }
+
+    /// 返回具备定义管理权的类型切片。
+    ///
+    /// # 返回
+    /// 返回类型级管理范围。
+    pub fn definition_admin_types(&self) -> &[DocumentType] {
+        &self.definition_admin_types
+    }
+
+    /// 返回具备运行管理权的类型切片。
+    ///
+    /// # 返回
+    /// 返回类型级运行管理范围。
+    pub fn runtime_admin_types(&self) -> &[DocumentType] {
+        &self.runtime_admin_types
+    }
+
+    /// 与另一范围求交，防止调用方扩大已证明的类型级权限。
+    ///
+    /// # 参数
+    /// * `other` - 另一份类型级范围
+    ///
+    /// # 返回
+    /// 返回两端都具备的类型集合。
+    pub fn intersect(&self, other: &Self) -> Self {
+        Self::from_type_permissions(
+            self.definition_admin_types
+                .iter()
+                .copied()
+                .filter(|item| other.can_define(*item))
+                .collect(),
+            self.runtime_admin_types
+                .iter()
+                .copied()
+                .filter(|item| other.runtime_admin_types.contains(item))
+                .collect(),
+        )
+    }
 }
 
 impl ApprovalManagementScope {
@@ -42,6 +131,55 @@ impl ApprovalManagementScope {
             Self::Organizations(ids) => ids.iter().any(|id| id == organization_id),
         }
     }
+}
+
+/// 计算定义管理的类型级可见范围。
+///
+/// 只按各 `DocumentType` 已注册的 `definition_admin_permission` 与
+/// `runtime_admin_permission` 判定，不得把系统管理员角色名当成全部类型管理权。
+///
+/// # 错误
+/// 政策读取或 RBAC 判定失败时返回服务错误。
+pub async fn definition_management_visibility(
+    rbac: &RbacService,
+    actor: &AuditActor,
+) -> Result<DefinitionManagementVisibility> {
+    let subject = subject(actor.kind(), actor.id());
+    let mut enforced = Vec::new();
+    for document_type in ALL_DOCUMENT_TYPES {
+        let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(document_type)? else {
+            continue;
+        };
+        let can_define = rbac
+            .enforce(&subject, &policy.definition_admin_permission)
+            .await?;
+        let can_runtime = rbac.enforce(&subject, &policy.runtime_admin_permission).await?;
+        enforced.push((document_type, can_define, can_runtime));
+    }
+    Ok(visibility_from_enforced_permissions(enforced))
+}
+
+/// 按各类型 enforce 结果构造可见范围，不把系统管理员角色当成全部类型管理权。
+///
+/// # 参数
+/// * `rows` - `(单据类型, 定义管理, 运行管理)` 判定结果
+///
+/// # 返回
+/// 返回仅包含已判定为真的类型集合。
+fn visibility_from_enforced_permissions(
+    rows: impl IntoIterator<Item = (DocumentType, bool, bool)>,
+) -> DefinitionManagementVisibility {
+    let mut definition_admin_types = Vec::new();
+    let mut runtime_admin_types = Vec::new();
+    for (document_type, can_define, can_runtime) in rows {
+        if can_define {
+            definition_admin_types.push(document_type);
+        }
+        if can_runtime {
+            runtime_admin_types.push(document_type);
+        }
+    }
+    DefinitionManagementVisibility::from_type_permissions(definition_admin_types, runtime_admin_types)
 }
 
 /// 从已认证身份、当前角色与数据范围形成阻塞审批查询边界。
@@ -307,7 +445,10 @@ fn intersect_coverage(role: OrganizationCoverage, user: OrganizationCoverage) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{intersect_coverage, ApprovalManagementScope, OrganizationCoverage};
+    use super::{
+        intersect_coverage, ApprovalManagementScope, DefinitionManagementVisibility, OrganizationCoverage,
+    };
+    use entities::document_registry::DocumentType;
 
     #[test]
     fn company_scope_has_no_repository_organization_filter() {
@@ -325,5 +466,44 @@ mod tests {
             ),
             OrganizationCoverage::Targets(vec!["organization-1".to_string()])
         );
+    }
+
+    /// 类型级可见范围只认已登记权限，不把系统管理员角色当成全部类型管理权。
+    #[test]
+    fn definition_visibility_is_type_level_not_role_name() {
+        let visibility = super::visibility_from_enforced_permissions([
+            (DocumentType::StockAdjustment, true, false),
+            (DocumentType::SalesOrder, false, true),
+            (DocumentType::Invoice, false, false),
+        ]);
+        assert!(visibility.can_define(DocumentType::StockAdjustment));
+        assert!(!visibility.can_define(DocumentType::SalesOrder));
+        assert!(visibility.can_read_detail(DocumentType::SalesOrder));
+        assert!(!visibility.can_read_detail(DocumentType::Invoice));
+        assert_eq!(
+            visibility.definition_admin_types(),
+            &[DocumentType::StockAdjustment]
+        );
+    }
+
+    /// 求交不能放大调用方范围。
+    #[test]
+    fn visibility_intersect_cannot_enlarge_caller_scope() {
+        let proven = DefinitionManagementVisibility::from_type_permissions(
+            vec![DocumentType::StockAdjustment],
+            vec![DocumentType::SalesOrder],
+        );
+        let claimed = DefinitionManagementVisibility::from_type_permissions(
+            vec![DocumentType::StockAdjustment, DocumentType::SalesOrder],
+            vec![DocumentType::SalesOrder, DocumentType::CustomerReceipt],
+        );
+        let intersected = proven.intersect(&claimed);
+        assert_eq!(
+            intersected.definition_admin_types(),
+            &[DocumentType::StockAdjustment]
+        );
+        assert_eq!(intersected.runtime_admin_types(), &[DocumentType::SalesOrder]);
+        assert!(!intersected.can_define(DocumentType::SalesOrder));
+        assert!(!intersected.can_read_detail(DocumentType::CustomerReceipt));
     }
 }
