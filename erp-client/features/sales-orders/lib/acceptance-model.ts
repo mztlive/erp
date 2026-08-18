@@ -80,7 +80,9 @@ export function formatOccurredAt(iso: string): string {
     }
 }
 
-export function deriveOverall(lines: LineResultState[]): AcceptanceOverallResult {
+export function deriveOverall(
+    lines: LineResultState[],
+): AcceptanceOverallResult {
     let hasReject = false
     let hasShort = false
     let hasServiceFail = false

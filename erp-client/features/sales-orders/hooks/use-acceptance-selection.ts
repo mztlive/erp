@@ -155,15 +155,14 @@ export function useAcceptanceSelection() {
 
     const selectedLines = React.useMemo(
         () =>
-            [...selected.values()].reduce<Map<string, AcceptanceEligibleFact[]>>(
-                (map, entry) => {
-                    const list = map.get(entry.fact.salesOrderLineId) ?? []
-                    list.push(entry.fact)
-                    map.set(entry.fact.salesOrderLineId, list)
-                    return map
-                },
-                new Map(),
-            ),
+            [...selected.values()].reduce<
+                Map<string, AcceptanceEligibleFact[]>
+            >((map, entry) => {
+                const list = map.get(entry.fact.salesOrderLineId) ?? []
+                list.push(entry.fact)
+                map.set(entry.fact.salesOrderLineId, list)
+                return map
+            }, new Map()),
         [selected],
     )
 

@@ -99,7 +99,7 @@ export function useSalesOrderDetailUrlState({
     const backHref = fromQueue && returnTo ? returnTo : "/sales/orders"
     const backLabel =
         fromWorkspace === "W07"
-            ? "返回采购确认"
+            ? "返回工作台"
             : fromWorkspace === "W08"
               ? "返回采购单列表"
               : fromWorkspace === "W09"

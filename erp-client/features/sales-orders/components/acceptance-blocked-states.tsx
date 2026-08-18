@@ -18,9 +18,7 @@ export function AcceptanceBlockedState({
         <BusinessEmptyState
             kind="no-data"
             title={isCard ? "卡券单不用做客户验收" : "当前不能验收"}
-            description={
-                blockerMessage ?? "请确认本单类型与你的权限后再试。"
-            }
+            description={blockerMessage ?? "请确认本单类型与你的权限后再试。"}
             action={
                 <Button
                     render={<Link href={`/sales/orders/${salesOrderId}`} />}

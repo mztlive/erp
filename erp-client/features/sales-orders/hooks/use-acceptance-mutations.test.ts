@@ -51,9 +51,7 @@ const reverseInput: ReverseAcceptanceInput = {
     idempotencyKey: "rev-1",
 }
 
-function renderMutations(
-    submittedOverall: AcceptanceOverallResult = "PASS",
-) {
+function renderMutations(submittedOverall: AcceptanceOverallResult = "PASS") {
     const client = createFreshQueryClient()
     const invalidateSpy = vi.spyOn(client, "invalidateQueries")
     const setDraftSavedAt = vi.fn()
@@ -106,9 +104,7 @@ describe("useAcceptanceMutations", () => {
         expect(
             vi.mocked(api.saveCustomerAcceptanceDraft).mock.calls[0]?.[0],
         ).toEqual(draftInput)
-        expect(setDraftSavedAt).toHaveBeenCalledWith(
-            "2026-08-01T01:00:00.000Z",
-        )
+        expect(setDraftSavedAt).toHaveBeenCalledWith("2026-08-01T01:00:00.000Z")
         expect(invalidateSpy).toHaveBeenCalledWith({
             queryKey: salesOrderKeys.acceptanceRoot("so_1"),
         })

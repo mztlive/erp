@@ -58,10 +58,9 @@ describe("useSalesOrdersListUrlState", () => {
             result.current.pushUrl({ page: 2 })
         })
 
-        expect(replaceMock).toHaveBeenCalledWith(
-            "/test?foo=bar&page=2",
-            { scroll: false },
-        )
+        expect(replaceMock).toHaveBeenCalledWith("/test?foo=bar&page=2", {
+            scroll: false,
+        })
     })
 
     it("pushUrl 会清掉受管参数后按最新状态重建", () => {
@@ -114,9 +113,9 @@ describe("parseSalesOrdersSearchParams 边界", () => {
         )
         expect(url.search).toBe(" SO-1 ")
 
-        expect(
-            buildSalesOrdersSearchParams({ ...url, search: " SO-1 " }),
-        ).toBe("?q=SO-1")
+        expect(buildSalesOrdersSearchParams({ ...url, search: " SO-1 " })).toBe(
+            "?q=SO-1",
+        )
     })
 
     it("兼容旧业务类型别名并归一化", () => {
@@ -163,9 +162,7 @@ describe("parseSalesOrdersSearchParams 边界", () => {
 
     it("反向日期区间自动交换，非法日期丢弃", () => {
         const url = parseSalesOrdersSearchParams(
-            new URLSearchParams(
-                "createdFrom=2026-03-02&createdTo=2026-03-01",
-            ),
+            new URLSearchParams("createdFrom=2026-03-02&createdTo=2026-03-01"),
         )
         expect(url.createdFrom).toBe("2026-03-01")
         expect(url.createdTo).toBe("2026-03-02")
@@ -208,8 +205,6 @@ describe("merge / normalized", () => {
     it("normalized 在受管参数一致时返回 undefined", () => {
         const params = new URLSearchParams("q=abc&page=2")
         const state = parseSalesOrdersSearchParams(params)
-        expect(
-            normalizedSalesOrdersSearchParams(params, state),
-        ).toBeUndefined()
+        expect(normalizedSalesOrdersSearchParams(params, state)).toBeUndefined()
     })
 })

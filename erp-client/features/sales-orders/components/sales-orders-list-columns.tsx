@@ -112,9 +112,7 @@ export function buildSalesOrdersListColumns(
                 const companyName = order.contractCompanyName.trim()
                 if (!order.contractId && !contractNo) {
                     return (
-                        <span className="text-sm text-muted-foreground">
-                            —
-                        </span>
+                        <span className="text-sm text-muted-foreground">—</span>
                     )
                 }
                 const downloading = downloadingContractId === order.contractId
@@ -197,10 +195,7 @@ export function buildSalesOrdersListColumns(
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue
-                    value={row.original.amountGross}
-                    taxBasis="gross"
-                />
+                <MoneyValue value={row.original.amountGross} taxBasis="gross" />
             ),
         },
         {
@@ -218,9 +213,7 @@ export function buildSalesOrdersListColumns(
                 const order = row.original
                 if (!isPendingReviewStage(order.primaryStatus.code)) {
                     return (
-                        <span className="text-sm text-muted-foreground">
-                            —
-                        </span>
+                        <span className="text-sm text-muted-foreground">—</span>
                     )
                 }
                 const due = stageDueDisplay(order)

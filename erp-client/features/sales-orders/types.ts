@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/ui/status-badge"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type { AssignmentMode, WorkItemStatus } from "@/features/work-items"
 
 export type SalesOrderNature = "physical_service" | "card_voucher"
@@ -60,6 +61,8 @@ export type CreateSalesOrderResult = {
     reference: string
     /** 工作副本乐观锁版本；草稿意图时用于后续 `saveSalesOrderDraft` 续接编辑。 */
     workingCopyVersion?: number
+    /** 实物及服务创建后服务端返回的只读审批绑定；卡券单为空。 */
+    approval?: DocumentApprovalView
 }
 
 export type ProgressTrack = {
@@ -324,6 +327,8 @@ export type SalesOrderListItem = {
     activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
     /** 审批在途但服务端未返回正式实例/步骤/任务投影时只读阻断。 */
     cardApprovalProjectionBlocker?: string | null
+    /** 实物及服务销售单的统一只读审批结构；卡券单为空。 */
+    approval?: DocumentApprovalView
     activeChangeOrder?: SalesChangeOrderSummary | null
     allowedActions: FormalAllowedAction[]
     actionBlockers: ActionBlocker[]

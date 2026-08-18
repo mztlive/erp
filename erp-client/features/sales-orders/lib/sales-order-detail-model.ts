@@ -60,6 +60,7 @@ const REVIEW_CODES = new Set([
     "awaiting_sales",
     "awaiting_sales_lead",
     "awaiting_ops",
+    "in_approval",
 ])
 
 const FROM_FULFILLMENT = new Set(["W07", "W08", "W09"])
@@ -173,7 +174,11 @@ export function resolveFocusTask(
     order: SalesOrderListItem,
     canAccept: boolean,
 ): FocusTask | null {
-    if (isOpenProcurementRejection(order) && order.procurementRejection) {
+    if (
+        order.nature !== "physical_service" &&
+        isOpenProcurementRejection(order) &&
+        order.procurementRejection
+    ) {
         const rejection = order.procurementRejection
         const reason =
             PROCUREMENT_REJECT_REASON_LABEL[rejection.rejectReasonCode] ??
@@ -187,6 +192,16 @@ export function resolveFocusTask(
                 : `${reason}。可以改完再报采购，或作废本单。`,
             actionLabel: "去处理",
             tone: "warning",
+        }
+    }
+    if (order.nature === "physical_service" && order.approval?.instance) {
+        return {
+            id: "approval",
+            title: "销售单等审批",
+            description:
+                "审批通过后本单才会生效。采购确认是流程中的普通审批节点。",
+            actionLabel: "去审批",
+            tone: "info",
         }
     }
     if (order.activeCardSalesApproval || order.cardApprovalProjectionBlocker) {

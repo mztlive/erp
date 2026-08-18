@@ -208,9 +208,7 @@ export function buildSalesOrderCreateLineItemColumns(
             align: "end",
             renderValue: ({ item }) => (
                 <MoneyValue
-                    value={
-                        calculateTotals([item], values.taxRatePercent).gross
-                    }
+                    value={calculateTotals([item], values.taxRatePercent).gross}
                 />
             ),
         },

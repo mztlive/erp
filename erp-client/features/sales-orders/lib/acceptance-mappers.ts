@@ -132,7 +132,9 @@ export function mapOverallResultToBackend(
     return "PASSED"
 }
 
-export function mapEligibleFact(f: BackendEligibleFact): AcceptanceEligibleFact {
+export function mapEligibleFact(
+    f: BackendEligibleFact,
+): AcceptanceEligibleFact {
     return {
         fulfillmentLineId: f.fulfillment_line_id,
         fulfillmentFactType: mapFactType(f.fulfillment_fact_type),
@@ -150,7 +152,9 @@ export function mapEligibleFact(f: BackendEligibleFact): AcceptanceEligibleFact 
     }
 }
 
-export function mapSalesLine(g: BackendSalesLineGroup): AcceptanceSalesLineGroup {
+export function mapSalesLine(
+    g: BackendSalesLineGroup,
+): AcceptanceSalesLineGroup {
     return {
         salesOrderLineId: g.sales_order_line_id,
         lineNo: g.line_no,

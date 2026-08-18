@@ -1,5 +1,6 @@
 // 本文件是销售单域共享的 API 契约类型表：除 PERMISSION_VERSION 外全部为类型声明，
 // 无任何逻辑，按声明式数据表保留单文件，避免拆分出零散的纯类型模块。
+import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type {
     SalesOrderListItem,
     SalesOrderOrigin,
@@ -270,6 +271,8 @@ export type BackendSalesOrderDetail = {
     open_procurement_rejection?: BackendOpenProcurementRejection | null
     active_card_sales_approval?: BackendActiveCardSalesApproval | null
     active_low_margin_manager_confirmation?: BackendActiveLowMarginManagerConfirmation | null
+    /** 实物及服务销售单的统一只读审批结构；卡券单为空。 */
+    approval?: DocumentApprovalViewDto | null
 }
 
 /** 销售单中心内嵌的唯一活动卡券审批投影。 */

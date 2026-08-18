@@ -236,8 +236,7 @@ export function useCardSalesApprovalActions({
             publishResult({
                 status: "rejected",
                 title: "已驳回，请销售修改后重提",
-                description:
-                    "当前审批实例已结束；修改后将从领导审批重新开始。",
+                description: "当前审批实例已结束；修改后将从领导审批重新开始。",
                 reference: outcome.workflow_action_id,
                 nextResponsible: "销售",
             })
@@ -273,8 +272,7 @@ export function useCardSalesApprovalActions({
             publishResult({
                 status: "succeeded",
                 title: "审批已终止",
-                description:
-                    "本次审批已结束，冻结提交已失效；销售可重新编辑。",
+                description: "本次审批已结束，冻结提交已失效；销售可重新编辑。",
                 reference: outcome.workflow_action_id,
                 nextResponsible: "销售",
             })

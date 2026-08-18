@@ -216,9 +216,9 @@ describe("lib/sales-orders-list-filters 纯函数", () => {
         expect(
             hasStructuredSalesOrdersFilters(makeUrl("createdTo=2026-01-01")),
         ).toBe(true)
-        expect(
-            hasStructuredSalesOrdersFilters(makeUrl("customerId=c-1")),
-        ).toBe(true)
+        expect(hasStructuredSalesOrdersFilters(makeUrl("customerId=c-1"))).toBe(
+            true,
+        )
     })
 
     it("salesOrdersListFiltersActive 同时考虑关键词", () => {

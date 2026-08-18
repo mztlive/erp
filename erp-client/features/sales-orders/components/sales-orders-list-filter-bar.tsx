@@ -106,10 +106,7 @@ export function SalesOrdersListFilterBar(props: {
                         <span aria-live="polite">
                             共 {total.toLocaleString("zh-CN")} 条
                         </span>
-                        <span
-                            className="hidden md:inline"
-                            aria-hidden="true"
-                        >
+                        <span className="hidden md:inline" aria-hidden="true">
                             ·
                         </span>
                         <span className="hidden md:inline">

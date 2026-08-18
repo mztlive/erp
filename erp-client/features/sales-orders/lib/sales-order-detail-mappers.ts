@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/ui/status-badge"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     BackendCloseEligibility,
     BackendRevision,
@@ -247,6 +248,7 @@ export function mapListItemFromBackend(
         activeCardSalesApproval?: CardSalesApproval | null
         activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
         cardApprovalProjectionBlocker?: string | null
+        approval?: DocumentApprovalView
         activeChangeOrder?: SalesChangeOrderSummary | null
         customerContact?: string
         closeEligibility?: BackendCloseEligibility
@@ -345,6 +347,7 @@ export function mapListItemFromBackend(
             extras?.activeLowMarginManagerConfirmation ?? null,
         cardApprovalProjectionBlocker:
             extras?.cardApprovalProjectionBlocker ?? null,
+        approval: extras?.approval,
         activeChangeOrder: extras?.activeChangeOrder ?? null,
         allowedActions: allowed,
         actionBlockers: blockers,

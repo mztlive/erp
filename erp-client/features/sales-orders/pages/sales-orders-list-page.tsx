@@ -2,10 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import type {
-    PaginationState,
-    SortingState,
-} from "@tanstack/react-table"
+import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import { BusinessTableFrame, PageScaffold } from "@/components/business"
 import { toast } from "@/components/ui/toast"

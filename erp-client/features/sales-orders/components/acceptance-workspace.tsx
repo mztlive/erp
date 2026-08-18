@@ -4,10 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-} from "@/components/business"
+import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { fetchCustomerAcceptanceWorkspace } from "@/features/sales-orders/api/acceptance"
@@ -21,7 +18,10 @@ import { useAcceptanceWorkspaceUrlState } from "@/features/sales-orders/hooks/ac
 import { useAcceptanceSelection } from "@/features/sales-orders/hooks/use-acceptance-selection"
 import { useAcceptanceForm } from "@/features/sales-orders/hooks/use-acceptance-form"
 import { useAcceptanceMutations } from "@/features/sales-orders/hooks/use-acceptance-mutations"
-import { AcceptanceBlockedState, AcceptanceNoFactsState } from "@/features/sales-orders/components/acceptance-blocked-states"
+import {
+    AcceptanceBlockedState,
+    AcceptanceNoFactsState,
+} from "@/features/sales-orders/components/acceptance-blocked-states"
 import { AcceptanceDialogs } from "@/features/sales-orders/components/acceptance-dialogs"
 import { AcceptanceEntryForm } from "@/features/sales-orders/components/acceptance-entry-form"
 import { AcceptanceFactPool } from "@/features/sales-orders/components/acceptance-fact-pool"
@@ -215,7 +215,9 @@ export function AcceptanceWorkspace({
     const isCard = view.salesOrder.businessType === "CARD_VOUCHER"
 
     const hasUnsavedInput =
-        formDirty || selection.selected.size > 0 || selection.lineResults.size > 0
+        formDirty ||
+        selection.selected.size > 0 ||
+        selection.lineResults.size > 0
 
     return (
         <div className="flex min-w-0 flex-col gap-4">

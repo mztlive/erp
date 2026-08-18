@@ -59,11 +59,11 @@ export function useSalesChangeReviewActions({
         handlerKey === "sales_change_finance_review"
     const valid = Boolean(
         workItem &&
-            changeOrder &&
-            handlerMatches &&
-            workItem.status === "OPEN" &&
-            workItem.businessObjectType === "sales_change_review" &&
-            workItem.rootBusinessObjectId === salesOrderId,
+        changeOrder &&
+        handlerMatches &&
+        workItem.status === "OPEN" &&
+        workItem.businessObjectType === "sales_change_review" &&
+        workItem.rootBusinessObjectId === salesOrderId,
     )
     const canProcess = Boolean(
         valid && workItem?.allowedActions.includes("PROCESS"),

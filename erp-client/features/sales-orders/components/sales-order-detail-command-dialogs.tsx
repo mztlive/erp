@@ -53,10 +53,7 @@ export function SalesOrderDetailSecondaryActions({
                     variant="outline"
                     onClick={onOpenVoid}
                 >
-                    <BanIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
+                    <BanIcon data-icon="inline-start" aria-hidden="true" />
                     作废
                 </Button>
             ) : null}

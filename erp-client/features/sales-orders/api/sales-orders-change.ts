@@ -10,7 +10,10 @@ import type {
     BackendSalesChangeOrder,
     BackendSalesOrderDetail,
 } from "@/features/sales-orders/api/contracts"
-import { mapChangeOrder, throwValidation } from "@/features/sales-orders/api/mappers"
+import {
+    mapChangeOrder,
+    throwValidation,
+} from "@/features/sales-orders/api/mappers"
 import type { SalesChangeOrderSummary } from "@/features/sales-orders/types"
 
 export type StartSalesChangeOrderIntent = {

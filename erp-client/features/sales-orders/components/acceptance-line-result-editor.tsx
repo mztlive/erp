@@ -4,7 +4,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import type { AcceptanceFactSelection, LineResultState } from "@/features/sales-orders/lib/acceptance-model"
+import type {
+    AcceptanceFactSelection,
+    LineResultState,
+} from "@/features/sales-orders/lib/acceptance-model"
 import type { AcceptanceEligibleFact } from "@/features/sales-orders/lib/acceptance-types"
 
 export function AcceptanceLineResultEditor({
@@ -24,7 +27,10 @@ export function AcceptanceLineResultEditor({
     hasService: boolean
     canPost: boolean
     selected: AcceptanceFactSelection
-    onUpdate: (salesOrderLineId: string, patch: Partial<LineResultState>) => void
+    onUpdate: (
+        salesOrderLineId: string,
+        patch: Partial<LineResultState>,
+    ) => void
 }) {
     return (
         <fieldset
@@ -45,9 +51,7 @@ export function AcceptanceLineResultEditor({
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
                 <Field>
-                    <FieldLabel htmlFor={`acc-${lineId}`}>
-                        通过数量
-                    </FieldLabel>
+                    <FieldLabel htmlFor={`acc-${lineId}`}>通过数量</FieldLabel>
                     <Input
                         id={`acc-${lineId}`}
                         className="num"
