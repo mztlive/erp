@@ -240,16 +240,27 @@ pub async fn retire_definition(
 /// # 错误
 /// 查询非法时返回 422；应用端口未接入时失败关闭。
 pub async fn eligible_assignees(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
-    Path(_document_type): Path<DocumentType>,
+    Path(document_type): Path<DocumentType>,
     Query(query): Query<EligibleAssigneesQuery>,
-) -> ApprovalResult<Vec<serde_json::Value>> {
-    query
+) -> ApprovalResult<Vec<services::approval::execution::RuntimeAssigneeCandidate>> {
+    let limit = query
         .normalized_limit()
         .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
-    Err(ApprovalHttpError::from(services::Error::Internal(
-        "定义期审批人候选应用端口尚未接入，已按安全策略拒绝".to_string(),
-    )))
+    let page = definition_service(&state)
+        .eligible_assignees(
+            &actor,
+            services::approval::definition_assignees::DefinitionAssigneeQuery {
+                document_type,
+                search: query.search,
+                limit,
+            },
+        )
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    Ok(ApiResponse::ok_with_data(page.items))
 }
 
 /// 构造定义管理服务。

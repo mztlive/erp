@@ -177,7 +177,7 @@ fn reject_approval_task(
     view: &WorkItemView,
     headers: &HeaderMap,
 ) -> std::result::Result<(), WorkItemActionError> {
-    if view.work_item_type != WorkItemType::DocumentApproval {
+    if view.work_item_type != WorkItemType::DocumentApproval && view.approval_node_execution_id.is_none() {
         return Ok(());
     }
     Err(WorkItemActionError::ApprovalProtected(ApprovalHttpError::coded(

@@ -9,15 +9,23 @@ pub mod error;
 pub mod http;
 
 use axum::{
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     http::HeaderMap,
     Extension, Json,
 };
+use entities::document_registry::DocumentType;
+use services::approval::execution::{
+    ApprovalRuntimeService, RuntimeInstanceListQuery, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
+    UpgradeBindingCommand,
+};
 use services::audit::AuditActor;
 
-use crate::core::{
-    handler::approval_instance::error::{parse_optional_version, parse_version, ApprovalHttpError},
-    response::ApiResponse,
+use crate::{
+    app_state::AppState,
+    core::{
+        handler::approval_instance::error::{parse_optional_version, parse_version, ApprovalHttpError},
+        response::ApiResponse,
+    },
 };
 
 use self::http::{
@@ -43,12 +51,24 @@ type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
 /// # 错误
 /// 协议非法或运行端口未接入时返回稳定错误。
 pub async fn submit_decision(
+    State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Json(request): Json<SubmitDecisionHttpRequest>,
 ) -> ApprovalResult<serde_json::Value> {
-    let _command = decision_command(request, actor.id(), &headers)?;
-    runtime_port_unavailable()
+    let command = decision_command(request, actor.id(), &headers)?;
+    let view = runtime_service(&state)
+        .submit_decision(
+            &actor,
+            &command.work_item_id,
+            command.decision.as_str(),
+            command.reason.as_deref(),
+            command.expected_task_version,
+            &command.idempotency_key,
+        )
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(view)
 }
 
 #[permission_macros::permission(
@@ -63,13 +83,27 @@ pub async fn submit_decision(
 /// # 错误
 /// view/status 组合非法时返回 422，不得返回伪空列表。
 pub async fn instance_list(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Query(query): Query<InstanceListQuery>,
 ) -> ApprovalResult<serde_json::Value> {
-    query
+    let normalized = query
         .normalize()
         .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
-    runtime_port_unavailable()
+    let page = runtime_service(&state)
+        .instance_list(
+            &actor,
+            RuntimeInstanceListQuery {
+                view: map_list_view(normalized.view),
+                document_type: normalized.document_type,
+                status: normalized.status.map(map_status_filter),
+                limit: normalized.limit,
+            },
+        )
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(page)
 }
 
 #[permission_macros::permission(
@@ -86,11 +120,17 @@ pub async fn instance_list(
 /// # 错误
 /// 无权时不泄露存在性。
 pub async fn instance_detail(
-    Path(_id): Path<String>,
-    _headers: HeaderMap,
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
 ) -> ApprovalResult<serde_json::Value> {
     let _ = http::DETAIL_HISTORY_LIMIT;
-    runtime_port_unavailable()
+    let view = runtime_service(&state)
+        .instance_detail(&actor, &id)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(view)
 }
 
 #[permission_macros::permission(
@@ -105,14 +145,20 @@ pub async fn instance_detail(
 /// # 错误
 /// 页大小非法时返回 422。
 pub async fn instance_history(
-    Path(_id): Path<String>,
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
     headers: HeaderMap,
     Query(query): Query<InstanceHistoryQuery>,
 ) -> ApprovalResult<serde_json::Value> {
-    query
+    let limit = query
         .normalized_limit()
         .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
-    runtime_port_unavailable()
+    let items = runtime_service(&state)
+        .instance_history(&actor, &id, limit)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(items)
 }
 
 #[permission_macros::permission(
@@ -129,10 +175,16 @@ pub async fn instance_history(
 /// # 错误
 /// 无权时不泄露实例存在性。
 pub async fn recovery_options(
-    Path(_id): Path<String>,
-    _headers: HeaderMap,
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
 ) -> ApprovalResult<serde_json::Value> {
-    runtime_port_unavailable()
+    let view = runtime_service(&state)
+        .recovery_options(&actor, &id)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(view)
 }
 
 #[permission_macros::permission(
@@ -149,14 +201,20 @@ pub async fn recovery_options(
 /// # 错误
 /// 页大小非法时返回 422。
 pub async fn eligible_reassignees(
-    Path(_id): Path<String>,
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
     headers: HeaderMap,
     Query(query): Query<EligibleReassigneesQuery>,
 ) -> ApprovalResult<serde_json::Value> {
-    query
+    let limit = query
         .normalized_limit()
         .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
-    runtime_port_unavailable()
+    let items = runtime_service(&state)
+        .eligible_reassignees(&actor, &id, query.search.as_deref(), limit)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(items)
 }
 
 #[permission_macros::permission(
@@ -173,13 +231,18 @@ pub async fn eligible_reassignees(
 /// # 错误
 /// 版本非法或端口未接入时返回稳定错误。
 pub async fn resume_current_approver(
+    State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(request): Json<ResumeApproverHttpRequest>,
 ) -> ApprovalResult<serde_json::Value> {
-    let _command = resume_command(id, request, actor.id(), &headers)?;
-    runtime_port_unavailable()
+    let command = resume_command(id, request, actor.id(), &headers)?;
+    let view = runtime_service(&state)
+        .resume_current_approver(&actor, &command.approval_process_instance_id)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(view)
 }
 
 #[permission_macros::permission(
@@ -196,13 +259,22 @@ pub async fn resume_current_approver(
 /// # 错误
 /// 原审批人已恢复或 blocker 不匹配时由服务返回稳定冲突。
 pub async fn reassign_current_approver(
+    State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(request): Json<ReassignApproverHttpRequest>,
 ) -> ApprovalResult<serde_json::Value> {
-    let _command = reassign_command(id, request, actor.id(), &headers)?;
-    runtime_port_unavailable()
+    let command = reassign_command(id, request, actor.id(), &headers)?;
+    let view = runtime_service(&state)
+        .reassign_current_approver(
+            &actor,
+            &command.approval_process_instance_id,
+            &command.target_user_id,
+        )
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(view)
 }
 
 #[permission_macros::permission(
@@ -219,13 +291,18 @@ pub async fn reassign_current_approver(
 /// # 错误
 /// 人员失效 blocker 必须拒绝。
 pub async fn cancel_blocked(
+    State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(request): Json<CancelBlockedHttpRequest>,
 ) -> ApprovalResult<serde_json::Value> {
-    let _command = cancel_blocked_command(id, request, actor.id(), &headers)?;
-    runtime_port_unavailable()
+    let command = cancel_blocked_command(id, request, actor.id(), &headers)?;
+    let view = runtime_service(&state)
+        .cancel_blocked(&actor, &command.approval_process_instance_id)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(view)
 }
 
 #[permission_macros::permission(
@@ -242,24 +319,63 @@ pub async fn cancel_blocked(
 /// # 错误
 /// 请求夹带 definition ID 时在反序列化阶段拒绝。
 pub async fn upgrade_binding(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
-    Path(_path): Path<(String, String)>,
+    Path((document_type, document_id)): Path<(DocumentType, String)>,
     Json(request): Json<UpgradeBindingHttpRequest>,
 ) -> ApprovalResult<serde_json::Value> {
     ensure_non_empty_reason(&request.reason, &headers)?;
-    parse_version(&request.expected_document_version, "单据", &headers)?;
-    parse_version(&request.expected_approval_binding_version, "审批绑定", &headers)?;
-    runtime_port_unavailable()
+    let expected_document_version = parse_version(&request.expected_document_version, "单据", &headers)?;
+    let expected_approval_binding_version =
+        parse_version(&request.expected_approval_binding_version, "审批绑定", &headers)?;
+    let view = runtime_service(&state)
+        .upgrade_binding(
+            &actor,
+            UpgradeBindingCommand {
+                document_type,
+                document_id,
+                reason: request.reason,
+                expected_document_version,
+                expected_approval_binding_version,
+                idempotency_key: request.idempotency_key,
+            },
+        )
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    ok_json(view)
 }
 
-/// 运行查询/命令应用端口尚未以 HTTP 面交付时失败关闭。
-///
-/// # 错误
-/// 始终返回内部错误，避免伪造成功。
-fn runtime_port_unavailable<T>() -> ApprovalResult<T> {
-    Err(ApprovalHttpError::from(services::Error::Internal(
-        "审批运行应用端口尚未接入，已按安全策略拒绝".to_string(),
-    )))
+/// 构造运行服务。
+fn runtime_service(state: &AppState) -> ApprovalRuntimeService {
+    ApprovalRuntimeService::new(state.db(), state.rbac())
+}
+
+/// 将服务视图序列化为 JSON 响应。
+fn ok_json<T: serde::Serialize>(data: T) -> ApprovalResult<serde_json::Value> {
+    serde_json::to_value(data)
+        .map(ApiResponse::ok_with_data)
+        .map_err(|error| ApprovalHttpError::from(services::Error::Internal(error.to_string())))
+}
+
+/// 映射 HTTP view。
+fn map_list_view(view: self::http::InstanceListView) -> RuntimeInstanceListView {
+    match view {
+        self::http::InstanceListView::Mine => RuntimeInstanceListView::Mine,
+        self::http::InstanceListView::Started => RuntimeInstanceListView::Started,
+        self::http::InstanceListView::Managed => RuntimeInstanceListView::Managed,
+        self::http::InstanceListView::Blocked => RuntimeInstanceListView::Blocked,
+    }
+}
+
+/// 映射 HTTP 状态过滤。
+fn map_status_filter(status: self::http::InstanceStatusFilter) -> RuntimeInstanceStatusFilter {
+    match status {
+        self::http::InstanceStatusFilter::Running => RuntimeInstanceStatusFilter::Running,
+        self::http::InstanceStatusFilter::Approved => RuntimeInstanceStatusFilter::Approved,
+        self::http::InstanceStatusFilter::Cancelled => RuntimeInstanceStatusFilter::Cancelled,
+        self::http::InstanceStatusFilter::Blocked => RuntimeInstanceStatusFilter::Blocked,
+    }
 }
 
 /// 协议层已注入 actor 的决定命令。

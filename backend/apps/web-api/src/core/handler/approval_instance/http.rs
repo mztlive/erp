@@ -254,6 +254,19 @@ pub enum DecisionValue {
     Reject,
 }
 
+impl DecisionValue {
+    /// 返回稳定决定码。
+    ///
+    /// # 返回
+    /// 返回 `APPROVE` 或 `REJECT`。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approve => "APPROVE",
+            Self::Reject => "REJECT",
+        }
+    }
+}
+
 /// 恢复当前审批人请求。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
