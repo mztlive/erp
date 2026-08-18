@@ -43,12 +43,9 @@ export function deriveSalesOrderDetailState(
     const acceptanceExpanded = section === "acceptance"
     const showGoodsApproval =
         order.nature === "physical_service" && Boolean(order.approval)
-    const showCardApproval =
-        Boolean(
-            order.activeCardSalesApproval ||
-            order.cardApprovalProjectionBlocker,
-        ) && section === "approval"
-    const showApproval = showGoodsApproval || showCardApproval
+    const showVoucherApproval =
+        order.nature === "card_voucher" && Boolean(order.approval)
+    const showApproval = showGoodsApproval || showVoucherApproval
     const canResubmit = rejectionAllowsResubmit(order)
     const canVoid = rejectionAllowsVoid(order)
     const canRequestLowMargin = Boolean(

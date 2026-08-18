@@ -84,9 +84,7 @@ function makeOrder(
         commercialReadOnly: false,
         revisions: [],
         procurementRejection: null,
-        activeCardSalesApproval: null,
         activeLowMarginManagerConfirmation: null,
-        cardApprovalProjectionBlocker: null,
         activeChangeOrder: null,
         allowedActions: [],
         actionBlockers: [],
@@ -189,42 +187,53 @@ describe("deriveSalesOrderDetailState", () => {
         expect(card.canAccept).toBe(false)
     })
 
-    it("shows the approval panel only inside the approval section", () => {
-        const order = makeOrder({
-            nature: "card_voucher",
-            activeCardSalesApproval: {
-                approvalInstanceId: "ai-1",
-                instanceVersion: "1",
-                approvalStepInstanceId: "si-1",
-                stepVersion: "1",
-                processingState: "READY",
-                subjectVersion: "1",
-                salesOrderSubmissionId: "sub-1",
-                submissionNo: 1,
-                frozenSubmissionSummary: "摘要",
-                expectedReviewStatus: "PENDING_SALES_LEAD",
-                allowedActions: ["APPROVE"],
-                actionBlockers: [],
-                workItemId: "wi-1",
-                workItemType: "CARD_SALES_MANAGER_APPROVAL",
-                taskVersion: "1",
-                workItemStatus: "OPEN",
-                assignmentMode: "DIRECT",
+    it("embeds the voucher-order approval area from the server projection", () => {
+        const binding = {
+            requirement: "PROCESS_REQUIRED" as const,
+            definition: {
+                id: "def-v1",
+                name: "卡券销售审批",
+                version: 3,
+                nodes: [
+                    { key: "n1", name: "销售审核", assigneeName: "张三" },
+                    { key: "n2", name: "卡券运营", assigneeName: "李四" },
+                ],
+                publishedNodes: [],
             },
-        })
-
-        expect(
-            deriveSalesOrderDetailState(order, {
-                ...baseInput,
-                section: "approval",
-            }).showApproval,
-        ).toBe(true)
-        expect(deriveSalesOrderDetailState(order, baseInput).showApproval).toBe(
-            false,
+            recentHistory: [],
+            historyHasMore: false,
+            allowedActions: ["SUBMIT"] as const,
+        }
+        const draft = deriveSalesOrderDetailState(
+            makeOrder({
+                nature: "card_voucher",
+                approval: binding,
+            }),
+            baseInput,
         )
-        expect(
-            deriveSalesOrderDetailState(order, baseInput).focusTask?.id,
-        ).toBe("approval")
+        expect(draft.showApproval).toBe(true)
+        expect(draft.focusTask).toBeNull()
+
+        const running = deriveSalesOrderDetailState(
+            makeOrder({
+                nature: "card_voucher",
+                approval: {
+                    ...binding,
+                    instance: {
+                        id: "inst-v1",
+                        status: "RUNNING",
+                        currentRoundNo: 1,
+                        currentNodeName: "卡券运营",
+                        currentAssigneeName: "李四",
+                    },
+                    allowedActions: ["CANCEL"] as const,
+                },
+            }),
+            baseInput,
+        )
+        expect(running.showApproval).toBe(true)
+        expect(running.focusTask?.id).toBe("approval")
+        expect(running.focusTask?.title).toBe("卡券销售等审批")
     })
 
     it("opens the editor for drafts without an explicit mode", () => {

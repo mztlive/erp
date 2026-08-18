@@ -5,7 +5,6 @@ import * as salesOrdersApi from "@/features/sales-orders/api/sales-orders"
 import {
     salesOrderKeys,
     useAdjustProcurementRejectionDraftMutation,
-    useCancelCardSalesApprovalMutation,
     useCreateSalesOrderExportJobMutation,
     useCreateSalesOrderMutation,
     useResolveProcurementRejectionMutation,
@@ -15,7 +14,6 @@ import {
     useSalesOrdersQuery,
     useSaveSalesOrderDraftMutation,
     useStartSalesChangeOrderMutation,
-    useSubmitCardSalesApprovalDecisionMutation,
     useSubmitSalesOrderMutation,
 } from "@/features/sales-orders/hooks/queries"
 import type { CreateSalesOrderResult } from "@/features/sales-orders/types"
@@ -30,7 +28,6 @@ import {
 
 vi.mock("@/features/sales-orders/api/sales-orders", () => ({
     adjustProcurementRejectionDraft: vi.fn(),
-    cancelCardSalesApproval: vi.fn(),
     createSalesOrder: vi.fn(),
     createSalesOrderExportJob: vi.fn(),
     fetchSalesOrderDetail: vi.fn(),
@@ -39,7 +36,6 @@ vi.mock("@/features/sales-orders/api/sales-orders", () => ({
     resolveProcurementRejection: vi.fn(),
     saveSalesOrderDraft: vi.fn(),
     startSalesChangeOrder: vi.fn(),
-    submitCardSalesApprovalDecision: vi.fn(),
     submitSalesChangeReviewDecision: vi.fn(),
     submitSalesOrder: vi.fn(),
 }))
@@ -498,106 +494,6 @@ describe("sales order mutations", () => {
         })
         expect(invalidateSpy).toHaveBeenCalledWith({
             queryKey: ["work-items"],
-        })
-    })
-
-    it("useSubmitCardSalesApprovalDecisionMutation invalidates all sales orders", async () => {
-        mockedApi.submitCardSalesApprovalDecision.mockResolvedValue({
-            approval_instance_status: "APPROVED",
-            work_item_id: "wi-1",
-            work_item_status: "COMPLETED",
-            business_result: {
-                outcome: "MANAGER_APPROVED",
-                sales_order_id: "so-1",
-                sales_order_review_id: "sr-1",
-                workflow_action_id: "wf-1",
-                sales_order_commercial_status: "PENDING_OPERATIONS",
-            },
-        } as never)
-        const client = createFreshQueryClient()
-        const invalidateSpy = vi.spyOn(client, "invalidateQueries")
-
-        const { result } = renderHookWithProviders(
-            () => useSubmitCardSalesApprovalDecisionMutation(),
-            { queryClient: client },
-        )
-
-        const input = {
-            approvalInstanceId: "ai-1",
-            expectedInstanceVersion: "1",
-            approvalStepInstanceId: "as-1",
-            expectedStepVersion: "1",
-            workItemId: "wi-1",
-            expectedTaskVersion: "3",
-            expectedSubjectVersion: "sv-1",
-            decision: {
-                salesOrderId: "so-1",
-                salesOrderSubmissionId: "sub-1",
-                expectedSalesOrderLockVersion: 3,
-                expectedSubmissionNo: 2,
-                workItemType: "CARD_SALES_MANAGER_APPROVAL",
-                expectedReviewStatus: "PENDING_SALES_LEAD",
-                reviewDecision: "APPROVE",
-            } as const,
-            idempotencyKey: "key-6",
-        }
-        await act(async () => {
-            await result.current.mutateAsync(input)
-        })
-
-        expect(mockedApi.submitCardSalesApprovalDecision).toHaveBeenCalledWith(
-            input,
-            expect.anything(),
-        )
-        expect(invalidateSpy).toHaveBeenCalledWith({
-            queryKey: salesOrderKeys.all,
-        })
-    })
-
-    it("useCancelCardSalesApprovalMutation invalidates all sales orders", async () => {
-        mockedApi.cancelCardSalesApproval.mockResolvedValue({
-            approval_instance_status: "CANCELLED",
-            business_result: {
-                outcome: "CANCELLED_TO_EDITABLE_DRAFT",
-                sales_order_id: "so-1",
-                sales_order_version: "3",
-                sales_order_commercial_status: "DRAFT",
-                sales_order_review_status: "NOT_SUBMITTED",
-                sales_order_submission_id: "sub-1",
-                submission_version: "2",
-                submission_status: "SUPERSEDED",
-                workflow_action_id: "wf-1",
-            },
-        } as never)
-        const client = createFreshQueryClient()
-        const invalidateSpy = vi.spyOn(client, "invalidateQueries")
-
-        const { result } = renderHookWithProviders(
-            () => useCancelCardSalesApprovalMutation(),
-            { queryClient: client },
-        )
-
-        const input = {
-            approvalInstanceId: "ai-1",
-            currentStepInstanceId: "as-1",
-            workItemId: "wi-1",
-            expectedInstanceVersion: "1",
-            expectedStepVersion: "1",
-            expectedTaskVersion: "3",
-            expectedSubjectVersion: "sv-1",
-            reason: "申请人撤回并继续修改",
-            idempotencyKey: "key-7",
-        }
-        await act(async () => {
-            await result.current.mutateAsync(input)
-        })
-
-        expect(mockedApi.cancelCardSalesApproval).toHaveBeenCalledWith(
-            input,
-            expect.anything(),
-        )
-        expect(invalidateSpy).toHaveBeenCalledWith({
-            queryKey: salesOrderKeys.all,
         })
     })
 

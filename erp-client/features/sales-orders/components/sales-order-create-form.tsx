@@ -39,6 +39,8 @@ import { SalesOrderCreateSummaryPanel } from "@/features/sales-orders/components
 import { SalesOrderCreateResubmitDialog } from "@/features/sales-orders/components/sales-order-create-resubmit-dialog"
 import { SalesOrderApprovalArea } from "@/features/sales-orders/components/sales-order-approval-area"
 import { SalesOrderSubmitConfirmDialog } from "@/features/sales-orders/components/sales-order-submit-confirm-dialog"
+import { VoucherSalesOrderApprovalArea } from "@/features/sales-orders/components/voucher-sales-order-approval-area"
+import { VoucherSalesOrderSubmitConfirmDialog } from "@/features/sales-orders/components/voucher-sales-order-submit-confirm-dialog"
 
 import type {
     SalesOrderEditorPurpose,
@@ -123,10 +125,7 @@ export function SalesOrderCreateForm({
                 ),
         },
         onSubmit: async ({ value }) => {
-            if (
-                value.nature === "physical_service" &&
-                submission.submitIntentRef.current === "SUBMIT"
-            ) {
+            if (submission.submitIntentRef.current === "SUBMIT") {
                 submission.setSubmitConfirmOpen(true)
                 return
             }
@@ -245,13 +244,20 @@ export function SalesOrderCreateForm({
                 draftSaved={submission.draftSaved}
             />
 
-            {nature !== "card_voucher" &&
-            (submission.approval || submission.draftIdentity) ? (
-                <SalesOrderApprovalArea
-                    phase="draft"
-                    approval={submission.approval}
-                    documentId={submission.draftIdentity?.salesOrderId}
-                />
+            {submission.approval || submission.draftIdentity ? (
+                nature === "card_voucher" ? (
+                    <VoucherSalesOrderApprovalArea
+                        phase="draft"
+                        approval={submission.approval}
+                        documentId={submission.draftIdentity?.salesOrderId}
+                    />
+                ) : (
+                    <SalesOrderApprovalArea
+                        phase="draft"
+                        approval={submission.approval}
+                        documentId={submission.draftIdentity?.salesOrderId}
+                    />
+                )
             ) : null}
 
             <form
@@ -348,16 +354,29 @@ export function SalesOrderCreateForm({
                 onConfirm={() => submission.confirmResubmit()}
             />
 
-            <SalesOrderSubmitConfirmDialog
-                open={submission.submitConfirmOpen}
-                onOpenChange={submission.setSubmitConfirmOpen}
-                approval={submission.approval}
-                pending={submission.isSubmitting}
-                onConfirm={() => {
-                    submission.setSubmitConfirmOpen(false)
-                    void submission.handleSubmit(form.state.values, form)
-                }}
-            />
+            {nature === "card_voucher" ? (
+                <VoucherSalesOrderSubmitConfirmDialog
+                    open={submission.submitConfirmOpen}
+                    onOpenChange={submission.setSubmitConfirmOpen}
+                    approval={submission.approval}
+                    pending={submission.isSubmitting}
+                    onConfirm={() => {
+                        submission.setSubmitConfirmOpen(false)
+                        void submission.handleSubmit(form.state.values, form)
+                    }}
+                />
+            ) : (
+                <SalesOrderSubmitConfirmDialog
+                    open={submission.submitConfirmOpen}
+                    onOpenChange={submission.setSubmitConfirmOpen}
+                    approval={submission.approval}
+                    pending={submission.isSubmitting}
+                    onConfirm={() => {
+                        submission.setSubmitConfirmOpen(false)
+                        void submission.handleSubmit(form.state.values, form)
+                    }}
+                />
+            )}
         </>
     )
 

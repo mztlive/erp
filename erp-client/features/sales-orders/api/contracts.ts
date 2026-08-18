@@ -5,7 +5,6 @@ import type {
     SalesOrderListItem,
     SalesOrderOrigin,
 } from "@/features/sales-orders/types"
-import type { ApprovalRuntimeViewDto } from "@/features/work-items/types"
 
 // ─── 导出视图类型（保持 queries 契约） ───────────────────────────────────────
 
@@ -269,43 +268,9 @@ export type BackendSalesOrderDetail = {
     can_start_sales_change_order: boolean
     change_order_blocker?: string | null
     open_procurement_rejection?: BackendOpenProcurementRejection | null
-    active_card_sales_approval?: BackendActiveCardSalesApproval | null
     active_low_margin_manager_confirmation?: BackendActiveLowMarginManagerConfirmation | null
-    /** 实物及服务销售单的统一只读审批结构；卡券单为空。 */
+    /** 统一只读审批结构；实物为 SalesOrder，卡券为 VoucherSalesOrder。 */
     approval?: DocumentApprovalViewDto | null
-}
-
-/** 销售单中心内嵌的唯一活动卡券审批投影。 */
-export type BackendActiveCardSalesApproval = {
-    approval_instance_id: string
-    instance_version: string | number
-    approval_step_instance_id: string
-    step_version: string | number
-    work_item_id?: string | null
-    task_version?: string | number | null
-    work_item_type?:
-        | "CARD_SALES_MANAGER_APPROVAL"
-        | "CARD_SALES_OPERATION_APPROVAL"
-        | null
-    subject_version: string
-    work_item_status?: "OPEN" | "COMPLETED" | "CLOSED" | null
-    processing_state: "READY" | "APPROVAL_BLOCKED"
-    processing_blocker?: { code: string; message: string } | null
-    assignment_mode?: "DIRECT" | "POOL" | null
-    owner_user?: { id: string; display_name: string } | null
-    sales_order_submission_id: string
-    submission_no: number
-    frozen_submission_summary: string
-    expected_review_status: "PENDING_SALES_LEAD" | "PENDING_OPERATIONS"
-    allowed_actions: Array<
-        "START_PROCESSING" | "APPROVE" | "REJECT" | "TERMINATE" | "CANCEL"
-    >
-    action_blockers: Array<{
-        action: string
-        code?: string
-        reason?: string
-        message?: string
-    }>
 }
 
 export type BackendContractDetail = {
@@ -464,73 +429,6 @@ export type BackendLowMarginManagerDecisionResult = {
               sales_order_review_id: string
               workflow_action_id: string
           }
-}
-
-export type CardSalesApprovalBusinessResult =
-    | {
-          outcome: "MANAGER_APPROVED"
-          sales_order_id: string
-          sales_order_review_id: string
-          workflow_action_id: string
-          sales_order_commercial_status: "PENDING_OPERATIONS"
-          next_work_item_id?: string | null
-          next_work_item_status?: "OPEN" | null
-      }
-    | {
-          outcome: "OPERATIONS_APPROVED_AND_EFFECTIVE"
-          sales_order_id: string
-          sales_order_review_id: string
-          workflow_action_id: string
-          sales_order_commercial_status: "EFFECTIVE"
-          sales_order_revision_id: string
-          receivable_account_id: string
-          execution_projection_operation_id: string
-      }
-    | {
-          outcome: "REJECTED_TO_SALES"
-          sales_order_id: string
-          sales_order_review_id: string
-          workflow_action_id: string
-          sales_order_commercial_status: string
-      }
-    | {
-          outcome: "TERMINATED"
-          sales_order_id: string
-          sales_order_submission_id: string
-          submission_status: "SUPERSEDED"
-          workflow_action_id: string
-          sales_order_commercial_status: "DRAFT"
-      }
-
-export type SubmitCardSalesApprovalDecisionResult = {
-    approval_instance_status:
-        | "RUNNING"
-        | "APPROVED"
-        | "REJECTED"
-        | "TERMINATED"
-        | "BLOCKED"
-    work_item_id: string
-    work_item_status: "COMPLETED"
-    business_result: CardSalesApprovalBusinessResult
-    approval: ApprovalRuntimeViewDto
-}
-
-export type CancelCardSalesApprovalResult = {
-    approval_instance_status: "CANCELLED"
-    work_item_id?: string | null
-    work_item_status?: "CLOSED" | null
-    business_result: {
-        outcome: "CANCELLED_TO_EDITABLE_DRAFT"
-        sales_order_id: string
-        sales_order_version: string
-        sales_order_commercial_status: "DRAFT"
-        sales_order_review_status: "NOT_SUBMITTED"
-        sales_order_submission_id: string
-        submission_version: string
-        submission_status: "SUPERSEDED"
-        workflow_action_id: string
-    }
-    approval: ApprovalRuntimeViewDto
 }
 
 export type ExportJobResult = {
