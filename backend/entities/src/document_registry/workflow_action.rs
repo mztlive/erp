@@ -8,6 +8,8 @@ use crate::errors::{Error, Result};
 use crate::ids::{BusinessDocumentId, WorkflowActionId};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+use bpm::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+
 /// 状态代码最大长度。
 const STATUS_CODE_MAX_LEN: usize = 64;
 /// 操作者 ID 最大长度。
@@ -34,6 +36,30 @@ pub enum WorkflowActionType {
     Void,
     /// 完成。
     Complete,
+    /// 单据绑定审批定义。
+    ApprovalDefinitionBound,
+    /// 未提交单据升级审批定义。
+    ApprovalDefinitionUpgraded,
+    /// 审批已启动。
+    ApprovalStarted,
+    /// 节点通过。
+    ApprovalNodeApproved,
+    /// 节点驳回。
+    ApprovalNodeRejected,
+    /// 审批轮次重启。
+    ApprovalRoundRestarted,
+    /// 审批受阻。
+    ApprovalBlocked,
+    /// 审批恢复。
+    ApprovalRecovered,
+    /// 审批改派。
+    ApprovalReassigned,
+    /// 审批取消。
+    ApprovalCancelled,
+    /// 受阻取消。
+    ApprovalBlockedCancelled,
+    /// 审批最终完成。
+    ApprovalCompleted,
 }
 
 impl WorkflowActionType {
@@ -49,6 +75,18 @@ impl WorkflowActionType {
             Self::Confirm => "确认",
             Self::Void => "作废",
             Self::Complete => "完成",
+            Self::ApprovalDefinitionBound => "绑定审批定义",
+            Self::ApprovalDefinitionUpgraded => "升级审批定义",
+            Self::ApprovalStarted => "启动审批",
+            Self::ApprovalNodeApproved => "审批节点通过",
+            Self::ApprovalNodeRejected => "审批节点驳回",
+            Self::ApprovalRoundRestarted => "审批轮次重启",
+            Self::ApprovalBlocked => "审批受阻",
+            Self::ApprovalRecovered => "审批恢复",
+            Self::ApprovalReassigned => "审批改派",
+            Self::ApprovalCancelled => "审批取消",
+            Self::ApprovalBlockedCancelled => "受阻取消",
+            Self::ApprovalCompleted => "审批完成",
         }
     }
 
@@ -64,8 +102,53 @@ impl WorkflowActionType {
             Self::Confirm => "confirm",
             Self::Void => "void",
             Self::Complete => "complete",
+            Self::ApprovalDefinitionBound => "approval_definition_bound",
+            Self::ApprovalDefinitionUpgraded => "approval_definition_upgraded",
+            Self::ApprovalStarted => "approval_started",
+            Self::ApprovalNodeApproved => "approval_node_approved",
+            Self::ApprovalNodeRejected => "approval_node_rejected",
+            Self::ApprovalRoundRestarted => "approval_round_restarted",
+            Self::ApprovalBlocked => "approval_blocked",
+            Self::ApprovalRecovered => "approval_recovered",
+            Self::ApprovalReassigned => "approval_reassigned",
+            Self::ApprovalCancelled => "approval_cancelled",
+            Self::ApprovalBlockedCancelled => "approval_blocked_cancelled",
+            Self::ApprovalCompleted => "approval_completed",
         }
     }
+
+    /// 判断是否属于审批审计动作。
+    ///
+    /// # 返回
+    /// 12 个审批动作返回 `true`。
+    pub fn is_approval_action(self) -> bool {
+        matches!(
+            self,
+            Self::ApprovalDefinitionBound
+                | Self::ApprovalDefinitionUpgraded
+                | Self::ApprovalStarted
+                | Self::ApprovalNodeApproved
+                | Self::ApprovalNodeRejected
+                | Self::ApprovalRoundRestarted
+                | Self::ApprovalBlocked
+                | Self::ApprovalRecovered
+                | Self::ApprovalReassigned
+                | Self::ApprovalCancelled
+                | Self::ApprovalBlockedCancelled
+                | Self::ApprovalCompleted
+        )
+    }
+}
+
+/// 审批动作的结构化引用，不得把身份拼入 comment。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalActionContext {
+    /// 审批实例。
+    pub approval_process_instance_id: ApprovalProcessInstanceId,
+    /// 轮次。
+    pub current_round_no: u32,
+    /// 节点执行。
+    pub approval_node_execution_id: ApprovalNodeExecutionId,
 }
 
 /// 工作流动作创建数据。
@@ -111,6 +194,9 @@ pub struct WorkflowAction {
     pub actor_role: String,
     /// 意见或驳回原因。
     pub comment: Option<String>,
+    /// 审批结构化引用。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_context: Option<ApprovalActionContext>,
 }
 
 impl WorkflowAction {
@@ -129,6 +215,31 @@ impl WorkflowAction {
     /// # 错误
     /// 当状态代码为空/超长/含非法字符，或操作者/角色为空/超长时返回错误。
     pub fn new(id: WorkflowActionId, data: WorkflowActionData) -> Result<Self> {
+        Self::construct(id, data, None)
+    }
+
+    /// 创建带审批结构化引用的动作。
+    ///
+    /// # 参数
+    /// * `id` - 动作主键
+    /// * `data` - 创建数据
+    /// * `approval_context` - 实例、轮次与节点执行
+    ///
+    /// # 错误
+    /// 基础字段非法或动作不是审批动作时返回错误。
+    pub fn new_with_approval_context(
+        id: WorkflowActionId,
+        data: WorkflowActionData,
+        approval_context: ApprovalActionContext,
+    ) -> Result<Self> {
+        Self::construct(id, data, Some(approval_context))
+    }
+
+    fn construct(
+        id: WorkflowActionId,
+        data: WorkflowActionData,
+        approval_context: Option<ApprovalActionContext>,
+    ) -> Result<Self> {
         let from_status = normalize_status_code(data.from_status, "迁移前状态")?;
         let to_status = normalize_status_code(data.to_status, "迁移后状态")?;
         let actor_id =
@@ -140,6 +251,7 @@ impl WorkflowAction {
             "责任角色过长",
         )?;
         let comment = normalize_optional_text(data.comment, "意见", COMMENT_MAX_LEN)?;
+        let approval_context = validate_approval_context(data.action_type, approval_context)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             document_id: data.document_id,
@@ -149,7 +261,29 @@ impl WorkflowAction {
             actor_id,
             actor_role,
             comment,
+            approval_context,
         })
+    }
+}
+
+/// 审批动作必须携带结构化上下文，不得把身份拼入意见。
+///
+/// # 错误
+/// 审批动作缺少上下文，或非审批动作携带上下文时返回错误。
+fn validate_approval_context(
+    action_type: WorkflowActionType,
+    approval_context: Option<ApprovalActionContext>,
+) -> Result<Option<ApprovalActionContext>> {
+    match (action_type.is_approval_action(), approval_context) {
+        (true, Some(context)) => {
+            if context.current_round_no == 0 {
+                return Err(Error::from("审批轮次必须从 1 开始"));
+            }
+            Ok(Some(context))
+        }
+        (true, None) => Err(Error::from("审批动作必须提供结构化审批上下文")),
+        (false, Some(_)) => Err(Error::from("非审批动作不得携带审批上下文")),
+        (false, None) => Ok(None),
     }
 }
 
@@ -254,6 +388,34 @@ mod tests {
         assert_eq!(WorkflowActionType::Submit.as_str(), "submit");
         assert_eq!(WorkflowActionType::Reject.label(), "驳回");
         assert_eq!(WorkflowActionType::Confirm.label(), "确认");
+        assert_eq!(WorkflowActionType::ApprovalStarted.as_str(), "approval_started");
+        assert!(WorkflowActionType::ApprovalCompleted.is_approval_action());
+        assert!(!WorkflowActionType::Submit.is_approval_action());
+    }
+
+    /// 审批动作必须带结构化上下文，身份不得只写在意见里。
+    #[test]
+    fn approval_action_requires_structured_context() {
+        let missing = WorkflowActionData {
+            action_type: WorkflowActionType::ApprovalStarted,
+            ..data()
+        };
+        assert!(WorkflowAction::new(WorkflowActionId::new("wa-2"), missing).is_err());
+
+        let action = WorkflowAction::new_with_approval_context(
+            WorkflowActionId::new("wa-3"),
+            WorkflowActionData {
+                action_type: WorkflowActionType::ApprovalNodeRejected,
+                ..data()
+            },
+            super::ApprovalActionContext {
+                approval_process_instance_id: bpm::ApprovalProcessInstanceId::new("inst-1"),
+                current_round_no: 2,
+                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-1"),
+            },
+        )
+        .unwrap();
+        assert_eq!(action.approval_context.as_ref().unwrap().current_round_no, 2);
     }
 
     /// BSON 往返。

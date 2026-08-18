@@ -99,6 +99,8 @@ pub enum ReviewStatus {
     Approved,
     /// 已驳回。
     Rejected,
+    /// 审批中。
+    InApproval,
 }
 
 impl ReviewStatus {
@@ -115,6 +117,7 @@ impl ReviewStatus {
             Self::PendingOperations => "待运营",
             Self::Approved => "已通过",
             Self::Rejected => "已驳回",
+            Self::InApproval => "审批中",
         }
     }
 
@@ -131,6 +134,7 @@ impl ReviewStatus {
             Self::PendingOperations => "PENDING_OPERATIONS",
             Self::Approved => "APPROVED",
             Self::Rejected => "REJECTED",
+            Self::InApproval => "IN_APPROVAL",
         }
     }
 }
@@ -142,7 +146,12 @@ impl DocumentState for ReviewStatus {
     /// 待销售领导 → 待运营 → 通过/驳回；驳回后修改重新提交回未提交。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::NotSubmitted => &[Self::PendingProcurementConfirmation, Self::PendingSalesLeader],
+            Self::NotSubmitted => &[
+                Self::PendingProcurementConfirmation,
+                Self::PendingSalesLeader,
+                Self::InApproval,
+            ],
+            Self::InApproval => &[Self::Approved, Self::NotSubmitted],
             Self::PendingProcurementConfirmation => {
                 &[Self::PendingLowMarginSuperior, Self::Approved, Self::Rejected]
             }

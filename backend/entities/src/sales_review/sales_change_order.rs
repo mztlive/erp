@@ -91,6 +91,8 @@ pub enum SalesChangeOrderStatus {
     Rejected,
     /// 已作废。
     Voided,
+    /// 审批中。
+    InApproval,
 }
 
 impl SalesChangeOrderStatus {
@@ -106,6 +108,7 @@ impl SalesChangeOrderStatus {
             Self::Effective => "已生效",
             Self::Rejected => "已驳回",
             Self::Voided => "已作废",
+            Self::InApproval => "审批中",
         }
     }
 
@@ -121,6 +124,7 @@ impl SalesChangeOrderStatus {
             Self::Effective => "EFFECTIVE",
             Self::Rejected => "REJECTED",
             Self::Voided => "VOIDED",
+            Self::InApproval => "IN_APPROVAL",
         }
     }
 }
@@ -131,7 +135,8 @@ impl DocumentState for SalesChangeOrderStatus {
     /// 提交并重新发起影响确认；生效/作废为终态。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::PendingImpactConfirmation, Self::Voided],
+            Self::Draft => &[Self::PendingImpactConfirmation, Self::Voided, Self::InApproval],
+            Self::InApproval => &[Self::Effective, Self::Draft],
             Self::PendingImpactConfirmation => &[Self::PendingFinanceReview, Self::Rejected],
             Self::PendingFinanceReview => &[Self::Effective, Self::Rejected],
             Self::Rejected => &[Self::PendingImpactConfirmation],

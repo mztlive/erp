@@ -28,6 +28,9 @@ pub enum CustomerReceiptStatus {
     Posted,
     /// 已冲正（存在正式反向事实，原事实不删除）。
     Reversed,
+    /// 审批中。
+    #[serde(rename = "IN_APPROVAL")]
+    InApproval,
 }
 
 impl CustomerReceiptStatus {
@@ -41,6 +44,7 @@ impl CustomerReceiptStatus {
             Self::PendingReview => "待复核",
             Self::Posted => "已过账",
             Self::Reversed => "已冲正",
+            Self::InApproval => "审批中",
         }
     }
 
@@ -54,6 +58,7 @@ impl CustomerReceiptStatus {
             Self::PendingReview => "pending_review",
             Self::Posted => "posted",
             Self::Reversed => "reversed",
+            Self::InApproval => "IN_APPROVAL",
         }
     }
 }
@@ -65,7 +70,8 @@ impl DocumentState for CustomerReceiptStatus {
     /// `REVERSED` 是终态。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::PendingReview, Self::Posted],
+            Self::Draft => &[Self::PendingReview, Self::Posted, Self::InApproval],
+            Self::InApproval => &[Self::Posted, Self::Draft],
             Self::PendingReview => &[Self::Posted],
             Self::Posted => &[Self::Reversed],
             Self::Reversed => &[],
@@ -124,6 +130,9 @@ pub struct CustomerReceipt {
     pub amount: Amount,
     /// 银行流水或凭证引用。
     pub bank_reference: Option<String>,
+    /// 审批提交版本，初值 0。
+    #[serde(default)]
+    pub approval_subject_version: u32,
 }
 
 impl CustomerReceipt {
@@ -162,6 +171,7 @@ impl CustomerReceipt {
             received_at: data.received_at,
             amount: data.amount,
             bank_reference,
+            approval_subject_version: 0,
         })
     }
 

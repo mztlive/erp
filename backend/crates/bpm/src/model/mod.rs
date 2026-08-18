@@ -3,6 +3,29 @@
 //! 本模块只冻结无 ERP 语义的边界类型。模型构造必须由调用方提供时间与 ID，
 //! 不得读取系统时钟或自行生成主键。
 
+pub mod command_receipt;
+pub mod instance_assignee;
+pub mod node_definition;
+pub mod node_execution;
+pub mod process_definition;
+pub mod process_instance;
+pub mod transition_definition;
+pub mod types;
+
+pub use command_receipt::ApprovalCommandReceipt;
+pub use instance_assignee::ApprovalInstanceAssignee;
+pub use node_definition::ApprovalNodeDefinition;
+pub use node_execution::{ApprovalNodeExecution, NewNodeExecution};
+pub use process_definition::ApprovalProcessDefinition;
+pub use process_instance::ApprovalProcessInstance;
+pub use transition_definition::ApprovalTransitionDefinition;
+pub use types::{
+    ApprovalAssigneeBindingSource, ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision,
+    ApprovalDefinitionStatus, ApprovalExecutionAssignmentSource, ApprovalExecutionEndReason,
+    ApprovalNodeExecutionStatus, ApprovalNodeType, ApprovalProcessInstanceStatus, ApprovalTerminalResult,
+    ApprovalTransitionEvent, ModelError, ModelResult,
+};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
