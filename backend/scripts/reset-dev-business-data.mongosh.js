@@ -3,6 +3,45 @@
 
 // 由 reset-dev-business-data.sh 调用。连接串只从进程环境读取，禁止输出。
 // 本文件默认只执行 count/distinct/aggregate；ERP_RESET_EXECUTE=1 才进入写分支。
+// ERP_RESET_VERIFY=1 只跑后置校验。禁止 dropDatabase()，只 drop 固定集合或按固定过滤删除。
+
+const OLD_APPROVAL_COLLECTIONS = [
+    "approval_step_instances",
+    "approval_instances",
+    "approval_step_definitions",
+    "approval_definitions",
+];
+
+const NEW_APPROVAL_COLLECTIONS = [
+    "approval_notification_outbox",
+    "approval_subject_snapshots",
+    "approval_command_receipts",
+    "approval_instance_assignees",
+    "approval_node_executions",
+    "approval_process_instances",
+    "approval_transition_definitions",
+    "approval_node_definitions",
+    "approval_process_definitions",
+];
+
+const APPROVAL_WORK_ITEM_TYPES = [
+    "CARD_SALES_MANAGER_APPROVAL",
+    "CARD_SALES_OPERATION_APPROVAL",
+    "DOCUMENT_APPROVAL",
+];
+
+const APPROVAL_WORK_ITEM_FILTER = {
+    $or: [
+        { work_item_type: { $in: APPROVAL_WORK_ITEM_TYPES } },
+        { approval_step_instance_id: { $exists: true, $nin: [null, ""] } },
+        { approval_node_execution_id: { $exists: true, $nin: [null, ""] } },
+    ],
+};
+
+const CONFLICTING_INDEX_ALLOWLIST = [
+    { collection: "work_items", name: "uk_work_items_open_approval_step" },
+    { collection: "work_items", name: "idx_work_items_team_pool" },
+];
 
 const DROP_GROUPS = [
     {
@@ -10,14 +49,12 @@ const DROP_GROUPS = [
         collections: ["system_safety_pause_operations"],
     },
     {
-        name: "审批与待办（不兼容旧 schema，必须 drop）",
-        collections: [
-            "work_items",
-            "approval_step_instances",
-            "approval_instances",
-            "approval_step_definitions",
-            "approval_definitions",
-        ],
+        name: "待办与旧审批集合（不兼容旧 schema，必须 drop）",
+        collections: ["work_items", ...OLD_APPROVAL_COLLECTIONS],
+    },
+    {
+        name: "新 BPM 与审批集成集合（空库起点，必须 drop）",
+        collections: [...NEW_APPROVAL_COLLECTIONS],
     },
     {
         name: "通用集成与批处理运行数据",
@@ -282,6 +319,62 @@ const BEFORE_RELATIONS = [
         "id",
     ],
     [
+        "approval_node_definition.definition",
+        "approval_node_definitions",
+        "process_definition_id",
+        "approval_process_definitions",
+        "id",
+    ],
+    [
+        "approval_transition_definition.definition",
+        "approval_transition_definitions",
+        "process_definition_id",
+        "approval_process_definitions",
+        "id",
+    ],
+    [
+        "approval_process_instance.definition",
+        "approval_process_instances",
+        "process_definition_id",
+        "approval_process_definitions",
+        "id",
+    ],
+    [
+        "approval_process_instance.current_execution",
+        "approval_process_instances",
+        "current_node_execution_id",
+        "approval_node_executions",
+        "id",
+    ],
+    [
+        "approval_node_execution.instance",
+        "approval_node_executions",
+        "process_instance_id",
+        "approval_process_instances",
+        "id",
+    ],
+    [
+        "approval_instance_assignee.instance",
+        "approval_instance_assignees",
+        "process_instance_id",
+        "approval_process_instances",
+        "id",
+    ],
+    [
+        "approval_subject_snapshot.instance",
+        "approval_subject_snapshots",
+        "approval_process_instance_id",
+        "approval_process_instances",
+        "id",
+    ],
+    [
+        "work_item.approval_execution",
+        "work_items",
+        "approval_node_execution_id",
+        "approval_node_executions",
+        "id",
+    ],
+    [
         "external_target.map",
         "external_identity_targets",
         "external_identity_map_id",
@@ -323,14 +416,38 @@ function chunks(values) {
     return result;
 }
 
+function dropCollectionNames() {
+    const names = [];
+    for (const group of DROP_GROUPS) {
+        names.push(...group.collections);
+    }
+    return names;
+}
+
+function printAllowlist() {
+    line("== 集合 allowlist ==");
+    line(`- 旧审批集合: ${OLD_APPROVAL_COLLECTIONS.join(", ")}`);
+    line(`- 新 BPM/集成集合: ${NEW_APPROVAL_COLLECTIONS.join(", ")}`);
+    line(`- drop 集合: ${dropCollectionNames().join(", ")}`);
+    line(`- 审批 WorkItem 类型: ${APPROVAL_WORK_ITEM_TYPES.join(", ")}`);
+    line("- 审批 WorkItem 字段: approval_step_instance_id, approval_node_execution_id");
+    line(
+        `- 冲突索引: ${CONFLICTING_INDEX_ALLOWLIST.map((item) => `${item.collection}.${item.name}`).join(", ")}`,
+    );
+}
+
 async function run() {
     const uri = process.env.ERP_RESET_MONGO_URI;
     const dbName = process.env.ERP_RESET_DB_NAME;
     const execute = process.env.ERP_RESET_EXECUTE === "1";
+    const verifyOnly = process.env.ERP_RESET_VERIFY === "1";
     const confirmedDb = process.env.ERP_RESET_CONFIRMED_DB || "";
 
     if (!uri || !dbName) {
         throw new Error("missing_configuration");
+    }
+    if (execute && verifyOnly) {
+        throw new Error("mode_conflict");
     }
     if (execute && confirmedDb !== dbName) {
         throw new Error("execution_not_confirmed");
@@ -349,7 +466,7 @@ async function run() {
         throw new Error("connection_failed");
     }
 
-    const existing = new Set(await targetDb.getCollectionNames());
+    let existing = new Set(await targetDb.getCollectionNames());
 
     async function countDocuments(collectionName, filter = {}) {
         if (!existing.has(collectionName)) {
@@ -430,6 +547,40 @@ async function run() {
         return rows.length === 0 ? 0 : Number(rows[0].count);
     }
 
+    async function listIndexNames(collectionName) {
+        if (!existing.has(collectionName)) {
+            return [];
+        }
+        const indexes = await targetDb.getCollection(collectionName).getIndexes();
+        return indexes.map((index) => index.name);
+    }
+
+    async function conflictingIndexHits() {
+        const hits = [];
+        for (const item of CONFLICTING_INDEX_ALLOWLIST) {
+            const names = await listIndexNames(item.collection);
+            if (names.includes(item.name)) {
+                hits.push(`${item.collection}.${item.name}`);
+            }
+        }
+        return hits;
+    }
+
+    async function countApprovalWorkItems() {
+        const byType = {};
+        for (const workItemType of APPROVAL_WORK_ITEM_TYPES) {
+            byType[workItemType] = await countDocuments("work_items", { work_item_type: workItemType });
+        }
+        const byStepId = await countDocuments("work_items", {
+            approval_step_instance_id: { $exists: true, $nin: [null, ""] },
+        });
+        const byExecutionId = await countDocuments("work_items", {
+            approval_node_execution_id: { $exists: true, $nin: [null, ""] },
+        });
+        const matching = await countDocuments("work_items", APPROVAL_WORK_ITEM_FILTER);
+        return { byType, byStepId, byExecutionId, matching };
+    }
+
     async function verifyRelations(title) {
         line(title);
         const result = new Map();
@@ -482,6 +633,9 @@ async function run() {
         ...(await distinct("contract_revisions", "contract_pdf_file_id")),
         ...(await distinct("document_attachments", "file_asset_id")),
     ]);
+
+    line();
+    printAllowlist();
 
     line();
     line("== 执行前范围 ==");
@@ -545,20 +699,70 @@ async function run() {
     line(`- 保留的文件资产候选: ${retainedFileIds.length}（不删除 file_assets，不操作对象存储）`);
     line(`- drop 集合内文档合计: ${plannedDocuments}`);
 
+    const approvalWorkItems = await countApprovalWorkItems();
+    line(`- 审批 WorkItem 合计: ${approvalWorkItems.matching}`);
+    for (const workItemType of APPROVAL_WORK_ITEM_TYPES) {
+        line(`    ${workItemType}=${approvalWorkItems.byType[workItemType]}`);
+    }
+    line(`    approval_step_instance_id=${approvalWorkItems.byStepId}`);
+    line(`    approval_node_execution_id=${approvalWorkItems.byExecutionId}`);
+
+    const presentConflictingIndexes = await conflictingIndexHits();
+    line(`- 冲突索引现存: ${presentConflictingIndexes.length}`);
+    for (const item of CONFLICTING_INDEX_ALLOWLIST) {
+        const present = presentConflictingIndexes.includes(`${item.collection}.${item.name}`);
+        line(`    ${item.collection}.${item.name}: ${present ? "present" : "absent"}`);
+    }
+
     const beforeDangling = await verifyRelations("== 执行前悬挂引用 ==");
 
-    if (!execute) {
+    if (!execute && !verifyOnly) {
         line();
-        line("预览完成：未执行任何写入。核对范围后使用 --execute --confirm-db <db_name>。 ");
+        line("预览完成：未执行任何写入。核对目标、集合摘要与范围后使用 --execute --confirm-db <db_name> --expect-summary <集合摘要>。");
         return;
     }
 
-    line();
-    line("== 执行清理 ==");
+    if (verifyOnly) {
+        line();
+        line("== 校验模式（只读，不执行写入） ==");
+    } else {
+        line();
+        line("== 执行清理 ==");
+    }
 
+    let invalidatedConnectionHealthCaches = 0;
+    let deletedApprovalWorkItems = 0;
+    let droppedConflictingIndexes = 0;
+    let deletedPartyTargets = 0;
+    let deletedPartyMaps = 0;
+    let deletedPartyChildren = 0;
+    let deletedParties = 0;
+    let deletedTargets = 0;
+    let deletedMaps = 0;
+
+    if (execute) {
+        for (const item of CONFLICTING_INDEX_ALLOWLIST) {
+            if (!existing.has(item.collection)) {
+                continue;
+            }
+            const names = await listIndexNames(item.collection);
+            if (!names.includes(item.name)) {
+                continue;
+            }
+            await targetDb.getCollection(item.collection).dropIndex(item.name);
+            droppedConflictingIndexes += 1;
+        }
+        if (existing.has("work_items")) {
+            const deleted = await targetDb.getCollection("work_items").deleteMany(APPROVAL_WORK_ITEM_FILTER);
+            deletedApprovalWorkItems = deleted.deletedCount;
+        }
+        line(`- 冲突索引已删除: ${droppedConflictingIndexes}`);
+        line(`- 审批 WorkItem 已按过滤删除: ${deletedApprovalWorkItems}`);
+    }
+
+    if (execute) {
     // 健康检查运行事实将被清空，保留的连接不得继续携带旧的健康放行缓存。
     // 同时停用连接并递增乐观锁版本，要求重启后重新健康检查和显式启用。
-    let invalidatedConnectionHealthCaches = 0;
     if (existing.has("supplier_api_connections")) {
         const result = await targetDb.getCollection("supplier_api_connections").updateMany(
             {
@@ -585,7 +789,6 @@ async function run() {
     // Party 候选依赖即将删除的客户、合同和销售来源事实。必须在 drop
     // 这些来源集合前完成 Party 链清理；若进程在此后中断，来源集合仍在，
     // 下次重跑可重建同一候选集并幂等继续，不会因来源先被 drop 而永久漏删。
-    let deletedPartyTargets = 0;
     if (existing.has("external_identity_targets")) {
         deletedPartyTargets = await deleteByValues(
             "external_identity_targets",
@@ -603,17 +806,16 @@ async function run() {
     const orphanedPartyMapIds = affectedPartyMapIds.filter(
         (value) => !retainedAffectedPartyMapKeys.has(bsonKey(value)),
     );
-    const deletedPartyMaps = await deleteByValues(
+    deletedPartyMaps = await deleteByValues(
         "external_identity_maps",
         "id",
         orphanedPartyMapIds,
     );
 
-    let deletedPartyChildren = 0;
     for (const collectionName of PARTY_CHILD_COLLECTIONS) {
         deletedPartyChildren += await deleteByValues(collectionName, "party_id", deletablePartyIds);
     }
-    const deletedParties = await deleteByValues("parties", "id", deletablePartyIds);
+    deletedParties = await deleteByValues("parties", "id", deletablePartyIds);
     line(`- 客户及结算链专属 Party targets 已删除: ${deletedPartyTargets}`);
     line(`- 客户及结算链专属 Party 孤立 maps 已删除: ${deletedPartyMaps}`);
     line(`- 客户及结算链专属 Party 子记录已删除: ${deletedPartyChildren}`);
@@ -633,7 +835,7 @@ async function run() {
         line(`- ${group.name}: drop ${dropped} 个集合`);
     }
 
-    let deletedTargets = deletedPartyTargets;
+    deletedTargets = deletedPartyTargets;
     if (existing.has("external_identity_targets")) {
         const byType = await targetDb.getCollection("external_identity_targets").deleteMany({
             internal_object_type: { $in: RESET_OBJECT_TYPES },
@@ -645,7 +847,7 @@ async function run() {
             resetMapIds,
         );
     }
-    let deletedMaps = deletedPartyMaps + (existing.has("external_identity_maps")
+    deletedMaps = deletedPartyMaps + (existing.has("external_identity_maps")
         ? (
               await targetDb.getCollection("external_identity_maps").deleteMany({
                   object_type: { $in: RESET_OBJECT_TYPES },
@@ -654,9 +856,10 @@ async function run() {
         : 0);
     line(`- external_identity_targets 已删除: ${deletedTargets}`);
     line(`- external_identity_maps 已删除: ${deletedMaps}`);
+    }
 
     line();
-    line("== 执行后验证 ==");
+    line(verifyOnly ? "== 校验验证 ==" : "== 执行后验证 ==");
     let remainingResetDocuments = 0;
     let remainingResetCollections = 0;
     const currentCollections = new Set(await targetDb.getCollectionNames());
@@ -697,6 +900,9 @@ async function run() {
             { last_healthy_technical_config_version: { $ne: null } },
         ],
     });
+    existing = currentCollections;
+    const remainingApprovalWorkItems = await countApprovalWorkItems();
+    const remainingConflictingIndexes = await conflictingIndexHits();
 
     line(`- 残留 reset 集合: ${remainingResetCollections}`);
     line(`- 残留 reset 文档: ${remainingResetDocuments}`);
@@ -706,6 +912,13 @@ async function run() {
     line(`- 残留指向已删客户及结算链专属 Party 的 targets: ${remainingDeletablePartyTargets}`);
     line(`- 残留客户及结算链专属 Party/子记录: ${remainingPartyRows}`);
     line(`- 残留供应商 API 连接技术健康缓存: ${remainingConnectionHealthCaches}`);
+    line(`- 残留审批 WorkItem: ${remainingApprovalWorkItems.matching}`);
+    line(`    approval_step_instance_id=${remainingApprovalWorkItems.byStepId}`);
+    line(`    approval_node_execution_id=${remainingApprovalWorkItems.byExecutionId}`);
+    line(`- 残留冲突索引: ${remainingConflictingIndexes.length}`);
+    for (const name of remainingConflictingIndexes) {
+        line(`    ${name}`);
+    }
 
     const afterDangling = await verifyRelations("== 执行后悬挂引用 ==");
     let danglingPostconditionFailed = false;
@@ -728,6 +941,10 @@ async function run() {
         remainingDeletablePartyTargets !== 0 ||
         remainingPartyRows !== 0 ||
         remainingConnectionHealthCaches !== 0 ||
+        remainingApprovalWorkItems.matching !== 0 ||
+        remainingApprovalWorkItems.byStepId !== 0 ||
+        remainingApprovalWorkItems.byExecutionId !== 0 ||
+        remainingConflictingIndexes.length !== 0 ||
         danglingPostconditionFailed;
 
     if (failed) {
@@ -735,7 +952,11 @@ async function run() {
     }
 
     line();
-    line("清理完成：重置后置条件通过。必须重启应用以重建索引和审批定义，再执行应用级验收。");
+    if (verifyOnly) {
+        line("校验完成：重置后置条件通过。旧审批集合、新 BPM/集成集合、审批 WorkItem 与冲突索引均为空。");
+    } else {
+        line("清理完成：重置后置条件通过。必须重启应用以重建索引和审批定义，再执行应用级验收。");
+    }
     line("保留项：账号/RBAC、供应商主数据、商品/仓库主数据、source_systems、file_assets、对象存储、审计记录、编号计数器。");
 }
 
@@ -751,6 +972,8 @@ run()
             console.error("错误: mongosh 写分支缺少与目标数据库一致的二次确认。");
         } else if (code === "postcondition_failed") {
             console.error("错误: 清理后置条件未通过；请保持写入停止并按上方残留计数处理后重跑。");
+        } else if (code === "mode_conflict") {
+            console.error("错误: --execute 与 --verify 不能同时使用。");
         } else {
             console.error("错误: MongoDB 重置失败（详细驱动错误已隐藏，避免泄露连接信息）。可在停写状态下幂等重跑。");
         }
