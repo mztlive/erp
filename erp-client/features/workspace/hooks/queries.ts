@@ -3,7 +3,11 @@
 import { useQuery } from "@tanstack/react-query"
 
 import type { AccountProfile } from "@/features/auth/api"
-import { fetchWorkspaceDashboard } from "@/features/workspace/api/dashboard"
+import { workItemKeys } from "@/features/work-items/queries"
+import {
+    fetchWorkspaceDashboard,
+    fetchWorkspaceInboxCount,
+} from "@/features/workspace/api/dashboard"
 import type { TodayWorkspaceQuery } from "@/features/workspace/types"
 
 const workspaceHomeKeys = {
@@ -19,6 +23,9 @@ const workspaceHomeKeys = {
         ] as const,
 }
 
+/**
+ * 工作台主查询。筛选切换保留上一页数据，避免整页闪烁。
+ */
 export function useWorkspaceDashboardQuery(
     query: TodayWorkspaceQuery,
     profile?: AccountProfile,
@@ -30,9 +37,19 @@ export function useWorkspaceDashboardQuery(
             return fetchWorkspaceDashboard(query, profile)
         },
         enabled: Boolean(profile),
-        // Keep previous filter results visible while the next filter loads (§6.2).
         placeholderData: (previous) => previous,
-        // 60s 自动轮询，数据过期无需等用户手动刷新（P2-11）。
         refetchInterval: 60_000,
     })
 }
+
+/**
+ * 顶栏待办角标。数量来自服务端统计，不对列表求和。
+ */
+export function useWorkspaceInboxCountQuery() {
+    return useQuery({
+        queryKey: workItemKeys.inboxCount(),
+        queryFn: fetchWorkspaceInboxCount,
+    })
+}
+
+export { workspaceHomeKeys }

@@ -8,7 +8,9 @@ import {
     type WorkItemDto,
 } from "./types"
 
-const makeWorkItemDto = (overrides: Partial<WorkItemDto> = {}): WorkItemDto => ({
+const makeWorkItemDto = (
+    overrides: Partial<WorkItemDto> = {},
+): WorkItemDto => ({
     id: "wi_1",
     work_item_type: "procurement_confirmation",
     handler_key: "procurement-confirmation",
@@ -51,7 +53,9 @@ describe("mapWorkItemDto", () => {
                 reason_code: "LATE",
                 reason_label: "来晚了",
                 impact_summary: "影响入库",
-                summary_sections: [{ label: "金额", value: "12.00", numeric: true }],
+                summary_sections: [
+                    { label: "金额", value: "12.00", numeric: true },
+                ],
                 queue_context_id: "qc_1",
             }),
         )
@@ -63,6 +67,8 @@ describe("mapWorkItemDto", () => {
             destinationWorkspaceId: "ws_1",
             routeContext: { confirmationScope: "scope_1" },
             approvalStepInstanceId: "si_1",
+            approvalProcessInstanceId: undefined,
+            approvalNodeExecutionId: undefined,
             status: "OPEN",
             assignmentMode: "DIRECT",
             assignmentSource: "assigned",

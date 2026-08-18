@@ -4,7 +4,6 @@ import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { writeW02FocusId } from "@/features/unified-task-queue/queue-url"
 import { useWorkspaceDashboardQuery } from "@/features/workspace/hooks/queries"
 import {
     buildWorkspaceSearchParams,
@@ -15,20 +14,16 @@ import {
     type WorkspaceUrlState,
 } from "@/features/workspace/lib/url-state"
 import type {
+    WorkspaceFamilyFilter,
     WorkspaceMetricKey,
+    WorkspaceSort,
     WorkspaceWorkItem,
 } from "@/features/workspace/types"
 
 const VIEWER_TIMEZONE = "Asia/Shanghai"
 
-/** 焦点还原走 sessionStorage，不落地址栏（内部 ID 禁止进 URL）。 */
-const HOME_FOCUS_SESSION_KEY = "workspace-home.focus"
-
-export type WorkspaceTaskIntent = "PROCESS" | "VIEW"
-
 /**
- * W01 页面状态：URL 筛选解析、指标/范围切换、刷新编排与任务焦点还原。
- * 取数仍由 TanStack Query（useWorkspaceDashboardQuery / useAccountProfileQuery）承载。
+ * W01 页面状态：URL 筛选、指标切换、当前项与连续处理后选中下一条。
  */
 export function useWorkspaceHome() {
     const router = useRouter()
@@ -56,22 +51,19 @@ export function useWorkspaceHome() {
         !dashboardQuery.isPending &&
         !!view
 
-    const [focusedStableNumber, setFocusedStableNumber] = React.useState<
-        string | null
-    >(null)
+    const [searchDraft, setSearchDraft] = React.useState(urlState.query ?? "")
+    const [narrowDetailOpen, setNarrowDetailOpen] = React.useState(false)
 
     const activeMetric = metricKeyFromUrlState(urlState)
-    // scope 也是激活筛选：团队待处理无任务时走「当前筛选无结果」空态（D17）
     const hasActiveFilter = Boolean(
-        urlState.scope === "team" || urlState.due || urlState.family,
+        urlState.view !== "inbox" ||
+        urlState.due ||
+        urlState.blocked ||
+        urlState.family ||
+        urlState.workItemType ||
+        urlState.query,
     )
 
-    const clearFocus = React.useCallback(() => {
-        sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
-        setFocusedStableNumber(null)
-    }, [])
-
-    // 筛选/指标变更恒 replace，不膨胀历史（P2）；scope 默认值省略，URL 最小化
     const replaceUrl = React.useCallback(
         (next: WorkspaceUrlState) => {
             const qs = buildWorkspaceSearchParams(next)
@@ -82,28 +74,73 @@ export function useWorkspaceHome() {
 
     const onMetricClick = React.useCallback(
         (key: WorkspaceMetricKey) => {
-            clearFocus()
             replaceUrl(urlStateFromMetricKey(key, urlState))
+            setNarrowDetailOpen(false)
         },
-        [clearFocus, replaceUrl, urlState],
+        [replaceUrl, urlState],
     )
 
     const clearFilters = React.useCallback(() => {
-        clearFocus()
-        replaceUrl({ scope: "mine" })
-    }, [clearFocus, replaceUrl])
+        replaceUrl({
+            view: "inbox",
+            sort: "priority_due",
+        })
+        setSearchDraft("")
+        setNarrowDetailOpen(false)
+    }, [replaceUrl])
 
-    const onOpenTask = React.useCallback(
-        (item: WorkspaceWorkItem, intent: WorkspaceTaskIntent) => {
-            // Persist focus so a return restores the row without putting the
-            // internal task identity in the URL.
-            sessionStorage.setItem(HOME_FOCUS_SESSION_KEY, item.stableNumber)
-            if (intent === "PROCESS" && item.destinationWorkspaceId !== "W18") {
-                writeW02FocusId(item.workItemId)
-            }
+    const onSelectTask = React.useCallback(
+        (item: WorkspaceWorkItem) => {
+            replaceUrl({
+                ...urlState,
+                currentWorkItemId: item.workItemId,
+            })
+            setNarrowDetailOpen(true)
         },
-        [],
+        [replaceUrl, urlState],
     )
+
+    const selectNextAfter = React.useCallback(
+        (completedWorkItemId: string) => {
+            const items = view?.items ?? []
+            const index = items.findIndex(
+                (item) => item.workItemId === completedWorkItemId,
+            )
+            const next = items[index + 1] ?? items[index - 1]
+            replaceUrl({
+                ...urlState,
+                currentWorkItemId: next?.workItemId,
+            })
+            if (!next) setNarrowDetailOpen(false)
+        },
+        [replaceUrl, urlState, view?.items],
+    )
+
+    const onFamilyChange = React.useCallback(
+        (family?: WorkspaceFamilyFilter) => {
+            replaceUrl({
+                ...urlState,
+                family,
+                currentWorkItemId: undefined,
+            })
+        },
+        [replaceUrl, urlState],
+    )
+
+    const onSortChange = React.useCallback(
+        (sort: WorkspaceSort) => {
+            replaceUrl({ ...urlState, sort })
+        },
+        [replaceUrl, urlState],
+    )
+
+    const applySearch = React.useCallback(() => {
+        replaceUrl({
+            ...urlState,
+            query: searchDraft.trim() || undefined,
+            currentWorkItemId: undefined,
+        })
+    }, [replaceUrl, searchDraft, urlState])
 
     const refresh = React.useCallback(() => {
         void accountProfileQuery.refetch().then((profileResult) => {
@@ -111,30 +148,10 @@ export function useWorkspaceHome() {
         })
     }, [accountProfileQuery, dashboardQuery])
 
-    const onScopeChange = React.useCallback(
-        (scope: "mine" | "team") => {
-            if (scope === urlState.scope) return
-            clearFocus()
-            replaceUrl({ ...urlState, scope })
-        },
-        [clearFocus, replaceUrl, urlState],
-    )
-
-    // Restore task focus after return from a target page. One-shot: the stored
-    // focus is consumed here, so a plain refresh never re-scrolls unexpectedly.
-    React.useEffect(() => {
-        if (!view) return
-        const stableNumber = sessionStorage.getItem(HOME_FOCUS_SESSION_KEY)
-        if (!stableNumber) return
-        const el = document.getElementById(`work-item-${stableNumber}`)
-        sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
-        if (!el) return
-        setFocusedStableNumber(stableNumber)
-        el.scrollIntoView({ block: "nearest", behavior: "smooth" })
-        if (el instanceof HTMLElement) {
-            el.focus({ preventScroll: true })
-        }
-    }, [view])
+    const selected =
+        view?.items.find(
+            (item) => item.workItemId === urlState.currentWorkItemId,
+        ) ?? view?.items[0]
 
     return {
         urlState,
@@ -142,13 +159,20 @@ export function useWorkspaceHome() {
         accountProfileQuery,
         dashboardQuery,
         refreshing,
-        focusedStableNumber,
         activeMetric,
         hasActiveFilter,
+        searchDraft,
+        setSearchDraft,
+        narrowDetailOpen,
+        setNarrowDetailOpen,
+        selected,
         onMetricClick,
         clearFilters,
-        onOpenTask,
+        onSelectTask,
+        selectNextAfter,
+        onFamilyChange,
+        onSortChange,
+        applySearch,
         refresh,
-        onScopeChange,
     }
 }

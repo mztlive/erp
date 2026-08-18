@@ -27,6 +27,12 @@ export type WorkItemAllowedAction =
     | "CLOSE"
     | "VIEW"
     | "PROCESS"
+    | "APPROVE"
+    | "REJECT"
+    | "OPEN_DOCUMENT"
+    | "RESUME_CURRENT_APPROVER"
+    | "REASSIGN_CURRENT_APPROVER"
+    | "CANCEL_BLOCKED_APPROVAL"
 
 export type WorkItemConflictCode =
     | "WORK_ITEM_VERSION_CONFLICT"
@@ -51,6 +57,8 @@ export type WorkItemDto = Readonly<{
         confirmation_scope?: string | null
     }> | null
     approval_step_instance_id: string | null
+    approval_process_instance_id?: string | null
+    approval_node_execution_id?: string | null
     status: WorkItemStatus
     assignment_mode: AssignmentMode
     assignment_source: string
@@ -120,6 +128,8 @@ export type WorkItemProjection = Readonly<{
     destinationWorkspaceId?: string
     routeContext?: { confirmationScope?: string }
     approvalStepInstanceId?: string
+    approvalProcessInstanceId?: string
+    approvalNodeExecutionId?: string
     status: WorkItemStatus
     assignmentMode: AssignmentMode
     assignmentSource: string
@@ -183,6 +193,9 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
               }
             : undefined,
         approvalStepInstanceId: dto.approval_step_instance_id ?? undefined,
+        approvalProcessInstanceId:
+            dto.approval_process_instance_id ?? undefined,
+        approvalNodeExecutionId: dto.approval_node_execution_id ?? undefined,
         status: dto.status,
         assignmentMode: dto.assignment_mode,
         assignmentSource: dto.assignment_source,

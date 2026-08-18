@@ -195,7 +195,7 @@ function withParams(path: string, params: URLSearchParams): string {
 }
 
 /**
- * 为 W02 当前任务构造受控处理器链接。
+ * 为工作台当前任务构造受控「打开单据」链接。
  *
  * 链接只携带稳定业务对象、任务和队列上下文；任务版本与允许动作必须由
  * 目标工作面重新查询。任一必需上下文缺失或 handler/工作面不匹配时失败关闭。
@@ -215,7 +215,7 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
     if (!businessObjectId || !workItemId || !queueContextId) return null
 
     const params = new URLSearchParams({
-        from: "W02",
+        from: "workspace",
         workItemId,
         queueContextId,
     })

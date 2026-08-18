@@ -10,8 +10,6 @@ import {
 import * as api from "./api"
 import {
     synchronizeWorkItemConflict,
-    useBlockedApprovalsQuery,
-    useRecoverApprovalMutation,
     useWorkItemDetailQuery,
     useWorkItemResponsibilityMutation,
     useWorkItemsQuery,
@@ -19,7 +17,6 @@ import {
     workItemKeys,
 } from "./queries"
 import type {
-    BlockedApprovalView,
     WorkItemConflict,
     WorkItemDto,
     WorkItemResponsibilityCommand,
@@ -29,14 +26,14 @@ import type { WorkItemPage, WorkItemStats } from "./api"
 vi.mock("./api", () => ({
     getWorkItem: vi.fn(),
     getWorkItemStats: vi.fn(),
-    listBlockedApprovals: vi.fn(),
     listWorkItems: vi.fn(),
     parseWorkItemConflict: vi.fn(),
-    recoverApproval: vi.fn(),
     submitWorkItemResponsibility: vi.fn(),
 }))
 
-const makeWorkItemDto = (overrides: Partial<WorkItemDto> = {}): WorkItemDto => ({
+const makeWorkItemDto = (
+    overrides: Partial<WorkItemDto> = {},
+): WorkItemDto => ({
     id: "wi_1",
     work_item_type: "procurement_confirmation",
     handler_key: "procurement-confirmation",
@@ -78,18 +75,6 @@ const makeStats = (): WorkItemStats => ({
     as_of: 1_700_000_000_000,
 })
 
-const makeBlockedApproval = (): BlockedApprovalView => ({
-    approvalInstanceId: "ai_1",
-    instanceVersion: "2",
-    currentStepInstanceId: "si_1",
-    stepVersion: "1",
-    businessObjectLabel: "采购计划 PO-1",
-    blockerCode: "STEP_BLOCKED",
-    blockerMessage: "请处理后继续",
-    blockedAt: 1_700_000_000_000,
-    allowedActions: ["RETRY_CURRENT_STEP"],
-})
-
 const conflict = (currentWorkItem: WorkItemDto | null): WorkItemConflict => ({
     code: "WORK_ITEM_RESPONSIBILITY_CONFLICT",
     currentWorkItem,
@@ -129,9 +114,12 @@ describe("useWorkItemsQuery", () => {
         expect(result.current.data?.items).toHaveLength(1)
         expect(api.listWorkItems).toHaveBeenCalledTimes(1)
         expect(api.listWorkItems).toHaveBeenCalledWith(listParams)
-        expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
-            ["work-items", "list", listParams],
-        ])
+        expect(
+            client
+                .getQueryCache()
+                .getAll()
+                .map((q) => q.queryKey),
+        ).toEqual([["work-items", "list", listParams]])
 
         rerender()
         await waitFor(() => expect(client.isFetching()).toBe(0))
@@ -155,7 +143,9 @@ describe("useWorkItemDetailQuery", () => {
     const wrapper =
         (client: ReturnType<typeof createFreshQueryClient>) =>
         ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={client}>{children}</QueryClientProvider>
+            <QueryClientProvider client={client}>
+                {children}
+            </QueryClientProvider>
         )
 
     it("stays disabled for blank ids and fetches for non-blank ids", async () => {
@@ -215,41 +205,12 @@ describe("useWorkItemStatsQuery", () => {
         await waitFor(() => expect(result.current.isSuccess).toBe(true))
         expect(result.current.data?.assigned).toBe(2)
         expect(api.getWorkItemStats).toHaveBeenCalledWith(listParams)
-        expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
-            ["work-items", "stats", listParams],
-        ])
-    })
-})
-
-describe("useBlockedApprovalsQuery", () => {
-    it("fetches the blocked approval list when enabled", async () => {
-        vi.mocked(api.listBlockedApprovals).mockResolvedValue({
-            items: [makeBlockedApproval()],
-            total: 1,
-            page: 1,
-            page_size: 100,
-        })
-        const client = createFreshQueryClient()
-        const { result } = renderHookWithProviders(
-            () => useBlockedApprovalsQuery(),
-            { queryClient: client },
-        )
-        await waitFor(() => expect(result.current.isSuccess).toBe(true))
-        expect(result.current.data?.items[0]?.blockerCode).toBe("STEP_BLOCKED")
-        expect(api.listBlockedApprovals).toHaveBeenCalledTimes(1)
-        expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
-            ["approval-instances", "blocked"],
-        ])
-    })
-
-    it("does not fetch when disabled", () => {
-        const client = createFreshQueryClient()
-        const { result } = renderHookWithProviders(
-            () => useBlockedApprovalsQuery(false),
-            { queryClient: client },
-        )
-        expect(result.current.fetchStatus).toBe("idle")
-        expect(api.listBlockedApprovals).not.toHaveBeenCalled()
+        expect(
+            client
+                .getQueryCache()
+                .getAll()
+                .map((q) => q.queryKey),
+        ).toEqual([["work-items", "stats", listParams]])
     })
 })
 
@@ -286,9 +247,7 @@ describe("useWorkItemResponsibilityMutation", () => {
         const current = makeWorkItemDto({ task_version: "7" })
         const failure = makeConflictError(current)
         vi.mocked(api.submitWorkItemResponsibility).mockRejectedValue(failure)
-        vi.mocked(api.parseWorkItemConflict).mockReturnValue(
-            conflict(current),
-        )
+        vi.mocked(api.parseWorkItemConflict).mockReturnValue(conflict(current))
         const client = createFreshQueryClient()
         client.setQueryData(workItemKeys.detail("wi_1"), stale)
         const invalidate = vi.spyOn(client, "invalidateQueries")
@@ -362,84 +321,6 @@ describe("useWorkItemResponsibilityMutation", () => {
             }),
         )
         expect(client.getQueryData(workItemKeys.detail("wi_1"))).toEqual(stale)
-    })
-})
-
-describe("useRecoverApprovalMutation", () => {
-    const recoverCommand = {
-        approvalInstanceId: "ai_1",
-        currentStepInstanceId: "si_1",
-        expectedInstanceVersion: "2",
-        expectedStepVersion: "1",
-        recoveryAction: "RETRY_CURRENT_STEP" as const,
-        reason: "retry",
-        idempotencyKey: "recover_1",
-    }
-
-    it("wires recoverApproval and invalidates blockers plus work item queries on success", async () => {
-        vi.mocked(api.recoverApproval).mockResolvedValue({
-            instance: {
-                id: "ai_1",
-                definition_key: "purchase_plan",
-                definition_version: 1,
-                runtime_kind: "INTERNAL",
-                business_object_type: "purchase_plan",
-                business_object_id: "po_1",
-                subject_version: "v1",
-                owner_organization_id: "org_1",
-                status: "RUNNING",
-                instance_version: "3",
-                started_by: "u1",
-                started_at: 1_700_000_000_000,
-            },
-            step: {
-                id: "si_1",
-                approval_instance_id: "ai_1",
-                step_key: "confirm",
-                sequence_no: 1,
-                status: "ACTIVE",
-                step_version: "2",
-            },
-        })
-        const client = createFreshQueryClient()
-        const invalidate = vi.spyOn(client, "invalidateQueries")
-        const { result } = renderHookWithProviders(
-            () => useRecoverApprovalMutation(),
-            { queryClient: client },
-        )
-
-        await act(async () => {
-            await result.current.mutateAsync(recoverCommand)
-        })
-        expect(api.recoverApproval).toHaveBeenCalledWith(
-            recoverCommand,
-            expect.anything(),
-        )
-        await waitFor(() => {
-            expect(invalidate).toHaveBeenCalledWith({
-                queryKey: ["approval-instances", "blocked"],
-            })
-            expect(invalidate).toHaveBeenCalledWith({
-                queryKey: ["work-items"],
-            })
-        })
-    })
-
-    it("does not invalidate when the recovery request fails", async () => {
-        vi.mocked(api.recoverApproval).mockRejectedValue(new Error("boom"))
-        const client = createFreshQueryClient()
-        const invalidate = vi.spyOn(client, "invalidateQueries")
-        const { result } = renderHookWithProviders(
-            () => useRecoverApprovalMutation(),
-            { queryClient: client },
-        )
-
-        await act(async () => {
-            await expect(result.current.mutateAsync(recoverCommand)).rejects.toBeInstanceOf(
-                Error,
-            )
-        })
-        expect(invalidate).not.toHaveBeenCalled()
     })
 })
 

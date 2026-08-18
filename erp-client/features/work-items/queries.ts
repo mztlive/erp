@@ -10,10 +10,8 @@ import {
 import {
     getWorkItem,
     getWorkItemStats,
-    listBlockedApprovals,
     listWorkItems,
     parseWorkItemConflict,
-    recoverApproval,
     submitWorkItemResponsibility,
     type WorkItemListParams,
     type WorkItemStatsParams,
@@ -28,7 +26,7 @@ export const workItemKeys = {
         [...workItemKeys.all, "list", params] as const,
     stats: (params: WorkItemStatsParams) =>
         [...workItemKeys.all, "stats", params] as const,
-    approvalBlockers: () => ["approval-instances", "blocked"] as const,
+    inboxCount: () => [...workItemKeys.all, "mine-count"] as const,
 }
 
 /** 冲突后保留可见最新摘要，并令列表、详情、统计与统一队列全部重新验证。 */
@@ -83,14 +81,6 @@ export const useWorkItemStatsQuery = (params: WorkItemStatsParams) =>
         queryFn: () => getWorkItemStats(params),
     })
 
-export function useBlockedApprovalsQuery(enabled = true) {
-    return useQuery({
-        queryKey: workItemKeys.approvalBlockers(),
-        queryFn: listBlockedApprovals,
-        enabled,
-    })
-}
-
 export function useWorkItemResponsibilityMutation() {
     const queryClient = useQueryClient()
     return useMutation({
@@ -100,21 +90,6 @@ export function useWorkItemResponsibilityMutation() {
         },
         onError: async (error, command) => {
             await synchronizeWorkItemConflict(queryClient, command, error)
-        },
-    })
-}
-
-export function useRecoverApprovalMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: recoverApproval,
-        onSuccess: async () => {
-            await Promise.all([
-                queryClient.invalidateQueries({
-                    queryKey: workItemKeys.approvalBlockers(),
-                }),
-                queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
-            ])
         },
     })
 }

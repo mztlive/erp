@@ -22,7 +22,7 @@ import {
 } from "@/lib/workspace-registry"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useFulfillmentCountQuery } from "@/features/fulfillment-operations/queries"
-import { useUnifiedTaskCountQuery } from "@/features/unified-task-queue/queries"
+import { useWorkspaceInboxCountQuery } from "@/features/workspace/hooks/queries"
 
 type NavBadgeCounts = {
     todo: number
@@ -61,7 +61,7 @@ export function WorkspaceSidebarNav() {
         [navGroups],
     )
 
-    const todoCountQuery = useUnifiedTaskCountQuery()
+    const todoCountQuery = useWorkspaceInboxCountQuery()
     const deliveryCountQuery = useFulfillmentCountQuery("procurement")
     const warehouseCountQuery = useFulfillmentCountQuery("warehouse")
     const counts: NavBadgeCounts = {

@@ -20,7 +20,7 @@ function parsedHref(href: string | null): URL {
 }
 
 function assertStableContext(url: URL): void {
-    assert.equal(url.searchParams.get("from"), "W02")
+    assert.equal(url.searchParams.get("from"), "workspace")
     assert.equal(url.searchParams.get("workItemId"), "wi-42")
     assert.equal(url.searchParams.get("queueContextId"), "queue-42")
     assert.equal(url.searchParams.has("taskVersion"), false)

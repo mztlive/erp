@@ -1,10 +1,6 @@
 import { apiGet, apiPost, type ApiError, type Page } from "@/lib/api"
 
 import type {
-    ApprovalRuntimeViewDto,
-    BlockedApprovalView,
-    BlockedApprovalViewDto,
-    RecoverApprovalCommand,
     WorkItemDto,
     WorkItemConflict,
     WorkItemConflictCode,
@@ -12,7 +8,6 @@ import type {
     WorkItemResponsibilityCommand,
     WorkItemScope,
 } from "./types"
-import { mapBlockedApprovalDto } from "./types"
 
 export type WorkItemListParams = Readonly<{
     scope: WorkItemScope
@@ -20,6 +15,7 @@ export type WorkItemListParams = Readonly<{
     workItemType?: string
     status?: "COMPLETED" | "CLOSED"
     due?: "today" | "overdue"
+    blocked?: boolean
     priorities?: readonly number[]
     query?: string
     sort?: "priority_due" | "due_asc" | "created_desc"
@@ -40,6 +36,7 @@ export type WorkItemStatsParams = Readonly<{
     family?: string
     workItemType?: string
     due?: "today" | "overdue"
+    blocked?: boolean
     timezone: string
 }>
 
@@ -49,6 +46,9 @@ export type WorkItemStats = Readonly<{
     due_today: number
     overdue: number
     exception: number
+    blocked?: number
+    started?: number
+    inbox?: number
     as_of: number
 }>
 
@@ -128,6 +128,7 @@ export function listWorkItems(
         work_item_type: params.workItemType,
         status: params.status,
         due: params.due,
+        blocked: params.blocked ? "1" : undefined,
         priorities: params.priorities?.join(","),
         q: params.query,
         sort: params.sort ?? "priority_due",
@@ -149,6 +150,7 @@ export function getWorkItemStats(
         family: params.family,
         work_item_type: params.workItemType,
         due: params.due,
+        blocked: params.blocked ? "1" : undefined,
         timezone: params.timezone,
     })
 }
@@ -156,17 +158,6 @@ export function getWorkItemStats(
 /** 查询单条权限安全的最新任务投影。 */
 export const getWorkItem = (workItemId: string): Promise<WorkItemDto> =>
     apiGet<WorkItemDto>(`/admin/work-items/${encodeURIComponent(workItemId)}`)
-
-/** 查询授权管理员可恢复的受阻审批。 */
-export async function listBlockedApprovals(): Promise<
-    Page<BlockedApprovalView>
-> {
-    const page = await apiGet<Page<BlockedApprovalViewDto>>(
-        "/admin/approval-instances",
-        { status: "BLOCKED", page: 1, page_size: 100 },
-    )
-    return { ...page, items: page.items.map(mapBlockedApprovalDto) }
-}
 
 /** 发送一条责任命令；任务版本只能来自最近一次服务端查询。 */
 export function submitWorkItemResponsibility(
@@ -203,22 +194,4 @@ export function submitWorkItemResponsibility(
                 comment: command.comment,
             })
     }
-}
-
-/** 重试当前受阻步骤；调用方不得指定下一步骤或处理人。 */
-export function recoverApproval(
-    command: RecoverApprovalCommand,
-): Promise<ApprovalRuntimeViewDto> {
-    return apiPost<ApprovalRuntimeViewDto>(
-        `/admin/approval-instances/${encodeURIComponent(command.approvalInstanceId)}/recover`,
-        {
-            current_step_instance_id: command.currentStepInstanceId,
-            expected_instance_version: command.expectedInstanceVersion,
-            expected_step_version: command.expectedStepVersion,
-            expected_task_version: command.expectedTaskVersion,
-            recovery_action: command.recoveryAction,
-            reason: command.reason,
-            idempotency_key: command.idempotencyKey,
-        },
-    )
 }

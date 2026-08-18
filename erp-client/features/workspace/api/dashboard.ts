@@ -1,10 +1,11 @@
 /**
- * W01 今日工作台 — 真实 HTTP（D03 work_item + /account/profile）。
- * 指标与列表复用同一授权规则；更新时间使用统计接口的 as_of。
+ * W01 工作台 — 任务列表与指标。
+ * 指标与列表使用同一授权口径；不得对已加载条目求和。
  */
 
 import type { AccountProfile } from "@/features/auth/api"
-import { isRegisteredHandlerDestination } from "@/features/unified-task-queue/lib/handler-destination"
+import { listApprovalInstances } from "@/features/approval-workflow/api"
+import type { ApprovalInstanceListItem } from "@/features/approval-workflow/types"
 import {
     getWorkItemStats,
     listWorkItems,
@@ -12,28 +13,31 @@ import {
 } from "@/features/work-items/api"
 import { mapWorkItemDto, type WorkItemDto } from "@/features/work-items/types"
 import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
-import { sequentialText } from "@/lib/ui-text"
 
 import type {
     TodayWorkspaceQuery,
     TodayWorkspaceView,
+    WorkspaceActionCode,
     WorkspaceFamilyFilter,
     WorkspaceMetric,
-    WorkspaceTaskGroup,
     WorkspaceWorkItem,
 } from "../types"
-import {
-    FAMILY_META,
-    PRIORITY_RANK,
-    STATUS_LABEL,
-    TYPE_META,
-} from "./work-item-meta"
-
-const TEMPORARY_PREVIEW_LIMIT = 5
+import { PRIORITY_RANK, STATUS_LABEL, TYPE_META } from "./work-item-meta"
 
 const WORKSPACE_IDS = new Set<string>(
     WORKSPACE_ROUTES.map((workspace) => workspace.id),
 )
+
+const WORKSPACE_ACTIONS = new Set<WorkspaceActionCode>([
+    "VIEW",
+    "PROCESS",
+    "OPEN_DOCUMENT",
+    "APPROVE",
+    "REJECT",
+    "RESUME_CURRENT_APPROVER",
+    "REASSIGN_CURRENT_APPROVER",
+    "CANCEL_BLOCKED_APPROVAL",
+])
 
 function workspaceId(value?: string): WorkspaceId | undefined {
     return value && WORKSPACE_IDS.has(value)
@@ -47,26 +51,19 @@ function actionBlockers(dto: WorkItemDto): WorkspaceWorkItem["actionBlockers"] {
             ? { code: "ACTION_BLOCKED", message: blocker }
             : blocker,
     )
-
-    if (dto.processing_blocker) {
-        messages.push(dto.processing_blocker)
-    }
-
+    if (dto.processing_blocker) messages.push(dto.processing_blocker)
     return messages.map((blocker) => ({
-        action: "PROCESS",
+        action:
+            dto.processing_state === "APPROVAL_BLOCKED" ? "APPROVE" : "PROCESS",
         code: blocker.code,
         message: blocker.message,
     }))
 }
 
 function allowedActions(dto: WorkItemDto): WorkspaceWorkItem["allowedActions"] {
-    if (dto.processing_state === "APPROVAL_BLOCKED") return []
-
     return (dto.allowed_actions ?? []).filter(
-        (action): action is "VIEW" | "PROCESS" | "START_PROCESSING" =>
-            action === "VIEW" ||
-            action === "PROCESS" ||
-            action === "START_PROCESSING",
+        (action): action is WorkspaceActionCode =>
+            WORKSPACE_ACTIONS.has(action as WorkspaceActionCode),
     )
 }
 
@@ -97,8 +94,6 @@ function dueBucket(
 ): WorkspaceWorkItem["dueBucket"] {
     if (!dueAtIso) return "later"
     const due = new Date(dueAtIso).getTime()
-    // 比较用服务端 due_at；无 as_of 时以 due 与本地日历日粗分桶仅供展示分组，
-    // 不作为 projection as_of。
     const now = Date.now()
     if (due < now) return "overdue"
     try {
@@ -108,16 +103,22 @@ function dueBucket(
             month: "2-digit",
             day: "2-digit",
         })
-        const dueDay = fmt.format(new Date(dueAtIso))
-        const todayDay = fmt.format(new Date(now))
-        if (dueDay === todayDay) return "today"
+        if (fmt.format(new Date(dueAtIso)) === fmt.format(new Date(now))) {
+            return "today"
+        }
     } catch {
         /* ignore */
     }
     return "later"
 }
 
-function mapWorkItem(dto: WorkItemDto, timezone: string): WorkspaceWorkItem {
+/**
+ * 把任务 DTO 转成工作台行。责任与动作只读服务端字段。
+ */
+export function mapWorkspaceWorkItem(
+    dto: WorkItemDto,
+    timezone: string,
+): WorkspaceWorkItem {
     const task = mapWorkItemDto(dto)
     const meta = TYPE_META[dto.work_item_type] ?? {
         label: dto.work_item_type,
@@ -128,29 +129,8 @@ function mapWorkItem(dto: WorkItemDto, timezone: string): WorkspaceWorkItem {
     const dueAt = unixToIso(task.dueAt)
     const bucket = dueBucket(dueAt, timezone)
     const configuredDestination = workspaceId(task.destinationWorkspaceId)
-    const destinationWorkspaceId = configuredDestination ?? "W02"
-    const queueContextId = task.queueContextId
-    const routeContext = task.routeContext
-    const hasRequiredRouting =
-        Boolean(configuredDestination) &&
-        isRegisteredHandlerDestination(
-            task.handlerKey,
-            task.destinationWorkspaceId,
-        ) &&
-        Boolean(queueContextId) &&
-        (destinationWorkspaceId !== "W18" ||
-            Boolean(routeContext?.confirmationScope))
-    const serverAllowedActions = allowedActions(dto)
-    const mappedActionBlockers = actionBlockers(dto)
-    const routeBlocker = hasRequiredRouting
-        ? []
-        : [
-              {
-                  action: "PROCESS" as const,
-                  code: "HANDLER_CONTEXT_MISSING",
-                  message: "任务处理入口尚未配置完整，请刷新或联系管理员。",
-              },
-          ]
+    const destinationWorkspaceId = configuredDestination ?? "W01"
+    const ownerUserLabel = task.ownerUser?.displayName || "处理人待确认"
 
     return {
         workItemId: task.workItemId,
@@ -164,31 +144,29 @@ function mapWorkItem(dto: WorkItemDto, timezone: string): WorkspaceWorkItem {
         objectTitle:
             dto.business_object_label ??
             `${meta.label} · ${task.businessObjectId}`,
-        counterpartyName: task.counterpartyLabel ?? task.businessObjectType,
+        counterpartyName: task.counterpartyLabel,
+        listSummary: task.listSummary,
         status: task.status,
         statusLabel: statusMeta.label,
         statusTone: statusMeta.tone,
         processingState: task.processingState,
-        assignmentMode: task.assignmentMode,
         priority:
             typeof task.priority === "number"
                 ? task.priority
-                : (PRIORITY_RANK[task.priority] ?? 3),
+                : (PRIORITY_RANK[String(task.priority).toLowerCase()] ?? 3),
         createdAt,
-        dueAt,
+        dueAt: dueAt || undefined,
         ownerRoleLabel: task.ownerRoleLabel,
         ownerOrganizationLabel: task.ownerOrganization.displayName,
-        ownerUserLabel: task.ownerUser?.displayName,
+        ownerUserLabel,
         reasonLabel: task.reasonLabel,
         impactSummary: task.impactSummary,
-        allowedActions: hasRequiredRouting
-            ? serverAllowedActions
-            : serverAllowedActions.filter((action) => action === "VIEW"),
-        actionBlockers: [...mappedActionBlockers, ...routeBlocker],
+        allowedActions: allowedActions(dto),
+        actionBlockers: actionBlockers(dto),
         destinationWorkspaceId,
-        queueContextId,
+        queueContextId: task.queueContextId,
         handlerKey: task.handlerKey,
-        routeContext,
+        routeContext: task.routeContext,
         enteredAtLabel: formatRelativeLabel(createdAt, timezone),
         dueAtLabel:
             bucket === "overdue"
@@ -196,32 +174,20 @@ function mapWorkItem(dto: WorkItemDto, timezone: string): WorkspaceWorkItem {
                 : formatRelativeLabel(dueAt, timezone),
         dueBucket: bucket,
         family: meta.family,
+        approvalProcessInstanceId: task.approvalProcessInstanceId,
+        approvalNodeExecutionId: task.approvalNodeExecutionId,
     }
 }
 
-function buildMetrics(
-    stats: WorkItemStats,
-    scope: TodayWorkspaceQuery["scope"],
-): WorkspaceMetric[] {
+function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
     const detail = "当前授权范围"
     return [
         {
-            key: "mine",
-            label:
-                scope === "mine"
-                    ? sequentialText.minePending
-                    : sequentialText.teamPending,
-            count: scope === "mine" ? stats.assigned : stats.team,
+            key: "inbox",
+            label: "待我处理",
+            count: stats.inbox ?? stats.assigned,
             visible: true,
             tone: "info",
-            detail,
-        },
-        {
-            key: "due_today",
-            label: "今日到期",
-            count: stats.due_today,
-            visible: true,
-            tone: "warning",
             detail,
         },
         {
@@ -233,69 +199,95 @@ function buildMetrics(
             detail,
         },
         {
-            key: "exception",
-            label: "异常待处理",
-            count: stats.exception,
-            visible: true,
+            key: "blocked",
+            label: "受阻",
+            count: stats.blocked ?? 0,
+            visible: stats.blocked != null,
             tone: "warning",
+            detail,
+        },
+        {
+            key: "started",
+            label: "我发起的",
+            count: stats.started ?? 0,
+            visible: stats.started != null,
+            tone: "info",
             detail,
         },
     ]
 }
 
-function buildGroups(
-    items: readonly WorkspaceWorkItem[],
-    familyFilter?: WorkspaceFamilyFilter,
-): WorkspaceTaskGroup[] {
-    const families = (
-        Object.keys(FAMILY_META) as WorkspaceFamilyFilter[]
-    ).filter((f) => !familyFilter || f === familyFilter)
-
-    return families
-        .map((family) => {
-            const familyItems = items.filter((i) => i.family === family)
-            const meta = FAMILY_META[family]
-            return {
-                family,
-                label: meta.label,
-                total: familyItems.length,
-                pagePreviewLimit: TEMPORARY_PREVIEW_LIMIT,
-                previewLimitSource: "TEMPORARY_FALLBACK" as const,
-                defaultExpanded: meta.defaultExpanded,
-                items: familyItems.slice(0, TEMPORARY_PREVIEW_LIMIT),
-            }
-        })
-        .filter((g) => g.total > 0 || Boolean(familyFilter))
-}
-
 /**
- * 拉取今日工作台视图：任务列表来自 `/admin/work-items`，观众身份来自 `/account/profile`。
+ * 拉取工作台视图：任务列表与指标分别请求，口径一致。
  */
 export async function fetchWorkspaceDashboard(
     query: TodayWorkspaceQuery,
     profile: AccountProfile,
 ): Promise<TodayWorkspaceView> {
+    const canManage = profile.permissions.some((permission) =>
+        [
+            "approval_instance:reassign",
+            "approval_instance:cancel_blocked",
+            "approval_instance:*",
+            "*:*",
+        ].includes(permission),
+    )
+    const view = query.view === "managed" && !canManage ? "inbox" : query.view
+
     const [page, stats] = await Promise.all([
-        listWorkItems({
-            scope: query.scope,
-            family: query.family,
-            due: query.due,
-            sort: "priority_due",
-            timezone: query.timezone,
-            page: 1,
-            pageSize: 100,
-        }),
+        view === "started"
+            ? listApprovalInstances({
+                  view: "started",
+                  documentType: query.workItemType,
+                  limit: 20,
+              }).then((result) => ({
+                  items: [] as WorkItemDto[],
+                  startedItems: result.items,
+                  total: result.total ?? result.items.length,
+                  nextCursor: result.nextCursor,
+              }))
+            : listWorkItems({
+                  scope: view === "managed" ? "managed" : "mine",
+                  family: query.family,
+                  workItemType: query.workItemType,
+                  due: query.due,
+                  blocked: query.blocked,
+                  query: query.query,
+                  sort: query.sort,
+                  cursor: query.cursor,
+                  currentWorkItemId: query.currentWorkItemId,
+                  timezone: query.timezone,
+                  page: 1,
+                  pageSize: 50,
+              }).then((result) => ({
+                  items: result.items,
+                  startedItems: [],
+                  total: result.total,
+                  nextCursor: undefined as string | undefined,
+              })),
         getWorkItemStats({
-            scope: query.scope,
+            scope: "mine",
             family: query.family,
+            workItemType: query.workItemType,
             due: query.due,
+            blocked: query.blocked,
             timezone: query.timezone,
         }),
     ])
 
-    const items = page.items.map((dto) => mapWorkItem(dto, query.timezone))
+    const items =
+        view === "started"
+            ? page.startedItems.map((item) =>
+                  startedInstanceToWorkItem(item, query.timezone),
+              )
+            : page.items.map((dto) => mapWorkspaceWorkItem(dto, query.timezone))
 
     const updatedAt = unixToIso(stats.as_of)
+    const metrics = buildMetrics(stats).map((metric) =>
+        metric.key === "started" && !canManage
+            ? { ...metric, visible: metric.visible && canManage }
+            : metric,
+    )
 
     return {
         access: "allowed",
@@ -310,14 +302,79 @@ export async function fetchWorkspaceDashboard(
         },
         freshness: {
             workItemsUpdatedAt: updatedAt,
+            statsUpdatedAt: updatedAt,
+            statsState: updatedAt ? "fresh" : "stale",
             projectionUpdatedAt: updatedAt,
             projectionState: updatedAt ? "fresh" : "stale",
         },
-        metrics: buildMetrics(stats, query.scope),
-        groups: buildGroups(items, query.family),
+        metrics,
+        items,
+        nextCursor: page.nextCursor,
+        total: page.total,
         warnings: [],
         recent: [],
-        canOpenTaskQueue: true,
-        temporaryPreviewLimitFallback: TEMPORARY_PREVIEW_LIMIT,
     }
 }
+
+/**
+ * 顶栏待办角标：本人开放任务数，来自服务端统计。
+ */
+export async function fetchWorkspaceInboxCount(): Promise<{ mine: number }> {
+    const stats = await getWorkItemStats({
+        scope: "mine",
+        timezone:
+            Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
+    })
+    return { mine: stats.inbox ?? stats.assigned }
+}
+
+function startedInstanceToWorkItem(
+    item: ApprovalInstanceListItem,
+    timezone: string,
+): WorkspaceWorkItem {
+    const createdAt = ""
+    return {
+        workItemId: item.instanceId,
+        taskVersion: "",
+        workItemType: "APPROVAL_INSTANCE",
+        workItemTypeLabel: item.processName ?? "我发起的审批",
+        businessObjectType: item.documentType ?? "",
+        businessObjectId: item.documentId ?? item.instanceId,
+        subjectVersion: "",
+        stableNumber: item.documentId ?? item.instanceId,
+        objectTitle: item.documentLabel ?? item.processName ?? "审批",
+        status: "OPEN",
+        statusLabel: item.status === "BLOCKED" ? "受阻" : "审批中",
+        statusTone: item.status === "BLOCKED" ? "destructive" : "info",
+        processingState:
+            item.status === "BLOCKED" ? "APPROVAL_BLOCKED" : "READY",
+        priority: 3,
+        createdAt,
+        ownerRoleLabel: "审批",
+        ownerOrganizationLabel: "",
+        ownerUserLabel: item.currentAssigneeName ?? "处理人待确认",
+        reasonLabel: "我发起的审批",
+        impactSummary: "",
+        allowedActions: ["VIEW"],
+        actionBlockers: [],
+        destinationWorkspaceId: "W01",
+        handlerKey: "",
+        enteredAtLabel: formatRelativeLabel(createdAt, timezone),
+        dueAtLabel: "—",
+        dueBucket: "later",
+        family: "approval",
+        approvalProcessInstanceId: item.instanceId,
+        approval: {
+            instanceId: item.instanceId,
+            currentRoundNo: item.currentRoundNo,
+            currentNodeLabel:
+                item.currentNodeName ?? item.currentNodeKey ?? "—",
+            currentAssigneeLabel: item.currentAssigneeName ?? "—",
+            processName: item.processName ?? "审批流程",
+            processVersion: item.processVersion ?? "",
+            status: item.status,
+        },
+    }
+}
+
+export { FAMILY_META } from "./work-item-meta"

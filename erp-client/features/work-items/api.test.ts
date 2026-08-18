@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import * as api from "./api"
-import type {
-    ApprovalRuntimeViewDto,
-    BlockedApprovalViewDto,
-    WorkItemDto,
-} from "./types"
+import type { WorkItemDto } from "./types"
 
 vi.mock("@/lib/api", () => ({
     apiGet: vi.fn(),
@@ -14,7 +10,9 @@ vi.mock("@/lib/api", () => ({
 
 import { apiGet, apiPost } from "@/lib/api"
 
-const makeWorkItemDto = (overrides: Partial<WorkItemDto> = {}): WorkItemDto => ({
+const makeWorkItemDto = (
+    overrides: Partial<WorkItemDto> = {},
+): WorkItemDto => ({
     id: "wi_1",
     work_item_type: "procurement_confirmation",
     handler_key: "procurement-confirmation",
@@ -116,7 +114,12 @@ describe("parseWorkItemConflict", () => {
 
 describe("listWorkItems", () => {
     it("serializes filters, defaults and array fields", async () => {
-        vi.mocked(apiGet).mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 })
+        vi.mocked(apiGet).mockResolvedValue({
+            items: [],
+            total: 0,
+            page: 1,
+            page_size: 100,
+        })
         await api.listWorkItems({
             scope: "mine",
             family: "procurement",
@@ -152,7 +155,12 @@ describe("listWorkItems", () => {
     })
 
     it("applies default sort and paging when omitted", async () => {
-        vi.mocked(apiGet).mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 })
+        vi.mocked(apiGet).mockResolvedValue({
+            items: [],
+            total: 0,
+            page: 1,
+            page_size: 100,
+        })
         await api.listWorkItems({ scope: "team", timezone: "UTC" })
         expect(apiGet).toHaveBeenCalledWith("/admin/work-items", {
             scope: "team",
@@ -208,71 +216,6 @@ describe("getWorkItem", () => {
     })
 })
 
-describe("listBlockedApprovals", () => {
-    it("maps the blocked approval page to the management view", async () => {
-        const dto: BlockedApprovalViewDto = {
-            approval_instance_id: "ai_1",
-            instance_version: 7,
-            current_step_instance_id: "si_1",
-            step_version: 3,
-            work_item: {
-                id: "wi_1",
-                work_item_type: "procurement_confirmation",
-                approval_step_instance_id: "si_1",
-                status: "OPEN",
-                assignment_mode: "POOL",
-                owner_role: "procurement",
-                owner_organization_id: "org_1",
-                owner_user_id: null,
-                task_version: "5",
-            },
-            business_object_label: "采购计划 PO-1",
-            blocker_code: "STEP_BLOCKED",
-            blocker_message: "请处理后继续",
-            blocked_at: 1_700_000_000_000,
-            allowed_actions: ["RETRY_CURRENT_STEP"],
-        }
-        vi.mocked(apiGet).mockResolvedValue({
-            items: [dto],
-            total: 1,
-            page: 1,
-            page_size: 100,
-        })
-
-        const result = await api.listBlockedApprovals()
-
-        expect(apiGet).toHaveBeenCalledWith("/admin/approval-instances", {
-            status: "BLOCKED",
-            page: 1,
-            page_size: 100,
-        })
-        expect(result.items).toEqual([
-            {
-                approvalInstanceId: "ai_1",
-                instanceVersion: "7",
-                currentStepInstanceId: "si_1",
-                stepVersion: "3",
-                workItem: {
-                    workItemId: "wi_1",
-                    workItemType: "procurement_confirmation",
-                    approvalStepInstanceId: "si_1",
-                    status: "OPEN",
-                    assignmentMode: "POOL",
-                    ownerRole: "procurement",
-                    ownerOrganizationId: "org_1",
-                    ownerUserId: undefined,
-                    taskVersion: "5",
-                },
-                businessObjectLabel: "采购计划 PO-1",
-                blockerCode: "STEP_BLOCKED",
-                blockerMessage: "请处理后继续",
-                blockedAt: 1_700_000_000_000,
-                allowedActions: ["RETRY_CURRENT_STEP"],
-            },
-        ])
-    })
-})
-
 describe("submitWorkItemResponsibility", () => {
     const common = {
         expected_task_version: "5",
@@ -318,12 +261,15 @@ describe("submitWorkItemResponsibility", () => {
             reason: "转交",
             idempotencyKey: "op_3",
         })
-        expect(apiPost).toHaveBeenCalledWith("/admin/work-items/wi_1/reassign", {
-            ...common,
-            idempotency_key: "op_3",
-            target_user_id: "u_9",
-            reason: "转交",
-        })
+        expect(apiPost).toHaveBeenCalledWith(
+            "/admin/work-items/wi_1/reassign",
+            {
+                ...common,
+                idempotency_key: "op_3",
+                target_user_id: "u_9",
+                reason: "转交",
+            },
+        )
     })
 
     it("posts CLOSE with reason code, replacement and comment", async () => {
@@ -344,57 +290,5 @@ describe("submitWorkItemResponsibility", () => {
             replacement_work_item_id: "wi_2",
             comment: "重复任务",
         })
-    })
-})
-
-describe("recoverApproval", () => {
-    it("posts the recovery payload to the instance endpoint", async () => {
-        const runtime: ApprovalRuntimeViewDto = {
-            instance: {
-                id: "ai_1",
-                definition_key: "purchase_plan",
-                definition_version: 1,
-                runtime_kind: "INTERNAL",
-                business_object_type: "purchase_plan",
-                business_object_id: "po_1",
-                subject_version: "v1",
-                owner_organization_id: "org_1",
-                status: "RUNNING",
-                instance_version: "3",
-                started_by: "u1",
-                started_at: 1_700_000_000_000,
-            },
-            step: {
-                id: "si_1",
-                approval_instance_id: "ai_1",
-                step_key: "confirm",
-                sequence_no: 1,
-                status: "ACTIVE",
-                step_version: "2",
-            },
-        }
-        vi.mocked(apiPost).mockResolvedValue(runtime)
-        await api.recoverApproval({
-            approvalInstanceId: "ai_1",
-            currentStepInstanceId: "si_1",
-            expectedInstanceVersion: "2",
-            expectedStepVersion: "1",
-            expectedTaskVersion: "5",
-            recoveryAction: "RETRY_CURRENT_STEP",
-            reason: "继续处理",
-            idempotencyKey: "recover_1",
-        })
-        expect(apiPost).toHaveBeenCalledWith(
-            "/admin/approval-instances/ai_1/recover",
-            {
-                current_step_instance_id: "si_1",
-                expected_instance_version: "2",
-                expected_step_version: "1",
-                expected_task_version: "5",
-                recovery_action: "RETRY_CURRENT_STEP",
-                reason: "继续处理",
-                idempotency_key: "recover_1",
-            },
-        )
     })
 })

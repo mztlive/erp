@@ -11,8 +11,8 @@ vi.mock("@/features/procurement-confirmation/api", () => ({
         typeof value === "string" && /^[0-9a-f]{64}$/i.test(value),
 }))
 
-vi.mock("@/features/unified-task-queue/queries", () => ({
-    unifiedQueueKeys: { all: ["work-items"], view: vi.fn(), counts: vi.fn() },
+vi.mock("@/features/work-items/queries", () => ({
+    workItemKeys: { all: ["work-items"], view: vi.fn(), counts: vi.fn() },
 }))
 
 import {

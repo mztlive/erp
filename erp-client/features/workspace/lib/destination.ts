@@ -1,10 +1,10 @@
 import { getWorkspaceById, type WorkspaceId } from "@/lib/workspace-registry"
 import type { WorkspaceWorkItem } from "@/features/workspace/types"
-import type { WorkspaceUrlState } from "@/features/workspace/lib/url-state"
+
+import { buildHandlerHref } from "./handler-destination"
 
 /**
- * Resolve a safe in-app destination from the local workspace registry.
- * Server may only return workspace ids — never raw external URLs (W01 §7.1).
+ * 从本地工作面注册表解析应用内路径。服务端只返回工作面编号。
  */
 export function resolveWorkspaceHref(
     workspaceId: WorkspaceId,
@@ -19,7 +19,6 @@ export function resolveWorkspaceHref(
         if (value) params.set(key, value)
     }
 
-    // Preserve any existing query on navHref (e.g. W06 acceptance section).
     const [path, existingQs] = base.split("?")
     if (existingQs) {
         const existing = new URLSearchParams(existingQs)
@@ -32,34 +31,17 @@ export function resolveWorkspaceHref(
 }
 
 /**
- * Primary action navigation: open W02 with the work item focused.
- * One click from W01 task row into the W02 current processor (W02 §12.1 / W01).
- * 任务身份不落地址栏（内部 ID 禁止进 URL）；焦点经 sessionStorage 传给 W02。
- * Specialized W07/W13 handlers are opened from W02, not bypassed from W01.
+ * 非审批任务的「打开单据」地址。审批决定在本页提交，不跳第二套待办页。
  */
-export function buildProcessHref(
-    item: WorkspaceWorkItem,
-    scope: WorkspaceUrlState["scope"],
-): string {
-    if (item.destinationWorkspaceId === "W18") {
-        return resolveWorkspaceHref("W18", {
-            batchId: item.businessObjectId,
-            section: "confirm",
-            confirmationScope: item.routeContext?.confirmationScope,
-            workItemId: item.workItemId,
-            queueContextId: item.queueContextId,
-        })
-    }
-
-    return resolveWorkspaceHref("W02", {
-        scope,
-        family: item.family,
+export function buildDocumentHref(item: WorkspaceWorkItem): string | null {
+    return buildHandlerHref({
+        handlerKey: item.handlerKey,
+        destinationWorkspaceId: item.destinationWorkspaceId,
+        businessObjectId: item.businessObjectId,
+        workItemId: item.workItemId,
+        queueContextId: item.queueContextId,
+        routeContext: item.routeContext,
     })
-}
-
-/** Secondary "查看" navigation when PROCESS is blocked but VIEW is allowed. */
-export function buildViewHref(item: WorkspaceWorkItem): string {
-    return resolveWorkspaceHref(item.destinationWorkspaceId)
 }
 
 export function buildWarningHref(warning: {
