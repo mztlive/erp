@@ -14,7 +14,10 @@ import {
     mapChangeOrder,
     throwValidation,
 } from "@/features/sales-orders/api/mappers"
-import type { SalesChangeOrderSummary } from "@/features/sales-orders/types"
+import type {
+    SalesChangeOrderSummary,
+    SalesOrderNature,
+} from "@/features/sales-orders/types"
 
 export type StartSalesChangeOrderIntent = {
     salesOrderId: string
@@ -169,6 +172,48 @@ export async function startSalesChangeOrder(
         ...mapChangeOrder(created, input.nature),
         baseRevisionNo: input.baseRevisionNo,
     }
+}
+
+/**
+ * 读取销售变更单详情，补齐统一只读审批投影。
+ *
+ * @param id 变更单 ID。
+ * @param nature 原销售单业务性质，仅用于兼容旧摘要字段。
+ */
+export async function fetchSalesChangeOrderDetail(
+    id: string,
+    nature: SalesOrderNature,
+): Promise<SalesChangeOrderSummary> {
+    const detail = await apiGet<BackendSalesChangeOrder>(
+        `/admin/sales-change-orders/${encodeURIComponent(id)}`,
+    )
+    return mapChangeOrder(detail, nature)
+}
+
+export type SubmitSalesChangeOrderInput = Readonly<{
+    salesChangeOrderId: string
+    salesOrderId: string
+    version: number
+    nature: SalesOrderNature
+    idempotencyKey: string
+}>
+
+/**
+ * 提交销售变更并启动统一审批。客户端不得选择定义或审批人。
+ *
+ * @param input 期望版本、幂等键与业务性质。
+ */
+export async function submitSalesChangeOrder(
+    input: SubmitSalesChangeOrderInput,
+): Promise<SalesChangeOrderSummary> {
+    const submitted = await apiPost<BackendSalesChangeOrder>(
+        `/admin/sales-change-orders/${encodeURIComponent(input.salesChangeOrderId)}/submit-impact`,
+        {
+            version: input.version,
+            idempotency_key: input.idempotencyKey,
+        },
+    )
+    return mapChangeOrder(submitted, input.nature)
 }
 
 export type SalesChangeReviewDecisionInput = Readonly<{

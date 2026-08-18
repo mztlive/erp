@@ -18,6 +18,7 @@ import {
     type PageView,
     type SalesOrderDetailView,
 } from "@/features/sales-orders/api/contracts"
+import { fetchSalesChangeOrderDetail } from "@/features/sales-orders/api/sales-orders-change"
 import {
     formatInstant,
     formatIsoNow,
@@ -87,10 +88,17 @@ async function loadDetailExtras(
                 c.status !== "REJECTED",
         ) ?? null
 
+    if (!activeChange) {
+        return { activeChangeOrder: null }
+    }
+
+    const detailed = await fetchSalesChangeOrderDetail(
+        activeChange.id,
+        nature,
+    ).catch(() => mapChangeOrder(activeChange, nature))
+
     return {
-        activeChangeOrder: activeChange
-            ? mapChangeOrder(activeChange, nature)
-            : null,
+        activeChangeOrder: detailed,
     }
 }
 

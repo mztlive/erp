@@ -128,7 +128,10 @@ export function SalesOrderDetailTabs({
             </TabsContent>
 
             <TabsContent value="versions" className="px-3 pt-4 pb-4 md:px-4">
-                <VersionsPanel order={order} />
+                <VersionsPanel
+                    order={order}
+                    onApprovalResult={onApprovalResult}
+                />
             </TabsContent>
         </Tabs>
     )

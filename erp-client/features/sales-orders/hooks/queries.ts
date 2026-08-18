@@ -14,6 +14,7 @@ import {
     resolveProcurementRejection,
     saveSalesOrderDraft,
     startSalesChangeOrder,
+    submitSalesChangeOrder,
     submitSalesChangeReviewDecision,
     submitSalesOrder,
     type SalesOrdersListQuery,
@@ -149,12 +150,43 @@ export function useStartSalesChangeOrderMutation() {
     return useMutation({
         mutationFn: startSalesChangeOrder,
         onSuccess: async (_data, variables) => {
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.detail(variables.salesOrderId),
-            })
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.all,
-            })
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.detail(variables.salesOrderId),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: approvalKeys.all,
+                }),
+            ])
+        },
+    })
+}
+
+/**
+ * 提交销售变更审批。成功后刷新销售单、审批实例与任务。
+ */
+export function useSubmitSalesChangeOrderMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: submitSalesChangeOrder,
+        onSuccess: async (_data, variables) => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.detail(variables.salesOrderId),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: approvalKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: workItemKeys.all,
+                }),
+            ])
         },
     })
 }

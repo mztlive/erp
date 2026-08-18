@@ -37,11 +37,14 @@ export {
 } from "@/features/sales-orders/api/sales-orders-procurement"
 export { completeLowMarginManagerConfirmation } from "@/features/sales-orders/api/sales-orders-low-margin"
 export {
+    fetchSalesChangeOrderDetail,
     prepareStartSalesChangeOrder,
     startSalesChangeOrder,
+    submitSalesChangeOrder,
     submitSalesChangeReviewDecision,
     type SalesChangeReviewDecisionInput,
     type StartSalesChangeOrderInput,
     type StartSalesChangeOrderIntent,
     type StartSalesChangeOrderPayload,
+    type SubmitSalesChangeOrderInput,
 } from "@/features/sales-orders/api/sales-orders-change"

@@ -348,7 +348,7 @@ describe("useSalesOrderDetailStartChange", () => {
         keySeq = 0
     })
 
-    it("starts a change order and reports the next responsible for goods orders", async () => {
+    it("starts a change order without inventing the next approver", async () => {
         apiMocks.prepareStartSalesChangeOrder.mockResolvedValue({
             salesOrderId: "so-1",
             baseRevisionNo: 3,
@@ -397,12 +397,12 @@ describe("useSalesOrderDetailStartChange", () => {
             title: "改单已创建",
             description: "已进入「待财务复核」。当前版本对客户仍然有效。",
             reference: "sc-1",
-            nextResponsible: "采购与财务",
+            nextResponsible: undefined,
         })
         expect(ledger.peek("start-change")).toBeUndefined()
     })
 
-    it("routes card orders to operations and finance", async () => {
+    it("does not invent operations or finance as the next approver for card orders", async () => {
         apiMocks.prepareStartSalesChangeOrder.mockResolvedValue({
             salesOrderId: "so-1",
             baseRevisionNo: 3,
@@ -436,7 +436,7 @@ describe("useSalesOrderDetailStartChange", () => {
             description:
                 "已进入「待运营执行影响确认」。当前版本对客户仍然有效。",
             reference: "sc-2",
-            nextResponsible: "运营与财务",
+            nextResponsible: undefined,
         })
     })
 

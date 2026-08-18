@@ -197,9 +197,15 @@ export type SalesChangeOrderSummary = {
     id: string
     statusLabel: string
     statusTone: StatusTone
+    /** 服务端状态码；审批相位只读此值与审批投影，不按影响路径推导。 */
+    statusCode?: string
+    /** 乐观锁版本；提交审批必须携带。 */
+    version?: number
     baseRevisionNo: number
     createdAt: string
     impactPath: "procurement" | "operations"
+    /** 统一只读审批结构。缺省表示列表行尚未补详情。 */
+    approval?: DocumentApprovalView
 }
 
 export type FormalAllowedAction =

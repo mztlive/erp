@@ -85,7 +85,6 @@ export function SalesOrderDetailSecondaryActions({
 
 export function SalesOrderDetailCommandDialogs({
     order,
-    isCard,
     voidOpen,
     onVoidOpenChange,
     voidPending,
@@ -103,7 +102,6 @@ export function SalesOrderDetailCommandDialogs({
     onChangeConfirm,
 }: {
     order: SalesOrderDetailView
-    isCard: boolean
     voidOpen: boolean
     onVoidOpenChange: (open: boolean) => void
     voidPending: boolean
@@ -176,11 +174,8 @@ export function SalesOrderDetailCommandDialogs({
                 effects={[
                     "生成一笔改单，不改掉当前客户正在执行的版本",
                     "已有交付、回款、开票记录都会保留",
-                    isCard
-                        ? "卡券：运营确认影响 → 财务复核后新版本生效"
-                        : "实物/服务：采购确认影响 → 财务复核后新版本生效",
+                    "提交后按已绑定的审批流程办理，全部通过后新版本生效",
                 ]}
-                nextDepartment={isCard ? "运营与财务" : "采购与财务"}
                 onConfirm={onChangeConfirm}
             />
         </>
