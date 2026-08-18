@@ -1,4 +1,6 @@
-//! D03 人工任务责任路由。
+//! 人工任务责任路由。
+//!
+//! 已删除 `/work-items/{id}/start-processing`、`release-to-team` 与 `claim`。
 
 use axum::{
     routing::{get, post},
@@ -14,8 +16,7 @@ use crate::{
 /// 返回只暴露稳定责任接口的管理端路由。
 ///
 /// # 返回
-/// 返回列表、详情、开始处理、退回团队、转交和关闭路由；不暴露公开创建、
-/// 暂挂或通用完成接口。
+/// 返回列表、统计、详情、转交和关闭路由；不暴露领取、开始处理或退回团队。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
@@ -40,22 +41,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(work_item::work_item_detail),
                 rbac,
                 work_item::work_item_detail_permission_key(),
-            ),
-        )
-        .route(
-            "/work-items/{id}/start-processing",
-            with_permission(
-                post(work_item::work_item_start_processing),
-                rbac,
-                work_item::work_item_start_processing_permission_key(),
-            ),
-        )
-        .route(
-            "/work-items/{id}/release-to-team",
-            with_permission(
-                post(work_item::work_item_release_to_team),
-                rbac,
-                work_item::work_item_release_to_team_permission_key(),
             ),
         )
         .route(
