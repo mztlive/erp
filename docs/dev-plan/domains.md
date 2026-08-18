@@ -30,7 +30,7 @@
 | `backend/database/src/repository/{bpm,approval_integration,work_item}.rs` | P2 |
 | `backend/database/src/indexes/{bpm,approval_integration,work_item}.rs` | P2 |
 | `backend/services/src/approval/**` | P3 |
-| `backend/services/src/work_item/**` | P3 |
+| `backend/services/src/work_item/**` | P3；P2 仅 ownsWithin 测试辅助 `w13_delta_row()` 的 `approval_node_execution_id` 字面量 |
 | `backend/services/src/document_registry/**` | P3 |
 | `backend/apps/web-api/src/core/handler/{approval_process,approval_instance,work_item}/**` | P3 |
 | `erp-client/features/approval-processes/**` | P4 |
