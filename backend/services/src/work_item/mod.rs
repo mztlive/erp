@@ -3932,6 +3932,7 @@ mod tests {
             id: "wi-w13-delta".to_string(),
             work_item_type: WorkItemType::CardFundsDeltaReview,
             approval_step_instance_id: None,
+            approval_node_execution_id: None,
             business_object_type: "receivable_account".to_string(),
             business_object_id: "account-1".to_string(),
             subject_version: "revision-2".to_string(),
