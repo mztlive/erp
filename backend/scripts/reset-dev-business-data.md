@@ -12,8 +12,10 @@
 backend/scripts/reset-dev-business-data.sh
 ```
 
-工具只读取指定 TOML 文件的 `database.uri` 和 `database.db_name`。工具不得输出 URI、用户名、密码或配置文件中的其他密钥。
+工具只读取指定 TOML 文件的 `database.uri` 和 `database.db_name`。工具不得输出 URI、用户名、密码、证书或配置文件中的其他密钥。
 `mongosh` 必须以 `--norc` 启动，禁止加载用户级 `.mongoshrc.js` 并引入合同外操作。
+preview、execute 与 verify 必须使用同一目标主机、数据库名和集合摘要；摘要由 `database.db_name` 与 `reset-dev-business-data.mongosh.js` 内容计算。
+工具不得调用 `dropDatabase()`，只能 drop 固定集合 allowlist 或按固定过滤条件删除。
 
 ## 2. 强制前置条件
 
@@ -24,25 +26,57 @@ backend/scripts/reset-dev-business-data.sh
 3. 已确认该数据库允许丢弃旧交易数据；
 4. 已提供 `--execute`；
 5. 已提供与配置完全一致的 `--confirm-db <db_name>`；
-6. 非 loopback MongoDB 已额外提供 `--allow-remote`。
-7. 远程库名含 `dev`/`test`/`stage`/`sandbox`/`local` 的独立边界标记；
-8. 远程 URI 中每个主机都已在 `ERP_RESET_ALLOWED_REMOTE_HOSTS` 精确白名单中，不得使用通配符。
+6. 已提供与预览输出完全一致的 `--expect-summary <集合摘要>`；
+7. 非 loopback MongoDB 已额外提供 `--allow-remote`。
+8. 远程库名含 `dev`/`test`/`stage`/`sandbox`/`local` 的独立边界标记；
+9. 远程 URI 中每个主机都已在 `ERP_RESET_ALLOWED_REMOTE_HOSTS` 精确白名单中，不得使用通配符。
 
-缺少任一执行参数时，工具不得进入写分支。
+缺少任一执行参数，或集合摘要与当前目标/脚本不一致时，工具不得进入写分支。
+`--execute` 与 `--verify` 不得同时使用。
 
 ## 3. 删除合同
 
-### 3.1 必须 drop 的不兼容集合
+### 3.1 必须 drop 的审批集合
 
-下列集合必须整体 drop，以同时移除旧文档和旧索引：
+下列旧审批集合必须整体 drop，以同时移除旧文档和旧索引：
 
 ```text
-work_items
 approval_step_instances
 approval_instances
 approval_step_definitions
 approval_definitions
 ```
+
+下列新 BPM 与审批集成集合必须整体 drop，为硬切换提供空库起点。不得只删实例而保留定义、快照、收据或 outbox：
+
+```text
+approval_notification_outbox
+approval_subject_snapshots
+approval_command_receipts
+approval_instance_assignees
+approval_node_executions
+approval_process_instances
+approval_transition_definitions
+approval_node_definitions
+approval_process_definitions
+```
+
+`work_items` 是共享目标集合，仍随完整交易链一并 drop，以同时移除旧文档和旧索引。drop 前必须先按固定过滤删除审批 WorkItem，并删除冲突索引 allowlist：
+
+```text
+# 审批 WorkItem 过滤（类型或字段命中任一即删）
+CARD_SALES_MANAGER_APPROVAL
+CARD_SALES_OPERATION_APPROVAL
+DOCUMENT_APPROVAL
+approval_step_instance_id 存在且非空
+approval_node_execution_id 存在且非空
+
+# 冲突索引 allowlist（集合仍在时按名删除）
+work_items.uk_work_items_open_approval_step
+work_items.idx_work_items_team_pool
+```
+
+不得只删除审批实例而保留引用它们的业务单据或 WorkItem。allowlist 外集合禁止 drop 或删除。
 
 ### 3.2 必须整体重置的交易链
 
@@ -166,14 +200,44 @@ backend/scripts/reset-dev-business-data.sh
 backend/scripts/reset-dev-business-data.sh --config /absolute/path/to/config.toml
 ```
 
-预览只允许执行 `ping`、集合枚举、计数、`distinct` 和聚合校验，不得调用 `drop`、`deleteMany` 或其他写命令。
+预览只允许执行 `ping`、集合枚举、计数、`distinct`、`getIndexes` 和聚合校验，不得调用 `drop`、`dropDatabase`、`deleteMany`、`dropIndex` 或其他写命令。
+
+预览必须输出下列脱敏字段，供 DOC-D runbook 引用：
+
+```text
+目标数据库: <database.db_name>
+目标主机: <host1,host2>
+集合摘要: <sha256>
+运行模式: PREVIEW（只读计数，不执行写入）
+目标拓扑: loopback|非 loopback（URI 已隐藏）
+== 集合 allowlist ==
+- 旧审批集合: ...
+- 新 BPM/集成集合: ...
+- drop 集合: ...
+- 审批 WorkItem 类型: ...
+- 审批 WorkItem 字段: approval_step_instance_id, approval_node_execution_id
+- 冲突索引: work_items.uk_work_items_open_approval_step, work_items.idx_work_items_team_pool
+== 执行前范围 ==
+- <组名>: <文档数>
+    <非零集合>=<计数>
+- 审批 WorkItem 合计: <N>
+    CARD_SALES_MANAGER_APPROVAL=<N>
+    CARD_SALES_OPERATION_APPROVAL=<N>
+    DOCUMENT_APPROVAL=<N>
+    approval_step_instance_id=<N>
+    approval_node_execution_id=<N>
+- 冲突索引现存: <N>
+    work_items.uk_work_items_open_approval_step: present|absent
+    work_items.idx_work_items_team_pool: present|absent
+```
 
 ### 5.2 本地执行
 
 ```bash
 backend/scripts/reset-dev-business-data.sh \
   --execute \
-  --confirm-db <database.db_name>
+  --confirm-db <database.db_name> \
+  --expect-summary <preview 输出的集合摘要>
 ```
 
 ### 5.3 远程开发库执行
@@ -182,6 +246,7 @@ backend/scripts/reset-dev-business-data.sh \
 backend/scripts/reset-dev-business-data.sh \
   --execute \
   --confirm-db <database.db_name> \
+  --expect-summary <preview 输出的集合摘要> \
   --allow-remote
 ```
 
@@ -193,23 +258,52 @@ export ERP_RESET_ALLOWED_REMOTE_HOSTS='mongo-dev-1.example.internal,mongo-dev-2.
 
 `--allow-remote` 只解除拓扑保护，不构成生产环境授权。脚本还必须验证开发库命名和全部远程主机精确白名单。
 
+### 5.4 执行后校验
+
+```bash
+backend/scripts/reset-dev-business-data.sh \
+  --verify \
+  --expect-summary <preview 输出的集合摘要>
+```
+
+verify 只读，不得进入写分支。目标或集合摘要与 preview 不一致时必须失败关闭。
+
 ## 6. 验收合同
 
 执行前必须输出：
 
+- 目标主机（不含 URI/凭据）、数据库名、集合摘要和集合 allowlist；
 - 每组待 drop 集合的文档计数和全部非零集合；
+- 审批 WorkItem 过滤计数（类型与 `approval_step_instance_id` / `approval_node_execution_id`）；
+- 冲突索引 allowlist 的 present/absent；
 - customer/contract/sales 外部映射计数与待删客户及结算链专属 Party 目标计数；
 - 客户账户 Party、客户/合同/销售结算链 Party、供应商共享 Party 与待删专属 Party 计数；
 - 保留文件资产候选计数；
 - 关键引用的悬挂数量。
 
-执行后必须满足：
+执行后与 `--verify` 必须输出同一格式，并满足：
 
-1. 全部 reset 集合不存在；
-2. customer/contract/sales 外部映射、映射目标及任何指向已删映射的目标为零；
-3. 客户及结算链专属 Party 及其子记录、指向该 Party 的外部映射目标为零；
-4. 保留的供应商 Party 引用和外部映射引用，其悬挂数量不得高于执行前基线；
-5. 工具以零状态退出并输出后置条件通过。
+1. 全部 reset 集合不存在（含旧审批集合与新 BPM/集成集合）；
+2. `work_items` 中旧卡券审批类型、`DOCUMENT_APPROVAL`、`approval_step_instance_id` 与 `approval_node_execution_id` 均为零；
+3. 冲突索引 allowlist 中的索引均不存在；
+4. customer/contract/sales 外部映射、映射目标及任何指向已删映射的目标为零；
+5. 客户及结算链专属 Party 及其子记录、指向该 Party 的外部映射目标为零；
+6. 保留的供应商 Party 引用和外部映射引用，其悬挂数量不得高于执行前基线；
+7. 工具以零状态退出并输出后置条件通过。
+
+verify 成功输出固定为：
+
+```text
+运行模式: VERIFY（只读后置校验，不执行写入）
+集合摘要: <sha256>
+- 残留 reset 集合: 0
+- 残留 reset 文档: 0
+- 残留审批 WorkItem: 0
+    approval_step_instance_id=0
+    approval_node_execution_id=0
+- 残留冲突索引: 0
+校验完成：重置后置条件通过。旧审批集合、新 BPM/集成集合、审批 WorkItem 与冲突索引均为空。
+```
 
 随后必须重启应用，以重建 MongoDB 索引和代码注册的审批定义。最后执行应用级销售、合同、客户及审批冒烟验收。
 
