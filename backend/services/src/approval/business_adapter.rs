@@ -332,6 +332,12 @@ pub fn adapter_object_read_decision(
             assignee_user_id,
         )?));
     }
+    if spec.document_type == DocumentType::PurchaseOrder {
+        return Ok(Some(crate::purchase_order::purchase_order_object_readable(
+            &context.organization_id,
+            assignee_user_id,
+        )?));
+    }
     let _ = context.creator_id.as_str();
     Ok(None)
 }
@@ -577,7 +583,7 @@ mod tests {
     /// 读取权未接线或显式拒绝必须失败关闭。
     #[test]
     fn object_read_unwired_and_denied_fail_closed() {
-        let unwired = adapter_spec_of(DocumentType::PurchaseOrder).expect("未接入类型仍有规格");
+        let unwired = adapter_spec_of(DocumentType::PurchaseChangeOrder).expect("未接入类型仍有规格");
         let context = BindingRevalidationContext {
             organization_id: "org-1".to_string(),
             creator_id: "creator-1".to_string(),
@@ -603,6 +609,11 @@ mod tests {
         let change = adapter_spec_of(DocumentType::SalesChangeOrder).expect("销售变更必须有适配器");
         assert_eq!(
             adapter_object_read_decision(&change, &context, "u1").expect("销售变更读取权已接线"),
+            Some(true)
+        );
+        let purchase = adapter_spec_of(DocumentType::PurchaseOrder).expect("采购单必须有适配器");
+        assert_eq!(
+            adapter_object_read_decision(&purchase, &context, "u1").expect("采购单读取权已接线"),
             Some(true)
         );
         assert_eq!(
@@ -646,7 +657,7 @@ mod tests {
             "u1",
         )
         .expect("试点读取权已接线且组织覆盖时应通过");
-        let sales = adapter_spec_of(DocumentType::PurchaseOrder).expect("未接入类型");
+        let sales = adapter_spec_of(DocumentType::PurchaseChangeOrder).expect("未接入类型");
         let unwired = revalidate_assignee_binding_access(
             &sales,
             std::slice::from_ref(&user_org),

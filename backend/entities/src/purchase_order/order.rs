@@ -10,19 +10,18 @@ use crate::common::state::{ensure_transition, DocumentState};
 use crate::errors::{Error, Result};
 use crate::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
 use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
-use crate::validation::normalize_required_text;
+use crate::validation::{normalize_optional_text, normalize_required_text};
 
 /// 采购单号最大长度。
 const PURCHASE_NO_MAX_LEN: usize = 64;
 /// 付款条件代码最大长度。
 const PAYMENT_TERM_MAX_LEN: usize = 64;
 
-/// 采购单状态（数据模型 §6.6/§7.4）。
+/// 采购单状态（数据模型 §6.6/§7.4，审批合同 §4.4.2 已收敛）。
 ///
-/// 状态机（§7.4）：`DRAFT → PENDING_FINANCE_REVIEW → EFFECTIVE →
-/// PARTIALLY_EXECUTED → COMPLETED`；财务驳回返回 `DRAFT`；草稿且无下游事实可作废
-/// （`DRAFT → VOIDED`）；`COMPLETED` / `VOIDED` 是终态。生效后变化走采购变更单，
-/// 不允许直接编辑或退回。
+/// 目标状态机：`DRAFT → IN_APPROVAL → EFFECTIVE → PARTIALLY_EXECUTED →
+/// COMPLETED`；撤回回到 `DRAFT`；草稿且无下游事实可作废（`DRAFT → VOIDED`）。
+/// `PENDING_FINANCE_REVIEW` 仅为旧数据反序列化保留，新写入不得进入。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum PurchaseOrderStatus {
@@ -82,9 +81,9 @@ impl PurchaseOrderStatus {
 impl DocumentState for PurchaseOrderStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::PendingFinanceReview, Self::Voided, Self::InApproval],
+            Self::Draft => &[Self::InApproval, Self::Voided],
             Self::InApproval => &[Self::Effective, Self::Draft],
-            Self::PendingFinanceReview => &[Self::Effective, Self::Draft],
+            Self::PendingFinanceReview => &[],
             Self::Effective => &[Self::PartiallyExecuted],
             Self::PartiallyExecuted => &[Self::Completed],
             Self::Completed => &[],
@@ -264,8 +263,8 @@ impl Eq for PurchaseOrder {}
 impl PurchaseOrder {
     /// 创建采购单。
     ///
-    /// 完成 `purchase_no`、`payment_term_code` 的完整校验与规范化；
-    /// 初始主状态为 `Draft`，审核状态为 `Pending`，三条进度为 `None`。
+    /// 草稿允许空 `purchase_no`；付款条件必须非空。初始主状态为 `Draft`，
+    /// `approval_subject_version` 为 0。不得预分配正式号。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::PurchaseOrderId`）
@@ -276,14 +275,10 @@ impl PurchaseOrder {
     /// 返回新建的采购单实体。
     ///
     /// # 错误
-    /// 采购单号/付款条件为空或超长时返回错误。
+    /// 采购单号超长或付款条件为空/超长时返回错误。
     pub fn new(id: PurchaseOrderId, data: PurchaseOrderData, created_by: impl Into<String>) -> Result<Self> {
-        let purchase_no = normalize_required_text(
-            data.purchase_no,
-            "采购单号不能为空",
-            PURCHASE_NO_MAX_LEN,
-            "采购单号过长",
-        )?;
+        let purchase_no = normalize_optional_text(Some(data.purchase_no), "采购单号", PURCHASE_NO_MAX_LEN)?
+            .unwrap_or_default();
         let payment_term_code = normalize_required_text(
             data.payment_term_code,
             "付款条件不能为空",
@@ -306,6 +301,28 @@ impl PurchaseOrder {
             current_submission_id: None,
             approval_subject_version: 0,
         })
+    }
+
+    /// 一次性分配不可复用正式采购单号。
+    ///
+    /// 仅允许空号草稿调用；成功后不得再改写。
+    ///
+    /// # 参数
+    /// * `purchase_no` - 正式采购单号
+    ///
+    /// # 错误
+    /// 已有正式号、编号为空或超长时返回错误。
+    pub fn assign_purchase_no(&mut self, purchase_no: impl Into<String>) -> Result<()> {
+        if !self.purchase_no.is_empty() {
+            return Err(Error::from("采购单号只能分配一次"));
+        }
+        self.purchase_no = normalize_required_text(
+            purchase_no.into(),
+            "采购单号不能为空",
+            PURCHASE_NO_MAX_LEN,
+            "采购单号过长",
+        )?;
+        Ok(())
     }
 
     /// 更新采购单内容。
@@ -335,64 +352,91 @@ impl PurchaseOrder {
         Ok(())
     }
 
-    /// 提交财务审核。
-    ///
-    /// 把草稿提交为待审核，并把审核状态置为待审核；提交后头行冻结（§6.6）。
-    /// 提交内容形成不可变 `purchase_order_submission` 后由 P3 调用。
-    ///
-    /// # 参数
-    /// * `current_submission_id` - 形成的不可变提交 ID
-    /// * `updated_by` - 提交执行人
-    ///
-    /// # 返回
-    /// 提交成功返回 `Ok(())`。
+    /// 旧财务审核提交入口。审批改造后不可达。
     ///
     /// # 错误
-    /// 状态不是草稿时返回错误。
+    /// 恒返回冲突，不得进入 `PENDING_FINANCE_REVIEW`。
     pub fn submit_for_review(
+        &mut self,
+        _current_submission_id: impl Into<String>,
+        _updated_by: impl Into<String>,
+    ) -> Result<()> {
+        Err(Error::from("采购单必须走统一审批提交，禁止写入待财务审核"))
+    }
+
+    /// 提交并启动审批：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
+    ///
+    /// 版本使用 checked add，成功后不回退。不得改写 `PurchaseReviewStatus`。
+    ///
+    /// # 参数
+    /// * `current_submission_id` - 本次冻结提交
+    /// * `updated_by` - 提交人
+    ///
+    /// # 返回
+    /// 返回冻结后的提交版本。
+    ///
+    /// # 错误
+    /// 非草稿或版本溢出时返回冲突。
+    pub fn start_approval(
         &mut self,
         current_submission_id: impl Into<String>,
         updated_by: impl Into<String>,
-    ) -> Result<()> {
+    ) -> Result<u32> {
         self.ensure_draft()?;
+        ensure_transition(self.stable.status, PurchaseOrderStatus::InApproval)?;
+        let next = self
+            .approval_subject_version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        self.approval_subject_version = next;
         self.current_submission_id = Some(current_submission_id.into());
-        self.review_status = PurchaseReviewStatus::Pending;
-        self.stable.status = PurchaseOrderStatus::PendingFinanceReview;
+        self.stable.status = PurchaseOrderStatus::InApproval;
+        self.stable.touch(updated_by);
+        Ok(next)
+    }
+
+    /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
+    ///
+    /// # 参数
+    /// * `updated_by` - 撤回人
+    ///
+    /// # 错误
+    /// 非审批中时返回冲突。
+    pub fn cancel_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.stable.status != PurchaseOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购单可以撤回审批"));
+        }
+        ensure_transition(self.stable.status, PurchaseOrderStatus::Draft)?;
+        self.stable.status = PurchaseOrderStatus::Draft;
         self.stable.touch(updated_by);
         Ok(())
     }
 
-    /// 执行财务审核结论（§7.4 分支）。
+    /// 最终通过：仅 `IN_APPROVAL` 可进入生效。
     ///
-    /// 只能对 `PendingFinanceReview` 状态执行：通过 → `Effective` + 审核通过；
-    /// 驳回 → 回到 `Draft` + 审核驳回（保留驳回动作，返回采购修改）。
+    /// 不改写 `PurchaseReviewStatus`，审批结果取实例投影。
     ///
     /// # 参数
-    /// * `approved` - 是否审核通过
-    /// * `updated_by` - 审核执行人
-    ///
-    /// # 返回
-    /// 审核成功返回 `Ok(())`。
+    /// * `updated_by` - 最终通过执行人
     ///
     /// # 错误
-    /// 状态不是待财务审核时返回错误。
-    pub fn apply_finance_review(&mut self, approved: bool, updated_by: impl Into<String>) -> Result<()> {
-        if self.stable.status != PurchaseOrderStatus::PendingFinanceReview {
-            return Err(Error::from("只有待财务审核的采购单才能执行财务审核"));
+    /// 状态不是审批中时返回冲突。
+    pub fn formalize_approved(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.stable.status != PurchaseOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购单可以由最终通过动作生效"));
         }
-        self.review_status = if approved {
-            PurchaseReviewStatus::Approved
-        } else {
-            PurchaseReviewStatus::Rejected
-        };
-        let to = if approved {
-            PurchaseOrderStatus::Effective
-        } else {
-            PurchaseOrderStatus::Draft
-        };
-        self.stable.status = to;
+        ensure_transition(self.stable.status, PurchaseOrderStatus::Effective)?;
+        self.stable.status = PurchaseOrderStatus::Effective;
         self.stable.touch(updated_by);
         Ok(())
+    }
+
+    /// 旧财务审核结论入口。审批改造后不可达。
+    ///
+    /// # 错误
+    /// 恒返回冲突，不得经 `PurchaseReviewStatus` 分支。
+    pub fn apply_finance_review(&mut self, _approved: bool, _updated_by: impl Into<String>) -> Result<()> {
+        Err(Error::from("采购财务审核不得作为审批动作"))
     }
 
     /// 推进主状态（§7.4 固定状态机）。
@@ -519,22 +563,40 @@ mod tests {
         assert_eq!(order.stable.status(), PurchaseOrderStatus::Draft);
         assert_eq!(order.review_status, PurchaseReviewStatus::Pending);
         assert_eq!(order.payment_progress, ProgressStatus::None);
+        assert_eq!(order.approval_subject_version, 0);
         assert!(order.current_submission_id.is_none());
     }
 
     #[test]
-    fn new_rejects_empty_or_overlong_purchase_no() {
+    fn new_allows_empty_purchase_no_and_rejects_overlong() {
         let empty = PurchaseOrderData {
             purchase_no: "   ".to_string(),
             ..order_data()
         };
-        assert!(PurchaseOrder::new(PurchaseOrderId::new("po-2"), empty, "admin-1").is_err());
+        let draft = PurchaseOrder::new(PurchaseOrderId::new("po-2"), empty, "admin-1").unwrap();
+        assert!(draft.purchase_no.is_empty());
 
         let overlong = PurchaseOrderData {
             purchase_no: "p".repeat(65),
             ..order_data()
         };
         assert!(PurchaseOrder::new(PurchaseOrderId::new("po-3"), overlong, "admin-1").is_err());
+    }
+
+    #[test]
+    fn assign_purchase_no_is_one_shot() {
+        let mut order = PurchaseOrder::new(
+            PurchaseOrderId::new("po-empty"),
+            PurchaseOrderData {
+                purchase_no: String::new(),
+                ..order_data()
+            },
+            "admin-1",
+        )
+        .unwrap();
+        order.assign_purchase_no(" PO-1 ").unwrap();
+        assert_eq!(order.purchase_no, "PO-1");
+        assert!(order.assign_purchase_no("PO-2").is_err());
     }
 
     #[test]
@@ -554,8 +616,9 @@ mod tests {
         assert_eq!(order.purchase_type, PurchaseType::Service);
         assert_eq!(order.stable.updated_by, "admin-2");
 
-        order.submit_for_review("sub-1", "admin-2").unwrap();
-        assert_eq!(order.stable.status(), PurchaseOrderStatus::PendingFinanceReview);
+        order.start_approval("sub-1", "admin-2").unwrap();
+        assert_eq!(order.stable.status(), PurchaseOrderStatus::InApproval);
+        assert_eq!(order.approval_subject_version, 1);
         assert!(order
             .update(
                 PurchaseOrderUpdate {
@@ -568,49 +631,48 @@ mod tests {
     }
 
     #[test]
-    fn finance_review_approve_and_reject_follow_machine() {
+    fn start_cancel_and_formalize_follow_machine() {
         let mut order = new_order();
-        order.submit_for_review("sub-1", "admin-1").unwrap();
-        order.apply_finance_review(true, "fin-1").unwrap();
+        order.start_approval("sub-1", "admin-1").unwrap();
+        order.formalize_approved("fin-1").unwrap();
         assert_eq!(order.stable.status(), PurchaseOrderStatus::Effective);
-        assert_eq!(order.review_status, PurchaseReviewStatus::Approved);
+        assert_eq!(order.approval_subject_version, 1);
+        assert_eq!(order.review_status, PurchaseReviewStatus::Pending);
 
-        let mut rejected = new_order();
-        rejected.submit_for_review("sub-2", "admin-1").unwrap();
-        rejected.apply_finance_review(false, "fin-1").unwrap();
-        assert_eq!(rejected.stable.status(), PurchaseOrderStatus::Draft);
-        assert_eq!(rejected.review_status, PurchaseReviewStatus::Rejected);
+        let mut cancelled = new_order();
+        cancelled.start_approval("sub-2", "admin-1").unwrap();
+        cancelled.cancel_approval("fin-1").unwrap();
+        assert_eq!(cancelled.stable.status(), PurchaseOrderStatus::Draft);
+        assert_eq!(cancelled.approval_subject_version, 1);
+        assert_eq!(cancelled.current_submission_id.as_deref(), Some("sub-2"));
     }
 
     #[test]
-    fn finance_review_rejects_wrong_state() {
+    fn legacy_finance_review_paths_fail_closed() {
         let mut order = new_order();
-        assert!(
-            order.apply_finance_review(true, "fin-1").is_err(),
-            "草稿不能直接审核"
-        );
+        assert!(order.submit_for_review("sub-1", "admin-1").is_err());
+        assert!(order.apply_finance_review(true, "fin-1").is_err());
+        assert!(order.formalize_approved("fin-1").is_err());
+        assert!(order.cancel_approval("fin-1").is_err());
     }
 
     #[test]
     fn status_machine_directional_edges() {
-        // §7.4 主链与草稿作废分支：逐边定向断言（含终态，不适用对称闭包）。
         assert!(ensure_transition(PurchaseOrderStatus::Draft, PurchaseOrderStatus::Draft).is_ok());
+        assert!(ensure_transition(PurchaseOrderStatus::Draft, PurchaseOrderStatus::InApproval).is_ok());
+        assert!(ensure_transition(PurchaseOrderStatus::Draft, PurchaseOrderStatus::Voided).is_ok());
+        assert!(ensure_transition(PurchaseOrderStatus::InApproval, PurchaseOrderStatus::Effective).is_ok());
+        assert!(ensure_transition(PurchaseOrderStatus::InApproval, PurchaseOrderStatus::Draft).is_ok());
         assert!(ensure_transition(
             PurchaseOrderStatus::Draft,
             PurchaseOrderStatus::PendingFinanceReview
         )
-        .is_ok());
-        assert!(ensure_transition(PurchaseOrderStatus::Draft, PurchaseOrderStatus::Voided).is_ok());
+        .is_err());
         assert!(ensure_transition(
             PurchaseOrderStatus::PendingFinanceReview,
             PurchaseOrderStatus::Effective
         )
-        .is_ok());
-        assert!(ensure_transition(
-            PurchaseOrderStatus::PendingFinanceReview,
-            PurchaseOrderStatus::Draft
-        )
-        .is_ok());
+        .is_err());
         assert!(ensure_transition(
             PurchaseOrderStatus::Effective,
             PurchaseOrderStatus::PartiallyExecuted
@@ -622,7 +684,6 @@ mod tests {
         )
         .is_ok());
 
-        // 非法与终态
         assert!(ensure_transition(PurchaseOrderStatus::Draft, PurchaseOrderStatus::Effective).is_err());
         assert!(ensure_transition(PurchaseOrderStatus::Effective, PurchaseOrderStatus::Draft).is_err());
         assert!(ensure_transition(PurchaseOrderStatus::Completed, PurchaseOrderStatus::Draft).is_err());

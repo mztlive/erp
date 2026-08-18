@@ -1,11 +1,11 @@
 //! 域 D15 `purchase_order` 服务编排（页面：W08）。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
-//! - 依据创建采购单、保存草稿、提交财务审核、财务审核通过/驳回、采购变更提交与
-//!   生效均为跨集合写入 → `database::Transactional::with_transaction`；
-//! - 财务审核通过（§8.1.4）在单事务内：锁定提交 → 逐行复验采购确认来源 →
+//! - 依据创建采购单、保存草稿、提交启动审批、最终通过生效、撤回与采购变更提交
+//!   均为跨集合写入 → `database::Transactional::with_transaction`；
+//! - 最终通过（§8.1.4）在单事务内：锁定提交 → 逐行复验采购确认来源 →
 //!   复制为生效版本与版本行 → 形成销售分配 → 推进采购状态与版本指针 →
-//!   形成应付原始分录与 `CONFIRMED` 成本事实 → 完成审核待办 → 审计；
+//!   形成应付原始分录与 `CONFIRMED` 成本事实 → 审计；
 //! - 采购变更生效（§8.1.3 采购部分）在单事务内：基准版本校验 → 新版本/版本行/
 //!   分配 → 应付与成本差额 → 当前版本指针推进，不修改已发生事实。
 //!
@@ -21,6 +21,8 @@
 
 use mongodb::Database;
 
+mod adapter;
+mod cancel_approval;
 mod change;
 mod creation_basis;
 mod draft_edit;
@@ -30,28 +32,34 @@ mod formalization;
 mod query;
 mod review;
 mod shared;
+mod start_approval;
 mod submission;
 mod view_mapping;
 
+pub use self::adapter::purchase_order_object_readable;
 pub(crate) use self::draft_from_confirmation::create_drafts_from_confirmation_lines;
 pub use self::dto::{
-    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView, CreationBasisView,
-    EffectPurchaseChangeRequest, PageView, PurchaseActionBlockerView, PurchaseChangeEffectResult,
-    PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseChangeSubmitResult,
-    PurchaseOrderCenterView, PurchaseOrderLineView, PurchaseOrderListItemView, PurchaseOrderListParams,
-    PurchaseOrderReviewDecisionCommand, PurchaseOrderReviewDecisionResult, PurchaseReviewDomainAction,
-    PurchaseReviewResult, PurchaseReviewWorkItemView, PurchaseSalesAllocationView,
-    ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
-    SavePurchaseOrderLine, StartPurchaseChangeRequest, StartPurchaseChangeResult,
-    SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, TotalsView,
+    CancelPurchaseOrderApprovalRequest, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
+    CreationBasisLineView, CreationBasisView, DocumentApprovalView, EffectPurchaseChangeRequest, PageView,
+    PurchaseActionBlockerView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
+    PurchaseChangeOrderView, PurchaseChangeSubmitResult, PurchaseOrderCenterView, PurchaseOrderLineView,
+    PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderReviewDecisionCommand,
+    PurchaseOrderReviewDecisionResult, PurchaseReviewDomainAction, PurchaseReviewResult,
+    PurchaseReviewWorkItemView, PurchaseSalesAllocationView, ReviewPurchaseOrderCommand,
+    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
+    StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
+    SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, TotalsView,
 };
+
+use crate::errors::{Error, Result};
+use crate::iam::SharedRbacService;
 
 /// 采购单服务。
 ///
-/// 提供采购单从依据创建、草稿保存、提交审核到财务审核（§8.1.4）与变更生效
-/// （§8.1.3 采购部分）的编排。
+/// 提供采购单从依据创建绑定、草稿保存、提交启动审批、最终通过生效与撤回编排。
 pub struct PurchaseOrderService {
     db: Database,
+    rbac: Option<SharedRbacService>,
 }
 
 impl PurchaseOrderService {
@@ -63,6 +71,28 @@ impl PurchaseOrderService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db }
+        Self { db, rbac: None }
+    }
+
+    /// 创建可绑定发布定义的采购单服务。
+    ///
+    /// # 参数
+    /// * `db` - 数据库实例
+    /// * `rbac` - 共享授权源
+    ///
+    /// # 返回
+    /// 返回同时绑定数据库和授权源的服务。
+    pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac: Some(rbac) }
+    }
+
+    /// 读取创建绑定所需的授权源。
+    ///
+    /// # 错误
+    /// 未注入 RBAC 时返回内部错误，不得跳过绑定。
+    pub(super) fn require_rbac(&self) -> Result<&SharedRbacService> {
+        self.rbac
+            .as_ref()
+            .ok_or_else(|| Error::Internal("采购单审批绑定需要授权源".to_string()))
     }
 }

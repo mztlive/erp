@@ -10,13 +10,13 @@ use axum::{
 use services::{
     audit::AuditActor,
     purchase_order::{
-        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisView,
-        EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
-        PurchaseChangeOrderView, PurchaseChangeSubmitResult, PurchaseOrderCenterView,
-        PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService, PurchaseReviewResult,
-        ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
-        StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
-        SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+        CancelPurchaseOrderApprovalRequest, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
+        CreationBasisView, EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult,
+        PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseChangeSubmitResult,
+        PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService,
+        PurchaseReviewResult, ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest,
+        SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
+        SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
     },
 };
 
@@ -100,7 +100,7 @@ pub async fn purchase_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseOrderFromBasisRequest>,
 ) -> Result<CreatePurchaseOrderResult> {
-    let view = PurchaseOrderService::new(state.db())
+    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
         .create_from_basis(req, &actor)
         .await?;
 
@@ -140,11 +140,11 @@ pub async fn purchase_order_save_draft(
 #[permission_macros::permission(
     group = "采购单",
     group_desc = "采购单、采购提交与采购变更管理",
-    desc = "提交采购财务审核",
+    desc = "提交采购单审批",
     resource = "purchase_order",
     action = "submit"
 )]
-/// 提交采购财务审核（冻结头行，形成不可变提交与审核待办）。
+/// 提交采购单并启动统一审批。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -160,11 +160,41 @@ pub async fn purchase_order_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseOrderRequest>,
 ) -> Result<SubmitPurchaseOrderResult> {
-    let view = PurchaseOrderService::new(state.db())
+    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
         .submit(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "采购单",
+    group_desc = "采购单、采购提交与采购变更管理",
+    desc = "撤回采购单审批",
+    resource = "purchase_order",
+    action = "cancel_approval"
+)]
+/// 撤回尚未最终通过的采购单审批。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 采购单 ID
+/// * `req` - 撤回请求（原因必填）
+///
+/// # 返回
+/// 撤回成功返回空数据。
+pub async fn purchase_order_cancel_approval(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CancelPurchaseOrderApprovalRequest>,
+) -> Result<()> {
+    PurchaseOrderService::with_rbac(state.db(), state.rbac())
+        .cancel_approval(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok())
 }
 
 #[permission_macros::permission(

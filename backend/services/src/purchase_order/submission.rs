@@ -1,32 +1,44 @@
-//! 采购草稿冻结、提交审核与待办构造。
+//! 采购草稿冻结并调用统一 `start_approval`。
 
-use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, Transactional, WorkItemExt};
+use database::{
+    AccessControlExt, DocumentRegistryExt, NoTransaction, PurchaseOrderExt, SalesOrderExt, Transactional,
+};
 use entities::common::time::Instant;
-use entities::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, WorkItemId};
+use entities::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use entities::purchase_order::{
     PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
     PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, SubmissionStatus,
-};
-use entities::work_item::{
-    AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
 use id_generator::next_id;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
+use super::adapter::{
+    build_purchase_order_snapshot, execute_purchase_order_domain_action, purchase_order_adapter,
+    purchase_order_object_readable, purchase_order_responsible_org_id, purchase_order_start_command,
+    purchase_order_subject_ref, require_frozen_binding, start_approval_command_kind, RECENT_HISTORY_LIMIT,
+};
 use super::dto::{SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult};
+use super::start_approval::{
+    build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
+    persist_purchase_order_start, PurchaseOrderStartPersistInput,
+};
 use super::PurchaseOrderService;
+use crate::approval::execution::prepare_start;
+use crate::approval::policy::ApprovalDomainAction;
 use crate::audit::AuditActor;
+use crate::document_registry::{find_approval_binding, find_registered_document};
 use crate::errors::{Error, Result};
 
 const PURCHASE_SUBMIT_RECEIPT_PREFIX: &str = "purchase-submit-command-";
 const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 
 impl PurchaseOrderService {
-    /// 提交财务审核（§6.6：头行冻结，形成不可变提交与审核待办）。
+    /// 提交采购单并调用统一 `start_approval`。
     ///
-    /// 单事务写入提交、提交明细、采购主表指针、审核待办与幂等收据；同一键
-    /// 重试返回原结果，不同键重复提交失败，提交序号唯一索引兜底。
+    /// 同一事务内：锁定采购单与 `BusinessDocument`；若尚无正式号则分配不可复用
+    /// `purchase_no` 并一次性写入两者；冻结提交；递增 `approval_subject_version`
+    /// 并启动审批。无绑定或无发布定义时失败关闭。
     ///
     /// # 参数
     /// * `id` - 采购单 ID
@@ -34,11 +46,11 @@ impl PurchaseOrderService {
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回提交结果（提交 ID、序号与审核待办）。
+    /// 返回提交结果（正式号、提交 ID 与冻结版本）。
     ///
     /// # 错误
     /// * `NotFound` - 采购单不存在
-    /// * `ConflictError` - 期望版本不一致或重复提交
+    /// * `ConflictError` - 期望版本不一致、无绑定或重复提交
     /// * `BusinessLogicError` - 状态非草稿或草稿内容缺失
     pub async fn submit(
         &self,
@@ -53,6 +65,8 @@ impl PurchaseOrderService {
         if let Some(result) = self.replay_purchase_submit(&audit_id, &fingerprint, id).await? {
             return Ok(result);
         }
+        let adapter = purchase_order_adapter()?;
+        let subject = purchase_order_subject_ref(id)?;
         let mut order = self
             .db
             .purchase_orders()
@@ -65,6 +79,8 @@ impl PurchaseOrderService {
                 "采购单已提交或已生效，请勿重复提交".to_string(),
             ));
         }
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = require_frozen_binding(binding.as_ref())?.clone();
         let draft_id = order
             .current_submission_id
             .as_ref()
@@ -87,61 +103,100 @@ impl PurchaseOrderService {
                 &mut NoTransaction,
             )
             .await?;
-
-        // 形成新的正式提交（复制草稿内容，冻结）。
+        let sales_order = self
+            .db
+            .sales_orders()
+            .find_by_id(&order.sales_order_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+        let organization_id = purchase_order_responsible_org_id(&sales_order)?;
+        let _ = purchase_order_object_readable(&organization_id, actor.id())?;
+        assign_formal_purchase_no(&mut order)?;
+        let mut document = find_registered_document(&self.db, id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
+        let now = Instant::now();
+        if document.document_no.is_empty() {
+            document.assign_document_no(order.purchase_no.clone(), now)?;
+        }
         let mut superseded_draft = draft.clone();
         superseded_draft.mark_superseded()?;
         let submission = self
             .freeze_submission(&mut order, &mut draft, &mut draft_lines, actor)
             .await?;
-        let work_item = finance_review_work_item(&order, &submission)?;
-
-        let audit_actor = actor.clone();
-        let audit_id_for_tx = audit_id.clone();
-        let fingerprint_for_tx = fingerprint.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut order_for_tx = order.clone();
-        let work_item_for_tx = work_item.clone();
-        let submission_for_tx = submission.clone();
-        let superseded_draft_for_tx = superseded_draft.clone();
-        let transaction_result = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.purchase_order()
-                        .create_purchase_submission(
-                            &mut order_for_tx,
-                            &submission_for_tx,
-                            &draft_lines,
-                            session,
-                        )
-                        .await?;
-                    db.purchase_order_submissions()
-                        .update(&mut superseded_draft_for_tx.clone(), session)
-                        .await?;
-                    db.work_items().create(&work_item_for_tx, session).await?;
-                    let receipt = PurchaseSubmitReceipt {
-                        submission_id: submission_for_tx.base.id.clone(),
-                        submission_no: submission_for_tx.submission_no.clone(),
-                        work_item_id: work_item_for_tx.base.id.clone(),
-                        task_version: work_item_for_tx.base.version,
-                        subject_version: work_item_for_tx.subject_version.clone(),
-                        lock_version: order_for_tx.base.version,
-                    };
-                    let audit = audit_actor.resource_log_with_id(
-                        audit_id_for_tx,
-                        action,
-                        "purchase_order",
-                        order_for_tx.base.id.clone(),
-                        Some(purchase_submit_receipt_message(&fingerprint_for_tx, &receipt)),
-                    )?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<PurchaseSubmitReceipt, crate::errors::Error>(receipt)
-                })
-            })
-            .await;
-        let receipt = match transaction_result {
-            Ok(receipt) => receipt,
+        execute_purchase_order_domain_action(
+            &mut order,
+            ApprovalDomainAction::PurchaseOrderSubmit,
+            &submission.base.id,
+            actor.id(),
+        )?;
+        let snapshot =
+            build_purchase_order_snapshot(&order, &sales_order, &submission, &draft_lines, actor.id(), now)?;
+        let start = purchase_order_start_command(
+            id,
+            order.approval_subject_version,
+            actor.id(),
+            &req.idempotency_key,
+        );
+        let owner_role = adapter.owner_role;
+        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
+        let graph = load_bound_definition_graph(&self.db, &binding).await?;
+        let existing_receipt = load_start_receipt(
+            &self.db,
+            &subject,
+            order.approval_subject_version,
+            &req.idempotency_key,
+        )
+        .await?;
+        let start_input = build_purchase_order_start_input(
+            graph,
+            &binding,
+            subject,
+            order.approval_subject_version,
+            actor.id(),
+            &organization_id,
+            &req.idempotency_key,
+            existing_receipt,
+            now,
+        )?;
+        let prepared = prepare_start(start_input)?;
+        let audit = actor.clone().resource_log_with_id(
+            audit_id.clone(),
+            action,
+            "purchase_order",
+            order.base.id.clone(),
+            Some(purchase_submit_receipt_message(
+                &fingerprint,
+                &PurchaseSubmitReceipt {
+                    purchase_no: order.purchase_no.clone(),
+                    submission_id: submission.base.id.clone(),
+                    submission_no: submission.submission_no.clone(),
+                    work_item_id: String::new(),
+                    task_version: 0,
+                    subject_version: order.approval_subject_version.to_string(),
+                    lock_version: order.base.version,
+                },
+            )),
+        )?;
+        let first_task = persist_purchase_order_start(
+            &self.db,
+            PurchaseOrderStartPersistInput {
+                order: order.clone(),
+                document,
+                superseded_draft,
+                submission: submission.clone(),
+                submission_lines: draft_lines,
+            },
+            snapshot,
+            prepared,
+            owner_role,
+            organization_id,
+            now,
+            audit,
+        )
+        .await;
+        let first_task = match first_task {
+            Ok(task) => task,
             Err(error) => {
                 if let Some(result) = self.replay_purchase_submit(&audit_id, &fingerprint, id).await? {
                     return Ok(result);
@@ -149,17 +204,17 @@ impl PurchaseOrderService {
                 return Err(error);
             }
         };
-
+        let (work_item_id, task_version) = first_task.unwrap_or((String::new(), 0));
         Ok(SubmitPurchaseOrderResult {
             purchase_order_id: order.base.id.clone(),
             purchase_no: order.purchase_no.clone(),
-            submission_id: receipt.submission_id,
-            submission_no: receipt.submission_no.clone(),
-            work_item_id: receipt.work_item_id,
-            task_version: receipt.task_version,
-            subject_version: receipt.subject_version,
-            lock_version: receipt.lock_version,
-            reference: receipt.submission_no,
+            submission_id: submission.base.id.clone(),
+            submission_no: submission.submission_no.clone(),
+            work_item_id,
+            task_version,
+            subject_version: order.approval_subject_version.to_string(),
+            lock_version: order.base.version,
+            reference: order.purchase_no.clone(),
         })
     }
 
@@ -196,7 +251,7 @@ impl PurchaseOrderService {
             .ok_or_else(|| Error::Internal("采购提交幂等收据引用的采购单不存在".to_string()))?;
         Ok(Some(SubmitPurchaseOrderResult {
             purchase_order_id: purchase_order_id.to_string(),
-            purchase_no: order.purchase_no,
+            purchase_no: receipt.purchase_no.clone(),
             submission_id: receipt.submission_id,
             submission_no: receipt.submission_no.clone(),
             work_item_id: receipt.work_item_id,
@@ -234,7 +289,6 @@ impl PurchaseOrderService {
         )?;
         let mut formal = formal;
         formal.submit(Instant::now(), actor.id())?;
-        // 正式提交行复制草稿快照并生成新身份；不得修改或复用旧草稿行主键。
         for line in draft_lines.iter_mut() {
             *line = PurchaseOrderSubmissionLine::new(
                 PurchaseOrderSubmissionLineId::new(next_id()),
@@ -260,7 +314,6 @@ impl PurchaseOrderService {
                 },
             )?;
         }
-        order.submit_for_review(formal.base.id.clone(), actor.id())?;
         Ok(formal)
     }
 
@@ -288,48 +341,21 @@ impl PurchaseOrderService {
     }
 }
 
-/// 构造采购财务审核待办。
-///
-/// # 参数
-/// * `order` - 已提交财务审核的采购单
-/// * `submission` - 对应的不可变提交
-///
-/// # 返回
-/// 返回未落库的财务审核待办。
+/// 首次提交分配不可复用正式号。已有正式号时保持不变。
 ///
 /// # 错误
-/// 待办字段非法时返回校验错误。
-pub(super) fn finance_review_work_item(
-    order: &PurchaseOrder,
-    submission: &PurchaseOrderSubmission,
-) -> Result<WorkItem> {
-    WorkItem::new(
-        WorkItemId::new(next_id()),
-        WorkItemData {
-            work_item_type: WorkItemType::PurchaseOrderReview,
-            approval_step_instance_id: None,
-            business_object_type: "purchase_order".to_string(),
-            business_object_id: order.base.id.clone(),
-            subject_version: submission.base.id.clone(),
-            assignment_mode: AssignmentMode::Pool,
-            owner_role: "role-finance".to_string(),
-            owner_organization_id: "company".to_string(),
-            owner_user_id: None,
-            assignment_source: AssignmentSource::SystemRule,
-            priority: WorkItemPriority::Normal,
-            due_at: None,
-            reason_code: Some(
-                crate::work_item::purchase_review_reason_code(&submission.submission_no).to_string(),
-            ),
-            impact_summary: None,
-        },
-    )
-    .map_err(Into::into)
+/// 编号非法时返回校验错误。
+fn assign_formal_purchase_no(order: &mut PurchaseOrder) -> Result<()> {
+    if !order.purchase_no.is_empty() {
+        return Ok(());
+    }
+    Ok(order.assign_purchase_no(format!("PO-{}", order.base.id))?)
 }
 
 /// 采购提交命令的最小、可重放结果收据。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PurchaseSubmitReceipt {
+    purchase_no: String,
     submission_id: String,
     submission_no: String,
     work_item_id: String,
@@ -351,7 +377,8 @@ fn purchase_submit_audit_id(actor_id: &str, purchase_order_id: &str, key: &str) 
 /// 把采购提交结果编码为审计消息。
 fn purchase_submit_receipt_message(fingerprint: &str, receipt: &PurchaseSubmitReceipt) -> String {
     format!(
-        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={}|{}|{}|{}|{}|{}",
+        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={}|{}|{}|{}|{}|{}|{}",
+        receipt.purchase_no,
         receipt.submission_id,
         receipt.submission_no,
         receipt.work_item_id,
@@ -371,12 +398,13 @@ fn parse_purchase_submit_receipt(message: &str, expected_fingerprint: &str) -> R
         return Err(Error::ConflictError("幂等键已用于不同的采购提交命令".to_string()));
     }
     let fields = result.split('|').collect::<Vec<_>>();
-    let [submission_id, submission_no, work_item_id, task_version, subject_version, lock_version] =
+    let [purchase_no, submission_id, submission_no, work_item_id, task_version, subject_version, lock_version] =
         fields.as_slice()
     else {
         return Err(Error::Internal("采购提交幂等收据结果非法".to_string()));
     };
     Ok(PurchaseSubmitReceipt {
+        purchase_no: (*purchase_no).to_string(),
         submission_id: (*submission_id).to_string(),
         submission_no: (*submission_no).to_string(),
         work_item_id: (*work_item_id).to_string(),
@@ -422,11 +450,12 @@ mod tests {
     fn submit_receipt_round_trips_and_hides_raw_key() {
         let fingerprint = "b".repeat(64);
         let receipt = PurchaseSubmitReceipt {
+            purchase_no: "PO-1".to_string(),
             submission_id: "submission-1".to_string(),
             submission_no: "SUB-000001".to_string(),
             work_item_id: "wi-1".to_string(),
             task_version: 1,
-            subject_version: "submission-1".to_string(),
+            subject_version: "1".to_string(),
             lock_version: 2,
         };
         let message = purchase_submit_receipt_message(&fingerprint, &receipt);

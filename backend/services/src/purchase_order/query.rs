@@ -7,6 +7,7 @@ use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionSta
 use entities::work_item::{AssignmentMode, WorkItem, WorkItemStatus, WorkItemType};
 use validator::Validate;
 
+use super::adapter::document_approval_view;
 use super::dto::{
     PageView, PurchaseActionBlockerView, PurchaseOrderCenterView, PurchaseOrderLineView,
     PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseReviewDomainAction,
@@ -14,6 +15,7 @@ use super::dto::{
 };
 use super::view_mapping::{revision_line_to_view, revision_totals, submission_line_to_view};
 use super::PurchaseOrderService;
+use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
 use crate::work_item::{ProcessingState, WorkItemAllowedAction};
 
@@ -178,6 +180,11 @@ impl PurchaseOrderService {
             None => None,
         };
         let review_work_item = self.resolve_review_work_item(&order, actor_id).await?;
+        let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction).await {
+            Ok(binding) => binding,
+            Err(Error::NotFound(_)) => None,
+            Err(error) => return Err(error),
+        };
 
         Ok(PurchaseOrderCenterView {
             id: order.base.id.clone(),
@@ -203,6 +210,7 @@ impl PurchaseOrderService {
             allocations,
             changes,
             review_work_item,
+            approval: document_approval_view(binding.as_ref(), None, order.stable.status),
             created_at: order.base.created_at,
         })
     }
@@ -216,7 +224,10 @@ impl PurchaseOrderService {
         let Some(submission_id) = order.current_submission_id.as_deref() else {
             return Ok(None);
         };
-        if order.stable.status != PurchaseOrderStatus::PendingFinanceReview {
+        let _ = (order, actor_id);
+        return Ok(None);
+        #[allow(unreachable_code)]
+        if order.stable.status != PurchaseOrderStatus::InApproval {
             return Ok(None);
         }
         let mut items = self
