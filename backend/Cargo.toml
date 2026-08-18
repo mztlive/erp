@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "apps/web-api",
+    "crates/bpm",
     "crates/entity-macros",     # 过程宏项目
     "crates/entity-core",
     "crates/permission-macros",
@@ -17,6 +18,7 @@ resolver = "2"
 
 [workspace.dependencies]
 # Workspace crates
+bpm = { path = "crates/bpm" }
 config = { path = "config" }
 database = { path = "database" }
 entities = { path = "entities" }

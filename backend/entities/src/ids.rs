@@ -19,12 +19,14 @@
 //! - `document_participant` → `DocumentParticipantId`
 //! - `workflow_action` → `WorkflowActionId`
 //!
-//! D03 `work_item`：
+//! D03 `work_item`（准备期旧审批 ID，仅供未切换调用方编译）：
 //! - `approval_definition` → `ApprovalDefinitionId`
 //! - `approval_step_definition` → `ApprovalStepDefinitionId`
 //! - `approval_instance` → `ApprovalInstanceId`
 //! - `approval_step_instance` → `ApprovalStepInstanceId`
 //! - `work_item` → `WorkItemId`
+//! - `approval_subject_snapshot` → `ApprovalSubjectSnapshotId`
+//! - `approval_notification_outbox` → `ApprovalNotificationOutboxId`
 //!
 //! D04 `bulk_job`：
 //! - `bulk_selection_snapshot` → `BulkSelectionSnapshotId`
@@ -230,72 +232,7 @@
 //! - `reconciliation_difference` → `ReconciliationDifferenceId`
 //! - `reconciliation_difference_resolution` → `ReconciliationDifferenceResolutionId`
 
-use std::fmt;
-
-use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
-
-/// 批量生成一个透明 ID newtype。
-///
-/// 提供：`new`、`Deref<Target = str>`、`AsRef<str>`、`From<String>`、`Display`、
-/// `Serialize`/`Deserialize`（透明字符串）、`PartialEq`/`Eq`/`Hash`/`Clone`/`Debug`。
-macro_rules! id_type {
-    ($name:ident) => {
-        /// 主键 ID（32 位十六进制，由 `id_generator::next_id()` 产生，不承载业务含义）。
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(String);
-
-        impl $name {
-            /// 由已生成的主键值构造 ID。
-            ///
-            /// # 参数
-            /// * `value` - 由 `id_generator::next_id()` 产生的值（UUID v4，32 位十六进制）。
-            ///
-            /// # 返回
-            /// 返回新的 ID。ID 是透明值对象，不校验格式。
-            pub fn new(value: impl Into<String>) -> Self {
-                Self(value.into())
-            }
-        }
-
-        impl std::ops::Deref for $name {
-            type Target = str;
-
-            fn deref(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl AsRef<str> for $name {
-            fn as_ref(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl From<String> for $name {
-            fn from(value: String) -> Self {
-                Self(value)
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str(&self.0)
-            }
-        }
-
-        impl Serialize for $name {
-            fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-                serializer.serialize_str(&self.0)
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
-                Ok(Self(String::deserialize(deserializer)?))
-            }
-        }
-    };
-}
+use entity_macros::id_type;
 
 // D01 source_registry
 id_type!(SourceSystemId);
@@ -314,6 +251,8 @@ id_type!(ApprovalStepDefinitionId);
 id_type!(ApprovalInstanceId);
 id_type!(ApprovalStepInstanceId);
 id_type!(WorkItemId);
+id_type!(ApprovalSubjectSnapshotId);
+id_type!(ApprovalNotificationOutboxId);
 
 // D04 bulk_job
 id_type!(BulkSelectionSnapshotId);
@@ -593,5 +532,41 @@ mod tests {
         let ids: Vec<InvoiceId> = serde_json::from_str(r#"["inv1","inv2","inv3"]"#).unwrap();
         assert_eq!(ids.len(), 3);
         assert_eq!(ids[2].as_ref(), "inv3");
+    }
+
+    /// ERP 集成审批 ID 透明序列化，且与彼此、旧审批 ID 类型隔离。
+    #[test]
+    fn erp_approval_integration_ids_are_transparent_and_type_isolated() {
+        let value = "00112233445566778899aabbccddeeff";
+        let snapshot = ApprovalSubjectSnapshotId::new(value);
+        let outbox = ApprovalNotificationOutboxId::new(value);
+
+        assert_eq!(snapshot.as_ref(), value);
+        assert_eq!(&*snapshot, value);
+        assert_eq!(snapshot.to_string(), value);
+        let snapshot_json = serde_json::to_string(&snapshot).unwrap();
+        assert_eq!(snapshot_json, format!("\"{value}\""));
+        let snapshot_back: ApprovalSubjectSnapshotId = serde_json::from_str(&snapshot_json).unwrap();
+        assert_eq!(snapshot_back, snapshot);
+
+        assert_eq!(outbox.as_ref(), value);
+        assert_eq!(outbox.to_string(), value);
+        let outbox_json = serde_json::to_string(&outbox).unwrap();
+        assert_eq!(outbox_json, format!("\"{value}\""));
+        let outbox_back: ApprovalNotificationOutboxId = serde_json::from_str(&outbox_json).unwrap();
+        assert_eq!(outbox_back, outbox);
+
+        assert_ne!(
+            std::any::type_name::<ApprovalSubjectSnapshotId>(),
+            std::any::type_name::<ApprovalNotificationOutboxId>()
+        );
+        assert_ne!(
+            std::any::type_name::<ApprovalSubjectSnapshotId>(),
+            std::any::type_name::<ApprovalInstanceId>()
+        );
+        assert_ne!(
+            std::any::type_name::<ApprovalNotificationOutboxId>(),
+            std::any::type_name::<ApprovalInstanceId>()
+        );
     }
 }

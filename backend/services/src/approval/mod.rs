@@ -1,8 +1,15 @@
 //! D03 审批定义 bootstrap、稳定运行时端口与阻塞恢复应用层。
 
 mod action;
+pub mod binding;
 mod bootstrap;
+pub mod business_adapter;
+pub mod definition;
+pub mod definition_dto;
 mod dto;
+pub mod execution;
+pub mod policy;
+pub mod process_kind;
 mod registry;
 mod resolver;
 mod runtime;

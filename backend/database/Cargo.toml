@@ -11,6 +11,7 @@ futures-util = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 chrono = { workspace = true }
+bpm = { workspace = true }
 entity-core = { workspace = true }
 entities = { workspace = true }
 regex = { workspace = true }

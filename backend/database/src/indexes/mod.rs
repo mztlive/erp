@@ -5,6 +5,8 @@
 
 mod access_control;
 mod approval;
+mod approval_integration;
+mod bpm;
 mod bulk_job;
 mod card_instance;
 mod catalog;
@@ -49,6 +51,8 @@ mod work_item;
 pub async fn ensure_indexes(db: &mongodb::Database) -> crate::Result<()> {
     access_control::ensure(db).await?;
     approval::ensure(db).await?;
+    approval_integration::ensure(db).await?;
+    bpm::ensure(db).await?;
     bulk_job::ensure(db).await?;
     card_instance::ensure(db).await?;
     catalog::ensure(db).await?;
