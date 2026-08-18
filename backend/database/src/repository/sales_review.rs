@@ -526,9 +526,7 @@ impl<'a> Repository<'a, SalesChangeOrder> {
                 "status": {
                     "$in": [
                         SalesChangeOrderStatus::Draft.as_str(),
-                        SalesChangeOrderStatus::PendingImpactConfirmation.as_str(),
-                        SalesChangeOrderStatus::PendingFinanceReview.as_str(),
-                        SalesChangeOrderStatus::Rejected.as_str(),
+                        SalesChangeOrderStatus::InApproval.as_str(),
                     ]
                 },
             },
@@ -659,7 +657,7 @@ impl<'a> SalesReviewRepository<'a> {
         Ok(())
     }
 
-    /// 发起销售变更影响确认：写入不可变变更提交并把变更单推进到待影响确认。
+    /// 提交销售变更：写入不可变变更提交并把变更单推进到审批中。
     ///
     /// 依次写入 `sales_change_submission`、`sales_change_submission_line` 并 CAS
     /// 更新变更单（绑定 `current_submission_id`/`target_content_hash`，数据模型
@@ -670,7 +668,7 @@ impl<'a> SalesReviewRepository<'a> {
     /// 必须通过 `with_transaction` 传入事务会话。
     ///
     /// # 参数
-    /// * `change_order` - 已迁移到待影响确认的变更单（成功后内存版本递增）
+    /// * `change_order` - 已迁移到审批中的变更单（成功后内存版本递增）
     /// * `submission` - 不可变变更提交头
     /// * `lines` - 不可变变更提交明细
     /// * `executor` - 数据访问执行器，必须位于事务中

@@ -12,14 +12,14 @@ use axum::{
 use services::{
     audit::AuditActor,
     sales_review::{
-        CancelCardSalesApprovalCommand, CancelCardSalesApprovalResult, CardSalesApprovalActionPort,
-        ChangeReviewDecisionRequest, CompleteLowMarginManagerConfirmationCommand,
-        CompleteLowMarginManagerConfirmationResult, CompleteProcurementConfirmationCommand,
-        CompleteProcurementConfirmationResult, CreateSalesChangeOrderRequest, PageView,
-        ProcurementConfirmationDetailParams, ProcurementConfirmationDetailView,
-        ProcurementConfirmationListParams, ProcurementConfirmationView, ProcurementRecommendationView,
-        SalesChangeOrderDetailView, SalesChangeOrderListParams, SalesChangeOrderView,
-        SalesOrderReviewListParams, SalesOrderReviewView, SalesReviewService,
+        CancelCardSalesApprovalCommand, CancelCardSalesApprovalResult, CancelSalesChangeApprovalRequest,
+        CardSalesApprovalActionPort, ChangeReviewDecisionRequest,
+        CompleteLowMarginManagerConfirmationCommand, CompleteLowMarginManagerConfirmationResult,
+        CompleteProcurementConfirmationCommand, CompleteProcurementConfirmationResult,
+        CreateSalesChangeOrderRequest, PageView, ProcurementConfirmationDetailParams,
+        ProcurementConfirmationDetailView, ProcurementConfirmationListParams, ProcurementConfirmationView,
+        ProcurementRecommendationView, SalesChangeOrderDetailView, SalesChangeOrderListParams,
+        SalesChangeOrderView, SalesOrderReviewListParams, SalesOrderReviewView, SalesReviewService,
         SaveProcurementConfirmationLinesRequest, SaveProcurementConfirmationResult,
         SubmitCardSalesApprovalDecisionCommand, SubmitCardSalesApprovalDecisionResult,
         SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
@@ -365,8 +365,9 @@ pub async fn sales_change_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSalesChangeOrderRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
+    let rbac = state.rbac();
     let view = SalesReviewService::new(state.db())
-        .create_sales_change_order(req, &actor)
+        .create_sales_change_order(req, &actor, &rbac)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -379,7 +380,7 @@ pub async fn sales_change_order_create(
     resource = "sales_change_order",
     action = "submit"
 )]
-/// 发起销售变更影响确认（形成不可变变更提交并进入影响确认/财务复核链）。
+/// 提交销售变更并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -409,7 +410,7 @@ pub async fn sales_change_order_submit_impact(
     resource = "sales_change_order",
     action = "approve"
 )]
-/// 通过变更履约影响确认（进入财务复核）。
+/// 履约影响确认不得充当审批流程节点，恒失败关闭。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -469,7 +470,7 @@ pub async fn sales_change_order_reject_impact(
     resource = "sales_change_order",
     action = "approve"
 )]
-/// 通过变更财务复核（§8.1.3 变更生效：新版本 + 应收差额 + 当前版本切换）。
+/// 财务复核不得充当审批流程节点，恒失败关闭。最终动作仅为 apply_effective_change。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -547,6 +548,36 @@ pub async fn sales_change_order_void(
 ) -> Result<SalesChangeOrderDetailView> {
     let view = SalesReviewService::new(state.db())
         .void_sales_change(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售复核",
+    group_desc = "销售审批与采购二次确认（W05/W07）管理",
+    desc = "撤回销售变更审批",
+    resource = "sales_change_order",
+    action = "submit"
+)]
+/// 撤回尚未最终通过的销售变更审批，回到可修正草稿。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 变更单 ID
+/// * `req` - 撤回请求（原因必填）
+///
+/// # 返回
+/// 返回变更单详情视图。
+pub async fn sales_change_order_cancel_approval(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CancelSalesChangeApprovalRequest>,
+) -> Result<SalesChangeOrderDetailView> {
+    let view = SalesReviewService::new(state.db())
+        .cancel_approval(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
