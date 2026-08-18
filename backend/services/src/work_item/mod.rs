@@ -3154,6 +3154,7 @@ fn assignment_separation_policy(work_item_type: WorkItemType) -> AssignmentSepar
         WorkItemType::OwnershipMigrationSalesConfirmation
         | WorkItemType::OwnershipMigrationFinanceConfirmation
         | WorkItemType::FinanceCorrectionReview => AssignmentSeparationPolicy::FailClosed,
+        WorkItemType::DocumentApproval => AssignmentSeparationPolicy::ApprovalHistory,
     }
 }
 

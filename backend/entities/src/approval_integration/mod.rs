@@ -1,4 +1,14 @@
-//! ERP 审批集成实体占位。P1 填充业务对象快照与通知 outbox。
+//! ERP 审批集成实体：业务对象快照与通知 outbox。
 //!
 //! 本模块不得重新定义流程定义、实例、执行、审批人或命令收据。
-//! 本占位不导出可被业务当成已就绪的集成实体。
+
+pub mod notification_outbox;
+pub mod subject_snapshot;
+
+pub use notification_outbox::{
+    ApprovalNotificationDeliveryStatus, ApprovalNotificationEventKind, ApprovalNotificationOutbox,
+    ApprovalNotificationTemplateParams, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS,
+};
+pub use subject_snapshot::{
+    ApprovalSubjectCounterparty, ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload,
+};

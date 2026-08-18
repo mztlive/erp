@@ -53,6 +53,9 @@ pub enum PurchaseChangeOrderStatus {
     Rejected,
     /// 作废。
     Voided,
+    /// 审批中。
+    #[serde(rename = "IN_APPROVAL")]
+    InApproval,
 }
 
 impl PurchaseChangeOrderStatus {
@@ -68,6 +71,7 @@ impl PurchaseChangeOrderStatus {
             Self::Effective => "已生效",
             Self::Rejected => "驳回",
             Self::Voided => "作废",
+            Self::InApproval => "审批中",
         }
     }
 
@@ -83,6 +87,7 @@ impl PurchaseChangeOrderStatus {
             Self::Effective => "EFFECTIVE",
             Self::Rejected => "REJECTED",
             Self::Voided => "VOIDED",
+            Self::InApproval => "IN_APPROVAL",
         }
     }
 }
@@ -136,6 +141,9 @@ pub struct PurchaseChangeOrder {
     pub target_content_hash: Option<String>,
     /// 生效后形成的新采购版本。
     pub effective_revision_id: Option<PurchaseOrderRevisionId>,
+    /// 审批提交版本，初值 0。
+    #[serde(default)]
+    pub approval_subject_version: u32,
 }
 
 impl PartialEq for PurchaseChangeOrder {
@@ -152,6 +160,7 @@ impl PartialEq for PurchaseChangeOrder {
             && self.current_submission_id == other.current_submission_id
             && self.target_content_hash == other.target_content_hash
             && self.effective_revision_id == other.effective_revision_id
+            && self.approval_subject_version == other.approval_subject_version
     }
 }
 
@@ -192,6 +201,7 @@ impl PurchaseChangeOrder {
             current_submission_id: None,
             target_content_hash: None,
             effective_revision_id: None,
+            approval_subject_version: 0,
         })
     }
 

@@ -1,3 +1,7 @@
-//! BPM 图规则。P1 填充线性连线与验证器。
-//!
-//! 本模块只声明空入口，不得在地基阶段注册可执行的图算法。
+//! BPM 图规则：线性连线生成与单条连线/入口校验。
+
+pub mod linear;
+pub mod validator;
+
+pub use linear::{generate_linear_transitions, LinearTransitionDraft};
+pub use validator::{validate_entry_node, validate_transition};

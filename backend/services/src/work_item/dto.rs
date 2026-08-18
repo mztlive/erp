@@ -812,6 +812,7 @@ fn handler_route(work_item_type: WorkItemType, business_object_type: &str, owner
         (WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException, _) => {
             ("unregistered_work_item", "W01")
         }
+        (WorkItemType::DocumentApproval, _) => ("document_approval", "W01"),
     };
     let route_context =
         w18_confirmation_scope(work_item_type, owner_role).map(|scope| WorkItemRouteContext {

@@ -54,6 +54,7 @@ pub(super) fn stage_code_label_tone(
         ReviewStatus::PendingOperations => ("awaiting_ops", "待运营审批", "warning"),
         ReviewStatus::Approved => ("effective", "已生效", "success"),
         ReviewStatus::NotSubmitted => ("draft", "草稿", "neutral"),
+        ReviewStatus::InApproval => ("in_approval", "审批中", "warning"),
     }
 }
 

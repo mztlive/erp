@@ -40,6 +40,9 @@ pub enum PurchaseOrderStatus {
     Completed,
     /// 已作废。
     Voided,
+    /// 审批中。
+    #[serde(rename = "IN_APPROVAL")]
+    InApproval,
 }
 
 impl PurchaseOrderStatus {
@@ -55,6 +58,7 @@ impl PurchaseOrderStatus {
             Self::PartiallyExecuted => "部分执行",
             Self::Completed => "已完成",
             Self::Voided => "已作废",
+            Self::InApproval => "审批中",
         }
     }
 
@@ -70,6 +74,7 @@ impl PurchaseOrderStatus {
             Self::PartiallyExecuted => "PARTIALLY_EXECUTED",
             Self::Completed => "COMPLETED",
             Self::Voided => "VOIDED",
+            Self::InApproval => "IN_APPROVAL",
         }
     }
 }
@@ -77,7 +82,8 @@ impl PurchaseOrderStatus {
 impl DocumentState for PurchaseOrderStatus {
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::PendingFinanceReview, Self::Voided],
+            Self::Draft => &[Self::PendingFinanceReview, Self::Voided, Self::InApproval],
+            Self::InApproval => &[Self::Effective, Self::Draft],
             Self::PendingFinanceReview => &[Self::Effective, Self::Draft],
             Self::Effective => &[Self::PartiallyExecuted],
             Self::PartiallyExecuted => &[Self::Completed],
@@ -225,6 +231,9 @@ pub struct PurchaseOrder {
     pub fulfillment_progress: ProgressStatus,
     /// 当前待财务审核的不可变提交。
     pub current_submission_id: Option<String>,
+    /// 审批提交版本，初值 0。
+    #[serde(default)]
+    pub approval_subject_version: u32,
 }
 
 impl PartialEq for PurchaseOrder {
@@ -246,6 +255,7 @@ impl PartialEq for PurchaseOrder {
             && self.invoice_progress == other.invoice_progress
             && self.fulfillment_progress == other.fulfillment_progress
             && self.current_submission_id == other.current_submission_id
+            && self.approval_subject_version == other.approval_subject_version
     }
 }
 
@@ -294,6 +304,7 @@ impl PurchaseOrder {
             invoice_progress: ProgressStatus::None,
             fulfillment_progress: ProgressStatus::None,
             current_submission_id: None,
+            approval_subject_version: 0,
         })
     }
 

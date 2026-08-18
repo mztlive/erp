@@ -10,6 +10,8 @@ use crate::errors::{Error, Result};
 use crate::ids::WorkItemId;
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+use bpm::ApprovalNodeExecutionId;
+
 const OBJECT_TYPE_MAX_LEN: usize = 64;
 const OBJECT_ID_MAX_LEN: usize = 128;
 const RESPONSIBILITY_KEY_MAX_LEN: usize = 128;
@@ -60,6 +62,8 @@ pub enum WorkItemType {
     IntegrationResultUnknown,
     /// 业务异常。
     BusinessException,
+    /// 通用单据审批任务。
+    DocumentApproval,
 }
 
 impl WorkItemType {
@@ -86,6 +90,7 @@ impl WorkItemType {
             Self::ImportBusinessConfirmation => "导入业务确认",
             Self::IntegrationResultUnknown => "集成结果未知",
             Self::BusinessException => "业务异常",
+            Self::DocumentApproval => "单据审批",
         }
     }
 
@@ -112,6 +117,7 @@ impl WorkItemType {
             Self::ImportBusinessConfirmation => "IMPORT_BUSINESS_CONFIRMATION",
             Self::IntegrationResultUnknown => "INTEGRATION_RESULT_UNKNOWN",
             Self::BusinessException => "BUSINESS_EXCEPTION",
+            Self::DocumentApproval => "DOCUMENT_APPROVAL",
         }
     }
 
@@ -214,6 +220,8 @@ pub enum AssignmentSource {
     AdminRelease,
     /// 阻塞恢复时重新执行冻结解析器。
     RecoveryResolver,
+    /// 审批运行时指定到人。
+    ApprovalRuntime,
 }
 
 impl AssignmentSource {
@@ -229,6 +237,7 @@ impl AssignmentSource {
             Self::AdminReassign => "ADMIN_REASSIGN",
             Self::AdminRelease => "ADMIN_RELEASE",
             Self::RecoveryResolver => "RECOVERY_RESOLVER",
+            Self::ApprovalRuntime => "APPROVAL_RUNTIME",
         }
     }
 }
@@ -273,6 +282,29 @@ impl WorkItemPriority {
             Self::Low => "low",
         }
     }
+}
+
+/// 通用单据审批任务的创建数据。责任人、角色、组织和执行 ID 均必填。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DocumentApprovalWorkItemData {
+    /// 当前节点执行。
+    pub approval_node_execution_id: ApprovalNodeExecutionId,
+    /// 业务对象类型。
+    pub business_object_type: String,
+    /// 业务对象 ID。
+    pub business_object_id: String,
+    /// 被审批的冻结提交版本。
+    pub subject_version: String,
+    /// 合同签署的责任角色。
+    pub owner_role: String,
+    /// 责任组织。
+    pub owner_organization_id: String,
+    /// 当前实例审批人。
+    pub owner_user_id: String,
+    /// 优先级。
+    pub priority: WorkItemPriority,
+    /// 时限。
+    pub due_at: Option<Instant>,
 }
 
 /// 创建任务所需的责任与业务对象快照。
@@ -324,6 +356,9 @@ pub struct WorkItem {
     pub work_item_type: WorkItemType,
     /// 审批步骤实例；独立任务为空。
     pub approval_step_instance_id: Option<String>,
+    /// 类型化审批节点执行；审批任务必填。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_node_execution_id: Option<ApprovalNodeExecutionId>,
     /// 业务对象类型。
     pub business_object_type: String,
     /// 业务对象 ID。
@@ -416,6 +451,51 @@ impl WorkItem {
         Self::new_at_with_optional_responsibility_key(id, data, None, at)
     }
 
+    /// 创建指定到人的单据审批任务。
+    ///
+    /// 必须同时提供非空责任人、角色、组织、审批运行时来源和节点执行 ID。
+    ///
+    /// # 参数
+    /// * `id` - 任务主键
+    /// * `data` - 审批任务数据
+    /// * `at` - 创建时间
+    ///
+    /// # 错误
+    /// 任一必填责任字段为空或超长时返回错误。
+    pub fn new_document_approval(
+        id: WorkItemId,
+        data: DocumentApprovalWorkItemData,
+        at: Instant,
+    ) -> Result<Self> {
+        let owner_user_id = normalize_required_text(
+            data.owner_user_id,
+            "审批任务责任人不能为空",
+            USER_ID_MAX_LEN,
+            "审批任务责任人过长",
+        )?;
+        let generic = WorkItemData {
+            work_item_type: WorkItemType::ImportBusinessConfirmation,
+            approval_step_instance_id: None,
+            business_object_type: data.business_object_type,
+            business_object_id: data.business_object_id,
+            subject_version: data.subject_version,
+            assignment_mode: AssignmentMode::Direct,
+            owner_role: data.owner_role,
+            owner_organization_id: data.owner_organization_id,
+            owner_user_id: Some(owner_user_id.clone()),
+            assignment_source: AssignmentSource::ApprovalRuntime,
+            priority: data.priority,
+            due_at: data.due_at,
+            reason_code: None,
+            impact_summary: None,
+        };
+        let mut item = Self::new_at_with_optional_responsibility_key(id, generic, None, at)?;
+        item.work_item_type = WorkItemType::DocumentApproval;
+        item.approval_node_execution_id = Some(data.approval_node_execution_id);
+        item.assignment_source = AssignmentSource::ApprovalRuntime;
+        Ok(item)
+    }
+
     fn new_at_with_optional_responsibility_key(
         id: WorkItemId,
         data: WorkItemData,
@@ -423,6 +503,9 @@ impl WorkItem {
         at: Instant,
     ) -> Result<Self> {
         let normalized = NormalizedWorkItemData::try_from(data)?;
+        if normalized.work_item_type == WorkItemType::DocumentApproval {
+            return Err(Error::from("单据审批任务必须使用专用构造路径"));
+        }
         normalized.ensure_assignment_invariant()?;
         let has_direct_owner = normalized.assignment_mode == AssignmentMode::Direct;
         let responsibility_actor_ids = normalized.owner_user_id.iter().cloned().collect();
@@ -430,6 +513,7 @@ impl WorkItem {
             base: BaseModel::new(id.to_string()),
             work_item_type: normalized.work_item_type,
             approval_step_instance_id: normalized.approval_step_instance_id,
+            approval_node_execution_id: None,
             business_object_type: normalized.business_object_type,
             business_object_id: normalized.business_object_id,
             responsibility_key,
@@ -505,6 +589,7 @@ impl WorkItem {
     /// # 错误
     /// 任务非开放或目标用户为空、超长时返回错误。
     pub fn reassign(&mut self, target_user_id: impl Into<String>, at: Instant) -> Result<()> {
+        self.ensure_generic_mutation()?;
         self.assign_to(target_user_id, AssignmentSource::AdminReassign, at)
     }
 
@@ -545,18 +630,21 @@ impl WorkItem {
     /// # 错误
     /// 任务非开放、没有个人责任或执行人不是当前责任人时返回错误。
     pub fn complete_by_domain_command(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
-        let completed_by = normalize_required_text(
-            completed_by.into(),
-            "完成执行人不能为空",
-            USER_ID_MAX_LEN,
-            "完成执行人过长",
-        )?;
-        self.ensure_current_owner(&completed_by)?;
-        self.started_at.get_or_insert(at);
-        self.status = WorkItemStatus::Completed;
-        self.completed_at = Some(at);
-        self.completed_by = Some(completed_by);
-        Ok(())
+        self.ensure_generic_mutation()?;
+        self.complete_open(completed_by, at)
+    }
+
+    /// 由审批运行时完成当前开放的单据审批任务。
+    ///
+    /// # 错误
+    /// 不是单据审批任务、任务非开放或执行人不是当前责任人时返回错误。
+    pub fn complete_by_approval_runtime(
+        &mut self,
+        completed_by: impl Into<String>,
+        at: Instant,
+    ) -> Result<()> {
+        self.ensure_document_approval()?;
+        self.complete_open(completed_by, at)
     }
 
     /// 以受控原因关闭开放任务。
@@ -566,6 +654,30 @@ impl WorkItem {
     /// # 错误
     /// 任务非开放、操作人或关闭原因为空、超长时返回错误。
     pub fn close(
+        &mut self,
+        closed_by: impl Into<String>,
+        data: WorkItemCloseData,
+        at: Instant,
+    ) -> Result<()> {
+        self.ensure_generic_mutation()?;
+        self.close_open(closed_by, data, at)
+    }
+
+    /// 由审批运行时关闭当前开放的单据审批任务。
+    ///
+    /// # 错误
+    /// 不是单据审批任务、任务非开放或关闭数据非法时返回错误。
+    pub fn close_by_approval_runtime(
+        &mut self,
+        closed_by: impl Into<String>,
+        data: WorkItemCloseData,
+        at: Instant,
+    ) -> Result<()> {
+        self.ensure_document_approval()?;
+        self.close_open(closed_by, data, at)
+    }
+
+    fn close_open(
         &mut self,
         closed_by: impl Into<String>,
         data: WorkItemCloseData,
@@ -605,6 +717,35 @@ impl WorkItem {
     /// 任务开放且责任人与给定用户相同时返回 `true`。
     pub fn is_owned_by(&self, user_id: &str) -> bool {
         self.status == WorkItemStatus::Open && self.owner_user_id.as_deref() == Some(user_id)
+    }
+
+    fn complete_open(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
+        let completed_by = normalize_required_text(
+            completed_by.into(),
+            "完成执行人不能为空",
+            USER_ID_MAX_LEN,
+            "完成执行人过长",
+        )?;
+        self.ensure_current_owner(&completed_by)?;
+        self.started_at.get_or_insert(at);
+        self.status = WorkItemStatus::Completed;
+        self.completed_at = Some(at);
+        self.completed_by = Some(completed_by);
+        Ok(())
+    }
+
+    fn ensure_generic_mutation(&self) -> Result<()> {
+        if self.work_item_type == WorkItemType::DocumentApproval {
+            return Err(Error::from("APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN"));
+        }
+        Ok(())
+    }
+
+    fn ensure_document_approval(&self) -> Result<()> {
+        if self.work_item_type != WorkItemType::DocumentApproval {
+            return Err(Error::from("只有单据审批任务可以由审批运行时完成或关闭"));
+        }
+        Ok(())
     }
 
     fn ensure_open(&self) -> Result<()> {
@@ -950,6 +1091,8 @@ mod tests {
 
         let item =
             WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), Instant::from_unix_secs(100)).unwrap();
+        assert_eq!(WorkItemType::DocumentApproval.as_str(), "DOCUMENT_APPROVAL");
+        assert_eq!(AssignmentSource::ApprovalRuntime.as_str(), "APPROVAL_RUNTIME");
         let document = bson::to_document(&item).unwrap();
         assert_eq!(document.get_str("status").unwrap(), "OPEN");
         assert_eq!(document.get_str("assignment_mode").unwrap(), "POOL");
@@ -957,5 +1100,70 @@ mod tests {
         assert!(document.get_array("responsibility_actor_ids").unwrap().is_empty());
         let roundtrip: WorkItem = bson::from_document(document).unwrap();
         assert_eq!(roundtrip, item);
+    }
+
+    /// 单据审批任务缺少责任人或执行 ID 时失败，通用动作被拒绝。
+    #[test]
+    fn document_approval_requires_owner_and_execution() {
+        let at = Instant::from_unix_secs(100);
+        let mut item = WorkItem::new_document_approval(
+            WorkItemId::new("wi-approval"),
+            super::DocumentApprovalWorkItemData {
+                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-1"),
+                business_object_type: "stock_adjustment".into(),
+                business_object_id: "adj-1".into(),
+                subject_version: "1".into(),
+                owner_role: "stock_adjustment_approver".into(),
+                owner_organization_id: "org-1".into(),
+                owner_user_id: " alice ".into(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            at,
+        )
+        .unwrap();
+        assert_eq!(item.work_item_type, WorkItemType::DocumentApproval);
+        assert_eq!(item.owner_user_id.as_deref(), Some("alice"));
+        assert_eq!(item.assignment_source, AssignmentSource::ApprovalRuntime);
+        assert!(item.approval_node_execution_id.is_some());
+        assert!(item
+            .complete_by_domain_command("alice", Instant::from_unix_secs(110))
+            .is_err());
+        assert!(item
+            .close(
+                "admin",
+                WorkItemCloseData {
+                    close_reason: "x".into(),
+                },
+                Instant::from_unix_secs(110),
+            )
+            .is_err());
+        assert!(item.reassign("bob", Instant::from_unix_secs(110)).is_err());
+        item.complete_by_approval_runtime("alice", Instant::from_unix_secs(110))
+            .unwrap();
+        assert_eq!(item.status, WorkItemStatus::Completed);
+
+        assert!(WorkItem::new_document_approval(
+            WorkItemId::new("wi-empty"),
+            super::DocumentApprovalWorkItemData {
+                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-2"),
+                business_object_type: "stock_adjustment".into(),
+                business_object_id: "adj-1".into(),
+                subject_version: "1".into(),
+                owner_role: "stock_adjustment_approver".into(),
+                owner_organization_id: "org-1".into(),
+                owner_user_id: "  ".into(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            at,
+        )
+        .is_err());
+
+        let generic = WorkItemData {
+            work_item_type: WorkItemType::DocumentApproval,
+            ..pool_data()
+        };
+        assert!(WorkItem::new_at(WorkItemId::new("wi-generic"), generic, at).is_err());
     }
 }

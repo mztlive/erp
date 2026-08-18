@@ -93,6 +93,7 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::ImportBusinessConfirmation => "进入导入页后，确认本次试算范围。",
         WorkItemType::IntegrationResultUnknown => "进入接口错误中心后，确认本次集成结果。",
         WorkItemType::BusinessException => "进入对应页面后，处理本次业务异常。",
+        WorkItemType::DocumentApproval => "进入单据后，完成当前审批节点。",
     }
     .to_string()
 }
@@ -241,6 +242,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::ImportBusinessConfirmation => "导入试算待业务确认",
         WorkItemType::IntegrationResultUnknown => "集成结果待确认",
         WorkItemType::BusinessException => "业务异常待处理",
+        WorkItemType::DocumentApproval => "单据待审批",
     }
 }
 
@@ -266,6 +268,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException => {
             "不处理则异常会继续挡住后续业务"
         }
+        WorkItemType::DocumentApproval => "不审批则单据不能形成正式事实",
     }
 }
 

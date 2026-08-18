@@ -40,6 +40,8 @@ pub enum StockAdjustmentState {
     Rejected,
     /// 已冲正（不可逆终态）。
     Reversed,
+    /// 审批中。
+    InApproval,
 }
 
 impl StockAdjustmentState {
@@ -55,6 +57,7 @@ impl StockAdjustmentState {
             Self::Posted => "已过账",
             Self::Rejected => "驳回",
             Self::Reversed => "已冲正",
+            Self::InApproval => "审批中",
         }
     }
 
@@ -70,6 +73,7 @@ impl StockAdjustmentState {
             Self::Posted => "POSTED",
             Self::Rejected => "REJECTED",
             Self::Reversed => "REVERSED",
+            Self::InApproval => "IN_APPROVAL",
         }
     }
 
@@ -88,7 +92,8 @@ impl DocumentState for StockAdjustmentState {
     /// `REJECTED` 可在修改后重新提交仓储复核（§6.5.5 再次提交审核）。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::PendingWarehouseReview],
+            Self::Draft => &[Self::PendingWarehouseReview, Self::InApproval],
+            Self::InApproval => &[Self::Posted, Self::Draft],
             Self::PendingWarehouseReview => &[Self::PendingFinanceReview, Self::Rejected],
             Self::PendingFinanceReview => &[Self::Posted, Self::Rejected],
             Self::Rejected => &[Self::PendingWarehouseReview],
@@ -183,6 +188,9 @@ pub struct StockAdjustment {
     pub reviewed_by: Option<String>,
     /// 成本影响确认人。
     pub finance_reviewed_by: Option<String>,
+    /// 审批提交版本，初值 0。
+    #[serde(default)]
+    pub approval_subject_version: u32,
 }
 
 impl StockAdjustment {
@@ -221,6 +229,7 @@ impl StockAdjustment {
             prepared_by,
             reviewed_by: None,
             finance_reviewed_by: None,
+            approval_subject_version: 0,
         })
     }
 
