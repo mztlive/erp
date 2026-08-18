@@ -28,6 +28,7 @@ interface LedgerTableFrameProps {
     reservationColumns: ColumnDef<StockReservationRow, unknown>[]
     adjustmentColumns: ColumnDef<StockAdjustmentRow, unknown>[]
     onOpenDetail: (balanceId: string) => void
+    onOpenAdjustment: (adjustmentId: string) => void
     searchInput: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
     onSearchChange: (value: string) => void
@@ -60,6 +61,7 @@ export function LedgerTableFrame({
     reservationColumns,
     adjustmentColumns,
     onOpenDetail,
+    onOpenAdjustment,
     searchInput,
     searchInputRef,
     onSearchChange,
@@ -189,6 +191,10 @@ export function LedgerTableFrame({
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         defaultColumnPinning={{ left: ["doc"] }}
+                        onRowPreview={(row) =>
+                            onOpenAdjustment(row.adjustmentId)
+                        }
+                        onRowOpen={(row) => onOpenAdjustment(row.adjustmentId)}
                     />
                 )
             }

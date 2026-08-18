@@ -16,12 +16,14 @@ import {
     localNowInput,
 } from "@/features/inventory/lib/presentation"
 import { REASON_TYPE_OPTIONS } from "@/features/inventory/types"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     AdjustmentReasonType,
     StockBalanceRow,
 } from "@/features/inventory/types"
 
 export type AdjustmentMeta = {
+    stockAdjustmentId: string
     warehouseName: string
     skuCode: string
     skuName: string
@@ -31,6 +33,7 @@ export type AdjustmentMeta = {
     adjustmentNo: string
     editVersion: number
     segregationNote: string
+    approval?: DocumentApprovalView
 }
 
 export type AdjustmentPendingPayload = {
@@ -133,6 +136,7 @@ export function useAdjustmentWorkflow({
                 setAdjustLockVersion(draft.balanceLockVersion)
                 setAdjustSeedLock(row.lockVersion)
                 setAdjustMeta({
+                    stockAdjustmentId: draft.stockAdjustmentId,
                     warehouseName: draft.warehouseName,
                     skuCode: draft.skuCode,
                     skuName: draft.skuName,
@@ -142,6 +146,7 @@ export function useAdjustmentWorkflow({
                     adjustmentNo: draft.adjustmentNo,
                     editVersion: draft.editVersion,
                     segregationNote: draft.segregationNote,
+                    approval: draft.approval,
                 })
                 form.reset()
                 form.setFieldValue("reasonType", draft.reasonType)
@@ -156,7 +161,13 @@ export function useAdjustmentWorkflow({
                 setActionError(getErrorMessage(err, "创建调整草稿失败"))
             }
         },
-        [createDraftMutation, form, isPhoneNarrow, onFocusRestore, onPreviewClose],
+        [
+            createDraftMutation,
+            form,
+            isPhoneNarrow,
+            onFocusRestore,
+            onPreviewClose,
+        ],
     )
 
     const doSubmit = React.useCallback(async () => {
@@ -186,8 +197,10 @@ export function useAdjustmentWorkflow({
         if (result.status === "succeeded") {
             setLastResult({
                 status: "succeeded",
-                title: "调整已提交待复核",
-                description: `单号 ${result.outcome.adjustmentNo}。下一责任方：${result.outcome.nextResponsible}。余额尚未变化，确认入账后由系统刷新。`,
+                title: "调整已提交审批",
+                description: result.outcome.currentNodeLabel
+                    ? `单号 ${result.outcome.adjustmentNo}。当前节点：${result.outcome.currentNodeLabel}。当前审批人：${result.outcome.nextResponsible}。余额尚未变化，审批通过后由系统更新。`
+                    : `单号 ${result.outcome.adjustmentNo}。当前审批人：${result.outcome.nextResponsible}。余额尚未变化，审批通过后由系统更新。`,
                 reference: result.outcome.reference,
             })
             setConfirmOpen(false)
@@ -237,8 +250,10 @@ export function useAdjustmentWorkflow({
         if (r.status === "succeeded") {
             setLastResult({
                 status: "succeeded",
-                title: "调整已提交待复核",
-                description: `单号 ${r.outcome.adjustmentNo}。下一责任方：${r.outcome.nextResponsible}。`,
+                title: "调整已提交审批",
+                description: r.outcome.currentNodeLabel
+                    ? `单号 ${r.outcome.adjustmentNo}。当前节点：${r.outcome.currentNodeLabel}。当前审批人：${r.outcome.nextResponsible}。`
+                    : `单号 ${r.outcome.adjustmentNo}。当前审批人：${r.outcome.nextResponsible}。`,
                 reference: r.outcome.reference,
             })
             closeAdjustment()
@@ -278,6 +293,4 @@ export function useAdjustmentWorkflow({
     }
 }
 
-export type AdjustmentFormApi = ReturnType<
-    typeof useAdjustmentWorkflow
->["form"]
+export type AdjustmentFormApi = ReturnType<typeof useAdjustmentWorkflow>["form"]

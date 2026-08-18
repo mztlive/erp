@@ -7,8 +7,11 @@
  */
 
 export {
+    buildAdjustmentSubmitRequest,
     createAdjustmentDraft,
+    fetchAdjustmentDetail,
     resolveAdjustmentUnknown,
+    STOCK_ADJUSTMENT_DOCUMENT_TYPE,
     submitAdjustment,
 } from "./adjustment"
 export { fetchBalanceDetail } from "./detail"

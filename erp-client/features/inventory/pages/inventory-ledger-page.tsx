@@ -7,10 +7,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { InventoryBalancePreview } from "@/features/inventory/components/inventory-balance-preview"
 import { useInventoryColumns } from "@/features/inventory/hooks/use-inventory-columns"
 import {
+    useAdjustmentDetailQuery,
     useBalanceDetailQuery,
     useInventoryListQuery,
 } from "@/features/inventory/hooks/queries"
+import { mapWorkItemDto } from "@/features/work-items/types"
+import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { AdjustmentConfirmDialog } from "./components/adjustment-confirm-dialog"
+import { AdjustmentDetailSheet } from "./components/adjustment-detail-sheet"
 import { AdjustmentDialog } from "./components/adjustment-dialog"
 import { AdjustmentResultBanner } from "./components/adjustment-result-banner"
 import { ExportJobProgress } from "./components/export-job-progress"
@@ -43,6 +47,7 @@ export function InventoryLedgerPage() {
         availability,
         balanceIdParam,
         adjustmentIdParam,
+        workItemIdParam,
         movementType,
         occurredFrom,
         occurredTo,
@@ -123,7 +128,18 @@ export function InventoryLedgerPage() {
         ],
         [listQuery.data],
     )
+    const workItemQuery = useWorkItemDetailQuery(workItemIdParam ?? "")
+    const workItem = workItemQuery.data
+        ? mapWorkItemDto(workItemQuery.data)
+        : undefined
+    const workItemAdjustmentId =
+        workItem?.businessObjectType === "stock_adjustment"
+            ? workItem.businessObjectId
+            : undefined
+    const previewAdjustmentId =
+        adjustmentIdParam ?? workItemAdjustmentId ?? null
     const detailQuery = useBalanceDetailQuery(previewBalanceId)
+    const adjustmentDetailQuery = useAdjustmentDetailQuery(previewAdjustmentId)
 
     const { exportJob, startExport, closeExport } = useInventoryExportJob()
 
@@ -166,6 +182,22 @@ export function InventoryLedgerPage() {
         setPreviewBalanceId(null)
         // P2：关闭详情属导航，用 push
         patchUrl({ balanceId: null })
+    }, [patchUrl])
+
+    const openAdjustment = React.useCallback(
+        (adjustmentId: string) => {
+            setPreviewBalanceId(null)
+            patchUrl({
+                view: "adjustment",
+                adjustmentId,
+                balanceId: null,
+            })
+        },
+        [patchUrl],
+    )
+
+    const closeAdjustment = React.useCallback(() => {
+        patchUrl({ adjustmentId: null })
     }, [patchUrl])
 
     const {
@@ -272,7 +304,9 @@ export function InventoryLedgerPage() {
             {adjustment.actionError ? (
                 <Alert variant="destructive">
                     <AlertTitle>操作未完成</AlertTitle>
-                    <AlertDescription>{adjustment.actionError}</AlertDescription>
+                    <AlertDescription>
+                        {adjustment.actionError}
+                    </AlertDescription>
                 </Alert>
             ) : null}
 
@@ -309,6 +343,7 @@ export function InventoryLedgerPage() {
                 reservationColumns={reservationColumns}
                 adjustmentColumns={adjustmentColumns}
                 onOpenDetail={openDetail}
+                onOpenAdjustment={openAdjustment}
                 searchInput={searchInput}
                 searchInputRef={searchInputRef}
                 onSearchChange={(value) => {
@@ -352,6 +387,22 @@ export function InventoryLedgerPage() {
                     resetPagination()
                 }}
                 onStartAdjustment={adjustment.startAdjustment}
+                onOpenAdjustment={openAdjustment}
+            />
+
+            <AdjustmentDetailSheet
+                open={previewAdjustmentId != null}
+                detail={adjustmentDetailQuery.data}
+                isPending={adjustmentDetailQuery.isPending}
+                workItemId={workItem?.workItemId}
+                expectedTaskVersion={workItem?.taskVersion}
+                workItemAllowedActions={workItem?.allowedActions}
+                onClose={closeAdjustment}
+                onDecisionApplied={() => {
+                    void listQuery.refetch()
+                    void adjustmentDetailQuery.refetch()
+                    void workItemQuery.refetch()
+                }}
             />
 
             <AdjustmentDialog

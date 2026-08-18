@@ -29,6 +29,7 @@ export interface InventoryLedgerUrlState {
     availability: InventoryAvailability
     balanceIdParam: string | undefined
     adjustmentIdParam: string | undefined
+    workItemIdParam: string | undefined
     movementType: string[]
     occurredFrom: string | undefined
     occurredTo: string | undefined
@@ -53,6 +54,10 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
     const availability = parseAvailability(searchParams.get("availability"))
     const balanceIdParam = searchParams.get("balanceId") ?? undefined
     const adjustmentIdParam = searchParams.get("adjustmentId") ?? undefined
+    const workItemIdParam =
+        searchParams.get("currentWorkItemId") ??
+        searchParams.get("workItemId") ??
+        undefined
     const movementTypeParam = searchParams.get("movementType") ?? ""
     const movementType = React.useMemo(
         () => movementTypeParam.split(",").filter(Boolean),
@@ -83,14 +88,14 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
     const hasOccurredToParam = searchParams.has("occurredTo")
     const hasActiveFilters = Boolean(
         qParam ||
-            warehouseId ||
-            (availability !== "all" && view === "balance") ||
-            skuId ||
-            salesOrderLineId ||
-            adjustmentIdParam ||
-            movementType.length > 0 ||
-            hasOccurredFromParam ||
-            hasOccurredToParam,
+        warehouseId ||
+        (availability !== "all" && view === "balance") ||
+        skuId ||
+        salesOrderLineId ||
+        adjustmentIdParam ||
+        movementType.length > 0 ||
+        hasOccurredFromParam ||
+        hasOccurredToParam,
     )
 
     return {
@@ -102,6 +107,7 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
         availability,
         balanceIdParam,
         adjustmentIdParam,
+        workItemIdParam,
         movementType,
         occurredFrom,
         occurredTo,

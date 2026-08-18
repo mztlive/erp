@@ -1,5 +1,7 @@
 /** W10 库存台账 · 客户端契约类型 */
 
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
+
 export type InventoryView =
     | "balance"
     | "movement"
@@ -113,6 +115,9 @@ export type StockReservationRow = Readonly<{
     fulfillmentHref?: string
 }>
 
+/** 合同 §4.4 库存调整生命周期。页面不得再展示旧复核旁路状态。 */
+export type StockAdjustmentStatus = "DRAFT" | "IN_APPROVAL" | "POSTED"
+
 export type StockAdjustmentRow = Readonly<{
     adjustmentId: string
     adjustmentNo: string
@@ -127,12 +132,12 @@ export type StockAdjustmentRow = Readonly<{
     reasonTypeLabel: string
     direction: "increase" | "decrease"
     quantity: string
-    status: string
+    status: StockAdjustmentStatus | string
     statusLabel: string
     statusTone: "neutral" | "warning" | "info" | "success" | "destructive"
     operatorLabel: string
-    warehouseReviewerLabel?: string
-    financeConfirmerLabel?: string
+    currentNodeLabel?: string
+    currentAssigneeLabel?: string
     postedAt?: string
     createdAt: string
     note?: string
@@ -228,16 +233,24 @@ export type AdjustmentDraftView = Readonly<{
     editVersion: number
     operatorLabel: string
     segregationNote: string
+    approval?: DocumentApprovalView
+}>
+
+export type AdjustmentDetailView = Readonly<{
+    adjustment: StockAdjustmentRow
+    approval: DocumentApprovalView
+    queriedAt: string
 }>
 
 export type AdjustmentSubmitResponse =
     | {
           status: "succeeded"
           outcome: {
-              kind: "SUBMITTED_FOR_WAREHOUSE_REVIEW"
+              kind: "SUBMITTED_FOR_APPROVAL"
               stockAdjustmentId: string
               adjustmentNo: string
               nextResponsible: string
+              currentNodeLabel?: string
               reference: string
               submittedAt: string
               balanceLockVersion: number

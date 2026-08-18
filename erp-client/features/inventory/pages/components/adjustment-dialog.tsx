@@ -15,6 +15,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { AdjustmentApprovalArea } from "@/features/inventory/components/adjustment-approval-area"
 import { REASON_TYPE_OPTIONS } from "@/features/inventory/types"
 import type { AdjustmentReasonType } from "@/features/inventory/types"
 import type {
@@ -46,7 +47,7 @@ export function AdjustmentDialog({
                 <DialogHeader>
                     <DialogTitle>发起库存调整</DialogTitle>
                     <DialogDescription>
-                        从当前余额上下文创建调整单草稿。提交后进入仓储复核，不会立即改库存。
+                        从当前余额上下文创建调整单草稿。提交后进入审批，不会立即改库存。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -169,8 +170,7 @@ export function AdjustmentDialog({
                                                 role="alert"
                                             >
                                                 {String(
-                                                    field.state.meta
-                                                        .errors[0],
+                                                    field.state.meta.errors[0],
                                                 )}
                                             </p>
                                         ) : null}
@@ -185,15 +185,19 @@ export function AdjustmentDialog({
                                 )}
                             />
 
+                            <AdjustmentApprovalArea
+                                phase="draft"
+                                approval={meta.approval}
+                                documentId={meta.stockAdjustmentId}
+                            />
+
                             <div className="rounded-lg border bg-card p-3 text-xs text-muted-foreground space-y-1">
                                 <div className="font-medium text-foreground">
                                     提交约束
                                 </div>
                                 <ul className="list-disc pl-4 space-y-0.5">
                                     <li>不会直接修改账面或可用数量</li>
-                                    <li>
-                                        经办与复核岗位分离，提交后待仓储复核
-                                    </li>
+                                    <li>经办与审批岗位分离，提交后进入审批</li>
                                     <li>
                                         按当前数据版本提交；若已被他人修改，将提示冲突并保留你的输入。
                                     </li>
@@ -209,7 +213,7 @@ export function AdjustmentDialog({
                                     取消
                                 </Button>
                                 <form.AppForm>
-                                    <form.SubmitButton label="提交待复核" />
+                                    <form.SubmitButton label="提交审批" />
                                 </form.AppForm>
                             </DialogFooter>
                         </form>

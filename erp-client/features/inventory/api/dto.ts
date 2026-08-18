@@ -3,6 +3,7 @@
  * 仅内部映射层使用；对外契约类型见 ../types。
  */
 
+import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type { Page } from "@/lib/api"
 
 export type BackendPage<T> = Page<T>
@@ -74,6 +75,7 @@ export type BackendStockAdjustmentDetail = {
     adjustment: BackendStockAdjustment
     lines: BackendStockAdjustmentLine[]
     posted_movements: BackendStockMovement[]
+    approval?: DocumentApprovalViewDto | null
 }
 
 export type BackendStockBalanceDetail = {

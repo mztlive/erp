@@ -3,7 +3,13 @@
  * 只做形状/文案转换，不发请求；文案映射见 display.ts。
  */
 
+import {
+    mapDocumentApprovalViewDto,
+    type DocumentApprovalView,
+    type DocumentApprovalViewDto,
+} from "@/features/approval-workflow/types"
 import type {
+    AdjustmentDetailView,
     AdjustmentDraftView,
     AdjustmentReasonType,
     StockAdjustmentRow,
@@ -126,7 +132,9 @@ export function mapMovement(
     }
 }
 
-export function mapReservation(r: BackendStockReservation): StockReservationRow {
+export function mapReservation(
+    r: BackendStockReservation,
+): StockReservationRow {
     const { statusLabel, statusTone } = reservationStatusLabel(r.status)
     // established ≈ reserved + consumed + released when backend only exposes remaining reserved
     const remaining = r.reserved_quantity
@@ -155,9 +163,29 @@ export function mapReservation(r: BackendStockReservation): StockReservationRow 
     }
 }
 
+/**
+ * 把单据详情上的只读审批结构转成通用审批区投影。
+ *
+ * 缺省时返回未绑定的空结构，禁止前端补默认审批人或节点。
+ */
+export function mapAdjustmentApproval(
+    dto?: DocumentApprovalViewDto | null,
+): DocumentApprovalView {
+    if (!dto) {
+        return {
+            requirement: "PROCESS_REQUIRED",
+            recentHistory: [],
+            historyHasMore: false,
+            allowedActions: [],
+        }
+    }
+    return mapDocumentApprovalViewDto(dto)
+}
+
 export function mapAdjustment(
     a: BackendStockAdjustment,
     line?: BackendStockAdjustmentLine,
+    approval?: DocumentApprovalView,
 ): StockAdjustmentRow {
     const st = adjustmentStatusMap(a.status)
     const direction = line
@@ -181,8 +209,12 @@ export function mapAdjustment(
         statusLabel: st.statusLabel,
         statusTone: st.statusTone,
         operatorLabel: a.prepared_by,
-        warehouseReviewerLabel: a.reviewed_by ?? undefined,
-        financeConfirmerLabel: a.finance_reviewed_by ?? undefined,
+        currentNodeLabel:
+            approval?.instance?.currentNodeName ??
+            approval?.instance?.currentNode,
+        currentAssigneeLabel:
+            approval?.instance?.currentAssigneeName ??
+            approval?.instance?.currentAssignee,
         createdAt: secsToIso(a.created_at),
     }
 }
@@ -219,5 +251,20 @@ export function toDraftView(
         editVersion: a.version,
         operatorLabel: a.prepared_by,
         segregationNote: SEGREGATION_NOTE,
+        approval: mapAdjustmentApproval(detail.approval),
+    }
+}
+
+/**
+ * 把调整单详情转成页面只读视图，审批事实只透传服务端投影。
+ */
+export function toAdjustmentDetailView(
+    detail: BackendStockAdjustmentDetail,
+): AdjustmentDetailView {
+    const approval = mapAdjustmentApproval(detail.approval)
+    return {
+        adjustment: mapAdjustment(detail.adjustment, detail.lines[0], approval),
+        approval,
+        queriedAt: new Date().toISOString(),
     }
 }

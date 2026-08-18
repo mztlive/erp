@@ -24,7 +24,7 @@ export const EXCLUDED_NOTE =
     "供应商直发、电子交付、线下服务与实体卡不进入本台账的自有实物库存。"
 
 export const SEGREGATION_NOTE =
-    "经办提交后进入仓储复核与财务确认，经办本人不得复核或确认入账；余额仅在确认入账完成后由系统更新。"
+    "经办提交后进入审批，经办本人不得担任当前节点审批人；余额仅在审批通过并过账后由系统更新。"
 
 export function secsToIso(secs: number | null | undefined): string {
     if (secs == null || secs === 0) return ""
@@ -153,6 +153,11 @@ export function reasonDirection(reason: string): "increase" | "decrease" {
     )
 }
 
+/**
+ * 把库存调整业务状态收敛到合同生命周期。
+ *
+ * 旧人工复核旁路与审批导致的业务驳回不得再上屏。
+ */
 export function adjustmentStatusMap(status: string): {
     status: string
     statusLabel: string
@@ -165,17 +170,14 @@ export function adjustmentStatusMap(status: string): {
                 statusLabel: "草稿",
                 statusTone: "neutral",
             }
+        case "IN_APPROVAL":
         case "PENDING_WAREHOUSE_REVIEW":
-            return {
-                status: "PENDING_WAREHOUSE_REVIEW",
-                statusLabel: "待仓储复核",
-                statusTone: "warning",
-            }
         case "PENDING_FINANCE_REVIEW":
+        case "PENDING_FINANCE":
             return {
-                status: "PENDING_FINANCE",
-                statusLabel: "待财务确认",
-                statusTone: "info",
+                status: "IN_APPROVAL",
+                statusLabel: "审批中",
+                statusTone: "warning",
             }
         case "POSTED":
             return {
@@ -183,22 +185,38 @@ export function adjustmentStatusMap(status: string): {
                 statusLabel: "已过账",
                 statusTone: "success",
             }
-        case "REJECTED":
-            return {
-                status: "REJECTED",
-                statusLabel: "驳回",
-                statusTone: "destructive",
-            }
         case "REVERSED":
             return {
                 status: "REVERSED",
                 statusLabel: "已冲正",
                 statusTone: "neutral",
             }
+        case "REJECTED":
+            return {
+                status: "DRAFT",
+                statusLabel: "草稿",
+                statusTone: "neutral",
+            }
         default:
-            return { status, statusLabel: status, statusTone: "neutral" }
+            return {
+                status: "IN_APPROVAL",
+                statusLabel: "审批中",
+                statusTone: "neutral",
+            }
     }
 }
+
+/**
+ * 判断调整单是否仍处于未提交草稿。
+ */
+export const isDraftAdjustmentStatus = (status?: string): boolean =>
+    adjustmentStatusMap(status ?? "").status === "DRAFT"
+
+/**
+ * 判断调整单是否已进入运行中或终态审批区。
+ */
+export const isRuntimeAdjustmentStatus = (status?: string): boolean =>
+    !isDraftAdjustmentStatus(status)
 
 export function filterSummary(
     query: InventoryQuery,

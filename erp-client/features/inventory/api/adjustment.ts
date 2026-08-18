@@ -5,6 +5,7 @@
 import { apiGet, apiPost, apiPut } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
 import type {
+    AdjustmentDetailView,
     AdjustmentDraftView,
     AdjustmentReasonType,
     AdjustmentSubmitResponse,
@@ -12,15 +13,45 @@ import type {
 import {
     adjustmentStatusMap,
     isApiError,
+    isDraftAdjustmentStatus,
     reasonTypeBackend,
     secsToIso,
 } from "@/features/inventory/api/display"
-import { toDraftView } from "@/features/inventory/api/mappers"
+import {
+    toAdjustmentDetailView,
+    toDraftView,
+} from "@/features/inventory/api/mappers"
 import { fetchBalanceDetail } from "@/features/inventory/api/detail"
 import type {
     BackendStockAdjustment,
     BackendStockAdjustmentDetail,
 } from "@/features/inventory/api/dto"
+
+/** 库存调整作为试点单据的合同 DocumentType。 */
+export const STOCK_ADJUSTMENT_DOCUMENT_TYPE = "StockAdjustment" as const
+
+/**
+ * 构造库存调整提交请求。只允许单据版本与幂等键，不得带复核人或审批人。
+ */
+export const buildAdjustmentSubmitRequest = (input: {
+    expectedVersion: number
+    idempotencyKey: string
+}): Readonly<{ expected_version: number; idempotency_key: string }> => ({
+    expected_version: input.expectedVersion,
+    idempotency_key: input.idempotencyKey,
+})
+
+/**
+ * 查询库存调整单详情，含只读审批绑定。
+ */
+export async function fetchAdjustmentDetail(
+    stockAdjustmentId: string,
+): Promise<AdjustmentDetailView> {
+    const detail = await apiGet<BackendStockAdjustmentDetail>(
+        `/admin/stock-adjustments/${encodeURIComponent(stockAdjustmentId)}`,
+    )
+    return toAdjustmentDetailView(detail)
+}
 
 export async function createAdjustmentDraft(input: {
     balanceId: string
@@ -85,10 +116,7 @@ export async function submitAdjustment(input: {
         const detail = await apiGet<BackendStockAdjustmentDetail>(
             `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}`,
         )
-        if (
-            detail.adjustment.status === "DRAFT" ||
-            detail.adjustment.status === "REJECTED"
-        ) {
+        if (isDraftAdjustmentStatus(detail.adjustment.status)) {
             await apiPut<BackendStockAdjustment>(
                 `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}`,
                 {
@@ -97,20 +125,38 @@ export async function submitAdjustment(input: {
                 },
             )
         }
-        // Submit requires reviewed_by (warehouse reviewer identity)
+        const latest = await apiGet<BackendStockAdjustmentDetail>(
+            `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}`,
+        )
         const submitted = await apiPost<BackendStockAdjustment>(
             `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}/submit`,
-            {
-                reviewed_by: "warehouse_reviewer",
-            },
+            buildAdjustmentSubmitRequest({
+                expectedVersion: latest.adjustment.version,
+                idempotencyKey: input.idempotencyKey,
+            }),
         )
+        const afterSubmit = await apiGet<BackendStockAdjustmentDetail>(
+            `/admin/stock-adjustments/${encodeURIComponent(submitted.id)}`,
+        )
+        const approval = toAdjustmentDetailView(afterSubmit).approval
+        const nextResponsible =
+            approval.instance?.currentAssigneeName ??
+            approval.instance?.currentAssignee ??
+            approval.instance?.currentNodeName ??
+            approval.definition?.nodes[0]?.assigneeName ??
+            approval.definition?.nodes[0]?.name ??
+            "当前审批人"
         return {
             status: "succeeded",
             outcome: {
-                kind: "SUBMITTED_FOR_WAREHOUSE_REVIEW",
+                kind: "SUBMITTED_FOR_APPROVAL",
                 stockAdjustmentId: submitted.id,
                 adjustmentNo: submitted.adjustment_no,
-                nextResponsible: "仓储复核",
+                nextResponsible,
+                currentNodeLabel:
+                    approval.instance?.currentNodeName ??
+                    approval.instance?.currentNode ??
+                    approval.definition?.nodes[0]?.name,
                 reference: submitted.adjustment_no,
                 submittedAt: new Date().toISOString(),
                 balanceLockVersion: input.expectedBalanceLockVersion,
@@ -159,18 +205,23 @@ export async function resolveAdjustmentUnknown(input: {
                 `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}`,
             )
             const st = adjustmentStatusMap(detail.adjustment.status)
-            if (
-                st.status === "PENDING_WAREHOUSE_REVIEW" ||
-                st.status === "PENDING_FINANCE" ||
-                st.status === "POSTED"
-            ) {
+            if (st.status === "IN_APPROVAL" || st.status === "POSTED") {
+                const approval = toAdjustmentDetailView(detail).approval
+                const nextResponsible =
+                    approval.instance?.currentAssigneeName ??
+                    approval.instance?.currentAssignee ??
+                    approval.instance?.currentNodeName ??
+                    "当前审批人"
                 return {
                     status: "succeeded",
                     outcome: {
-                        kind: "SUBMITTED_FOR_WAREHOUSE_REVIEW",
+                        kind: "SUBMITTED_FOR_APPROVAL",
                         stockAdjustmentId: detail.adjustment.id,
                         adjustmentNo: detail.adjustment.adjustment_no,
-                        nextResponsible: "仓储复核",
+                        nextResponsible,
+                        currentNodeLabel:
+                            approval.instance?.currentNodeName ??
+                            approval.instance?.currentNode,
                         reference: detail.adjustment.adjustment_no,
                         submittedAt: secsToIso(detail.adjustment.created_at),
                         balanceLockVersion:
