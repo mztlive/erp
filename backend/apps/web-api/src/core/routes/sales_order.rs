@@ -64,11 +64,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/sales-orders/{id}/procurement-rejection-resolution",
+            "/sales-orders/{id}/cancel-approval",
             with_permission(
-                post(sales_order::sales_order_resolve_procurement_rejection),
+                post(sales_order::sales_order_cancel_approval),
                 rbac,
-                sales_order::sales_order_resolve_procurement_rejection_permission_key(),
+                sales_order::sales_order_cancel_approval_permission_key(),
             ),
         )
         .route(

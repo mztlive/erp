@@ -1,11 +1,11 @@
 //! 域 D14 `sales_review` 管理端路由。
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/sales-order-reviews`、
-//! `/admin/procurement-confirmations`、`/admin/sales-change-orders`；每条路由统一
+//! `/admin/sales-change-orders`；采购二次确认与低毛利路由已移除。每条路由统一
 //! 走 JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
 use axum::{
-    routing::{get, post, put},
+    routing::{get, post},
     Router,
 };
 use services::iam::SharedRbacService;
@@ -42,60 +42,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/sales-order-reviews/low-margin-decisions",
-            with_permission(
-                post(sales_review::low_margin_manager_confirmation_decide),
-                rbac,
-                sales_review::low_margin_manager_confirmation_decide_permission_key(),
-            ),
-        )
-        .route(
             "/sales-order-reviews/cancellations",
             with_permission(
                 post(sales_review::sales_order_review_cancel),
                 rbac,
                 sales_review::sales_order_review_cancel_permission_key(),
-            ),
-        )
-        // 采购二次确认（W07）
-        .route(
-            "/procurement-confirmations",
-            with_permission(
-                get(sales_review::procurement_confirmation_list),
-                rbac,
-                sales_review::procurement_confirmation_list_permission_key(),
-            ),
-        )
-        .route(
-            "/procurement-confirmations/{id}",
-            with_permission(
-                get(sales_review::procurement_confirmation_detail),
-                rbac,
-                sales_review::procurement_confirmation_detail_permission_key(),
-            ),
-        )
-        .route(
-            "/procurement-confirmations/{id}/recommendation",
-            with_permission(
-                get(sales_review::procurement_confirmation_recommendation),
-                rbac,
-                sales_review::procurement_confirmation_recommendation_permission_key(),
-            ),
-        )
-        .route(
-            "/procurement-confirmations/{id}/lines",
-            with_permission(
-                put(sales_review::procurement_confirmation_save_lines),
-                rbac,
-                sales_review::procurement_confirmation_save_lines_permission_key(),
-            ),
-        )
-        .route(
-            "/procurement-confirmations/{id}/decisions",
-            with_permission(
-                post(sales_review::procurement_confirmation_complete),
-                rbac,
-                sales_review::procurement_confirmation_complete_permission_key(),
             ),
         )
         // 销售变更单（W05 变更轨）

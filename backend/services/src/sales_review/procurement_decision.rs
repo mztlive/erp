@@ -1,3 +1,6 @@
+//! 采购确认完成命令。新写入已失败关闭；旧符号保留至 P0-D 删除。
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -15,19 +18,17 @@ use entities::supplier::{CapabilityCode, CapabilityStatus};
 use entities::supplier_offering::{
     OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
 };
-use validator::Validate;
 
 use super::formalization::{build_receivable_account, build_receivable_entry, build_revision};
 use super::procurement_confirmation::{
-    command_audit_id, command_fingerprint, ensure_command_confirmation_id, ensure_pending_confirmation,
+    command_audit_id, command_fingerprint, ensure_pending_confirmation,
     ensure_procurement_confirmation_actor_eligible, ensure_submission_identity,
     load_procurement_confirmation_work_item, parse_task_version, replace_pending_confirmation_lines,
     ProcurementConfirmationTaskGuard, DECISION_COMMAND_ACTION,
 };
 use super::{
     CompleteProcurementConfirmationCommand, CompleteProcurementConfirmationResult,
-    ProcurementConfirmationBusinessResult, ProcurementConfirmationDecision, ProcurementSalesResolution,
-    SalesReviewService,
+    ProcurementConfirmationBusinessResult, ProcurementSalesResolution, SalesReviewService,
 };
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -46,19 +47,10 @@ impl SalesReviewService {
         actor: &AuditActor,
         rbac: SharedRbacService,
     ) -> Result<CompleteProcurementConfirmationResult> {
-        command.validate()?;
-        command.decision.validate_branch()?;
-        ensure_command_confirmation_id(id, command.decision.confirmation_id())?;
-        if matches!(
-            &command.decision,
-            ProcurementConfirmationDecision::Approved { .. }
-        ) {
-            self.complete_approved_procurement_confirmation(id, command, actor, rbac)
-                .await
-        } else {
-            self.complete_rejected_procurement_confirmation(id, command, actor, rbac)
-                .await
-        }
+        let _ = (self, id, command, actor, rbac);
+        Err(Error::ConflictError(
+            "采购二次确认已停止新写入，必须走销售单统一审批".to_string(),
+        ))
     }
 
     /// 以 W07 唯一强类型完成命令通过采购确认。

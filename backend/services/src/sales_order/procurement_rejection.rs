@@ -1,4 +1,5 @@
-//! W05 采购驳回后的三路强类型处置。
+//! W05 采购驳回后的三路强类型处置。新写入已失败关闭。
+#![allow(dead_code)]
 
 use database::{
     AccessControlExt, DocumentRegistryExt, FileAssetExt, NoTransaction, SalesOrderExt, SalesReviewExt,
@@ -298,7 +299,11 @@ impl SalesOrderService {
         command: ResolveProcurementRejectionCommand,
         actor: &AuditActor,
     ) -> Result<ResolveProcurementRejectionResult> {
-        command.validate()?;
+        let _ = (self, path_sales_order_id, command, actor);
+        return Err(Error::ConflictError(
+            "采购驳回处置已停止新写入，必须走销售单统一审批撤回或重新提交".to_string(),
+        ));
+        #[allow(unreachable_code)]
         if path_sales_order_id != command.sales_order_id() {
             return Err(Error::ConflictError("路径销售单与命令载荷不一致".to_string()));
         }

@@ -168,7 +168,7 @@ pub(super) fn compute_can_start_sales_change(
     }
     if matches!(
         stage_code,
-        "awaiting_sales" | "awaiting_confirm" | "awaiting_sales_lead" | "awaiting_ops"
+        "awaiting_sales" | "awaiting_confirm" | "awaiting_sales_lead" | "awaiting_ops" | "in_approval"
     ) {
         return (
             false,
@@ -278,6 +278,7 @@ mod tests {
             ),
             (ReviewStatus::Approved, ("effective", "已生效", "success")),
             (ReviewStatus::NotSubmitted, ("draft", "草稿", "neutral")),
+            (ReviewStatus::InApproval, ("in_approval", "审批中", "warning")),
         ];
         for (review, expected) in cases {
             let actual = stage_code_label_tone(
@@ -421,6 +422,7 @@ mod tests {
             "awaiting_confirm",
             "awaiting_sales_lead",
             "awaiting_ops",
+            "in_approval",
         ] {
             let (allowed, _) = compute_can_start_sales_change(OriginSystem::Erp, code, "任意", false);
             assert!(!allowed, "stage={code}");

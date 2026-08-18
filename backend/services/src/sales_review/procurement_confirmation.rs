@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------
-// 采购二次确认（W07）
+// 采购二次确认（W07）。新写入已失败关闭；旧符号保留至 P0-D 删除。
 // ---------------------------------------------------------------------
+#![allow(dead_code)]
 
 use database::{
     AccessControlExt, Executor, NoTransaction, SalesOrderExt, SalesReviewExt, Transactional, WorkItemExt,
@@ -242,7 +243,11 @@ impl SalesReviewService {
         req: SaveProcurementConfirmationLinesRequest,
         actor: &AuditActor,
     ) -> Result<SaveProcurementConfirmationResult> {
-        req.validate()?;
+        let _ = (self, id, req, actor);
+        return Err(Error::ConflictError(
+            "采购二次确认已停止新写入，必须走销售单统一审批".to_string(),
+        ));
+        #[allow(unreachable_code)]
         ensure_command_confirmation_id(id, &req.action.confirmation_id)?;
         let expected_task_version = parse_task_version(&req.expected_task_version)?;
         let fingerprint = command_fingerprint(SAVE_COMMAND_ACTION, id, actor.id(), &req)?;

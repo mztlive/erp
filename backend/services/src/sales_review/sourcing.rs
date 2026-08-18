@@ -44,6 +44,11 @@ impl SalesReviewService {
     /// # 错误
     /// 确认批次或销售提交不存在、数据库查询失败时返回错误。
     pub async fn procurement_recommendation(&self, id: &str) -> Result<ProcurementRecommendationView> {
+        let _ = (self, id);
+        return Err(Error::ConflictError(
+            "采购二次确认已停止新写入，选源改由采购单创建路径承担".to_string(),
+        ));
+        #[allow(unreachable_code)]
         let confirmation = self
             .db
             .procurement_confirmations()
