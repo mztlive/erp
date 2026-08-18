@@ -6,9 +6,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use database::{
-    AccessControlExt, Executor, PartyExt, PurchaseOrderExt, SalesOrderExt, SupplierExt, WorkItemExt,
+    AccessControlExt, DocumentRegistryExt, Executor, PartyExt, PurchaseOrderExt, SalesOrderExt, SupplierExt,
 };
-use entities::common::time::Instant;
 use entities::ids::{
     PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
     SupplierAccountId,
@@ -24,11 +23,16 @@ use id_generator::next_id;
 use mongodb::bson::doc;
 use mongodb::Database;
 
-use super::shared::{fulfillment_from_mode, today_stamp, zero_amount};
-use super::submission::finance_review_work_item;
+use super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
+use super::shared::{fulfillment_from_mode, zero_amount};
+use crate::approval::binding::{
+    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
+};
+use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::audit::AuditActor;
-use crate::document_registry::{new_registered_document, persist_registered_document};
+use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
+use crate::iam::shared_rbac_service;
 use entities::document_registry::DocumentType;
 
 /// 确认拆单后落库（或幂等复用）的采购草稿身份。
@@ -136,8 +140,7 @@ async fn persist_split_group(
         return Ok(existing);
     }
 
-    let mut prepared = prepare_draft(db, sales_order_id, lines, fulfillment, actor, executor).await?;
-    formalize_prepared_order(&mut prepared, actor)?;
+    let prepared = prepare_draft(db, sales_order_id, lines, fulfillment, actor, executor).await?;
     write_prepared_draft(db, &prepared, actor, executor).await?;
     Ok(prepared.as_created())
 }
@@ -172,7 +175,7 @@ async fn find_existing_draft(
                 "fulfillment_responsibility": fulfillment.as_str(),
                 "status": { "$in": [
                     PurchaseOrderStatus::Draft.as_str(),
-                    PurchaseOrderStatus::PendingFinanceReview.as_str(),
+                    PurchaseOrderStatus::InApproval.as_str(),
                 ]},
             },
             executor,
@@ -244,7 +247,7 @@ async fn prepare_draft(
     let mut order = PurchaseOrder::new(
         order_id.clone(),
         PurchaseOrderData {
-            purchase_no: format!("PO-{}-{}", today_stamp(), &order_id.to_string()[..6]),
+            purchase_no: String::new(),
             sales_order_id: sales_order_id.clone(),
             supplier_id: first.supplier_id.clone(),
             purchase_type,
@@ -274,7 +277,9 @@ async fn prepare_draft(
     })
 }
 
-/// 把已构造的采购草稿、提交和明细写入当前执行器。
+/// 把已构造的采购草稿、提交和明细写入当前执行器，并绑定已发布定义。
+///
+/// `PROCESS_REQUIRED` 无发布定义时失败关闭，调用方必须回滚整单。
 ///
 /// # 参数
 /// * `db` - 数据库
@@ -286,7 +291,7 @@ async fn prepare_draft(
 /// 写入成功返回 `Ok(())`。
 ///
 /// # 错误
-/// 仓储写入或审计失败时返回错误。
+/// 无发布定义、人员重验失败、仓储写入或审计失败时返回错误。
 async fn write_prepared_draft(
     db: &Database,
     prepared: &PreparedDraft,
@@ -298,13 +303,30 @@ async fn write_prepared_draft(
         "purchase_order",
         prepared.order.base.id.clone(),
     )?;
-    let document = new_registered_document(
-        &prepared.order.base.id,
-        DocumentType::PurchaseOrder,
-        prepared.order.purchase_no.clone(),
-    )?;
+    let sales_order = db
+        .sales_orders()
+        .find_by_id(&prepared.order.sales_order_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+    let organization_id = purchase_order_responsible_org_id(&sales_order)?;
+    let _ = purchase_order_object_readable(&organization_id, actor.id())?;
+    let bind_command = BindPublishedDefinitionCommand {
+        document_type: DocumentType::PurchaseOrder,
+        business_object_id: prepared.order.base.id.clone(),
+        business_object_version: prepared.order.base.version,
+        context: BindingRevalidationContext {
+            organization_id,
+            creator_id: actor.id().to_string(),
+        },
+    };
+    let rbac = shared_rbac_service(db.clone());
+    let binding =
+        bind_published_definition_on_document_create(db, &rbac, &bind_command, actor, executor).await?;
+    let binding = binding.ok_or_else(|| Error::Internal("采购单必须绑定已发布定义".to_string()))?;
+    let mut document = new_registered_document(&prepared.order.base.id, DocumentType::PurchaseOrder, "")?;
+    attach_published_binding(&mut document, binding)?;
     db.purchase_orders().create(&prepared.order, executor).await?;
-    persist_registered_document(db, &document, executor).await?;
+    db.business_documents().create(&document, executor).await?;
     db.purchase_order_submissions()
         .create(&prepared.submission, executor)
         .await?;
@@ -313,29 +335,7 @@ async fn write_prepared_draft(
             .create(line, executor)
             .await?;
     }
-    let work_item = finance_review_work_item(&prepared.order, &prepared.submission)?;
-    db.work_items().create(&work_item, executor).await?;
     db.audit_logs().create(&audit, executor).await?;
-    Ok(())
-}
-
-/// 把待写入的采购草稿推进为正式待财务审核采购单。
-///
-/// # 参数
-/// * `prepared` - 待写入聚合
-/// * `actor` - 提交人
-///
-/// # 返回
-/// 推进成功返回 `Ok(())`。
-///
-/// # 错误
-/// 状态不是草稿或提交字段非法时返回错误。
-fn formalize_prepared_order(prepared: &mut PreparedDraft, actor: &AuditActor) -> Result<()> {
-    prepared.submission.submission_no = "SUB-000001".to_string();
-    prepared.submission.submit(Instant::now(), actor.id())?;
-    prepared
-        .order
-        .submit_for_review(prepared.submission.base.id.clone(), actor.id())?;
     Ok(())
 }
 

@@ -56,47 +56,116 @@ impl PurchaseReviewContext<'_> {
 }
 
 impl PurchaseOrderService {
-    /// 执行 W08 唯一采购财务审核命令。
-    ///
-    /// 命令中的 `decision.review_result` 是唯一审核分支；HTTP 路径、命令顶层和
-    /// 通用任务动作都不得另行表达审核结论。两条分支继续在各自既有事务中完成
-    /// 采购、提交、应付/成本（通过分支）、待办与审计写入。
+    /// 旧财务审核旁路。审批改造后立即失败关闭。
     ///
     /// # 错误
-    /// 请求字段、任务版本、提交版本、责任、岗位分离或采购事实不满足时失败关闭。
+    /// 恒返回冲突，不得再写入 `PurchaseReviewStatus`。
     pub async fn review_purchase_order(
         &self,
-        path_purchase_order_id: &str,
-        command: ReviewPurchaseOrderCommand,
-        actor: &AuditActor,
-        rbac: SharedRbacService,
+        _path_purchase_order_id: &str,
+        _command: ReviewPurchaseOrderCommand,
+        _actor: &AuditActor,
+        _rbac: SharedRbacService,
     ) -> Result<PurchaseReviewResult> {
-        command.validate()?;
-        command.decision.validate_branch()?;
-        if command.decision.purchase_order_id != path_purchase_order_id {
-            return Err(Error::ValidationError("路径采购单与审核决定不一致".to_string()));
-        }
-        let expected_task_version = command
-            .expected_task_version
-            .parse::<u64>()
-            .map_err(|_| Error::ValidationError("待办版本必须为正整数".to_string()))?;
-        if expected_task_version == 0 {
-            return Err(Error::ValidationError("待办版本必须大于 0".to_string()));
-        }
+        Err(Error::ConflictError(
+            "采购单必须走统一审批，禁止写入财务审核旁路".to_string(),
+        ))
+    }
 
-        let review = PurchaseReviewContext {
-            purchase_order_id: path_purchase_order_id,
-            work_item_id: &command.work_item_id,
-            expected_task_version,
-            expected_subject_version: &command.expected_subject_version,
-            decision: &command.decision,
-            idempotency_key: &command.idempotency_key,
-            actor,
-        };
-        match command.decision.review_result {
-            PurchaseOrderReviewDecisionResult::Approved => self.review_approve(review, rbac).await,
-            PurchaseOrderReviewDecisionResult::Rejected => self.review_reject(review, rbac).await,
+    /// 最终通过并生效：形成采购版本、应付与成本事实。
+    ///
+    /// 仅由合同 §4.4.4 `on_final_approve` 调用，不得再作为人工财务审核旁路。
+    ///
+    /// # 参数
+    /// * `id` - 采购单主键
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回生效结果。
+    ///
+    /// # 错误
+    /// 非审批中、缺少提交、来源复验失败或仓储失败时返回错误。
+    pub async fn formalize_approved_order(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<PurchaseReviewResult> {
+        use super::adapter::{execute_purchase_order_domain_action, purchase_order_adapter};
+        use crate::approval::policy::ApprovalDomainAction;
+
+        let adapter = purchase_order_adapter()?;
+        let order = self
+            .db
+            .purchase_orders()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+        execute_purchase_order_domain_action(
+            &mut order.clone(),
+            adapter.on_final_approve,
+            order.current_submission_id.clone().unwrap_or_default().as_str(),
+            actor.id(),
+        )?;
+        let submission_id = order
+            .current_submission_id
+            .clone()
+            .ok_or_else(|| Error::BusinessLogicError("采购单缺少待生效提交".to_string()))?;
+        let submission = self
+            .db
+            .purchase_order_submissions()
+            .find_by_id(&submission_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("待审核提交不存在".to_string()))?;
+        if submission.status != SubmissionStatus::Pending {
+            return Err(Error::ConflictError(
+                "提交已审核或已失效，请勿重复生效".to_string(),
+            ));
         }
+        let submission_lines = self
+            .db
+            .purchase_order_submission_lines()
+            .find_many(
+                mongodb::bson::doc! { "purchase_order_submission_id": &submission_id },
+                &mut NoTransaction,
+            )
+            .await?;
+        let revision_no = self.next_revision_no(&order).await?;
+        let (revision, revision_lines) = self
+            .build_effective_revision(&order, &submission, &submission_lines, revision_no)
+            .await?;
+        let payable = self.build_payable(&order, &submission).await?;
+        let cost_entries = self
+            .build_confirmed_cost_entries(&submission, &submission_lines, revision_no)
+            .await?;
+        let subject_version = order.approval_subject_version.to_string();
+        let lock_version = order.base.version;
+        let revision_id = revision.base.id.clone();
+        let payable_entry_id = payable.1.base.id.clone();
+        persist_formalized_order(
+            &self.db,
+            order,
+            submission,
+            submission_lines,
+            revision,
+            revision_lines,
+            payable,
+            cost_entries,
+            actor,
+        )
+        .await?;
+        let _ = ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder;
+        Ok(PurchaseReviewResult {
+            work_item_id: String::new(),
+            work_item_status: WorkItemStatus::Completed.as_str().to_string(),
+            task_version: "0".to_string(),
+            subject_version,
+            review_result: "APPROVED".to_string(),
+            revision_id: Some(revision_id),
+            revision_no: Some(revision_no),
+            payable_entry_id: Some(payable_entry_id),
+            lock_version,
+            reference: format!("PO-V{revision_no}"),
+        })
     }
 
     /// 财务审核通过（§8.1.4 事务不变量）。
@@ -642,6 +711,65 @@ impl PurchaseOrderService {
         }
         Ok(entries)
     }
+}
+
+/// 在同一事务内写入生效版本、采购单、提交结论、应付与成本。
+///
+/// # 错误
+/// 状态不允许、来源复验失败或仓储失败时返回错误。
+#[allow(clippy::too_many_arguments)]
+async fn persist_formalized_order(
+    db: &mongodb::Database,
+    order: PurchaseOrder,
+    submission: PurchaseOrderSubmission,
+    submission_lines: Vec<PurchaseOrderSubmissionLine>,
+    revision: entities::purchase_order::PurchaseOrderRevision,
+    revision_lines: Vec<entities::purchase_order::PurchaseOrderRevisionLine>,
+    payable: (entities::payable::PayableAccount, entities::payable::PayableEntry),
+    cost_entries: Vec<entities::cost::CostEntry>,
+    actor: &AuditActor,
+) -> Result<()> {
+    let actor_id = actor.id().to_string();
+    let audit = actor.clone().resource_log(
+        "purchase_order.formalize",
+        "purchase_order",
+        order.base.id.clone(),
+    )?;
+    let db = db.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move {
+                ensure_purchase_review_sources(&db, &order, &submission, &submission_lines, session).await?;
+                db.purchase_order()
+                    .create_effective_revision(&revision, &revision_lines, session)
+                    .await?;
+                let mut order_mut = order;
+                order_mut.formalize_approved(&actor_id)?;
+                order_mut.stable.current_revision_id = Some(revision.base.id.clone());
+                let mut submission_mut = submission;
+                submission_mut.record_review(
+                    PurchaseOrderReviewDecision::Approved { comment: None },
+                    Instant::now(),
+                    &actor_id,
+                )?;
+                db.purchase_order_submissions()
+                    .update(&mut submission_mut, session)
+                    .await?;
+                db.purchase_orders().update(&mut order_mut, session).await?;
+                db.payable()
+                    .create_payable_with_entry(&payable.0, &payable.1, session)
+                    .await?;
+                for entry in &cost_entries {
+                    db.cost()
+                        .create_cost_entry_with_allocations(entry, Vec::new(), session)
+                        .await?;
+                }
+                db.audit_logs().create(&audit, session).await?;
+                Ok::<(), crate::errors::Error>(())
+            })
+        })
+        .await
 }
 
 /// 审核命令写入审计唯一键的最小结果收据。

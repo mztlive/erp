@@ -156,7 +156,7 @@ impl PurchaseOrderService {
             purchase_no: draft.purchase_no.clone(),
             lock_version: draft.lock_version,
             replayed: draft.replayed,
-            reference: format!("PO-{}", draft.purchase_no),
+            reference: draft.purchase_order_id.clone(),
         })
     }
 
