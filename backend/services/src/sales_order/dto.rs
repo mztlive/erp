@@ -879,7 +879,7 @@ pub struct SalesOrderDetailView {
     pub active_card_sales_approval: Option<ActiveCardSalesApprovalView>,
     /// 唯一活动低毛利上级确认。
     pub active_low_margin_manager_confirmation: Option<ActiveLowMarginManagerConfirmationView>,
-    /// 实物及服务销售单的统一只读审批结构；卡券单为空。
+    /// 统一只读审批结构（`SalesOrder` 与 `VoucherSalesOrder`）。
     pub approval: Option<DocumentApprovalView>,
 }
 

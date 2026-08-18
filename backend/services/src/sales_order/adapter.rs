@@ -1,7 +1,8 @@
-//! `SalesOrder`（`BusinessType::GoodsService`）审批业务 Adapter。
+//! `SalesOrder` 与 `VoucherSalesOrder` 审批业务 Adapter。
 //!
-//! 独立于 `VoucherSalesOrder`。领域动作只通过实体状态邻接与仓储更新，
-//! 不得 `$set` 绕过不变式，运行时不得按 `SALES_ORDER_PROCUREMENT_CONFIRMATION` 分支。
+//! 两者按 `BusinessType` 穷尽分派到独立 `DocumentType` / `ProcessKind`。
+//! 领域动作只通过实体状态邻接与仓储更新，不得 `$set` 绕过不变式，
+//! 运行时不得按采购确认或卡券运营节点用途分支。
 
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
@@ -72,6 +73,134 @@ pub fn sales_order_adapter() -> Result<SalesOrderAdapter> {
     adapter_from_spec(spec)
 }
 
+/// 已注册的卡券销售单适配器规格。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VoucherSalesOrderAdapter {
+    /// 单据类型。
+    pub document_type: DocumentType,
+    /// 一对一流程种类。
+    pub process_kind: bpm::ProcessKind,
+    /// 主体引用构造器标识。
+    pub subject_ref_builder: &'static str,
+    /// 提交版本权威来源。
+    pub subject_version_source: ApprovalSubjectVersionSource,
+    /// 快照构造器标识。
+    pub subject_snapshot_builder: &'static str,
+    /// 提交并启动动作。
+    pub on_approval_start: ApprovalDomainAction,
+    /// 最终通过动作。
+    pub on_final_approve: ApprovalDomainAction,
+    /// 撤回与受阻取消动作。
+    pub cancel_action: ApprovalDomainAction,
+    /// WorkItem 责任角色。
+    pub owner_role: &'static str,
+    /// 责任组织快照来源。
+    pub owner_organization_snapshot: OwnerOrganizationSource,
+    /// 对象读取范围。
+    pub read_scope: AdapterReadScope,
+}
+
+/// 返回卡券销售单的完整适配器登记。
+///
+/// # 返回
+/// 返回已校验完整性的规格与显式字段声明。
+///
+/// # 错误
+/// 政策缺失或三类动作不互异时返回部署不变量错误。
+pub fn voucher_sales_order_adapter() -> Result<VoucherSalesOrderAdapter> {
+    let spec = adapter_spec_of(DocumentType::VoucherSalesOrder)?;
+    ensure_adapter_spec_complete(&spec)?;
+    voucher_adapter_from_spec(spec)
+}
+
+/// 由政策规格填充卡券 Adapter 字段。
+///
+/// # 错误
+/// 字段与合同签署值不一致时返回错误。
+fn voucher_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<VoucherSalesOrderAdapter> {
+    if spec.document_type != DocumentType::VoucherSalesOrder
+        || spec.process_kind != process_kind_of(DocumentType::VoucherSalesOrder)
+        || spec.subject_version_source != ApprovalSubjectVersionSource::SalesOrderSubmissionNo
+        || spec.on_approval_start != ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission
+        || spec.on_final_approve != ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission
+        || spec.cancel_action != ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission
+        || spec.owner_role.as_str() != "voucher_sales_order_approver"
+        || spec.owner_organization_source != OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
+        || spec.read_scope != AdapterReadScope::DocumentOrganizationAndCreator
+        || !spec
+            .subject_snapshot_fields
+            .contains(&ApprovalSubjectSnapshotField::TotalAmount)
+        || !spec
+            .subject_snapshot_fields
+            .contains(&ApprovalSubjectSnapshotField::TotalQuantity)
+    {
+        return Err(Error::Internal("卡券销售单审批适配器登记不完整".to_string()));
+    }
+    Ok(VoucherSalesOrderAdapter {
+        document_type: spec.document_type,
+        process_kind: spec.process_kind,
+        subject_ref_builder: "subject_ref_for(VoucherSalesOrder)",
+        subject_version_source: spec.subject_version_source,
+        subject_snapshot_builder: "build_sales_order_snapshot",
+        on_approval_start: spec.on_approval_start,
+        on_final_approve: spec.on_final_approve,
+        cancel_action: spec.cancel_action,
+        owner_role: spec.owner_role.as_str(),
+        owner_organization_snapshot: spec.owner_organization_source,
+        read_scope: spec.read_scope,
+    })
+}
+
+/// 两类销售单提交/撤回/正式化共用的已登记端口。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SalesApprovalPorts {
+    /// 创建与启动应使用的单据类型。
+    pub document_type: DocumentType,
+    /// 提交并启动动作。
+    pub on_approval_start: ApprovalDomainAction,
+    /// 最终通过动作。
+    pub on_final_approve: ApprovalDomainAction,
+    /// 撤回动作。
+    pub cancel_action: ApprovalDomainAction,
+    /// WorkItem 责任角色。
+    pub owner_role: &'static str,
+}
+
+/// 按 `BusinessType` 返回对应独立 Adapter 的强类型端口。
+///
+/// # 参数
+/// * `business_type` - 销售单业务性质
+///
+/// # 返回
+/// 返回该类型已登记的单据类型、三类动作与责任角色。
+///
+/// # 错误
+/// 适配器登记不完整时返回部署不变量错误。
+pub fn sales_approval_ports(business_type: BusinessType) -> Result<SalesApprovalPorts> {
+    match business_type {
+        BusinessType::GoodsService => {
+            let adapter = sales_order_adapter()?;
+            Ok(SalesApprovalPorts {
+                document_type: adapter.document_type,
+                on_approval_start: adapter.on_approval_start,
+                on_final_approve: adapter.on_final_approve,
+                cancel_action: adapter.cancel_action,
+                owner_role: adapter.owner_role,
+            })
+        }
+        BusinessType::Voucher => {
+            let adapter = voucher_sales_order_adapter()?;
+            Ok(SalesApprovalPorts {
+                document_type: adapter.document_type,
+                on_approval_start: adapter.on_approval_start,
+                on_final_approve: adapter.on_final_approve,
+                cancel_action: adapter.cancel_action,
+                owner_role: adapter.owner_role,
+            })
+        }
+    }
+}
+
 /// 由政策规格填充显式 Adapter 字段。
 ///
 /// # 错误
@@ -121,10 +250,40 @@ pub fn sales_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     subject_ref_for(DocumentType::SalesOrder, business_object_id)
 }
 
+/// 为卡券销售单构造唯一 `bpm::SubjectRef`。
+///
+/// # 参数
+/// * `business_object_id` - 销售单主键
+///
+/// # 错误
+/// 主键为空或超长时返回校验错误。
+pub fn voucher_sales_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
+    subject_ref_for(DocumentType::VoucherSalesOrder, business_object_id)
+}
+
+/// 按业务性质构造对应独立 `DocumentType` 的主体引用。
+///
+/// # 参数
+/// * `business_type` - 销售单业务性质
+/// * `business_object_id` - 销售单主键
+///
+/// # 错误
+/// 主键为空或超长时返回校验错误。
+pub fn subject_ref_for_sales_business(
+    business_type: BusinessType,
+    business_object_id: &str,
+) -> Result<SubjectRef> {
+    if is_goods_service_sales_order(business_type) {
+        sales_order_subject_ref(business_object_id)
+    } else {
+        voucher_sales_order_subject_ref(business_object_id)
+    }
+}
+
 /// 按 `BusinessType` 穷尽分派创建时应绑定的单据类型。
 ///
-/// 本阶段只为 `GoodsService` 绑定 `SalesOrder`；卡券仍注册旧单据类型，
-/// 不得同批接入 `VoucherSalesOrder`。
+/// `GoodsService` 绑定 `SalesOrder`，`Voucher` 绑定 `VoucherSalesOrder`。
+/// 不得在同一 `ProcessKind` 内按业务性质二次分流。
 ///
 /// # 参数
 /// * `business_type` - 销售单业务性质
@@ -134,7 +293,7 @@ pub fn sales_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
 pub fn document_type_for_sales_create(business_type: BusinessType) -> DocumentType {
     match business_type {
         BusinessType::GoodsService => DocumentType::SalesOrder,
-        BusinessType::Voucher => DocumentType::SalesOrder,
+        BusinessType::Voucher => DocumentType::VoucherSalesOrder,
     }
 }
 
@@ -149,6 +308,17 @@ pub fn is_goods_service_sales_order(business_type: BusinessType) -> bool {
     matches!(business_type, BusinessType::GoodsService)
 }
 
+/// 是否为卡券销售单。
+///
+/// # 参数
+/// * `business_type` - 销售单业务性质
+///
+/// # 返回
+/// 卡券为 `true`。
+pub fn is_voucher_sales_order(business_type: BusinessType) -> bool {
+    matches!(business_type, BusinessType::Voucher)
+}
+
 /// 提交并启动：进入 `PENDING_REVIEW` / `IN_APPROVAL`。
 ///
 /// 版本权威来源是提交记录 `submission_no`，本方法不改写该编号。
@@ -159,7 +329,7 @@ pub fn is_goods_service_sales_order(business_type: BusinessType) -> bool {
 /// * `submitted_by` - 本次提交销售
 ///
 /// # 错误
-/// 非实物及服务或状态不允许时返回冲突。
+/// 状态不允许时返回冲突。
 pub fn start_sales_order_approval(order: &mut SalesOrder, submitted_by: &str) -> Result<()> {
     Ok(order.start_approval_submission(submitted_by)?)
 }
@@ -181,11 +351,6 @@ pub fn cancel_sales_order_to_draft(order: &mut SalesOrder, updated_by: &str) -> 
 /// # 错误
 /// 状态不是审批中时返回冲突。
 pub fn ensure_final_approve_formalize(order: &SalesOrder) -> Result<()> {
-    if order.business_type != BusinessType::GoodsService {
-        return Err(Error::ConflictError(
-            "只有实物及服务销售单可以由本端口形式化".to_string(),
-        ));
-    }
     if order.commercial_status != CommercialStatus::PendingReview
         || order.review_status != ReviewStatus::InApproval
     {
@@ -206,7 +371,7 @@ pub fn require_frozen_binding(
     binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的销售单不得提交".to_string()))
 }
 
-/// 实物及服务销售单调用统一 `start_approval` 的目标命令。
+/// 销售单调用统一 `start_approval` 的目标命令。
 ///
 /// 字段与合同 §14.2 对齐；不得包含定义 ID 或审批人。
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -227,6 +392,7 @@ pub struct SalesOrderStartCommand {
 /// 由冻结提交构造目标启动命令。客户端不得提交定义或审批人。
 ///
 /// # 参数
+/// * `document_type` - 按业务性质分派的独立单据类型
 /// * `sales_order_id` - 销售单主键
 /// * `subject_version` - `sales_order_submission.submission_no`
 /// * `actor_id` - 提交人
@@ -235,13 +401,14 @@ pub struct SalesOrderStartCommand {
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
 pub fn sales_order_start_command(
+    document_type: DocumentType,
     sales_order_id: &str,
     subject_version: u32,
     actor_id: &str,
     idempotency_key: &str,
 ) -> SalesOrderStartCommand {
     SalesOrderStartCommand {
-        subject_kind: process_kind_of(DocumentType::SalesOrder).as_str().to_string(),
+        subject_kind: process_kind_of(document_type).as_str().to_string(),
         subject_id: sales_order_id.to_string(),
         subject_version,
         actor_id: actor_id.to_string(),
@@ -277,18 +444,46 @@ pub fn execute_sales_order_domain_action(
     action: ApprovalDomainAction,
     updated_by: &str,
 ) -> Result<()> {
-    match action {
-        ApprovalDomainAction::SalesOrderStartApprovalSubmission => {
-            start_sales_order_approval(order, updated_by)
+    let ports = sales_approval_ports(order.business_type)?;
+    if action == ports.on_approval_start {
+        return start_sales_order_approval(order, updated_by);
+    }
+    if action == ports.on_final_approve {
+        return ensure_final_approve_formalize(order);
+    }
+    if action == ports.cancel_action {
+        return cancel_sales_order_to_draft(order, updated_by);
+    }
+    Err(Error::ValidationError(format!(
+        "动作 {} 不属于 {}",
+        action.as_str(),
+        ports.document_type.label()
+    )))
+}
+
+/// 卡券专用决定路径新写立即失败关闭。
+///
+/// # 错误
+/// 恒返回冲突，不得回退 `CARD_SALES_APPROVAL` 或专用决定端口。
+pub fn reject_legacy_card_sales_decision() -> Result<()> {
+    Err(Error::ConflictError(
+        "卡券销售单必须走统一审批，禁止写入卡券专用决定路径".to_string(),
+    ))
+}
+
+/// `CardSalesManagerApproval` / `CardSalesOperationApproval` 新写立即失败关闭。
+///
+/// # 参数
+/// * `work_item_type` - 待写入的工作项类型稳定码
+///
+/// # 错误
+/// 命中卡券专用类型时返回冲突。
+pub fn reject_legacy_card_sales_work_item(work_item_type: &str) -> Result<()> {
+    match work_item_type {
+        "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL" => {
+            Err(Error::ConflictError("禁止新建卡券专用审批工作项".to_string()))
         }
-        ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission => ensure_final_approve_formalize(order),
-        ApprovalDomainAction::SalesOrderCancelApprovalSubmission => {
-            cancel_sales_order_to_draft(order, updated_by)
-        }
-        other => Err(Error::ValidationError(format!(
-            "动作 {} 不属于实物及服务销售单",
-            other.as_str()
-        ))),
+        _ => Ok(()),
     }
 }
 
@@ -600,10 +795,47 @@ mod tests {
         );
         assert_eq!(
             document_type_for_sales_create(BusinessType::Voucher),
-            DocumentType::SalesOrder
+            DocumentType::VoucherSalesOrder
         );
         assert!(is_goods_service_sales_order(BusinessType::GoodsService));
         assert!(!is_goods_service_sales_order(BusinessType::Voucher));
+        assert!(is_voucher_sales_order(BusinessType::Voucher));
+    }
+
+    /// 卡券适配器必须独立登记合同签署字段，且不得复用 SalesOrder ProcessKind。
+    #[test]
+    fn voucher_adapter_declares_independent_fields() {
+        let adapter = voucher_sales_order_adapter().expect("卡券销售单必须可登记");
+        assert_eq!(adapter.document_type, DocumentType::VoucherSalesOrder);
+        assert_eq!(adapter.process_kind.as_str(), "voucher_sales_order");
+        assert_eq!(
+            voucher_sales_order_subject_ref("so-1")
+                .expect("主体引用必须可构造")
+                .subject_kind(),
+            "voucher_sales_order"
+        );
+        assert_eq!(
+            adapter.subject_version_source,
+            ApprovalSubjectVersionSource::SalesOrderSubmissionNo
+        );
+        assert_eq!(
+            adapter.on_approval_start,
+            ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission
+        );
+        assert_eq!(
+            adapter.on_final_approve,
+            ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission
+        );
+        assert_eq!(
+            adapter.cancel_action,
+            ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission
+        );
+        assert_eq!(adapter.owner_role, "voucher_sales_order_approver");
+        assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
+        assert_ne!(adapter.on_approval_start, adapter.cancel_action);
+        let ports = sales_approval_ports(BusinessType::Voucher).expect("端口必须可取");
+        assert_eq!(ports.document_type, DocumentType::VoucherSalesOrder);
+        assert_eq!(ports.owner_role, "voucher_sales_order_approver");
     }
 
     /// 提交进入审批中；撤回不回退提交号，且切断 REJECTED。
@@ -642,19 +874,24 @@ mod tests {
 
         let mut voucher = draft_order();
         voucher.business_type = BusinessType::Voucher;
-        assert!(start_sales_order_approval(&mut voucher, "user-2").is_err());
+        start_sales_order_approval(&mut voucher, "user-2").expect("卡券必须可进入统一审批");
+        assert_eq!(voucher.commercial_status, CommercialStatus::PendingReview);
+        assert_eq!(voucher.review_status, ReviewStatus::InApproval);
     }
 
     /// 启动命令不含定义 ID 或审批人。
     #[test]
     fn start_command_omits_definition_and_assignee() {
-        let command = sales_order_start_command("so-1", 1, "user-1", "key-1");
+        let command = sales_order_start_command(DocumentType::SalesOrder, "so-1", 1, "user-1", "key-1");
         let encoded = serde_json::to_value(&command).unwrap();
         assert!(encoded.get("definition_id").is_none());
         assert!(encoded.get("definition_key").is_none());
         assert!(encoded.get("assignee").is_none());
         assert_eq!(command.subject_kind, "sales_order");
         assert_eq!(command.subject_version, 1);
+        let voucher =
+            sales_order_start_command(DocumentType::VoucherSalesOrder, "so-1", 1, "user-1", "key-1");
+        assert_eq!(voucher.subject_kind, "voucher_sales_order");
         assert_eq!(
             start_approval_command_kind(&command),
             bpm::model::types::ApprovalCommandKind::StartApproval
@@ -758,5 +995,57 @@ mod tests {
             "user-1",
         )
         .is_err());
+        assert!(execute_sales_order_domain_action(
+            &mut order,
+            ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission,
+            "user-1",
+        )
+        .is_err());
+    }
+
+    /// 卡券领域动作只接受本类型三类签署动作；驳回不改业务状态。
+    #[test]
+    fn voucher_domain_action_dispatch_and_reject_does_not_mutate() {
+        let mut order = draft_order();
+        order.business_type = BusinessType::Voucher;
+        execute_sales_order_domain_action(
+            &mut order,
+            ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission,
+            "user-1",
+        )
+        .unwrap();
+        assert_eq!(order.review_status, ReviewStatus::InApproval);
+        let subject_version_before = 1_u32;
+        assert!(order.transition_review(ReviewStatus::Rejected, "u").is_err());
+        assert_eq!(order.review_status, ReviewStatus::InApproval);
+        assert_eq!(subject_version_before, 1);
+        execute_sales_order_domain_action(
+            &mut order,
+            ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission,
+            "user-1",
+        )
+        .unwrap();
+        execute_sales_order_domain_action(
+            &mut order,
+            ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission,
+            "user-1",
+        )
+        .unwrap();
+        assert_eq!(order.commercial_status, CommercialStatus::Draft);
+        assert!(execute_sales_order_domain_action(
+            &mut order,
+            ApprovalDomainAction::SalesOrderStartApprovalSubmission,
+            "user-1",
+        )
+        .is_err());
+    }
+
+    /// 卡券专用决定与专用工作项新写必须失败关闭。
+    #[test]
+    fn legacy_card_sales_writes_fail_closed() {
+        assert!(reject_legacy_card_sales_decision().is_err());
+        assert!(reject_legacy_card_sales_work_item("CARD_SALES_MANAGER_APPROVAL").is_err());
+        assert!(reject_legacy_card_sales_work_item("CARD_SALES_OPERATION_APPROVAL").is_err());
+        assert!(reject_legacy_card_sales_work_item("DOCUMENT_APPROVAL").is_ok());
     }
 }

@@ -197,7 +197,7 @@ pub async fn sales_order_submit(
     resource = "sales_order",
     action = "cancel_approval"
 )]
-/// 撤回尚未最终通过的实物及服务销售单审批。
+/// 撤回尚未最终通过的销售单审批（含 `VoucherSalesOrder`）。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -248,4 +248,23 @@ pub async fn sales_order_void(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[cfg(test)]
+mod tests {
+    /// HTTP 调用方对卡券销售单只走统一提交/撤回，不得新增专用决定入口。
+    #[test]
+    fn voucher_sales_order_http_uses_unified_ports() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("submit_sales_order"));
+        assert!(production.contains("cancel_approval_submission"));
+        assert!(production.contains("VoucherSalesOrder"));
+        assert!(!production.contains("CARD_SALES_APPROVAL"));
+        assert!(!production.contains("CardSalesManagerApproval"));
+        assert!(!production.contains("CardSalesOperationApproval"));
+        assert!(!production.contains("InternalApprovalRuntime"));
+    }
 }

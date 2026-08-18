@@ -11,8 +11,8 @@
 //! 跨域协作（P3 §2）：
 //! - D08 `customer_accounts`：客户存在性校验；
 //! - D12 `contracts`：合同存在性校验；
-//! - D14 `sales_order_reviews` / `procurement_confirmations`：提交时按业务性质
-//!   派发审批记录（卡券 → 销售领导审批）或采购二次确认批次（实物及服务）；
+//! - D14 旧卡券/采购确认路径不得由新提交写入；`GoodsService` 与 `Voucher`
+//!   均由提交命令启动统一审批；
 //! - D03 `work_items`：待办派发；
 //! - D02 `audit_logs`：审计。
 //!
