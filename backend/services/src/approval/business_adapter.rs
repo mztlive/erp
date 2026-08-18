@@ -319,8 +319,7 @@ pub fn adapter_object_read_decision(
             assignee_user_id,
         )?));
     }
-    if spec.document_type == DocumentType::SalesOrder
-        || spec.document_type == DocumentType::VoucherSalesOrder
+    if spec.document_type == DocumentType::SalesOrder || spec.document_type == DocumentType::VoucherSalesOrder
     {
         return Ok(Some(crate::sales_order::sales_order_object_readable(
             &context.organization_id,
