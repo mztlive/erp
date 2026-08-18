@@ -14,7 +14,8 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
-const WORK_ITEM_TYPES: [WorkItemType; 17] = [
+const WORK_ITEM_TYPES: [WorkItemType; 16] = [
+    WorkItemType::DocumentApproval,
     WorkItemType::ProcurementConfirmation,
     WorkItemType::LowMarginManagerConfirmation,
     WorkItemType::PurchaseOrderReview,
@@ -22,8 +23,6 @@ const WORK_ITEM_TYPES: [WorkItemType; 17] = [
     WorkItemType::SalesChangeFinanceReview,
     WorkItemType::CardFundsReview,
     WorkItemType::CardFundsDeltaReview,
-    WorkItemType::CardSalesManagerApproval,
-    WorkItemType::CardSalesOperationApproval,
     WorkItemType::OwnershipMigrationSalesConfirmation,
     WorkItemType::OwnershipMigrationFinanceConfirmation,
     WorkItemType::InventoryAdjustmentReview,
@@ -342,6 +341,9 @@ pub struct WorkItemRouteContext {
     /// 导入确认范围；不适用时为空。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confirmation_scope: Option<String>,
+    /// 单据审批的 DocumentType 稳定代码。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_type: Option<String>,
 }
 
 /// 人工任务队列安全投影。
@@ -509,13 +511,13 @@ impl WorkItemView {
     /// 返回原因、影响和下一步均已翻译成业务语言的投影；处理人姓名仍可能是占位，由服务层补齐。
     ///
     /// # 错误
-    /// 无。
-    pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Self {
+    /// DocumentApproval 缺少已签署页面映射时返回错误。
+    pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
         let route = handler_route(
             fields.work_item_type,
             &fields.business_object_type,
             &fields.owner_role,
-        );
+        )?;
         let owner_user = fields.owner_user_id.as_ref().map(|id| WorkItemPartyView {
             id: id.clone(),
             display_name: UNRESOLVED_OWNER_DISPLAY_NAME.to_string(),
@@ -524,7 +526,7 @@ impl WorkItemView {
             .brief_source
             .as_ref()
             .map(|source| assemble_brief(source, fields.reason_code.as_deref()));
-        Self {
+        Ok(Self {
             id: fields.id,
             work_item_type: fields.work_item_type,
             handler_key: route.handler_key.to_string(),
@@ -607,7 +609,7 @@ impl WorkItemView {
             close_reason: fields.close_reason,
             created_at: fields.created_at,
             queue_context_id,
-        }
+        })
     }
 }
 
@@ -779,7 +781,11 @@ struct HandlerRoute {
     route_context: Option<WorkItemRouteContext>,
 }
 
-fn handler_route(work_item_type: WorkItemType, business_object_type: &str, owner_role: &str) -> HandlerRoute {
+fn handler_route(
+    work_item_type: WorkItemType,
+    business_object_type: &str,
+    owner_role: &str,
+) -> Result<HandlerRoute> {
     let (handler_key, destination_workspace_id) = match (work_item_type, business_object_type) {
         (
             WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException,
@@ -812,17 +818,24 @@ fn handler_route(work_item_type: WorkItemType, business_object_type: &str, owner
         (WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException, _) => {
             ("unregistered_work_item", "W01")
         }
-        (WorkItemType::DocumentApproval, _) => ("document_approval", "W01"),
+        (WorkItemType::DocumentApproval, object_type) => document_approval_route(object_type)?,
     };
-    let route_context =
+    let mut route_context =
         w18_confirmation_scope(work_item_type, owner_role).map(|scope| WorkItemRouteContext {
             confirmation_scope: Some(scope.to_string()),
+            document_type: None,
         });
-    HandlerRoute {
+    if work_item_type == WorkItemType::DocumentApproval {
+        route_context = Some(WorkItemRouteContext {
+            confirmation_scope: None,
+            document_type: Some(business_object_type.to_string()),
+        });
+    }
+    Ok(HandlerRoute {
         handler_key,
         destination_workspace_id,
         route_context,
-    }
+    })
 }
 
 fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Option<&'static str> {
@@ -841,6 +854,11 @@ fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Opt
 
 fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
     match work_item_type {
+        WorkItemType::DocumentApproval
+        | WorkItemType::CardSalesManagerApproval
+        | WorkItemType::CardSalesOperationApproval
+        | WorkItemType::LowMarginManagerConfirmation
+        | WorkItemType::OwnershipMigrationSalesConfirmation => WorkItemFamily::Approval,
         WorkItemType::CardFundsReview
         | WorkItemType::CardFundsDeltaReview
         | WorkItemType::PurchaseOrderReview
@@ -854,7 +872,29 @@ fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
         WorkItemType::ImportBusinessConfirmation
         | WorkItemType::IntegrationResultUnknown
         | WorkItemType::BusinessException => WorkItemFamily::Exception,
-        _ => WorkItemFamily::Approval,
+    }
+}
+
+/// 按已签署页面映射单据审批目标工作面。缺少映射失败关闭，不得回落 W05。
+///
+/// # 参数
+/// * `business_object_type` - WorkItem 中的 DocumentType 稳定代码
+///
+/// # 返回
+/// 返回 handler 与目标 workspace。
+///
+/// # 错误
+/// 未签署映射时返回稳定错误，不得回落默认工作面。
+fn document_approval_route(business_object_type: &str) -> Result<(&'static str, &'static str)> {
+    match business_object_type {
+        "sales_order" | "voucher_sales_order" | "sales_change_order" => Ok(("document_approval", "W05")),
+        "purchase_order" | "purchase_change_order" => Ok(("document_approval", "W08")),
+        "stock_adjustment" => Ok(("document_approval", "W10")),
+        "customer_receipt" | "customer_refund" | "receipt_reversal" => Ok(("document_approval", "W11")),
+        "supplier_payment" | "supplier_refund" | "payment_reversal" => Ok(("document_approval", "W12")),
+        _ => Err(Error::ValidationError(
+            "APPROVAL_DOCUMENT_ROUTE_UNMAPPED".to_string(),
+        )),
     }
 }
 
@@ -1017,12 +1057,14 @@ mod tests {
             WorkItemType::CardFundsReview,
             "receivable_account",
             "role-finance",
-        );
+        )
+        .unwrap();
         let delta = handler_route(
             WorkItemType::CardFundsDeltaReview,
             "receivable_account",
             "role-finance",
-        );
+        )
+        .unwrap();
 
         assert_eq!(opening.handler_key, "card_funds");
         assert_eq!(opening.destination_workspace_id, "W13");
@@ -1046,7 +1088,8 @@ mod tests {
                 WorkItemType::ImportBusinessConfirmation,
                 "LEGACY_IMPORT_BATCH",
                 role,
-            );
+            )
+            .unwrap();
             assert_eq!(
                 route
                     .route_context
@@ -1059,7 +1102,39 @@ mod tests {
             WorkItemType::ImportBusinessConfirmation,
             "LEGACY_IMPORT_BATCH",
             "role-unregistered",
-        );
+        )
+        .unwrap();
         assert!(unknown.route_context.is_none());
+    }
+
+    #[test]
+    fn document_approval_maps_to_signed_workspace_and_approval_family() {
+        let stock = handler_route(
+            WorkItemType::DocumentApproval,
+            "stock_adjustment",
+            "stock_adjustment_approver",
+        )
+        .unwrap();
+        assert_eq!(stock.handler_key, "document_approval");
+        assert_eq!(stock.destination_workspace_id, "W10");
+        assert_eq!(
+            stock
+                .route_context
+                .and_then(|context| context.document_type)
+                .as_deref(),
+            Some("stock_adjustment")
+        );
+        let missing = handler_route(WorkItemType::DocumentApproval, "unknown_type", "approver");
+        match missing {
+            Err(error) => assert!(error.to_string().contains("APPROVAL_DOCUMENT_ROUTE_UNMAPPED")),
+            Ok(_) => panic!("缺少映射必须失败关闭"),
+        }
+        assert_eq!(
+            family_of(WorkItemType::DocumentApproval),
+            WorkItemFamily::Approval
+        );
+        assert!(!WORK_ITEM_TYPES.contains(&WorkItemType::CardSalesManagerApproval));
+        assert!(!WORK_ITEM_TYPES.contains(&WorkItemType::CardSalesOperationApproval));
+        assert!(WORK_ITEM_TYPES.contains(&WorkItemType::DocumentApproval));
     }
 }
