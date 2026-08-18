@@ -11,12 +11,11 @@ use crate::{
         handler::admin,
         middleware::{authenticate, with_permission},
         routes::{
-            access_control, approval_instance, approval_process, bulk_job, card_instance, catalog, contract,
-            cost, customer, document_registry, file_asset, fulfillment, integration_ops, inventory,
-            legacy_import, mall_after_sales, mall_backfill, mall_order, mall_sync, party, payable,
-            projection, publication, purchase_order, receivable, returns, sales_order, sales_review,
-            source_registry, supplier, supplier_api, supplier_fulfillment, supplier_offering,
-            supplier_settlement, warehouse, work_item,
+            access_control, approval_instance, bulk_job, card_instance, catalog, contract, cost, customer,
+            document_registry, file_asset, fulfillment, integration_ops, inventory, legacy_import,
+            mall_after_sales, mall_backfill, mall_order, mall_sync, party, payable, projection, publication,
+            purchase_order, receivable, returns, sales_order, sales_review, source_registry, supplier,
+            supplier_api, supplier_fulfillment, supplier_offering, supplier_settlement, warehouse, work_item,
         },
     },
 };
@@ -34,7 +33,6 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(audit_log_routes(&rbac_service))
         .merge(access_control::routes(&rbac_service))
         .merge(approval_instance::routes(&rbac_service))
-        .merge(approval_process::routes(&rbac_service))
         .merge(bulk_job::routes(&rbac_service))
         .merge(card_instance::routes(&rbac_service))
         .merge(catalog::routes(&rbac_service))

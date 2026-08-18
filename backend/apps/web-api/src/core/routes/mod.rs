@@ -31,7 +31,6 @@ mod public;
 
 mod access_control;
 mod approval_instance;
-mod approval_process;
 mod bulk_job;
 mod card_instance;
 mod catalog;

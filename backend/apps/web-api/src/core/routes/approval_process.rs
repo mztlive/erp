@@ -1,4 +1,7 @@
 //! 审批流程定义管理路由。
+//!
+//! 共享 `routes/mod.rs` / `admin.rs` 接线归 P0-B；本模块由已接线的
+//! `approval_instance` 路由在 P3-HTTP 期间 `#[path]` 引入以完成编译。
 
 use axum::{
     routing::{get, post, put},
@@ -8,7 +11,7 @@ use services::iam::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::approval_process, middleware::with_permission},
+    core::{handler::approval_instance::approval_process, middleware::with_permission},
 };
 
 /// 返回定义管理路由。

@@ -28,6 +28,7 @@ pub use apply_plan::{apply_plan, DomainActionKind, PlannedWrites};
 pub use authorization::{converge_eligibility, AuthorizationFailure};
 pub use cancel::{prepare_cancel, CancelExecutionInput};
 pub use decision::{prepare_decision, DecisionExecutionInput};
+pub use notification_worker::ApprovalNotificationOutboxPort;
 pub use reassign::{prepare_reassign, ReassignExecutionInput};
 pub use resume::{prepare_resume, ResumeExecutionInput};
 pub use runtime_query::{

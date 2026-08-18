@@ -196,7 +196,7 @@ impl Error {
             approval_codes::TASK_NOT_ASSIGNED_TO_ACTOR => Self::Forbidden(code.to_string()),
             approval_codes::DEFINITION_INVALID
             | approval_codes::REJECT_REASON_REQUIRED
-            | approval_codes::REASSIGN_TARGET_INELIGIBLE => Self::ValidationError(code.to_string()),
+            | approval_codes::REASSIGN_TARGET_INELIGIBLE => Self::BusinessLogicError(code.to_string()),
             _ => Self::ConflictError(code.to_string()),
         }
     }
@@ -293,6 +293,26 @@ mod tests {
         let error = Error::from_approval_code(approval_codes::POLICY_NOT_REGISTERED);
         assert!(matches!(error, Error::Internal(_)));
         assert_eq!(error.approval_code(), Some(approval_codes::POLICY_NOT_REGISTERED));
+    }
+
+    #[test]
+    fn contract_unprocessable_codes_are_business_logic_not_validation() {
+        for code in [
+            approval_codes::DEFINITION_INVALID,
+            approval_codes::REJECT_REASON_REQUIRED,
+            approval_codes::REASSIGN_TARGET_INELIGIBLE,
+        ] {
+            let error = Error::from_approval_code(code);
+            assert!(
+                matches!(error, Error::BusinessLogicError(_)),
+                "{code} 必须是 422 语义"
+            );
+            assert!(
+                !matches!(error, Error::ValidationError(_)),
+                "{code} 不得落入 ValidationError"
+            );
+            assert_eq!(error.approval_code(), Some(code));
+        }
     }
 
     #[test]

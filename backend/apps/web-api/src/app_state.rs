@@ -1,16 +1,11 @@
 use config::{Config, SafeConfig};
-use database::{ApprovalIntegrationExt, NoTransaction};
-use entities::approval_integration::ApprovalNotificationDeliveryStatus;
-use entities::common::time::Instant;
 use mongodb::Database;
 use services::approval::definition::ApprovalDefinitionService;
-use services::approval::execution::notification_worker::{
-    apply_delivery_attempt, lease_until, DeliveryAttempt, NotificationSender,
-};
 use services::approval::execution::ApprovalRuntimeService;
 use services::approval::{ApprovalDomainActionPort, ApprovalRuntimePort, InternalApprovalRuntime};
 use services::iam::SharedRbacService;
 use services::party::SensitiveDataCodec;
+use services::ApprovalNotificationOutboxPort;
 use std::sync::Arc;
 use std::time::Duration;
 use storage::S3Storage;
@@ -18,29 +13,8 @@ use tokio::sync::{watch, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
-/// 未接入通知提供方时失败关闭，不得伪造成功投递。
-#[derive(Clone, Copy, Debug, Default)]
-struct FailClosedApprovalNotificationSender;
-
-/// 单次 outbox 领取上限。
-const OUTBOX_BATCH_LIMIT: u32 = 20;
-
 /// worker 轮询间隔。
 const OUTBOX_POLL_INTERVAL: Duration = Duration::from_secs(1);
-
-impl NotificationSender for FailClosedApprovalNotificationSender {
-    /// 以去重键调用发送口；提供方未接线时返回致命失败。
-    ///
-    /// # 参数
-    /// * `dedup_key` - outbox 业务去重键
-    ///
-    /// # 返回
-    /// 始终返回 `Fatal`，由 worker 按退避或死信落库。
-    fn send_idempotent(&self, dedup_key: &str) -> DeliveryAttempt {
-        error!(dedup_key = %dedup_key, "审批通知提供方未接入，投递失败关闭");
-        DeliveryAttempt::Fatal
-    }
-}
 
 /// 审批通知 outbox worker 句柄。停止时不再领取新租约。
 pub struct ApprovalOutboxWorker {
@@ -74,7 +48,7 @@ pub struct AppState {
     sensitive_data: Arc<SensitiveDataCodec>,
     approval_definition: Arc<ApprovalDefinitionService>,
     approval_runtime_service: Arc<ApprovalRuntimeService>,
-    approval_notification_sender: FailClosedApprovalNotificationSender,
+    approval_outbox: Arc<ApprovalNotificationOutboxPort>,
 }
 
 impl AppState {
@@ -94,6 +68,7 @@ impl AppState {
         let rbac = services::iam::shared_rbac_service(db.clone());
         let approval_definition = Arc::new(ApprovalDefinitionService::new(db.clone(), Arc::clone(&rbac)));
         let approval_runtime_service = Arc::new(ApprovalRuntimeService::new(db.clone(), Arc::clone(&rbac)));
+        let approval_outbox = Arc::new(ApprovalNotificationOutboxPort::new(db.clone()));
         Self {
             db,
             config,
@@ -103,7 +78,7 @@ impl AppState {
             sensitive_data,
             approval_definition,
             approval_runtime_service,
-            approval_notification_sender: FailClosedApprovalNotificationSender,
+            approval_outbox,
         }
     }
 
@@ -141,6 +116,8 @@ impl AppState {
 
     /// 返回进程内注入的审批定义管理服务。
     ///
+    /// 本波次只交付注入点；Handler 改走本访问器归 P3-HTTP owns，不得在此越权改 Handler。
+    ///
     /// # 返回
     /// 返回启动时构造的真实 [`ApprovalDefinitionService`]，不得以 Noop 或 `Option` 绕过。
     pub fn approval_definition_service(&self) -> Arc<ApprovalDefinitionService> {
@@ -149,10 +126,20 @@ impl AppState {
 
     /// 返回进程内注入的目标审批运行服务。
     ///
+    /// 本波次只交付注入点；Handler 改走本访问器归 P3-HTTP owns，不得在此越权改 Handler。
+    ///
     /// # 返回
     /// 返回启动时构造的真实 [`ApprovalRuntimeService`]；未 cut-over 类型必须失败关闭。
     pub fn approval_runtime_service(&self) -> Arc<ApprovalRuntimeService> {
         Arc::clone(&self.approval_runtime_service)
+    }
+
+    /// 返回进程内注入的通知 outbox 应用端口。
+    ///
+    /// # 返回
+    /// 返回 services 层端口；HTTP 不得直连审批仓储。
+    pub fn approval_outbox_port(&self) -> Arc<ApprovalNotificationOutboxPort> {
+        Arc::clone(&self.approval_outbox)
     }
 
     /// 返回旧卡券销售路径仍在使用的 INTERNAL 运行时端口。
@@ -180,10 +167,9 @@ impl AppState {
     /// 返回可用于显式停止的 worker 句柄。
     pub fn start_approval_outbox_worker(&self) -> ApprovalOutboxWorker {
         let (stop_tx, stop_rx) = watch::channel(false);
-        let db = self.db();
-        let sender = self.approval_notification_sender;
+        let port = self.approval_outbox_port();
         let worker_id = format!("web-api-{}", id_generator::next_id());
-        let join = tokio::spawn(run_approval_outbox_worker(db, sender, worker_id, stop_rx));
+        let join = tokio::spawn(run_approval_outbox_worker(port, worker_id, stop_rx));
         ApprovalOutboxWorker { stop_tx, join }
     }
 
@@ -238,13 +224,11 @@ impl AppState {
 /// 运行 outbox worker，直到收到停止信号。
 ///
 /// # 参数
-/// * `db` - MongoDB
-/// * `sender` - 失败关闭发送口
+/// * `port` - services 层 outbox 端口
 /// * `worker_id` - 本进程租约持有者
 /// * `stop_rx` - 停止信号
 async fn run_approval_outbox_worker(
-    db: Database,
-    sender: FailClosedApprovalNotificationSender,
+    port: Arc<ApprovalNotificationOutboxPort>,
     worker_id: String,
     mut stop_rx: watch::Receiver<bool>,
 ) {
@@ -254,7 +238,7 @@ async fn run_approval_outbox_worker(
             info!(worker_id = %worker_id, "审批通知 outbox worker 停止领取新租约");
             return;
         }
-        if let Err(error) = process_outbox_tick(&db, sender, &worker_id).await {
+        if let Err(error) = port.process_tick(&worker_id).await {
             error!(worker_id = %worker_id, error = %error, "审批通知 outbox 批次处理失败");
         }
         tokio::select! {
@@ -266,103 +250,5 @@ async fn run_approval_outbox_worker(
             }
             () = tokio::time::sleep(OUTBOX_POLL_INTERVAL) => {}
         }
-    }
-}
-
-/// 领取并处理一批 outbox。
-///
-/// # 参数
-/// * `db` - MongoDB
-/// * `sender` - 失败关闭发送口
-/// * `worker_id` - 租约持有者
-///
-/// # 错误
-/// 租约或 CAS 落库失败时返回服务错误。
-async fn process_outbox_tick(
-    db: &Database,
-    sender: FailClosedApprovalNotificationSender,
-    worker_id: &str,
-) -> std::result::Result<(), services::Error> {
-    let now = Instant::now();
-    let until = lease_until(now);
-    let leased = db
-        .approval_notification_outbox()
-        .lease_outbox_batch(worker_id, now, until, OUTBOX_BATCH_LIMIT, &mut NoTransaction)
-        .await?;
-    for item in leased {
-        persist_delivery_attempt(db, sender, worker_id, item, now).await?;
-    }
-    Ok(())
-}
-
-/// 对已租约消息应用一次发送结果并 CAS 写回。
-///
-/// # 参数
-/// * `db` - MongoDB
-/// * `sender` - 失败关闭发送口
-/// * `worker_id` - 租约持有者
-/// * `item` - 已领取消息
-/// * `now` - 当前时间
-///
-/// # 错误
-/// 实体状态或仓储 CAS 失败时返回错误。
-async fn persist_delivery_attempt(
-    db: &Database,
-    sender: FailClosedApprovalNotificationSender,
-    worker_id: &str,
-    mut item: entities::approval_integration::ApprovalNotificationOutbox,
-    now: Instant,
-) -> std::result::Result<(), services::Error> {
-    let attempt = sender.send_idempotent(&item.dedup_key);
-    if attempt == DeliveryAttempt::Delivered {
-        db.approval_notification_outbox()
-            .mark_outbox_delivered(&item.base.id, worker_id, now, &mut NoTransaction)
-            .await?;
-        return Ok(());
-    }
-    apply_delivery_attempt(&mut item, attempt, now)?;
-    let error_class = outbox_error_class(attempt);
-    if item.delivery_status == ApprovalNotificationDeliveryStatus::DeadLetter {
-        db.approval_notification_outbox()
-            .dead_letter_outbox(&item.base.id, worker_id, error_class, &mut NoTransaction)
-            .await?;
-        return Ok(());
-    }
-    db.approval_notification_outbox()
-        .reschedule_outbox(
-            &item.base.id,
-            worker_id,
-            item.next_attempt_at,
-            error_class,
-            &mut NoTransaction,
-        )
-        .await?;
-    Ok(())
-}
-
-/// 返回可落库的失败分类。
-///
-/// # 参数
-/// * `attempt` - 发送结果
-///
-/// # 返回
-/// 返回不含敏感载荷的分类字面量。
-fn outbox_error_class(attempt: DeliveryAttempt) -> &'static str {
-    match attempt {
-        DeliveryAttempt::Delivered => "delivered",
-        DeliveryAttempt::Retryable => "retryable",
-        DeliveryAttempt::Fatal => "fatal",
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{FailClosedApprovalNotificationSender, NotificationSender};
-    use services::approval::execution::notification_worker::DeliveryAttempt;
-
-    #[test]
-    fn unconfigured_notification_sender_fails_closed() {
-        let sender = FailClosedApprovalNotificationSender;
-        assert_eq!(sender.send_idempotent("started:inst-1"), DeliveryAttempt::Fatal);
     }
 }

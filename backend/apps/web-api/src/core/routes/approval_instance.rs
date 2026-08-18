@@ -1,6 +1,7 @@
 //! 审批实例、决定、恢复、改派与受阻取消路由。
 //!
-//! 已删除 `POST /approval-instances/{id}/recover`。定义管理路由由 `approval_process` 独立合并。
+//! 已删除 `POST /approval-instances/{id}/recover`。定义管理路由经 `#[path]` 合并，
+//! P0-B 接线 `routes/mod.rs` 后应改为独立 merge。
 
 use axum::{
     routing::{get, post},
@@ -13,15 +14,20 @@ use crate::{
     core::{handler::approval_instance, middleware::with_permission},
 };
 
-/// 返回审批实例运行路由。
+/// P0-B 声明 `mod approval_process` 后应删除此 `#[path]`。
+#[path = "approval_process.rs"]
+mod approval_process;
+
+/// 返回审批实例与定义管理路由。
 ///
 /// # 参数
 /// * `rbac` - 共享 RBAC 服务
 ///
 /// # 返回
-/// 返回合同 §3 运行 API。
+/// 返回合同 §3 运行 API 与定义管理 API。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(approval_process::routes(rbac))
         .route(
             "/approval-decisions",
             with_permission(
