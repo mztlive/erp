@@ -9,7 +9,6 @@ export {
     throwValidation,
 } from "@/features/sales-orders/lib/sales-order-detail-mappers"
 export {
-    mapActiveCardSalesApproval,
     mapActiveLowMarginManagerConfirmation,
     mapChangeOrder,
     mapDetailToListItem,

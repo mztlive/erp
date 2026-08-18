@@ -204,19 +204,14 @@ export function resolveFocusTask(
             tone: "info",
         }
     }
-    if (order.activeCardSalesApproval || order.cardApprovalProjectionBlocker) {
+    if (order.nature === "card_voucher" && order.approval?.instance) {
         return {
             id: "approval",
-            title: order.cardApprovalProjectionBlocker
-                ? "卡券审批信息未就绪"
-                : "卡券销售等审批",
+            title: "卡券销售等审批",
             description:
-                order.cardApprovalProjectionBlocker ??
-                "审批通过后本单才会生效。",
-            actionLabel: order.cardApprovalProjectionBlocker
-                ? "查看阻断原因"
-                : "去审批",
-            tone: order.cardApprovalProjectionBlocker ? "warning" : "info",
+                "审批通过后本单才会生效。卡券运营是流程中的普通审批节点。",
+            actionLabel: "去审批",
+            tone: "info",
         }
     }
     if (canAccept) {

@@ -1,5 +1,4 @@
 import type {
-    BackendActiveCardSalesApproval,
     BackendActiveLowMarginManagerConfirmation,
     BackendOpenProcurementRejection,
     BackendProcurementConfirmation,
@@ -9,7 +8,6 @@ import type {
 } from "@/features/sales-orders/api/contracts"
 import type {
     ActiveLowMarginManagerConfirmation,
-    CardSalesApproval,
     ProcurementRejectionResolution,
     SalesChangeOrderSummary,
     SalesOrderListItem,
@@ -17,6 +15,7 @@ import type {
 } from "@/features/sales-orders/types"
 import { personDisplayName } from "@/features/sales-orders/lib/labels"
 import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-approval"
+import { mapVoucherSalesOrderApproval } from "@/features/sales-orders/lib/voucher-sales-order-approval"
 import {
     formatEpochDate,
     formatInstant,
@@ -107,7 +106,6 @@ export function mapDetailToListItem(
         contractNumber?: string
         ownerName?: string
         procurementRejection?: ProcurementRejectionResolution | null
-        activeCardSalesApproval?: CardSalesApproval | null
         activeChangeOrder?: SalesChangeOrderSummary | null
         customerContact?: string
     },
@@ -122,16 +120,10 @@ export function mapDetailToListItem(
             detail.open_procurement_rejection,
             openRejectionSubmissionNo,
         )
-    const activeCardSalesApproval =
-        extras?.activeCardSalesApproval ??
-        mapActiveCardSalesApproval(detail.active_card_sales_approval)
     const activeLowMarginManagerConfirmation =
         mapActiveLowMarginManagerConfirmation(
             detail.active_low_margin_manager_confirmation,
         )
-    const approvalProjectionInvalid = Boolean(
-        detail.active_card_sales_approval && !activeCardSalesApproval,
-    )
     return mapListItemFromBackend(
         {
             id: detail.id,
@@ -173,17 +165,11 @@ export function mapDetailToListItem(
             remark: commercial.remark,
             revisions: mapRevisions(detail.revisions),
             procurementRejection,
-            activeCardSalesApproval,
             activeLowMarginManagerConfirmation,
-            cardApprovalProjectionBlocker: approvalProjectionInvalid
-                ? "当前审批进度缺少实例、步骤、任务或业务版本；为避免错批，本页仅供查看。"
-                : detail.business_type === "VOUCHER" &&
-                    (detail.review_status === "PENDING_SALES_LEADER" ||
-                        detail.review_status === "PENDING_OPERATIONS") &&
-                    !detail.active_card_sales_approval
-                  ? "审批仍在进行，但审批进度和任务版本不完整；为避免错批，本页仅供查看。"
-                  : null,
-            approval: mapSalesOrderApproval(detail.approval),
+            approval:
+                detail.business_type === "VOUCHER"
+                    ? mapVoucherSalesOrderApproval(detail.approval)
+                    : mapSalesOrderApproval(detail.approval),
             activeChangeOrder: extras?.activeChangeOrder,
             settlementEntity:
                 commercial.settlementPartyName || detail.settlement_party_id,
@@ -194,75 +180,6 @@ export function mapDetailToListItem(
             },
         },
     )
-}
-
-export function mapActiveCardSalesApproval(
-    approval?: BackendActiveCardSalesApproval | null,
-): CardSalesApproval | null {
-    if (!approval) return null
-    const hasWorkItem = Boolean(
-        approval.work_item_id &&
-        approval.task_version != null &&
-        approval.work_item_type &&
-        approval.work_item_status &&
-        approval.assignment_mode,
-    )
-    if (approval.processing_state === "READY" && !hasWorkItem) {
-        return null
-    }
-    const common = {
-        approvalInstanceId: approval.approval_instance_id,
-        instanceVersion: String(approval.instance_version),
-        approvalStepInstanceId: approval.approval_step_instance_id,
-        stepVersion: String(approval.step_version),
-        processingBlocker: approval.processing_blocker ?? undefined,
-        subjectVersion: approval.subject_version,
-        salesOrderSubmissionId: approval.sales_order_submission_id,
-        submissionNo: approval.submission_no,
-        ownerUser: approval.owner_user
-            ? {
-                  id: approval.owner_user.id,
-                  displayName: approval.owner_user.display_name,
-              }
-            : undefined,
-        frozenSubmissionSummary: approval.frozen_submission_summary,
-        expectedReviewStatus: approval.expected_review_status,
-        actionBlockers: approval.action_blockers.map((blocker) => ({
-            action: blocker.action,
-            reason:
-                blocker.message ??
-                blocker.reason ??
-                blocker.code ??
-                "当前不可执行",
-        })),
-    }
-    if (approval.processing_state === "APPROVAL_BLOCKED") {
-        return {
-            ...common,
-            processingState: "APPROVAL_BLOCKED",
-            workItemId: approval.work_item_id ?? undefined,
-            workItemType: approval.work_item_type ?? undefined,
-            taskVersion:
-                approval.task_version == null
-                    ? undefined
-                    : String(approval.task_version),
-            workItemStatus: approval.work_item_status ?? undefined,
-            assignmentMode: approval.assignment_mode ?? undefined,
-            allowedActions: approval.allowed_actions.filter(
-                (action): action is "CANCEL" => action === "CANCEL",
-            ),
-        }
-    }
-    return {
-        ...common,
-        processingState: "READY",
-        workItemId: approval.work_item_id!,
-        workItemType: approval.work_item_type!,
-        taskVersion: String(approval.task_version!),
-        workItemStatus: approval.work_item_status!,
-        assignmentMode: approval.assignment_mode!,
-        allowedActions: approval.allowed_actions,
-    }
 }
 
 /** 将服务端 actor-specific 低毛利确认投影原样收敛为页面工作面。 */

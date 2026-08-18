@@ -6,7 +6,6 @@ import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import {
     adjustProcurementRejectionDraft,
-    cancelCardSalesApproval,
     createSalesOrder,
     createSalesOrderExportJob,
     fetchSalesOrderDetail,
@@ -17,7 +16,6 @@ import {
     startSalesChangeOrder,
     submitSalesChangeReviewDecision,
     submitSalesOrder,
-    submitCardSalesApprovalDecision,
     type SalesOrdersListQuery,
 } from "@/features/sales-orders/api/sales-orders"
 
@@ -174,31 +172,6 @@ export function useSalesChangeReviewDecisionMutation() {
                     queryKey: ["work-items"],
                 }),
             ])
-        },
-    })
-}
-
-export function useSubmitCardSalesApprovalDecisionMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: submitCardSalesApprovalDecision,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.all,
-            })
-        },
-    })
-}
-
-/** 撤回卡券审批后刷新对象详情与销售单列表。 */
-export const useCancelCardSalesApprovalMutation = () => {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: cancelCardSalesApproval,
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.all,
-            })
         },
     })
 }

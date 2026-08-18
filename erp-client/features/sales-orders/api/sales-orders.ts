@@ -12,10 +12,6 @@ export type {
     SalesOrdersListQuery,
 } from "@/features/sales-orders/api/contracts"
 
-export {
-    cancelCardSalesApproval,
-    submitCardSalesApprovalDecision,
-} from "@/features/sales-orders/api/card-approval"
 export { createSalesOrderExportJob } from "@/features/sales-orders/api/export"
 
 export { fetchSalesOrders } from "@/features/sales-orders/api/sales-orders-list"

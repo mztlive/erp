@@ -1,6 +1,5 @@
 import type { StatusTone } from "@/components/ui/status-badge"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
-import type { AssignmentMode, WorkItemStatus } from "@/features/work-items"
 
 export type SalesOrderNature = "physical_service" | "card_voucher"
 export type SalesOrderOrigin = "erp" | "mall"
@@ -61,7 +60,7 @@ export type CreateSalesOrderResult = {
     reference: string
     /** 工作副本乐观锁版本；草稿意图时用于后续 `saveSalesOrderDraft` 续接编辑。 */
     workingCopyVersion?: number
-    /** 实物及服务创建后服务端返回的只读审批绑定；卡券单为空。 */
+    /** 创建后服务端返回的只读审批绑定；实物与卡券各自对应独立 DocumentType。 */
     approval?: DocumentApprovalView
 }
 
@@ -181,53 +180,6 @@ export type ActiveLowMarginManagerConfirmation = {
     actionBlockers: Array<{ code: string; message: string }>
 }
 
-type CardSalesApprovalBase = {
-    approvalInstanceId: string
-    instanceVersion: string
-    approvalStepInstanceId: string
-    stepVersion: string
-    processingState: "READY" | "APPROVAL_BLOCKED"
-    processingBlocker?: { code: string; message: string }
-    subjectVersion: string
-    salesOrderSubmissionId: string
-    submissionNo: number
-    ownerUser?: { id: string; displayName: string }
-    /** 冻结提交摘要（只读） */
-    frozenSubmissionSummary: string
-    expectedReviewStatus: "PENDING_SALES_LEAD" | "PENDING_OPERATIONS"
-    allowedActions: Array<
-        "START_PROCESSING" | "APPROVE" | "REJECT" | "TERMINATE" | "CANCEL"
-    >
-    actionBlockers: ActionBlocker[]
-}
-
-type CardSalesApprovalWorkItem = {
-    workItemId: string
-    workItemType:
-        | "CARD_SALES_MANAGER_APPROVAL"
-        | "CARD_SALES_OPERATION_APPROVAL"
-    taskVersion: string
-    workItemStatus: WorkItemStatus
-    assignmentMode: AssignmentMode
-}
-
-/**
- * 当前活动卡券审批投影。
- *
- * `READY` 必须同时携带实例、步骤、任务和业务对象四个版本；首步直接分派解析
- * 失败时可以只有 `BLOCKED` 实例/步骤而没有任务，前端不得补造任务身份。
- */
-export type CardSalesApproval =
-    | (CardSalesApprovalBase &
-          CardSalesApprovalWorkItem & {
-              processingState: "READY"
-          })
-    | (CardSalesApprovalBase &
-          Partial<CardSalesApprovalWorkItem> & {
-              processingState: "APPROVAL_BLOCKED"
-              allowedActions: Array<"CANCEL">
-          })
-
 export type SalesOrderRevisionSnapshot = {
     revisionNo: number
     effectiveAt: string
@@ -257,7 +209,6 @@ export type FormalAllowedAction =
     | "PRINT"
     | "EXPORT"
     | "RESOLVE_PROCUREMENT_REJECTION"
-    | "HANDLE_CARD_APPROVAL"
 
 export type SalesOrderListItem = {
     id: string
@@ -323,11 +274,8 @@ export type SalesOrderListItem = {
     commercialReadOnlyReason?: string
     revisions: readonly SalesOrderRevisionSnapshot[]
     procurementRejection?: ProcurementRejectionResolution | null
-    activeCardSalesApproval?: CardSalesApproval | null
     activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
-    /** 审批在途但服务端未返回正式实例/步骤/任务投影时只读阻断。 */
-    cardApprovalProjectionBlocker?: string | null
-    /** 实物及服务销售单的统一只读审批结构；卡券单为空。 */
+    /** 统一只读审批结构；实物为 SalesOrder，卡券为 VoucherSalesOrder。 */
     approval?: DocumentApprovalView
     activeChangeOrder?: SalesChangeOrderSummary | null
     allowedActions: FormalAllowedAction[]

@@ -28,6 +28,7 @@ import {
     throwValidation,
 } from "@/features/sales-orders/api/mappers"
 import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-approval"
+import { mapVoucherSalesOrderApproval } from "@/features/sales-orders/lib/voucher-sales-order-approval"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     CreateSalesOrderInput,
@@ -226,7 +227,10 @@ export async function createSalesOrder(
         createdAt: new Date(created.created_at * 1000).toISOString(),
         reference: `SO-CREATE-${created.order_no}`,
         workingCopyVersion: created.working_copy?.version,
-        approval: mapSalesOrderApproval(created.approval),
+        approval:
+            input.nature === "card_voucher"
+                ? mapVoucherSalesOrderApproval(created.approval)
+                : mapSalesOrderApproval(created.approval),
     }
 }
 
@@ -385,6 +389,9 @@ export async function fetchSalesOrderDraftForResume(
         taxRatePercent: rateToPercent(lines[0]?.sales_tax_rate),
         remark: remark ?? "",
         lineItems: mapDraftLines(lines, voucherCategorySkuId),
-        approval: mapSalesOrderApproval(detail.approval),
+        approval:
+            nature === "card_voucher"
+                ? mapVoucherSalesOrderApproval(detail.approval)
+                : mapSalesOrderApproval(detail.approval),
     }
 }

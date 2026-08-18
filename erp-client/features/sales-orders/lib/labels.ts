@@ -1,9 +1,6 @@
 import type { DisplayTime } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
-import type {
-    CardSalesApproval,
-    SalesOrderListItem,
-} from "@/features/sales-orders/types"
+import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
 /** 业务性质展示文案（W05 列表/详情/纸质预览共用）。 */
 export const NATURE_LABEL: Record<SalesOrderListItem["nature"], string> = {
@@ -96,11 +93,4 @@ export const PROCUREMENT_REJECT_REASON_LABEL: Record<string, string> = {
     TERMS_UNCLEAR: "商业条件不清晰",
 }
 
-/** 卡券审批任务类型文案。 */
-export const CARD_APPROVAL_TYPE_LABEL: Record<
-    NonNullable<CardSalesApproval["workItemType"]>,
-    string
-> = {
-    CARD_SALES_MANAGER_APPROVAL: "卡券销售领导审批",
-    CARD_SALES_OPERATION_APPROVAL: "卡券销售运营审批",
-}
+

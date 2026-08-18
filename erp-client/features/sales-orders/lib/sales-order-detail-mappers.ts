@@ -9,7 +9,6 @@ import type {
 import type {
     ActionBlocker,
     ActiveLowMarginManagerConfirmation,
-    CardSalesApproval,
     FormalAllowedAction,
     ProcurementRejectionResolution,
     ProgressTrack,
@@ -187,7 +186,6 @@ export function mapRevisions(
 
 function defaultAllowedActions(
     commercial: string,
-    hasCardApproval: boolean,
     hasRejection: boolean,
     /**
      * 能否发起销售变更单——后端权威判定（`sales_order_detail` 的
@@ -220,9 +218,6 @@ function defaultAllowedActions(
     if (hasRejection) {
         allowed.push("RESOLVE_PROCUREMENT_REJECTION")
     }
-    if (hasCardApproval) {
-        allowed.push("HANDLE_CARD_APPROVAL")
-    }
 
     return { allowed, blockers }
 }
@@ -245,9 +240,7 @@ export function mapListItemFromBackend(
         settlementEntity?: string
         revisions?: SalesOrderRevisionSnapshot[]
         procurementRejection?: ProcurementRejectionResolution | null
-        activeCardSalesApproval?: CardSalesApproval | null
         activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
-        cardApprovalProjectionBlocker?: string | null
         approval?: DocumentApprovalView
         activeChangeOrder?: SalesChangeOrderSummary | null
         customerContact?: string
@@ -269,14 +262,14 @@ export function mapListItemFromBackend(
     const fulfillment = mapFulfillment(row.fulfillment_progress)
     const collection = mapCollection(row.collection_progress)
     const invoicing = mapInvoicing(row.invoice_progress)
-    const hasCard = Boolean(
-        extras?.activeCardSalesApproval ||
-        extras?.cardApprovalProjectionBlocker,
-    )
+    const hasRunningVoucherApproval =
+        nature === "card_voucher" &&
+        (Boolean(extras?.approval?.instance) ||
+            row.commercial_status === "PENDING_REVIEW" ||
+            row.review_status === "IN_APPROVAL")
     const hasRejection = Boolean(extras?.procurementRejection)
     const { allowed, blockers } = defaultAllowedActions(
         row.commercial_status,
-        hasCard,
         hasRejection,
         extras?.startSalesChange,
     )
@@ -285,7 +278,7 @@ export function mapListItemFromBackend(
         originSystem === "mall" ||
         primaryStatus.label === "已关闭" ||
         primaryStatus.label === "已作废" ||
-        hasCard ||
+        hasRunningVoucherApproval ||
         row.commercial_status === "EFFECTIVE"
 
     return {
@@ -342,11 +335,8 @@ export function mapListItemFromBackend(
             : undefined,
         revisions: extras?.revisions ?? [],
         procurementRejection: extras?.procurementRejection ?? null,
-        activeCardSalesApproval: extras?.activeCardSalesApproval ?? null,
         activeLowMarginManagerConfirmation:
             extras?.activeLowMarginManagerConfirmation ?? null,
-        cardApprovalProjectionBlocker:
-            extras?.cardApprovalProjectionBlocker ?? null,
         approval: extras?.approval,
         activeChangeOrder: extras?.activeChangeOrder ?? null,
         allowedActions: allowed,
