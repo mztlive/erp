@@ -134,6 +134,7 @@ mod tests {
             destination_workspace_id: "W07".to_string(),
             route_context: None,
             approval_step_instance_id: None,
+            approval_node_execution_id: None,
             status: WorkItemStatus::Open,
             assignment_mode: AssignmentMode::Direct,
             assignment_source: AssignmentSource::SystemRule,

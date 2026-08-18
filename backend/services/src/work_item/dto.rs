@@ -356,6 +356,8 @@ pub struct WorkItemView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_context: Option<WorkItemRouteContext>,
     pub approval_step_instance_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_node_execution_id: Option<String>,
     pub status: WorkItemStatus,
     pub assignment_mode: AssignmentMode,
     pub assignment_source: AssignmentSource,
@@ -533,6 +535,7 @@ impl WorkItemView {
             destination_workspace_id: route.destination_workspace_id.to_string(),
             route_context: route.route_context,
             approval_step_instance_id: fields.approval_step_instance_id,
+            approval_node_execution_id: fields.approval_node_execution_id,
             status: fields.status,
             assignment_mode: fields.assignment_mode,
             assignment_source: fields.assignment_source,
@@ -667,6 +670,7 @@ pub(crate) struct WorkItemFields {
     pub id: String,
     pub work_item_type: WorkItemType,
     pub approval_step_instance_id: Option<String>,
+    pub approval_node_execution_id: Option<String>,
     pub business_object_type: String,
     pub business_object_id: String,
     pub root_business_object_id: String,
@@ -704,6 +708,10 @@ impl From<WorkItem> for WorkItemFields {
             id: item.base.id,
             work_item_type: item.work_item_type,
             approval_step_instance_id: item.approval_step_instance_id,
+            approval_node_execution_id: item
+                .approval_node_execution_id
+                .as_ref()
+                .map(|id| id.as_ref().to_string()),
             business_object_type: item.business_object_type,
             business_object_id: item.business_object_id,
             root_business_object_id,
@@ -743,6 +751,7 @@ impl From<database::WorkItemRow> for WorkItemFields {
             id: item.id,
             work_item_type: item.work_item_type,
             approval_step_instance_id: item.approval_step_instance_id,
+            approval_node_execution_id: item.approval_node_execution_id,
             business_object_type: item.business_object_type,
             business_object_id: item.business_object_id,
             root_business_object_id,

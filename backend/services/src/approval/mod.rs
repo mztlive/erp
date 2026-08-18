@@ -5,6 +5,7 @@ pub mod binding;
 mod bootstrap;
 pub mod business_adapter;
 pub mod definition;
+pub mod definition_assignees;
 pub mod definition_dto;
 mod dto;
 pub mod execution;
