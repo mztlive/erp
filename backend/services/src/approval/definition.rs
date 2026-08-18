@@ -66,6 +66,14 @@ impl ApprovalDefinitionService {
         Self { db, rbac }
     }
 
+    /// 返回定义管理使用的数据库。
+    ///
+    /// # 返回
+    /// 返回 MongoDB 句柄。
+    pub(crate) fn db(&self) -> &Database {
+        &self.db
+    }
+
     /// 返回固定 20 行非敏感目录。
     ///
     /// # 参数
@@ -264,7 +272,7 @@ impl ApprovalDefinitionService {
     ///
     /// # 错误
     /// 缺少类型级权限时返回禁止。
-    async fn ensure_definition_admin(
+    pub(crate) async fn ensure_definition_admin(
         &self,
         actor: &AuditActor,
         policy: &ProcessRequiredApprovalPolicy,
