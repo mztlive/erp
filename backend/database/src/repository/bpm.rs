@@ -256,12 +256,9 @@ impl<'a> BpmWorkflowRepository<'a> {
     ) -> Result<Vec<ApprovalProcessDefinition>> {
         find_limited(
             &self.db.collection(DEFINITIONS),
-            doc! {
-                "process_kind": process_kind.as_str(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            doc! { "definition_version": -1 },
-            MAX_DEFINITION_VERSIONS,
+            definition_versions_filter(process_kind),
+            definition_versions_sort(),
+            definition_versions_limit(MAX_DEFINITION_VERSIONS as u32),
             executor,
         )
         .await
@@ -428,18 +425,11 @@ impl<'a> BpmWorkflowRepository<'a> {
         limit: u32,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ApprovalNodeExecution>> {
-        let mut filter = doc! {
-            "process_instance_id": instance_id.as_ref(),
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-        };
-        if let Some(after_execution_no) = after_execution_no {
-            filter.insert("execution_no", doc! { "$gt": i64::from(after_execution_no) });
-        }
         find_limited(
             &self.db.collection(EXECUTIONS),
-            filter,
+            execution_history_filter(instance_id, after_execution_no),
             doc! { "execution_no": 1 },
-            clamp_limit(limit, MAX_EXECUTION_HISTORY),
+            execution_history_limit(limit),
             executor,
         )
         .await
@@ -456,12 +446,9 @@ impl<'a> BpmWorkflowRepository<'a> {
     ) -> Result<Vec<ApprovalInstanceAssignee>> {
         find_limited(
             &self.db.collection(ASSIGNEES),
-            doc! {
-                "process_instance_id": instance_id.as_ref(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            doc! { "node_key": 1 },
-            MAX_ASSIGNEES,
+            instance_assignees_filter(instance_id),
+            instance_assignees_sort(),
+            instance_assignees_limit(MAX_ASSIGNEES as u32),
             executor,
         )
         .await
@@ -702,7 +689,7 @@ impl<'a> BpmWorkflowRepository<'a> {
             &self.db.collection(TRANSITION_DEFINITIONS),
             definition_child_filter(definition_id),
             doc! { "from_node_key": 1, "event": 1 },
-            MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2),
+            definition_graph_transition_limit(),
             executor,
         )
         .await
@@ -886,6 +873,113 @@ fn definition_child_filter(definition_id: &ApprovalProcessDefinitionId) -> Docum
     }
 }
 
+/// 构造定义历史查询条件，前缀对齐 `idx_approval_process_definitions_history`。
+///
+/// # 参数
+/// * `process_kind` - 流程种类
+///
+/// # 返回
+/// 返回含 `process_kind` 与软删除约束的查询文档。
+fn definition_versions_filter(process_kind: ProcessKind) -> Document {
+    doc! {
+        "process_kind": process_kind.as_str(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 返回定义历史固定排序文档。
+///
+/// # 返回
+/// 返回 `{ definition_version: -1 }`。
+fn definition_versions_sort() -> Document {
+    doc! { "definition_version": -1 }
+}
+
+/// 将定义历史请求页大小夹紧到 `[1, MAX_DEFINITION_VERSIONS]`。
+///
+/// # 参数
+/// * `limit` - 调用方请求条数
+///
+/// # 返回
+/// 返回可交给 MongoDB `limit` 的有界整数。
+fn definition_versions_limit(limit: u32) -> i64 {
+    clamp_limit(limit, MAX_DEFINITION_VERSIONS)
+}
+
+/// 构造实例审批人查询条件。
+///
+/// # 参数
+/// * `instance_id` - 所属流程实例
+///
+/// # 返回
+/// 返回含实例主键与软删除约束的查询文档。
+fn instance_assignees_filter(instance_id: &ApprovalProcessInstanceId) -> Document {
+    doc! {
+        "process_instance_id": instance_id.as_ref(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 返回实例审批人固定排序文档。
+///
+/// # 返回
+/// 返回 `{ node_key: 1 }`。
+fn instance_assignees_sort() -> Document {
+    doc! { "node_key": 1 }
+}
+
+/// 将审批人列表请求页大小夹紧到 `[1, MAX_ASSIGNEES]`。
+///
+/// # 参数
+/// * `limit` - 调用方请求条数
+///
+/// # 返回
+/// 返回可交给 MongoDB `limit` 的有界整数。
+fn instance_assignees_limit(limit: u32) -> i64 {
+    clamp_limit(limit, MAX_ASSIGNEES)
+}
+
+/// 返回定义连线一次批量读取上限（节点上限的两倍）。
+///
+/// # 返回
+/// 返回 `MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)`。
+fn definition_graph_transition_limit() -> i64 {
+    MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)
+}
+
+/// 构造实例执行历史的稳定游标过滤条件。
+///
+/// # 参数
+/// * `instance_id` - 所属流程实例
+/// * `after_execution_no` - 上一页最后一条执行序号；首页为空
+///
+/// # 返回
+/// 返回含软删除约束、实例主键与可选 `execution_no $gt` 的查询文档。
+fn execution_history_filter(
+    instance_id: &ApprovalProcessInstanceId,
+    after_execution_no: Option<u32>,
+) -> Document {
+    let mut filter = doc! {
+        "process_instance_id": instance_id.as_ref(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    };
+    if let Some(after_execution_no) = after_execution_no {
+        filter.insert("execution_no", doc! { "$gt": i64::from(after_execution_no) });
+    }
+    filter
+}
+
+/// 将执行历史请求页大小夹紧到 `[1, MAX_EXECUTION_HISTORY]`。
+///
+/// # 参数
+/// * `limit` - 调用方请求条数
+///
+/// # 返回
+/// 返回可交给 MongoDB `limit` 的有界整数。
+fn execution_history_limit(limit: u32) -> i64 {
+    clamp_limit(limit, MAX_EXECUTION_HISTORY)
+}
+
 fn non_terminal_subject_filter(subject: &SubjectRef, subject_version: u32) -> Document {
     doc! {
         "subject.subject_kind": subject.subject_kind(),
@@ -1015,7 +1109,24 @@ fn instance_insert_document(
 }
 
 fn instance_list_scope_empty(filter: &ApprovalInstanceListFilter) -> bool {
-    filter.subject_ids.as_ref().is_some_and(Vec::is_empty)
+    if filter.subject_ids.as_ref().is_some_and(Vec::is_empty) {
+        return true;
+    }
+    filter.view == ApprovalInstanceListView::Started && !started_by_present(filter)
+}
+
+/// 判断 `Started` 视图是否带有非空发起人前缀。
+///
+/// # 参数
+/// * `filter` - 实例列表过滤条件
+///
+/// # 返回
+/// `started_by` 为非空字符串时返回 `true`。
+fn started_by_present(filter: &ApprovalInstanceListFilter) -> bool {
+    filter
+        .started_by
+        .as_ref()
+        .is_some_and(|started_by| !started_by.is_empty())
 }
 
 fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> Document {
@@ -1203,12 +1314,16 @@ mod tests {
     use super::{
         active_draft_filter, approval_task_cas_filter, assign_document_no_filter, clamp_limit,
         classify_assign_document_no_miss, classify_cas_miss, current_execution_filter,
-        draft_or_status_filter, execution_end_filter, instance_advance_filter, instance_insert_document,
-        instance_list_filter_doc, instance_list_scope_empty, instance_list_sort, kind_version_filter,
-        merge_documents, non_terminal_subject_filter, published_kind_filter, reassign_assignee_filter,
-        receipt_key_filter, superseded_execution_write, ApprovalInstanceListCursor,
-        ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
-        AssignDocumentNoOutcome, CasWriteOutcome, MAX_INSTANCE_PAGE,
+        definition_child_filter, definition_graph_transition_limit, definition_versions_filter,
+        definition_versions_limit, definition_versions_sort, draft_or_status_filter, execution_end_filter,
+        execution_history_filter, execution_history_limit, instance_advance_filter,
+        instance_assignees_filter, instance_assignees_limit, instance_assignees_sort,
+        instance_insert_document, instance_list_filter_doc, instance_list_scope_empty, instance_list_sort,
+        instance_summary_projection, kind_version_filter, merge_documents, non_terminal_subject_filter,
+        published_kind_filter, reassign_assignee_filter, receipt_key_filter, superseded_execution_write,
+        ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
+        ApprovalInstanceListView, AssignDocumentNoOutcome, CasWriteOutcome, MAX_ASSIGNEES,
+        MAX_DEFINITION_GRAPH_DOCS, MAX_DEFINITION_VERSIONS, MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
     };
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
@@ -1623,6 +1738,180 @@ mod tests {
         assert_eq!(clamp_limit(50, MAX_INSTANCE_PAGE), 50);
         assert_eq!(clamp_limit(51, MAX_INSTANCE_PAGE), 50);
         assert_eq!(clamp_limit(u32::MAX, MAX_INSTANCE_PAGE), 50);
+    }
+
+    #[test]
+    fn started_view_fail_closes_without_started_by_and_allows_optional_filters() {
+        let missing_starter = ApprovalInstanceListFilter {
+            view: ApprovalInstanceListView::Started,
+            process_kind: Some(ProcessKind::StockAdjustment),
+            status: Some(ApprovalProcessInstanceStatus::Running),
+            started_by: None,
+            subject_kind: None,
+            subject_ids: None,
+            cursor: None,
+            limit: 20,
+        };
+        assert!(instance_list_scope_empty(&missing_starter));
+
+        let empty_starter = ApprovalInstanceListFilter {
+            started_by: Some(String::new()),
+            ..missing_starter.clone()
+        };
+        assert!(instance_list_scope_empty(&empty_starter));
+
+        let kind_only = ApprovalInstanceListFilter {
+            view: ApprovalInstanceListView::Started,
+            process_kind: Some(ProcessKind::StockAdjustment),
+            status: None,
+            started_by: Some("u1".into()),
+            subject_kind: None,
+            subject_ids: None,
+            cursor: None,
+            limit: 20,
+        };
+        assert!(!instance_list_scope_empty(&kind_only));
+        let kind_doc = instance_list_filter_doc(&kind_only);
+        assert_eq!(kind_doc.get_str("started_by").unwrap(), "u1");
+        assert_eq!(kind_doc.get_str("process_kind").unwrap(), "stock_adjustment");
+        assert!(!kind_doc.contains_key("status"));
+        assert_eq!(
+            instance_list_sort(&kind_only),
+            doc! { "started_at": -1, "id": -1 }
+        );
+
+        let status_only = ApprovalInstanceListFilter {
+            view: ApprovalInstanceListView::Started,
+            process_kind: None,
+            status: Some(ApprovalProcessInstanceStatus::Running),
+            started_by: Some("u1".into()),
+            subject_kind: None,
+            subject_ids: None,
+            cursor: None,
+            limit: 20,
+        };
+        assert!(!instance_list_scope_empty(&status_only));
+        let status_doc = instance_list_filter_doc(&status_only);
+        assert_eq!(status_doc.get_str("started_by").unwrap(), "u1");
+        assert_eq!(status_doc.get_str("status").unwrap(), "RUNNING");
+        assert!(!status_doc.contains_key("process_kind"));
+        assert_eq!(
+            instance_list_sort(&status_only),
+            doc! { "started_at": -1, "id": -1 }
+        );
+    }
+
+    #[test]
+    fn definition_versions_and_assignees_queries_are_bounded() {
+        let versions = definition_versions_filter(ProcessKind::StockAdjustment);
+        assert_eq!(versions.get_str("process_kind").unwrap(), "stock_adjustment");
+        assert_eq!(versions.get_i64("deleted_at").unwrap(), 0);
+        assert!(!versions.contains_key("status"));
+        assert_eq!(definition_versions_sort(), doc! { "definition_version": -1 });
+        assert_eq!(MAX_DEFINITION_VERSIONS, 100);
+        assert_eq!(definition_versions_limit(0), 1);
+        assert_eq!(definition_versions_limit(100), MAX_DEFINITION_VERSIONS);
+        assert_eq!(definition_versions_limit(101), MAX_DEFINITION_VERSIONS);
+        assert_eq!(definition_versions_limit(u32::MAX), MAX_DEFINITION_VERSIONS);
+
+        let instance_id = ApprovalProcessInstanceId::new("inst-1");
+        let assignees = instance_assignees_filter(&instance_id);
+        assert_eq!(assignees.get_str("process_instance_id").unwrap(), "inst-1");
+        assert_eq!(assignees.get_i64("deleted_at").unwrap(), 0);
+        assert!(!assignees.contains_key("node_key"));
+        assert_eq!(instance_assignees_sort(), doc! { "node_key": 1 });
+        assert_eq!(MAX_ASSIGNEES, 20);
+        assert_eq!(instance_assignees_limit(0), 1);
+        assert_eq!(instance_assignees_limit(20), MAX_ASSIGNEES);
+        assert_eq!(instance_assignees_limit(21), MAX_ASSIGNEES);
+        assert_eq!(instance_assignees_limit(u32::MAX), MAX_ASSIGNEES);
+    }
+
+    #[test]
+    fn execution_history_filter_and_limit_are_bounded() {
+        let instance_id = ApprovalProcessInstanceId::new("inst-1");
+        let first_page = execution_history_filter(&instance_id, None);
+        assert_eq!(first_page.get_str("process_instance_id").unwrap(), "inst-1");
+        assert_eq!(first_page.get_i64("deleted_at").unwrap(), 0);
+        assert!(!first_page.contains_key("execution_no"));
+
+        let next_page = execution_history_filter(&instance_id, Some(7));
+        assert_eq!(
+            next_page.get_document("execution_no").unwrap(),
+            &doc! { "$gt": 7_i64 }
+        );
+        assert_eq!(next_page.get_str("process_instance_id").unwrap(), "inst-1");
+        assert_eq!(execution_history_limit(0), 1);
+        assert_eq!(execution_history_limit(50), MAX_EXECUTION_HISTORY);
+        assert_eq!(execution_history_limit(51), MAX_EXECUTION_HISTORY);
+        assert_eq!(execution_history_limit(u32::MAX), MAX_EXECUTION_HISTORY);
+        assert_eq!(MAX_EXECUTION_HISTORY, 50);
+    }
+
+    #[test]
+    fn definition_child_filter_batches_by_definition_id_with_graph_limits() {
+        let filter = definition_child_filter(&ApprovalProcessDefinitionId::new("def-1"));
+        assert_eq!(filter.len(), 2);
+        assert_eq!(filter.get_str("process_definition_id").unwrap(), "def-1");
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
+        assert!(!filter.contains_key("node_key"));
+        assert!(!filter.contains_key("id"));
+        assert_eq!(MAX_DEFINITION_GRAPH_DOCS, 20);
+        assert_eq!(definition_graph_transition_limit(), 40);
+        assert_eq!(
+            definition_graph_transition_limit(),
+            MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)
+        );
+    }
+
+    #[test]
+    fn instance_summary_projection_is_bounded_and_excludes_history() {
+        let projection = instance_summary_projection();
+        let keys: std::collections::BTreeSet<&str> = projection.keys().map(String::as_str).collect();
+        assert_eq!(
+            keys,
+            [
+                "id",
+                "process_kind",
+                "process_definition_id",
+                "definition_version",
+                "subject",
+                "subject_version",
+                "status",
+                "current_round_no",
+                "current_node_execution_id",
+                "current_node_key",
+                "current_node_name",
+                "current_assignee_participant_id",
+                "current_assignee_name",
+                "latest_rejected_execution_id",
+                "latest_rejection_summary",
+                "last_status_changed_at",
+                "started_by",
+                "started_at",
+                "blocked_at",
+                "version",
+                "updated_at",
+            ]
+            .into_iter()
+            .collect()
+        );
+        for field in [
+            "id",
+            "current_node_key",
+            "current_node_name",
+            "current_assignee_participant_id",
+            "current_assignee_name",
+            "latest_rejected_execution_id",
+            "latest_rejection_summary",
+            "last_status_changed_at",
+        ] {
+            assert_eq!(projection.get_i32(field).unwrap(), 1);
+        }
+        assert!(!projection.contains_key("history"));
+        assert!(!projection.contains_key("executions"));
+        assert!(!projection.contains_key("execution_history"));
+        assert!(!projection.contains_key("node_executions"));
     }
 
     #[test]

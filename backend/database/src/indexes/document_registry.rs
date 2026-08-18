@@ -26,8 +26,9 @@ pub(crate) const WORKFLOW_ACTIONS: &str = <mongodb::Database as DocumentRegistry
 /// 创建本域集合的幂等命名索引。
 ///
 /// 逐条落地数据模型 §6.1「必需约束与索引」：
-/// - `business_document`：非空 `(document_type, document_no)` 部分唯一（空编号
-///   草稿可并存）；非空 `document_no` 全局搜索索引；
+/// - `business_document`：`id` 全量唯一（空编号草稿也只能有一行）；非空
+///   `(document_type, document_no)` 部分唯一（空编号草稿可并存）；非空
+///   `document_no` 全局搜索索引；
 /// - `document_relation`：`(from_document_id, to_document_id, relation_type)` 唯一，
 ///   `to_document_id + relation_type` 反向查询索引；
 /// - `workflow_action`：`document_id + created_at` 历史索引、`actor_id + created_at`
@@ -56,9 +57,10 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
     Ok(())
 }
 
-/// 返回 `business_document` 的非空编号身份约束与搜索索引。
+/// 返回 `business_document` 的稳定 `id`、非空编号身份约束与搜索索引。
 fn business_document_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_business_documents_id", doc! { "id": 1 }),
         unique_partial_index(
             "uk_business_documents_identity",
             doc! { "document_type": 1, "document_no": 1 },
@@ -181,6 +183,22 @@ mod tests {
     fn business_document_identity_index_is_partial_unique_for_non_empty_no() {
         let indexes = business_document_indexes();
         let non_empty = doc! { "document_no": { "$gt": "" } };
+
+        let id_unique = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_business_documents_id")
+            })
+            .unwrap();
+        assert_eq!(id_unique.keys, doc! { "id": 1 });
+        assert_eq!(id_unique.options.as_ref().unwrap().unique, Some(true));
+        assert!(id_unique
+            .options
+            .as_ref()
+            .unwrap()
+            .partial_filter_expression
+            .is_none());
 
         let identity = indexes
             .iter()

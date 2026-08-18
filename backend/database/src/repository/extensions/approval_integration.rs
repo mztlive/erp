@@ -36,3 +36,32 @@ impl ApprovalIntegrationExt for Database {
         Repository::new(self, Self::APPROVAL_NOTIFICATION_OUTBOX)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ApprovalIntegrationExt;
+
+    #[test]
+    fn integration_collection_names_match_target_runtime() {
+        assert_eq!(
+            mongodb::Database::APPROVAL_SUBJECT_SNAPSHOTS,
+            "approval_subject_snapshots"
+        );
+        assert_eq!(
+            mongodb::Database::APPROVAL_NOTIFICATION_OUTBOX,
+            "approval_notification_outbox"
+        );
+        assert_eq!(
+            mongodb::Database::APPROVAL_COMMAND_RECEIPTS,
+            "approval_command_receipts"
+        );
+        assert_ne!(
+            mongodb::Database::APPROVAL_SUBJECT_SNAPSHOTS,
+            "approval_definitions"
+        );
+        assert_ne!(
+            mongodb::Database::APPROVAL_NOTIFICATION_OUTBOX,
+            "approval_step_instances"
+        );
+    }
+}

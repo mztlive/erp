@@ -92,14 +92,15 @@ impl Pagination for BusinessDocumentFilter {
 impl<'a> Repository<'a, BusinessDocument> {
     /// 幂等注册业务单据。
     ///
-    /// 跨域注册表入口（数据模型 §6.1）：空编号草稿可并存；非空
+    /// 跨域注册表入口（数据模型 §6.1）：空编号草稿可并存，但同一 `document_id`
+    /// 始终最多一行，由 `uk_business_documents_id` 仲裁；非空
     /// `(document_type, document_no)` 由部分唯一索引 `uk_business_documents_identity`
-    /// 承担并发仲裁。已存在同身份且同 ID 的非空注册视为幂等成功并返回已存在行；
+    /// 承担并发仲裁。已存在同 ID 的注册视为幂等成功并返回已存在行；
     /// 同身份但 ID 不同的重复注册透出 [`crate::Error::DuplicateKey`]。
     ///
-    /// 本方法采用「先插后查」：唯一索引保证并发下最多一条注册行，不存在
+    /// 本方法采用「先插后查」：唯一索引保证并发下同 ID 最多一条注册行，不存在
     /// 读后写的竞态窗口，**不需要事务执行器**；传入 `NoTransaction` 时行为
-    /// 可预期（单条写入自动提交）。身份字段全局唯一：注册行软删除后仍占用
+    /// 可预期（单条写入自动提交）。非空身份字段全局唯一：注册行软删除后仍占用
     /// `(document_type, document_no)` 身份（与 accounts 处理一致），恢复语义
     /// 不被身份复用破坏。
     ///
@@ -119,17 +120,11 @@ impl<'a> Repository<'a, BusinessDocument> {
         doc: &BusinessDocument,
         executor: &mut dyn Executor,
     ) -> Result<Option<BusinessDocument>> {
-        if doc.document_no.is_empty() {
-            mongo_ops::insert_one(&self.collection(), doc, executor).await?;
-            return Ok(None);
-        }
         match mongo_ops::insert_one(&self.collection(), doc, executor).await {
             Ok(()) => Ok(None),
             Err(Error::DuplicateKey(duplicate)) => {
-                let existing = self
-                    .find_by_type_and_no(doc.document_type, &doc.document_no, executor)
-                    .await?;
-                if existing.as_ref().is_some_and(|row| row.base.id == doc.base.id) {
+                let existing = self.find_by_id(&doc.base.id, executor).await?;
+                if same_id_registration(existing.as_ref(), &doc.base.id, |row| row.base.id.as_str()) {
                     Ok(existing)
                 } else {
                     Err(Error::DuplicateKey(duplicate))
@@ -535,7 +530,36 @@ impl<'a> DocumentRegistryRepository<'a> {
     }
 }
 
+/// 判断唯一键冲突是否为同一 `document_id` 的幂等回读。
+///
+/// 命中 `uk_business_documents_id` 且现有行 id 相同则回读；id 冲突或其它
+/// 唯一键冲突（例如非空编号身份被另一行占用）不得视为同一注册。
+///
+/// # 参数
+/// * `existing` - 按请求 `document_id` 回读到的现有行
+/// * `expected_id` - 本次注册请求的稳定 `document_id`
+/// * `id_of` - 从现有行取出 id 的函数
+///
+/// # 返回
+/// 同 ID 时返回 `true`；无现有行或 id 不同时返回 `false`。
+///
+/// # 错误
+/// 无。
+fn same_id_registration<T>(existing: Option<&T>, expected_id: &str, id_of: impl FnOnce(&T) -> &str) -> bool {
+    existing.is_some_and(|row| id_of(row) == expected_id)
+}
+
 /// 一次性编号赋值更新管道。
+///
+/// # 参数
+/// * `document_no` - 要写入的正式编号
+/// * `assigned_at` - 编号赋值时间
+///
+/// # 返回
+/// 返回同时写入编号、赋值时间和版本递增的 `$set` 管道。
+///
+/// # 错误
+/// 无。
 fn assign_document_no_pipeline(document_no: &str, assigned_at: Instant) -> Vec<Document> {
     let assigned_at = assigned_at.unix_secs();
     vec![doc! {
@@ -602,7 +626,8 @@ fn workflow_action_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        assign_document_no_pipeline, sort_doc, BusinessDocumentFilter, QueryFilter, WorkflowActionFilter,
+        assign_document_no_pipeline, same_id_registration, sort_doc, BusinessDocumentFilter, QueryFilter,
+        WorkflowActionFilter,
     };
     use crate::repository::bpm::{
         assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome,
@@ -657,6 +682,21 @@ mod tests {
             doc! { "created_at": -1 },
             "白名单外字段回落默认排序"
         );
+    }
+
+    #[test]
+    fn empty_document_register_same_id_is_idempotent_reread() {
+        assert!(same_id_registration(
+            Some(&"bd-1".to_string()),
+            "bd-1",
+            String::as_str
+        ));
+        assert!(!same_id_registration(
+            Some(&"bd-2".to_string()),
+            "bd-1",
+            String::as_str
+        ));
+        assert!(!same_id_registration::<String>(None, "bd-1", String::as_str));
     }
 
     #[test]

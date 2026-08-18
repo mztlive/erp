@@ -117,16 +117,7 @@ impl<'a> Repository<'a, ApprovalNotificationOutbox> {
         find_one_and_update_pipeline(
             &self.collection(),
             lease_owner_filter(outbox_id, expected_lease_owner),
-            vec![doc! {
-                "$set": {
-                    "delivery_status": ApprovalNotificationDeliveryStatus::Delivered.as_str(),
-                    "lease_owner": Bson::Null,
-                    "lease_until": Bson::Null,
-                    "delivered_at": delivered_at.unix_secs(),
-                    "version": { "$add": ["$version", 1_i64] },
-                    "updated_at": delivered_at.unix_secs(),
-                }
-            }],
+            mark_outbox_delivered_pipeline(delivered_at),
             executor,
         )
         .await
@@ -147,18 +138,7 @@ impl<'a> Repository<'a, ApprovalNotificationOutbox> {
         find_one_and_update_pipeline(
             &self.collection(),
             lease_owner_filter(outbox_id, expected_lease_owner),
-            vec![doc! {
-                "$set": {
-                    "delivery_status": ApprovalNotificationDeliveryStatus::Pending.as_str(),
-                    "next_attempt_at": next_attempt_at.unix_secs(),
-                    "last_error_class": error_kind,
-                    "lease_owner": Bson::Null,
-                    "lease_until": Bson::Null,
-                    "attempt_count": { "$add": ["$attempt_count", 1_i64] },
-                    "version": { "$add": ["$version", 1_i64] },
-                    "updated_at": next_attempt_at.unix_secs(),
-                }
-            }],
+            reschedule_outbox_pipeline(next_attempt_at, error_kind),
             executor,
         )
         .await
@@ -178,16 +158,7 @@ impl<'a> Repository<'a, ApprovalNotificationOutbox> {
         find_one_and_update_pipeline(
             &self.collection(),
             lease_owner_filter(outbox_id, expected_lease_owner),
-            vec![doc! {
-                "$set": {
-                    "delivery_status": ApprovalNotificationDeliveryStatus::DeadLetter.as_str(),
-                    "last_error_class": error_kind,
-                    "lease_owner": Bson::Null,
-                    "lease_until": Bson::Null,
-                    "dead_lettered_at": { "$ifNull": ["$lease_until", "$next_attempt_at"] },
-                    "version": { "$add": ["$version", 1_i64] },
-                }
-            }],
+            dead_letter_outbox_pipeline(error_kind),
             executor,
         )
         .await
@@ -205,19 +176,48 @@ async fn lease_one_outbox(
     find_one_and_update_sorted(
         collection,
         outbox_lease_filter(now),
-        vec![doc! {
-            "$set": {
-                "delivery_status": ApprovalNotificationDeliveryStatus::InFlight.as_str(),
-                "lease_owner": worker_id,
-                "lease_until": lease_until.unix_secs(),
-                "version": { "$add": ["$version", 1_i64] },
-                "updated_at": now.unix_secs(),
-            }
-        }],
-        doc! { "next_attempt_at": 1, "id": 1 },
+        lease_take_pipeline(worker_id, now, lease_until),
+        lease_take_sort(),
         executor,
     )
     .await
+}
+
+/// 构造竞争取租约成功时的 `$set` 管道。
+///
+/// 将消息标为 `IN_FLIGHT`，写入 `lease_owner`/`lease_until`，并递增版本。
+///
+/// # 参数
+/// * `worker_id` - 取得租约的 worker
+/// * `now` - 本次领取时间，写入 `updated_at`
+/// * `lease_until` - 租约到期时间
+///
+/// # 返回
+/// 返回单步 `$set` 管道。
+///
+/// # 错误
+/// 无。
+fn lease_take_pipeline(worker_id: &str, now: Instant, lease_until: Instant) -> Vec<Document> {
+    vec![doc! {
+        "$set": {
+            "delivery_status": ApprovalNotificationDeliveryStatus::InFlight.as_str(),
+            "lease_owner": worker_id,
+            "lease_until": lease_until.unix_secs(),
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": now.unix_secs(),
+        }
+    }]
+}
+
+/// 返回取租约扫描顺序：先到期者优先，同时间按 `id` 升序。
+///
+/// # 返回
+/// 返回 `{ next_attempt_at: 1, id: 1 }`。
+///
+/// # 错误
+/// 无。
+fn lease_take_sort() -> Document {
+    doc! { "next_attempt_at": 1, "id": 1 }
 }
 
 fn snapshot_by_process_instance_filter(approval_process_instance_id: &str) -> Document {
@@ -260,6 +260,69 @@ fn lease_owner_filter(outbox_id: &str, expected_lease_owner: &str) -> Document {
         "delivery_status": ApprovalNotificationDeliveryStatus::InFlight.as_str(),
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
     }
+}
+
+/// 构造投递成功的 `$set` 管道：写 `Delivered` 并清空租约。
+///
+/// # 参数
+/// * `delivered_at` - 投递完成时间
+///
+/// # 返回
+/// 返回单步 `$set` 管道。
+fn mark_outbox_delivered_pipeline(delivered_at: Instant) -> Vec<Document> {
+    vec![doc! {
+        "$set": {
+            "delivery_status": ApprovalNotificationDeliveryStatus::Delivered.as_str(),
+            "lease_owner": Bson::Null,
+            "lease_until": Bson::Null,
+            "delivered_at": delivered_at.unix_secs(),
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": delivered_at.unix_secs(),
+        }
+    }]
+}
+
+/// 构造重试回 `Pending` 的 `$set` 管道，并递增 `attempt_count`。
+///
+/// # 参数
+/// * `next_attempt_at` - 下次尝试时间
+/// * `error_kind` - 本次失败分类
+///
+/// # 返回
+/// 返回单步 `$set` 管道。
+fn reschedule_outbox_pipeline(next_attempt_at: Instant, error_kind: &str) -> Vec<Document> {
+    vec![doc! {
+        "$set": {
+            "delivery_status": ApprovalNotificationDeliveryStatus::Pending.as_str(),
+            "next_attempt_at": next_attempt_at.unix_secs(),
+            "last_error_class": error_kind,
+            "lease_owner": Bson::Null,
+            "lease_until": Bson::Null,
+            "attempt_count": { "$add": ["$attempt_count", 1_i64] },
+            "version": { "$add": ["$version", 1_i64] },
+            "updated_at": next_attempt_at.unix_secs(),
+        }
+    }]
+}
+
+/// 构造转入死信的 `$set` 管道。
+///
+/// # 参数
+/// * `error_kind` - 死信失败分类
+///
+/// # 返回
+/// 返回单步 `$set` 管道；`dead_lettered_at` 取当前租约到期或下次尝试时间。
+fn dead_letter_outbox_pipeline(error_kind: &str) -> Vec<Document> {
+    vec![doc! {
+        "$set": {
+            "delivery_status": ApprovalNotificationDeliveryStatus::DeadLetter.as_str(),
+            "last_error_class": error_kind,
+            "lease_owner": Bson::Null,
+            "lease_until": Bson::Null,
+            "dead_lettered_at": { "$ifNull": ["$lease_until", "$next_attempt_at"] },
+            "version": { "$add": ["$version", 1_i64] },
+        }
+    }]
 }
 
 fn clamp_outbox_limit(limit: u32) -> i64 {
@@ -306,13 +369,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_outbox_limit, lease_owner_filter, outbox_lease_filter, snapshot_by_process_instance_filter,
-        snapshot_by_subject_filter, MAX_OUTBOX_BATCH,
+        clamp_outbox_limit, dead_letter_outbox_pipeline, lease_owner_filter, lease_take_pipeline,
+        lease_take_sort, mark_outbox_delivered_pipeline, outbox_lease_filter, reschedule_outbox_pipeline,
+        snapshot_by_process_instance_filter, snapshot_by_subject_filter, MAX_OUTBOX_BATCH,
     };
     use entities::approval_integration::ApprovalNotificationDeliveryStatus;
     use entities::common::time::Instant;
     use entities::document_registry::DocumentType;
-    use mongodb::bson::doc;
+    use mongodb::bson::{doc, Bson};
 
     #[test]
     fn lease_filter_allows_pending_due_and_expired_inflight() {
@@ -364,6 +428,27 @@ mod tests {
     }
 
     #[test]
+    fn lease_take_pipeline_sets_inflight_owner_and_sorts_by_due_id() {
+        let now = Instant::from_unix_secs(1_000);
+        let lease_until = Instant::from_unix_secs(1_500);
+        let pipeline = lease_take_pipeline("worker-a", now, lease_until);
+        assert_eq!(pipeline.len(), 1);
+        let set = pipeline[0].get_document("$set").unwrap();
+        assert_eq!(
+            set.get_str("delivery_status").unwrap(),
+            ApprovalNotificationDeliveryStatus::InFlight.as_str()
+        );
+        assert_eq!(set.get_str("lease_owner").unwrap(), "worker-a");
+        assert_eq!(set.get_i64("lease_until").unwrap(), 1_500);
+        assert_eq!(set.get_i64("updated_at").unwrap(), 1_000);
+        assert_eq!(
+            set.get_document("version").unwrap(),
+            &doc! { "$add": ["$version", 1_i64] }
+        );
+        assert_eq!(lease_take_sort(), doc! { "next_attempt_at": 1, "id": 1 });
+    }
+
+    #[test]
     fn delivery_updates_require_current_lease_owner() {
         let filter = lease_owner_filter("ob-1", "worker-a");
         assert_eq!(filter.get_str("id").unwrap(), "ob-1");
@@ -372,6 +457,65 @@ mod tests {
             filter.get_str("delivery_status").unwrap(),
             ApprovalNotificationDeliveryStatus::InFlight.as_str()
         );
+    }
+
+    #[test]
+    fn outbox_success_pipelines_clear_lease_and_contrast_lease_filter() {
+        let delivered_at = Instant::from_unix_secs(2_000);
+        let delivered = mark_outbox_delivered_pipeline(delivered_at);
+        assert_eq!(delivered.len(), 1);
+        let delivered_set = delivered[0].get_document("$set").unwrap();
+        assert_eq!(
+            delivered_set.get_str("delivery_status").unwrap(),
+            ApprovalNotificationDeliveryStatus::Delivered.as_str()
+        );
+        assert_eq!(delivered_set.get("lease_owner").unwrap(), &Bson::Null);
+        assert_eq!(delivered_set.get("lease_until").unwrap(), &Bson::Null);
+        assert_eq!(delivered_set.get_i64("delivered_at").unwrap(), 2_000);
+        assert_eq!(
+            delivered_set.get_document("version").unwrap(),
+            &doc! { "$add": ["$version", 1_i64] }
+        );
+        assert_eq!(delivered_set.get_i64("updated_at").unwrap(), 2_000);
+
+        let next_attempt_at = Instant::from_unix_secs(3_000);
+        let rescheduled = reschedule_outbox_pipeline(next_attempt_at, "timeout");
+        assert_eq!(rescheduled.len(), 1);
+        let rescheduled_set = rescheduled[0].get_document("$set").unwrap();
+        assert_eq!(
+            rescheduled_set.get_str("delivery_status").unwrap(),
+            ApprovalNotificationDeliveryStatus::Pending.as_str()
+        );
+        assert_eq!(rescheduled_set.get_i64("next_attempt_at").unwrap(), 3_000);
+        assert_eq!(rescheduled_set.get_str("last_error_class").unwrap(), "timeout");
+        assert_eq!(rescheduled_set.get("lease_owner").unwrap(), &Bson::Null);
+        assert_eq!(rescheduled_set.get("lease_until").unwrap(), &Bson::Null);
+        assert_eq!(
+            rescheduled_set.get_document("attempt_count").unwrap(),
+            &doc! { "$add": ["$attempt_count", 1_i64] }
+        );
+
+        let dead_lettered = dead_letter_outbox_pipeline("exhausted");
+        assert_eq!(dead_lettered.len(), 1);
+        let dead_set = dead_lettered[0].get_document("$set").unwrap();
+        assert_eq!(
+            dead_set.get_str("delivery_status").unwrap(),
+            ApprovalNotificationDeliveryStatus::DeadLetter.as_str()
+        );
+        assert_eq!(dead_set.get_str("last_error_class").unwrap(), "exhausted");
+        assert_eq!(dead_set.get("lease_owner").unwrap(), &Bson::Null);
+        assert_eq!(dead_set.get("lease_until").unwrap(), &Bson::Null);
+        assert_eq!(
+            dead_set.get_document("dead_lettered_at").unwrap(),
+            &doc! { "$ifNull": ["$lease_until", "$next_attempt_at"] }
+        );
+        assert!(!dead_set.contains_key("delivered_at"));
+
+        let lease_filter = outbox_lease_filter(Instant::from_unix_secs(1_000)).to_string();
+        assert!(!lease_filter.contains("DELIVERED"));
+        assert!(!lease_filter.contains("DEAD_LETTER"));
+        assert!(lease_filter.contains("PENDING"));
+        assert!(lease_filter.contains("IN_FLIGHT"));
     }
 
     #[test]

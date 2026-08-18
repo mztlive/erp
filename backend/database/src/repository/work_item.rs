@@ -190,6 +190,56 @@ impl Pagination for WorkItemFilter {
     }
 }
 
+/// 待我审批列表的稳定游标，字段顺序与 `idx_work_items_pending_approval` 一致。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MineApprovalTaskCursor {
+    /// 上一页最后一条的 `assigned_at`（unix 秒）。
+    pub assigned_at: i64,
+    /// 上一页最后一条的任务主键。
+    pub id: String,
+}
+
+/// Service 已计算的待我审批过滤条件。仓储必须在 MongoDB 内施加。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MineApprovalTaskFilter {
+    /// 当前用户；对应索引前缀 `owner_user_id`。
+    pub owner_user_id: String,
+    /// 可选业务对象类型，对应 HTTP `document_type`。
+    pub business_object_type: Option<String>,
+    /// 稳定游标；首页为空。
+    pub cursor: Option<MineApprovalTaskCursor>,
+    /// 请求页大小，仓储会夹紧到 `[1, MAX_MINE_APPROVAL_PAGE]`。
+    pub limit: u32,
+}
+
+/// 待我审批单次页大小上限，对齐阶段 06 `GET /approval-instances` 的最大 `limit`。
+const MAX_MINE_APPROVAL_PAGE: i64 = 100;
+
+/// 统一工作台列表的稳定游标，字段顺序与 `idx_work_items_mine` 一致。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MineWorkbenchCursor {
+    /// 上一页最后一条的 `due_at`（unix 秒）。
+    pub due_at: i64,
+    /// 上一页最后一条的任务主键。
+    pub id: String,
+}
+
+/// Service 已计算的统一工作台过滤条件。仓储必须在 MongoDB 内施加。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MineWorkbenchFilter {
+    /// 当前用户；对应索引前缀 `owner_user_id`。
+    pub owner_user_id: String,
+    /// 可选业务对象类型，对应 HTTP `document_type`。
+    pub business_object_type: Option<String>,
+    /// 稳定游标；首页为空。
+    pub cursor: Option<MineWorkbenchCursor>,
+    /// 请求页大小，仓储会夹紧到 `[1, MAX_MINE_WORKBENCH_PAGE]`。
+    pub limit: u32,
+}
+
+/// 统一工作台单次页大小上限，与待我审批页上限一致。
+const MAX_MINE_WORKBENCH_PAGE: i64 = 100;
+
 /// 责任池原子开始处理的持久化结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StartProcessingOutcome {
@@ -371,6 +421,64 @@ impl<'a> Repository<'a, WorkItem> {
     ) -> Result<CasWriteOutcome<WorkItem>> {
         self.persist_open_approval_task(item, expected_task_version, approval_node_execution_id, executor)
             .await
+    }
+
+    /// 按待我审批索引读取当前用户的开放审批任务。
+    ///
+    /// MongoDB 内固定施加 `status=OPEN`、`owner_user_id`、`DOCUMENT_APPROVAL`
+    /// 与 `approval_node_execution_id` 字符串存在条件；排序为
+    /// `assigned_at desc, id desc`。不判断关联执行是否为当前 ACTIVE 节点。
+    ///
+    /// # 参数
+    /// * `filter` - 已计算的责任人、可选单据类型、游标与页大小
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回有界任务投影，单次不超过 100 条。
+    ///
+    /// # 错误
+    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
+    pub async fn list_mine_approval_tasks(
+        &self,
+        filter: &MineApprovalTaskFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItemRow>> {
+        let options = FindOptions::builder()
+            .sort(mine_approval_sort_doc())
+            .limit(clamp_mine_approval_limit(filter.limit))
+            .projection(work_item_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<WorkItemRow>();
+        mongo_ops::find_many(&collection, mine_approval_filter_doc(filter), options, executor).await
+    }
+
+    /// 按统一工作台索引读取当前用户的开放任务。
+    ///
+    /// MongoDB 内固定施加 `status=OPEN` 与 `owner_user_id`；排序为
+    /// `due_at asc, id asc`，覆盖审批与非审批同一口径。不按
+    /// `assignment_mode` 或执行状态推断责任。
+    ///
+    /// # 参数
+    /// * `filter` - 已计算的责任人、可选单据类型、游标与页大小
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回有界任务投影，单次不超过 100 条。
+    ///
+    /// # 错误
+    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
+    pub async fn list_mine_workbench(
+        &self,
+        filter: &MineWorkbenchFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItemRow>> {
+        let options = FindOptions::builder()
+            .sort(mine_workbench_sort_doc())
+            .limit(clamp_mine_workbench_limit(filter.limit))
+            .projection(work_item_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<WorkItemRow>();
+        mongo_ops::find_many(&collection, mine_workbench_filter_doc(filter), options, executor).await
     }
 
     /// 按审批执行读取全生命周期关联任务。
@@ -632,6 +740,7 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let field = match sort_by {
         Some("updated_at") => "updated_at",
         Some("due_at") => "due_at",
+        Some("assigned_at") => "assigned_at",
         Some("current_assignment_at") => "current_assignment_at",
         Some("last_activity_at") => "last_activity_at",
         Some("completed_at") => "completed_at",
@@ -639,6 +748,124 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
         _ => "created_at",
     };
     doc! { field: direction }
+}
+
+/// 构造待我审批 MongoDB 过滤条件。
+///
+/// # 参数
+/// * `filter` - 责任人、可选单据类型与稳定游标
+///
+/// # 返回
+/// 返回含软删除约束、开放审批任务条件与可选游标的查询文档。
+fn mine_approval_filter_doc(filter: &MineApprovalTaskFilter) -> Document {
+    let mut document = doc! {
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "status": WorkItemStatus::Open.as_str(),
+        "owner_user_id": &filter.owner_user_id,
+        "work_item_type": WorkItemType::DocumentApproval.as_str(),
+        "approval_node_execution_id": { "$type": "string" },
+    };
+    if let Some(business_object_type) = &filter.business_object_type {
+        document.insert("business_object_type", business_object_type);
+    }
+    if let Some(cursor) = &filter.cursor {
+        document.insert("$or", mine_approval_cursor_or(cursor));
+    }
+    document
+}
+
+/// 返回 `assigned_at desc, id desc` 的稳定游标后继条件。
+///
+/// # 参数
+/// * `cursor` - 上一页最后一条的排序键
+///
+/// # 返回
+/// 返回与待我审批复合索引方向一致的 `$or` 分支。
+fn mine_approval_cursor_or(cursor: &MineApprovalTaskCursor) -> Vec<Document> {
+    vec![
+        doc! { "assigned_at": { "$lt": cursor.assigned_at } },
+        doc! { "assigned_at": cursor.assigned_at, "id": { "$lt": cursor.id.as_str() } },
+    ]
+}
+
+/// 返回待我审批固定排序文档。
+///
+/// # 返回
+/// 返回 `{ assigned_at: -1, id: -1 }`。
+fn mine_approval_sort_doc() -> Document {
+    doc! { "assigned_at": -1, "id": -1 }
+}
+
+/// 将待我审批请求页大小夹紧到 `[1, MAX_MINE_APPROVAL_PAGE]`。
+///
+/// # 参数
+/// * `limit` - 调用方请求条数
+///
+/// # 返回
+/// 返回可交给 MongoDB `limit` 的有界整数。
+fn clamp_mine_approval_limit(limit: u32) -> i64 {
+    if limit == 0 {
+        return 1;
+    }
+    i64::from(limit).min(MAX_MINE_APPROVAL_PAGE)
+}
+
+/// 构造统一工作台 MongoDB 过滤条件。
+///
+/// # 参数
+/// * `filter` - 责任人、可选单据类型与稳定游标
+///
+/// # 返回
+/// 返回含软删除约束、开放任务条件与可选游标的查询文档。
+fn mine_workbench_filter_doc(filter: &MineWorkbenchFilter) -> Document {
+    let mut document = doc! {
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "status": WorkItemStatus::Open.as_str(),
+        "owner_user_id": &filter.owner_user_id,
+    };
+    if let Some(business_object_type) = &filter.business_object_type {
+        document.insert("business_object_type", business_object_type);
+    }
+    if let Some(cursor) = &filter.cursor {
+        document.insert("$or", mine_workbench_cursor_or(cursor));
+    }
+    document
+}
+
+/// 返回 `due_at asc, id asc` 的稳定游标后继条件。
+///
+/// # 参数
+/// * `cursor` - 上一页最后一条的排序键
+///
+/// # 返回
+/// 返回与 `idx_work_items_mine` 方向一致的 `$or` 分支。
+fn mine_workbench_cursor_or(cursor: &MineWorkbenchCursor) -> Vec<Document> {
+    vec![
+        doc! { "due_at": { "$gt": cursor.due_at } },
+        doc! { "due_at": cursor.due_at, "id": { "$gt": cursor.id.as_str() } },
+    ]
+}
+
+/// 返回统一工作台固定排序文档。
+///
+/// # 返回
+/// 返回 `{ due_at: 1, id: 1 }`。
+fn mine_workbench_sort_doc() -> Document {
+    doc! { "due_at": 1, "id": 1 }
+}
+
+/// 将统一工作台请求页大小夹紧到 `[1, MAX_MINE_WORKBENCH_PAGE]`。
+///
+/// # 参数
+/// * `limit` - 调用方请求条数
+///
+/// # 返回
+/// 返回可交给 MongoDB `limit` 的有界整数。
+fn clamp_mine_workbench_limit(limit: u32) -> i64 {
+    if limit == 0 {
+        return 1;
+    }
+    i64::from(limit).min(MAX_MINE_WORKBENCH_PAGE)
 }
 
 fn work_item_projection() -> Document {
@@ -682,9 +909,12 @@ mod tests {
     use mongodb::bson::{doc, Bson};
 
     use super::{
-        approval_task_still_open, classify_start_processing_miss, sort_doc, start_processing_filter,
-        start_processing_pipeline, work_item_projection, QueryFilter, StartProcessingOutcome, WorkItemFilter,
-        WorkItemRow,
+        approval_task_still_open, clamp_mine_approval_limit, clamp_mine_workbench_limit,
+        classify_start_processing_miss, mine_approval_filter_doc, mine_approval_sort_doc,
+        mine_workbench_filter_doc, mine_workbench_sort_doc, sort_doc, start_processing_filter,
+        start_processing_pipeline, work_item_projection, MineApprovalTaskCursor, MineApprovalTaskFilter,
+        MineWorkbenchCursor, MineWorkbenchFilter, QueryFilter, StartProcessingOutcome, WorkItemFilter,
+        WorkItemRow, MAX_MINE_APPROVAL_PAGE, MAX_MINE_WORKBENCH_PAGE,
     };
     use crate::repository::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
     use bpm::ApprovalNodeExecutionId;
@@ -964,10 +1194,117 @@ mod tests {
             sort_doc(Some("last_activity_at"), true),
             doc! { "last_activity_at": 1 }
         );
+        assert_eq!(sort_doc(Some("assigned_at"), false), doc! { "assigned_at": -1 });
         assert_eq!(
             sort_doc(Some("business_object_id"), false),
             doc! { "created_at": -1 }
         );
+    }
+
+    #[test]
+    fn mine_approval_query_matches_pending_approval_index() {
+        let first_page = MineApprovalTaskFilter {
+            owner_user_id: "alice".to_string(),
+            business_object_type: None,
+            cursor: None,
+            limit: 20,
+        };
+        let document = mine_approval_filter_doc(&first_page);
+        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
+        assert_eq!(document.get_str("status").unwrap(), "OPEN");
+        assert_eq!(document.get_str("owner_user_id").unwrap(), "alice");
+        assert_eq!(document.get_str("work_item_type").unwrap(), "DOCUMENT_APPROVAL");
+        assert_eq!(
+            document.get_document("approval_node_execution_id").unwrap(),
+            &doc! { "$type": "string" }
+        );
+        assert!(!document.contains_key("business_object_type"));
+        assert!(!document.contains_key("$or"));
+        assert_eq!(mine_approval_sort_doc(), doc! { "assigned_at": -1, "id": -1 });
+
+        let paged = MineApprovalTaskFilter {
+            owner_user_id: "alice".to_string(),
+            business_object_type: Some("stock_adjustment".to_string()),
+            cursor: Some(MineApprovalTaskCursor {
+                assigned_at: 42,
+                id: "wi-9".to_string(),
+            }),
+            limit: 0,
+        };
+        let paged_doc = mine_approval_filter_doc(&paged);
+        assert_eq!(
+            paged_doc.get_str("business_object_type").unwrap(),
+            "stock_adjustment"
+        );
+        assert_eq!(
+            paged_doc.get_array("$or").unwrap(),
+            &vec![
+                Bson::Document(doc! { "assigned_at": { "$lt": 42_i64 } }),
+                Bson::Document(doc! { "assigned_at": 42_i64, "id": { "$lt": "wi-9" } }),
+            ]
+        );
+        assert_eq!(clamp_mine_approval_limit(0), 1);
+        assert_eq!(clamp_mine_approval_limit(20), 20);
+        assert_eq!(clamp_mine_approval_limit(100), MAX_MINE_APPROVAL_PAGE);
+        assert_eq!(clamp_mine_approval_limit(101), MAX_MINE_APPROVAL_PAGE);
+        assert_eq!(clamp_mine_approval_limit(u32::MAX), MAX_MINE_APPROVAL_PAGE);
+    }
+
+    #[test]
+    fn mine_workbench_query_matches_mine_index() {
+        let first_page = MineWorkbenchFilter {
+            owner_user_id: "alice".to_string(),
+            business_object_type: None,
+            cursor: None,
+            limit: 20,
+        };
+        let document = mine_workbench_filter_doc(&first_page);
+        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
+        assert_eq!(document.get_str("status").unwrap(), "OPEN");
+        assert_eq!(document.get_str("owner_user_id").unwrap(), "alice");
+        assert!(!document.contains_key("work_item_type"));
+        assert!(!document.contains_key("assignment_mode"));
+        assert!(!document.contains_key("business_object_type"));
+        assert!(!document.contains_key("$or"));
+        assert_eq!(mine_workbench_sort_doc(), doc! { "due_at": 1, "id": 1 });
+
+        let typed = MineWorkbenchFilter {
+            owner_user_id: "alice".to_string(),
+            business_object_type: Some("stock_adjustment".to_string()),
+            cursor: None,
+            limit: 20,
+        };
+        let typed_doc = mine_workbench_filter_doc(&typed);
+        assert_eq!(typed_doc.get_str("status").unwrap(), "OPEN");
+        assert_eq!(typed_doc.get_str("owner_user_id").unwrap(), "alice");
+        assert_eq!(
+            typed_doc.get_str("business_object_type").unwrap(),
+            "stock_adjustment"
+        );
+        assert!(!typed_doc.contains_key("$or"));
+
+        let paged = MineWorkbenchFilter {
+            owner_user_id: "alice".to_string(),
+            business_object_type: None,
+            cursor: Some(MineWorkbenchCursor {
+                due_at: 88,
+                id: "wi-3".to_string(),
+            }),
+            limit: 0,
+        };
+        let paged_doc = mine_workbench_filter_doc(&paged);
+        assert_eq!(
+            paged_doc.get_array("$or").unwrap(),
+            &vec![
+                Bson::Document(doc! { "due_at": { "$gt": 88_i64 } }),
+                Bson::Document(doc! { "due_at": 88_i64, "id": { "$gt": "wi-3" } }),
+            ]
+        );
+        assert_eq!(clamp_mine_workbench_limit(0), 1);
+        assert_eq!(clamp_mine_workbench_limit(20), 20);
+        assert_eq!(clamp_mine_workbench_limit(100), MAX_MINE_WORKBENCH_PAGE);
+        assert_eq!(clamp_mine_workbench_limit(101), MAX_MINE_WORKBENCH_PAGE);
+        assert_eq!(clamp_mine_workbench_limit(u32::MAX), MAX_MINE_WORKBENCH_PAGE);
     }
 
     #[test]
