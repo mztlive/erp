@@ -1,16 +1,16 @@
 let meta = #{
     name: "implement-approval-workflow-stage",
-    description: "Implement exactly one approval-workflow stage from docs/dev-plan/_meta.json, including a stages[] object or a perDocumentTypeStages[].p3/.p4 object. All subagents are general-purpose. Scope and dependency proofs are general-purpose execute work; every project-file addition, modification, deletion, test/document change, review repair, or quality-gate repair is exclusively general-purpose with capability all. Baseline and quality-gate execution are general-purpose execute work and are never reviews. All contract, architecture, security, correctness, scope, test, and final acceptance reviews are general-purpose execute work and must not edit files. MongoDB integration tests and browser E2E tests are excluded. Ordinary success uses 8 agents; the maximum path is 21 agents after two review repairs, one quality-gate repair, and the mandatory post-quality review panel.",
-    when_to_use: "Use only on a clean, already-prepared stage branch with args.stage_id and optional args.base_ref (default main); agents are instructed not to create branches, commits, pushes, PRs, or nested workflows, and blocked runs may leave uncommitted modifications that require final status/diff inspection.",
+    description: "根据 docs/dev-plan/_meta.json 精确实现一个审批工作流阶段，包括 stages[] 对象或 perDocumentTypeStages[].p3/.p4 对象。所有子代理均为 general-purpose。范围与依赖证明为 general-purpose execute 工作；凡项目文件增删改、测试/文档变更、评审修复或质量门禁修复，一律且仅由 capability all 的 general-purpose 执行。基线与质量门禁执行为 general-purpose execute 工作，绝不是评审。合同、架构、安全、正确性、范围、测试与最终验收评审均为 general-purpose execute 工作，且不得改文件。排除 MongoDB 集成测试与浏览器 E2E 测试。普通成功路径使用 8 个代理；最大路径在两次评审修复、一次质量门禁修复及强制的质量后评审面板后为 21 个代理。所有代理必须使用简体中文思考与作答。",
+    when_to_use: "仅在已准备好的干净阶段分支上使用，传入 args.stage_id 与可选 args.base_ref（默认 main）；代理被要求不得创建分支、提交、推送、PR 或嵌套工作流；被阻断的运行可能留下未提交修改，需要最终检查 status/diff。",
     phases: [
-        #{ title: "Scope", detail: "Resolve the exact metadata stage and prove branch, dependency, ownership, and precondition safety" },
-        #{ title: "Baseline", detail: "Run the applicable pre-stage checks without edits" },
-        #{ title: "Implement", detail: "Use only general-purpose/all for implementation or repair" },
-        #{ title: "Review", detail: "Run independent general-purpose read-only review panels" },
-        #{ title: "Repair", detail: "Route findings and gate failures only to general-purpose/all" },
-        #{ title: "Verify", detail: "Run metadata acceptance and all applicable merge gates" },
-        #{ title: "Final Review", detail: "Perform independent general-purpose final acceptance" },
-        #{ title: "Report", detail: "Write a scratch Markdown evidence report" },
+        #{ title: "Scope", detail: "解析精确元数据阶段，并证明分支、依赖、所有权与前置条件安全" },
+        #{ title: "Baseline", detail: "在不改文件的前提下运行适用的阶段前检查" },
+        #{ title: "Implement", detail: "仅由 general-purpose/all 负责实现或修复" },
+        #{ title: "Review", detail: "运行独立的 general-purpose 只读评审面板" },
+        #{ title: "Repair", detail: "将 findings 与门禁失败仅交给 general-purpose/all" },
+        #{ title: "Verify", detail: "运行元数据验收与全部适用的合并门禁" },
+        #{ title: "Final Review", detail: "执行独立的 general-purpose 最终验收" },
+        #{ title: "Report", detail: "写入 scratch Markdown 证据报告" },
     ],
 };
 
@@ -517,13 +517,13 @@ fn finding_valid(finding) {
 }
 
 fn assess_one_review(output, expected_kind) {
-    let assessed = #{ usable: false, passed: false, findings: [], reason: "review output was missing" };
+    let assessed = #{ usable: false, passed: false, findings: [], reason: "评审输出缺失" };
     if output != () {
         if type_of(output) == "map" {
             let shape_ok = is_nonempty_text(output.reviewer_kind) && is_bool_value(output.approved) && is_bool_value(output.scope_clean) && is_bool_value(output.metadata_match) && is_bool_value(output.contract_ok) && is_bool_value(output.tests_sufficient) && is_nonempty_text_array(output.evidence) && is_text_array(output.findings) && is_nonempty_text(output.summary);
             if shape_ok {
                 if output.reviewer_kind != expected_kind {
-                    assessed.reason = "reviewer_kind did not match the assigned review";
+                    assessed.reason = "reviewer_kind 与指派的评审类型不匹配";
                 } else {
                     let findings_ok = true;
                     for finding in output.findings {
@@ -533,22 +533,22 @@ fn assess_one_review(output, expected_kind) {
                     }
                     let core_ok = output.scope_clean == true && output.metadata_match == true && output.contract_ok == true && output.tests_sufficient == true;
                     if !findings_ok {
-                        assessed.reason = "review findings were malformed";
+                        assessed.reason = "评审 findings 格式无效";
                     } else if output.findings.len() == 0 && (output.approved != true || !core_ok) {
-                        assessed.reason = "review was not approved without a concrete finding";
+                        assessed.reason = "评审未批准且未给出具体 finding";
                     } else {
                         assessed.usable = true;
                         assessed.findings = output.findings;
                         assessed.passed = output.approved == true && core_ok && output.findings.len() == 0;
                         if assessed.passed {
-                            assessed.reason = "review passed";
+                            assessed.reason = "评审通过";
                         } else {
-                            assessed.reason = "review findings or failed proof must be repaired";
+                            assessed.reason = "评审 findings 或失败证明必须修复";
                         }
                     }
                 }
             } else {
-                assessed.reason = "review output lacked required non-empty evidence fields";
+                assessed.reason = "评审输出缺少必需的非空证据字段";
             }
         }
     }
@@ -558,11 +558,11 @@ fn assess_one_review(output, expected_kind) {
 fn assess_review_panel(results, expected_count) {
     let assessed = #{ usable: false, passed: false, findings: [], summaries: [], reasons: [] };
     if results == () {
-        assessed.reasons.push("parallel review returned unit");
+        assessed.reasons.push("并行评审返回 unit");
     } else if !is_text_array(results) {
-        assessed.reasons.push("parallel review returned a non-array");
+        assessed.reasons.push("并行评审返回了非数组");
     } else if results.len() != expected_count {
-        assessed.reasons.push("review panel returned an unexpected number of results");
+        assessed.reasons.push("评审面板返回了非预期数量的结果");
     } else {
         let usable = true;
         let passed = true;
@@ -577,7 +577,7 @@ fn assess_review_panel(results, expected_count) {
             }
             let output = ();
             let result_usable = false;
-            let result_assessment = #{ usable: false, passed: false, findings: [], reason: "review agent failed" };
+            let result_assessment = #{ usable: false, passed: false, findings: [], reason: "评审代理失败" };
             if result != () {
                 if type_of(result) == "map" {
                     if result.success == true {
@@ -599,7 +599,7 @@ fn assess_review_panel(results, expected_count) {
                 }
             } else {
                 usable = false;
-                assessed.reasons.push("reviewer " + index.to_string() + ": " + result_assessment.reason);
+                assessed.reasons.push("评审者 " + index.to_string() + "：" + result_assessment.reason);
             }
             if !result_usable {
                 usable = false;
@@ -613,7 +613,7 @@ fn assess_review_panel(results, expected_count) {
 }
 
 fn assess_verification(output, expected_commands, acceptance_checks) {
-    let assessed = #{ usable: false, passed: false, environment_blocked: false, reason: "verification output was missing" };
+    let assessed = #{ usable: false, passed: false, environment_blocked: false, reason: "验证输出缺失" };
     if output != () {
         if type_of(output) == "map" {
             let shape_ok = is_bool_value(output.all_pass) && is_bool_value(output.metadata_acceptance_pass) && is_bool_value(output.scope_clean) && is_text_array(output.commands) && is_text_array(output.acceptance_results) && is_nonempty_text_array(output.evidence) && is_bool_value(output.environment_blocked) && is_nonempty_text(output.summary);
@@ -625,14 +625,14 @@ fn assess_verification(output, expected_commands, acceptance_checks) {
                 assessed.environment_blocked = environment_blocked;
                 assessed.passed = output.all_pass == true && output.metadata_acceptance_pass == true && output.scope_clean == true && command_ok && acceptance_ok && !environment_blocked;
                 if assessed.passed {
-                    assessed.reason = "all exact quality-gate and acceptance evidence passed";
+                    assessed.reason = "全部精确质量门禁与验收证据均已通过";
                 } else if environment_blocked {
-                    assessed.reason = "required command environment was blocked";
+                    assessed.reason = "必需命令的运行环境被阻断";
                 } else {
-                    assessed.reason = "quality-gate or exact acceptance evidence failed";
+                    assessed.reason = "质量门禁或精确验收证据失败";
                 }
             } else {
-                assessed.reason = "verification output lacked required non-empty evidence fields";
+                assessed.reason = "验证输出缺少必需的非空证据字段";
             }
         }
     }
@@ -646,35 +646,36 @@ fn build_review_jobs(plan, base_ref, implementation_evidence, review_schema, lab
     let diff_command = "git diff --name-status " + base_ref_json + " --";
     let cached_diff_command = "git diff --cached --name-status " + base_ref_json + " --";
     let base_commit_command = "git rev-parse --verify --end-of-options " + base_ref_json + "^{commit}";
-    let common = "Role: general-purpose read-only reviewer. Use agent_type general-purpose with capability_mode execute. ";
-    common += "This is a read-only review and you must not edit, format, generate, regenerate, write, delete, commit, push, branch, repair, or alter any project file. Do not write tests or documentation. ";
-    common += "Use read_file, grep/rg, and terminal tools; inspect the actual current code and call sites before answering. Do not run MongoDB integration tests or browser E2E tests. ";
-    common += "Before every conclusion run exactly: ";
+    let common = "角色：只读评审代理。agent_type 为 general-purpose，capability_mode 为 execute。";
+    common += "必须全程使用简体中文思考与作答：summary、evidence、findings 中的 issue/evidence/remediation，以及所有说明文字必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
+    common += "这是只读评审，禁止编辑、格式化、生成、再生成、写入、删除、提交、推送、建分支、修复或改动任何项目文件。不得编写测试或文档。";
+    common += "使用 read_file、grep/rg 与终端工具；回答前必须检查当前真实代码与调用点。禁止运行 MongoDB 集成测试或浏览器 E2E 测试。";
+    common += "每次下结论前必须精确执行：";
     common += status_command;
-    common += ", git branch --show-current, ";
+    common += "、git branch --show-current、";
     common += diff_command;
-    common += ", ";
+    common += "、";
     common += cached_diff_command;
-    common += ", and ";
+    common += "，以及 ";
     common += "git diff --cached --name-status --";
-    common += ". Prove the base commit with ";
+    common += "。用 ";
     common += base_commit_command;
-    common += ". ";
-    common += "Read every path reported as ??, including all untracked files, and classify every added, modified, deleted, or renamed path against owns, ownsWithin symbol scope, creates, deletes, forbids, frozen-file restrictions, and generated-file provenance. Never rely only on files_changed or an implementation summary. ";
-    common += "Re-read docs/dev-plan/_meta.json, docs/dev-plan/conventions.md, docs/dev-plan/approval-workflow.md, the exact planDoc, and relevant repository instructions. ";
-    common += "The dependency proof must use exact metadata dependency branch tips and treat stage dependsOnGroups plus project dependencyGroups as one complete dependency-group contract; prove each dependsOn stage and every referenced group member is an ancestor of both the resolved base_ref commit and HEAD. Missing refs, partial cherry-picks, similar contents, or mere branch existence are not proof. ";
-    common += "Requested stage plan: ";
+    common += " 证明基线提交。";
+    common += "读取所有显示为 ?? 的路径（含全部未跟踪文件），并逐项对照 owns、ownsWithin 符号范围、creates、deletes、forbids、冻结文件限制与生成文件来源，对每个新增/修改/删除/重命名路径分类。禁止只依赖 files_changed 或实现摘要。";
+    common += "重新阅读 docs/dev-plan/_meta.json、docs/dev-plan/conventions.md、docs/dev-plan/approval-workflow.md、精确的 planDoc 以及相关仓库指令。";
+    common += "依赖证明必须使用元数据中精确的依赖分支 tip，并将阶段 dependsOnGroups 与项目 dependencyGroups 视为同一份完整依赖组契约；证明每个 dependsOn 阶段及每个被引用组成员都是已解析 base_ref 提交与 HEAD 的祖先。缺失引用、部分 cherry-pick、内容相似或仅分支存在，都不能作为证明。";
+    common += "请求的阶段计划：";
     common += json_encode(plan);
-    common += ". Implementation and repair evidence: ";
+    common += "。实现与修复证据：";
     common += json_encode(implementation_evidence);
-    common += ". Base ref: ";
+    common += "。基线引用：";
     common += base_ref_json;
-    common += ". ";
+    common += "。";
     common += panel_note;
-    common += " Return concrete file/line or command evidence. MongoDB integration-test execution and browser E2E execution are outside this workflow and must not be required for approval. ";
+    common += " 返回具体的文件/行号或命令证据。MongoDB 集成测试执行与浏览器 E2E 执行不在本工作流范围内，不得将其作为批准条件。";
 
     let contract_prompt = common;
-    contract_prompt += "Reviewer kind is contract. Review contract and business semantics, architecture, security, authorization, DataScope timing, transaction/CAS/idempotency behavior, BPM/ERP dependency direction, failure-closed behavior, strong-typed actions, no fallback/double-write/Noop, no second definition source, and the exact stage plan. Check actual code, tests, and call sites. Set approved=false with concrete findings for any violation; an approved=false result without findings is unusable. Do not edit.";
+    contract_prompt += "评审类型为 contract。审查合同与业务语义、架构、安全、授权、DataScope 时序、事务/CAS/幂等行为、BPM/ERP 依赖方向、失败即关闭、强类型动作、无 fallback/双写/Noop、无第二定义源，以及精确阶段计划。检查真实代码、测试与调用点。任何违规须 approved=false 并给出具体 findings；approved=false 且无 findings 视为不可用。禁止改文件。";
     jobs.push(#{
         label: label_prefix + "-contract-architecture-security-correctness",
         agent_type: "general-purpose",
@@ -684,7 +685,7 @@ fn build_review_jobs(plan, base_ref, implementation_evidence, review_schema, lab
     });
 
     let ownership_prompt = common;
-    ownership_prompt += "Reviewer kind is ownership. Return reviewer_kind exactly \"ownership\". Review the complete status and both base/cached name-status lists item by item against raw _meta.json and conventions.md: exact stages[] or perDocumentTypeStages[].p3/.p4 identity, branch, dependsOn, dependencyGroups, owns, ownsWithin symbol scope, creates, deletes, forbids, frozen-file restrictions, and generated-file provenance. Read every ?? file. Any path outside exact ownership, unregistered deletion/creation, forbidden/frozen/generated violation, or dependency boundary mismatch is a blocking finding. Do not edit.";
+    ownership_prompt += "评审类型为 ownership。reviewer_kind 必须精确返回 \"ownership\"。对照原始 _meta.json 与 conventions.md，逐项审查完整 status 以及 base/cached name-status 列表：精确的 stages[] 或 perDocumentTypeStages[].p3/.p4 身份、branch、dependsOn、dependencyGroups、owns、ownsWithin 符号范围、creates、deletes、forbids、冻结文件限制与生成文件来源。读取每一个 ?? 文件。任何超出精确所有权的路径、未登记的删除/创建、禁止/冻结/生成文件违规，或依赖边界不匹配，均为阻断性 finding。禁止改文件。";
     jobs.push(#{
         label: label_prefix + "-ownership-scope",
         agent_type: "general-purpose",
@@ -694,7 +695,7 @@ fn build_review_jobs(plan, base_ref, implementation_evidence, review_schema, lab
     });
 
     let test_prompt = common;
-    test_prompt += "Reviewer kind is tests. Review actual changed code and non-excluded tests for happy paths, failures, boundaries, regressions, call-site omissions, generated-file drift, targeted command evidence, applicable non-excluded merge gates, and exact non-excluded acceptance results. Do not run or require MongoDB integration tests or browser E2E tests. Set tests_sufficient=false with concrete findings for gaps in the remaining unit, service, API-contract, static-analysis, build, or script coverage. Do not edit or repair.";
+    test_prompt += "评审类型为 tests。审查实际变更代码与未排除测试，覆盖成功路径、失败、边界、回归、调用点遗漏、生成文件漂移、定向命令证据、适用的未排除合并门禁，以及精确的未排除验收结果。禁止运行或要求 MongoDB 集成测试或浏览器 E2E 测试。对剩余的单元、服务、API 契约、静态分析、构建或脚本覆盖缺口，须 tests_sufficient=false 并给出具体 findings。禁止编辑或修复。";
     jobs.push(#{
         label: label_prefix + "-tests-regression",
         agent_type: "general-purpose",
@@ -754,17 +755,17 @@ if stage_id == () {
     }
 }
 if invalid_stage || invalid_base_ref {
-    let invalid_report = "# implement-approval-workflow-stage\n\nStatus: blocked before agent calls.\n\n";
-    invalid_report += "## Requested stage\n\n";
+    let invalid_report = "# implement-approval-workflow-stage\n\n状态：在调用代理前已阻断。\n\n";
+    invalid_report += "## 请求的阶段\n\n";
     if stage_id == () {
-        invalid_report += "- stage_id: missing\n";
+        invalid_report += "- stage_id：缺失\n";
     } else {
-        invalid_report += "- stage_id: " + json_encode(stage_id) + "\n";
+        invalid_report += "- stage_id：" + json_encode(stage_id) + "\n";
     }
-    invalid_report += "- base_ref: " + json_encode(base_ref) + "\n";
-    invalid_report += "- reason: stage_id is required and must be an exact safe metadata identifier; base_ref must be an exact safe Git reference with no option prefix, revision expression, whitespace, shell metacharacter, or Git revision danger character.\n";
+    invalid_report += "- base_ref：" + json_encode(base_ref) + "\n";
+    invalid_report += "- 原因：stage_id 为必填项，且必须是精确、安全的元数据标识符；base_ref 必须是精确、安全的 Git 引用，不得包含选项前缀、修订表达式、空白、shell 元字符或 Git 修订危险字符。\n";
     let invalid_path = write_scratch_file("implement-approval-workflow-stage-report.md", invalid_report);
-    complete(#{ status: "blocked", path: invalid_path, stage_id: if stage_id == () { "" } else { stage_id }, summary: "Missing or unsafe stage_id/base_ref; no agent was called and no project file was changed." });
+    complete(#{ status: "blocked", path: invalid_path, stage_id: if stage_id == () { "" } else { stage_id }, summary: "stage_id/base_ref 缺失或不安全；未调用任何代理，也未改动任何项目文件。" });
 }
 
 let stage_is_p6_pilot = stage_id == "P6-PILOT";
@@ -776,25 +777,26 @@ let base_diff_command = "git diff --name-status " + base_ref_json + " --";
 let cached_base_diff_command = "git diff --cached --name-status " + base_ref_json + " --";
 
 phase("Scope");
-let scope_prompt = "Role: general-purpose read-only scope and implementation-plan agent. Use agent_type general-purpose with capability_mode execute. ";
-scope_prompt += "This is a blocking read-only scope proof. You must not edit, format, generate, regenerate, write, delete, commit, push, branch, repair, or alter any project file, test, document, generated file, or workflow. ";
-scope_prompt += "Use read_file, grep/rg, and terminal evidence. First read docs/dev-plan/README.md, docs/dev-plan/conventions.md, docs/dev-plan/domains.md, docs/dev-plan/_meta.json, docs/dev-plan/approval-workflow.md, docs/approval-workflow-implementation-plan/README.md, docs/approval-workflow-contract.md, docs/erp-phase-1.md, docs/erp-phase-2.md, and docs/approval-workflow-implementation-plan/11-integration-and-acceptance.md. ";
-scope_prompt += "Then read the exact planDoc selected from metadata, including the relevant plan file for stages[] or the default plan file for a perDocumentTypeStages[].p3/.p4 object. Resolve the requested stage_id exactly from _meta.json: one exact object in projects.approval-workflow.stages[] or one exact p3/p4 object nested under projects.approval-workflow.perDocumentTypeStages[]. Never invent, merge, rename, or infer a stage model. ";
-scope_prompt += "Return the exact id, source, normalized stage_kind, documentType, approvalRequirement, branch, dependsOn, dependencyGroups, owns, ownsWithin, creates, deletes, forbids, acceptance, implementation steps, and complete applicable backend, frontend, and docs merge-gate lists. stage_kind is a normalized script field, not a metadata source field: use exactly top_level for stages[], p3 for perDocumentTypeStages[].p3, and p4 for perDocumentTypeStages[].p4. stages[] may return documentType and approvalRequirement as empty strings; only perDocumentTypeStages[].p3/.p4 must return both as non-empty strings. ";
-scope_prompt += "Before any conclusion run: git status --porcelain=v1 --untracked-files=all; ";
+let scope_prompt = "角色：只读范围与实现计划代理。agent_type 为 general-purpose，capability_mode 为 execute。";
+scope_prompt += "必须全程使用简体中文思考与作答：evidence、blockers、implementation_steps、acceptance 中的说明文字，以及所有结论必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
+scope_prompt += "这是阻断性只读范围证明。禁止编辑、格式化、生成、再生成、写入、删除、提交、推送、建分支、修复或改动任何项目文件、测试、文档、生成文件或工作流。";
+scope_prompt += "使用 read_file、grep/rg 与终端证据。先阅读 docs/dev-plan/README.md、docs/dev-plan/conventions.md、docs/dev-plan/domains.md、docs/dev-plan/_meta.json、docs/dev-plan/approval-workflow.md、docs/approval-workflow-implementation-plan/README.md、docs/approval-workflow-contract.md、docs/erp-phase-1.md、docs/erp-phase-2.md，以及 docs/approval-workflow-implementation-plan/11-integration-and-acceptance.md。";
+scope_prompt += "然后阅读从元数据选出的精确 planDoc，包括 stages[] 对应的计划文件，或 perDocumentTypeStages[].p3/.p4 对象的默认计划文件。从 _meta.json 精确解析请求的 stage_id：projects.approval-workflow.stages[] 中的一个精确对象，或嵌套在 projects.approval-workflow.perDocumentTypeStages[] 下的一个精确 p3/p4 对象。禁止发明、合并、重命名或推断阶段模型。";
+scope_prompt += "返回精确的 id、source、规范化 stage_kind、documentType、approvalRequirement、branch、dependsOn、dependencyGroups、owns、ownsWithin、creates、deletes、forbids、acceptance、实现步骤，以及完整适用的 backend、frontend、docs 合并门禁列表。stage_kind 是脚本规范化字段，不是元数据源字段：stages[] 必须为 top_level，perDocumentTypeStages[].p3 必须为 p3，perDocumentTypeStages[].p4 必须为 p4。stages[] 可将 documentType 与 approvalRequirement 返回为空字符串；仅 perDocumentTypeStages[].p3/.p4 必须将二者都返回为非空字符串。";
+scope_prompt += "下任何结论前先运行：git status --porcelain=v1 --untracked-files=all；";
 scope_prompt += base_diff_command;
-scope_prompt += "; ";
+scope_prompt += "；";
 scope_prompt += cached_base_diff_command;
-scope_prompt += "; git diff --cached --name-status --; and ";
+scope_prompt += "；git diff --cached --name-status --；以及 ";
 scope_prompt += base_commit_command;
-scope_prompt += ". Use the safe quoted base reference exactly as shown and use -- for every path list. Read every path shown as ??, even if it is not in files_changed, and classify every added, modified, deleted, or renamed path item by item against owns, ownsWithin symbol scope, creates, deletes, forbids, frozen-file restrictions, and generated-file provenance. ";
-scope_prompt += "The startup worktree must be empty and the current branch must equal the exact metadata branch. Return at least one item in owns or ownsWithin; an empty creates, deletes, or forbids list is valid when metadata has no such entries. ";
-scope_prompt += "Treat stage dependsOnGroups and project dependencyGroups as the same complete dependency-group contract. For every dependsOn stage and every member of every referenced dependencyGroups group, resolve the exact dependency branch from raw metadata with git rev-parse --verify --end-of-options <safe-dependency-branch>^{commit}; prove the dependency tip is an ancestor of both the resolved base_ref commit and HEAD with git merge-base --is-ancestor. A missing ref, partial cherry-pick, similar contents, or mere branch existence is failure. Do not accept any weaker dependency claim. ";
-scope_prompt += "Verify DOC gates, P0 prerequisites, pilot gates, frozen files, generated-file rules, and every plan precondition. Set dependencies_satisfied=false for any unproven dependency. Keep acceptance and merge-gate lists faithful to their sources, but MongoDB integration tests and browser E2E tests are excluded from execution by this workflow: do not include them in baseline_commands or implementation validation, and record their exclusion in evidence. ";
-scope_prompt += "For P6-PILOT and P6-FINAL, include these non-excluded backend commands explicitly: cargo fmt --all -- --check, cargo check --workspace, cargo clippy --workspace --all-targets --all-features -- -D warnings, cargo test --workspace, cargo test -p bpm --lib, and ./scripts/check-bpm-boundaries.sh. Also include the complete non-excluded frontend gates and npm run openapi:lint. Return non-empty evidence for every conclusion. When there is no blocker, return blockers: [] exactly; do not use a placeholder blocker string. ";
-scope_prompt += "Return scope_safe=true only when all metadata, branch, dependency, clean-start, precondition, ownership, and gate proofs are concrete. Requested stage_id: ";
+scope_prompt += "。安全加引号的基线引用必须按所示原样使用，且每个路径列表都要使用 --。读取所有显示为 ?? 的路径（即使不在 files_changed 中），并逐项对照 owns、ownsWithin 符号范围、creates、deletes、forbids、冻结文件限制与生成文件来源，对每个新增/修改/删除/重命名路径分类。";
+scope_prompt += "启动工作区必须为空，且当前分支必须等于精确的元数据分支。owns 或 ownsWithin 至少返回一项；当元数据没有对应条目时，creates、deletes 或 forbids 为空列表是合法的。";
+scope_prompt += "将阶段 dependsOnGroups 与项目 dependencyGroups 视为同一份完整依赖组契约。对每个 dependsOn 阶段以及每个被引用 dependencyGroups 组的每个成员，用 git rev-parse --verify --end-of-options <safe-dependency-branch>^{commit} 从原始元数据解析精确依赖分支；再用 git merge-base --is-ancestor 证明该依赖 tip 是已解析 base_ref 提交与 HEAD 的祖先。缺失引用、部分 cherry-pick、内容相似或仅分支存在均视为失败。不得接受任何更弱的依赖声明。";
+scope_prompt += "核验 DOC 门禁、P0 前置条件、试点门禁、冻结文件、生成文件规则以及每一条计划前置条件。任何未证明的依赖须将 dependencies_satisfied=false。acceptance 与合并门禁列表必须忠实于来源，但本工作流排除 MongoDB 集成测试与浏览器 E2E 测试的执行：不要把它们放进 baseline_commands 或实现校验，并在 evidence 中记录排除原因。";
+scope_prompt += "对于 P6-PILOT 与 P6-FINAL，须显式包含这些未排除的 backend 命令：cargo fmt --all -- --check、cargo check --workspace、cargo clippy --workspace --all-targets --all-features -- -D warnings、cargo test --workspace、cargo test -p bpm --lib，以及 ./scripts/check-bpm-boundaries.sh。同时包含完整的未排除 frontend 门禁以及 npm run openapi:lint。每条结论都必须返回非空 evidence。没有阻断项时，精确返回 blockers: []，不要使用占位阻断字符串。";
+scope_prompt += "仅当全部元数据、分支、依赖、干净启动、前置条件、所有权与门禁证明都具体可核验时，才返回 scope_safe=true。请求的 stage_id：";
 scope_prompt += json_encode(stage_id);
-scope_prompt += ". Requested base_ref: ";
+scope_prompt += "。请求的 base_ref：";
 scope_prompt += base_ref_json;
 let scope = agent(scope_prompt, #{
     label: "general:approval-stage-scope",
@@ -814,7 +816,7 @@ if scope != () {
     }
 }
 
-let scope_details = "No usable scope result was returned.";
+let scope_details = "未返回可用的范围结果。";
 if scope_out != () {
     scope_details = json_encode(scope_out);
 }
@@ -868,12 +870,12 @@ let blocked = false;
 let blocked_reason = "";
 if !scope_ok {
     blocked = true;
-    blocked_reason = "Scope/plan proof failed or the requested stage is unsafe. No baseline or write-capable agent was started.";
+    blocked_reason = "范围/计划证明失败，或请求的阶段不安全。未启动基线或可写代理。";
 }
 if !blocked {
     if baseline_commands.len() == 0 {
         blocked = true;
-        blocked_reason = "No non-excluded baseline command remained after removing MongoDB integration and browser E2E tests.";
+        blocked_reason = "剔除 MongoDB 集成测试与浏览器 E2E 测试后，没有剩余未排除的基线命令。";
     }
 }
 if !blocked {
@@ -881,7 +883,7 @@ if !blocked {
     let minimum_remaining = 7;
     if scope_budget.remaining < minimum_remaining {
         blocked = true;
-        blocked_reason = "Insufficient remaining agent budget after scope; the ordinary path requires at least " + minimum_remaining.to_string() + " remaining agents.";
+        blocked_reason = "范围阶段后剩余代理预算不足；普通路径至少还需要 " + minimum_remaining.to_string() + " 个代理。";
     }
 }
 
@@ -999,7 +1001,7 @@ if !blocked {
     }
     if expected_commands.len() == 0 {
         blocked = true;
-        blocked_reason = "No applicable executable merge gate or acceptance command was resolved by scope.";
+        blocked_reason = "范围阶段未能解析出任何适用的可执行合并门禁或验收命令。";
     }
 }
 
@@ -1020,22 +1022,23 @@ if !blocked {
     let baseline_budget = budget();
     if baseline_budget.remaining < 1 {
         blocked = true;
-        blocked_reason = "Insufficient remaining agent budget before the general-purpose baseline.";
+        blocked_reason = "启动 general-purpose 基线前剩余代理预算不足。";
     } else {
-        let baseline_prompt = "Role: general-purpose execute baseline agent. Use agent_type general-purpose with capability_mode execute. This command is not a review and must not edit, format, generate, regenerate, write, delete, commit, push, branch, repair, or alter source, tests, docs, generated files, or workflows. ";
-        baseline_prompt += "Read the exact stage plan and re-check raw metadata/conventions. Run git status --porcelain=v1 --untracked-files=all and git branch --show-current first. Also run ";
+        let baseline_prompt = "角色：基线执行代理。agent_type 为 general-purpose，capability_mode 为 execute。这不是评审，禁止编辑、格式化、生成、再生成、写入、删除、提交、推送、建分支、修复或改动源码、测试、文档、生成文件或工作流。";
+        baseline_prompt += "必须全程使用简体中文思考与作答：summary、evidence、blocked_reason 以及所有说明文字必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
+        baseline_prompt += "阅读精确阶段计划并复核原始元数据/约定。先运行 git status --porcelain=v1 --untracked-files=all 与 git branch --show-current。同时运行 ";
         baseline_prompt += base_diff_command;
-        baseline_prompt += ", ";
+        baseline_prompt += "、";
         baseline_prompt += cached_base_diff_command;
-        baseline_prompt += ", git diff --cached --name-status --, and ";
+        baseline_prompt += "、git diff --cached --name-status --，以及 ";
         baseline_prompt += base_commit_command;
-        baseline_prompt += ". Read every ?? file and confirm the startup tree is clean; do not trust files_changed summaries. ";
-        baseline_prompt += "Run every read-only baseline command listed below in its correct repository directory. MongoDB integration tests and browser E2E tests have been removed from this list and must not be run or added back. Do not repair failures, do not skip a remaining command, and do not call a failing pre-existing command a pass. Return exactly one command result for every filtered baseline command and no other command result; each result must preserve the exact command text and include concise evidence. Record blocked_reason as non-empty none when clear. ";
-        baseline_prompt += "Stage plan: ";
+        baseline_prompt += "。读取每一个 ?? 文件并确认启动工作区干净；不要信任 files_changed 摘要。";
+        baseline_prompt += "在正确的仓库目录中运行下列每一条只读基线命令。MongoDB 集成测试与浏览器 E2E 测试已从此列表移除，禁止运行或重新加入。不得修复失败、不得跳过剩余命令，也不得把已失败的既有命令标为通过。对每条过滤后的基线命令恰好返回一条命令结果，且不得有其他命令结果；每条结果必须保留精确命令原文并附简要证据。无阻断时 blocked_reason 记录为非空的 none。";
+        baseline_prompt += "阶段计划：";
         baseline_prompt += json_encode(stage_plan);
-        baseline_prompt += ". Filtered baseline commands: ";
+        baseline_prompt += "。过滤后的基线命令：";
         baseline_prompt += json_encode(baseline_commands);
-        baseline_prompt += ". Expected branch: ";
+        baseline_prompt += "。期望分支：";
         baseline_prompt += json_encode(stage_plan.branch);
         let baseline = agent(baseline_prompt, #{
             label: "general:approval-stage-baseline",
@@ -1062,7 +1065,7 @@ if !blocked {
         }
         if !baseline_ok {
             blocked = true;
-            blocked_reason = "The general-purpose execute baseline was not green, the startup tree/branch was unsafe, or baseline evidence was incomplete. No implementation was attempted.";
+            blocked_reason = "general-purpose 基线执行未通过、启动工作区/分支不安全，或基线证据不完整。未尝试实现。";
         }
     }
 }
@@ -1072,21 +1075,22 @@ if !blocked {
     let implementation_budget = budget();
     if implementation_budget.remaining < 1 {
         blocked = true;
-        blocked_reason = "Insufficient remaining agent budget before implementation.";
+        blocked_reason = "启动实现前剩余代理预算不足。";
     } else {
-        let implementation_prompt = "Role: general-purpose implementation agent. Use agent_type general-purpose with capability_mode all. This is the write-capable implementation role: every project-file addition, modification, deletion, test code change, documentation edit, review repair, and quality-gate repair must be done by general-purpose/all; execute-only reviewers must not edit. ";
-        implementation_prompt += "Read backend/AGENTS.md or its repository instruction indirection, erp-client/AGENTS.md and erp-client/CLAUDE.md when frontend paths apply, relevant coding standards, docs/dev-plan/conventions.md, docs/dev-plan/domains.md, docs/dev-plan/_meta.json, docs/dev-plan/approval-workflow.md, docs/approval-workflow-contract.md, docs/erp-phase-1.md, docs/erp-phase-2.md, and the exact planDoc before editing. ";
-        implementation_prompt += "Before editing, run git status --porcelain=v1 --untracked-files=all, ";
+        let implementation_prompt = "角色：实现代理。agent_type 为 general-purpose，capability_mode 为 all。这是可写实现角色：凡项目文件增删改、测试代码变更、文档编辑、评审修复与质量门禁修复，必须由 general-purpose/all 完成；仅 execute 的评审者不得改文件。";
+        implementation_prompt += "必须全程使用简体中文思考与作答：summary、blockers、commands 说明以及所有说明文字必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
+        implementation_prompt += "编辑前先阅读 backend/AGENTS.md 或其仓库指令间接文件；若涉及 frontend 路径，还要阅读 erp-client/AGENTS.md 与 erp-client/CLAUDE.md；以及相关编码规范、docs/dev-plan/conventions.md、docs/dev-plan/domains.md、docs/dev-plan/_meta.json、docs/dev-plan/approval-workflow.md、docs/approval-workflow-contract.md、docs/erp-phase-1.md、docs/erp-phase-2.md 与精确 planDoc。";
+        implementation_prompt += "编辑前运行 git status --porcelain=v1 --untracked-files=all、";
         implementation_prompt += base_diff_command;
-        implementation_prompt += ", ";
+        implementation_prompt += "、";
         implementation_prompt += cached_base_diff_command;
-        implementation_prompt += ", and ";
+        implementation_prompt += "，以及 ";
         implementation_prompt += base_commit_command;
-        implementation_prompt += ". Read every ?? file and classify all actual paths against owns, ownsWithin, creates, deletes, forbids, frozen files, and generated-file rules. Use full-repository symbol and call-site search before changing an entry point. ";
-        implementation_prompt += "Implement only the exact metadata stage plan below; respect owns and ownsWithin symbol scopes and do not touch frozen or unowned files. Do not invent another stage model, compatibility path, fallback, double-write, Noop success, default assignee, or undocumented business rule. ";
-        implementation_prompt += "All new or modified Rust non-generated methods/functions need the repository multi-line /// documentation rules; production Rust must not use forbidden unwrap/expect/panic. For frontend paths use Client Components for business UI, TanStack Query for all requests, useAppForm plus Zod for forms, JSDoc for new functions/hooks/components, the glossary for user-visible wording, and no BPM-internal types in the client. Generated files must be produced only by the registered generator, never hand-edited. ";
-        implementation_prompt += "Run only the non-excluded stage targeted commands after edits. Do not run MongoDB integration tests or browser E2E tests, and do not claim either as validation evidence. Do not create a branch, commit, push, open a PR, or modify this workflow file. If metadata, dependency, ownership, or business semantics cannot be implemented safely, stop and return completed=false rather than guessing. ";
-        implementation_prompt += "Exact stage plan: ";
+        implementation_prompt += "。读取每一个 ?? 文件，并对照 owns、ownsWithin、creates、deletes、forbids、冻结文件与生成文件规则，对全部实际路径分类。修改入口点前必须做全仓库符号与调用点搜索。";
+        implementation_prompt += "只实现下方精确元数据阶段计划；遵守 owns 与 ownsWithin 符号范围，不得触碰冻结或无所有权文件。禁止发明另一套阶段模型、兼容路径、fallback、双写、Noop 成功、默认办理人或未文档化的业务规则。";
+        implementation_prompt += "所有新增或修改的非生成 Rust 方法/函数须遵守仓库多行 /// 文档规则；生产 Rust 不得使用禁止的 unwrap/expect/panic。frontend 路径须：业务 UI 使用 Client Components，全部请求使用 TanStack Query，表单使用 useAppForm 加 Zod，新函数/hooks/组件使用 JSDoc，用户可见文案使用术语表，客户端不得出现 BPM 内部类型。生成文件只能由已登记生成器产出，禁止手改。";
+        implementation_prompt += "编辑后只运行未排除的阶段定向命令。禁止运行 MongoDB 集成测试或浏览器 E2E 测试，也不得将二者当作校验证据。禁止创建分支、提交、推送、开 PR 或修改本工作流文件。若元数据、依赖、所有权或业务语义无法安全实现，停止并返回 completed=false，不要猜测。";
+        implementation_prompt += "精确阶段计划：";
         implementation_prompt += json_encode(stage_plan);
         let implementation = agent(implementation_prompt, #{
             label: "general:approval-stage-implementation",
@@ -1108,7 +1112,7 @@ if !blocked {
         }
         if !implementation_result_valid(implementation_out) {
             blocked = true;
-            blocked_reason = "The general-purpose implementation agent failed, reported an unsafe scope, or returned incomplete implementation evidence.";
+            blocked_reason = "general-purpose 实现代理失败、报告了不安全范围，或返回了不完整的实现证据。";
         }
     }
 }
@@ -1116,11 +1120,11 @@ if !blocked {
 while !blocked && !review_passed && review_round <= 2 {
     phase("Review");
     let expected_reviewers = 3;
-    let review_jobs = build_review_jobs(stage_plan, base_ref, implementation_summaries, review_schema, "general:approval-review-round-" + review_round.to_string(), "This is the ordinary independent review panel.");
+    let review_jobs = build_review_jobs(stage_plan, base_ref, implementation_summaries, review_schema, "general:approval-review-round-" + review_round.to_string(), "这是常规独立评审面板。");
     let review_budget = budget();
     if review_budget.remaining < expected_reviewers {
         blocked = true;
-        blocked_reason = "Insufficient remaining agent budget before review panel round " + review_round.to_string() + ".";
+        blocked_reason = "启动第 " + review_round.to_string() + " 轮评审面板前剩余代理预算不足。";
     } else {
         let review_results = parallel(review_jobs);
         let panel_assessment = assess_review_panel(review_results, expected_reviewers);
@@ -1129,33 +1133,34 @@ while !blocked && !review_passed && review_round <= 2 {
         }
         if panel_assessment.usable != true {
             blocked = true;
-            blocked_reason = "A required general-purpose review agent failed or lacked evidence: " + json_encode(panel_assessment.reasons);
+            blocked_reason = "必需的 general-purpose 评审代理失败或缺少证据：" + json_encode(panel_assessment.reasons);
         } else if panel_assessment.passed == true {
             review_passed = true;
         } else if review_round >= 2 {
             blocked = true;
-            blocked_reason = "The implementation did not pass the required general-purpose review panel within the two allowed review-repair rounds. Findings: " + json_encode(panel_assessment.findings);
+            blocked_reason = "实现未在允许的两轮评审修复内通过必需的 general-purpose 评审面板。Findings：" + json_encode(panel_assessment.findings);
         } else {
             phase("Repair");
             let repair_budget = budget();
             if repair_budget.remaining < 1 {
                 blocked = true;
-                blocked_reason = "Insufficient remaining agent budget before review repair round " + review_round.to_string() + ".";
+                blocked_reason = "启动第 " + review_round.to_string() + " 轮评审修复前剩余代理预算不足。";
             } else {
-                let repair_prompt = "Role: general-purpose review-repair agent. Use agent_type general-purpose with capability_mode all. All project-file additions, modifications, deletions, test writing, documentation editing, review repairs, and quality-gate repairs must be done only by general-purpose/all; this is the write-capable repair role and it is not a review. Execute-only reviewers must not edit. ";
-                repair_prompt += "Read the actual current diff and code, raw docs/dev-plan/_meta.json, conventions.md, approval-workflow.md, the exact planDoc, and relevant instructions before editing. Run git status --porcelain=v1 --untracked-files=all, ";
+                let repair_prompt = "角色：评审修复代理。agent_type 为 general-purpose，capability_mode 为 all。凡项目文件增删改、测试编写、文档编辑、评审修复与质量门禁修复，只能由 general-purpose/all 完成；这是可写修复角色，不是评审。仅 execute 的评审者不得改文件。";
+                repair_prompt += "必须全程使用简体中文思考与作答：summary、blockers 以及所有说明文字必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
+                repair_prompt += "编辑前阅读当前真实 diff 与代码、原始 docs/dev-plan/_meta.json、conventions.md、approval-workflow.md、精确 planDoc 以及相关指令。运行 git status --porcelain=v1 --untracked-files=all、";
                 repair_prompt += base_diff_command;
-                repair_prompt += ", ";
+                repair_prompt += "、";
                 repair_prompt += cached_base_diff_command;
-                repair_prompt += ", and ";
+                repair_prompt += "，以及 ";
                 repair_prompt += base_commit_command;
-                repair_prompt += ". Read every ?? file and compare every actual path against owns, ownsWithin, creates, deletes, forbids, frozen, and generated-file rules. ";
-                repair_prompt += "Repair only concrete findings below that are valid for the exact metadata stage. Do not broaden scope, touch unowned/forbidden/frozen/generated paths, invent compatibility behavior, weaken tests, or change unrelated pre-existing code. Use the registered generator for generated files. Do not commit, push, branch, or modify the workflow. Run only non-excluded targeted commands after the repair; do not run MongoDB integration tests or browser E2E tests. If a finding cannot be safely repaired within owns/ownsWithin, return completed=false rather than guessing. ";
-                repair_prompt += "Exact stage plan: ";
+                repair_prompt += "。读取每一个 ?? 文件，并将每个实际路径对照 owns、ownsWithin、creates、deletes、forbids、冻结与生成文件规则。";
+                repair_prompt += "只修复下方对精确元数据阶段有效的具体 findings。禁止扩大范围、触碰无所有权/禁止/冻结/生成路径、发明兼容行为、削弱测试，或改动无关的既有代码。生成文件使用已登记生成器。禁止提交、推送、建分支或修改工作流。修复后只运行未排除的定向命令；禁止运行 MongoDB 集成测试或浏览器 E2E 测试。若某条 finding 无法在 owns/ownsWithin 内安全修复，返回 completed=false，不要猜测。";
+                repair_prompt += "精确阶段计划：";
                 repair_prompt += json_encode(stage_plan);
-                repair_prompt += ". Review findings: ";
+                repair_prompt += "。评审 findings：";
                 repair_prompt += json_encode(panel_assessment.findings);
-                repair_prompt += ". Review evidence summary: ";
+                repair_prompt += "。评审证据摘要：";
                 repair_prompt += json_encode(review_summaries);
                 let repair = agent(repair_prompt, #{
                     label: "general:approval-stage-review-repair-" + review_round.to_string(),
@@ -1179,7 +1184,7 @@ while !blocked && !review_passed && review_round <= 2 {
                 }
                 if !implementation_result_valid(repair_out) {
                     blocked = true;
-                    blocked_reason = "A general-purpose review repair failed or returned unsafe/incomplete evidence.";
+                    blocked_reason = "general-purpose 评审修复失败，或返回了不安全/不完整的证据。";
                 } else {
                     review_round += 1;
                 }
@@ -1189,35 +1194,36 @@ while !blocked && !review_passed && review_round <= 2 {
 }
 if !review_passed && !blocked {
     blocked = true;
-    blocked_reason = "The review loop ended without a passing general-purpose review panel.";
+    blocked_reason = "评审循环结束时，没有通过的 general-purpose 评审面板。";
 }
 
 if !blocked {
     phase("Verify");
-    let verification_prompt = "Role: general-purpose execute quality-gate agent. Use agent_type general-purpose with capability_mode execute. This is command execution, not review, and you must not edit, format, generate, regenerate, write, delete, commit, push, branch, repair, or alter files. All project-file changes and gate repairs belong exclusively to general-purpose/all. ";
-    verification_prompt += "Read the raw docs/dev-plan/_meta.json, docs/dev-plan/conventions.md, docs/dev-plan/approval-workflow.md, docs/approval-workflow-contract.md, docs/erp-phase-1.md, docs/erp-phase-2.md, exact planDoc, repository instructions, and actual current code. Before any conclusion run git status --porcelain=v1 --untracked-files=all, git branch --show-current, ";
+    let verification_prompt = "角色：质量门禁执行代理。agent_type 为 general-purpose，capability_mode 为 execute。这是命令执行，不是评审；禁止编辑、格式化、生成、再生成、写入、删除、提交、推送、建分支、修复或改动文件。凡项目文件变更与门禁修复，一律且仅由 general-purpose/all 负责。";
+    verification_prompt += "必须全程使用简体中文思考与作答：summary、evidence、commands/acceptance_results 中的说明文字必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
+    verification_prompt += "阅读原始 docs/dev-plan/_meta.json、docs/dev-plan/conventions.md、docs/dev-plan/approval-workflow.md、docs/approval-workflow-contract.md、docs/erp-phase-1.md、docs/erp-phase-2.md、精确 planDoc、仓库指令以及当前真实代码。下任何结论前运行 git status --porcelain=v1 --untracked-files=all、git branch --show-current、";
     verification_prompt += base_diff_command;
-    verification_prompt += ", ";
+    verification_prompt += "、";
     verification_prompt += cached_base_diff_command;
-    verification_prompt += ", git diff --cached --name-status --, and ";
+    verification_prompt += "、git diff --cached --name-status --，以及 ";
     verification_prompt += base_commit_command;
-    verification_prompt += ". Read every ?? file and compare all added, modified, deleted, and renamed paths item by item with owns, ownsWithin, creates, deletes, forbids, frozen files, and generated-file provenance; do not trust files_changed. ";
-    verification_prompt += "Confirm the final scope still matches the exact metadata stage and dependency proof. Run the exact expected command set below, in the correct repository directories, with no substitutions, aliases, partial commands, or duplicates. ";
-    verification_prompt += "Return one command result for every expected command and no other command result; every result needs a non-empty command, summary, and evidence. Return acceptance_results with exactly one entry per expected_acceptance_checks item, in the same order and exact item text; expected_acceptance_checks is non-excluded stage acceptance followed by every non-executable non-excluded merge gate, deduplicated. Every acceptance entry must pass and include manual evidence where applicable. Do not represent DOC manual relative-Markdown-link or Stage-10 semantic scans as shell commands. ";
-    verification_prompt += "MongoDB integration tests and browser E2E tests are excluded. Do not run them, add them to results, require their environments, or claim them as acceptance evidence. Set environment_blocked=true only when a command that remains in the exact expected command set cannot run in its required environment. ";
-    verification_prompt += "Exact stage plan: ";
+    verification_prompt += "。读取每一个 ?? 文件，并将全部新增、修改、删除、重命名路径逐项对照 owns、ownsWithin、creates、deletes、forbids、冻结文件与生成文件来源；不要信任 files_changed。";
+    verification_prompt += "确认最终范围仍匹配精确元数据阶段与依赖证明。在正确仓库目录中运行下方精确期望命令集，不得替换、别名、截断或重复。";
+    verification_prompt += "对每条期望命令恰好返回一条命令结果，且不得有其他命令结果；每条结果都需要非空 command、summary 与 evidence。acceptance_results 必须对 expected_acceptance_checks 的每一项恰好一条，顺序与原文完全一致；expected_acceptance_checks 是未排除的阶段验收，再加上每条不可执行且未排除的合并门禁，并已去重。每条验收必须通过，并在适用处包含人工证据。不要把 DOC 人工相对 Markdown 链接检查或阶段 10 语义扫描写成 shell 命令。";
+    verification_prompt += "MongoDB 集成测试与浏览器 E2E 测试已排除。禁止运行它们、把它们加入结果、要求其环境，或将其当作验收证据。仅当精确期望命令集中仍保留的某条命令无法在其所需环境中运行时，才设置 environment_blocked=true。";
+    verification_prompt += "精确阶段计划：";
     verification_prompt += json_encode(stage_plan);
-    verification_prompt += ". Expected command set: ";
+    verification_prompt += "。期望命令集：";
     verification_prompt += json_encode(expected_commands);
-    verification_prompt += ". Expected acceptance checks: ";
+    verification_prompt += "。期望验收检查：";
     verification_prompt += json_encode(expected_acceptance_checks);
     if stage_is_p6 {
-        verification_prompt += ". P6 non-excluded executable backend gates are explicitly cargo fmt --all -- --check, cargo check --workspace, cargo clippy --workspace --all-targets --all-features -- -D warnings, cargo test --workspace, cargo test -p bpm --lib, and ./scripts/check-bpm-boundaries.sh; non-excluded frontend gates are npm run format:check, npm run lint, npm run test, npm run test:node, npm exec -- tsc --noEmit, and npm run build; also run npm run openapi:lint.";
+        verification_prompt += "。P6 未排除的可执行 backend 门禁明确为 cargo fmt --all -- --check、cargo check --workspace、cargo clippy --workspace --all-targets --all-features -- -D warnings、cargo test --workspace、cargo test -p bpm --lib，以及 ./scripts/check-bpm-boundaries.sh；未排除的 frontend 门禁为 npm run format:check、npm run lint、npm run test、npm run test:node、npm exec -- tsc --noEmit，以及 npm run build；同时还要运行 npm run openapi:lint。";
     }
     let verification_budget = budget();
     if verification_budget.remaining < 1 {
         blocked = true;
-        blocked_reason = "Insufficient remaining agent budget before quality-gate verification.";
+        blocked_reason = "启动质量门禁验证前剩余代理预算不足。";
     } else {
         let verification = agent(verification_prompt, #{
             label: "general:approval-stage-quality-gates",
@@ -1237,31 +1243,32 @@ if !blocked {
         let verification_assessment = assess_verification(verification_out, expected_commands, expected_acceptance_checks);
         if verification_assessment.usable != true {
             blocked = true;
-            blocked_reason = "The general-purpose quality-gate agent failed or returned incomplete gate evidence.";
+            blocked_reason = "general-purpose 质量门禁代理失败，或返回了不完整的门禁证据。";
         } else if verification_assessment.environment_blocked == true {
             blocked = true;
-            blocked_reason = "A required non-excluded quality gate is environmentally blocked; the workflow fails closed and will not claim success.";
+            blocked_reason = "某条必需且未排除的质量门禁因环境被阻断；工作流失败即关闭，不得宣称成功。";
         } else if verification_assessment.passed != true {
             phase("Repair");
             let quality_repair_budget = budget();
             if quality_repair_budget.remaining < 1 {
                 blocked = true;
-                blocked_reason = "Insufficient remaining agent budget before quality-gate repair.";
+                blocked_reason = "启动质量门禁修复前剩余代理预算不足。";
             } else {
-                let quality_repair_prompt = "Role: general-purpose quality-gate repair agent. Use agent_type general-purpose with capability_mode all. All project-file changes, including fixes for quality-gate failures, belong exclusively to general-purpose/all; this is not a review and execute-only agents must not edit. ";
-                quality_repair_prompt += "Inspect the actual current diff, raw metadata/conventions, exact planDoc, repository instructions, and the complete failed gate evidence. Before editing run git status --porcelain=v1 --untracked-files=all, ";
+                let quality_repair_prompt = "角色：质量门禁修复代理。agent_type 为 general-purpose，capability_mode 为 all。凡项目文件变更（含质量门禁失败修复）一律且仅由 general-purpose/all 负责；这不是评审，仅 execute 的代理不得改文件。";
+                quality_repair_prompt += "必须全程使用简体中文思考与作答：summary、blockers 以及所有说明文字必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
+                quality_repair_prompt += "检查当前真实 diff、原始元数据/约定、精确 planDoc、仓库指令以及完整的失败门禁证据。编辑前运行 git status --porcelain=v1 --untracked-files=all、";
                 quality_repair_prompt += base_diff_command;
-                quality_repair_prompt += ", ";
+                quality_repair_prompt += "、";
                 quality_repair_prompt += cached_base_diff_command;
-                quality_repair_prompt += ", and ";
+                quality_repair_prompt += "，以及 ";
                 quality_repair_prompt += base_commit_command;
-                quality_repair_prompt += ". Read every ?? file and compare every actual path item by item against owns, ownsWithin, creates, deletes, forbids, frozen, and generated-file rules. ";
-                quality_repair_prompt += "Repair only failures introduced by this stage and only within owns/ownsWithin. Do not mask pre-existing or environmental failures, weaken tests, skip non-excluded gates, hand-edit generated files, alter forbidden/frozen/unowned paths, commit, push, branch, or modify the workflow. Do not run MongoDB integration tests or browser E2E tests. If the failure is pre-existing, environmental, or cannot be safely repaired, return completed=false. Run the failing non-excluded targeted commands after the repair. ";
-                quality_repair_prompt += "Exact stage plan: ";
+                quality_repair_prompt += "。读取每一个 ?? 文件，并将每个实际路径逐项对照 owns、ownsWithin、creates、deletes、forbids、冻结与生成文件规则。";
+                quality_repair_prompt += "只修复本阶段引入的失败，且仅限 owns/ownsWithin 范围内。禁止掩盖既有或环境失败、削弱测试、跳过未排除门禁、手改生成文件、改动禁止/冻结/无所有权路径、提交、推送、建分支或修改工作流。禁止运行 MongoDB 集成测试或浏览器 E2E 测试。若失败是既有的、环境性的或无法安全修复，返回 completed=false。修复后运行失败的未排除定向命令。";
+                quality_repair_prompt += "精确阶段计划：";
                 quality_repair_prompt += json_encode(stage_plan);
-                quality_repair_prompt += ". Expected command set: ";
+                quality_repair_prompt += "。期望命令集：";
                 quality_repair_prompt += json_encode(expected_commands);
-                quality_repair_prompt += ". Failed quality evidence: ";
+                quality_repair_prompt += "。失败的质量证据：";
                 quality_repair_prompt += json_encode(verification_out);
                 let quality_repair = agent(quality_repair_prompt, #{
                     label: "general:approval-stage-quality-repair",
@@ -1285,17 +1292,17 @@ if !blocked {
                 }
                 if !implementation_result_valid(quality_repair_out) {
                     blocked = true;
-                    blocked_reason = "The single allowed general-purpose quality-gate repair failed or returned unsafe/incomplete evidence.";
+                    blocked_reason = "唯一允许的 general-purpose 质量门禁修复失败，或返回了不安全/不完整的证据。";
                 } else {
                     quality_repair_used = true;
                     phase("Verify");
                     let rerun_budget = budget();
                     if rerun_budget.remaining < 1 {
                         blocked = true;
-                        blocked_reason = "Insufficient remaining agent budget before the mandatory quality-gate rerun.";
+                        blocked_reason = "启动强制质量门禁重跑前剩余代理预算不足。";
                     } else {
                         let verification_rerun_prompt = verification_prompt;
-                        verification_rerun_prompt += " This is the mandatory full rerun after the general-purpose quality repair. Rerun every expected command and every acceptance result from scratch, return the exact same command-set and acceptance-set shape, and do not rely on the first result.";
+                        verification_rerun_prompt += " 这是 general-purpose 质量修复后的强制全量重跑。必须从零重跑每条期望命令与每条验收结果，返回完全相同的命令集与验收集形态，不得依赖第一次结果。";
                         let verification_rerun = agent(verification_rerun_prompt, #{
                             label: "general:approval-stage-quality-gates-rerun",
                             agent_type: "general-purpose",
@@ -1316,15 +1323,15 @@ if !blocked {
                         let rerun_assessment = assess_verification(verification_rerun_out, expected_commands, expected_acceptance_checks);
                         if rerun_assessment.usable != true || rerun_assessment.environment_blocked == true || rerun_assessment.passed != true {
                             blocked = true;
-                            blocked_reason = "The complete quality gates did not pass after the single allowed general-purpose repair, or the rerun lacked exact command and acceptance evidence.";
+                            blocked_reason = "在唯一允许的 general-purpose 修复后，完整质量门禁仍未通过，或重跑缺少精确命令与验收证据。";
                         } else {
                             phase("Review");
                             let post_review_expected = 3;
-                            let post_review_jobs = build_review_jobs(stage_plan, base_ref, implementation_summaries, review_schema, "general:approval-post-quality-review", "This is the mandatory post-quality repair review. Any failed proof or non-empty findings block immediately; no further repair is allowed after this panel.");
+                            let post_review_jobs = build_review_jobs(stage_plan, base_ref, implementation_summaries, review_schema, "general:approval-post-quality-review", "这是质量修复后的强制评审。任何证明失败或非空 findings 立即阻断；本面板之后不允许再修复。");
                             let post_review_budget = budget();
                             if post_review_budget.remaining < post_review_expected {
                                 blocked = true;
-                                blocked_reason = "Insufficient remaining agent budget before the mandatory post-quality review panel.";
+                                blocked_reason = "启动强制质量后评审面板前剩余代理预算不足。";
                             } else {
                                 let post_review_results = parallel(post_review_jobs);
                                 let post_panel_assessment = assess_review_panel(post_review_results, post_review_expected);
@@ -1333,7 +1340,7 @@ if !blocked {
                                 }
                                 if post_panel_assessment.usable != true || post_panel_assessment.passed != true {
                                     blocked = true;
-                                    blocked_reason = "The mandatory general-purpose post-quality review failed after repair; the workflow is blocked. Findings: " + json_encode(post_panel_assessment.findings) + ". Reasons: " + json_encode(post_panel_assessment.reasons);
+                                    blocked_reason = "修复后强制的 general-purpose 质量后评审失败；工作流已阻断。Findings：" + json_encode(post_panel_assessment.findings) + "。原因：" + json_encode(post_panel_assessment.reasons);
                                 }
                             }
                         }
@@ -1346,28 +1353,29 @@ if !blocked {
 
 if !blocked {
     phase("Final Review");
-    let final_review_prompt = "Role: general-purpose read-only final acceptance reviewer. Use agent_type general-purpose with capability_mode execute. All project-file additions, modifications, deletions, test writing, documentation editing, review repairs, and quality-gate repairs belong exclusively to general-purpose/all; you must not edit, format, generate, regenerate, write, delete, commit, push, branch, repair, or alter any project file. ";
-    final_review_prompt += "Inspect the actual complete current diff and status, actual changed code and tests, every untracked ?? file, and raw docs/dev-plan/_meta.json, docs/dev-plan/conventions.md, docs/dev-plan/approval-workflow.md, exact planDoc, repository instructions, baseline, implementation/repair evidence, all review evidence, and complete quality-gate evidence. Before any conclusion run git status --porcelain=v1 --untracked-files=all, git branch --show-current, ";
+    let final_review_prompt = "角色：只读最终验收评审者。agent_type 为 general-purpose，capability_mode 为 execute。凡项目文件增删改、测试编写、文档编辑、评审修复与质量门禁修复，一律且仅由 general-purpose/all 负责；禁止编辑、格式化、生成、再生成、写入、删除、提交、推送、建分支、修复或改动任何项目文件。";
+    final_review_prompt += "必须全程使用简体中文思考与作答：summary、evidence、findings 中的 issue/evidence/remediation，以及所有说明文字必须为中文；命令原文、路径、标识符与 JSON 字段名保持原样，不要翻译。";
+    final_review_prompt += "检查当前完整真实 diff 与 status、实际变更代码与测试、每一个未跟踪 ?? 文件，以及原始 docs/dev-plan/_meta.json、docs/dev-plan/conventions.md、docs/dev-plan/approval-workflow.md、精确 planDoc、仓库指令、基线、实现/修复证据、全部评审证据与完整质量门禁证据。下任何结论前运行 git status --porcelain=v1 --untracked-files=all、git branch --show-current、";
     final_review_prompt += base_diff_command;
-    final_review_prompt += ", ";
+    final_review_prompt += "、";
     final_review_prompt += cached_base_diff_command;
-    final_review_prompt += ", git diff --cached --name-status --, and ";
+    final_review_prompt += "、git diff --cached --name-status --，以及 ";
     final_review_prompt += base_commit_command;
-    final_review_prompt += ". Read every ?? file and classify every added, modified, deleted, or renamed path item by item against owns, ownsWithin, creates, deletes, forbids, frozen-file restrictions, and generated-file provenance. Do not approve from files_changed or summaries alone. ";
-    final_review_prompt += "Prove every dependsOn stage and every member of stage dependsOnGroups or project dependencyGroups is merged by exact dependency branch-tip ancestry into both base_ref and HEAD; partial cherry-picks, content similarity, and branch existence are not proof. Check exact stage identity and branch, contract and business semantics, architecture/security/correctness, test sufficiency, exact non-excluded command and acceptance evidence, and full non-excluded gate evidence. MongoDB integration tests and browser E2E tests are outside this workflow: do not run them, require them, or treat their absence as a finding. ";
-    final_review_prompt += "Reviewer kind must be final, exactly \"final\". Return approved=true only when every required non-excluded proof is concrete and the current diff is safe to merge as this exact metadata stage. Any non-empty findings block; approved=false with empty findings is unusable. Return non-empty evidence and summary. Do not edit.";
-    final_review_prompt += " Exact stage plan: ";
+    final_review_prompt += "。读取每一个 ?? 文件，并逐项对照 owns、ownsWithin、creates、deletes、forbids、冻结文件限制与生成文件来源，对每个新增/修改/删除/重命名路径分类。禁止仅凭 files_changed 或摘要批准。";
+    final_review_prompt += "证明每个 dependsOn 阶段以及阶段 dependsOnGroups 或项目 dependencyGroups 的每个成员，都已通过精确依赖分支 tip 祖先关系并入 base_ref 与 HEAD；部分 cherry-pick、内容相似与仅分支存在都不能作为证明。检查精确阶段身份与分支、合同与业务语义、架构/安全/正确性、测试充分性、精确未排除命令与验收证据，以及完整未排除门禁证据。MongoDB 集成测试与浏览器 E2E 测试不在本工作流范围内：禁止运行、要求或将其缺失当作 finding。";
+    final_review_prompt += "评审类型必须为 final，精确返回 \"final\"。仅当每条必需且未排除的证明都具体可核验、且当前 diff 可作为该精确元数据阶段安全合并时，才返回 approved=true。任何非空 findings 均阻断；approved=false 且 findings 为空视为不可用。返回非空 evidence 与 summary。禁止改文件。";
+    final_review_prompt += " 精确阶段计划：";
     final_review_prompt += json_encode(stage_plan);
-    final_review_prompt += ". Implementation and repair evidence: ";
+    final_review_prompt += "。实现与修复证据：";
     final_review_prompt += json_encode(implementation_summaries);
-    final_review_prompt += ". Review evidence: ";
+    final_review_prompt += "。评审证据：";
     final_review_prompt += json_encode(review_summaries);
-    final_review_prompt += ". Quality-gate evidence: ";
+    final_review_prompt += "。质量门禁证据：";
     final_review_prompt += json_encode(verification_out);
     let final_budget = budget();
     if final_budget.remaining < 1 {
         blocked = true;
-        blocked_reason = "Insufficient remaining agent budget before final acceptance review.";
+        blocked_reason = "启动最终验收评审前剩余代理预算不足。";
     } else {
         let final_review = agent(final_review_prompt, #{
             label: "general:approval-stage-final-acceptance",
@@ -1388,10 +1396,10 @@ if !blocked {
         final_review_passed = final_assessment.usable == true && final_assessment.passed == true;
         if final_assessment.usable != true {
             blocked = true;
-            blocked_reason = "The general-purpose final acceptance reviewer failed or returned incomplete evidence: " + final_assessment.reason;
+            blocked_reason = "general-purpose 最终验收评审失败，或返回了不完整证据：" + final_assessment.reason;
         } else if !final_review_passed {
             blocked = true;
-            blocked_reason = "The final general-purpose acceptance review found blocking issues; no unsafe approval was returned. Findings: " + json_encode(final_assessment.findings);
+            blocked_reason = "最终 general-purpose 验收评审发现阻断问题；未返回不安全批准。Findings：" + json_encode(final_assessment.findings);
         }
     }
 }
@@ -1403,54 +1411,54 @@ if blocked || !final_review_passed {
 }
 let verdict_reason = blocked_reason;
 if report_status == "completed" {
-    verdict_reason = "All exact metadata, ownership, dependency, review, quality-gate, acceptance, and final-review proofs passed for the requested stage.";
+    verdict_reason = "请求阶段的全部精确元数据、所有权、依赖、评审、质量门禁、验收与最终评审证明均已通过。";
 }
 if !is_nonempty_text(verdict_reason) {
-    verdict_reason = "Workflow blocked because a required proof was unavailable.";
+    verdict_reason = "工作流已阻断，因为缺少必需证明。";
 }
 let report = "# implement-approval-workflow-stage\n\n";
-report += "Status: " + report_status + "\n\n";
-report += "## Stage\n\n";
-report += "- requested stage_id: " + json_encode(stage_id) + "\n";
-report += "- base_ref: " + base_ref_json + "\n";
+report += "状态：" + report_status + "\n\n";
+report += "## 阶段\n\n";
+report += "- 请求的 stage_id：" + json_encode(stage_id) + "\n";
+report += "- base_ref：" + base_ref_json + "\n";
 if scope_ok {
-    report += "- resolved stage_id: " + json_encode(stage_plan.stage_id) + "\n";
-    report += "- stage source: " + json_encode(stage_plan.stage_source) + "\n";
-    report += "- metadata branch: " + json_encode(stage_plan.branch) + "\n";
-    report += "- planDoc: " + json_encode(stage_plan.plan_doc) + "\n";
-    report += "- excluded tests: MongoDB integration and browser E2E\n";
+    report += "- 解析到的 stage_id：" + json_encode(stage_plan.stage_id) + "\n";
+    report += "- 阶段来源：" + json_encode(stage_plan.stage_source) + "\n";
+    report += "- 元数据分支：" + json_encode(stage_plan.branch) + "\n";
+    report += "- planDoc：" + json_encode(stage_plan.plan_doc) + "\n";
+    report += "- 已排除测试：MongoDB 集成测试与浏览器 E2E\n";
 } else {
-    report += "- resolved stage: unavailable or unsafe\n";
+    report += "- 解析到的阶段：不可用或不安全\n";
 }
-report += "\n## Scope plan\n\n```json\n" + scope_details + "\n```\n\n";
-report += "## Baseline\n\n";
+report += "\n## 范围计划\n\n```json\n" + scope_details + "\n```\n\n";
+report += "## 基线\n\n";
 if baseline_out == () {
-    report += "Not run or no usable result.\n\n";
+    report += "未运行或无可用结果。\n\n";
 } else {
     report += "```json\n" + json_encode(baseline_out) + "\n```\n\n";
 }
-report += "## Implementation and repairs\n\n```json\n" + json_encode(implementation_summaries) + "\n```\n\n";
-report += "## Reviews\n\n```json\n" + json_encode(review_summaries) + "\n```\n\n";
-report += "## Repair records\n\n```json\n" + json_encode(repair_summaries) + "\n```\n\n";
-report += "## Quality gates\n\n";
+report += "## 实现与修复\n\n```json\n" + json_encode(implementation_summaries) + "\n```\n\n";
+report += "## 评审\n\n```json\n" + json_encode(review_summaries) + "\n```\n\n";
+report += "## 修复记录\n\n```json\n" + json_encode(repair_summaries) + "\n```\n\n";
+report += "## 质量门禁\n\n";
 if verification_out == () {
-    report += "Not run or no usable result.\n\n";
+    report += "未运行或无可用结果。\n\n";
 } else {
     report += "```json\n" + json_encode(verification_out) + "\n```\n\n";
 }
-report += "## Excluded tests\n\n";
-report += "- MongoDB integration tests were not executed or required.\n";
-report += "- Browser E2E tests were not executed or required.\n\n";
-report += "## Final review\n\n```json\n" + json_encode(final_review_out) + "\n```\n\n";
-report += "## Final verdict\n\n";
-report += "- reason: " + verdict_reason + "\n";
-report += "- final review passed: " + final_review_passed.to_string() + "\n";
-report += "- review repair rounds used: " + review_round.to_string() + " (maximum 2)\n";
-report += "- quality-gate repair used: " + quality_repair_used.to_string() + " (maximum 1)\n";
-report += "- ordinary success budget: 8 agents; maximum path: 21 agents when two review repairs, one quality-gate repair, and the post-quality review panel are all used.\n";
+report += "## 已排除测试\n\n";
+report += "- 未执行、也未要求 MongoDB 集成测试。\n";
+report += "- 未执行、也未要求浏览器 E2E 测试。\n\n";
+report += "## 最终评审\n\n```json\n" + json_encode(final_review_out) + "\n```\n\n";
+report += "## 最终裁决\n\n";
+report += "- 原因：" + verdict_reason + "\n";
+report += "- 最终评审通过：" + final_review_passed.to_string() + "\n";
+report += "- 已用评审修复轮数：" + review_round.to_string() + "（最多 2）\n";
+report += "- 已用质量门禁修复：" + quality_repair_used.to_string() + "（最多 1）\n";
+report += "- 普通成功预算：8 个代理；最大路径：在两次评审修复、一次质量门禁修复及质量后评审面板全部使用时为 21 个代理。\n";
 let budget_snapshot = budget();
-report += "- agents spent in this run: " + budget_snapshot.spent.to_string() + "\n";
-report += "- agent instructions: agents were instructed not to create branches, commits, pushes, PRs, or nested workflows; a blocked run may leave uncommitted modifications, so inspect final git status --porcelain=v1 --untracked-files=all and git diff before relying on this report.\n";
+report += "- 本次运行已消耗代理数：" + budget_snapshot.spent.to_string() + "\n";
+report += "- 代理指令：代理已被要求不得创建分支、提交、推送、PR 或嵌套工作流；被阻断的运行可能留下未提交修改，因此在采信本报告前请检查最终 git status --porcelain=v1 --untracked-files=all 与 git diff。\n";
 let report_path = write_scratch_file("implement-approval-workflow-stage-report.md", report);
 complete(#{
     status: report_status,
