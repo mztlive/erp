@@ -98,22 +98,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/stock-adjustments/{id}/approve",
-            with_permission(
-                post(inventory::stock_adjustment_approve),
-                rbac,
-                inventory::stock_adjustment_approve_permission_key(),
-            ),
-        )
-        .route(
-            "/stock-adjustments/{id}/reject",
-            with_permission(
-                post(inventory::stock_adjustment_reject),
-                rbac,
-                inventory::stock_adjustment_reject_permission_key(),
-            ),
-        )
-        .route(
             "/stock-adjustments/{id}/post",
             with_permission(
                 post(inventory::stock_adjustment_post),
@@ -121,4 +105,21 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 inventory::stock_adjustment_post_permission_key(),
             ),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    /// 库存调整不再暴露人工 approve/reject 路由。
+    #[test]
+    fn inventory_routes_drop_manual_approve_and_reject() {
+        let production = include_str!("inventory.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产路由必须存在");
+        assert!(!production.contains("/stock-adjustments/{id}/approve"));
+        assert!(!production.contains("/stock-adjustments/{id}/reject"));
+        assert!(!production.contains("stock_adjustment_approve"));
+        assert!(!production.contains("stock_adjustment_reject"));
+        assert!(production.contains("/stock-adjustments/{id}/submit"));
+    }
 }

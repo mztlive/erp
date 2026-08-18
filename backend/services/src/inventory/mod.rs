@@ -9,7 +9,7 @@
 //! - D11 `warehouse`：仓库代码 + 当前修订名称；
 //! - D10 `catalog`：SKU 编号 + 当前修订名称/规格。
 //!
-//! 过账去重（§8.2）：状态守卫（仅 `PendingFinanceReview` 可过账）+
+//! 过账去重（§8.2）：状态守卫（仅 `IN_APPROVAL` 可由最终通过动作过账）+
 //! `stock_movement` 的 `(source_document_id, source_line_id, movement_type)`
 //! 唯一索引双重防护，重复过账返回 409，不产生第二条正式流水。
 
@@ -32,21 +32,35 @@ use mongodb::Database;
 use std::str::FromStr;
 use validator::Validate;
 
+use crate::approval::binding::{
+    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
+};
+use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::audit::AuditActor;
-use crate::document_registry::{new_registered_document, persist_registered_document};
+use crate::document_registry::{find_approval_binding, new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
-use entities::document_registry::DocumentType;
+use crate::iam::SharedRbacService;
+use entities::document_registry::{BusinessDocument, DocumentType};
 
+use self::adapter::{
+    build_stock_adjustment_snapshot, document_approval_view, ensure_final_approve_posting,
+    execute_stock_adjustment_domain_action, require_frozen_binding, start_approval_command_kind,
+    stock_adjustment_adapter, stock_adjustment_start_command, stock_adjustment_subject_ref,
+    RECENT_HISTORY_LIMIT,
+};
 use self::dto::SortDir;
 pub use self::dto::{
-    ApproveStockAdjustmentRequest, CreateStockAdjustmentRequest, PageView, StockAdjustmentDetailView,
-    StockAdjustmentLineInput, StockAdjustmentLineView, StockAdjustmentListParams, StockAdjustmentView,
-    StockBalanceDetailView, StockBalanceListParams, StockBalanceView, StockMovementListParams,
-    StockMovementView, StockReservationListParams, StockReservationView, SubmitStockAdjustmentRequest,
-    UpdateStockAdjustmentRequest,
+    CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest, DocumentApprovalView, PageView,
+    StockAdjustmentDetailView, StockAdjustmentLineInput, StockAdjustmentLineView, StockAdjustmentListParams,
+    StockAdjustmentView, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
+    StockMovementListParams, StockMovementView, StockReservationListParams, StockReservationView,
+    SubmitStockAdjustmentRequest, UpdateStockAdjustmentRequest,
 };
 
+mod adapter;
 mod dto;
+
+pub use adapter::stock_adjustment_object_readable;
 
 /// 库存余额列表筛选条件类型（经 `InventoryExt` 关联类型跨 crate 可达）。
 type StockBalanceFilter = <mongodb::Database as InventoryExt>::StockBalanceFilter;
@@ -59,10 +73,11 @@ type StockAdjustmentFilter = <mongodb::Database as InventoryExt>::StockAdjustmen
 
 /// 库存服务。
 ///
-/// 提供余额/流水/预占/调整单的查询与调整单全流程（创建、提交复核、
-/// 复核通过、驳回、过账）编排。
+/// 提供余额/流水/预占/调整单的查询，以及调整单创建绑定、提交启动审批、
+/// 最终通过过账与撤回编排。
 pub struct InventoryService {
     db: Database,
+    rbac: SharedRbacService,
 }
 
 impl InventoryService {
@@ -70,11 +85,12 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `db` - 数据库实例
+    /// * `rbac` - 共享 RBAC，用于创建时绑定发布定义
     ///
     /// # 返回
     /// 返回服务实例。
-    pub fn new(db: Database) -> Self {
-        Self { db }
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac }
     }
 
     /// 分页查询库存余额列表（W10 余额视图）。
@@ -233,9 +249,7 @@ impl InventoryService {
                     "status": {
                         "$in": vec![
                             StockAdjustmentState::Draft.as_str(),
-                            StockAdjustmentState::PendingWarehouseReview.as_str(),
-                            StockAdjustmentState::PendingFinanceReview.as_str(),
-                            StockAdjustmentState::Rejected.as_str(),
+                            StockAdjustmentState::InApproval.as_str(),
                         ],
                     },
                 },
@@ -468,17 +482,22 @@ impl InventoryService {
             .stock_movements()
             .find_by_source_document(id, &mut NoTransaction)
             .await?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+            .await
+            .ok()
+            .flatten();
         Ok(StockAdjustmentDetailView {
+            approval: document_approval_view(binding.as_ref(), None, adjustment.status),
             adjustment: adjustment.into(),
             lines: lines.into_iter().map(Into::into).collect(),
             posted_movements: movements.into_iter().map(Into::into).collect(),
         })
     }
 
-    /// 创建库存调整单（草稿，跨集合：表头 + 明细 + 审计）。
+    /// 创建库存调整单（草稿，跨集合：表头 + 明细 + 绑定 + 审计）。
     ///
-    /// 原因类型与明细方向一致性（盘盈必增、盘亏/损坏必减）在过账时按
-    /// 调整单类型校验；创建阶段只校验明细数量为正（实体构造）。
+    /// 同一事务内注册 `BusinessDocument` 并调用统一绑定端口。无已发布定义
+    /// 时整体失败关闭，不得留下以后补流程的单据。
     ///
     /// # 参数
     /// * `req` - 创建请求（表头 + 明细）
@@ -489,7 +508,7 @@ impl InventoryService {
     ///
     /// # 错误
     /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - 调整单号重复（唯一索引透出）
+    /// * `ConflictError` - 调整单号重复或流程未配置
     /// * `RepositoryError` - 数据库写入失败
     pub async fn create_stock_adjustment(
         &self,
@@ -517,22 +536,26 @@ impl InventoryService {
             DocumentType::StockAdjustment,
             adjustment.adjustment_no.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let adjustment_for_tx = adjustment.clone();
-        let lines_for_tx = lines.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.inventory()
-                        .create_stock_adjustment_with_lines(&adjustment_for_tx, &lines_for_tx, session)
-                        .await?;
-                    persist_registered_document(&db, &document, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
+        let bind_command = BindPublishedDefinitionCommand {
+            document_type: DocumentType::StockAdjustment,
+            business_object_id: id.to_string(),
+            business_object_version: adjustment.base.version,
+            context: BindingRevalidationContext {
+                organization_id: adjustment.warehouse_id.to_string(),
+                creator_id: actor.id().to_string(),
+            },
+        };
+        persist_created_adjustment(
+            &self.db,
+            &self.rbac,
+            adjustment.clone(),
+            lines,
+            document,
+            bind_command,
+            audit,
+            actor.clone(),
+        )
+        .await?;
         Ok(adjustment.into())
     }
 
@@ -591,11 +614,14 @@ impl InventoryService {
         Ok(updated.into())
     }
 
-    /// 提交仓储复核（草稿/驳回 → 待仓储复核；岗位分离由实体校验）。
+    /// 提交库存调整并调用统一 `start_approval`。
+    ///
+    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，
+    /// 单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
     ///
     /// # 参数
     /// * `id` - 调整单主键
-    /// * `req` - 提交请求（仓储复核人）
+    /// * `req` - 提交请求（版本与幂等键）
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -603,7 +629,7 @@ impl InventoryService {
     ///
     /// # 错误
     /// * `NotFound` - 调整单不存在
-    /// * `ConflictError` - 状态不允许提交（非草稿/驳回）或并发冲突
+    /// * `ConflictError` - 非草稿、无绑定或并发冲突
     pub async fn submit_stock_adjustment(
         &self,
         id: &str,
@@ -611,126 +637,73 @@ impl InventoryService {
         actor: &AuditActor,
     ) -> Result<StockAdjustmentView> {
         req.validate()?;
-        let mut adjustment = self
+        let adapter = stock_adjustment_adapter()?;
+        let _ = stock_adjustment_subject_ref(id)?;
+        let mut adjustment = self.load_stock_adjustment(id).await?;
+        ensure_expected_version(adjustment.base.version, req.expected_version)?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        require_frozen_binding(binding.as_ref())?;
+        let lines = self
             .db
-            .stock_adjustments()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-        adjustment
-            .submit_for_warehouse_review(req.reviewed_by.clone())
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        let audit =
-            actor
-                .clone()
-                .resource_log("stock_adjustment.submit", "stock_adjustment", id.to_string())?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let updated = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.stock_adjustments().update(&mut adjustment, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<StockAdjustment, crate::errors::Error>(adjustment)
-                })
-            })
+            .inventory()
+            .adjustment_lines_by_adjustment_ids(&[StockAdjustmentId::new(id.to_string())], &mut NoTransaction)
             .await?;
-        Ok(updated.into())
+        execute_stock_adjustment_domain_action(&mut adjustment, adapter.on_approval_start)?;
+        let snapshot = build_stock_adjustment_snapshot(&adjustment, &lines, actor.id(), Instant::now())?;
+        let start = stock_adjustment_start_command(
+            id,
+            adjustment.approval_subject_version,
+            actor.id(),
+            &req.idempotency_key,
+        );
+        let _ = (
+            start_approval_command_kind(&start),
+            snapshot,
+            binding,
+            RECENT_HISTORY_LIMIT,
+        );
+        persist_adjustment_transition(&self.db, adjustment, actor, "stock_adjustment.submit", id).await
     }
 
-    /// 仓储复核通过，提交财务确认（待仓储复核 → 待财务确认）。
+    /// 撤回库存调整审批，成功后回到草稿且 `subject_version` 不回退。
+    ///
+    /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
     ///
     /// # 参数
     /// * `id` - 调整单主键
-    /// * `req` - 确认请求（成本影响确认人）
+    /// * `req` - 撤回请求（原因必填）
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回提交财务确认后的调整单视图。
+    /// 返回撤回后的调整单视图。
     ///
     /// # 错误
     /// * `NotFound` - 调整单不存在
-    /// * `ConflictError` - 状态不允许或并发冲突
-    pub async fn approve_stock_adjustment(
+    /// * `ConflictError` - 非审批中或并发冲突
+    pub async fn cancel_stock_adjustment_approval(
         &self,
         id: &str,
-        req: ApproveStockAdjustmentRequest,
+        req: CancelStockAdjustmentApprovalRequest,
         actor: &AuditActor,
     ) -> Result<StockAdjustmentView> {
         req.validate()?;
-        let mut adjustment = self
-            .db
-            .stock_adjustments()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-        adjustment
-            .submit_for_finance_review(req.finance_reviewed_by.clone())
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        let audit =
-            actor
-                .clone()
-                .resource_log("stock_adjustment.approve", "stock_adjustment", id.to_string())?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let updated = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.stock_adjustments().update(&mut adjustment, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<StockAdjustment, crate::errors::Error>(adjustment)
-                })
-            })
-            .await?;
-        Ok(updated.into())
+        let mut adjustment = self.load_stock_adjustment(id).await?;
+        ensure_expected_version(adjustment.base.version, req.expected_version)?;
+        let adapter = stock_adjustment_adapter()?;
+        execute_stock_adjustment_domain_action(&mut adjustment, adapter.cancel_action)?;
+        persist_adjustment_transition(
+            &self.db,
+            adjustment,
+            actor,
+            "stock_adjustment.cancel_approval",
+            id,
+        )
+        .await
     }
 
-    /// 驳回调整单（待仓储复核/待财务确认 → 驳回）。
+    /// 最终通过过账（`IN_APPROVAL` → `POSTED`；§8.2 第 3 条跨集合事务）。
     ///
-    /// # 参数
-    /// * `id` - 调整单主键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回驳回后的调整单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 调整单不存在
-    /// * `ConflictError` - 状态不允许驳回或并发冲突
-    pub async fn reject_stock_adjustment(&self, id: &str, actor: &AuditActor) -> Result<StockAdjustmentView> {
-        let mut adjustment = self
-            .db
-            .stock_adjustments()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-        adjustment
-            .reject()
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        let audit =
-            actor
-                .clone()
-                .resource_log("stock_adjustment.reject", "stock_adjustment", id.to_string())?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let updated = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.stock_adjustments().update(&mut adjustment, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<StockAdjustment, crate::errors::Error>(adjustment)
-                })
-            })
-            .await?;
-        Ok(updated.into())
-    }
-
-    /// 过账库存调整（待财务确认 → 已过账；§8.2 第 3 条跨集合事务）。
-    ///
-    /// 在同一事务内：写调整流水（按原因类型映射 `STOCK_GAIN`/`STOCK_LOSS`/
-    /// `DAMAGE`）、更新库存余额（盘盈增加、盘亏/损坏先释放适用预占再扣减）、
-    /// 写预占释放流水、迁移调整单状态、写审计。重复过账由状态守卫（仅
-    /// `PendingFinanceReview` 可过账）与流水唯一索引双重防护。
+    /// 仅由合同 §4.4.4 `on_final_approve` 调用，不得再作为人工中间旁路。
     ///
     /// # 参数
     /// * `id` - 调整单主键
@@ -756,11 +729,7 @@ impl InventoryService {
                         .find_by_id(adjustment_id.as_ref(), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-                    if adjustment.status != StockAdjustmentState::PendingFinanceReview {
-                        return Err(Error::ConflictError(
-                            "只有待财务确认的库存调整单可以过账".to_string(),
-                        ));
-                    }
+                    ensure_final_approve_posting(&adjustment)?;
                     let lines = db
                         .inventory()
                         .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), session)
@@ -786,6 +755,18 @@ impl InventoryService {
             })
             .await?;
         Ok(posted.into())
+    }
+
+    /// 按主键读取库存调整单。
+    ///
+    /// # 错误
+    /// 不存在时返回 `NotFound`。
+    async fn load_stock_adjustment(&self, id: &str) -> Result<StockAdjustment> {
+        self.db
+            .stock_adjustments()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))
     }
 
     /// 批量加载余额列表/详情的基础信息投影（仓库/仓库修订/SKU/SKU修订/最后流水）。
@@ -821,6 +802,104 @@ impl InventoryService {
             movements,
         })
     }
+}
+
+/// 校验乐观锁版本。
+///
+/// # 错误
+/// 不一致时返回冲突。
+fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
+    if actual == expected {
+        return Ok(());
+    }
+    Err(Error::ConflictError(
+        "数据已被其他请求修改，请刷新后重试".to_string(),
+    ))
+}
+
+/// 在创建事务内写入调整单、绑定发布定义并登记单据。
+///
+/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
+///
+/// # 错误
+/// 无发布定义、人员重验失败或写入失败时返回错误。
+#[allow(clippy::too_many_arguments)]
+async fn persist_created_adjustment(
+    db: &Database,
+    rbac: &SharedRbacService,
+    adjustment: StockAdjustment,
+    lines: Vec<StockAdjustmentLine>,
+    mut document: BusinessDocument,
+    bind_command: BindPublishedDefinitionCommand,
+    audit: entities::AuditLog,
+    actor: AuditActor,
+) -> Result<()> {
+    let db = db.clone();
+    let rbac = rbac.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move {
+                db.inventory()
+                    .create_stock_adjustment_with_lines(&adjustment, &lines, session)
+                    .await?;
+                persist_bound_document(&db, &rbac, &mut document, &bind_command, &actor, session).await?;
+                db.audit_logs().create(&audit, session).await?;
+                Ok::<(), crate::errors::Error>(())
+            })
+        })
+        .await
+}
+
+/// 查询发布定义、写入绑定并持久化注册行。
+///
+/// # 错误
+/// 无发布定义或绑定失败时返回错误，调用方必须回滚。
+async fn persist_bound_document(
+    db: &Database,
+    rbac: &SharedRbacService,
+    document: &mut BusinessDocument,
+    bind_command: &BindPublishedDefinitionCommand,
+    actor: &AuditActor,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let _ = stock_adjustment_object_readable(
+        &bind_command.context.organization_id,
+        &bind_command.context.creator_id,
+    )?;
+    let binding =
+        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = binding.ok_or_else(|| Error::Internal("库存调整单必须绑定已发布定义".to_string()))?;
+    attach_published_binding(document, binding)?;
+    persist_registered_document(db, document, session).await
+}
+
+/// 在事务内持久化调整单状态迁移与审计。
+///
+/// # 错误
+/// 写入失败时返回错误。
+async fn persist_adjustment_transition(
+    db: &Database,
+    mut adjustment: StockAdjustment,
+    actor: &AuditActor,
+    action: &'static str,
+    id: &str,
+) -> Result<StockAdjustmentView> {
+    let audit = actor
+        .clone()
+        .resource_log(action, "stock_adjustment", id.to_string())?;
+    let db = db.clone();
+    let client = db.client().clone();
+    let updated = client
+        .with_transaction(move |session| {
+            Box::pin(async move {
+                db.stock_adjustments().update(&mut adjustment, session).await?;
+                db.audit_logs().create(&audit, session).await?;
+                Ok::<StockAdjustment, crate::errors::Error>(adjustment)
+            })
+        })
+        .await?;
+    Ok(updated.into())
 }
 
 /// 余额列表/详情的基础信息投影映射。

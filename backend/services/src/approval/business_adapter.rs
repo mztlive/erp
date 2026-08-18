@@ -313,6 +313,12 @@ pub fn adapter_object_read_decision(
     if context.organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
         return Err(Error::ValidationError("单据组织或审批人不能为空".to_string()));
     }
+    if spec.document_type == DocumentType::StockAdjustment {
+        return Ok(Some(crate::inventory::stock_adjustment_object_readable(
+            &context.organization_id,
+            assignee_user_id,
+        )?));
+    }
     let _ = context.creator_id.as_str();
     Ok(None)
 }
@@ -558,14 +564,23 @@ mod tests {
     /// 读取权未接线或显式拒绝必须失败关闭。
     #[test]
     fn object_read_unwired_and_denied_fail_closed() {
-        let spec = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
+        let unwired = adapter_spec_of(DocumentType::SalesOrder).expect("未接入类型仍有规格");
         let context = BindingRevalidationContext {
             organization_id: "org-1".to_string(),
             creator_id: "creator-1".to_string(),
         };
-        assert!(adapter_object_read_decision(&spec, &context, "u1")
-            .expect("未接线应返回 None")
+        assert!(adapter_object_read_decision(&unwired, &context, "u1")
+            .expect("未接线类型应返回 None")
             .is_none());
+        let pilot = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
+        assert_eq!(
+            adapter_object_read_decision(&pilot, &context, "creator-1").expect("创建人可读"),
+            Some(true)
+        );
+        assert_eq!(
+            adapter_object_read_decision(&pilot, &context, "u1").expect("组织上下文已给出"),
+            Some(true)
+        );
         assert!(require_wired_object_read(None).is_err());
         assert!(ensure_object_readable(false).is_err());
     }
@@ -595,8 +610,17 @@ mod tests {
             DataScopeType::Organization,
             &["org-1"],
         );
-        let unwired = revalidate_assignee_binding_access(
+        revalidate_assignee_binding_access(
             &spec,
+            std::slice::from_ref(&user_org),
+            std::slice::from_ref(&role_company),
+            &context,
+            "u1",
+        )
+        .expect("试点读取权已接线且组织覆盖时应通过");
+        let sales = adapter_spec_of(DocumentType::SalesOrder).expect("未接入类型");
+        let unwired = revalidate_assignee_binding_access(
+            &sales,
             std::slice::from_ref(&user_org),
             std::slice::from_ref(&role_company),
             &context,
