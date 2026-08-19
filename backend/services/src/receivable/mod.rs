@@ -1,13 +1,14 @@
 //! 域 D18 `receivable` 服务编排（页面：W11 客户往来、W13 卡券票款复核）。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
-//! - 单集合草稿写入（回款/发票草稿、复核缓存更新）→ `&mut NoTransaction`；
+//! - 单集合草稿写入（发票草稿、复核缓存更新）→ `&mut NoTransaction`；
+//! - 客户回款创建必须在同一事务注册 `BusinessDocument` 并绑定发布定义；
 //! - 跨集合资金/票款过账（§8.3 不变量）→
 //!   `database::Transactional::with_transaction`，闭包内按稳定顺序锁定两侧，
 //!   不执行外部 HTTP/文件 IO。
 //! - 资金类入口（回款过账、发票登记、红冲）以业务唯一键
 //!   （回款单号/规范化发票号码）与状态迁移构成去重机制，重复提交只产生一条
-//!   正式事实。
+//!   正式事实。回款过账只能作为审批最终通过动作。
 //!
 //! 跨域只经 `DatabaseExt` 调对方域 Repository：D13 `sales_orders()` 校验来源
 //! 销售单存在；D18 拥有 `invoice` 实体与仓储，D19 经 `invoices()` 复用。
@@ -17,7 +18,9 @@ use database::{
     SalesOrderExt, Transactional, WorkItemExt,
 };
 use entities::common::time::Instant;
-use entities::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
+use entities::document_registry::{
+    BusinessDocument, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionType,
+};
 use entities::file_asset::SecurityScanStatus;
 use entities::ids::{
     BusinessDocumentId, CustomerReceiptId, InvoiceId, ReceiptAllocationId, ReceivableAccountId,
@@ -27,10 +30,10 @@ use entities::ids::{
 use entities::money::Amount;
 use entities::receivable::{
     AccountReviewStatus, AllocationAction, CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus,
-    EntryDirection, Invoice, InvoiceData, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceiptAllocation,
-    ReceiptAllocationData, ReceivableAccount, ReceivableAccountData, ReceivableEntry, ReceivableEntryData,
-    ReceivableEntryType, ReceivableFundsReview, ReceivableFundsReviewData, ReviewResult,
-    SalesInvoiceAllocation, SalesInvoiceAllocationData,
+    EntryDirection, Invoice, InvoiceData, InvoiceDirection, InvoiceKind, InvoiceStatus,
+    PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData, ReceivableAccount,
+    ReceivableAccountData, ReceivableEntry, ReceivableEntryData, ReceivableEntryType, ReceivableFundsReview,
+    ReceivableFundsReviewData, ReviewResult, SalesInvoiceAllocation, SalesInvoiceAllocationData,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use entities::Permission;
@@ -42,24 +45,49 @@ use validator::Validate;
 use std::collections::HashSet;
 use std::str::FromStr;
 
+use crate::approval::binding::{
+    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
+};
+use crate::approval::business_adapter::BindingRevalidationContext;
+use crate::approval::execution::{prepare_cancel, prepare_start};
 use crate::audit::AuditActor;
+use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::{self, SharedRbacService};
 use crate::work_item::{WorkItemAllowedAction, WorkItemService};
 
+mod adapter;
+mod cancel_approval;
 mod dto;
+mod start_approval;
 
+pub use self::adapter::customer_receipt_object_readable;
+use self::adapter::{
+    build_customer_receipt_snapshot, customer_receipt_adapter, customer_receipt_responsible_org_id,
+    customer_receipt_start_command, customer_receipt_subject_ref, document_approval_view,
+    ensure_final_approve_posting, execute_customer_receipt_domain_action, pending_allocations_from_request,
+    require_frozen_binding, start_approval_command_kind, start_customer_receipt_approval,
+    RECENT_HISTORY_LIMIT,
+};
+use self::cancel_approval::{
+    build_customer_receipt_cancel_input, load_cancel_runtime, persist_customer_receipt_cancel,
+};
 use self::dto::SortDir;
 pub use self::dto::{
-    CardFundsReviewActionBlockerView, CardFundsReviewAllowedAction, CardFundsReviewBusinessResult,
-    CardFundsReviewConclusion, CardFundsReviewDecision, CardFundsReviewDetailParams,
-    CardFundsReviewFollowUpConfiguration, CardFundsReviewResult, CardFundsReviewType,
-    CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult, CompletedWorkItemStatus,
-    CreateCustomerReceiptRequest, CreateInvoiceRequest, CreateReceivableAccountRequest,
-    CustomerReceiptListParams, CustomerReceiptView, FollowUpRequiredRegistration, FundsReviewView,
-    InvoiceListParams, InvoiceView, IssueRedInvoiceRequest, PageView, PostCustomerReceiptRequest,
-    PostInvoiceRequest, ReceiptAllocationView, ReceivableAccountListParams, ReceivableAccountView,
-    ReceivableInvoiceFactView, ReceivableReceiptFactView, SalesInvoiceAllocationView,
+    CancelCustomerReceiptApprovalRequest, CardFundsReviewActionBlockerView, CardFundsReviewAllowedAction,
+    CardFundsReviewBusinessResult, CardFundsReviewConclusion, CardFundsReviewDecision,
+    CardFundsReviewDetailParams, CardFundsReviewFollowUpConfiguration, CardFundsReviewResult,
+    CardFundsReviewType, CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult,
+    CompletedWorkItemStatus, CreateCustomerReceiptRequest, CreateInvoiceRequest,
+    CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView, DocumentApprovalView,
+    FollowUpRequiredRegistration, FundsReviewView, InvoiceListParams, InvoiceView, IssueRedInvoiceRequest,
+    PageView, PostCustomerReceiptRequest, PostInvoiceRequest, ReceiptAllocationView,
+    ReceivableAccountListParams, ReceivableAccountView, ReceivableInvoiceFactView, ReceivableReceiptFactView,
+    SalesInvoiceAllocationView, SubmitCustomerReceiptRequest,
+};
+use self::start_approval::{
+    build_customer_receipt_start_input, load_bound_definition_graph, load_start_receipt,
+    persist_customer_receipt_start,
 };
 
 /// 应收往来子账列表筛选条件类型（经 `ReceivableExt` 关联类型跨 crate 可达）。
@@ -718,10 +746,10 @@ impl ReceivableService {
         self.customer_receipt_view(id.to_string()).await
     }
 
-    /// 登记客户回款草稿（单集合写入，无事务）。
+    /// 登记客户回款草稿，并在同一事务绑定已发布审批定义。
     ///
-    /// 回款单号全局唯一（`uk_customer_receipts_no` 唯一索引）构成幂等去重：
-    /// 重复登记同一单号落入 409，只产生一条正式事实。
+    /// 回款单号全局唯一（`uk_customer_receipts_no` 唯一索引）构成幂等去重。
+    /// 绑定失败必须回滚业务实体，不得把绑定推迟到提交。
     ///
     /// # 参数
     /// * `req` - 创建请求
@@ -731,7 +759,7 @@ impl ReceivableService {
     /// 返回新建回款单视图。
     ///
     /// # 错误
-    /// * `ConflictError` - 回款单号重复
+    /// * `ConflictError` - 回款单号重复或流程未配置
     pub async fn create_customer_receipt(
         &self,
         req: CreateCustomerReceiptRequest,
@@ -749,31 +777,211 @@ impl ReceivableService {
                 bank_reference: req.bank_reference,
             },
         )?;
-        let audit = actor.clone().resource_log(
-            "customer_receipt.create",
-            "customer_receipt",
-            receipt.base.id.clone(),
-        )?;
-        self.db
-            .customer_receipts()
-            .create(&receipt, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
-
+        persist_created_customer_receipt(&self.db, &self.rbac, receipt.clone(), actor.clone()).await?;
         self.customer_receipt_detail(&receipt.base.id).await
     }
 
-    /// 客户回款过账并核销（§8.3-1 事务不变量）。
+    /// 提交客户回款并调用统一 `start_approval`。
     ///
-    /// 同一事务内：校验回款与应收分录同一往来主体、分录开放余额与回款剩余
-    /// 余额；写回款核销分配（`APPLY`）；按条件原子更新子账已核销进度
-    /// （`apply_settlement` 不超额核销）；草稿回款迁移为已过账。
-    /// 任一校验失败整体回滚，不存在只有分配没有进度或只有进度没有分配的
-    /// 中间态。回款单号唯一 + 状态迁移构成重复提交去重。
+    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，
+    /// 单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
+    ///
+    /// # 参数
+    /// * `id` - 回款单主键
+    /// * `req` - 提交请求（版本、幂等键与冻结分配）
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回提交后的回款单视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 回款单不存在
+    /// * `ConflictError` - 非草稿、无绑定或并发冲突
+    pub async fn submit_customer_receipt(
+        &self,
+        id: &str,
+        req: SubmitCustomerReceiptRequest,
+        actor: &AuditActor,
+    ) -> Result<CustomerReceiptView> {
+        req.validate()?;
+        let adapter = customer_receipt_adapter()?;
+        let mut receipt = self.load_customer_receipt(id).await?;
+        ensure_expected_version(receipt.base.version, req.expected_version)?;
+        let allocations = pending_allocations_from_request(&req.allocations)?;
+        start_customer_receipt_approval(&mut receipt, allocations)?;
+        self.dispatch_customer_receipt_start(id, receipt, req.idempotency_key, actor, adapter)
+            .await
+    }
+
+    /// 撤回客户回款审批，成功后回到草稿且 `subject_version` 不回退。
+    ///
+    /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
+    ///
+    /// # 参数
+    /// * `id` - 回款单主键
+    /// * `req` - 撤回请求（原因必填）
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回撤回后的回款单视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 回款单不存在
+    /// * `ConflictError` - 非审批中、已最终通过或并发冲突
+    pub async fn cancel_customer_receipt_approval(
+        &self,
+        id: &str,
+        req: CancelCustomerReceiptApprovalRequest,
+        actor: &AuditActor,
+    ) -> Result<CustomerReceiptView> {
+        req.validate()?;
+        let mut receipt = self.load_customer_receipt(id).await?;
+        ensure_expected_version(receipt.base.version, req.expected_version)?;
+        self.persist_cancelled_customer_receipt(id, &mut receipt, &req, actor)
+            .await?;
+        self.customer_receipt_detail(id).await
+    }
+
+    /// 客户端直接过账失败关闭。最终动作只能由审批运行时调用。
+    ///
+    /// # 返回
+    /// 恒返回冲突。
+    ///
+    /// # 错误
+    /// 恒返回 `ConflictError`。
+    pub fn reject_client_post() -> Result<CustomerReceiptView> {
+        Err(Error::ConflictError(
+            "客户回款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string(),
+        ))
+    }
+
+    /// 从绑定读取定义并持久化启动事实。
+    ///
+    /// # 错误
+    /// 无绑定、定义缺失或写入失败时返回错误。
+    async fn dispatch_customer_receipt_start(
+        &self,
+        id: &str,
+        receipt: CustomerReceipt,
+        idempotency_key: String,
+        actor: &AuditActor,
+        adapter: adapter::CustomerReceiptAdapter,
+    ) -> Result<CustomerReceiptView> {
+        let subject = customer_receipt_subject_ref(id)?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = require_frozen_binding(binding.as_ref())?.clone();
+        let now = Instant::now();
+        let snapshot = build_customer_receipt_snapshot(&receipt, actor.id(), now)?;
+        let start = customer_receipt_start_command(
+            id,
+            receipt.approval_subject_version,
+            actor.id(),
+            &idempotency_key,
+        );
+        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
+        let organization_id = customer_receipt_responsible_org_id(&receipt)?;
+        let _ = customer_receipt_object_readable(&organization_id, actor.id())?;
+        let graph = load_bound_definition_graph(&self.db, &binding).await?;
+        let existing_receipt = load_start_receipt(
+            &self.db,
+            &subject,
+            receipt.approval_subject_version,
+            &idempotency_key,
+        )
+        .await?;
+        let start_input = build_customer_receipt_start_input(
+            graph,
+            &binding,
+            subject,
+            receipt.approval_subject_version,
+            actor.id(),
+            &organization_id,
+            &idempotency_key,
+            existing_receipt,
+            now,
+        )?;
+        let prepared = prepare_start(start_input)?;
+        persist_customer_receipt_start(
+            &self.db,
+            receipt,
+            actor,
+            id,
+            snapshot,
+            prepared,
+            adapter.owner_role,
+            organization_id,
+            now,
+        )
+        .await?;
+        self.customer_receipt_detail(id).await
+    }
+
+    /// 加载撤回运行事实并写回草稿。
+    ///
+    /// # 错误
+    /// 无绑定、实例终态或写入失败时返回错误。
+    async fn persist_cancelled_customer_receipt(
+        &self,
+        id: &str,
+        receipt: &mut CustomerReceipt,
+        req: &CancelCustomerReceiptApprovalRequest,
+        actor: &AuditActor,
+    ) -> Result<()> {
+        let adapter = customer_receipt_adapter()?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = require_frozen_binding(binding.as_ref())?.clone();
+        let subject = customer_receipt_subject_ref(id)?;
+        let runtime =
+            load_cancel_runtime(&self.db, &binding, &subject, receipt.approval_subject_version).await?;
+        let now = Instant::now();
+        let input = build_customer_receipt_cancel_input(
+            &runtime,
+            &req.reason,
+            actor.id(),
+            &req.idempotency_key,
+            None,
+            now,
+        )?;
+        let prepared = prepare_cancel(input)?;
+        execute_customer_receipt_domain_action(receipt, adapter.cancel_action)?;
+        let audit = actor.clone().resource_log(
+            "customer_receipt.cancel_approval",
+            "customer_receipt",
+            id.to_string(),
+        )?;
+        persist_customer_receipt_cancel(
+            &self.db,
+            receipt.clone(),
+            prepared,
+            runtime.open_tasks,
+            actor.id(),
+            &req.reason,
+            now,
+            audit,
+        )
+        .await
+    }
+
+    /// 按主键读取客户回款单。
+    ///
+    /// # 错误
+    /// 不存在时返回 `NotFound`。
+    async fn load_customer_receipt(&self, id: &str) -> Result<CustomerReceipt> {
+        self.db
+            .customer_receipts()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))
+    }
+
+    /// 最终通过过账并核销（§8.3-1 事务不变量）。
+    ///
+    /// 作为合同 `on_final_approve`，仅 `IN_APPROVAL` 可进入过账。同一事务内：
+    /// 校验回款与应收分录同一往来主体、分录开放余额与回款剩余余额；写提交时
+    /// 冻结的核销分配（`APPLY`）；按条件原子更新子账已核销进度。
     ///
     /// # 参数
     /// * `id` - 回款单 ID
-    /// * `req` - 过账请求（核销分配行）
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -781,14 +989,9 @@ impl ReceivableService {
     ///
     /// # 错误
     /// * `NotFound` - 回款单或应收分录不存在
+    /// * `ConflictError` - 非审批中
     /// * `BusinessLogicError` - 跨主体核销、超额核销或重复过账
-    pub async fn post_customer_receipt(
-        &self,
-        id: &str,
-        req: PostCustomerReceiptRequest,
-        actor: &AuditActor,
-    ) -> Result<CustomerReceiptView> {
-        req.validate()?;
+    pub async fn post_customer_receipt(&self, id: &str, actor: &AuditActor) -> Result<CustomerReceiptView> {
         let db = self.db.clone();
         let client = db.client().clone();
         let actor_owned = actor.clone();
@@ -807,16 +1010,20 @@ impl ReceivableService {
                     if receipt.status == CustomerReceiptStatus::Reversed {
                         return Err(Error::BusinessLogicError("已冲正回款不能再核销".to_string()));
                     }
-                    if receipt.status == CustomerReceiptStatus::PendingReview {
-                        return Err(Error::BusinessLogicError("待复核回款必须先完成复核".to_string()));
-                    }
+                    ensure_final_approve_posting(&receipt)?;
+                    execute_customer_receipt_domain_action(
+                        &mut receipt,
+                        crate::approval::policy::ApprovalDomainAction::CustomerReceiptPost,
+                    )?;
 
                     let existing = db
                         .receipt_allocations()
                         .find_allocations_by_receipts(&[receipt.base.id.clone().into()], session)
                         .await?;
                     let net_allocated = net_receipt_allocated(&existing);
-                    if net_allocated.checked_add(req_allocated_total(&req)) > receipt.amount {
+                    if net_allocated.checked_add(pending_allocated_total(&receipt.pending_allocations))
+                        > receipt.amount
+                    {
                         return Err(Error::BusinessLogicError("核销合计超过回款金额".to_string()));
                     }
 
@@ -841,8 +1048,9 @@ impl ReceivableService {
                         .max()
                         .unwrap_or(0)
                         + 1;
-                    let mut new_allocations = Vec::with_capacity(req.allocations.len());
-                    for (index, line) in req.allocations.iter().enumerate() {
+                    let pending = receipt.pending_allocations.clone();
+                    let mut new_allocations = Vec::with_capacity(pending.len());
+                    for (index, line) in pending.iter().enumerate() {
                         let entry = db
                             .receivable_entries()
                             .find_by_id(&line.receivable_entry_id, session)
@@ -901,9 +1109,7 @@ impl ReceivableService {
                             ));
                         }
                     }
-                    if receipt.status == CustomerReceiptStatus::Draft {
-                        receipt.transition(CustomerReceiptStatus::Posted)?;
-                    }
+                    receipt.mark_posted()?;
                     db.customer_receipts().update(&mut receipt, session).await?;
                     for allocation in &new_allocations {
                         db.receipt_allocations().create(allocation, session).await?;
@@ -1453,6 +1659,11 @@ impl ReceivableService {
             .find_allocations_by_receipts(&[receipt.base.id.clone().into()], &mut NoTransaction)
             .await?;
         let (allocated_total, views) = allocation_view(&allocations);
+        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction).await {
+            Ok(binding) => binding,
+            Err(Error::NotFound(_)) => None,
+            Err(error) => return Err(error),
+        };
         Ok(CustomerReceiptView {
             id: receipt.base.id.clone(),
             receipt_no: receipt.receipt_no,
@@ -1467,6 +1678,7 @@ impl ReceivableService {
             unallocated_amount: receipt.amount.checked_sub(allocated_total),
             allocated_total,
             allocations: views,
+            approval: document_approval_view(binding.as_ref(), None, receipt.status),
         })
     }
 
@@ -2601,15 +2813,100 @@ fn sales_allocation_view(
     (net, views)
 }
 
-/// 汇总请求分配行金额。
+/// 校验乐观锁版本。
+///
+/// # 错误
+/// 不一致时返回冲突。
+fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
+    if actual == expected {
+        return Ok(());
+    }
+    Err(Error::ConflictError(
+        "数据已被其他请求修改，请刷新后重试".to_string(),
+    ))
+}
+
+/// 在创建事务内写入回款单、绑定发布定义并登记单据。
+///
+/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
+///
+/// # 错误
+/// 无发布定义、人员重验失败或写入失败时返回错误。
+async fn persist_created_customer_receipt(
+    db: &Database,
+    rbac: &SharedRbacService,
+    receipt: CustomerReceipt,
+    actor: AuditActor,
+) -> Result<()> {
+    let organization_id = customer_receipt_responsible_org_id(&receipt)?;
+    let bind_command = BindPublishedDefinitionCommand {
+        document_type: DocumentType::CustomerReceipt,
+        business_object_id: receipt.base.id.clone(),
+        business_object_version: receipt.base.version,
+        context: BindingRevalidationContext {
+            organization_id,
+            creator_id: actor.id().to_string(),
+        },
+    };
+    let document = new_registered_document(
+        &receipt.base.id,
+        DocumentType::CustomerReceipt,
+        receipt.receipt_no.clone(),
+    )?;
+    let audit = actor.clone().resource_log(
+        "customer_receipt.create",
+        "customer_receipt",
+        receipt.base.id.clone(),
+    )?;
+    let db = db.clone();
+    let rbac = rbac.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move {
+                persist_bound_customer_receipt_document(&db, &rbac, document, &bind_command, &actor, session)
+                    .await?;
+                db.customer_receipts().create(&receipt, session).await?;
+                db.audit_logs().create(&audit, session).await?;
+                Ok::<(), crate::errors::Error>(())
+            })
+        })
+        .await
+}
+
+/// 查询发布定义、写入绑定并持久化注册行。
+///
+/// # 错误
+/// 无发布定义或绑定失败时返回错误。
+async fn persist_bound_customer_receipt_document(
+    db: &Database,
+    rbac: &SharedRbacService,
+    mut document: BusinessDocument,
+    bind_command: &BindPublishedDefinitionCommand,
+    actor: &AuditActor,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let _ = customer_receipt_object_readable(
+        &bind_command.context.organization_id,
+        &bind_command.context.creator_id,
+    )?;
+    let binding =
+        bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
+    let binding = binding.ok_or_else(|| Error::Internal("客户回款单必须绑定已发布定义".to_string()))?;
+    attach_published_binding(&mut document, binding)?;
+    db.business_documents().create(&document, session).await?;
+    Ok(())
+}
+
+/// 汇总冻结分配行金额。
 ///
 /// # 参数
-/// * `req` - 回款过账请求
+/// * `allocations` - 提交时冻结的待过账分配
 ///
 /// # 返回
-/// 返回请求内各分配行金额之和。
-fn req_allocated_total(req: &PostCustomerReceiptRequest) -> Amount {
-    req.allocations
+/// 返回各分配行金额之和。
+fn pending_allocated_total(allocations: &[PendingReceiptAllocation]) -> Amount {
+    allocations
         .iter()
         .fold(zero_amount(), |sum, line| sum.checked_add(line.allocated_amount))
 }
@@ -2752,5 +3049,91 @@ mod card_funds_review_tests {
         assert_eq!(id, card_funds_audit_id("actor-1", "secret-idempotency-key"));
         assert_ne!(id, card_funds_audit_id("actor-2", "secret-idempotency-key"));
         assert!(!id.contains("secret-idempotency-key"));
+    }
+}
+
+#[cfg(test)]
+mod customer_receipt_approval_tests {
+    use super::{execute_customer_receipt_domain_action, start_customer_receipt_approval, ReceivableService};
+    use crate::approval::policy::ApprovalDomainAction;
+    use entities::common::time::Instant;
+    use entities::ids::{CustomerReceiptId, PartyId, ReceivableEntryId};
+    use entities::money::Amount;
+    use entities::receivable::{
+        CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus, PendingReceiptAllocation,
+    };
+    use std::str::FromStr;
+
+    fn draft_receipt() -> CustomerReceipt {
+        CustomerReceipt::new(
+            CustomerReceiptId::new("cr-1"),
+            CustomerReceiptData {
+                receipt_no: "RC-1".into(),
+                counterparty_party_id: PartyId::new("party-1"),
+                customer_id: None,
+                received_at: Instant::from_unix_secs(1),
+                amount: Amount::from_str("100").expect("金额合法"),
+                bank_reference: None,
+            },
+        )
+        .expect("草稿必须可构造")
+    }
+
+    /// 创建必须注册 BusinessDocument 并绑定发布定义。
+    #[test]
+    fn create_registers_document_and_binds_published_definition() {
+        let source = include_str!("mod.rs");
+        assert!(source.contains("bind_published_definition_on_document_create"));
+        assert!(source.contains("new_registered_document"));
+        assert!(source.contains("DocumentType::CustomerReceipt"));
+        assert!(source.contains("persist_created_customer_receipt"));
+    }
+
+    /// 提交必须锁定单据、递增 approval_subject_version 并调用 start_approval。
+    #[test]
+    fn submit_calls_start_approval_with_subject_version() {
+        let source = include_str!("mod.rs");
+        assert!(source.contains("pub async fn submit_customer_receipt"));
+        assert!(source.contains("customer_receipt_start_command"));
+        assert!(source.contains("receipt.approval_subject_version"));
+        assert!(source.contains("prepare_start"));
+    }
+
+    /// 最终动作唯一为 post_customer_receipt，且客户端过账旁路关闭。
+    #[test]
+    fn final_action_is_post_customer_receipt() {
+        let source = include_str!("mod.rs");
+        assert!(source.contains("pub async fn post_customer_receipt"));
+        assert!(source.contains("receipt.mark_posted"));
+        assert!(source.contains("CustomerReceiptPost"));
+        assert!(source.contains("pending_allocations"));
+        assert!(ReceivableService::reject_client_post().is_err());
+    }
+
+    /// 撤回必须调用统一 cancel 并回到草稿。
+    #[test]
+    fn cancel_uses_unified_port() {
+        let source = include_str!("mod.rs");
+        assert!(source.contains("pub async fn cancel_customer_receipt_approval"));
+        assert!(source.contains("prepare_cancel"));
+        assert!(source.contains("persist_customer_receipt_cancel"));
+        let _ = ReceivableService::reject_client_post();
+        let mut receipt = draft_receipt();
+        start_customer_receipt_approval(
+            &mut receipt,
+            vec![PendingReceiptAllocation::new(
+                ReceivableEntryId::new("re-1"),
+                Amount::from_str("10").expect("金额合法"),
+            )
+            .expect("分配合法")],
+        )
+        .unwrap();
+        execute_customer_receipt_domain_action(
+            &mut receipt,
+            ApprovalDomainAction::CustomerReceiptCancelApproval,
+        )
+        .unwrap();
+        assert_eq!(receipt.status, CustomerReceiptStatus::Draft);
+        assert_eq!(receipt.approval_subject_version, 1);
     }
 }

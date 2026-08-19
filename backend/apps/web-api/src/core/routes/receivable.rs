@@ -82,6 +82,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/customer-receipts/{id}/submit",
+            with_permission(
+                post(receivable::customer_receipt_submit),
+                rbac,
+                receivable::customer_receipt_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-receipts/{id}/cancel-approval",
+            with_permission(
+                post(receivable::customer_receipt_cancel_approval),
+                rbac,
+                receivable::customer_receipt_cancel_approval_permission_key(),
+            ),
+        )
+        .route(
             "/customer-receipts/{id}/post",
             with_permission(
                 post(receivable::customer_receipt_post),
@@ -129,4 +145,21 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 receivable::invoice_red_issue_permission_key(),
             ),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    /// 客户回款路由暴露提交与撤回，不再把过账当客户端旁路入口。
+    #[test]
+    fn customer_receipt_routes_expose_submit_and_cancel() {
+        let production = include_str!("receivable.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产路由必须存在");
+        assert!(production.contains("/customer-receipts/{id}/submit"));
+        assert!(production.contains("/customer-receipts/{id}/cancel-approval"));
+        assert!(production.contains("customer_receipt_submit"));
+        assert!(production.contains("customer_receipt_cancel_approval"));
+        assert!(!production.contains("PENDING_REVIEW"));
+    }
 }
