@@ -17,6 +17,7 @@ import type {
     BackendReceivableAccount,
 } from "./dto"
 import { instantToIso } from "./mappers"
+import { mapCustomerReceiptApproval } from "@/features/customer-receivables/lib/customer-receipt-approval"
 
 export const sessions = new Map<string, AllocationSessionView>()
 let sessionSeq = 100
@@ -95,6 +96,8 @@ export async function createAllocationSession(
 ): Promise<AllocationSessionView> {
     const pool = await buildPool(input.mode, input.counterpartyPartyId)
     let existingFactNo: string | undefined
+    let existingFactVersion: number | undefined
+    let approval: AllocationSessionView["approval"]
     let fact: AllocationSessionView["fact"] = {}
     let prefillAllocations: AllocationDraftLine[] = []
     let customerId = ""
@@ -105,6 +108,8 @@ export async function createAllocationSession(
             `/admin/customer-receipts/${encodeURIComponent(input.existingFactId)}`,
         )
         existingFactNo = r.receipt_no
+        existingFactVersion = r.version
+        approval = mapCustomerReceiptApproval(r.approval)
         customerId = r.customer_id ?? ""
         customerName = r.customer_id ?? ""
         fact = {
@@ -218,6 +223,8 @@ export async function createAllocationSession(
         status: "draft",
         existingFactId: input.existingFactId,
         existingFactNo,
+        existingFactVersion,
+        approval,
         fact,
         pool,
         allocations: prefillAllocations,

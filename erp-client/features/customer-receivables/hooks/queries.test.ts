@@ -32,6 +32,7 @@ vi.mock('@/features/customer-receivables/api', () => ({
     postAllocation: vi.fn(),
     resolvePostUnknown: vi.fn(),
     reverseFact: vi.fn(),
+    ensureCustomerReceiptDraft: vi.fn(),
 }))
 
 const mockedApi = vi.mocked(customerReceivablesApi)
@@ -351,9 +352,12 @@ describe('usePostAllocationMutation', () => {
         expect(mockedApi.postAllocation).toHaveBeenCalledTimes(1)
         expect(mockedApi.postAllocation.mock.calls[0][0]).toEqual(input)
 
-        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(2))
         expect(invalidateSpy).toHaveBeenCalledWith({
             queryKey: ['customer-receivables'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'CustomerReceipt', 'r1'],
         })
     })
 

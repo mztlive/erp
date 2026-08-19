@@ -28,7 +28,8 @@ function CustomerAccountsFallback() {
 
 /**
  * SPA 壳：URL 查询由客户端 useSearchParams 恢复
- * view / counterpartyId / customerId / q / sessionId / returnTo。
+ * view / counterpartyId / customerId / q / sessionId / returnTo /
+ * previewKind / previewId / currentWorkItemId。
  * 业务数据不在服务端 fetch。
  */
 export default function Page() {

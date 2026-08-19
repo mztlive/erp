@@ -17,10 +17,13 @@ import {
     parseAmt,
 } from "@/features/customer-receivables/lib/allocation-math"
 import {
+    useEnsureCustomerReceiptDraftMutation,
     usePostAllocationMutation,
     useResolvePostUnknownMutation,
     useSaveAllocationDraftMutation,
 } from "@/features/customer-receivables/hooks/queries"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
+import { readCustomerReceiptApprovalResponsibility } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import type {
     AllocationDraftLine,
     AllocationSessionView,
@@ -44,6 +47,7 @@ export function useAllocationSession({
     const saveMutation = useSaveAllocationDraftMutation()
     const postMutation = usePostAllocationMutation()
     const resolveMutation = useResolvePostUnknownMutation()
+    const ensureReceiptMutation = useEnsureCustomerReceiptDraftMutation()
 
     const [allocations, setAllocations] = React.useState<AllocationDraftLine[]>(
         () => session.allocations.map((a) => ({ ...a })),
@@ -60,6 +64,9 @@ export function useAllocationSession({
     )
     const idempotencyRef = React.useRef<string | null>(null)
     const baselineRef = React.useRef("")
+    const [receiptApproval, setReceiptApproval] = React.useState<
+        DocumentApprovalView | undefined
+    >(session.approval)
 
     const isReceipt = session.mode === "receipt"
     const existing = Boolean(session.existingFactId)
@@ -70,6 +77,10 @@ export function useAllocationSession({
             onChange: factFormSchema,
         },
         onSubmit: async () => {
+            if (isReceipt) {
+                const prepared = await prepareReceiptDraft()
+                if (!prepared) return
+            }
             setConfirmOpen(true)
         },
     })
@@ -82,6 +93,7 @@ export function useAllocationSession({
         setEditVersion(session.editVersion)
         setDraftSavedAt(session.savedAt)
         setPostedLocally(false)
+        setReceiptApproval(session.approval)
         baselineRef.current = snapshot()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [session.draftSessionId, session.editVersion, session.savedAt])
@@ -168,6 +180,16 @@ export function useAllocationSession({
             message: "拟分配合计超过记录金额",
         })
     }
+    if (
+        isReceipt &&
+        allocations.filter((line) => parseAmt(line.amount) > 0).length === 0
+    ) {
+        issues.push({
+            id: "need-alloc",
+            label: "核销分配",
+            message: "提交审批至少需要一条核销分配",
+        })
+    }
 
     const canSubmit =
         session.leaseValid &&
@@ -233,16 +255,54 @@ export function useAllocationSession({
             })
             setEditVersion(next.editVersion)
             setDraftSavedAt(next.savedAt)
+            if (next.approval) setReceiptApproval(next.approval)
             baselineRef.current = snapshot()
         } catch (err) {
             setActionError(getErrorMessage(err, "保存草稿失败"))
         }
     }
 
+    /**
+     * 提交确认前先创建回款草稿，只读展示服务端绑定。
+     *
+     * @returns 创建或刷新成功为 true。
+     */
+    async function prepareReceiptDraft(): Promise<boolean> {
+        setActionError(null)
+        if (!idempotencyRef.current) {
+            idempotencyRef.current = `w11-submit-${session.draftSessionId}-${Date.now()}`
+        }
+        try {
+            const fact = factFromValues(form.state.values, isReceipt)
+            const saved = await saveMutation.mutateAsync({
+                draftSessionId: session.draftSessionId,
+                fact,
+                allocations,
+                editVersion,
+            })
+            setEditVersion(saved.editVersion)
+            setDraftSavedAt(saved.savedAt)
+            const ensured = await ensureReceiptMutation.mutateAsync({
+                draftSessionId: session.draftSessionId,
+                editVersion: saved.editVersion,
+                idempotencyKey: idempotencyRef.current,
+            })
+            if (ensured.status !== "succeeded") {
+                setActionError(ensured.message)
+                return false
+            }
+            setReceiptApproval(ensured.session.approval)
+            return true
+        } catch (err) {
+            setActionError(getErrorMessage(err, "创建回款草稿失败"))
+            return false
+        }
+    }
+
     async function doPost() {
         setActionError(null)
         if (!idempotencyRef.current) {
-            idempotencyRef.current = `w11-post-${session.draftSessionId}-${Date.now()}`
+            idempotencyRef.current = `w11-submit-${session.draftSessionId}-${Date.now()}`
         }
         // 先保存草稿同步服务端
         try {
@@ -270,10 +330,16 @@ export function useAllocationSession({
     function applyPostResult(res: PostAllocationResult) {
         if (res.status === "succeeded") {
             setPostedLocally(true)
+            if (res.approval) setReceiptApproval(res.approval)
+            const responsibility = readCustomerReceiptApprovalResponsibility(
+                res.approval,
+            )
             setResult({
                 status: "succeeded",
-                title: isReceipt ? "回款已登记并核销" : "销项发票已登记并分配",
-                description: `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}。`,
+                title: isReceipt ? "回款已提交审批" : "销项发票已登记并分配",
+                description: isReceipt
+                    ? `已进入审批。单号 ${res.factNo}。全部节点通过后过账核销。`
+                    : `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}。`,
                 reference: res.operationId,
                 facts: [
                     {
@@ -283,6 +349,14 @@ export function useAllocationSession({
                     { label: "净已分配", value: res.allocatedTotal },
                     { label: "未分配余额", value: res.unallocatedAmount },
                     { label: "往来主体", value: session.counterpartyPartyName },
+                    ...(isReceipt && responsibility.nextResponsible
+                        ? [
+                              {
+                                  label: "当前审批人",
+                                  value: responsibility.nextResponsible,
+                              },
+                          ]
+                        : []),
                 ],
                 returnTo: res.returnTo,
             })
@@ -353,6 +427,7 @@ export function useAllocationSession({
         isReceipt,
         existing,
         locked,
+        receiptApproval,
         allocations,
         editVersion,
         draftSavedAt,
@@ -381,5 +456,6 @@ export function useAllocationSession({
         saveMutation,
         postMutation,
         resolveMutation,
+        ensureReceiptMutation,
     }
 }

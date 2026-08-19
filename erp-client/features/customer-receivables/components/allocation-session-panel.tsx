@@ -18,10 +18,16 @@ import { SessionFactFields } from "@/features/customer-receivables/components/se
 import { SessionHeader } from "@/features/customer-receivables/components/session-header"
 import { SessionPool } from "@/features/customer-receivables/components/session-pool"
 import { SessionRemoveLineDialog } from "@/features/customer-receivables/components/session-remove-line-dialog"
+import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
+import { CustomerReceiptSubmitConfirmDialog } from "@/features/customer-receivables/components/customer-receipt-submit-confirm-dialog"
 import { useAllocationSession } from "@/features/customer-receivables/hooks/use-allocation-session"
 import { money } from "@/features/customer-receivables/lib/allocation-math"
+import { customerReceiptApprovalPhase } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import type { AllocationSessionView } from "@/features/customer-receivables/types"
 
+/**
+ * 核销工作区。回款创建后只读展示绑定，提交确认走通用审批路线。
+ */
 export function AllocationSessionPanel({
     session,
     onClose,
@@ -60,10 +66,16 @@ export function AllocationSessionPanel({
         doSaveDraft,
         doPost,
         resolveUnknown,
+        receiptApproval,
         saveMutation,
         postMutation,
         resolveMutation,
+        ensureReceiptMutation,
     } = useAllocationSession({ session, onClose, onPosted })
+    const receiptPhase = customerReceiptApprovalPhase(
+        receiptApproval,
+        postedLocally ? "IN_APPROVAL" : "DRAFT",
+    )
 
     return (
         <div className="flex flex-col gap-4">
@@ -123,6 +135,14 @@ export function AllocationSessionPanel({
                     <AlertTitle>操作未成功</AlertTitle>
                     <AlertDescription>{actionError}</AlertDescription>
                 </Alert>
+            ) : null}
+
+            {isReceipt && receiptApproval ? (
+                <CustomerReceiptApprovalArea
+                    phase={receiptPhase}
+                    approval={receiptApproval}
+                    documentId={session.existingFactId}
+                />
             ) : null}
 
             <div className="grid gap-4 lg:grid-cols-2">
@@ -272,6 +292,7 @@ export function AllocationSessionPanel({
                             disabled={
                                 !canSubmit ||
                                 postMutation.isPending ||
+                                ensureReceiptMutation.isPending ||
                                 postedLocally
                             }
                             onClick={() => {
@@ -307,29 +328,41 @@ export function AllocationSessionPanel({
                 onConfirmRemove={removeLine}
             />
 
-            <FormalActionConfirmDialog
-                open={confirmOpen}
-                onOpenChange={setConfirmOpen}
-                title={
-                    isReceipt ? "确认登记回款并核销" : "确认登记销项发票并分配"
-                }
-                actionLabel="提交"
-                confirmLabel="确认提交"
-                fromStatus={{ label: "本次草稿", tone: "warning" }}
-                toStatus={{
-                    label: isReceipt ? "已确认回款" : "已登记发票",
-                    tone: "success",
-                }}
-                lockedFields={["往来主体", "记录编号（提交后）", "既有分配行"]}
-                effects={[
-                    "形成回款/发票记录与追加式分配明细",
-                    "同步更新应收开放余额与净分配（系统）",
-                    "未分配余额按系统策略保留并可见",
-                    "重复提交不会重复生成记录",
-                ]}
-                nextDepartment="财务"
-                onConfirm={() => void doPost()}
-            />
+            {isReceipt ? (
+                <CustomerReceiptSubmitConfirmDialog
+                    open={confirmOpen}
+                    pending={postMutation.isPending}
+                    approval={receiptApproval}
+                    onOpenChange={setConfirmOpen}
+                    onConfirm={() => void doPost()}
+                />
+            ) : (
+                <FormalActionConfirmDialog
+                    open={confirmOpen}
+                    onOpenChange={setConfirmOpen}
+                    title="确认登记销项发票并分配"
+                    actionLabel="提交"
+                    confirmLabel="确认提交"
+                    fromStatus={{ label: "本次草稿", tone: "warning" }}
+                    toStatus={{
+                        label: "已登记发票",
+                        tone: "success",
+                    }}
+                    lockedFields={[
+                        "往来主体",
+                        "记录编号（提交后）",
+                        "既有分配行",
+                    ]}
+                    effects={[
+                        "形成发票记录与追加式分配明细",
+                        "同步更新应收开放余额与净分配（系统）",
+                        "未分配余额按系统策略保留并可见",
+                        "重复提交不会重复生成记录",
+                    ]}
+                    nextDepartment="财务"
+                    onConfirm={() => void doPost()}
+                />
+            )}
         </div>
     )
 }

@@ -1,15 +1,149 @@
 /** Post allocation (draft session → formal receipt/invoice allocations). */
 
-import { apiPost } from "@/lib/api"
+import { apiGet, apiPost } from "@/lib/api"
 
 import type {
+    AllocationSessionView,
     PostAllocationInput,
     PostAllocationResult,
 } from "@/features/customer-receivables/types"
+import {
+    buildCustomerReceiptSubmitRequest,
+    mapCustomerReceiptApproval,
+} from "@/features/customer-receivables/lib/customer-receipt-approval"
 import type { BackendCustomerReceipt, BackendInvoice } from "./dto"
 import { sessions } from "./session"
 
 export const postIdempotency = new Map<string, PostAllocationResult>()
+
+function failedResult(
+    code: string,
+    message: string,
+): Extract<PostAllocationResult, { status: "failed" }> {
+    return { status: "failed", code, message }
+}
+
+function isPostedReceiptStatus(status?: string): boolean {
+    return status === "posted" || status === "POSTED" || status === "reversed"
+}
+
+function isInApprovalReceiptStatus(status?: string): boolean {
+    return (
+        status === "IN_APPROVAL" ||
+        status === "in_approval" ||
+        status === "pending_review"
+    )
+}
+
+/**
+ * 把已创建回款草稿写回会话，供绑定卡只读展示。
+ *
+ * @param session 当前核销会话。
+ * @param receipt 服务端回款视图。
+ */
+function rememberCreatedReceipt(
+    session: AllocationSessionView,
+    receipt: BackendCustomerReceipt,
+): AllocationSessionView {
+    const next: AllocationSessionView = {
+        ...session,
+        existingFactId: receipt.id,
+        existingFactNo: receipt.receipt_no,
+        existingFactVersion: receipt.version,
+        approval: mapCustomerReceiptApproval(receipt.approval),
+    }
+    sessions.set(session.draftSessionId, next)
+    return next
+}
+
+/**
+ * 创建客户回款草稿并只读展示服务端绑定。提交仍走独立确认。
+ *
+ * @param session 当前核销会话。
+ */
+async function createCustomerReceiptDraft(
+    session: AllocationSessionView,
+    idempotencyKey: string,
+): Promise<BackendCustomerReceipt> {
+    const amount = session.fact.amount ?? "0"
+    const receivedAtLocal = session.fact.receivedAt
+    const receivedAtSecs = receivedAtLocal
+        ? Math.floor(new Date(receivedAtLocal).getTime() / 1000)
+        : Math.floor(Date.now() / 1000)
+    const receiptNo = `SK-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${idempotencyKey.slice(-6)}`
+    return apiPost<BackendCustomerReceipt>("/admin/customer-receipts", {
+        receipt_no: receiptNo,
+        counterparty_party_id: session.counterpartyPartyId,
+        customer_id: session.customerId || undefined,
+        received_at: receivedAtSecs,
+        amount,
+        bank_reference: session.fact.bankReference || undefined,
+    })
+}
+
+/**
+ * 确保回款草稿已在服务端创建并带回只读审批绑定。
+ *
+ * 已存在草稿时只刷新版本与绑定，不得调用过账旁路。
+ *
+ * @param input 当前核销会话标识。
+ */
+export async function ensureCustomerReceiptDraft(input: {
+    draftSessionId: string
+    editVersion: number
+    idempotencyKey: string
+}): Promise<
+    | {
+          status: "succeeded"
+          session: AllocationSessionView
+      }
+    | Extract<PostAllocationResult, { status: "failed" }>
+> {
+    const session = sessions.get(input.draftSessionId)
+    if (!session || session.status !== "draft") {
+        return failedResult("SESSION_INVALID", "本次核销已不存在或已提交。")
+    }
+    if (input.editVersion !== session.editVersion) {
+        return failedResult(
+            "VERSION_CONFLICT",
+            "草稿数据已更新，请保存或刷新后重试。",
+        )
+    }
+    if (session.mode !== "receipt") {
+        return failedResult("NOT_RECEIPT", "当前核销不是回款。")
+    }
+
+    if (session.existingFactId) {
+        const latest = await apiGet<BackendCustomerReceipt>(
+            `/admin/customer-receipts/${encodeURIComponent(session.existingFactId)}`,
+        )
+        if (isPostedReceiptStatus(latest.status)) {
+            return failedResult(
+                "RECEIPT_ALREADY_POSTED",
+                "已过账回款不得再次过账。未分配余额请另登新回款。",
+            )
+        }
+        if (isInApprovalReceiptStatus(latest.status)) {
+            return failedResult(
+                "RECEIPT_IN_APPROVAL",
+                "回款正在审批中，不能重复提交。",
+            )
+        }
+        return {
+            status: "succeeded",
+            session: rememberCreatedReceipt(session, latest),
+        }
+    }
+
+    const created = await createCustomerReceiptDraft(
+        session,
+        input.idempotencyKey,
+    )
+    return {
+        status: "succeeded",
+        session: rememberCreatedReceipt(session, created),
+    }
+}
 
 export async function postAllocation(
     input: PostAllocationInput,
@@ -41,69 +175,63 @@ export async function postAllocation(
 
     try {
         if (s.mode === "receipt") {
-            let factId = s.existingFactId
-            let factNo = s.existingFactNo ?? ""
-
-            if (!factId) {
-                const amount = s.fact.amount ?? "0"
-                const receivedAtLocal = s.fact.receivedAt
-                const receivedAtSecs = receivedAtLocal
-                    ? Math.floor(new Date(receivedAtLocal).getTime() / 1000)
-                    : Math.floor(Date.now() / 1000)
-                const receiptNo = `SK-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${input.idempotencyKey.slice(-6)}`
-                const created = await apiPost<BackendCustomerReceipt>(
-                    "/admin/customer-receipts",
-                    {
-                        receipt_no: receiptNo,
-                        counterparty_party_id: s.counterpartyPartyId,
-                        customer_id: s.customerId || undefined,
-                        received_at: receivedAtSecs,
-                        amount,
-                        bank_reference: s.fact.bankReference || undefined,
-                    },
-                )
-                factId = created.id
-                factNo = created.receipt_no
-            }
-
             if (positiveLines.length === 0) {
-                // Backend requires ≥1 allocation line on post — create without post if no lines
-                sessions.set(input.draftSessionId, { ...s, status: "posted" })
-                const result: PostAllocationResult = {
-                    status: "succeeded",
-                    mode: "receipt",
-                    factId: factId!,
-                    factNo,
-                    allocatedTotal: "0.00",
-                    unallocatedAmount: s.fact.amount ?? "0",
-                    operationId: input.idempotencyKey,
-                    watermark: new Date().toISOString(),
-                    returnTo: s.returnContext?.returnTo,
-                }
-                postIdempotency.set(input.idempotencyKey, result)
-                return result
+                return failedResult(
+                    "NEED_ALLOCATION",
+                    "提交审批至少需要一条核销分配。",
+                )
             }
 
-            const posted = await apiPost<BackendCustomerReceipt>(
-                `/admin/customer-receipts/${encodeURIComponent(factId!)}/post`,
-                {
+            const ensured = await ensureCustomerReceiptDraft({
+                draftSessionId: input.draftSessionId,
+                editVersion: input.editVersion,
+                idempotencyKey: input.idempotencyKey,
+            })
+            if (ensured.status !== "succeeded") {
+                return ensured
+            }
+            const draft = ensured.session
+            const factId = draft.existingFactId
+            const expectedVersion = draft.existingFactVersion
+            if (!factId || !expectedVersion) {
+                return failedResult(
+                    "RECEIPT_DRAFT_MISSING",
+                    "回款草稿尚未创建，请刷新后重试。",
+                )
+            }
+
+            const submitted = await apiPost<BackendCustomerReceipt>(
+                `/admin/customer-receipts/${encodeURIComponent(factId)}/submit`,
+                buildCustomerReceiptSubmitRequest({
+                    expectedVersion,
+                    idempotencyKey: input.idempotencyKey,
                     allocations: positiveLines.map((line) => ({
-                        receivable_entry_id: line.targetId,
-                        allocated_amount: line.amount,
+                        receivableEntryId: line.targetId,
+                        allocatedAmount: line.amount,
                     })),
-                },
+                }),
             )
-            sessions.set(input.draftSessionId, { ...s, status: "posted" })
+            const approval = mapCustomerReceiptApproval(submitted.approval)
+            sessions.set(input.draftSessionId, {
+                ...draft,
+                status: "posted",
+                existingFactId: submitted.id,
+                existingFactNo: submitted.receipt_no,
+                existingFactVersion: submitted.version,
+                approval,
+            })
             const result: PostAllocationResult = {
                 status: "succeeded",
                 mode: "receipt",
-                factId: posted.id,
-                factNo: posted.receipt_no,
-                allocatedTotal: posted.allocated_total,
-                unallocatedAmount: posted.unallocated_amount,
+                factId: submitted.id,
+                factNo: submitted.receipt_no,
+                allocatedTotal: submitted.allocated_total,
+                unallocatedAmount: submitted.unallocated_amount,
                 operationId: input.idempotencyKey,
                 watermark: new Date().toISOString(),
-                returnTo: s.returnContext?.returnTo,
+                returnTo: draft.returnContext?.returnTo,
+                approval,
+                subjectStatus: submitted.status,
             }
             postIdempotency.set(input.idempotencyKey, result)
             return result

@@ -58,6 +58,7 @@ describe('useCustomerReceivablesUrlState', () => {
         expect(result.current.sessionId).toBeUndefined()
         expect(result.current.previewKind).toBeNull()
         expect(result.current.previewId).toBeUndefined()
+        expect(result.current.workItemId).toBeUndefined()
         expect(result.current.searchInput).toBe('')
         expect(result.current.hasActiveFilters).toBe(false)
         expect(result.current.pageFromUrl).toBe(1)
@@ -73,7 +74,8 @@ describe('useCustomerReceivablesUrlState', () => {
                 'view=receipt&q=SO-1&counterpartyId=p1&customerId=c1&due=overdue' +
                     '&status=open&reviewStatus=reviewed&focusId=f1&salesOrderId=s1' +
                     '&receivableAccountId=r1&returnTo=%2Forders&from=W05' +
-                    '&sessionId=ses1&previewKind=receipt&previewId=prv1&page=3',
+                    '&sessionId=ses1&previewKind=receipt&previewId=prv1&page=3' +
+                    '&currentWorkItemId=wi-cr-1',
             ) as unknown as ReadonlyURLSearchParams,
         )
         const { result } = renderHook(() => useCustomerReceivablesUrlState())
@@ -92,9 +94,20 @@ describe('useCustomerReceivablesUrlState', () => {
         expect(result.current.sessionId).toBe('ses1')
         expect(result.current.previewKind).toBe('receipt')
         expect(result.current.previewId).toBe('prv1')
+        expect(result.current.workItemId).toBe('wi-cr-1')
         expect(result.current.searchInput).toBe('SO-1')
         expect(result.current.pageFromUrl).toBe(3)
         expect(result.current.pagination.pageIndex).toBe(2)
+    })
+
+    it('reads workItemId when currentWorkItemId is absent', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=receipt&workItemId=wi-cr-2',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        const { result } = renderHook(() => useCustomerReceivablesUrlState())
+        expect(result.current.workItemId).toBe('wi-cr-2')
     })
 
     it('clamps invalid page values back to page 1', () => {

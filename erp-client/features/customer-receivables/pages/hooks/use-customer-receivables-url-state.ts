@@ -33,6 +33,7 @@ export interface CustomerReceivablesUrlState {
     sessionId: string | undefined
     previewKind: "receivable" | "receipt" | "invoice" | null
     previewId: string | undefined
+    workItemId: string | undefined
     query: CustomerAccountsQuery
     pageFromUrl: number
     pagination: PaginationState
@@ -70,6 +71,10 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
         | "invoice"
         | null
     const previewId = searchParams.get("previewId") ?? undefined
+    const workItemId =
+        searchParams.get("currentWorkItemId") ??
+        searchParams.get("workItemId") ??
+        undefined
 
     const [searchInput, setSearchInput] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -230,6 +235,7 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
         sessionId,
         previewKind,
         previewId,
+        workItemId,
         query,
         pageFromUrl,
         pagination,

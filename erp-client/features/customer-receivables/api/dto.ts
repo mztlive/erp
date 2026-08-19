@@ -1,5 +1,7 @@
 /** Backend DTO shapes (snake_case; amounts as strings). */
 
+import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
+
 export type BackendReceivableEntry = {
     id: string
     entry_type: string
@@ -66,6 +68,7 @@ export type BackendCustomerReceipt = {
     allocated_total: string
     unallocated_amount: string
     allocations: BackendReceiptAllocation[]
+    approval?: DocumentApprovalViewDto | null
 }
 
 export type BackendInvoiceAllocation = {

@@ -1,6 +1,9 @@
+"use client"
+
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
     InvoiceDetailBody,
     ReceiptDetailBody,
@@ -39,8 +42,15 @@ type CustomerAccountDetailPreviewProps = Readonly<{
         target?: AllocationTarget,
     ) => void | Promise<void>
     onRequestReverse: (request: ReverseRequest) => void
+    workItemId?: string
+    expectedTaskVersion?: string
+    workItemAllowedActions?: readonly string[]
+    onDecisionApplied?: (view: ApprovalCommandView) => void
 }>
 
+/**
+ * 客户往来详情抽屉。回款嵌入通用审批区；决定与恢复只读服务端白名单。
+ */
 export function CustomerAccountDetailPreview({
     open,
     data,
@@ -51,6 +61,10 @@ export function CustomerAccountDetailPreview({
     onClose,
     onStartSession,
     onRequestReverse,
+    workItemId,
+    expectedTaskVersion,
+    workItemAllowedActions,
+    onDecisionApplied,
 }: CustomerAccountDetailPreviewProps) {
     return (
         <QuickPreviewSheet
@@ -241,7 +255,13 @@ export function CustomerAccountDetailPreview({
             ) : data?.receivable ? (
                 <ReceivableDetailBody row={data.receivable} />
             ) : data?.receipt ? (
-                <ReceiptDetailBody row={data.receipt} />
+                <ReceiptDetailBody
+                    row={data.receipt}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={onDecisionApplied}
+                />
             ) : data?.invoice ? (
                 <InvoiceDetailBody row={data.invoice} />
             ) : (
