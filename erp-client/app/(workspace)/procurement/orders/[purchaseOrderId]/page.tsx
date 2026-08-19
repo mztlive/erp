@@ -10,6 +10,10 @@ export const metadata: Metadata = {
 /**
  * 采购单对象页壳。审批任务从 URL `workItemId` 进入；
  * 采购变更单由 `changeOrderId` 或任务对象类型定位，业务取数在客户端完成。
+ *
+ * PurchaseReturnOrder 为 NO_APPROVAL：本页关联采购退货不渲染审批流程
+ * 选择、决定弹窗、撤回或改派；PENDING_EXECUTION 是待执行分工态，
+ * 不得渲染为审批复核。
  */
 export default async function PurchaseOrderObjectPage({
     params,

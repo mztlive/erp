@@ -9,11 +9,14 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/components/purchase-change-order-approval-section"
+import { PurchaseReturnOrderRelatedSection } from "@/features/purchase-orders/components/purchase-return-order-section"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
 /**
  * 采购单变更子区。在途改单嵌入通用审批区，动作只读服务端白名单。
+ * PurchaseReturnOrder 为 NO_APPROVAL，关联采购退货只展示执行事实，
+ * 不接入审批区；PENDING_EXECUTION 渲染为待执行，不是审批复核。
  */
 export function PurchaseOrderDetailChangesSection({
     order,
@@ -79,6 +82,9 @@ export function PurchaseOrderDetailChangesSection({
                     />
                 </div>
             ) : null}
+            <PurchaseReturnOrderRelatedSection
+                purchaseOrderId={order.identity.purchaseOrderId}
+            />
             <div className="mt-4 flex flex-wrap gap-2">
                 {canChange ? (
                     <Button type="button" onClick={onRequestChange}>
