@@ -17,14 +17,18 @@ export function secsToIso(secs?: number | null): string {
     return new Date(secs * 1000).toISOString()
 }
 
-/** 前端状态 → 后端状态 */
+/**
+ * 把前端状态筛选映射为后端状态码。
+ *
+ * `PENDING_REVIEW` 对应统一审批中的 `IN_APPROVAL`。
+ */
 export function toBackendStatus(
     status?: PurchaseOrderStatusFilter,
 ): string | undefined {
     if (!status || status === "all") return undefined
     switch (status) {
         case "PENDING_REVIEW":
-            return "PENDING_FINANCE_REVIEW"
+            return "IN_APPROVAL"
         case "PARTIAL":
             return "PARTIALLY_EXECUTED"
         case "VOID":
@@ -34,9 +38,14 @@ export function toBackendStatus(
     }
 }
 
-/** 后端状态 → 前端状态 */
+/**
+ * 把后端状态码映射为前端生命周期。
+ *
+ * `IN_APPROVAL` 与旧的待财务审核码都视为审批中，不上屏枚举原值。
+ */
 export function fromBackendStatus(status: string): PurchaseOrderStatus {
     switch (status) {
+        case "IN_APPROVAL":
         case "PENDING_FINANCE_REVIEW":
             return "PENDING_REVIEW"
         case "PARTIALLY_EXECUTED":
@@ -115,13 +124,16 @@ export function mapFulfillment(value: string): FulfillmentResponsibility {
     return "WAREHOUSE"
 }
 
+/**
+ * 由生命周期给出业务动作。审批决定不在此推导，只读服务端白名单。
+ */
 export function deriveAllowedActions(status: PurchaseOrderStatus): string[] {
     const common = ["OPEN_CENTER", "PRINT"]
     if (status === "DRAFT") {
         return [...common, "EDIT", "SUBMIT", "VOID"]
     }
     if (status === "PENDING_REVIEW") {
-        // 财务审核只能从服务端 review_work_item 责任投影进入。
+        // 审批决定只能从服务端 allowed_actions 进入。
         return common
     }
     if (status === "EFFECTIVE" || status === "PARTIAL") {
@@ -130,6 +142,9 @@ export function deriveAllowedActions(status: PurchaseOrderStatus): string[] {
     return common
 }
 
+/**
+ * 把列表指标筛选项映射为后端状态。审批中对应 `IN_APPROVAL`。
+ */
 export function metricStatusParam(
     metric: PurchaseOrderMetricFilter | undefined,
 ): string | undefined {
@@ -137,7 +152,7 @@ export function metricStatusParam(
         case "draft":
             return "DRAFT"
         case "review":
-            return "PENDING_FINANCE_REVIEW"
+            return "IN_APPROVAL"
         case "fulfill":
             // 后端无「待履约」复合筛选；用 EFFECTIVE 近似
             return "EFFECTIVE"

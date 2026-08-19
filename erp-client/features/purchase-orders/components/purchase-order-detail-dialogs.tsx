@@ -1,8 +1,6 @@
 "use client"
 
-import {
-    FormalActionConfirmDialog,
-} from "@/components/business"
+import { FormalActionConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -16,8 +14,12 @@ import {
 } from "@/components/ui/dialog"
 
 import { responsibilityText } from "@/lib/ui-text"
+import { PurchaseOrderSubmitConfirmDialog } from "@/features/purchase-orders/components/purchase-order-submit-confirm-dialog"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
+/**
+ * 采购单详情命令确认框。提交确认嵌入通用审批路线，不选择下一节点或审批人。
+ */
 export function PurchaseOrderDetailDialogs({
     order,
     submitConfirmOpen,
@@ -71,36 +73,21 @@ export function PurchaseOrderDetailDialogs({
 }) {
     return (
         <>
-            <FormalActionConfirmDialog
+            <PurchaseOrderSubmitConfirmDialog
                 open={submitConfirmOpen}
-                onOpenChange={onSubmitConfirmOpenChange}
-                title="提交财务审核"
-                actionLabel="提交"
-                confirmLabel="确认提交"
-                fromStatus={{ label: "草稿", tone: "neutral" }}
-                toStatus={{ label: "待财务审核", tone: "warning" }}
-                lockedFields={[
-                    "供应商 / 采购类型 / 履约责任 / 付款条件",
-                    "商品行（二次确认分行）与物流费用",
-                    "销售分配与系统金额",
-                ]}
-                effects={[
-                    "形成不可修改的采购提交与数据版本",
-                    "创建采购审核任务",
-                    "结束草稿编辑；中心转等待审核态",
-                ]}
-                nextDepartment="财务审核"
                 pending={submitPending || savePending}
+                approval={order.approval}
+                onOpenChange={onSubmitConfirmOpenChange}
                 onConfirm={onConfirmSubmit}
             />
 
             <FormalActionConfirmDialog
                 open={approveConfirmOpen}
                 onOpenChange={onApproveConfirmOpenChange}
-                title="财务审核通过"
+                title="审批通过"
                 actionLabel="通过"
                 confirmLabel="确认通过"
-                fromStatus={{ label: "待财务审核", tone: "warning" }}
+                fromStatus={{ label: "审批中", tone: "warning" }}
                 toStatus={{ label: "已生效", tone: "success" }}
                 lockedFields={[
                     `本次审核的提交内容（销售单 ${order.header.salesOrderNo}）`,
@@ -146,8 +133,7 @@ export function PurchaseOrderDetailDialogs({
                         <Button
                             type="button"
                             disabled={
-                                !releaseReason.trim() ||
-                                responsibilityPending
+                                !releaseReason.trim() || responsibilityPending
                             }
                             onClick={onConfirmRelease}
                         >

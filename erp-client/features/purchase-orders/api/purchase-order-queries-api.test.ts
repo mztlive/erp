@@ -7,6 +7,7 @@ vi.mock("@/lib/api", () => ({
 import { apiGet } from "@/lib/api"
 import {
     fetchCreationBases,
+    fetchPurchaseOrderCenter,
     fetchPurchaseOrders,
 } from "./purchase-order-queries-api"
 import type { BackendListItem } from "./purchase-order-wire-types"
@@ -96,6 +97,105 @@ describe("fetchPurchaseOrders", () => {
         expect(result.rows[0]?.paymentTermCode).toBe("POSTPAY_NET30")
         expect(result.rows[0]?.paymentTermLabel).toBe("货到 30 天")
         expect(result.rows[0]?.ownerName).toBe("张三")
+    })
+})
+
+describe("fetchPurchaseOrderCenter", () => {
+    it("maps the created approval binding without inventing a work item", async () => {
+        mockedApiGet.mockResolvedValue({
+            id: "po_1",
+            purchase_no: "PO-1",
+            status: "DRAFT",
+            review_status: "NONE",
+            version: 1,
+            sales_order_id: "so_1",
+            supplier_id: "sup_1",
+            supplier_name: "供应商A",
+            purchase_type: "PHYSICAL",
+            payment_term_code: "POSTPAY_NET30",
+            fulfillment_responsibility: "WAREHOUSE",
+            payment_progress: "NONE",
+            invoice_progress: "NONE",
+            fulfillment_progress: "NONE",
+            content_source: "DRAFT",
+            lines: [],
+            totals: { gross: "0", net: "0", tax: "0" },
+            allocations: [],
+            changes: [],
+            approval: {
+                requirement: "PROCESS_REQUIRED",
+                definition: {
+                    id: "def-po-1",
+                    name: "采购单审批",
+                    version: 2,
+                    nodes: [
+                        { key: "n1", name: "采购审核", assignee_name: "张三" },
+                    ],
+                },
+                instance: null,
+                recent_history: [],
+                allowed_actions: ["SUBMIT", "UPGRADE_BINDING"],
+            },
+            created_at: 1_700_000_000,
+        })
+
+        const center = await fetchPurchaseOrderCenter("po_1")
+        expect(center?.approval?.instance).toBeUndefined()
+        expect(center?.approval?.definition?.name).toBe("采购单审批")
+        expect(center?.reviewWorkItem).toBeUndefined()
+        expect(center?.allowedActions).toEqual(
+            expect.arrayContaining(["SUBMIT", "UPGRADE_BINDING"]),
+        )
+        expect(center?.identity.statusLabel).toBe("草稿")
+    })
+
+    it("maps IN_APPROVAL to the runtime review status without inventing assignees", async () => {
+        mockedApiGet.mockResolvedValue({
+            id: "po_2",
+            purchase_no: "PO-2",
+            status: "IN_APPROVAL",
+            review_status: "PENDING",
+            version: 2,
+            sales_order_id: "so_1",
+            supplier_id: "sup_1",
+            supplier_name: "供应商A",
+            purchase_type: "PHYSICAL",
+            payment_term_code: "POSTPAY_NET30",
+            fulfillment_responsibility: "WAREHOUSE",
+            payment_progress: "NONE",
+            invoice_progress: "NONE",
+            fulfillment_progress: "NONE",
+            content_source: "SUBMISSION",
+            lines: [],
+            totals: { gross: "0", net: "0", tax: "0" },
+            allocations: [],
+            changes: [],
+            approval: {
+                requirement: "PROCESS_REQUIRED",
+                definition: {
+                    id: "def-po-1",
+                    name: "采购单审批",
+                    version: 2,
+                    nodes: [],
+                },
+                instance: {
+                    id: "inst-po-1",
+                    status: "RUNNING",
+                    current_round_no: 1,
+                    current_node_name: "采购审核",
+                    current_assignee_name: "张三",
+                },
+                recent_history: [],
+                allowed_actions: ["CANCEL"],
+            },
+            created_at: 1_700_000_000,
+        })
+
+        const center = await fetchPurchaseOrderCenter("po_2")
+        expect(center?.identity.status).toBe("PENDING_REVIEW")
+        expect(center?.identity.statusLabel).toBe("审批中")
+        expect(center?.approval?.instance?.currentAssigneeName).toBe("张三")
+        expect(center?.reviewWorkItem).toBeUndefined()
     })
 })
 

@@ -51,9 +51,7 @@ vi.mock("next/navigation", () => ({
     }),
 }))
 
-type EditActionsProps = Parameters<
-    typeof usePurchaseOrderDetailEditActions
->[0]
+type EditActionsProps = Parameters<typeof usePurchaseOrderDetailEditActions>[0]
 
 function makeProps(
     overrides: Partial<EditActionsProps> = {},
@@ -114,9 +112,7 @@ describe("usePurchaseOrderDetailEditActions", () => {
                 "po-1",
             ),
         )
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
         expect(result.current.lineEdits["line-1"]).toEqual({
             quantity: "10",
             unitCostGross: "100.00",
@@ -183,9 +179,7 @@ describe("usePurchaseOrderDetailEditActions", () => {
         )
         props = makeProps({ mode: "edit", order, setResult, refetch })
         rerender()
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
 
         let ok = false
         await act(async () => {
@@ -236,9 +230,7 @@ describe("usePurchaseOrderDetailEditActions", () => {
         )
         props = makeProps({ mode: "edit", order, setResult })
         rerender()
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
 
         act(() => {
             result.current.setLineEdits({
@@ -284,9 +276,7 @@ describe("usePurchaseOrderDetailEditActions", () => {
         )
         props = makeProps({ mode: "edit", order, setResult })
         rerender()
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
 
         let ok = true
         await act(async () => {
@@ -334,15 +324,15 @@ describe("usePurchaseOrderDetailEditActions", () => {
         )
         props = makeProps({ mode: "edit", order, setResult, refetch })
         rerender()
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
 
         await act(async () => {
             await result.current.handleSubmit()
         })
 
-        expect(apiMocks.submitPurchaseOrderForReview.mock.calls[0]?.[0]).toEqual(
+        expect(
+            apiMocks.submitPurchaseOrderForReview.mock.calls[0]?.[0],
+        ).toEqual(
             expect.objectContaining({
                 purchaseOrderId: "po-1",
                 expectedLockVersion: 4,
@@ -354,12 +344,12 @@ describe("usePurchaseOrderDetailEditActions", () => {
         expect(result.current.submitConfirmOpen).toBe(false)
         expect(result.current.draftEditToken).toBeNull()
         expect(navMocks.replace).toHaveBeenCalledWith(
-            "/procurement/orders/po-1?mode=review",
+            "/procurement/orders/po-1",
         )
         expect(setResult).toHaveBeenCalledWith(
             expect.objectContaining({
                 status: "succeeded",
-                title: "已提交财务审核",
+                title: "已提交审批",
                 reference: "REF-SUBMIT",
             }),
         )
@@ -384,9 +374,7 @@ describe("usePurchaseOrderDetailEditActions", () => {
         )
         props = makeProps({ mode: "edit", order, setResult })
         rerender()
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
         act(() => {
             result.current.setSubmitConfirmOpen(true)
         })
@@ -431,14 +419,13 @@ describe("usePurchaseOrderDetailEditActions", () => {
         )
         props = makeProps({ mode: "edit", order, setResult, refetch })
         rerender()
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
 
         await act(async () => {
             await result.current.handleSubmit()
         })
-        const callsAfterSubmit = apiMocks.savePurchaseOrderDraft.mock.calls.length
+        const callsAfterSubmit =
+            apiMocks.savePurchaseOrderDraft.mock.calls.length
 
         let ok = true
         await act(async () => {
@@ -477,9 +464,7 @@ describe("usePurchaseOrderDetailEditActions", () => {
         )
         props = makeProps({ mode: "edit", order, setResult, refetch })
         rerender()
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
         act(() => {
             result.current.setChangeConfirmOpen(true)
         })
@@ -524,9 +509,7 @@ describe("usePurchaseOrderDetailEditActions", () => {
         )
         props = makeProps({ mode: "edit", order, setResult })
         rerender()
-        await waitFor(() =>
-            expect(result.current.draftEditToken).toBe("tok-1"),
-        )
+        await waitFor(() => expect(result.current.draftEditToken).toBe("tok-1"))
 
         await act(async () => {
             await result.current.handleStartChange()

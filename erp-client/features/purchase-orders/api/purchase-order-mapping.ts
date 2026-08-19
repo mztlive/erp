@@ -14,6 +14,7 @@ import {
     PO_STATUS_TONE,
     REVIEW_STATUS_LABEL,
 } from "@/features/purchase-orders/types"
+import { mapPurchaseOrderApproval } from "@/features/purchase-orders/lib/purchase-order-approval"
 import {
     deriveAllowedActions,
     fromBackendReviewStatus,
@@ -76,6 +77,11 @@ export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
     }
 }
 
+/**
+ * 把对象中心 wire 转成详情视图，并映射只读审批投影。
+ *
+ * 缺省审批结构保持 undefined，不得补默认审批人或节点。
+ */
 export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
     const status = fromBackendStatus(center.status)
     const reviewStatus = fromBackendReviewStatus(center.review_status, status)
@@ -115,6 +121,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         center.fulfillment_progress,
         "fulfillment",
     )
+    const approval = mapPurchaseOrderApproval(center.approval)
 
     return {
         identity: {
@@ -205,7 +212,13 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             baseRevisionNo: undefined,
         })),
         workflow: [],
-        allowedActions: deriveAllowedActions(status),
+        approval,
+        allowedActions: Array.from(
+            new Set([
+                ...deriveAllowedActions(status),
+                ...(approval?.allowedActions ?? []),
+            ]),
+        ),
         actionBlockers: center.review_work_item?.action_blockers ?? [],
         fieldVisibility: {},
         reviewWorkItem:

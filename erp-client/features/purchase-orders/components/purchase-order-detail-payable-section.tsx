@@ -36,8 +36,7 @@ export function PurchaseOrderDetailPayableSection({
                             ) : (
                                 <MoneyValue
                                     value={
-                                        order.payableSummary
-                                            .payableOpenAmount
+                                        order.payableSummary.payableOpenAmount
                                     }
                                 />
                             )}
@@ -51,8 +50,7 @@ export function PurchaseOrderDetailPayableSection({
                             ) : (
                                 <MoneyValue
                                     value={
-                                        order.payableSummary
-                                            .paidAllocatedAmount
+                                        order.payableSummary.paidAllocatedAmount
                                     }
                                 />
                             )}
@@ -76,7 +74,7 @@ export function PurchaseOrderDetailPayableSection({
                 </DescriptionList>
             ) : (
                 <p className="text-sm text-muted-foreground">
-                    尚未形成应付（需财务审核通过）。
+                    尚未形成应付（需审批通过）。
                 </p>
             )}
             <div className="mt-4">

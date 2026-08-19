@@ -3,6 +3,7 @@
  * 本文件为纯类型声明表，仅描述后端契约，不承载逻辑。
  */
 
+import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type {
     FulfillmentResponsibility,
     PurchaseType,
@@ -120,6 +121,7 @@ export type BackendCenter = {
             message: string
         }[]
     } | null
+    approval?: DocumentApprovalViewDto | null
     created_at: number
 }
 
