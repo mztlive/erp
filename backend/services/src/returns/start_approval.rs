@@ -12,17 +12,19 @@ use database::{
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
+use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
-use entities::returns::{CustomerRefund, SupplierRefund};
+use entities::returns::{CustomerRefund, ReceiptReversal, SupplierRefund};
 use entities::work_item::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
 use id_generator::next_id;
 use mongodb::Database;
 
-use super::adapter::{customer_refund_object_readable, supplier_refund_object_readable};
-use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
+use super::adapter::{
+    customer_refund_object_readable, receipt_reversal_object_readable, supplier_refund_object_readable,
+};
+use crate::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
 use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
 use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
 use crate::approval::process_kind::process_kind_of;
@@ -659,6 +661,298 @@ async fn persist_supplier_refund_open_tasks(
             DocumentApprovalWorkItemData {
                 approval_node_execution_id: execution_id.clone(),
                 business_object_type: DocumentType::SupplierRefund.as_str().to_string(),
+                business_object_id: writes.instance.subject.subject_id().to_string(),
+                subject_version: writes.instance.subject_version.to_string(),
+                owner_role: owner_role.to_string(),
+                owner_organization_id: organization_id.to_string(),
+                owner_user_id: assignee.as_str().to_string(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            now,
+        )?;
+        db.work_items().create(&item, session).await?;
+    }
+    Ok(())
+}
+
+/// 读取回款冲正同载荷启动收据；不存在时返回 `None`。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `subject` - 业务对象引用
+/// * `subject_version` - 冻结提交版本
+/// * `idempotency_key` - 调用方幂等键
+///
+/// # 返回
+/// 已提交收据或空。
+///
+/// # 错误
+/// 幂等键非法或仓储失败时返回错误。
+pub(super) async fn load_receipt_reversal_start_receipt(
+    db: &Database,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+    let key = normalize_idempotency_key(idempotency_key)?;
+    let process_kind = process_kind_of(DocumentType::ReceiptReversal);
+    let scope = start_scope(
+        process_kind.as_str(),
+        subject.subject_kind(),
+        subject.subject_id(),
+        subject_version,
+    );
+    Ok(db
+        .bpm_workflow()
+        .find_command_receipt(
+            ApprovalCommandKind::StartApproval,
+            &scope,
+            &key,
+            &mut NoTransaction,
+        )
+        .await?)
+}
+
+/// 由定义图与单据组织构造回款冲正启动输入。
+///
+/// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
+///
+/// # 参数
+/// * `graph` - 绑定定义图
+/// * `binding` - 冻结绑定
+/// * `subject` - 业务对象引用
+/// * `subject_version` - 冻结提交版本
+/// * `actor_id` - 提交人
+/// * `organization_id` - 单据责任组织
+/// * `idempotency_key` - 规范化前的幂等键
+/// * `receipt` - 已存在收据
+/// * `now` - 调用方时间
+///
+/// # 返回
+/// 返回可交给 `prepare_start` 的输入。
+///
+/// # 错误
+/// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
+#[allow(clippy::too_many_arguments)]
+pub(super) fn build_receipt_reversal_start_input(
+    graph: DefinitionGraph,
+    binding: &ApprovalDefinitionBinding,
+    subject: SubjectRef,
+    subject_version: u32,
+    actor_id: &str,
+    organization_id: &str,
+    idempotency_key: &str,
+    receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    now: Instant,
+) -> Result<StartExecutionInput> {
+    if graph.definition.definition_version != binding.approval_definition_version {
+        return Err(Error::ConflictError(
+            "回款冲正单绑定定义版本与已加载定义不一致".to_string(),
+        ));
+    }
+    let idempotency_key = normalize_idempotency_key(idempotency_key)?;
+    let actor =
+        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
+    let timestamp = Timestamp::from_utc(now.as_utc());
+    let bindings = receipt_reversal_start_bindings(&graph, organization_id)?;
+    let entry = graph
+        .entry_node()
+        .map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
+    let entry_eligibility = bindings
+        .iter()
+        .find(|item| item.node_key == entry.node_key)
+        .map(|item| item.eligibility.clone())
+        .ok_or_else(|| Error::ConflictError("入口节点缺少审批人绑定".to_string()))?;
+    Ok(StartExecutionInput {
+        command: ExecutionCommandInput {
+            graph,
+            current_eligibility: entry_eligibility.clone(),
+            next_eligibility: entry_eligibility,
+            receipt,
+            idempotency_key,
+            now: timestamp,
+        },
+        process_kind: process_kind_of(DocumentType::ReceiptReversal),
+        subject,
+        subject_version,
+        binding_id: binding.approval_process_definition_id.as_ref().to_string(),
+        definition_version: binding.approval_definition_version,
+        actor,
+        instance_id: ApprovalProcessInstanceId::new(next_id()),
+        entry_execution_id: ApprovalNodeExecutionId::new(next_id()),
+        receipt_id: ApprovalCommandReceiptId::new(next_id()),
+        bindings,
+    })
+}
+
+/// 为定义全部节点冻结回款冲正启动绑定，并按单据组织重验对象读取权。
+///
+/// # 参数
+/// * `graph` - 定义图
+/// * `organization_id` - 单据责任组织
+///
+/// # 返回
+/// 返回与节点一一对应的绑定。
+///
+/// # 错误
+/// 节点审批人引用非法或显示名为空时返回校验错误。
+fn receipt_reversal_start_bindings(
+    graph: &DefinitionGraph,
+    organization_id: &str,
+) -> Result<Vec<StartAssigneeBinding>> {
+    let mut bindings = Vec::with_capacity(graph.nodes.len());
+    for node in &graph.nodes {
+        let assignee = node.assignee_participant_id.as_str();
+        let failure = match receipt_reversal_object_readable(organization_id, assignee) {
+            Ok(true) => None,
+            Ok(false) | Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+        };
+        bindings.push(StartAssigneeBinding {
+            id: ApprovalInstanceAssigneeId::new(next_id()),
+            node_key: node.node_key.clone(),
+            participant: node.assignee_participant_id.clone(),
+            eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, failure)?,
+        });
+    }
+    if bindings.is_empty() {
+        return Err(Error::ConflictError(
+            "审批定义没有节点，无法启动回款冲正审批".to_string(),
+        ));
+    }
+    Ok(bindings)
+}
+
+/// 在同一事务中写入回款冲正迁移、快照、BPM 运行事实与入口任务。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `reversal` - 已进入 `IN_APPROVAL` 的冲正单
+/// * `actor` - 审计操作人
+/// * `id` - 冲正单主键
+/// * `snapshot_payload` - 冻结快照载荷
+/// * `prepared` - `prepare_start` 结果
+/// * `owner_role` - 合同签署的责任角色
+/// * `organization_id` - 责任组织
+/// * `now` - 调用方时间
+///
+/// # 返回
+/// 返回提交后的冲正单实体，由调用方装配视图。
+///
+/// # 错误
+/// 仓储写入失败或计划不完整时返回错误，事务回滚。
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn persist_receipt_reversal_start(
+    db: &Database,
+    reversal: ReceiptReversal,
+    actor: &AuditActor,
+    id: &str,
+    snapshot_payload: ApprovalSubjectSnapshotPayload,
+    prepared: PreparedExecution,
+    owner_role: &'static str,
+    organization_id: String,
+    now: Instant,
+) -> Result<ReceiptReversal> {
+    let audit = actor
+        .clone()
+        .resource_log("receipt_reversal.submit", "receipt_reversal", id.to_string())?;
+    let db = db.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move {
+                match prepared {
+                    PreparedExecution::Apply(writes) => {
+                        persist_receipt_reversal_runtime(
+                            &db,
+                            &writes,
+                            &snapshot_payload,
+                            owner_role,
+                            &organization_id,
+                            now,
+                            session,
+                        )
+                        .await?;
+                    }
+                    PreparedExecution::Replay { .. } => {}
+                }
+                let mut reversal = reversal;
+                db.receipt_reversals().update(&mut reversal, session).await?;
+                db.audit_logs().create(&audit, session).await?;
+                Ok::<ReceiptReversal, crate::errors::Error>(reversal)
+            })
+        })
+        .await
+}
+
+/// 将回款冲正启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
+///
+/// # 错误
+/// 计划缺少入口执行或写入失败时返回错误。
+async fn persist_receipt_reversal_runtime(
+    db: &Database,
+    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    snapshot_payload: &ApprovalSubjectSnapshotPayload,
+    owner_role: &str,
+    organization_id: &str,
+    now: Instant,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let first = writes
+        .created_executions
+        .first()
+        .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交回款冲正".to_string()))?;
+    db.bpm_workflow()
+        .create_bpm_runtime(
+            &writes.instance,
+            &writes.created_assignees,
+            first,
+            &writes.receipt,
+            &list_projection_from_execution(first, now),
+            session,
+        )
+        .await?;
+    let snapshot = ApprovalSubjectSnapshot::new(
+        ApprovalSubjectSnapshotId::new(next_id()),
+        ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
+        DocumentType::ReceiptReversal,
+        writes.instance.subject.subject_id(),
+        writes.instance.subject_version,
+        snapshot_payload.clone(),
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))?;
+    db.approval_subject_snapshots()
+        .create_immutable_snapshot(&snapshot, session)
+        .await?;
+    persist_receipt_reversal_open_tasks(db, writes, owner_role, organization_id, now, session).await
+}
+
+/// 将回款冲正 `HumanTaskRequested` 映射为 `DOCUMENT_APPROVAL` 任务并写入。
+///
+/// # 错误
+/// 责任人为空或仓储失败时返回错误。
+async fn persist_receipt_reversal_open_tasks(
+    db: &Database,
+    writes: &crate::approval::execution::apply_plan::PlannedWrites,
+    owner_role: &str,
+    organization_id: &str,
+    now: Instant,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    for intent in &writes.create_tasks {
+        let TaskIntent::HumanTaskRequested {
+            execution_id,
+            assignee,
+            ..
+        } = intent
+        else {
+            continue;
+        };
+        let item = WorkItem::new_document_approval(
+            WorkItemId::new(next_id()),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: execution_id.clone(),
+                business_object_type: DocumentType::ReceiptReversal.as_str().to_string(),
                 business_object_id: writes.instance.subject.subject_id().to_string(),
                 subject_version: writes.instance.subject_version.to_string(),
                 owner_role: owner_role.to_string(),

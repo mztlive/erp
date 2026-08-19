@@ -6,8 +6,8 @@
 //! 每条路由统一走 JWT + RBAC（`with_permission`）。
 
 use axum::{
-    routing::{get, post},
     Router,
+    routing::{get, post},
 };
 use services::iam::SharedRbacService;
 
@@ -170,6 +170,30 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/receipt-reversals/{id}",
+            with_permission(
+                get(returns::receipt_reversal_detail),
+                rbac,
+                returns::receipt_reversal_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/receipt-reversals/{id}/submit",
+            with_permission(
+                post(returns::receipt_reversal_submit),
+                rbac,
+                returns::receipt_reversal_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/receipt-reversals/{id}/cancel-approval",
+            with_permission(
+                post(returns::receipt_reversal_cancel_approval),
+                rbac,
+                returns::receipt_reversal_cancel_approval_permission_key(),
+            ),
+        )
+        .route(
             "/receipt-reversals/{id}/post",
             with_permission(
                 post(returns::receipt_reversal_post),
@@ -223,6 +247,21 @@ mod tests {
         assert!(production.contains("supplier_refund_submit"));
         assert!(production.contains("supplier_refund_cancel_approval"));
         assert!(production.contains("supplier_refund_detail"));
+        assert!(!production.contains("PENDING_REVIEW"));
+    }
+
+    /// 回款冲正路由暴露提交与撤回，不再把过账当客户端旁路入口。
+    #[test]
+    fn receipt_reversal_routes_expose_submit_and_cancel() {
+        let production = include_str!("returns.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产路由必须存在");
+        assert!(production.contains("/receipt-reversals/{id}/submit"));
+        assert!(production.contains("/receipt-reversals/{id}/cancel-approval"));
+        assert!(production.contains("receipt_reversal_submit"));
+        assert!(production.contains("receipt_reversal_cancel_approval"));
+        assert!(production.contains("receipt_reversal_detail"));
         assert!(!production.contains("PENDING_REVIEW"));
     }
 }
