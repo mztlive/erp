@@ -376,6 +376,12 @@ pub fn adapter_object_read_decision(
             assignee_user_id,
         )?));
     }
+    if spec.document_type == DocumentType::PaymentReversal {
+        return Ok(Some(crate::returns::payment_reversal_object_readable(
+            &context.organization_id,
+            assignee_user_id,
+        )?));
+    }
     let _ = context.creator_id.as_str();
     Ok(None)
 }
@@ -621,14 +627,10 @@ mod tests {
     /// 读取权未接线或显式拒绝必须失败关闭。
     #[test]
     fn object_read_unwired_and_denied_fail_closed() {
-        let unwired = adapter_spec_of(DocumentType::PaymentReversal).expect("未接入类型仍有规格");
         let context = BindingRevalidationContext {
             organization_id: "org-1".to_string(),
             creator_id: "creator-1".to_string(),
         };
-        assert!(adapter_object_read_decision(&unwired, &context, "u1")
-            .expect("未接线类型应返回 None")
-            .is_none());
         let pilot = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
         assert_eq!(
             adapter_object_read_decision(&pilot, &context, "creator-1").expect("创建人可读"),
@@ -685,6 +687,11 @@ mod tests {
             adapter_object_read_decision(&payment, &context, "u1").expect("供应商付款读取权已接线"),
             Some(true)
         );
+        let payment_reversal = adapter_spec_of(DocumentType::PaymentReversal).expect("付款冲正必须有适配器");
+        assert_eq!(
+            adapter_object_read_decision(&payment_reversal, &context, "u1").expect("付款冲正读取权已接线"),
+            Some(true)
+        );
         assert_eq!(
             adapter_object_read_decision(&pilot, &context, "u1").expect("组织上下文已给出"),
             Some(true)
@@ -726,16 +733,18 @@ mod tests {
             "u1",
         )
         .expect("试点读取权已接线且组织覆盖时应通过");
-        let sales = adapter_spec_of(DocumentType::PaymentReversal).expect("未接入类型");
-        let unwired = revalidate_assignee_binding_access(
-            &sales,
+        revalidate_assignee_binding_access(
+            &adapter_spec_of(DocumentType::PaymentReversal).expect("付款冲正必须有适配器"),
             std::slice::from_ref(&user_org),
             std::slice::from_ref(&role_company),
             &context,
             "u1",
         )
-        .unwrap_err();
-        assert!(unwired.to_string().contains("对象读取权未接线"));
+        .expect("付款冲正读取权已接线且组织覆盖时应通过");
+        assert!(require_wired_object_read(None)
+            .unwrap_err()
+            .to_string()
+            .contains("对象读取权未接线"));
         assert!(ensure_binding_scope(
             &spec,
             std::slice::from_ref(&user_org),
