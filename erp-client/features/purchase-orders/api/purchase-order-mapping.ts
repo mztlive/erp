@@ -5,6 +5,7 @@
  */
 
 import type {
+    PurchaseChangeOrderSummary,
     PurchaseCreationBasis,
     PurchaseOrderCenterView,
     PurchaseOrderListItem,
@@ -14,6 +15,11 @@ import {
     PO_STATUS_TONE,
     REVIEW_STATUS_LABEL,
 } from "@/features/purchase-orders/types"
+import {
+    mapPurchaseChangeOrderApproval,
+    purchaseChangeOrderStatusLabel,
+    purchaseChangeOrderStatusTone,
+} from "@/features/purchase-orders/lib/purchase-change-order-approval"
 import { mapPurchaseOrderApproval } from "@/features/purchase-orders/lib/purchase-order-approval"
 import {
     deriveAllowedActions,
@@ -29,6 +35,7 @@ import type {
     BackendBasis,
     BackendCenter,
     BackendListItem,
+    BackendPurchaseChangeOrder,
 } from "./purchase-order-wire-types"
 
 export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
@@ -206,9 +213,9 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         },
         changes: (center.changes ?? []).map((c) => ({
             changeId: c.change_id,
-            label: c.reason || c.change_id,
-            statusLabel: c.status,
-            tone: "neutral" as const,
+            label: c.reason || "采购变更",
+            statusLabel: purchaseChangeOrderStatusLabel(c.status),
+            tone: purchaseChangeOrderStatusTone(c.status),
             baseRevisionNo: undefined,
         })),
         workflow: [],
@@ -254,6 +261,28 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                           center.review_work_item.action_blockers ?? [],
                   }
                 : undefined,
+    }
+}
+
+/**
+ * 把采购变更单 wire 转成页面摘要，只透传服务端审批投影。
+ *
+ * @param row 列表行或详情。
+ */
+export function mapPurchaseChangeOrder(
+    row: BackendPurchaseChangeOrder,
+): PurchaseChangeOrderSummary {
+    return {
+        id: row.id,
+        purchaseOrderId: row.purchase_order_id,
+        statusLabel: purchaseChangeOrderStatusLabel(row.status),
+        statusTone: purchaseChangeOrderStatusTone(row.status),
+        statusCode: row.status,
+        version: row.version,
+        reason: row.reason,
+        baseRevisionId: row.base_revision_id,
+        createdAt: secsToIso(row.created_at),
+        approval: mapPurchaseChangeOrderApproval(row.approval),
     }
 }
 

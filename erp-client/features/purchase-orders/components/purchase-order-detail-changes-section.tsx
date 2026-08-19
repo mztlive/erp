@@ -8,13 +8,22 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/components/purchase-change-order-approval-section"
+import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
+/**
+ * 采购单变更子区。在途改单嵌入通用审批区，动作只读服务端白名单。
+ */
 export function PurchaseOrderDetailChangesSection({
     order,
     canChange,
     changeBlocker,
     onRequestChange,
+    workItemId,
+    expectedTaskVersion,
+    workItemAllowedActions,
+    onApprovalResult,
 }: {
     order: PurchaseOrderCenterView
     canChange: boolean
@@ -22,6 +31,10 @@ export function PurchaseOrderDetailChangesSection({
         | PurchaseOrderCenterView["actionBlockers"][number]
         | undefined
     onRequestChange: () => void
+    workItemId?: string
+    expectedTaskVersion?: string
+    workItemAllowedActions?: readonly string[]
+    onApprovalResult?: (result: PurchaseOrderDetailResult) => void
 }) {
     return (
         <DocumentSection title="变更与异常">
@@ -54,6 +67,18 @@ export function PurchaseOrderDetailChangesSection({
                     ))}
                 </ul>
             )}
+            {order.activeChangeOrder ? (
+                <div className="mt-4">
+                    <PurchaseChangeOrderApprovalSection
+                        purchaseOrderId={order.identity.purchaseOrderId}
+                        changeOrder={order.activeChangeOrder}
+                        workItemId={workItemId}
+                        expectedTaskVersion={expectedTaskVersion}
+                        workItemAllowedActions={workItemAllowedActions}
+                        onResult={onApprovalResult}
+                    />
+                </div>
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
                 {canChange ? (
                     <Button type="button" onClick={onRequestChange}>

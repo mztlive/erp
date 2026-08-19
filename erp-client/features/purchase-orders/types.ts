@@ -118,6 +118,22 @@ type RelatedChangeView = Readonly<{
     baseRevisionNo?: number
 }>
 
+export type PurchaseChangeOrderSummary = Readonly<{
+    id: string
+    purchaseOrderId: string
+    statusLabel: string
+    statusTone: StatusTone
+    /** 服务端状态码；审批相位只读此值与审批投影，不按仓配影响推导。 */
+    statusCode: string
+    /** 乐观锁版本；提交审批必须携带。 */
+    version: number
+    reason: string
+    baseRevisionId: string
+    createdAt: string
+    /** 统一只读审批结构。缺省表示列表行尚未补详情。 */
+    approval?: DocumentApprovalView
+}>
+
 type WorkflowActionView = Readonly<{
     id: string
     actionLabel: string
@@ -219,6 +235,8 @@ export type PurchaseOrderCenterView = Readonly<{
     fieldVisibility: Record<string, "full" | "masked" | "hidden">
     /** 统一只读审批投影；缺省表示服务端未返回绑定。 */
     approval?: DocumentApprovalView
+    /** 当前进行中的采购变更单；缺省表示无在途改单。 */
+    activeChangeOrder?: PurchaseChangeOrderSummary | null
     /** 审核任务（仅待审核且存在提交时） */
     reviewWorkItem?: {
         workItemId: string

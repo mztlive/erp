@@ -2,6 +2,7 @@ import { apiGet, apiPost } from "@/lib/api"
 import type { FormalActionResponse } from "@/features/purchase-orders/types"
 import type {
     CreatePurchaseOrderFromBasisInput,
+    PurchaseChangeOrderSummary,
     ReviewPurchaseOrderInput,
     SavePurchaseOrderDraftInput,
     SubmitPurchaseOrderInput,
@@ -11,11 +12,15 @@ import type {
     BackendCenter,
     BackendChangeStartResult,
     BackendCreateResult,
+    BackendPurchaseChangeSubmitResult,
     BackendReviewResult,
     BackendSaveResult,
     BackendSubmitResult,
 } from "./purchase-order-wire-types"
-import { fetchCreationBases } from "./purchase-order-queries-api"
+import {
+    fetchCreationBases,
+    fetchPurchaseChangeOrderDetail,
+} from "./purchase-order-queries-api"
 
 export async function savePurchaseOrderDraft(
     input: SavePurchaseOrderDraftInput & { paymentTermLabel: string },
@@ -221,6 +226,75 @@ export async function startPurchaseChange(input: {
                 baseRevisionNo: data.base_revision_no,
             },
             reference: data.reference || `CHANGE-V${data.base_revision_no}`,
+        }
+    } catch (error) {
+        return formalActionFailure(error, input.idempotencyKey)
+    }
+}
+
+/**
+ * 把采购单中心当前行转成变更提交所需的完整目标行。
+ *
+ * 客户端不得选择定义或审批人，只冻结当前可见内容。
+ *
+ * @param center 原采购单对象中心 wire。
+ */
+const mapCenterLinesForChangeSubmit = (center: BackendCenter) =>
+    (center.lines ?? []).map((line) => {
+        const lineType =
+            line.line_type === "LOGISTICS_FEE" ? "LOGISTICS_FEE" : "ITEM_SERVICE"
+        return {
+            line_type: lineType,
+            procurement_confirmation_line_id:
+                line.procurement_confirmation_line_id ?? undefined,
+            sku_id: line.sku_id ?? undefined,
+            sku_revision_id: line.sku_revision_id ?? undefined,
+            product_name: line.product_name ?? undefined,
+            specification: line.specification ?? undefined,
+            quantity: line.quantity ?? undefined,
+            base_unit_code: line.base_unit_code ?? undefined,
+            unit_cost_gross: line.unit_cost_gross ?? undefined,
+            input_tax_rate: line.input_tax_rate ?? "0",
+            expected_delivery_date: line.expected_delivery_date ?? undefined,
+            sales_order_submission_line_id:
+                line.sales_order_submission_line_id ?? undefined,
+            allocated_quantity: line.allocated_quantity ?? undefined,
+            gross_amount:
+                lineType === "LOGISTICS_FEE" ? line.gross_amount : undefined,
+        }
+    })
+
+/**
+ * 提交采购变更并启动统一审批。客户端不得选择定义或审批人。
+ *
+ * @param input 变更单版本、原采购单与幂等键。
+ */
+export async function submitPurchaseChange(input: {
+    purchaseChangeOrderId: string
+    purchaseOrderId: string
+    expectedLockVersion: number
+    idempotencyKey: string
+}): Promise<FormalActionResponse<PurchaseChangeOrderSummary>> {
+    try {
+        const center = await apiGet<BackendCenter>(
+            `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}`,
+        )
+        const submitted = await apiPost<BackendPurchaseChangeSubmitResult>(
+            `/admin/purchase-change-orders/${encodeURIComponent(input.purchaseChangeOrderId)}/submit`,
+            {
+                expected_lock_version: input.expectedLockVersion,
+                payment_term_code: center.payment_term_code,
+                lines: mapCenterLinesForChangeSubmit(center),
+                idempotency_key: input.idempotencyKey,
+            },
+        )
+        const detail = await fetchPurchaseChangeOrderDetail(
+            submitted.change_id || input.purchaseChangeOrderId,
+        )
+        return {
+            status: "succeeded",
+            data: detail,
+            reference: submitted.reference || `CHANGE-SUB-${submitted.submission_no}`,
         }
     } catch (error) {
         return formalActionFailure(error, input.idempotencyKey)

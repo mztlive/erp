@@ -15,6 +15,7 @@ import {
     PurchaseOrderDetailSummarySection,
 } from "@/features/purchase-orders/components/purchase-order-detail-overview-section"
 import { PurchaseOrderDetailPayableSection } from "@/features/purchase-orders/components/purchase-order-detail-payable-section"
+import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import type {
     PurchaseOrderDetailMode,
     PurchaseOrderDetailNavItem,
@@ -26,6 +27,9 @@ type GateView = PurchaseOrderCenterView["progress"]["prepaymentGate"]
 type ActionBlocker =
     PurchaseOrderCenterView["actionBlockers"][number] | undefined
 
+/**
+ * 采购单详情子区。变更页签承接 PurchaseChangeOrder 通用审批区。
+ */
 export function PurchaseOrderDetailSections({
     order,
     activeSection,
@@ -41,6 +45,10 @@ export function PurchaseOrderDetailSections({
     baseHref,
     w12PayHref,
     onRequestChange,
+    changeWorkItemId,
+    changeExpectedTaskVersion,
+    changeWorkItemAllowedActions,
+    onChangeApprovalResult,
 }: {
     order: PurchaseOrderCenterView
     activeSection: PurchaseOrderDetailSectionId
@@ -56,6 +64,10 @@ export function PurchaseOrderDetailSections({
     baseHref: string
     w12PayHref: string
     onRequestChange: () => void
+    changeWorkItemId?: string
+    changeExpectedTaskVersion?: string
+    changeWorkItemAllowedActions?: readonly string[]
+    onChangeApprovalResult?: (result: PurchaseOrderDetailResult) => void
 }) {
     return (
         <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
@@ -125,6 +137,12 @@ export function PurchaseOrderDetailSections({
                                 canChange={canChange}
                                 changeBlocker={changeBlocker}
                                 onRequestChange={onRequestChange}
+                                workItemId={changeWorkItemId}
+                                expectedTaskVersion={changeExpectedTaskVersion}
+                                workItemAllowedActions={
+                                    changeWorkItemAllowedActions
+                                }
+                                onApprovalResult={onChangeApprovalResult}
                             />
                         ) : null}
 
