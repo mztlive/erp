@@ -101,8 +101,6 @@ pub struct PurchaseChangeOrderUpdate {
     pub current_submission_id: Option<PurchaseChangeSubmissionId>,
     /// 目标提交内容指纹；`None` 表示不修改。
     pub target_content_hash: Option<String>,
-    /// 状态；`None` 表示不修改。
-    pub status: Option<PurchaseChangeOrderStatus>,
     /// 生效后形成的新采购版本；`None` 表示不修改。
     pub effective_revision_id: Option<PurchaseOrderRevisionId>,
 }
@@ -207,11 +205,7 @@ impl PurchaseChangeOrder {
     /// # 错误
     /// 状态不是草稿，或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: PurchaseChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
-        self.apply_content(&update, updated_by)?;
-        if let Some(status) = update.status {
-            self.stable.status = status;
-        }
-        Ok(())
+        self.apply_content(&update, updated_by)
     }
 
     /// 应用内容更新（草稿门禁）。
@@ -915,6 +909,24 @@ mod tests {
         assert!(order
             .apply_effective(PurchaseOrderRevisionId::new("por-3"), "u")
             .is_err());
+    }
+
+    /// 内容更新不得改写状态；状态只能经签署邻接方法迁移。
+    #[test]
+    fn update_cannot_rewrite_status() {
+        let mut order =
+            PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
+        order
+            .update(
+                PurchaseChangeOrderUpdate {
+                    reason: Some("仅改原因".to_string()),
+                    ..Default::default()
+                },
+                "admin-2",
+            )
+            .unwrap();
+        assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Draft);
+        assert_eq!(order.reason, "仅改原因");
     }
 
     #[test]

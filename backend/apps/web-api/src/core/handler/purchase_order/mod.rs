@@ -317,27 +317,26 @@ pub async fn purchase_change_submit(
     resource = "purchase_change_order",
     action = "post"
 )]
-/// 采购变更生效（§8.1.3：新版本 + 差额 + 指针推进原子生效）。
+/// 客户端直接生效失败关闭。最终动作仅由审批运行时 `on_final_approve` 调用。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 变更单 ID
-/// * `req` - 生效请求
+/// * `req` - 生效请求（客户端不得据此改写采购单）
 ///
 /// # 返回
-/// 返回生效结果。
+/// 恒返回冲突。
 pub async fn purchase_change_effect(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<EffectPurchaseChangeRequest>,
+    State(_state): State<AppState>,
+    Extension(_actor): Extension<AuditActor>,
+    Path(_id): Path<String>,
+    Json(_req): Json<EffectPurchaseChangeRequest>,
 ) -> Result<PurchaseChangeEffectResult> {
-    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
-        .apply_effective_change(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
+    match PurchaseOrderService::reject_client_effect() {
+        Err(error) => Err(error.into()),
+        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+    }
 }
 
 #[permission_macros::permission(
@@ -433,9 +432,10 @@ mod tests {
             .expect("生产代码");
         assert!(production.contains("submit_change"));
         assert!(production.contains("cancel_change_approval"));
-        assert!(production.contains("apply_effective_change"));
+        assert!(production.contains("reject_client_effect"));
         assert!(production.contains("change_order_detail"));
         assert!(production.contains("with_rbac"));
+        assert!(!production.contains(".apply_effective_change("));
         assert!(!production.contains("definition_id"));
         assert!(!production.contains("PENDING_WAREHOUSE_IMPACT"));
         assert!(!production.contains("PENDING_FINANCE_REVIEW"));

@@ -192,7 +192,24 @@ impl PurchaseOrderService {
             ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
             actor.id(),
         )?;
-        self.persist_effective_change(change, req, actor).await
+        let submission_id = resolve_effect_submission_id(
+            change.current_submission_id.as_ref(),
+            Some(req.submission_id.as_str()),
+        )?;
+        self.persist_effective_change(change, submission_id, actor).await
+    }
+
+    /// 客户端直接生效失败关闭。最终动作只能由审批运行时调用。
+    ///
+    /// # 返回
+    /// 恒返回冲突。
+    ///
+    /// # 错误
+    /// 恒返回 `ConflictError`。
+    pub fn reject_client_effect() -> Result<PurchaseChangeEffectResult> {
+        Err(Error::ConflictError(
+            "采购变更生效只能由审批最终通过动作执行，客户端不得直接生效".to_string(),
+        ))
     }
 
     /// 分页查询采购变更单列表。
@@ -607,7 +624,7 @@ impl PurchaseOrderService {
     async fn persist_effective_change(
         &self,
         change: PurchaseChangeOrder,
-        req: EffectPurchaseChangeRequest,
+        submission_id: String,
         actor: &AuditActor,
     ) -> Result<PurchaseChangeEffectResult> {
         let order = self
@@ -617,7 +634,7 @@ impl PurchaseOrderService {
             .await?
             .ok_or_else(|| Error::NotFound("原采购单不存在".to_string()))?;
         ensure_base_revision_current(&change, &order)?;
-        let (submission, lines) = self.load_pending_change_submission(&req.submission_id).await?;
+        let (submission, lines) = self.load_pending_change_submission(&submission_id).await?;
         let new_revision_no = self.next_revision_no(&order).await?;
         let (revision, revision_lines) = self
             .build_change_revision(&order, &submission, &lines, new_revision_no)
@@ -769,6 +786,34 @@ fn ensure_order_allows_change(order: &PurchaseOrder) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// 生效只允许当前冻结提交；请求携带的提交必须与之一致。
+///
+/// # 参数
+/// * `current` - 变更单上的当前冻结提交
+/// * `requested` - 客户端或运行时给出的提交；空则只用当前提交
+///
+/// # 返回
+/// 返回当前冻结提交 ID。
+///
+/// # 错误
+/// 尚未提交，或请求提交与当前冻结提交不一致时返回错误。
+pub(super) fn resolve_effect_submission_id(
+    current: Option<&PurchaseChangeSubmissionId>,
+    requested: Option<&str>,
+) -> Result<String> {
+    let current = current
+        .ok_or_else(|| Error::BusinessLogicError("变更单尚未提交审批".to_string()))?
+        .to_string();
+    if let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty()) {
+        if requested != current {
+            return Err(Error::ConflictError(
+                "生效提交必须是当前冻结提交，不得使用历史提交".to_string(),
+            ));
+        }
+    }
+    Ok(current)
 }
 
 /// 基准版本必须仍是采购单当前版本。
@@ -988,6 +1033,16 @@ fn content_fingerprint(lines: &[SavePurchaseOrderLine]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        execute_purchase_change_domain_action, resolve_effect_submission_id, start_purchase_change_approval,
+        PurchaseOrderService,
+    };
+    use crate::approval::policy::ApprovalDomainAction;
+    use entities::ids::{
+        PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId, PurchaseOrderRevisionId,
+    };
+    use entities::purchase_order::{PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus};
+
     /// 创建必须注册 BusinessDocument 并独立绑定发布定义。
     #[test]
     fn create_registers_document_and_binds_published_definition() {
@@ -1008,13 +1063,15 @@ mod tests {
         assert!(source.contains("prepare_start"));
     }
 
-    /// 最终动作唯一为 apply_effective_change。
+    /// 最终动作唯一为 apply_effective_change，且绑定当前冻结提交。
     #[test]
     fn final_action_is_apply_effective_change() {
         let source = include_str!("change.rs");
         assert!(source.contains("pub async fn apply_effective_change"));
         assert!(source.contains("change.apply_effective"));
         assert!(source.contains("PurchaseChangeOrderApplyEffectiveChange"));
+        assert!(source.contains("resolve_effect_submission_id"));
+        assert!(source.contains("current_submission_id"));
     }
 
     /// 撤回必须调用统一 cancel 并回到草稿。
@@ -1032,5 +1089,66 @@ mod tests {
         let source = include_str!("change.rs");
         assert!(source.contains("document_approval_view"));
         assert!(source.contains("load_change_binding"));
+    }
+
+    /// 客户端直接生效必须失败关闭。
+    #[test]
+    fn client_effect_fails_closed() {
+        let error = PurchaseOrderService::reject_client_effect().unwrap_err();
+        assert!(error.to_string().contains("客户端不得直接生效"));
+    }
+
+    /// 生效只接受当前冻结提交；错误提交或缺失提交失败关闭。
+    #[test]
+    fn effect_rejects_mismatched_or_missing_submission() {
+        let current = PurchaseChangeSubmissionId::new("pcs-current");
+        assert_eq!(
+            resolve_effect_submission_id(Some(&current), Some("pcs-current")).unwrap(),
+            "pcs-current"
+        );
+        assert_eq!(
+            resolve_effect_submission_id(Some(&current), None).unwrap(),
+            "pcs-current"
+        );
+        let mismatch = resolve_effect_submission_id(Some(&current), Some("pcs-old")).unwrap_err();
+        assert!(mismatch.to_string().contains("当前冻结提交"));
+        assert!(resolve_effect_submission_id(None, Some("pcs-current")).is_err());
+    }
+
+    /// 非审批中不得走最终通过动作；撤回不回退 subject_version。
+    #[test]
+    fn cancel_keeps_subject_version_and_effect_requires_in_approval() {
+        let mut change = PurchaseChangeOrder::new(
+            PurchaseChangeOrderId::new("pco-1"),
+            PurchaseChangeOrderData {
+                purchase_order_id: PurchaseOrderId::new("po-1"),
+                base_revision_id: PurchaseOrderRevisionId::new("por-1"),
+                reason: "成本上涨".into(),
+            },
+            "user-1",
+        )
+        .expect("草稿必须可构造");
+        assert!(execute_purchase_change_domain_action(
+            &mut change,
+            ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
+            "user-1",
+        )
+        .is_err());
+        start_purchase_change_approval(
+            &mut change,
+            PurchaseChangeSubmissionId::new("pcs-1"),
+            "hash-1",
+            "user-1",
+        )
+        .unwrap();
+        assert_eq!(change.approval_subject_version, 1);
+        execute_purchase_change_domain_action(
+            &mut change,
+            ApprovalDomainAction::PurchaseChangeOrderCancelApproval,
+            "user-1",
+        )
+        .unwrap();
+        assert_eq!(change.stable.status, PurchaseChangeOrderStatus::Draft);
+        assert_eq!(change.approval_subject_version, 1);
     }
 }
