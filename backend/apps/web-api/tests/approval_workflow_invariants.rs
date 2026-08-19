@@ -95,7 +95,12 @@ fn assert_no_approval_identity(document_type: DocumentType) {
 ///
 /// # 错误
 /// 创建路径启动实例或提交路径未接线时测试失败。
-fn assert_create_binds_submit_starts(source: &str, create_sig: &str, submit_sig: &str) {
+fn assert_create_binds_submit_starts(
+    source: &str,
+    create_sig: &str,
+    submit_sig: &str,
+    submit_start_token: &str,
+) {
     let create = async_method_body(source, create_sig);
     let submit = async_method_body(source, submit_sig);
     assert!(
@@ -104,11 +109,42 @@ fn assert_create_binds_submit_starts(source: &str, create_sig: &str, submit_sig:
     );
     assert!(!create.is_empty(), "必须定位到创建方法 {create_sig}");
     assert!(!create.contains("prepare_start("), "创建不得启动实例");
-    assert!(!create.contains("start_approval("), "创建不得启动实例");
     assert!(
-        submit.contains("prepare_start(") || source.contains("prepare_start("),
-        "提交必须调用 prepare_start"
+        !create.contains(submit_start_token),
+        "创建不得调用提交启动入口 {submit_start_token}"
     );
+    assert!(
+        submit.contains(submit_start_token),
+        "提交方法体必须调用 {submit_start_token}"
+    );
+    assert!(
+        source.contains("prepare_start("),
+        "提交链路必须最终调用 prepare_start"
+    );
+}
+
+/// 断言启动读取已冻结绑定，不得按当前发布定义切换。
+///
+/// # 错误
+/// 启动路径查询当前 PUBLISHED 或未加载绑定图时测试失败。
+fn assert_start_uses_frozen_binding(start_source: &str) {
+    assert!(
+        start_source.contains("load_bound_definition_graph"),
+        "启动必须按单据绑定加载定义图"
+    );
+    assert!(
+        !start_source.contains("find_published_by_process_kind"),
+        "启动不得改绑到当前发布版本"
+    );
+}
+
+/// 断言前端升级/决定/撤回只按 allowed_actions 显示。
+///
+/// # 错误
+/// 缺少通用动作栏或升级入口未受 allowed_actions 约束时测试失败。
+fn assert_frontend_allowed_actions_only(source: &str) {
+    assert_frontend_uses_generic_area(source);
+    assert!(source.contains("UPGRADE_BINDING") || source.contains("allowedActions"));
 }
 
 /// 断言无审批创建走统一绑定端口且不启动实例。
@@ -226,6 +262,7 @@ fn create_binds_and_submit_starts_for_stock_adjustment() {
         inventory,
         "async fn create_stock_adjustment",
         "async fn submit_stock_adjustment",
+        "prepare_start(",
     );
 }
 
@@ -369,8 +406,8 @@ fn stock_adjustment_policy_actions_and_duties() {
 fn cancel_requires_reason_and_legacy_symbols_are_absent_from_target_paths() {
     let cancel = production(include_str!("../../../services/src/approval/execution/cancel.rs"));
     assert!(cancel.contains("reason"));
-    let instance_http = production(include_str!("../src/core/handler/approval_instance/http.rs"));
-    assert!(instance_http.contains("原因不能为空") || instance_http.contains("reason"));
+    let instance_mod = production(include_str!("../src/core/handler/approval_instance/mod.rs"));
+    assert!(instance_mod.contains("原因不能为空"));
     let routes = production(include_str!("../src/core/routes/approval_instance.rs"));
     assert!(!routes.contains("approval_instance::recover)"));
     assert!(!routes.contains("RETRY_CURRENT_STEP"));
@@ -378,6 +415,60 @@ fn cancel_requires_reason_and_legacy_symbols_are_absent_from_target_paths() {
     let work_item = production(include_str!("../../../entities/src/work_item/work_item.rs"));
     assert!(work_item.contains("DocumentApproval"));
     assert!(!work_item.contains("AssignmentMode"));
+}
+
+/// 受控升级只能到当前发布版本，且仅运行管理员、未提交未启动。
+#[test]
+fn upgrade_unsubmitted_only_targets_current_published_definition() {
+    use services::approval::binding::{
+        ensure_upgrade_unsubmitted_allowed, process_not_configured, published_definition_or_not_configured,
+        APPROVAL_PROCESS_NOT_CONFIGURED,
+    };
+
+    assert!(ensure_upgrade_unsubmitted_allowed(false, false, 1, 1, 1, 1, true).is_ok());
+    assert!(ensure_upgrade_unsubmitted_allowed(false, false, 1, 1, 1, 1, false).is_err());
+    assert!(ensure_upgrade_unsubmitted_allowed(true, false, 1, 1, 1, 1, true).is_err());
+    assert!(ensure_upgrade_unsubmitted_allowed(false, true, 1, 1, 1, 1, true).is_err());
+    assert!(ensure_upgrade_unsubmitted_allowed(false, false, 2, 1, 1, 1, true).is_err());
+    let missing = published_definition_or_not_configured::<()>(None).expect_err("无定义");
+    assert!(missing.to_string().contains(APPROVAL_PROCESS_NOT_CONFIGURED));
+    assert_eq!(
+        process_not_configured().to_string(),
+        format!("数据冲突: {APPROVAL_PROCESS_NOT_CONFIGURED}")
+    );
+    let binding = production(include_str!("../../../services/src/approval/binding.rs"));
+    assert!(binding.contains("load_published_graph"));
+    assert!(binding.contains("find_published_by_process_kind"));
+    assert!(!binding.contains("source_definition_id"));
+}
+
+/// 创建绑定、启动进入节点和决定必须重验资格、DataScope、读取权与岗位分离。
+#[test]
+fn create_start_and_decide_revalidate_eligibility() {
+    use services::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
+
+    let bind = production(include_str!("../../../services/src/approval/binding.rs"));
+    assert!(bind.contains("revalidate_assignee_binding_access"));
+    assert!(bind.contains("ensure_separation_of_duties"));
+    let auth = production(include_str!(
+        "../../../services/src/approval/execution/authorization.rs"
+    ));
+    assert!(auth.contains("OutOfDataScope"));
+    assert!(auth.contains("CannotReadSubject"));
+    assert!(auth.contains("SeparationOfDuties"));
+    for failure in [
+        AuthorizationFailure::AccountInactive,
+        AuthorizationFailure::EmploymentInvalid,
+        AuthorizationFailure::NotEligible,
+        AuthorizationFailure::OutOfDataScope,
+        AuthorizationFailure::CannotReadSubject,
+        AuthorizationFailure::SeparationOfDuties,
+    ] {
+        let blocked = converge_eligibility("u1", "仓储", Some(failure)).expect("资格");
+        assert!(blocked.blocked_code().is_some());
+    }
+    let eligible = converge_eligibility("u1", "仓储", None).expect("合格");
+    assert!(eligible.blocked_code().is_none());
 }
 
 /// 快照与 SubjectRef + subject_version 一致且写后不可变。
@@ -394,11 +485,9 @@ fn snapshot_write_path_is_create_only() {
 /// 合同要求的 9 个 `approval_subject_version` 字段必须存在且不得回退。
 #[test]
 fn nine_approval_subject_version_fields_are_immutable_sources() {
+    let stock = include_str!("../../../entities/src/inventory/stock_adjustment.rs");
+    assert!(stock.contains("pub approval_subject_version: u32"));
     for (path, document_type) in [
-        (
-            include_str!("../../../entities/src/inventory/stock_adjustment.rs"),
-            DocumentType::StockAdjustment,
-        ),
         (
             include_str!("../../../entities/src/purchase_order/order.rs"),
             DocumentType::PurchaseOrder,
@@ -438,8 +527,22 @@ fn nine_approval_subject_version_fields_are_immutable_sources() {
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert!(path.contains("pub approval_subject_version: u32"));
-        assert!(path.contains("不回退") || path.contains("approval_subject_version"));
+        assert!(
+            path.contains("approval_subject_version` 不回退")
+                || path.contains("且 `approval_subject_version` 不回退"),
+            "{} 撤回必须声明版本不回退",
+            document_type.as_str()
+        );
     }
+    let stock_adapter = production(include_str!("../../../services/src/inventory/adapter.rs"));
+    assert!(stock_adapter.contains("成功后不回退"));
+    assert!(stock_adapter.contains("subject_version` 不回退"));
+    assert_eq!(
+        require_process_required(DocumentType::StockAdjustment)
+            .expect("试点")
+            .subject_version_source,
+        ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
+    );
     let sales = require_process_required(DocumentType::SalesOrder).expect("销售");
     let voucher = require_process_required(DocumentType::VoucherSalesOrder).expect("卡券销售");
     let change = require_process_required(DocumentType::SalesChangeOrder).expect("销售变更");
@@ -481,10 +584,21 @@ fn sales_order_acceptance_record() {
     );
     assert!(!create.contains("prepare_start("), "创建不得启动实例");
     assert!(submit.contains("prepare_start("), "提交必须启动");
-    assert!(command.contains("document_type_for_sales_create") || command.contains("BusinessType"));
+    assert!(command.contains("document_type_for_sales_create"));
+    let start = production(include_str!(
+        "../../../services/src/sales_order/start_approval.rs"
+    ));
+    assert_start_uses_frozen_binding(start);
+    assert_eq!(
+        require_process_required(DocumentType::SalesOrder)
+            .expect("销售")
+            .final_approve_action
+            .as_str(),
+        "SalesOrderService::formalize_approved_submission"
+    );
     let frontend =
         include_str!("../../../../erp-client/features/sales-orders/components/sales-order-approval-area.tsx");
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
     assert!(frontend.contains("SALES_ORDER_DOCUMENT_TYPE"));
 }
 
@@ -504,13 +618,24 @@ fn voucher_sales_order_acceptance_record() {
     assert_ne!(sales.process_kind, voucher.process_kind);
     assert!(voucher.required_node_purposes.is_empty());
     let command = production(include_str!("../../../services/src/sales_order/command.rs"));
-    assert!(command.contains("VoucherSalesOrder") || command.contains("BusinessType::Voucher"));
+    assert!(command.contains("BusinessType::Voucher"));
+    let create = async_method_body(command, "async fn create_sales_order");
     let submit = async_method_body(command, "async fn submit_sales_order");
+    assert!(!create.contains("prepare_start("));
     assert!(submit.contains("prepare_start("));
+    let start = production(include_str!(
+        "../../../services/src/sales_order/start_approval.rs"
+    ));
+    assert_start_uses_frozen_binding(start);
+    assert_eq!(
+        voucher.final_approve_action.as_str(),
+        "SalesOrderService::formalize_approved_submission"
+    );
     let frontend = include_str!(
         "../../../../erp-client/features/sales-orders/components/voucher-sales-order-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("VOUCHER_SALES_ORDER_DOCUMENT_TYPE"));
 }
 
 /// SalesChangeOrder 独立验收：创建绑定、提交启动、变更提交版本。
@@ -531,11 +656,24 @@ fn sales_change_order_acceptance_record() {
         source,
         "async fn create_sales_change_order",
         "async fn submit_sales_change",
+        "start_change_approval(",
+    );
+    let start = production(include_str!(
+        "../../../services/src/sales_review/start_approval.rs"
+    ));
+    assert_start_uses_frozen_binding(start);
+    assert_eq!(
+        require_process_required(DocumentType::SalesChangeOrder)
+            .expect("销售变更")
+            .final_approve_action
+            .as_str(),
+        "SalesChangeOrderService::apply_effective_change"
     );
     let frontend = include_str!(
         "../../../../erp-client/features/sales-orders/components/sales-change-order-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("SALES_CHANGE_ORDER_DOCUMENT_TYPE"));
 }
 
 /// PurchaseOrder 独立验收：提交启动、实体版本、无采购确认 purpose。
@@ -550,12 +688,33 @@ fn purchase_order_acceptance_record() {
         ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
     );
     let submit = production(include_str!("../../../services/src/purchase_order/submission.rs"));
-    assert!(submit.contains("prepare_start("));
-    assert!(submit.contains("find_approval_binding"));
+    let submit_body = async_method_body(submit, "async fn submit(");
+    assert!(submit_body.contains("prepare_start("));
+    assert!(submit_body.contains("load_bound_definition_graph"));
+    let start = production(include_str!(
+        "../../../services/src/purchase_order/start_approval.rs"
+    ));
+    assert_start_uses_frozen_binding(start);
+    let create = production(include_str!(
+        "../../../services/src/purchase_order/creation_basis.rs"
+    ));
+    assert!(create.contains("采购创建依据不存在"));
+    assert!(!create.contains("bind_published_definition_on_document_create"));
+    let draft = production(include_str!("../../../services/src/purchase_order/draft_edit.rs"));
+    assert!(!draft.contains("bind_published_definition_on_document_create"));
+    assert!(!draft.contains("prepare_start("));
+    assert_eq!(
+        require_process_required(DocumentType::PurchaseOrder)
+            .expect("采购")
+            .final_approve_action
+            .as_str(),
+        "PurchaseOrderService::formalize_approved_order"
+    );
     let frontend = include_str!(
         "../../../../erp-client/features/purchase-orders/components/purchase-order-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("PURCHASE_ORDER_DOCUMENT_TYPE"));
 }
 
 /// PurchaseChangeOrder 独立验收：创建绑定、提交启动。
@@ -570,14 +729,28 @@ fn purchase_change_order_acceptance_record() {
         ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
     );
     let source = production(include_str!("../../../services/src/purchase_order/change.rs"));
-    assert!(source.contains("bind_published_definition_on_document_create"));
-    assert!(source.contains("prepare_start("));
-    let create = async_method_body(source, "bind_published_definition_on_document_create");
-    assert!(!create.contains("prepare_start(") || source.contains("prepare_start("));
+    assert_create_binds_submit_starts(
+        source,
+        "async fn start_change",
+        "async fn submit_change",
+        "start_change_approval(",
+    );
+    let start = production(include_str!(
+        "../../../services/src/purchase_order/change_start.rs"
+    ));
+    assert_start_uses_frozen_binding(start);
+    assert_eq!(
+        require_process_required(DocumentType::PurchaseChangeOrder)
+            .expect("采购变更")
+            .final_approve_action
+            .as_str(),
+        "PurchaseChangeService::apply_effective_change"
+    );
     let frontend = include_str!(
         "../../../../erp-client/features/purchase-orders/components/purchase-change-order-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE"));
 }
 
 /// StockAdjustment 独立验收：试点类型走实体版本与数量快照。
@@ -596,12 +769,20 @@ fn stock_adjustment_acceptance_record() {
         inventory,
         "async fn create_stock_adjustment",
         "async fn submit_stock_adjustment",
+        "prepare_start(",
     );
+    let start = production(include_str!("../../../services/src/inventory/start_approval.rs"));
+    assert_start_uses_frozen_binding(start);
     let policy = require_process_required(DocumentType::StockAdjustment).expect("试点");
     assert!(policy.required_node_purposes.is_empty());
+    assert_eq!(
+        policy.final_approve_action.as_str(),
+        "InventoryService::post_stock_adjustment"
+    );
     let frontend =
         include_str!("../../../../erp-client/features/inventory/components/adjustment-approval-area.tsx");
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("STOCK_ADJUSTMENT_DOCUMENT_TYPE"));
 }
 
 /// CustomerReceipt 独立验收：资金类金额快照、创建绑定、提交启动。
@@ -620,11 +801,22 @@ fn customer_receipt_acceptance_record() {
         source,
         "async fn create_customer_receipt",
         "async fn submit_customer_receipt",
+        "dispatch_customer_receipt_start(",
+    );
+    let start = production(include_str!("../../../services/src/receivable/start_approval.rs"));
+    assert_start_uses_frozen_binding(start);
+    assert_eq!(
+        require_process_required(DocumentType::CustomerReceipt)
+            .expect("回款")
+            .final_approve_action
+            .as_str(),
+        "ReceivableService::post_customer_receipt"
     );
     let frontend = include_str!(
         "../../../../erp-client/features/customer-receivables/components/customer-receipt-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("CUSTOMER_RECEIPT_DOCUMENT_TYPE"));
 }
 
 /// SupplierPayment 独立验收：资金类金额快照、创建绑定、提交启动。
@@ -643,11 +835,22 @@ fn supplier_payment_acceptance_record() {
         source,
         "async fn create_supplier_payment",
         "async fn submit_supplier_payment",
+        "dispatch_supplier_payment_start(",
+    );
+    let start = production(include_str!("../../../services/src/payable/start_approval.rs"));
+    assert_start_uses_frozen_binding(start);
+    assert_eq!(
+        require_process_required(DocumentType::SupplierPayment)
+            .expect("付款")
+            .final_approve_action
+            .as_str(),
+        "PayableService::post_supplier_payment"
     );
     let frontend = include_str!(
         "../../../../erp-client/features/supplier-payables/components/supplier-payment-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("SUPPLIER_PAYMENT_DOCUMENT_TYPE"));
 }
 
 /// CustomerRefund 独立验收：退款提交启动、通用审批区。
@@ -666,11 +869,22 @@ fn customer_refund_acceptance_record() {
         source,
         "async fn create_customer_refund",
         "async fn submit_customer_refund",
+        "dispatch_customer_refund_start(",
+    );
+    let start = production(include_str!("../../../services/src/returns/start_approval.rs"));
+    assert_start_uses_frozen_binding(start);
+    assert_eq!(
+        require_process_required(DocumentType::CustomerRefund)
+            .expect("客户退款")
+            .final_approve_action
+            .as_str(),
+        "ReturnsService::post_customer_refund"
     );
     let frontend = include_str!(
         "../../../../erp-client/features/customer-receivables/components/customer-refund-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("CUSTOMER_REFUND_DOCUMENT_TYPE"));
 }
 
 /// SupplierRefund 独立验收：供应商退款提交启动。
@@ -689,11 +903,20 @@ fn supplier_refund_acceptance_record() {
         source,
         "async fn create_supplier_refund",
         "async fn submit_supplier_refund",
+        "dispatch_supplier_refund_start(",
+    );
+    assert_eq!(
+        require_process_required(DocumentType::SupplierRefund)
+            .expect("供应商退款")
+            .final_approve_action
+            .as_str(),
+        "ReturnsService::post_supplier_refund"
     );
     let frontend = include_str!(
         "../../../../erp-client/features/supplier-payables/components/supplier-refund-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("SUPPLIER_REFUND_DOCUMENT_TYPE"));
 }
 
 /// ReceiptReversal 独立验收：回款冲正提交启动。
@@ -712,11 +935,20 @@ fn receipt_reversal_acceptance_record() {
         source,
         "async fn create_receipt_reversal",
         "async fn submit_receipt_reversal",
+        "dispatch_receipt_reversal_start(",
+    );
+    assert_eq!(
+        require_process_required(DocumentType::ReceiptReversal)
+            .expect("回款冲正")
+            .final_approve_action
+            .as_str(),
+        "ReturnsService::post_receipt_reversal"
     );
     let frontend = include_str!(
         "../../../../erp-client/features/customer-receivables/components/receipt-reversal-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("RECEIPT_REVERSAL_DOCUMENT_TYPE"));
 }
 
 /// PaymentReversal 独立验收：付款冲正提交启动。
@@ -735,11 +967,20 @@ fn payment_reversal_acceptance_record() {
         source,
         "async fn create_payment_reversal",
         "async fn submit_payment_reversal",
+        "dispatch_payment_reversal_start(",
+    );
+    assert_eq!(
+        require_process_required(DocumentType::PaymentReversal)
+            .expect("付款冲正")
+            .final_approve_action
+            .as_str(),
+        "ReturnsService::post_payment_reversal"
     );
     let frontend = include_str!(
         "../../../../erp-client/features/supplier-payables/components/payment-reversal-approval-area.tsx"
     );
-    assert_frontend_uses_generic_area(frontend);
+    assert_frontend_allowed_actions_only(frontend);
+    assert!(frontend.contains("PAYMENT_REVERSAL_DOCUMENT_TYPE"));
 }
 
 /// PurchaseReceipt 独立验收：无绑定、无实例、无空适配器。
@@ -754,6 +995,8 @@ fn purchase_receipt_acceptance_record() {
         "../../../../erp-client/features/fulfillment-operations/lib/purchase-receipt-no-approval.ts"
     );
     assert_frontend_has_no_approval_area(frontend);
+    assert!(frontend.contains("PURCHASE_RECEIPT_DOCUMENT_TYPE"));
+    assert!(frontend.contains("PURCHASE_RECEIPT_APPROVAL_REQUIREMENT"));
 }
 
 /// Delivery 独立验收：仓发创建不启动审批。
@@ -765,6 +1008,8 @@ fn delivery_acceptance_record() {
     let frontend =
         include_str!("../../../../erp-client/features/fulfillment-operations/lib/delivery-no-approval.ts");
     assert_frontend_has_no_approval_area(frontend);
+    assert!(frontend.contains("DELIVERY_DOCUMENT_TYPE"));
+    assert!(frontend.contains("DELIVERY_APPROVAL_REQUIREMENT"));
 }
 
 /// ElectronicDelivery 独立验收：电子交付创建不启动审批。
@@ -779,6 +1024,8 @@ fn electronic_delivery_acceptance_record() {
         "../../../../erp-client/features/fulfillment-operations/lib/electronic-delivery-no-approval.ts"
     );
     assert_frontend_has_no_approval_area(frontend);
+    assert!(frontend.contains("ELECTRONIC_DELIVERY_DOCUMENT_TYPE"));
+    assert!(frontend.contains("ELECTRONIC_DELIVERY_APPROVAL_REQUIREMENT"));
 }
 
 /// ServiceFulfillment 独立验收：服务履约创建不启动审批。
@@ -793,6 +1040,8 @@ fn service_fulfillment_acceptance_record() {
         "../../../../erp-client/features/fulfillment-operations/lib/service-fulfillment-no-approval.ts"
     );
     assert_frontend_has_no_approval_area(frontend);
+    assert!(frontend.contains("SERVICE_FULFILLMENT_DOCUMENT_TYPE"));
+    assert!(frontend.contains("SERVICE_FULFILLMENT_APPROVAL_REQUIREMENT"));
 }
 
 /// CustomerAcceptance 独立验收：客户验收创建不启动审批。
@@ -807,6 +1056,8 @@ fn customer_acceptance_acceptance_record() {
         "../../../../erp-client/features/fulfillment-operations/lib/customer-acceptance-no-approval.ts"
     );
     assert_frontend_has_no_approval_area(frontend);
+    assert!(frontend.contains("CUSTOMER_ACCEPTANCE_DOCUMENT_TYPE"));
+    assert!(frontend.contains("CUSTOMER_ACCEPTANCE_APPROVAL_REQUIREMENT"));
 }
 
 /// Invoice 独立验收：发票创建不绑定流程、无提交启动。
@@ -821,6 +1072,8 @@ fn invoice_acceptance_record() {
     let frontend =
         include_str!("../../../../erp-client/features/customer-receivables/lib/invoice-no-approval.ts");
     assert_frontend_has_no_approval_area(frontend);
+    assert!(frontend.contains("INVOICE_DOCUMENT_TYPE"));
+    assert!(frontend.contains("INVOICE_APPROVAL_REQUIREMENT"));
 }
 
 /// SalesReturnCase 独立验收：销售退货创建不启动审批。
@@ -832,6 +1085,8 @@ fn sales_return_case_acceptance_record() {
     let frontend =
         include_str!("../../../../erp-client/features/sales-orders/lib/sales-return-no-approval.ts");
     assert_frontend_has_no_approval_area(frontend);
+    assert!(frontend.contains("SALES_RETURN_CASE_DOCUMENT_TYPE"));
+    assert!(frontend.contains("SALES_RETURN_CASE_APPROVAL_REQUIREMENT"));
 }
 
 /// PurchaseReturnOrder 独立验收：采购退货创建不启动审批。
@@ -844,4 +1099,6 @@ fn purchase_return_order_acceptance_record() {
         "../../../../erp-client/features/purchase-orders/lib/purchase-return-order-no-approval.ts"
     );
     assert_frontend_has_no_approval_area(frontend);
+    assert!(frontend.contains("PURCHASE_RETURN_ORDER_DOCUMENT_TYPE"));
+    assert!(frontend.contains("PURCHASE_RETURN_ORDER_APPROVAL_REQUIREMENT"));
 }

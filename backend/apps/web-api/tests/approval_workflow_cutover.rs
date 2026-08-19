@@ -68,7 +68,8 @@ fn uncut_over_gate_and_legacy_runtime_are_removed() {
     assert!(!action.contains("InternalApprovalRuntime"));
     assert!(!inventory.contains("CARD_SALES_APPROVAL"));
     assert!(!inventory.contains("entities::approval::"));
-    assert!(adapter.contains("全部固定单据类型均已切入目标运行时") || adapter.contains("Ok(())"));
+    assert!(adapter.contains("全部固定单据类型均已切入目标运行时"));
+    assert!(!adapter.contains("APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER"));
 }
 
 /// 旧集成测试入口必须删除，不得与新入口并存。
@@ -109,7 +110,7 @@ fn reset_script_drops_old_and_new_approval_collections() {
     assert!(!reset.contains(".dropDatabase("));
 }
 
-/// 硬切换演练合同：preview → execute → verify，必须显式确认目标。
+/// 硬切换演练合同：preview 集合 allowlist 与删除清单一致，必须显式确认目标。
 #[test]
 fn hard_cutover_reset_preview_execute_verify_contract() {
     let shell = include_str!("../../../scripts/reset-dev-business-data.sh");
@@ -124,21 +125,97 @@ fn hard_cutover_reset_preview_execute_verify_contract() {
     assert!(js.contains("ERP_RESET_VERIFY"));
     assert!(js.contains("ERP_RESET_CONFIRMED_DB"));
     assert!(js.contains("预览完成：未执行任何写入"));
+    assert!(js.contains("if (execute && confirmedDb !== dbName)"));
     assert!(md.contains("preview、execute 与 verify"));
     assert!(shell.contains("不得调用 dropDatabase()"));
+    assert!(js.contains("const OLD_APPROVAL_COLLECTIONS"));
+    assert!(js.contains("const NEW_APPROVAL_COLLECTIONS"));
+    for collection in [
+        "approval_step_instances",
+        "approval_instances",
+        "approval_step_definitions",
+        "approval_definitions",
+        "approval_notification_outbox",
+        "approval_subject_snapshots",
+        "approval_command_receipts",
+        "approval_instance_assignees",
+        "approval_node_executions",
+        "approval_process_instances",
+        "approval_transition_definitions",
+        "approval_node_definitions",
+        "approval_process_definitions",
+    ] {
+        assert!(
+            js.contains(&format!("\"{collection}\"")),
+            "{collection} 必须在 preview allowlist"
+        );
+    }
+    assert!(js.contains("work_items"));
+    assert!(!js.contains(".dropDatabase("));
 }
 
-/// 未发布定义时 PROCESS_REQUIRED 创建必须失败关闭。
+/// 未发布定义时 12 个 PROCESS_REQUIRED 创建必须失败关闭。
 #[test]
 fn missing_published_definition_is_fail_closed() {
     let binding = production(include_str!("../../../services/src/approval/binding.rs"));
-    assert!(binding.contains("APPROVAL_PROCESS_NOT_CONFIGURED"));
+    assert!(binding.contains("pub const APPROVAL_PROCESS_NOT_CONFIGURED"));
+    assert!(binding.contains("published_definition_or_not_configured"));
     assert_eq!(APPROVAL_PROCESS_NOT_CONFIGURED, "APPROVAL_PROCESS_NOT_CONFIGURED");
     assert!(approval_codes::ALL.contains(&approval_codes::PROCESS_NOT_CONFIGURED));
-    let inventory = production(include_str!("../../../services/src/inventory/mod.rs"));
-    assert!(inventory.contains("bind_published_definition_on_document_create"));
-    let sales = production(include_str!("../../../services/src/sales_order/command.rs"));
-    assert!(sales.contains("bind_published_definition_on_document_create"));
+    for (label, source) in [
+        (
+            "SalesOrder/VoucherSalesOrder",
+            production(include_str!("../../../services/src/sales_order/command.rs")),
+        ),
+        (
+            "SalesChangeOrder",
+            production(include_str!(
+                "../../../services/src/sales_review/sales_change_order.rs"
+            )),
+        ),
+        (
+            "PurchaseChangeOrder",
+            production(include_str!("../../../services/src/purchase_order/change.rs")),
+        ),
+        (
+            "StockAdjustment",
+            production(include_str!("../../../services/src/inventory/mod.rs")),
+        ),
+        (
+            "CustomerReceipt",
+            production(include_str!("../../../services/src/receivable/mod.rs")),
+        ),
+        (
+            "SupplierPayment",
+            production(include_str!("../../../services/src/payable/mod.rs")),
+        ),
+        (
+            "CustomerRefund",
+            production(include_str!("../../../services/src/returns/customer_refund.rs")),
+        ),
+        (
+            "SupplierRefund",
+            production(include_str!("../../../services/src/returns/supplier_refund.rs")),
+        ),
+        (
+            "ReceiptReversal",
+            production(include_str!("../../../services/src/returns/receipt_reversal.rs")),
+        ),
+        (
+            "PaymentReversal",
+            production(include_str!("../../../services/src/returns/payment_reversal.rs")),
+        ),
+    ] {
+        assert!(
+            source.contains("bind_published_definition_on_document_create"),
+            "{label} 创建必须走统一绑定，无发布定义失败关闭"
+        );
+    }
+    let purchase_create = production(include_str!(
+        "../../../services/src/purchase_order/creation_basis.rs"
+    ));
+    assert!(purchase_create.contains("采购创建依据不存在"));
+    assert!(!purchase_create.contains("bind_published_definition_on_document_create"));
 }
 
 /// 低基数观测指标存在；标签不得使用实例或用户 ID。
@@ -272,10 +349,15 @@ fn production_legacy_fields_and_pool_actions_are_gone() {
 #[test]
 fn rollback_is_forward_only_without_legacy_runtime_restore() {
     let runbook = include_str!("../../../../docs/runbooks/approval-workflow.md");
-    assert!(runbook.contains("退役") || runbook.contains("前向") || runbook.contains("重置"));
+    assert!(runbook.contains("立即退役该类型已发布定义"));
+    assert!(runbook.contains("前向部署"));
+    assert!(runbook.contains("回退旧运行时"));
+    assert!(runbook.contains("不得新增全局审批运行开关"));
     let runtime = production(include_str!(
         "../../../services/src/approval/execution/runtime_service.rs"
     ));
     assert!(!runtime.contains("restore_legacy"));
     assert!(!runtime.contains("ENABLE_OLD_APPROVAL"));
+    assert!(!runtime.contains("legacy_runtime"));
+    assert!(!runtime.contains("FEATURE_APPROVAL"));
 }

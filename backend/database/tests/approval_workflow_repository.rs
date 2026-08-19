@@ -1418,22 +1418,52 @@ fn reset_index_creation_matches_new_bpm_collections() {
     let reset = include_str!("../../scripts/reset-dev-business-data.mongosh.js");
     let bpm_indexes = include_str!("../src/indexes/bpm.rs");
     let integration_indexes = include_str!("../src/indexes/approval_integration.rs");
-    let indexes = format!("{bpm_indexes}\n{integration_indexes}");
-    for name in [
-        "uk_approval_process_definitions_published_kind",
-        "uk_approval_process_definitions_active_draft_kind",
-        "uk_approval_process_instances_active_subject",
-        "uk_approval_node_executions_current",
-        "uk_approval_command_receipts_idempotency",
-        "uk_approval_subject_snapshots_instance",
-        "uk_approval_notification_outbox_dedup",
+    for (collection, name, source) in [
+        (
+            "approval_process_definitions",
+            "uk_approval_process_definitions_published_kind",
+            bpm_indexes,
+        ),
+        (
+            "approval_process_definitions",
+            "uk_approval_process_definitions_active_draft_kind",
+            bpm_indexes,
+        ),
+        (
+            "approval_process_instances",
+            "uk_approval_process_instances_active_subject",
+            bpm_indexes,
+        ),
+        (
+            "approval_node_executions",
+            "uk_approval_node_executions_current",
+            bpm_indexes,
+        ),
+        (
+            "approval_command_receipts",
+            "uk_approval_command_receipts_idempotency",
+            bpm_indexes,
+        ),
+        (
+            "approval_subject_snapshots",
+            "uk_approval_subject_snapshots_instance",
+            integration_indexes,
+        ),
+        (
+            "approval_notification_outbox",
+            "uk_approval_notification_outbox_dedup",
+            integration_indexes,
+        ),
     ] {
-        assert!(indexes.contains(name), "{name} 必须在索引定义中");
+        assert!(source.contains(name), "{name} 必须在对应索引源文件");
         assert!(
-            reset.contains(name) || reset.contains("approval_process_definitions"),
-            "{name}"
+            reset.contains(&format!("\"{collection}\"")),
+            "{collection} 必须出现在 NEW_APPROVAL_COLLECTIONS"
         );
     }
-    assert!(!indexes.contains("uk_work_items_open_approval_step"));
-    assert!(!indexes.contains("idx_work_items_team_pool"));
+    assert!(reset.contains("uk_work_items_open_approval_step"));
+    assert!(reset.contains("idx_work_items_team_pool"));
+    assert!(!bpm_indexes.contains("uk_work_items_open_approval_step"));
+    assert!(!integration_indexes.contains("idx_work_items_team_pool"));
+    assert!(reset.contains("CONFLICTING_INDEX_ALLOWLIST"));
 }

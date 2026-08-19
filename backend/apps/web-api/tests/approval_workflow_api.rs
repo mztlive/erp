@@ -401,6 +401,133 @@ async fn definition_admin_requires_action_and_type_permissions() {
 
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+async fn definition_detail_upgrade_runtime_and_decide_require_dual_gates() {
+    require_mongo!(async {
+        let fixture = TestDb::new("awf_api_dual").await.expect("测试数据库创建失败");
+        ensure_indexes(fixture.db()).await.expect("索引创建失败");
+        let action_only = seed_admin_account(fixture.db()).await.expect("动作账号");
+        grant(
+            fixture.db(),
+            &action_only,
+            &[
+                ("approval_process", "read"),
+                ("approval_instance", "upgrade_binding"),
+                ("approval_instance", "decide"),
+                ("approval_instance", "cancel_blocked"),
+            ],
+        )
+        .await;
+        let type_only = seed_admin_account(fixture.db()).await.expect("类型账号");
+        grant(
+            fixture.db(),
+            &type_only,
+            &[
+                ("stock_adjustment", "approval_definition_admin"),
+                ("stock_adjustment", "approval_runtime_admin"),
+            ],
+        )
+        .await;
+        let both = seed_admin_account(fixture.db()).await.expect("双门禁账号");
+        grant(
+            fixture.db(),
+            &both,
+            &[
+                ("approval_process", "read"),
+                ("approval_instance", "upgrade_binding"),
+                ("approval_instance", "decide"),
+                ("approval_instance", "cancel_blocked"),
+                ("stock_adjustment", "approval_definition_admin"),
+                ("stock_adjustment", "approval_runtime_admin"),
+            ],
+        )
+        .await;
+        let none = seed_admin_account(fixture.db()).await.expect("无权限账号");
+        let api = TestApi::new(routes::create(test_app_state(
+            fixture.db().clone(),
+            "mongodb://localhost".to_string(),
+            fixture.name().to_string(),
+        )));
+        let missing_def = "/admin/approval-process-definitions/missing-def";
+        let (status, body) = api.get(missing_def, Some(&token(&none))).await;
+        assert_eq!(status, 403, "无动作权限不得泄露定义存在性: {body}");
+        let (status, body) = api.get(missing_def, Some(&token(&type_only))).await;
+        assert_eq!(status, 403, "仅类型权限不得读详情: {body}");
+        let (status, body) = api.get(missing_def, Some(&token(&action_only))).await;
+        assert!(
+            status == 403 || status == 404,
+            "仅动作权限不得看到无权类型详情: {status} {body}"
+        );
+        let (status, body) = api.get(missing_def, Some(&token(&both))).await;
+        assert_eq!(status, 404, "双门禁命中后才允许 404: {body}");
+        assert_ne!(error_code(&body), "APPROVAL_PROCESS_NOT_CONFIGURED");
+
+        let upgrade = "/admin/business-documents/stock_adjustment/missing-doc/approval-definition/upgrade";
+        let payload = json!({
+            "reason": "升级到当前发布版本",
+            "expected_document_version": "1",
+            "expected_approval_binding_version": "1",
+            "idempotency_key": "up-1"
+        });
+        let (status, _) = api
+            .post(upgrade, Some(&token(&none)), Some(payload.clone()))
+            .await;
+        assert_eq!(status, 403);
+        let (status, _) = api
+            .post(upgrade, Some(&token(&type_only)), Some(payload.clone()))
+            .await;
+        assert_eq!(status, 403);
+        let (status, body) = api
+            .post(upgrade, Some(&token(&action_only)), Some(payload.clone()))
+            .await;
+        assert!(status == 403 || status == 404, "{status} {body}");
+        let (status, body) = api.post(upgrade, Some(&token(&both)), Some(payload)).await;
+        assert!(
+            status == 404 || status == 409 || status == 422,
+            "双门禁后才进入资源级错误: {status} {body}"
+        );
+
+        let decide = json!({
+            "work_item_id": "missing-wi",
+            "decision": "APPROVE",
+            "expected_task_version": "1",
+            "idempotency_key": "dec-1"
+        });
+        let (status, _) = api
+            .post(
+                "/admin/approval-decisions",
+                Some(&token(&none)),
+                Some(decide.clone()),
+            )
+            .await;
+        assert_eq!(status, 403);
+        let (status, _) = api
+            .post(
+                "/admin/approval-decisions",
+                Some(&token(&type_only)),
+                Some(decide.clone()),
+            )
+            .await;
+        assert_eq!(status, 403);
+        let (status, body) = api
+            .post(
+                "/admin/approval-decisions",
+                Some(&token(&action_only)),
+                Some(decide.clone()),
+            )
+            .await;
+        assert!(status == 403 || status == 404 || status == 422, "{status} {body}");
+        let (status, body) = api
+            .post("/admin/approval-decisions", Some(&token(&both)), Some(decide))
+            .await;
+        assert!(
+            status == 403 || status == 404 || status == 422,
+            "决定失败不得泄露任务存在性: {status} {body}"
+        );
+    });
+}
+
+#[tokio::test]
+#[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn http_covers_401_403_404_422_and_does_not_leak_existence() {
     require_mongo!(async {
         let fixture = TestDb::new("awf_api_err").await.expect("测试数据库创建失败");
@@ -562,4 +689,94 @@ fn http_status_matrix_covers_stable_approval_codes() {
         &headers,
     );
     assert_eq!(not_configured.status(), axum::http::StatusCode::CONFLICT);
+    let missing = ApprovalHttpError::from_service(
+        services::Error::NotFound("审批流程定义不存在".to_string()),
+        &headers,
+    );
+    assert_eq!(missing.status(), axum::http::StatusCode::NOT_FOUND);
+    assert_eq!(missing.code(), "NOT_FOUND");
+    let leak = ApprovalHttpError::from_service(
+        services::Error::Forbidden("没有该单据类型的流程定义管理权限".to_string()),
+        &headers,
+    );
+    assert_eq!(leak.status(), axum::http::StatusCode::FORBIDDEN);
+}
+
+/// 12 个必须审批类型都登记动作级+类型级双门禁。
+#[test]
+fn all_process_required_types_register_dual_admin_permissions() {
+    use entities::document_registry::DocumentType;
+    use entities::Permission;
+    use services::approval::policy::{policy_of, require_process_required, DocumentApprovalPolicy};
+
+    for document_type in [
+        DocumentType::SalesOrder,
+        DocumentType::VoucherSalesOrder,
+        DocumentType::SalesChangeOrder,
+        DocumentType::PurchaseOrder,
+        DocumentType::PurchaseChangeOrder,
+        DocumentType::StockAdjustment,
+        DocumentType::CustomerReceipt,
+        DocumentType::SupplierPayment,
+        DocumentType::CustomerRefund,
+        DocumentType::SupplierRefund,
+        DocumentType::ReceiptReversal,
+        DocumentType::PaymentReversal,
+    ] {
+        let policy = require_process_required(document_type).expect("必须审批");
+        let definition_admin =
+            Permission::parse(format!("{}:approval_definition_admin", document_type.as_str()))
+                .expect("定义管理权限");
+        let runtime_admin = Permission::parse(format!("{}:approval_runtime_admin", document_type.as_str()))
+            .expect("运行管理权限");
+        assert_eq!(policy.definition_admin_permission, definition_admin);
+        assert_eq!(policy.runtime_admin_permission, runtime_admin);
+        assert!(matches!(
+            policy_of(document_type).expect("政策"),
+            DocumentApprovalPolicy::ProcessRequired(_)
+        ));
+    }
+    let scope = include_str!("../../../services/src/approval/scope.rs");
+    assert!(scope.contains("fn can_read_detail"));
+    assert!(scope.contains("can_define(document_type) || self.runtime_admin_types.contains"));
+}
+
+/// 升级/决定/撤回请求拒绝内部字段；幂等回读不得重做写入。
+#[test]
+fn upgrade_decide_and_cancel_deny_client_internal_fields() {
+    use serde_json::json;
+    use services::approval::execution::PreparedExecution;
+    use web_api::core::handler::approval_instance::http::{
+        CancelBlockedHttpRequest, SubmitDecisionHttpRequest, UpgradeBindingHttpRequest,
+    };
+
+    assert!(serde_json::from_value::<UpgradeBindingHttpRequest>(json!({
+        "reason": "升级",
+        "expected_document_version": "1",
+        "expected_approval_binding_version": "1",
+        "idempotency_key": "k1",
+        "definition_id": "forged"
+    }))
+    .is_err());
+    assert!(serde_json::from_value::<CancelBlockedHttpRequest>(json!({
+        "reason": "取消",
+        "expected_instance_version": "1",
+        "expected_execution_version": "1",
+        "idempotency_key": "k1",
+        "next_node": "n2"
+    }))
+    .is_err());
+    assert!(serde_json::from_value::<SubmitDecisionHttpRequest>(json!({
+        "work_item_id": "wi-1",
+        "decision": "APPROVE",
+        "expected_task_version": "1",
+        "idempotency_key": "k1",
+        "actor_id": "forged"
+    }))
+    .is_err());
+    let _ = std::any::type_name::<PreparedExecution>();
+    let exec = include_str!("../../../services/src/approval/execution/mod.rs");
+    assert!(exec.contains("enum PreparedExecution"));
+    assert!(exec.contains("Replay"));
+    assert!(exec.contains("不得重做写入"));
 }
