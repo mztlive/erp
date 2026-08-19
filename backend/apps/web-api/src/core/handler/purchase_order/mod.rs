@@ -10,13 +10,14 @@ use axum::{
 use services::{
     audit::AuditActor,
     purchase_order::{
-        CancelPurchaseOrderApprovalRequest, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
-        CreationBasisView, EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult,
-        PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseChangeSubmitResult,
-        PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService,
-        PurchaseReviewResult, ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest,
-        SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
-        SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+        CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
+        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisView,
+        EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
+        PurchaseChangeOrderView, PurchaseChangeSubmitResult, PurchaseOrderCenterView,
+        PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService, PurchaseReviewResult,
+        ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
+        StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
+        SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
     },
 };
 
@@ -272,7 +273,7 @@ pub async fn purchase_change_create(
     Path(id): Path<String>,
     Json(req): Json<StartPurchaseChangeRequest>,
 ) -> Result<StartPurchaseChangeResult> {
-    let view = PurchaseOrderService::new(state.db())
+    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
         .start_change(&id, req, &actor)
         .await?;
 
@@ -282,11 +283,11 @@ pub async fn purchase_change_create(
 #[permission_macros::permission(
     group = "采购单",
     group_desc = "采购单、采购提交与采购变更管理",
-    desc = "提交采购变更目标内容",
+    desc = "提交采购变更审批",
     resource = "purchase_change_order",
     action = "submit"
 )]
-/// 提交采购变更目标内容（形成不可变变更提交）。
+/// 提交采购变更并启动统一审批。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -302,7 +303,7 @@ pub async fn purchase_change_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseChangeRequest>,
 ) -> Result<PurchaseChangeSubmitResult> {
-    let view = PurchaseOrderService::new(state.db())
+    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
         .submit_change(&id, req, &actor)
         .await?;
 
@@ -316,27 +317,56 @@ pub async fn purchase_change_submit(
     resource = "purchase_change_order",
     action = "post"
 )]
-/// 采购变更生效（§8.1.3：新版本 + 差额 + 指针推进原子生效）。
+/// 客户端直接生效失败关闭。最终动作仅由审批运行时 `on_final_approve` 调用。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 变更单 ID
-/// * `req` - 生效请求
+/// * `req` - 生效请求（客户端不得据此改写采购单）
 ///
 /// # 返回
-/// 返回生效结果。
+/// 恒返回冲突。
 pub async fn purchase_change_effect(
+    State(_state): State<AppState>,
+    Extension(_actor): Extension<AuditActor>,
+    Path(_id): Path<String>,
+    Json(_req): Json<EffectPurchaseChangeRequest>,
+) -> Result<PurchaseChangeEffectResult> {
+    match PurchaseOrderService::reject_client_effect() {
+        Err(error) => Err(error.into()),
+        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+    }
+}
+
+#[permission_macros::permission(
+    group = "采购单",
+    group_desc = "采购单、采购提交与采购变更管理",
+    desc = "撤回采购变更审批",
+    resource = "purchase_change_order",
+    action = "cancel_approval"
+)]
+/// 撤回尚未最终通过的采购变更审批。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 变更单 ID
+/// * `req` - 撤回请求（原因必填）
+///
+/// # 返回
+/// 撤回成功返回空数据。
+pub async fn purchase_change_cancel_approval(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<EffectPurchaseChangeRequest>,
-) -> Result<PurchaseChangeEffectResult> {
-    let view = PurchaseOrderService::new(state.db())
-        .effect_change(&id, req, &actor)
+    Json(req): Json<CancelPurchaseChangeApprovalRequest>,
+) -> Result<()> {
+    PurchaseOrderService::with_rbac(state.db(), state.rbac())
+        .cancel_change_approval(&id, req, &actor)
         .await?;
 
-    Ok(ApiResponse::ok_with_data(view))
+    Ok(ApiResponse::ok())
 }
 
 #[permission_macros::permission(
@@ -389,4 +419,25 @@ pub async fn purchase_change_detail(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[cfg(test)]
+mod tests {
+    /// 采购变更 HTTP 只走统一提交、撤回、生效与详情，客户端不得选定义。
+    #[test]
+    fn purchase_change_http_uses_unified_ports() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("submit_change"));
+        assert!(production.contains("cancel_change_approval"));
+        assert!(production.contains("reject_client_effect"));
+        assert!(production.contains("change_order_detail"));
+        assert!(production.contains("with_rbac"));
+        assert!(!production.contains(".apply_effective_change("));
+        assert!(!production.contains("definition_id"));
+        assert!(!production.contains("PENDING_WAREHOUSE_IMPACT"));
+        assert!(!production.contains("PENDING_FINANCE_REVIEW"));
+    }
 }

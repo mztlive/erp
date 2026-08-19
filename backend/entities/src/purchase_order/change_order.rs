@@ -32,30 +32,23 @@ const CONTENT_HASH_MAX_LEN: usize = 128;
 /// 操作人标识最大长度。
 const ACTOR_MAX_LEN: usize = 128;
 
-/// 采购变更单状态（§6.6：草稿、待仓储影响确认、待财务复核、已生效、驳回、作废）。
+/// 采购变更单状态（合同 §4.4.1 / §4.4.2：草稿、审批中、已生效、作废）。
 ///
-/// 本枚举是固定业务代码，但不在数据模型 §7.4 状态机之列，不实现 `DocumentState`；
-/// 流转由 P3 按 §6.6/§8.1 第 3 条编排。
+/// 创建与提交均为 `Draft`，启动后 `InApproval`，最终通过 `Effective`。
+/// `PENDING_WAREHOUSE_IMPACT`、`PENDING_FINANCE_REVIEW` 与审批导致的 `Rejected`
+/// 已删除，节点事实只存在于审批实例。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum PurchaseChangeOrderStatus {
     /// 草稿。
     Draft,
-    /// 待仓储影响确认。
-    #[serde(rename = "PENDING_WAREHOUSE_IMPACT")]
-    PendingWarehouseImpact,
-    /// 待财务复核。
-    #[serde(rename = "PENDING_FINANCE_REVIEW")]
-    PendingFinanceReview,
-    /// 已生效。
-    Effective,
-    /// 驳回。
-    Rejected,
-    /// 作废。
-    Voided,
     /// 审批中。
     #[serde(rename = "IN_APPROVAL")]
     InApproval,
+    /// 已生效。
+    Effective,
+    /// 作废。
+    Voided,
 }
 
 impl PurchaseChangeOrderStatus {
@@ -66,12 +59,9 @@ impl PurchaseChangeOrderStatus {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
-            Self::PendingWarehouseImpact => "待仓储影响确认",
-            Self::PendingFinanceReview => "待财务复核",
-            Self::Effective => "已生效",
-            Self::Rejected => "驳回",
-            Self::Voided => "作废",
             Self::InApproval => "审批中",
+            Self::Effective => "已生效",
+            Self::Voided => "作废",
         }
     }
 
@@ -82,12 +72,9 @@ impl PurchaseChangeOrderStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
-            Self::PendingWarehouseImpact => "PENDING_WAREHOUSE_IMPACT",
-            Self::PendingFinanceReview => "PENDING_FINANCE_REVIEW",
-            Self::Effective => "EFFECTIVE",
-            Self::Rejected => "REJECTED",
-            Self::Voided => "VOIDED",
             Self::InApproval => "IN_APPROVAL",
+            Self::Effective => "EFFECTIVE",
+            Self::Voided => "VOIDED",
         }
     }
 }
@@ -114,8 +101,6 @@ pub struct PurchaseChangeOrderUpdate {
     pub current_submission_id: Option<PurchaseChangeSubmissionId>,
     /// 目标提交内容指纹；`None` 表示不修改。
     pub target_content_hash: Option<String>,
-    /// 状态；`None` 表示不修改。
-    pub status: Option<PurchaseChangeOrderStatus>,
     /// 生效后形成的新采购版本；`None` 表示不修改。
     pub effective_revision_id: Option<PurchaseOrderRevisionId>,
 }
@@ -220,11 +205,7 @@ impl PurchaseChangeOrder {
     /// # 错误
     /// 状态不是草稿，或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: PurchaseChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
-        self.apply_content(&update, updated_by)?;
-        if let Some(status) = update.status {
-            self.stable.status = status;
-        }
-        Ok(())
+        self.apply_content(&update, updated_by)
     }
 
     /// 应用内容更新（草稿门禁）。
@@ -261,6 +242,85 @@ impl PurchaseChangeOrder {
         if let Some(revision_id) = update.effective_revision_id.clone() {
             self.effective_revision_id = Some(revision_id);
         }
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 提交并启动审批：递增 `approval_subject_version` 并进入 `IN_APPROVAL`。
+    ///
+    /// 版本使用 checked add，成功后不回退。不得改写 `BaseModel.version`。
+    ///
+    /// # 参数
+    /// * `submission_id` - 本次冻结的不可变目标提交
+    /// * `target_content_hash` - 目标内容指纹
+    /// * `updated_by` - 提交人
+    ///
+    /// # 返回
+    /// 返回冻结后的提交版本。
+    ///
+    /// # 错误
+    /// 非草稿、指纹非法或版本溢出时返回冲突。
+    pub fn start_approval(
+        &mut self,
+        submission_id: PurchaseChangeSubmissionId,
+        target_content_hash: impl Into<String>,
+        updated_by: impl Into<String>,
+    ) -> Result<u32> {
+        if self.stable.status != PurchaseChangeOrderStatus::Draft {
+            return Err(Error::from("只有草稿状态的采购变更单可以提交审批"));
+        }
+        let next = self
+            .approval_subject_version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        let target_content_hash = normalize_required_text(
+            target_content_hash.into(),
+            "目标内容指纹不能为空",
+            CONTENT_HASH_MAX_LEN,
+            "目标内容指纹过长",
+        )?;
+        self.approval_subject_version = next;
+        self.current_submission_id = Some(submission_id);
+        self.target_content_hash = Some(target_content_hash);
+        self.stable.status = PurchaseChangeOrderStatus::InApproval;
+        self.stable.touch(updated_by);
+        Ok(next)
+    }
+
+    /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
+    ///
+    /// # 参数
+    /// * `updated_by` - 撤回人
+    ///
+    /// # 错误
+    /// 非审批中时返回冲突。
+    pub fn cancel_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.stable.status != PurchaseChangeOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购变更单可以撤回审批"));
+        }
+        self.stable.status = PurchaseChangeOrderStatus::Draft;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 最终通过并生效：仅 `IN_APPROVAL` 可进入 `EFFECTIVE`。
+    ///
+    /// # 参数
+    /// * `effective_revision_id` - 生效后形成的新采购版本
+    /// * `updated_by` - 最终通过执行人
+    ///
+    /// # 错误
+    /// 状态不是审批中时返回冲突。
+    pub fn apply_effective(
+        &mut self,
+        effective_revision_id: PurchaseOrderRevisionId,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        if self.stable.status != PurchaseChangeOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购变更单可以由最终通过动作生效"));
+        }
+        self.effective_revision_id = Some(effective_revision_id);
+        self.stable.status = PurchaseChangeOrderStatus::Effective;
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -766,6 +826,7 @@ mod tests {
             PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
         assert_eq!(order.reason, "成本上涨调整");
         assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Draft);
+        assert_eq!(order.approval_subject_version, 0);
         assert!(order.current_submission_id.is_none());
     }
 
@@ -788,14 +849,10 @@ mod tests {
         assert_eq!(order.stable.updated_by, "admin-2");
 
         order
-            .update(
-                PurchaseChangeOrderUpdate {
-                    status: Some(PurchaseChangeOrderStatus::PendingWarehouseImpact),
-                    ..Default::default()
-                },
-                "admin-2",
-            )
+            .start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "admin-2")
             .unwrap();
+        assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::InApproval);
+        assert_eq!(order.approval_subject_version, 1);
 
         assert!(
             order
@@ -809,6 +866,67 @@ mod tests {
                 .is_err(),
             "非草稿不得编辑内容"
         );
+    }
+
+    /// 提交进入审批中；撤回不回退版本；最终通过进入生效。
+    #[test]
+    fn start_approval_cancel_and_apply_effective() {
+        let mut order =
+            PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
+        let version = order
+            .start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "submitter-1")
+            .unwrap();
+        assert_eq!(version, 1);
+        assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::InApproval);
+        assert_eq!(order.approval_subject_version, 1);
+        assert_eq!(order.stable.updated_by, "submitter-1");
+
+        order.cancel_approval("admin-2").unwrap();
+        assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Draft);
+        assert_eq!(order.approval_subject_version, 1);
+        assert_eq!(
+            order
+                .current_submission_id
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("pcs-1")
+        );
+
+        let next = order
+            .start_approval(PurchaseChangeSubmissionId::new("pcs-2"), "hash-2", "submitter-2")
+            .unwrap();
+        assert_eq!(next, 2);
+        order
+            .apply_effective(PurchaseOrderRevisionId::new("por-2"), "approver-1")
+            .unwrap();
+        assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Effective);
+        assert_eq!(order.approval_subject_version, 2);
+        assert!(order
+            .start_approval(PurchaseChangeSubmissionId::new("pcs-3"), "h", "u")
+            .is_err());
+        assert!(order.cancel_approval("u").is_err());
+        assert!(order
+            .apply_effective(PurchaseOrderRevisionId::new("por-3"), "u")
+            .is_err());
+    }
+
+    /// 内容更新不得改写状态；状态只能经签署邻接方法迁移。
+    #[test]
+    fn update_cannot_rewrite_status() {
+        let mut order =
+            PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
+        order
+            .update(
+                PurchaseChangeOrderUpdate {
+                    reason: Some("仅改原因".to_string()),
+                    ..Default::default()
+                },
+                "admin-2",
+            )
+            .unwrap();
+        assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Draft);
+        assert_eq!(order.reason, "仅改原因");
     }
 
     #[test]
