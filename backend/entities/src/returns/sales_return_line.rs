@@ -1,4 +1,7 @@
 //! `sales_return_line` 销售退货明细（数据模型 §6.11）。
+//!
+//! 合同 §4.3 签署为 `NO_APPROVAL`：明细只保留验收数量与质量结果，不得新增
+//! 审批绑定字段、审批任务或审批状态机。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -296,11 +299,34 @@ mod tests {
         assert!(line.is_qualified());
         assert_eq!(line.requested_quantity, qty("10.000000"), "关键字段不改");
 
-        assert!(line
-            .update(SalesReturnLineUpdate {
+        assert!(
+            line.update(SalesReturnLineUpdate {
                 received_quantity: Some(qty("12.000000")),
                 ..Default::default()
             })
-            .is_err());
+            .is_err()
+        );
+    }
+
+    /// 销售退货明细无审批约束：不得出现绑定字段或任务字段。
+    #[test]
+    fn sales_return_line_has_no_approval_binding_or_work_item() {
+        let line = SalesReturnLine::new(SalesReturnLineId::new("srl-1"), data()).unwrap();
+        let value = serde_json::to_value(&line).unwrap();
+        let object = value.as_object().expect("明细序列化为对象");
+        assert!(!object.contains_key("approval_binding"));
+        assert!(!object.contains_key("approval_subject_version"));
+        assert!(!object.contains_key("work_item_id"));
+        assert!(!object.contains_key("pending_allocations"));
+
+        let production = include_str!("sales_return_line.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("IN_APPROVAL"));
+        assert!(!production.contains("fn start_approval"));
+        assert!(!production.contains("approval_subject_version"));
+        assert!(!production.contains("ApprovalDefinitionBinding"));
+        assert!(!production.contains("WorkItem"));
     }
 }
