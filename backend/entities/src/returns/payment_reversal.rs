@@ -4,7 +4,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{DocumentState, ensure_transition};
+use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{FileAssetId, PaymentReversalId, SupplierPaymentId};
@@ -386,14 +386,12 @@ mod tests {
         reversal.start_approval().unwrap();
         reversal.mark_posted().unwrap();
         assert!(reversal.is_posted());
-        assert!(
-            reversal
-                .update(PaymentReversalUpdate {
-                    amount: Some(Amount::from_str("1.00").unwrap()),
-                    ..Default::default()
-                })
-                .is_err()
-        );
+        assert!(reversal
+            .update(PaymentReversalUpdate {
+                amount: Some(Amount::from_str("1.00").unwrap()),
+                ..Default::default()
+            })
+            .is_err());
     }
 
     #[test]

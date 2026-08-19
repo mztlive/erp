@@ -1,8 +1,10 @@
 //! 采购财务审核、应付与成本事实编排。
 
+#![allow(dead_code)]
+
 use database::{
-    AccessControlExt, CostExt, Executor, NoTransaction, PayableExt, PurchaseOrderExt, SalesOrderExt,
-    SalesReviewExt, SupplierOfferingExt, Transactional, WorkItemExt,
+    AccessControlExt, CostExt, Executor, NoTransaction, PayableExt, PurchaseOrderExt, Transactional,
+    WorkItemExt,
 };
 use entities::common::time::Instant;
 use entities::ids::{CostEntryId, PayableEntryId};
@@ -13,7 +15,6 @@ use entities::purchase_order::{
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use id_generator::next_id;
 use sha2::{Digest, Sha256};
-use validator::Validate;
 
 use super::dto::{
     PurchaseOrderReviewDecisionCommand, PurchaseOrderReviewDecisionResult, PurchaseReviewResult,

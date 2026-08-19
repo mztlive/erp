@@ -2,21 +2,18 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt, WorkItemExt};
+use database::{AccessControlExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt};
 use entities::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use entities::sales_order::{
     CommercialStatus, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy, WorkingPurpose,
 };
-use entities::work_item::{WorkItem, WorkItemStatus};
-use entities::Permission;
 use validator::Validate;
 
 use super::adapter::document_approval_view;
 use super::dto;
 use super::dto::{
-    ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CardSalesApprovalAllowedAction,
-    LowMarginManagerAllowedAction, OpenProcurementRejectionView, PageView, ProcurementRejectionAllowedAction,
-    RevisionView, SalesOrderDetailView, SalesOrderLineView, SalesOrderListParams, SalesOrderView,
+    ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, OpenProcurementRejectionView,
+    PageView, RevisionView, SalesOrderDetailView, SalesOrderLineView, SalesOrderListParams, SalesOrderView,
     SubmissionView, WorkingCopyView,
 };
 use super::mapper::{submission_view, working_copy_line_view};
@@ -29,7 +26,6 @@ use crate::document_registry::find_approval_binding;
 use crate::{
     audit::AuditActor,
     errors::{Error, Result},
-    work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView},
 };
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
@@ -485,6 +481,7 @@ impl SalesOrderService {
     /// 只有领导首步尚未形成任何决定事实时允许撤回；运营步骤即使仍开放，也因
     /// 已存在领导不可变决定而失败关闭。阻塞首步可以没有待办，活动首步必须存在
     /// 与实例、步骤、销售单和冻结提交一致的开放待办。
+    #[allow(dead_code)]
     async fn can_cancel_card_sales_approval(
         &self,
         _order: &entities::sales_order::SalesOrder,

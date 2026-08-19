@@ -12,8 +12,8 @@ use database::{
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
-use entities::document_registry::DocumentType;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use entities::document_registry::DocumentType;
 use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use entities::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use entities::work_item::work_item::DocumentApprovalWorkItemData;
@@ -25,7 +25,7 @@ use super::adapter::{
     customer_refund_object_readable, payment_reversal_object_readable, receipt_reversal_object_readable,
     supplier_refund_object_readable,
 };
-use crate::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
 use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
 use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
 use crate::approval::process_kind::process_kind_of;

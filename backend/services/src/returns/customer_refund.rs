@@ -387,7 +387,7 @@ impl ReturnsService {
                         &mut refund,
                         crate::approval::policy::ApprovalDomainAction::CustomerRefundPost,
                     )?;
-                    apply_customer_refund_posting(&db, &mut refund, &actor_id, session).await?;
+                    apply_customer_refund_posting(&db, &refund, &actor_id, session).await?;
                     refund.mark_posted()?;
                     db.customer_refunds().update(&mut refund, session).await?;
                     let audit = actor_owned.clone().resource_log(
@@ -522,7 +522,7 @@ async fn load_customer_responsible_org_id(db: &Database, customer_id: &CustomerA
         .find_by_id(customer_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
-    customer_refund_responsible_org_id(&customer.party_id.to_string())
+    customer_refund_responsible_org_id(customer.party_id.as_ref())
 }
 
 /// 查询发布定义、写入绑定并持久化注册行。

@@ -224,7 +224,7 @@ impl PurchaseOrderService {
         let Some(submission_id) = order.current_submission_id.as_deref() else {
             return Ok(None);
         };
-        let _ = (order, actor_id);
+        let _ = (order, actor_id, submission_id);
         return Ok(None);
         #[allow(unreachable_code)]
         if order.stable.status != PurchaseOrderStatus::InApproval {

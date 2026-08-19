@@ -49,8 +49,6 @@ pub use dto::{
     WorkItemListParams, WorkItemMutationOutcome, WorkItemPageView, WorkItemPartyView, WorkItemScope,
     WorkItemSort, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
 };
-pub(crate) use purchase_review_brief::purchase_review_reason_code;
-
 type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 
 const MANAGE_PERMISSION: &str = "work_item:manage";
@@ -2008,7 +2006,7 @@ impl WorkItemService {
         let replay_fingerprint = audit_command_fingerprint(&audit_message)
             .expect("服务端审计消息必须携带指纹")
             .to_string();
-        let audit = actor.clone().resource_log_with_id(
+        let _audit = actor.clone().resource_log_with_id(
             audit_id,
             action,
             "work_item",
@@ -2025,7 +2023,7 @@ impl WorkItemService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     ensure_policy_revision(&db, authorization.policy_revision, session).await?;
-                    let mut current = db
+                    let current = db
                         .work_items()
                         .find_by_id(&item_id, session)
                         .await?
@@ -2051,27 +2049,9 @@ impl WorkItemService {
                         session,
                     )
                     .await?;
-                    return Err(WorkItemWriteError::Service(Error::BusinessLogicError(
+                    Err(WorkItemWriteError::Service(Error::BusinessLogicError(
                         "已取消退回团队动作".to_string(),
-                    )));
-                    #[allow(unreachable_code)]
-                    db.work_items()
-                        .update(&mut current, session)
-                        .await
-                        .map_err(work_item_update_error)?;
-                    WorkItemService::new(db.clone(), rbac.clone())
-                        .ensure_assignment_actor_access(
-                            actor_kind,
-                            &actor_id,
-                            &current,
-                            false,
-                            &authorization,
-                            session,
-                        )
-                        .await?;
-                    ensure_policy_revision(&db, authorization.policy_revision, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<WorkItem, WorkItemWriteError>(current)
+                    )))
                 })
             })
             .await;
@@ -2333,6 +2313,7 @@ fn intersect_role_ids(active: &[String], authorized: &[String]) -> Vec<String> {
         .collect()
 }
 
+#[cfg(test)]
 fn approval_assignment_separated(
     candidate_id: &str,
     started_by: &str,
@@ -2350,7 +2331,7 @@ fn approval_assignment_separated(
     }) {
         return false;
     }
-    !decided_by.iter().any(|actor| *actor == candidate_id)
+    !decided_by.contains(&candidate_id)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2761,11 +2742,8 @@ fn object_policy(work_item_type: WorkItemType, business_object_type: &str) -> Op
 
 fn assignment_separation_policy(work_item_type: WorkItemType) -> AssignmentSeparationPolicy {
     match work_item_type {
-        WorkItemType::DocumentApproval | WorkItemType::DocumentApproval => {
-            AssignmentSeparationPolicy::ApprovalHistory
-        }
+        WorkItemType::DocumentApproval => AssignmentSeparationPolicy::ApprovalHistory,
         WorkItemType::ImportBusinessConfirmation
-        | WorkItemType::ImportBusinessConfirmation
         | WorkItemType::PurchaseOrderReview
         | WorkItemType::SalesChangeImpactReview
         | WorkItemType::SalesChangeFinanceReview
@@ -2773,25 +2751,13 @@ fn assignment_separation_policy(work_item_type: WorkItemType) -> AssignmentSepar
         | WorkItemType::CardFundsDeltaReview
         | WorkItemType::InventoryAdjustmentReview
         | WorkItemType::SupplierSettlementReview => AssignmentSeparationPolicy::DomainActors,
-        WorkItemType::ImportBusinessConfirmation
-        | WorkItemType::IntegrationResultUnknown
-        | WorkItemType::BusinessException => AssignmentSeparationPolicy::RoleAndParticipation,
+        WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException => {
+            AssignmentSeparationPolicy::RoleAndParticipation
+        }
         WorkItemType::OwnershipMigrationSalesConfirmation
         | WorkItemType::OwnershipMigrationFinanceConfirmation
         | WorkItemType::FinanceCorrectionReview => AssignmentSeparationPolicy::FailClosed,
-        WorkItemType::DocumentApproval => AssignmentSeparationPolicy::ApprovalHistory,
     }
-}
-
-/// 旧责任池命令的稳定失败关闭错误。
-///
-/// # 参数
-/// * `command` - 命令名
-///
-/// # 返回
-/// 返回不含默认责任人的业务错误。
-fn pool_command_closed(command: &str) -> Error {
-    Error::BusinessLogicError(format!("全系统已取消责任池语义，命令 {command} 已失败关闭"))
 }
 
 /// 审批任务不得走通用工作项写接口。
@@ -3443,13 +3409,6 @@ fn w29_domain_evidence_reference(
         _ => Err(Error::ValidationError(
             "关闭原因只允许 DUPLICATE 或 MISROUTED".to_string(),
         )),
-    }
-}
-
-fn blocker(code: &str, message: &str) -> ProcessingBlockerView {
-    ProcessingBlockerView {
-        code: code.to_string(),
-        message: message.to_string(),
     }
 }
 

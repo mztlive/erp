@@ -691,6 +691,7 @@ async fn upgrade_supplier_connection_governance_permissions(rbac: &SharedRbacSer
 }
 
 /// 从目标权限还原低毛利确认上线前的销售领导精确快照。
+#[cfg(test)]
 fn low_margin_confirmation_legacy_snapshot(desired: &[Permission]) -> Vec<Permission> {
     remove_permissions(desired, &["sales_change_order:approve"])
 }
@@ -729,7 +730,7 @@ async fn upgrade_approval_http_permissions(rbac: &SharedRbacService) -> Result<(
 /// # 错误
 /// 旧权限字符串无法解析时返回错误。
 fn approval_http_legacy_snapshot(role_id: &str, desired: &[Permission]) -> Result<Vec<Permission>> {
-    let mut previous = remove_permissions(desired, APPROVAL_HTTP_ACTION_PERMISSIONS);
+    let previous = remove_permissions(desired, APPROVAL_HTTP_ACTION_PERMISSIONS);
     let _ = role_id;
     Ok(previous)
 }

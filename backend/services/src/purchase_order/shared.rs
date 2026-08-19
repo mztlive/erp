@@ -6,11 +6,9 @@ use database::{NoTransaction, PartyExt, SupplierExt};
 use entities::ids::{PurchaseChangeSubmissionLineId, PurchaseOrderSubmissionLineId};
 use entities::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
 use entities::purchase_order::{
-    FulfillmentResponsibility, PaymentTermSnapshot, PurchaseChangeOrder, PurchaseChangeSubmissionLine,
-    PurchaseChangeSubmissionLineData, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmissionLine,
-    PurchaseOrderSubmissionLineData,
+    PaymentTermSnapshot, PurchaseChangeOrder, PurchaseChangeSubmissionLine, PurchaseChangeSubmissionLineData,
+    PurchaseLineType, PurchaseOrder, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
 };
-use entities::sales_review::FulfillmentMode;
 use id_generator::next_id;
 
 use super::dto::SavePurchaseOrderLine;
@@ -283,16 +281,6 @@ impl Versioned for PurchaseChangeOrder {
     }
 }
 
-/// 从确认履约方式映射采购履约责任。
-pub(super) fn fulfillment_from_mode(mode: FulfillmentMode) -> FulfillmentResponsibility {
-    match mode {
-        FulfillmentMode::CompanyWarehouse => FulfillmentResponsibility::Warehouse,
-        FulfillmentMode::SupplierDirect => FulfillmentResponsibility::SupplierDirect,
-        FulfillmentMode::ElectronicDelivery => FulfillmentResponsibility::Electronic,
-        FulfillmentMode::OfflineService => FulfillmentResponsibility::Service,
-    }
-}
-
 /// 零金额。
 pub(super) fn zero_amount() -> Amount {
     Amount::from_str("0").expect("零金额合法")
@@ -307,11 +295,4 @@ pub(super) fn zero_rate() -> Rate {
 fn parse_business_date(value: &str) -> Result<entities::common::time::BusinessDate> {
     entities::common::time::BusinessDate::from_str(value.trim())
         .map_err(|_| Error::ValidationError(format!("非法业务日期: {value}")))
-}
-
-/// 生成当日时间戳前缀（`YYYYMMDD`）。
-pub(super) fn today_stamp() -> String {
-    entities::common::time::BusinessDate::today()
-        .to_string()
-        .replace('-', "")
 }

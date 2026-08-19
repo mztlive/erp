@@ -299,13 +299,12 @@ mod tests {
         assert!(line.is_qualified());
         assert_eq!(line.requested_quantity, qty("10.000000"), "关键字段不改");
 
-        assert!(
-            line.update(SalesReturnLineUpdate {
+        assert!(line
+            .update(SalesReturnLineUpdate {
                 received_quantity: Some(qty("12.000000")),
                 ..Default::default()
             })
-            .is_err()
-        );
+            .is_err());
     }
 
     /// 销售退货明细无审批约束：不得出现绑定字段或任务字段。

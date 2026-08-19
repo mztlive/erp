@@ -1139,11 +1139,7 @@ impl MallSyncService {
             .mapping_work_item_for_task(&task, explicit_work_item_id)
             .await?;
         let routing_configured = task.owner_role.is_some() && work_item.is_some();
-        let eligible = if let Some(work_item) = work_item.as_ref() {
-            true
-        } else {
-            false
-        };
+        let eligible = work_item.is_some();
         let source = self
             .db
             .source_systems()

@@ -904,8 +904,8 @@ pub struct PaymentReversalView {
 #[cfg(test)]
 mod tests {
     use super::{
-        CustomerRefundListParams, PurchaseReturnOrderListParams, SalesReturnCaseListParams, SortDir,
-        normalize_sort,
+        normalize_sort, CustomerRefundListParams, PurchaseReturnOrderListParams, SalesReturnCaseListParams,
+        SortDir,
     };
     use entities::returns::{CustomerRefundStatus, PurchaseReturnStatus, SalesReturnCaseStatus};
 

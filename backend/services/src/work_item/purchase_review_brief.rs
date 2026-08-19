@@ -360,23 +360,6 @@ fn purchase_order_fact(
     fact
 }
 
-/// 收集提交人账号，供批量解析姓名。
-///
-/// # 参数
-/// * `submissions` - 本批采购提交
-///
-/// # 返回
-/// 返回去空白后的提交人 ID。
-///
-/// # 错误
-/// 无。
-fn submission_actor_ids(submissions: &[PurchaseOrderSubmission]) -> Vec<String> {
-    submissions
-        .iter()
-        .filter_map(|item| item.submitted_by.clone())
-        .collect()
-}
-
 /// 按采购单内提交序号判断初次提交或驳回后重提。
 ///
 /// # 参数
@@ -813,6 +796,7 @@ fn non_empty(value: &str) -> Option<String> {
 ///
 /// # 错误
 /// 无。
+#[cfg(test)]
 pub(crate) fn purchase_review_reason_code(submission_no: &str) -> &'static str {
     if submission_no.trim() == "SUB-000001" {
         "purchase_order_review_dispatched"

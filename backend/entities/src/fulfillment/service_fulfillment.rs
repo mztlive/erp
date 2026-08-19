@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::fact::FactBase;
 use crate::common::source::SourceType;
-use crate::common::state::{DocumentState, ensure_transition};
+use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
@@ -28,7 +28,7 @@ use crate::validation::normalize_optional_text;
 use crate::validation::normalize_required_text;
 
 use super::electronic_delivery::FulfillmentResult;
-use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
+use super::fingerprint::{hmac_sha256_hex, validate_fingerprint, FINGERPRINT_HEX_LEN};
 
 /// 履约记录号最大长度。
 const FULFILLMENT_NO_MAX_LEN: usize = 64;
@@ -600,13 +600,11 @@ mod tests {
         assert!(
             ensure_transition(ServiceFulfillmentState::Draft, ServiceFulfillmentState::Confirmed).is_ok()
         );
-        assert!(
-            ensure_transition(
-                ServiceFulfillmentState::Confirmed,
-                ServiceFulfillmentState::Reversed
-            )
-            .is_ok()
-        );
+        assert!(ensure_transition(
+            ServiceFulfillmentState::Confirmed,
+            ServiceFulfillmentState::Reversed
+        )
+        .is_ok());
         assert!(
             ensure_transition(ServiceFulfillmentState::Draft, ServiceFulfillmentState::Reversed).is_err()
         );

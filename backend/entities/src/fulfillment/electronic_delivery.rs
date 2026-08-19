@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::fact::FactBase;
 use crate::common::source::SourceType;
-use crate::common::state::{DocumentState, ensure_transition};
+use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
@@ -26,7 +26,7 @@ use crate::ids::{
 use crate::money::Quantity;
 use crate::validation::normalize_required_text;
 
-use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
+use super::fingerprint::{hmac_sha256_hex, validate_fingerprint, FINGERPRINT_HEX_LEN};
 
 /// 履约记录号最大长度。
 const FULFILLMENT_NO_MAX_LEN: usize = 64;
@@ -537,14 +537,12 @@ mod tests {
     fn state_machine_directed_edges() {
         let mut delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-7"), data()).unwrap();
         assert!(delivery.reverse().is_err(), "草稿不能直接冲正");
-        assert!(
-            delivery
-                .update(ElectronicDeliveryUpdate {
-                    result: Some(FulfillmentResult::Failure),
-                    evidence_attachment_id: None,
-                })
-                .is_ok()
-        );
+        assert!(delivery
+            .update(ElectronicDeliveryUpdate {
+                result: Some(FulfillmentResult::Failure),
+                evidence_attachment_id: None,
+            })
+            .is_ok());
         delivery.confirm().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；CONFIRMED 不可编辑由 update 把关。
         assert!(delivery.confirm().is_ok());
@@ -567,26 +565,22 @@ mod tests {
         assert!(
             ensure_transition(ElectronicDeliveryState::Draft, ElectronicDeliveryState::Confirmed).is_ok()
         );
-        assert!(
-            ensure_transition(
-                ElectronicDeliveryState::Confirmed,
-                ElectronicDeliveryState::Reversed
-            )
-            .is_ok()
-        );
+        assert!(ensure_transition(
+            ElectronicDeliveryState::Confirmed,
+            ElectronicDeliveryState::Reversed
+        )
+        .is_ok());
         assert!(
             ensure_transition(ElectronicDeliveryState::Draft, ElectronicDeliveryState::Reversed).is_err()
         );
         assert!(
             ensure_transition(ElectronicDeliveryState::Confirmed, ElectronicDeliveryState::Draft).is_err()
         );
-        assert!(
-            ensure_transition(
-                ElectronicDeliveryState::Reversed,
-                ElectronicDeliveryState::Confirmed
-            )
-            .is_err()
-        );
+        assert!(ensure_transition(
+            ElectronicDeliveryState::Reversed,
+            ElectronicDeliveryState::Confirmed
+        )
+        .is_err());
     }
 
     /// 敏感字段：指纹稳定且带密钥；Debug 不泄漏明文/密文/指纹。

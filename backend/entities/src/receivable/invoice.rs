@@ -588,17 +588,15 @@ mod tests {
 
         invoice.mark_registered("admin-2").unwrap();
         assert!(invoice.is_registered());
-        assert!(
-            invoice
-                .update(
-                    InvoiceUpdate {
-                        invoice_date: Some(BusinessDate::from_ymd(2026, 8, 7).unwrap()),
-                        ..Default::default()
-                    },
-                    "admin-3",
-                )
-                .is_err()
-        );
+        assert!(invoice
+            .update(
+                InvoiceUpdate {
+                    invoice_date: Some(BusinessDate::from_ymd(2026, 8, 7).unwrap()),
+                    ..Default::default()
+                },
+                "admin-3",
+            )
+            .is_err());
     }
 
     #[test]

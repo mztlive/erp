@@ -1,5 +1,7 @@
 //! 旧采购确认拆单入口已删除。选源由采购单创建路径承担。
 
+#![allow(dead_code)]
+
 use database::Executor;
 use entities::ids::SalesOrderId;
 use mongodb::Database;

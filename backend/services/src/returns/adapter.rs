@@ -7,8 +7,8 @@
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
-use entities::document_registry::DocumentType;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use entities::document_registry::DocumentType;
 use entities::ids::{CustomerAccountId, SupplierAccountId};
 use entities::returns::{
     CustomerRefund, CustomerRefundStatus, PaymentReversal, PaymentReversalStatus, ReceiptReversal,
@@ -20,7 +20,7 @@ use super::dto::{
     DocumentApprovalView,
 };
 use crate::approval::business_adapter::{
-    AdapterReadScope, ApprovalAdapterSpec, adapter_spec_of, ensure_adapter_spec_complete, subject_ref_for,
+    adapter_spec_of, ensure_adapter_spec_complete, subject_ref_for, AdapterReadScope, ApprovalAdapterSpec,
 };
 use crate::approval::policy::{
     ApprovalDomainAction, ApprovalRequirement, ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource,
@@ -1509,12 +1509,10 @@ mod tests {
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
-        assert!(
-            !view
-                .allowed_actions
-                .iter()
-                .any(|item| item.contains("DEFINITION"))
-        );
+        assert!(!view
+            .allowed_actions
+            .iter()
+            .any(|item| item.contains("DEFINITION")));
         let running = document_approval_view(Some(&binding), None, CustomerRefundStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }
@@ -1533,10 +1531,11 @@ mod tests {
         let mut refund = draft_refund();
         start_customer_refund_approval(&mut refund).unwrap();
         execute_customer_refund_domain_action(&mut refund, ApprovalDomainAction::CustomerRefundPost).unwrap();
-        assert!(
-            execute_customer_refund_domain_action(&mut refund, ApprovalDomainAction::StockAdjustmentSubmit,)
-                .is_err()
-        );
+        assert!(execute_customer_refund_domain_action(
+            &mut refund,
+            ApprovalDomainAction::StockAdjustmentSubmit,
+        )
+        .is_err());
     }
 }
 
@@ -1695,12 +1694,10 @@ mod supplier_refund_tests {
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
-        assert!(
-            !view
-                .allowed_actions
-                .iter()
-                .any(|item| item.contains("DEFINITION"))
-        );
+        assert!(!view
+            .allowed_actions
+            .iter()
+            .any(|item| item.contains("DEFINITION")));
         let running = supplier_refund_approval_view(Some(&binding), None, SupplierRefundStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }
@@ -1719,10 +1716,11 @@ mod supplier_refund_tests {
         let mut refund = draft_refund();
         start_supplier_refund_approval(&mut refund).unwrap();
         execute_supplier_refund_domain_action(&mut refund, ApprovalDomainAction::SupplierRefundPost).unwrap();
-        assert!(
-            execute_supplier_refund_domain_action(&mut refund, ApprovalDomainAction::StockAdjustmentSubmit,)
-                .is_err()
-        );
+        assert!(execute_supplier_refund_domain_action(
+            &mut refund,
+            ApprovalDomainAction::StockAdjustmentSubmit,
+        )
+        .is_err());
     }
 }
 
@@ -1897,12 +1895,10 @@ mod receipt_reversal_tests {
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
-        assert!(
-            !view
-                .allowed_actions
-                .iter()
-                .any(|item| item.contains("DEFINITION"))
-        );
+        assert!(!view
+            .allowed_actions
+            .iter()
+            .any(|item| item.contains("DEFINITION")));
         let running = receipt_reversal_approval_view(Some(&binding), None, ReceiptReversalStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }
@@ -1922,13 +1918,11 @@ mod receipt_reversal_tests {
         start_receipt_reversal_approval(&mut reversal).unwrap();
         execute_receipt_reversal_domain_action(&mut reversal, ApprovalDomainAction::ReceiptReversalPost)
             .unwrap();
-        assert!(
-            execute_receipt_reversal_domain_action(
-                &mut reversal,
-                ApprovalDomainAction::StockAdjustmentSubmit,
-            )
-            .is_err()
-        );
+        assert!(execute_receipt_reversal_domain_action(
+            &mut reversal,
+            ApprovalDomainAction::StockAdjustmentSubmit,
+        )
+        .is_err());
     }
 }
 
@@ -2082,16 +2076,14 @@ mod payment_reversal_tests {
             payload.counterparty,
             Some(ApprovalSubjectCounterparty::Supplier { .. })
         ));
-        assert!(
-            build_payment_reversal_snapshot(
-                &reversal,
-                " ",
-                &supplier_id,
-                "user-1",
-                Instant::from_unix_secs(10)
-            )
-            .is_err()
-        );
+        assert!(build_payment_reversal_snapshot(
+            &reversal,
+            " ",
+            &supplier_id,
+            "user-1",
+            Instant::from_unix_secs(10)
+        )
+        .is_err());
     }
 
     /// 详情只读审批结构；允许动作不含选择定义或审批人。
@@ -2109,12 +2101,10 @@ mod payment_reversal_tests {
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
-        assert!(
-            !view
-                .allowed_actions
-                .iter()
-                .any(|item| item.contains("DEFINITION"))
-        );
+        assert!(!view
+            .allowed_actions
+            .iter()
+            .any(|item| item.contains("DEFINITION")));
         let running = payment_reversal_approval_view(Some(&binding), None, PaymentReversalStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }
@@ -2134,12 +2124,10 @@ mod payment_reversal_tests {
         start_payment_reversal_approval(&mut reversal).unwrap();
         execute_payment_reversal_domain_action(&mut reversal, ApprovalDomainAction::PaymentReversalPost)
             .unwrap();
-        assert!(
-            execute_payment_reversal_domain_action(
-                &mut reversal,
-                ApprovalDomainAction::StockAdjustmentSubmit,
-            )
-            .is_err()
-        );
+        assert!(execute_payment_reversal_domain_action(
+            &mut reversal,
+            ApprovalDomainAction::StockAdjustmentSubmit,
+        )
+        .is_err());
     }
 }

@@ -41,7 +41,6 @@ mod view_mapping;
 
 pub use self::adapter::purchase_order_object_readable;
 pub use self::change_adapter::purchase_change_order_object_readable;
-pub(crate) use self::draft_from_confirmation::create_drafts_from_confirmation_lines;
 pub use self::dto::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView, CreationBasisView,

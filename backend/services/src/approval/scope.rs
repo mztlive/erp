@@ -319,6 +319,7 @@ pub fn approval_recovery_authorization_scope(
 }
 
 /// 在恢复事务快照内重新证明账号、角色、权限策略版本与组织范围。
+#[allow(dead_code)]
 pub(crate) async fn ensure_recovery_authorization(
     db: &Database,
     authorization: &ApprovalRecoveryAuthorization,

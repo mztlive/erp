@@ -6,15 +6,12 @@
 //!
 //! 契约来源：erp-client `features/sales-orders`（W05 变更轨）。
 
-use entities::money::Quantity;
 use entities::sales_order::{GoodsLineFields, LineType, VoucherLineDraft};
 use entities::sales_review::SalesChangeType;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::work_item::WorkItemView;
-
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::query::{page_or_default, page_size_or_default};
 
 /// 销售变更单列表允许的排序字段白名单。

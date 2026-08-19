@@ -13,7 +13,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{DocumentState, ensure_transition};
+use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
@@ -451,13 +451,11 @@ mod tests {
     #[test]
     fn state_machine_directed_edges() {
         let mut acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("a5"), data()).unwrap();
-        assert!(
-            acceptance
-                .update(CustomerAcceptanceUpdate {
-                    result: Some(AcceptanceResult::Shortage),
-                })
-                .is_ok()
-        );
+        assert!(acceptance
+            .update(CustomerAcceptanceUpdate {
+                result: Some(AcceptanceResult::Shortage),
+            })
+            .is_ok());
         assert_eq!(acceptance.result, AcceptanceResult::Shortage);
         acceptance.mark_posted().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；POSTED 不可编辑由 update 把关。

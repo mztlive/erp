@@ -6,8 +6,8 @@
 //! 每条路由统一走 JWT + RBAC（`with_permission`）。
 
 use axum::{
-    Router,
     routing::{get, post},
+    Router,
 };
 use services::iam::SharedRbacService;
 

@@ -73,9 +73,6 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::ImportBusinessConfirmation => {
             "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。"
         }
-        WorkItemType::ImportBusinessConfirmation => {
-            "进入销售单后，确认是否按原条件承接；通过后仍需采购再次确认供货。"
-        }
         WorkItemType::PurchaseOrderReview => {
             "进入后核对供应商、含税成本、进项税和付款条件，再提交通过或驳回。"
         }
@@ -88,7 +85,6 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::InventoryAdjustmentReview => "进入库存页后，核对本次调整并提交复核结论。",
         WorkItemType::FinanceCorrectionReview => "进入对应页面后，核对财务纠错并提交复核结论。",
         WorkItemType::SupplierSettlementReview => "进入结算页后，核对供应商结算并提交复核结论。",
-        WorkItemType::ImportBusinessConfirmation => "进入导入页后，确认本次试算范围。",
         WorkItemType::IntegrationResultUnknown => "进入接口错误中心后，确认本次集成结果。",
         WorkItemType::BusinessException => "进入对应页面后，处理本次业务异常。",
         WorkItemType::DocumentApproval => "进入单据后，完成当前审批节点。",
@@ -106,6 +102,7 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
 ///
 /// # 错误
 /// 无。
+#[allow(dead_code)]
 pub(crate) fn sales_order_object_label(order_no: &str) -> String {
     let order_no = order_no.trim();
     if order_no.is_empty() {
@@ -125,6 +122,7 @@ pub(crate) fn sales_order_object_label(order_no: &str) -> String {
 ///
 /// # 错误
 /// 无。
+#[allow(dead_code)]
 pub(crate) fn procurement_impact_summary(line_count: Option<usize>, gross_amount: Option<&Amount>) -> String {
     let mut summary = default_impact_summary(WorkItemType::ImportBusinessConfirmation).to_string();
     let mut scale = Vec::new();
@@ -248,7 +246,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview => {
             "不复核则票款与开票事实不能确认"
         }
-        WorkItemType::DocumentApproval | WorkItemType::DocumentApproval => "不审批则卡券销售不能生效",
+        WorkItemType::DocumentApproval => "不审批则卡券销售不能生效",
         WorkItemType::OwnershipMigrationSalesConfirmation
         | WorkItemType::OwnershipMigrationFinanceConfirmation => "不确认则客户归属不能完成迁移",
         WorkItemType::InventoryAdjustmentReview => "不复核则库存调整不能入账",
@@ -258,7 +256,6 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException => {
             "不处理则异常会继续挡住后续业务"
         }
-        WorkItemType::DocumentApproval => "不审批则单据不能形成正式事实",
     }
 }
 

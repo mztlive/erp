@@ -1,19 +1,19 @@
 //! 采购版本形成、版本号与变更差额构造。
 
-use database::{NoTransaction, PurchaseOrderExt, SalesReviewExt};
+use database::{NoTransaction, PurchaseOrderExt};
 use entities::common::time::Instant;
 use entities::ids::{PayableEntryId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId};
 use entities::money::Amount;
 use entities::purchase_order::{
-    PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseLineType, PurchaseOrder,
-    PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
-    PurchaseOrderRevisionLineData, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+    PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseOrder, PurchaseOrderRevision,
+    PurchaseOrderRevisionData, PurchaseOrderRevisionLine, PurchaseOrderRevisionLineData,
+    PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use id_generator::next_id;
 
 use super::shared::zero_amount;
 use super::PurchaseOrderService;
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 
 impl PurchaseOrderService {
     /// 计算下一个版本号（同一采购单内从 1 递增）。

@@ -8,16 +8,16 @@ use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentState};
 use entities::ids::ServiceFulfillmentId;
 use id_generator::next_id;
-use mongodb::Database;
 use mongodb::bson::doc;
+use mongodb::Database;
 use validator::Validate;
 
 use crate::approval::binding::{
-    BindPublishedDefinitionCommand, BindingDecision, bind_published_definition_on_document_create,
-    binding_decision,
+    bind_published_definition_on_document_create, binding_decision, BindPublishedDefinitionCommand,
+    BindingDecision,
 };
-use crate::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
-use crate::approval::policy::{DocumentApprovalPolicy, policy_of};
+use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
 use crate::audit::AuditActor;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
@@ -492,15 +492,15 @@ async fn persist_created_service_fulfillment(
 #[cfg(test)]
 mod service_fulfillment_no_approval_tests {
     use super::{
-        BindingDecision, DocumentApprovalPolicy, DocumentType, ServiceFulfillment, ServiceFulfillmentData,
         apply_service_fulfillment_create_binding, ensure_service_fulfillment_has_no_adapter,
         ensure_service_fulfillment_skips_approval_binding, policy_of, service_fulfillment_bind_command,
-        service_fulfillment_create_binding_decision,
+        service_fulfillment_create_binding_decision, BindingDecision, DocumentApprovalPolicy, DocumentType,
+        ServiceFulfillment, ServiceFulfillmentData,
     };
     use crate::approval::binding::binding_from_published;
     use crate::document_registry::new_registered_document;
-    use bpm::ProcessKind;
     use bpm::ids::ApprovalProcessDefinitionId;
+    use bpm::ProcessKind;
     use entities::common::source::SourceType;
     use entities::common::time::Instant;
     use entities::fulfillment::FulfillmentResult;

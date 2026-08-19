@@ -88,6 +88,7 @@ pub(crate) fn submission_origin_label(reason_code: Option<&str>) -> Option<&'sta
 ///
 /// # 错误
 /// 无。
+#[allow(dead_code)]
 pub(crate) fn brief_line_from_submission(
     item_name: &str,
     spec: Option<&str>,
@@ -115,6 +116,7 @@ pub(crate) fn brief_line_from_submission(
 ///
 /// # 错误
 /// 无。
+#[allow(dead_code)]
 pub(crate) fn object_brief_source(
     customer: Option<String>,
     gross_amount: Option<&Amount>,
@@ -242,6 +244,7 @@ pub(crate) fn format_quantity(quantity: &Quantity, unit: Option<&str>) -> String
     }
 }
 
+#[allow(dead_code)]
 fn format_due_label(due_at: Instant) -> String {
     let offset = FixedOffset::east_opt(8 * 3600).expect("东八区偏移合法");
     let local = offset.from_utc_datetime(&due_at.as_utc().naive_utc());
@@ -263,6 +266,7 @@ pub(crate) fn format_business_due_label(due: BusinessDate) -> String {
     format!("{month}/{day} 交")
 }
 
+#[allow(dead_code)]
 fn list_summary(
     customer: Option<&str>,
     amount_label: Option<&str>,

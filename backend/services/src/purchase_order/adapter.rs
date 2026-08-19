@@ -269,6 +269,7 @@ pub fn execute_purchase_order_domain_action(
 ///
 /// # 错误
 /// 恒返回冲突。
+#[cfg(test)]
 pub fn reject_legacy_finance_review_node() -> Result<()> {
     Err(Error::ConflictError(
         "采购财务审核不得充当审批流程节点".to_string(),

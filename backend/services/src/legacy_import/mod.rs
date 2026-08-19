@@ -2288,9 +2288,7 @@ fn work_item_action_code(action: WorkItemAllowedAction) -> &'static str {
     match action {
         WorkItemAllowedAction::View => "VIEW",
         WorkItemAllowedAction::Process => "PROCESS",
-        WorkItemAllowedAction::Process => "START_PROCESSING",
         WorkItemAllowedAction::Reassign => "RELEASE_TO_TEAM",
-        WorkItemAllowedAction::Reassign => "REASSIGN",
         WorkItemAllowedAction::Close => "CLOSE",
     }
 }
@@ -2753,7 +2751,7 @@ mod tests {
         .unwrap();
         item.base.version = 3;
         item.owner_user_id = Some("user-1".to_string());
-        item.assignment_source = AssignmentSource::SelfStart;
+        item.assignment_source = AssignmentSource::SystemRule;
         item
     }
 

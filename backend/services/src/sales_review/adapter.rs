@@ -267,6 +267,7 @@ pub fn execute_sales_change_domain_action(
 ///
 /// # 错误
 /// 恒返回冲突。
+#[cfg(test)]
 pub fn reject_legacy_change_review_node() -> Result<()> {
     Err(Error::ConflictError(
         "销售变更履约影响确认与财务复核不得充当审批流程节点".to_string(),

@@ -1,8 +1,6 @@
 //! 采购草稿冻结并调用统一 `start_approval`。
 
-use database::{
-    AccessControlExt, DocumentRegistryExt, NoTransaction, PurchaseOrderExt, SalesOrderExt, Transactional,
-};
+use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, SalesOrderExt};
 use entities::common::time::Instant;
 use entities::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use entities::purchase_order::{
@@ -243,7 +241,7 @@ impl PurchaseOrderService {
                 .ok_or_else(|| Error::Internal("采购提交幂等收据缺少结果".to_string()))?,
             expected_fingerprint,
         )?;
-        let order = self
+        let _order = self
             .db
             .purchase_orders()
             .find_by_id(purchase_order_id, &mut NoTransaction)

@@ -457,7 +457,7 @@ async fn load_supplier_refund_org_id(db: &Database, supplier_id: &SupplierAccoun
         .find_by_id(supplier_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-    supplier_refund_responsible_org_id(&supplier.party_id.to_string())
+    supplier_refund_responsible_org_id(supplier.party_id.as_ref())
 }
 
 /// 查询发布定义、写入绑定并持久化注册行。

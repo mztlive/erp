@@ -1,10 +1,9 @@
-use super::ReturnsService;
 use super::adapter::{
-    RECENT_HISTORY_LIMIT, build_payment_reversal_snapshot, ensure_payment_reversal_final_approve_posting,
+    build_payment_reversal_snapshot, ensure_payment_reversal_final_approve_posting,
     execute_payment_reversal_domain_action, payment_reversal_adapter, payment_reversal_approval_view,
     payment_reversal_object_readable, payment_reversal_responsible_org_id, payment_reversal_start_command,
     payment_reversal_start_command_kind, payment_reversal_subject_ref, require_payment_reversal_binding,
-    start_payment_reversal_approval,
+    start_payment_reversal_approval, RECENT_HISTORY_LIMIT,
 };
 use super::cancel_approval::{
     build_payment_reversal_cancel_input, load_cancel_runtime, persist_payment_reversal_cancel,
@@ -18,8 +17,9 @@ use super::start_approval::{
     build_payment_reversal_start_input, load_bound_definition_graph, load_payment_reversal_start_receipt,
     persist_payment_reversal_start,
 };
+use super::ReturnsService;
 use crate::approval::binding::{
-    BindPublishedDefinitionCommand, attach_published_binding, bind_published_definition_on_document_create,
+    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::{prepare_cancel, prepare_start};
@@ -468,7 +468,7 @@ async fn load_payment_reversal_context(
         .find_by_id(&payment.supplier_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-    let organization_id = payment_reversal_responsible_org_id(&supplier.party_id.to_string())?;
+    let organization_id = payment_reversal_responsible_org_id(supplier.party_id.as_ref())?;
     Ok((organization_id, payment.supplier_id))
 }
 
@@ -655,7 +655,7 @@ async fn persist_reverse_allocations(
 
 #[cfg(test)]
 mod payment_reversal_approval_tests {
-    use super::{ReturnsService, execute_payment_reversal_domain_action, start_payment_reversal_approval};
+    use super::{execute_payment_reversal_domain_action, start_payment_reversal_approval, ReturnsService};
     use crate::approval::policy::ApprovalDomainAction;
     use entities::common::time::Instant;
     use entities::ids::{PaymentReversalId, SupplierPaymentId};

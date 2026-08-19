@@ -1,10 +1,9 @@
-use super::ReturnsService;
 use super::adapter::{
-    RECENT_HISTORY_LIMIT, build_receipt_reversal_snapshot, ensure_receipt_reversal_final_approve_posting,
+    build_receipt_reversal_snapshot, ensure_receipt_reversal_final_approve_posting,
     execute_receipt_reversal_domain_action, receipt_reversal_adapter, receipt_reversal_approval_view,
     receipt_reversal_object_readable, receipt_reversal_responsible_org_id, receipt_reversal_start_command,
     receipt_reversal_start_command_kind, receipt_reversal_subject_ref, require_receipt_reversal_binding,
-    start_receipt_reversal_approval,
+    start_receipt_reversal_approval, RECENT_HISTORY_LIMIT,
 };
 use super::cancel_approval::{
     build_receipt_reversal_cancel_input, load_cancel_runtime, persist_receipt_reversal_cancel,
@@ -18,8 +17,9 @@ use super::start_approval::{
     build_receipt_reversal_start_input, load_bound_definition_graph, load_receipt_reversal_start_receipt,
     persist_receipt_reversal_start,
 };
+use super::ReturnsService;
 use crate::approval::binding::{
-    BindPublishedDefinitionCommand, attach_published_binding, bind_published_definition_on_document_create,
+    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::{prepare_cancel, prepare_start};
@@ -468,7 +468,7 @@ async fn load_receipt_reversal_context(
         .find_by_id(original_receipt_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("原回款不存在".to_string()))?;
-    let organization_id = receipt_reversal_responsible_org_id(&receipt.counterparty_party_id.to_string())?;
+    let organization_id = receipt_reversal_responsible_org_id(receipt.counterparty_party_id.as_ref())?;
     Ok((organization_id, receipt.customer_id))
 }
 
@@ -655,7 +655,7 @@ async fn persist_reverse_allocations(
 
 #[cfg(test)]
 mod receipt_reversal_approval_tests {
-    use super::{ReturnsService, execute_receipt_reversal_domain_action, start_receipt_reversal_approval};
+    use super::{execute_receipt_reversal_domain_action, start_receipt_reversal_approval, ReturnsService};
     use crate::approval::policy::ApprovalDomainAction;
     use entities::common::time::Instant;
     use entities::ids::{CustomerReceiptId, ReceiptReversalId};

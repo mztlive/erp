@@ -397,16 +397,15 @@ mod tests {
         )
         .unwrap();
         assert!(case.is_completed());
-        assert!(
-            case.update(
+        assert!(case
+            .update(
                 SalesReturnCaseUpdate {
                     reason: Some("新原因".to_string()),
                     ..Default::default()
                 },
                 "admin-3",
             )
-            .is_err()
-        );
+            .is_err());
     }
 
     #[test]

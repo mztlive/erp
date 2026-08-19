@@ -467,21 +467,19 @@ mod tests {
         assert!(!invoice_create.contains("submit_"));
         assert!(!invoice_create.contains("start_approval"));
         assert!(!invoice_create.contains("definition_id"));
-        assert!(
-            serde_json::from_value::<CreateInvoiceRequest>(serde_json::json!({
-                "invoice_direction": "sales",
-                "invoice_kind": "blue",
-                "party_id": "p-1",
-                "invoice_no": "001",
-                "invoice_date": "2026-08-06",
-                "gross_amount": "100.00",
-                "net_amount": "88.50",
-                "tax_amount": "11.50",
-                "definition_id": "forged",
-                "assignee": "forged"
-            }))
-            .is_err()
-        );
+        assert!(serde_json::from_value::<CreateInvoiceRequest>(serde_json::json!({
+            "invoice_direction": "sales",
+            "invoice_kind": "blue",
+            "party_id": "p-1",
+            "invoice_no": "001",
+            "invoice_date": "2026-08-06",
+            "gross_amount": "100.00",
+            "net_amount": "88.50",
+            "tax_amount": "11.50",
+            "definition_id": "forged",
+            "assignee": "forged"
+        }))
+        .is_err());
     }
 
     /// 客户回款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。

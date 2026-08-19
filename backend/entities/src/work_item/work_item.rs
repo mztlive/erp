@@ -754,10 +754,7 @@ impl NormalizedWorkItemData {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        AssignmentSource, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
-        WorkItemType,
-    };
+    use super::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType};
     use crate::common::state::ensure_transition;
     use crate::common::time::Instant;
     use crate::ids::WorkItemId;

@@ -1121,9 +1121,9 @@ pub struct CompleteCardFundsReviewResult {
 #[cfg(test)]
 mod tests {
     use super::{
-        CardFundsReviewConclusion, CardFundsReviewResult, CardFundsReviewType,
+        normalize_sort, CardFundsReviewConclusion, CardFundsReviewResult, CardFundsReviewType,
         CompleteCardFundsReviewCommand, CreateInvoiceRequest, CustomerReceiptListParams, InvoiceListParams,
-        InvoiceView, ReceivableAccountListParams, SortDir, normalize_sort,
+        InvoiceView, ReceivableAccountListParams, SortDir,
     };
     use entities::common::time::BusinessDate;
     use entities::money::Amount;

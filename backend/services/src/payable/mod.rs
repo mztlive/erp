@@ -545,7 +545,7 @@ impl PayableService {
             .find_by_id(supplier_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-        supplier_payment_responsible_org_id(&supplier.party_id.to_string())
+        supplier_payment_responsible_org_id(supplier.party_id.as_ref())
     }
 
     /// 最终通过过账并核销（§8.3-1 事务不变量）。
@@ -1105,7 +1105,7 @@ async fn load_supplier_responsible_org_id(db: &Database, supplier_id: &SupplierA
         .find_by_id(supplier_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-    supplier_payment_responsible_org_id(&supplier.party_id.to_string())
+    supplier_payment_responsible_org_id(supplier.party_id.as_ref())
 }
 
 /// 查询发布定义、写入绑定并持久化注册行。

@@ -712,6 +712,7 @@ pub enum PurchaseOrderReviewDecisionResult {
 
 impl PurchaseOrderReviewDecisionResult {
     /// 返回稳定协议代码。
+    #[allow(dead_code)]
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Approved => "APPROVED",
@@ -747,6 +748,7 @@ pub struct PurchaseOrderReviewDecisionCommand {
 
 impl PurchaseOrderReviewDecisionCommand {
     /// 校验审核结论分支专属字段。
+    #[allow(dead_code)]
     pub(crate) fn validate_branch(&self) -> Result<()> {
         match (self.review_result, self.reason_code.as_deref()) {
             (PurchaseOrderReviewDecisionResult::Approved, None) => Ok(()),

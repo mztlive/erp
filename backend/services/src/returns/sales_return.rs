@@ -1,13 +1,13 @@
-use super::ReturnsService;
 use super::dto::{
     CreateSalesReturnCaseRequest, PageView, SalesReturnCaseListParams, SalesReturnCaseView, SortDir,
 };
+use super::ReturnsService;
 use crate::approval::binding::{
-    BindPublishedDefinitionCommand, BindingDecision, bind_published_definition_on_document_create,
-    binding_decision,
+    bind_published_definition_on_document_create, binding_decision, BindPublishedDefinitionCommand,
+    BindingDecision,
 };
-use crate::approval::business_adapter::{BindingRevalidationContext, adapter_spec_of};
-use crate::approval::policy::{DocumentApprovalPolicy, policy_of};
+use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
 use crate::audit::AuditActor;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
@@ -408,15 +408,15 @@ async fn persist_created_sales_return_case(
 #[cfg(test)]
 mod sales_return_case_no_approval_tests {
     use super::{
-        BindingDecision, DocumentApprovalPolicy, DocumentType, SalesReturnCase, SalesReturnCaseData,
         apply_sales_return_case_create_binding, ensure_sales_return_case_has_no_adapter,
         ensure_sales_return_case_skips_approval_binding, policy_of, sales_return_case_bind_command,
-        sales_return_case_create_binding_decision,
+        sales_return_case_create_binding_decision, BindingDecision, DocumentApprovalPolicy, DocumentType,
+        SalesReturnCase, SalesReturnCaseData,
     };
     use crate::approval::binding::binding_from_published;
     use crate::document_registry::new_registered_document;
-    use bpm::ProcessKind;
     use bpm::ids::ApprovalProcessDefinitionId;
+    use bpm::ProcessKind;
     use entities::common::time::Instant;
     use entities::ids::{SalesOrderId, SalesReturnCaseId};
     use entities::returns::{CaseType, ReturnRoute};

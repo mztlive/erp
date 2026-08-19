@@ -227,44 +227,42 @@ mod tests {
             allocated_quantity: Quantity::from_str("0").unwrap(),
             ..apply_data()
         };
-        assert!(
-            AcceptanceFulfillmentAllocation::new(AcceptanceFulfillmentAllocationId::new("a1"), zero_quantity)
-                .is_err()
-        );
+        assert!(AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("a1"),
+            zero_quantity
+        )
+        .is_err());
 
         let blank_line = AcceptanceFulfillmentAllocationData {
             fulfillment_line_id: "   ".to_string(),
             ..apply_data()
         };
-        assert!(
-            AcceptanceFulfillmentAllocation::new(AcceptanceFulfillmentAllocationId::new("a2"), blank_line)
-                .is_err()
-        );
+        assert!(AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("a2"),
+            blank_line
+        )
+        .is_err());
 
         let reverse_without_reference = AcceptanceFulfillmentAllocationData {
             allocation_action: AllocationAction::Reverse,
             reverses_allocation_id: None,
             ..apply_data()
         };
-        assert!(
-            AcceptanceFulfillmentAllocation::new(
-                AcceptanceFulfillmentAllocationId::new("a3"),
-                reverse_without_reference
-            )
-            .is_err()
-        );
+        assert!(AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("a3"),
+            reverse_without_reference
+        )
+        .is_err());
 
         let apply_with_reference = AcceptanceFulfillmentAllocationData {
             reverses_allocation_id: Some(AcceptanceFulfillmentAllocationId::new("allocation-9")),
             ..apply_data()
         };
-        assert!(
-            AcceptanceFulfillmentAllocation::new(
-                AcceptanceFulfillmentAllocationId::new("a4"),
-                apply_with_reference
-            )
-            .is_err()
-        );
+        assert!(AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("a4"),
+            apply_with_reference
+        )
+        .is_err());
     }
 
     /// 序列化：枚举稳定代码；实体 BSON 往返。
