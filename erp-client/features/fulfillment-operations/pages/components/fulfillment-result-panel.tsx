@@ -25,6 +25,7 @@ export type FulfillmentResultPanelProps = {
  * PurchaseReceipt 为 NO_APPROVAL，入库创建结果不展示绑定卡、决定或审批历史。
  * Delivery 为 NO_APPROVAL，仓发/直发创建结果不展示绑定卡、待办或审批入口。
  * ElectronicDelivery 为 NO_APPROVAL，电子交付创建结果不展示绑定卡、决定或审批历史。
+ * ServiceFulfillment 为 NO_APPROVAL，服务履约创建结果不展示绑定卡、决定或审批历史。
  */
 export function FulfillmentResultPanel({
     lastResult,

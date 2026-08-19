@@ -56,6 +56,8 @@ import {
  * 不展示绑定卡、待办或审批入口。
  * ElectronicDelivery 为 NO_APPROVAL，电子交付创建结果、详情、提交确认
  * 不展示绑定卡、决定、撤回或审批历史。
+ * ServiceFulfillment 为 NO_APPROVAL，服务履约创建结果、详情、提交确认
+ * 不展示绑定卡、决定、撤回或审批历史。
  */
 export function FulfillmentOperationsPage() {
     const router = useRouter()

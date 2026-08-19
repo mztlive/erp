@@ -20,6 +20,15 @@ function nowLocal(): string {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/**
+ * 线下服务表单。ServiceFulfillment 为 NO_APPROVAL，只收集服务地点、时间、
+ * 履约结果、完成说明与数量，不嵌入绑定卡、决定弹窗、撤回或改派入口。
+ *
+ * @param operation 服务履约工作单。
+ * @param draft 线下服务草稿。
+ * @param onChange 草稿变更回调。
+ * @param disabled 只读或提交中禁用。
+ */
 export function FulfillmentServiceForm({
     operation,
     draft,

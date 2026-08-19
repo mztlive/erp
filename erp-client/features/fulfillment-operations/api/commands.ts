@@ -18,6 +18,7 @@ import {
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
 import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
+import { stripServiceFulfillmentApprovalField } from "@/features/fulfillment-operations/lib/service-fulfillment-no-approval"
 import type {
     BackendDelivery,
     BackendDeliveryDetail,
@@ -30,12 +31,14 @@ import {
     formalFromDelivery,
     formalFromElectronic,
     formalFromReceipt,
+    formalFromService,
 } from "./outcomes"
 
 /**
  * 保存履约草稿。PurchaseReceipt 为 NO_APPROVAL，入库保存不绑定、不启动审批。
  * Delivery 为 NO_APPROVAL，仓发/直发保存不绑定、不启动审批。
  * ElectronicDelivery 为 NO_APPROVAL，电子交付无草稿保存命令，也不绑定或启动审批。
+ * ServiceFulfillment 为 NO_APPROVAL，服务履约无草稿保存命令，也不绑定或启动审批。
  *
  * @param input 保存命令。
  * @returns 新的单据版本。
@@ -80,9 +83,10 @@ export async function saveFulfillmentOperation(
  * 确认正式单据。PurchaseReceipt 为 NO_APPROVAL，入库确认直接过账，不提交审批。
  * Delivery 为 NO_APPROVAL，仓发/直发确认直接过账，不提交审批。
  * ElectronicDelivery 为 NO_APPROVAL，电子交付确认直接落账，不提交审批。
+ * ServiceFulfillment 为 NO_APPROVAL，服务履约确认直接落账，不提交审批。
  *
  * @param input 确认命令。
- * @returns 成功/失败/待确认结果；入库、仓发与电子交付成功结果不含审批区。
+ * @returns 成功/失败/待确认结果；入库、仓发、电子交付与服务履约成功结果不含审批区。
  */
 export async function postFulfillmentOperation(
     input: PostFulfillmentOperationCommand,
@@ -247,36 +251,20 @@ export async function postFulfillmentOperation(
                 message: "服务明细不能为空",
             }
         }
-        const confirmed = await apiPost<BackendServiceFulfillment>(
-            `/admin/service-fulfillments/${encodeURIComponent(input.operationId)}/confirm`,
-            {
-                version: input.expectedDocumentVersion,
-                expected_source_version: input.expectedSourceVersion,
-                idempotency_key: input.idempotencyKey,
-            },
+        // ServiceFulfillment 为 NO_APPROVAL，确认后丢弃误带的审批绑定。
+        const confirmed = stripServiceFulfillmentApprovalField(
+            await apiPost<BackendServiceFulfillment>(
+                `/admin/service-fulfillments/${encodeURIComponent(input.operationId)}/confirm`,
+                {
+                    version: input.expectedDocumentVersion,
+                    expected_source_version: input.expectedSourceVersion,
+                    idempotency_key: input.idempotencyKey,
+                },
+            ),
         )
         return {
             status: "succeeded",
-            outcome: {
-                kind: "POSTED",
-                operationId: input.operationId,
-                factType: "SERVICE_FULFILLMENT",
-                factId: confirmed.id,
-                factNo: confirmed.fulfillment_no,
-                formalStatus:
-                    confirmed.result === "FAILED" ? "FAILED" : "CONFIRMED",
-                occurredAt: secsToIso(confirmed.occurred_at) || nowIso(),
-                operationType: "SERVICE",
-                inventoryDelta: [],
-                reservationDelta: [],
-                remainingByLine: [],
-                acceptanceRequired: confirmed.result !== "FAILED",
-                acceptanceNextStep: "服务履约已确认。请销售在客户验收登记。",
-                inventoryImpactSummary: "不影响自有库存。",
-                reference: confirmed.fulfillment_no,
-                salesOrderId: "",
-                salesOrderNo: "",
-            },
+            outcome: formalFromService(confirmed, draft, input.operationId),
         }
     } catch (error) {
         if (isApiError(error)) {
@@ -312,6 +300,7 @@ export async function postFulfillmentOperation(
  * 复核暂未确认的处理结果。PurchaseReceipt 为 NO_APPROVAL，已入库事实不含审批绑定。
  * Delivery 为 NO_APPROVAL，已发货事实不含审批绑定。
  * ElectronicDelivery 为 NO_APPROVAL，已确认电子交付不含审批绑定。
+ * ServiceFulfillment 为 NO_APPROVAL，已确认服务履约不含审批绑定。
  *
  * @param input 复核命令。
  * @returns 已过账则返回正式结果，否则保持未知。

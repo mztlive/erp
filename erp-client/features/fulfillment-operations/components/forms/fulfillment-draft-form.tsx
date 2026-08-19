@@ -29,6 +29,7 @@ import { FulfillmentShipForm } from "./fulfillment-ship-form"
  * 草稿是可辨识联合，分派后各表单拿到收窄类型，不再各自 narrow。
  * Delivery 为 NO_APPROVAL，仓发/直发只走业务表单，不接入审批区。
  * ElectronicDelivery 为 NO_APPROVAL，电子交付只走业务表单，不接入审批区。
+ * ServiceFulfillment 为 NO_APPROVAL，服务履约只走业务表单，不接入审批区。
  */
 export function FulfillmentDraftForm({
     operation,

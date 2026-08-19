@@ -17,6 +17,7 @@ import {
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
 import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
+import { stripServiceFulfillmentApprovalField } from "@/features/fulfillment-operations/lib/service-fulfillment-no-approval"
 
 // ─── backend DTO shapes ─────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ export type BackendElectronicDelivery = {
     version: number
 }
 
+/** ServiceFulfillment 为 NO_APPROVAL：创建/详情 DTO 不得携带审批绑定。 */
 export type BackendServiceFulfillment = {
     id: string
     fulfillment_no: string
@@ -273,19 +275,25 @@ export function electronicToOperation(
     })
 }
 
+/**
+ * 把服务履约草稿投影为线下服务工作单。ServiceFulfillment 为 NO_APPROVAL，丢弃误带的审批字段。
+ *
+ * @param s 服务履约 HTTP 载荷。
+ */
 export function serviceToOperation(
     s: BackendServiceFulfillment,
 ): FulfillmentOperation {
+    const service = stripServiceFulfillmentApprovalField(s)
     return baseOperation({
-        operationId: s.id,
+        operationId: service.id,
         operationType: "SERVICE",
-        editVersion: s.version,
-        sourceVersion: String(s.version),
-        dueAt: secsToIso(s.occurred_at) || nowIso(),
-        summary: s.fulfillment_no,
+        editVersion: service.version,
+        sourceVersion: String(service.version),
+        dueAt: secsToIso(service.occurred_at) || nowIso(),
+        summary: service.fulfillment_no,
         source: {
-            purchaseOrderId: s.purchase_order_id,
-            purchaseNo: s.purchase_order_id,
+            purchaseOrderId: service.purchase_order_id,
+            purchaseNo: service.purchase_order_id,
             salesOrderId: "",
             salesOrderNo: "",
             salesRevisionId: "",
@@ -293,29 +301,33 @@ export function serviceToOperation(
         },
         lines: [
             emptySourceLine({
-                lineId: s.sales_order_line_id,
-                salesOrderLineId: s.sales_order_line_id,
+                lineId: service.sales_order_line_id,
+                salesOrderLineId: service.sales_order_line_id,
                 purchaseLineSalesAllocationId:
-                    s.purchase_line_sales_allocation_id,
-                remainingQuantity: s.quantity,
-                orderedQuantity: s.quantity,
+                    service.purchase_line_sales_allocation_id,
+                remainingQuantity: service.quantity,
+                orderedQuantity: service.quantity,
             }),
         ],
         draft: {
             type: "SERVICE",
             startedAt:
-                secsToIso(s.occurred_at).slice(0, 16) || nowIso().slice(0, 16),
+                secsToIso(service.occurred_at).slice(0, 16) ||
+                nowIso().slice(0, 16),
             endedAt:
-                secsToIso(s.occurred_at).slice(0, 16) || nowIso().slice(0, 16),
+                secsToIso(service.occurred_at).slice(0, 16) ||
+                nowIso().slice(0, 16),
             serviceLocation: "",
-            result: (s.result as "SUCCESS" | "PARTIAL" | "FAILED") || "SUCCESS",
+            result:
+                (service.result as "SUCCESS" | "PARTIAL" | "FAILED") ||
+                "SUCCESS",
             completionNote: "",
             lines: [
                 {
-                    salesOrderLineId: s.sales_order_line_id,
+                    salesOrderLineId: service.sales_order_line_id,
                     purchaseLineSalesAllocationId:
-                        s.purchase_line_sales_allocation_id,
-                    quantity: s.quantity,
+                        service.purchase_line_sales_allocation_id,
+                    quantity: service.quantity,
                 },
             ],
         },
