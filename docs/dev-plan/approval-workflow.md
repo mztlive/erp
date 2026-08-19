@@ -75,30 +75,41 @@ DOC-D 依赖 P3-HTTP 的端点稳定，因此排在 P3 之后、P6-PILOT 之前�
 
 试点：**`StockAdjustment`**。`P6-PILOT` 通过前，下表其余 `PROCESS_REQUIRED` 类型不得开始接入。
 
-| `DocumentType` | P3 适配子阶段 | P4 页面子阶段 | 状态 |
-| --- | --- | --- | --- |
-| `StockAdjustment`（试点） | `P3-ADAPTER-PILOT` | `P4-PILOT` | 未开始 |
-| `SalesOrder` | `P3-ADAPTER-SALES-ORDER` | `P4-SALES-ORDER` | 阻塞于 P6-PILOT |
-| `VoucherSalesOrder` | `P3-ADAPTER-VOUCHER-SALES-ORDER` | `P4-VOUCHER-SALES-ORDER` | 依赖上一类型 |
-| `SalesChangeOrder` | `P3-ADAPTER-SALES-CHANGE-ORDER` | `P4-SALES-CHANGE-ORDER` | 依赖上一类型 |
-| `PurchaseOrder` | `P3-ADAPTER-PURCHASE-ORDER` | `P4-PURCHASE-ORDER` | 依赖上一类型 |
-| `PurchaseChangeOrder` | `P3-ADAPTER-PURCHASE-CHANGE-ORDER` | `P4-PURCHASE-CHANGE-ORDER` | 依赖上一类型 |
-| `CustomerReceipt` | `P3-ADAPTER-CUSTOMER-RECEIPT` | `P4-CUSTOMER-RECEIPT` | 依赖上一类型 |
-| `Invoice` | `P3-NO-APPROVAL-INVOICE` | `P4-INVOICE` | `NO_APPROVAL` 证明批次 |
-| `SupplierPayment` | `P3-ADAPTER-SUPPLIER-PAYMENT` | `P4-SUPPLIER-PAYMENT` | 依赖上一类型 |
-| `CustomerRefund` | `P3-ADAPTER-CUSTOMER-REFUND` | `P4-CUSTOMER-REFUND` | 依赖上一类型 |
-| `SupplierRefund` | `P3-ADAPTER-SUPPLIER-REFUND` | `P4-SUPPLIER-REFUND` | 依赖上一类型 |
-| `ReceiptReversal` | `P3-ADAPTER-RECEIPT-REVERSAL` | `P4-RECEIPT-REVERSAL` | 依赖上一类型 |
-| `PaymentReversal` | `P3-ADAPTER-PAYMENT-REVERSAL` | `P4-PAYMENT-REVERSAL` | 依赖上一类型 |
-| `SalesReturnCase` | `P3-NO-APPROVAL-SALES-RETURN-CASE` | `P4-SALES-RETURN-CASE` | `NO_APPROVAL` 证明批次 |
-| `PurchaseReturnOrder` | `P3-NO-APPROVAL-PURCHASE-RETURN-ORDER` | `P4-PURCHASE-RETURN-ORDER` | `NO_APPROVAL` 证明批次 |
-| `PurchaseReceipt` | `P3-NO-APPROVAL-PURCHASE-RECEIPT` | `P4-PURCHASE-RECEIPT` | `NO_APPROVAL` 证明批次 |
-| `Delivery` | `P3-NO-APPROVAL-DELIVERY` | `P4-DELIVERY` | `NO_APPROVAL` 证明批次 |
-| `ElectronicDelivery` | `P3-NO-APPROVAL-ELECTRONIC-DELIVERY` | `P4-ELECTRONIC-DELIVERY` | `NO_APPROVAL` 证明批次 |
-| `ServiceFulfillment` | `P3-NO-APPROVAL-SERVICE-FULFILLMENT` | `P4-SERVICE-FULFILLMENT` | `NO_APPROVAL` 证明批次 |
-| `CustomerAcceptance` | `P3-NO-APPROVAL-CUSTOMER-ACCEPTANCE` | `P4-CUSTOMER-ACCEPTANCE` | `NO_APPROVAL` 证明批次 |
+`P6-PILOT` 之后按**文件所有权**分轨，不再要求跨域串行。同一 `owns`/`ownsWithin` 前缀内的类型仍须串行；不同目录的 P3/P4 可以并行。精确 `dependsOn` 以 `_meta.json` 为准。
 
-表中 19 组 P3/P4 对象均已在 `_meta.json.perDocumentTypeStages` 登记完整分支、依赖、所有权、删除项和验收命令。`NO_APPROVAL` 类型也必须有独立证明批次，禁止把它们推迟到 `P6-FINAL` 临时补测。
+| 轨道 | 后端目录 | 前端目录 | 类型顺序 |
+| --- | --- | --- | --- |
+| 销售 | `sales_order` / `sales_review` | `sales-orders` | SalesOrder → VoucherSalesOrder → SalesChangeOrder → SalesReturnCase（P4） |
+| 采购 | `purchase_order` | `purchase-orders` | PurchaseOrder → PurchaseChangeOrder → PurchaseReturnOrder（P4） |
+| 应收 | `receivable` | `customer-receivables` | CustomerReceipt → Invoice → CustomerRefund（P4）→ ReceiptReversal（P4） |
+| 应付 | `payable` | `supplier-payables` | SupplierPayment → SupplierRefund（P4）→ PaymentReversal（P4） |
+| 退货资金 | `returns` | 见上列应收/应付/销售/采购 P4 | CustomerRefund → SupplierRefund → ReceiptReversal → PaymentReversal → SalesReturnCase → PurchaseReturnOrder |
+| 履约 | `fulfillment` | `fulfillment-operations` | PurchaseReceipt → Delivery → ElectronicDelivery → ServiceFulfillment → CustomerAcceptance |
+
+| `DocumentType` | P3 适配子阶段 | P4 页面子阶段 | 调度 |
+| --- | --- | --- | --- |
+| `StockAdjustment`（试点） | `P3-ADAPTER-PILOT` | `P4-PILOT` | 试点，先于其余 `PROCESS_REQUIRED` |
+| `SalesOrder` | `P3-ADAPTER-SALES-ORDER` | `P4-SALES-ORDER` | 销售轨 |
+| `VoucherSalesOrder` | `P3-ADAPTER-VOUCHER-SALES-ORDER` | `P4-VOUCHER-SALES-ORDER` | 销售轨，依赖上一销售类型 |
+| `SalesChangeOrder` | `P3-ADAPTER-SALES-CHANGE-ORDER` | `P4-SALES-CHANGE-ORDER` | 销售轨，依赖上一销售类型 |
+| `PurchaseOrder` | `P3-ADAPTER-PURCHASE-ORDER` | `P4-PURCHASE-ORDER` | 采购轨 |
+| `PurchaseChangeOrder` | `P3-ADAPTER-PURCHASE-CHANGE-ORDER` | `P4-PURCHASE-CHANGE-ORDER` | 采购轨，依赖上一采购类型 |
+| `CustomerReceipt` | `P3-ADAPTER-CUSTOMER-RECEIPT` | `P4-CUSTOMER-RECEIPT` | 应收轨 |
+| `Invoice` | `P3-NO-APPROVAL-INVOICE` | `P4-INVOICE` | 应收轨，`NO_APPROVAL` |
+| `SupplierPayment` | `P3-ADAPTER-SUPPLIER-PAYMENT` | `P4-SUPPLIER-PAYMENT` | 应付轨，P3 不依赖发票 |
+| `CustomerRefund` | `P3-ADAPTER-CUSTOMER-REFUND` | `P4-CUSTOMER-REFUND` | 退货资金 P3 起点；P4 接应收页 |
+| `SupplierRefund` | `P3-ADAPTER-SUPPLIER-REFUND` | `P4-SUPPLIER-REFUND` | 退货资金 P3；P4 接应付页 |
+| `ReceiptReversal` | `P3-ADAPTER-RECEIPT-REVERSAL` | `P4-RECEIPT-REVERSAL` | 退货资金 P3；P4 接应收页 |
+| `PaymentReversal` | `P3-ADAPTER-PAYMENT-REVERSAL` | `P4-PAYMENT-REVERSAL` | 退货资金 P3；P4 接应付页 |
+| `SalesReturnCase` | `P3-NO-APPROVAL-SALES-RETURN-CASE` | `P4-SALES-RETURN-CASE` | 退货资金 P3；P4 接销售页 |
+| `PurchaseReturnOrder` | `P3-NO-APPROVAL-PURCHASE-RETURN-ORDER` | `P4-PURCHASE-RETURN-ORDER` | 退货资金 P3；P4 接采购页 |
+| `PurchaseReceipt` | `P3-NO-APPROVAL-PURCHASE-RECEIPT` | `P4-PURCHASE-RECEIPT` | 履约轨起点 |
+| `Delivery` | `P3-NO-APPROVAL-DELIVERY` | `P4-DELIVERY` | 履约轨 |
+| `ElectronicDelivery` | `P3-NO-APPROVAL-ELECTRONIC-DELIVERY` | `P4-ELECTRONIC-DELIVERY` | 履约轨 |
+| `ServiceFulfillment` | `P3-NO-APPROVAL-SERVICE-FULFILLMENT` | `P4-SERVICE-FULFILLMENT` | 履约轨 |
+| `CustomerAcceptance` | `P3-NO-APPROVAL-CUSTOMER-ACCEPTANCE` | `P4-CUSTOMER-ACCEPTANCE` | 履约轨终点 |
+
+表中 19 组 P3/P4 对象均已在 `_meta.json.perDocumentTypeStages` 登记完整分支、依赖、所有权、删除项和验收命令。`NO_APPROVAL` 类型也必须有独立证明批次，禁止把它们推迟到 `P6-FINAL` 临时补测。同一目录内禁止并行改同一组文件。
 
 ### 3.1 `BusinessDocument` 注册前置
 
@@ -125,6 +136,7 @@ services/src/file_asset/**
 | P0-C | 前端 W24 与权限生成 | `chore/erp-p0-amend-approval-workflow-frontend-registry` | 未开始 |
 | P0-D | 全类型硬切换清理 | `chore/erp-p0-amend-approval-workflow-hard-cutover-cleanup` | 阻塞于全部逐类型阶段 |
 | P0-A-2 | 授权 P2 同步 `WorkItemRow.approval_node_execution_id` 测试字面量 | `chore/erp-p0-amend-work-item-row-execution-id` | 已合并 |
+| SCHED-1 | 按文件所有权拆未开始阶段的 `dependsOn`（应付 / 退货资金 / 履约可并行） | 计划元数据，无独立代码分支 | 已登记 |
 
 新增冻结修改必须追加一行单主题 amendment，合并后所有在途分支 rebase。
 
