@@ -4,13 +4,16 @@
  */
 
 export {
+    ensurePaymentReversalDraft,
     ensureSupplierPaymentDraft,
     ensureSupplierRefundDraft,
     fetchAllocationSession,
     fetchPayableDetail,
+    fetchPaymentReversal,
     fetchSupplierAccounts,
     fetchSupplierPayment,
     fetchSupplierRefund,
+    forgetPaymentReversalDraft,
     forgetSupplierRefundDraft,
     resolveUnknownResult,
     reverseInvoice,
@@ -18,5 +21,6 @@ export {
     saveAllocationDraft,
     submitInvoice,
     submitPayment,
+    submitPaymentReversal,
     submitSupplierRefund,
 } from "@/features/supplier-payables/api/requests"

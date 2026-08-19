@@ -3,6 +3,7 @@
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type {
     PayableRow,
+    PaymentReversalRow,
     PaymentRow,
     PurchaseInvoiceRow,
     SupplierAccountsQuery,
@@ -19,6 +20,11 @@ import {
     supplierPaymentStatusLabel,
     supplierPaymentStatusTone,
 } from "@/features/supplier-payables/lib/supplier-payment-approval"
+import {
+    mapPaymentReversalApproval,
+    paymentReversalStatusLabel,
+    paymentReversalStatusTone,
+} from "@/features/supplier-payables/lib/payment-reversal-approval"
 import {
     mapSupplierRefundApproval,
     supplierRefundStatusLabel,
@@ -90,6 +96,23 @@ export type BackendSupplierRefund = {
     supplier_id: string
     original_payment_id?: string | null
     original_payable_entry_id?: string | null
+    reason_code?: string | null
+    reason_text: string
+    amount: string
+    handled_by: string
+    reviewed_by: string
+    occurred_at: number
+    version: number
+    created_at: number
+    approval?: DocumentApprovalViewDto | null
+}
+
+/** PaymentReversal 为 PROCESS_REQUIRED：创建/详情 DTO 必须携带只读审批绑定。 */
+export type BackendPaymentReversal = {
+    id: string
+    reversal_no: string
+    status: string
+    original_supplier_payment_id: string
     reason_code?: string | null
     reason_text: string
     amount: string
@@ -326,6 +349,46 @@ export function projectSupplierRefund(
         allowedActions: ["VIEW_DETAIL"],
         actionBlockers: [],
         approval: mapSupplierRefundApproval(refund.approval),
+    }
+}
+
+function mapReversalStatus(s: string): PaymentReversalRow["status"] {
+    if (s === "reversed" || s === "REVERSED") return "reversed"
+    if (s === "posted" || s === "POSTED") return "posted"
+    if (
+        s === "IN_APPROVAL" ||
+        s === "in_approval" ||
+        s === "pending_review" ||
+        s === "PENDING_REVIEW"
+    ) {
+        return "in_approval"
+    }
+    return "draft"
+}
+
+/**
+ * 把付款冲正详情投影为预览行。PaymentReversal 为 PROCESS_REQUIRED，只读映射审批绑定。
+ *
+ * @param reversal 冲正 HTTP 载荷。
+ */
+export function projectPaymentReversal(
+    reversal: BackendPaymentReversal,
+): PaymentReversalRow {
+    const status = mapReversalStatus(reversal.status)
+    return {
+        reversalId: reversal.id,
+        reversalNo: reversal.reversal_no,
+        originalPaymentId: reversal.original_supplier_payment_id,
+        reasonText: reversal.reason_text,
+        amount: reversal.amount,
+        occurredAt: instantToIso(reversal.occurred_at),
+        status,
+        statusLabel: paymentReversalStatusLabel(reversal.status),
+        statusTone: paymentReversalStatusTone(reversal.status),
+        baselineVersion: reversal.version,
+        allowedActions: ["VIEW_DETAIL"],
+        actionBlockers: [],
+        approval: mapPaymentReversalApproval(reversal.approval),
     }
 }
 

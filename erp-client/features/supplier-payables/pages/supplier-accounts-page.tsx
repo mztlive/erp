@@ -8,16 +8,19 @@ import {
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AllocationSession } from "@/features/supplier-payables/components/allocation-session"
+import { PaymentReversalRequestDialog } from "@/features/supplier-payables/components/payment-reversal-request-dialog"
+import { PaymentReversalSubmitConfirmDialog } from "@/features/supplier-payables/components/payment-reversal-submit-confirm-dialog"
 import { SupplierRefundRequestDialog } from "@/features/supplier-payables/components/supplier-refund-request-dialog"
 import { SupplierRefundSubmitConfirmDialog } from "@/features/supplier-payables/components/supplier-refund-submit-confirm-dialog"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
     usePayableDetailQuery,
+    usePaymentReversalQuery,
     useReverseInvoiceMutation,
-    useReversePaymentMutation,
     useSupplierPaymentQuery,
     useSupplierRefundQuery,
 } from "@/features/supplier-payables/hooks/queries"
+import { isPaymentReversalWorkItem } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import { isSupplierPaymentWorkItem } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { isSupplierRefundWorkItem } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import { mapWorkItemDto } from "@/features/work-items/types"
@@ -38,6 +41,7 @@ import { SupplierAccountsTable } from "./components/supplier-accounts-table"
 import { SupplierAccountsToolbar } from "./components/supplier-accounts-toolbar"
 import { PickSupplierDialog } from "./components/pick-supplier-dialog"
 import { ReverseDialog } from "./components/reverse-dialog"
+import { usePaymentReversalFlow } from "./hooks/use-payment-reversal-flow"
 import { useSupplierRefundFlow } from "./hooks/use-supplier-refund-flow"
 
 export function SupplierAccountsPage() {
@@ -62,10 +66,12 @@ export function SupplierAccountsPage() {
         previewPayableId,
         previewPaymentId,
         previewRefundId,
+        previewReversalId,
         workItemId,
         openPreview,
         openPaymentPreview,
         openRefundPreview,
+        openReversalPreview,
         closePreview,
         session,
         openSession,
@@ -101,12 +107,16 @@ export function SupplierAccountsPage() {
     const workItemRefundId = isSupplierRefundWorkItem(focusedWorkItem)
         ? focusedWorkItem?.businessObjectId
         : undefined
+    const workItemReversalId = isPaymentReversalWorkItem(focusedWorkItem)
+        ? focusedWorkItem?.businessObjectId
+        : undefined
     const focusedPaymentId = previewPaymentId ?? workItemPaymentId ?? null
     const focusedRefundId = previewRefundId ?? workItemRefundId ?? null
+    const focusedReversalId = previewReversalId ?? workItemReversalId ?? null
     const detailQuery = usePayableDetailQuery(previewPayableId)
     const paymentQuery = useSupplierPaymentQuery(focusedPaymentId)
     const refundQuery = useSupplierRefundQuery(focusedRefundId)
-    const reversePayment = useReversePaymentMutation()
+    const reversalQuery = usePaymentReversalQuery(focusedReversalId)
     const reverseInvoice = useReverseInvoiceMutation()
     const refundFlow = useSupplierRefundFlow({
         openRefundPreview,
@@ -116,6 +126,19 @@ export function SupplierAccountsPage() {
                 setLastResult({
                     status: "failed",
                     title: "退款失败",
+                    description: message,
+                })
+            }
+        },
+    })
+    const reversalFlow = usePaymentReversalFlow({
+        openReversalPreview,
+        setLastResult,
+        setActionError: (message) => {
+            if (message) {
+                setLastResult({
+                    status: "failed",
+                    title: "冲正失败",
                     description: message,
                 })
             }
@@ -322,12 +345,18 @@ export function SupplierAccountsPage() {
                 previewPayableId={previewPayableId}
                 previewPaymentId={focusedPaymentId}
                 previewRefundId={focusedRefundId}
+                previewReversalId={focusedReversalId}
                 detailQuery={detailQuery}
                 paymentQuery={paymentQuery}
                 refundQuery={refundQuery}
+                reversalQuery={reversalQuery}
                 onRequestRefundSubmit={() => {
                     const refund = refundQuery.data
                     if (refund) refundFlow.beginRefundSubmit(refund)
+                }}
+                onRequestReversalSubmit={() => {
+                    const reversal = reversalQuery.data
+                    if (reversal) reversalFlow.beginReversalSubmit(reversal)
                 }}
                 returnTo={returnTo}
                 fromWorkspace={fromWorkspace}
@@ -339,6 +368,7 @@ export function SupplierAccountsPage() {
                 onDecisionApplied={(view: ApprovalCommandView) => {
                     void paymentQuery.refetch()
                     void refundQuery.refetch()
+                    void reversalQuery.refetch()
                     void listQuery.refetch()
                     setLastResult({
                         status: "succeeded",
@@ -347,7 +377,10 @@ export function SupplierAccountsPage() {
                             ? `已按当前任务提交决定。${view.latestRejectionReason}`
                             : "已按当前任务提交决定。",
                         reference:
-                            focusedRefundId ?? focusedPaymentId ?? undefined,
+                            focusedReversalId ??
+                            focusedRefundId ??
+                            focusedPaymentId ??
+                            undefined,
                         facts: view.currentAssigneeName
                             ? [
                                   {
@@ -400,35 +433,72 @@ export function SupplierAccountsPage() {
                 onConfirm={() => void refundFlow.confirmRefundSubmit()}
             />
 
-            {reverseTarget ? (
+            <PaymentReversalRequestDialog
+                open={
+                    Boolean(reversalFlow.reversalRequest) ||
+                    reverseTarget?.kind === "payment"
+                }
+                pending={reversalFlow.reversalDraftPending}
+                sourceLabel={
+                    reversalFlow.reversalRequest?.sourcePaymentNo ??
+                    (reverseTarget?.kind === "payment"
+                        ? reverseTarget.no
+                        : undefined)
+                }
+                amount={reversalFlow.reversalRequest?.amount}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        reversalFlow.setReversalRequest(null)
+                        if (reverseTarget?.kind === "payment") {
+                            setReverseTarget(null)
+                        }
+                    }
+                }}
+                onSubmit={(reason) => {
+                    const request =
+                        reverseTarget?.kind === "payment"
+                            ? {
+                                  sourcePaymentId: reverseTarget.id,
+                                  sourcePaymentNo: reverseTarget.no,
+                              }
+                            : reversalFlow.reversalRequest
+                    if (reverseTarget?.kind === "payment") {
+                        setReverseTarget(null)
+                    }
+                    void reversalFlow.prepareReversalDraft(reason, request)
+                }}
+            />
+
+            <PaymentReversalSubmitConfirmDialog
+                open={reversalFlow.reversalSubmitOpen}
+                pending={reversalFlow.reversalSubmitPending}
+                approval={
+                    reversalFlow.reversalDraft?.approval ??
+                    reversalQuery.data?.approval
+                }
+                onOpenChange={reversalFlow.setReversalSubmitOpen}
+                onConfirm={() => void reversalFlow.confirmReversalSubmit()}
+            />
+
+            {reverseTarget && reverseTarget.kind === "invoice" ? (
                 <ReverseDialog
                     target={reverseTarget}
                     reason={reverseReason}
                     onReasonChange={setReverseReason}
                     redInvoiceNo={redInvoiceNo}
                     onRedInvoiceNoChange={setRedInvoiceNo}
-                    submitting={
-                        reversePayment.isPending || reverseInvoice.isPending
-                    }
+                    submitting={reverseInvoice.isPending}
                     onCancel={() => setReverseTarget(null)}
                     onSubmit={() => {
                         void (async () => {
                             const key = `w12_rev_${reverseTarget.kind}_${reverseTarget.id}_${Date.now()}`
-                            let res: FormalSubmitResult
-                            if (reverseTarget.kind === "payment") {
-                                res = await reversePayment.mutateAsync({
-                                    paymentId: reverseTarget.id,
-                                    reason: reverseReason,
-                                    idempotencyKey: key,
-                                })
-                            } else {
-                                res = await reverseInvoice.mutateAsync({
+                            const res: FormalSubmitResult =
+                                await reverseInvoice.mutateAsync({
                                     invoiceId: reverseTarget.id,
                                     reason: reverseReason,
                                     redInvoiceNo: redInvoiceNo.trim(),
                                     idempotencyKey: key,
                                 })
-                            }
                             setLastResult(res)
                             setReverseTarget(null)
                             setReverseReason("")

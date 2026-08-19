@@ -15,7 +15,10 @@ import {
     useSubmitPaymentMutation,
     useSubmitSupplierRefundMutation,
     useSupplierAccountsQuery,
+    useEnsurePaymentReversalDraftMutation,
     useEnsureSupplierRefundDraftMutation,
+    usePaymentReversalQuery,
+    useSubmitPaymentReversalMutation,
     useSupplierRefundQuery,
 } from '@/features/supplier-payables/hooks/queries'
 import type {
@@ -47,6 +50,10 @@ vi.mock('@/features/supplier-payables/api/requests', () => ({
     ensureSupplierRefundDraft: vi.fn(),
     submitSupplierRefund: vi.fn(),
     forgetSupplierRefundDraft: vi.fn(),
+    fetchPaymentReversal: vi.fn(),
+    ensurePaymentReversalDraft: vi.fn(),
+    submitPaymentReversal: vi.fn(),
+    forgetPaymentReversalDraft: vi.fn(),
 }))
 
 const mockedApi = vi.mocked(payablesApi)
@@ -753,6 +760,116 @@ describe('useSubmitSupplierRefundMutation', () => {
         })
         expect(invalidateSpy).toHaveBeenCalledWith({
             queryKey: ['approval', 'document', 'SupplierRefund', 'srf-1'],
+        })
+    })
+})
+
+const reversalRow = {
+    reversalId: 'pr-1',
+    reversalNo: 'PCZ-1',
+    originalPaymentId: 'sp-1',
+    reasonText: '录入错误',
+    amount: '10.00',
+    occurredAt: '',
+    status: 'draft' as const,
+    statusLabel: '草稿',
+    statusTone: 'neutral' as const,
+    baselineVersion: 1,
+    allowedActions: ['VIEW_DETAIL'] as const,
+    actionBlockers: [],
+}
+
+describe('usePaymentReversalQuery', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('stays disabled and never fetches for a null id', () => {
+        const { result } = renderHookWithProviders(() =>
+            usePaymentReversalQuery(null),
+        )
+        expect(result.current.fetchStatus).toBe('idle')
+        expect(mockedApi.fetchPaymentReversal).not.toHaveBeenCalled()
+    })
+
+    it('fetches the reversal under the reversal key', async () => {
+        mockedApi.fetchPaymentReversal.mockResolvedValue(reversalRow)
+        const client = createFreshQueryClient()
+        const { result } = renderHookWithProviders(
+            () => usePaymentReversalQuery('pr-1'),
+            { queryClient: client },
+        )
+        await waitFor(() => expect(result.current.data).toEqual(reversalRow))
+        expect(mockedApi.fetchPaymentReversal).toHaveBeenCalledWith('pr-1')
+        expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+            ['supplier-payables', 'reversal', 'pr-1'],
+        ])
+    })
+})
+
+describe('useEnsurePaymentReversalDraftMutation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('invalidates reversal detail and approval keys on a succeeded draft', async () => {
+        mockedApi.ensurePaymentReversalDraft.mockResolvedValue({
+            status: 'succeeded',
+            reversal: reversalRow,
+        })
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => useEnsurePaymentReversalDraftMutation(),
+            { queryClient: client },
+        )
+        await result.current.mutateAsync({
+            sourcePaymentId: 'sp-1',
+            reason: '录入错误',
+            idempotencyKey: 'k-pr',
+        })
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'PaymentReversal', 'pr-1'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['supplier-payables', 'reversal', 'pr-1'],
+        })
+    })
+})
+
+describe('useSubmitPaymentReversalMutation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('invalidates payables and approval keys after submit', async () => {
+        mockedApi.submitPaymentReversal.mockResolvedValue({
+            status: 'succeeded',
+            reversal: {
+                ...reversalRow,
+                status: 'in_approval',
+                statusLabel: '审批中',
+                baselineVersion: 2,
+            },
+        })
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => useSubmitPaymentReversalMutation(),
+            { queryClient: client },
+        )
+        await result.current.mutateAsync({
+            reversalId: 'pr-1',
+            expectedVersion: 1,
+            idempotencyKey: 'k-pr-2',
+        })
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['supplier-payables'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'PaymentReversal', 'pr-1'],
         })
     })
 })

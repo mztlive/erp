@@ -34,6 +34,7 @@ function SupplierAccountsFallback() {
  *
  * Invoice 为 NO_APPROVAL：本页进项发票详情/预览/登记不显示审批流程选择或审批动作。
  * SupplierRefund 为 PROCESS_REQUIRED：退款详情/预览/提交走通用审批区。
+ * PaymentReversal 为 PROCESS_REQUIRED：冲正详情/预览/提交走通用审批区。
  */
 export default function Page() {
     return (

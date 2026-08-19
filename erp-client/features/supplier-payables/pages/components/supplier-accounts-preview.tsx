@@ -20,11 +20,14 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { PaymentReversalDetailBody } from "@/features/supplier-payables/components/payment-reversal-detail-body"
 import { SupplierPaymentDetailBody } from "@/features/supplier-payables/components/supplier-payment-detail-body"
 import { SupplierRefundDetailBody } from "@/features/supplier-payables/components/supplier-refund-detail-body"
+import { isUnsubmittedPaymentReversalStatus } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import { isUnsubmittedSupplierRefundStatus } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import type {
     PayableDetailView,
+    PaymentReversalRow,
     PaymentRow,
     SessionState,
     SupplierRefundRow,
@@ -34,10 +37,13 @@ export interface SupplierAccountsPreviewProps {
     previewPayableId: string | null
     previewPaymentId: string | null
     previewRefundId: string | null
+    previewReversalId: string | null
     detailQuery: UseQueryResult<PayableDetailView | null, Error>
     paymentQuery: UseQueryResult<PaymentRow | null, Error>
     refundQuery: UseQueryResult<SupplierRefundRow | null, Error>
+    reversalQuery: UseQueryResult<PaymentReversalRow | null, Error>
     onRequestRefundSubmit?: () => void
+    onRequestReversalSubmit?: () => void
     returnTo: string | undefined
     fromWorkspace: string | undefined
     onClose: () => void
@@ -49,16 +55,19 @@ export interface SupplierAccountsPreviewProps {
 }
 
 /**
- * 供应商往来详情抽屉。付款与供应商退款嵌入通用审批区；应付预览不展示审批。
+ * 供应商往来详情抽屉。付款、退款与付款冲正嵌入通用审批区；应付预览不展示审批。
  */
 export function SupplierAccountsPreview({
     previewPayableId,
     previewPaymentId,
     previewRefundId,
+    previewReversalId,
     detailQuery,
     paymentQuery,
     refundQuery,
+    reversalQuery,
     onRequestRefundSubmit,
+    onRequestReversalSubmit,
     returnTo,
     fromWorkspace,
     onClose,
@@ -68,6 +77,72 @@ export function SupplierAccountsPreview({
     workItemAllowedActions,
     onDecisionApplied,
 }: SupplierAccountsPreviewProps) {
+    if (previewReversalId) {
+        const canSubmitDraft =
+            Boolean(reversalQuery.data) &&
+            isUnsubmittedPaymentReversalStatus(reversalQuery.data?.status) &&
+            Boolean(
+                reversalQuery.data?.approval?.allowedActions.includes(
+                    "SUBMIT",
+                ),
+            ) &&
+            Boolean(onRequestReversalSubmit)
+        return (
+            <QuickPreviewSheet
+                open
+                onOpenChange={(open) => {
+                    if (!open) onClose()
+                }}
+                size="detail"
+                title={reversalQuery.data?.reversalNo ?? "冲正详情"}
+                description="冲正事实与审批区只读服务端投影"
+                footer={
+                    canSubmitDraft ? (
+                        <Button
+                            type="button"
+                            onClick={onRequestReversalSubmit}
+                        >
+                            提交审批
+                        </Button>
+                    ) : null
+                }
+            >
+                {reversalQuery.isPending ? (
+                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                ) : reversalQuery.data ? (
+                    <PaymentReversalDetailBody
+                        row={reversalQuery.data}
+                        workItemId={workItemId}
+                        expectedTaskVersion={expectedTaskVersion}
+                        workItemAllowedActions={workItemAllowedActions}
+                        onDecisionApplied={onDecisionApplied}
+                    />
+                ) : reversalQuery.isError ? (
+                    <div className="space-y-3 p-6">
+                        <p className="text-sm text-muted-foreground">
+                            {getErrorMessage(
+                                reversalQuery.error,
+                                "冲正详情加载失败，请重试。",
+                            )}
+                        </p>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void reversalQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    </div>
+                ) : (
+                    <p className="p-6 text-sm text-muted-foreground">
+                        未找到冲正详情
+                    </p>
+                )}
+            </QuickPreviewSheet>
+        )
+    }
+
     if (previewRefundId) {
         const canSubmitDraft =
             Boolean(refundQuery.data) &&
