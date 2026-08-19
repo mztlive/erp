@@ -12,7 +12,7 @@
 //! 集合名常量统一从 `SupplierExt` 关联常量导入（唯一权威来源）；筛选/行类型
 //! 定义在本文件，经 `SupplierExt` 的关联类型对外暴露。
 
-use entities::ids::{PartyId, SupplierAccountId, SupplierCapabilityId, SupplierQualificationId};
+use entities::ids::{PartyId, SupplierAccountId, SupplierQualificationId};
 use entities::supplier::{
     CapabilityCode, CapabilityStatus, QualificationStatus, QualificationType, SupplierAccount,
     SupplierAccountStatus, SupplierCapability, SupplierCommercialProfileRevision, SupplierProfileCommand,
@@ -198,26 +198,6 @@ impl<'a> Repository<'a, SupplierAccount> {
         })
     }
 
-    /// 按供应商编号查找供应商角色（编号全局唯一，由 `uk_supplier_accounts_supplier_no`
-    /// 保证）。
-    ///
-    /// # 参数
-    /// * `supplier_no` - 供应商编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除供应商角色；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_supplier_no(
-        &self,
-        supplier_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierAccount>> {
-        self.find_one(doc! { "supplier_no": supplier_no }, executor).await
-    }
-
     /// 按共用企业主体查找供应商角色（一个主体至多一个供应商角色，由
     /// `uk_supplier_accounts_party` 保证）。
     ///
@@ -238,31 +218,6 @@ impl<'a> Repository<'a, SupplierAccount> {
         self.find_one(doc! { "party_id": party_id.to_string() }, executor)
             .await
     }
-}
-
-/// 商务结算版本列表投影行。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SupplierCommercialProfileRow {
-    /// 实体主键。
-    pub id: String,
-    /// 供应商角色 ID。
-    pub supplier_id: SupplierAccountId,
-    /// 商务版本号。
-    pub revision_no: u32,
-    /// 结算方式。
-    pub settlement_mode: String,
-    /// 对账周期。
-    pub reconciliation_cycle: String,
-    /// 付款条件快照。
-    pub payment_term_snapshot: String,
-    /// 发票类型。
-    pub invoice_type: String,
-    /// 变更原因。
-    pub change_reason: String,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
 }
 
 /// 商务结算版本列表筛选条件。
@@ -306,78 +261,6 @@ impl Pagination for SupplierCommercialProfileFilter {
 }
 
 impl<'a> Repository<'a, SupplierCommercialProfileRevision> {
-    /// 分页检索商务结算版本列表（投影查询，§6.2 历史查询）。
-    ///
-    /// 只返回 [`SupplierCommercialProfileRow`] 所需的列表字段；排序字段经仓储
-    /// 白名单校验（`created_at`/`revision_no`），非法字段回落默认 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_commercial_profiles(
-        &self,
-        filter: &SupplierCommercialProfileFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierCommercialProfileRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["created_at", "revision_no"],
-            ))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(commercial_profile_projection())
-            .build();
-        let collection = self
-            .collection()
-            .clone_with_type::<SupplierCommercialProfileRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
-    }
-
-    /// 按「供应商 + 修订序号」查找商务结算版本。
-    ///
-    /// 唯一性由 `uk_supplier_commercial_profile_revisions_supplier_revision`
-    /// 唯一索引保证；本方法用于版本定位与历史查询。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `revision_no` - 修订序号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的版本；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_supplier_and_revision(
-        &self,
-        supplier_id: &SupplierAccountId,
-        revision_no: u32,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierCommercialProfileRevision>> {
-        self.find_one(
-            doc! {
-                "supplier_id": supplier_id.to_string(),
-                "revision_no": revision_no as i32,
-            },
-            executor,
-        )
-        .await
-    }
-
     /// 检索某供应商的商务版本历史（按 `revision_no` 升序，§6.2 历史查询）。
     ///
     /// # 参数
@@ -401,35 +284,6 @@ impl<'a> Repository<'a, SupplierCommercialProfileRevision> {
         )
         .await
     }
-}
-
-/// 供应商能力列表投影行。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SupplierCapabilityRow {
-    /// 实体主键。
-    pub id: String,
-    /// 供应商角色 ID。
-    pub supplier_id: SupplierAccountId,
-    /// 能力代码。
-    pub capability_code: CapabilityCode,
-    /// 服务区域。
-    pub service_region: Option<String>,
-    /// 负责人。
-    pub owner_user_id: String,
-    /// 履约说明。
-    pub fulfillment_note: Option<String>,
-    /// 生效开始日期。
-    pub valid_from: String,
-    /// 生效结束日期。
-    pub valid_to: Option<String>,
-    /// 启停状态。
-    pub status: CapabilityStatus,
-    /// 当前能力修订。
-    pub current_revision_id: Option<String>,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
 }
 
 /// 供应商能力列表筛选条件。
@@ -482,45 +336,6 @@ impl Pagination for SupplierCapabilityFilter {
 }
 
 impl<'a> Repository<'a, SupplierCapability> {
-    /// 分页检索供应商能力列表（投影查询）。
-    ///
-    /// 排序字段经仓储白名单校验（`created_at`/`capability_code`/`valid_to`），
-    /// 非法字段回落默认 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_capabilities(
-        &self,
-        filter: &SupplierCapabilityFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierCapabilityRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["created_at", "capability_code", "valid_to"],
-            ))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(supplier_capability_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<SupplierCapabilityRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
-    }
-
     /// 按「供应商 + 能力代码」查找能力（唯一性由
     /// `uk_supplier_capabilities_supplier_code` 保证）。
     ///
@@ -614,33 +429,6 @@ impl<'a> Repository<'a, SupplierCapability> {
     }
 }
 
-/// 供应商资质列表投影行。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SupplierQualificationRow {
-    /// 实体主键。
-    pub id: String,
-    /// 供应商角色 ID。
-    pub supplier_id: SupplierAccountId,
-    /// 资质类型。
-    pub qualification_type: QualificationType,
-    /// 证书编号。
-    pub certificate_no: String,
-    /// 发证机构。
-    pub issuer: Option<String>,
-    /// 生效开始日期。
-    pub valid_from: String,
-    /// 生效结束日期。
-    pub valid_to: Option<String>,
-    /// 资质附件 ID。
-    pub attachment_id: Option<String>,
-    /// 资质状态。
-    pub status: QualificationStatus,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-}
-
 /// 供应商资质列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SupplierQualificationFilter {
@@ -691,45 +479,6 @@ impl Pagination for SupplierQualificationFilter {
 }
 
 impl<'a> Repository<'a, SupplierQualification> {
-    /// 分页检索供应商资质列表（投影查询）。
-    ///
-    /// 排序字段经仓储白名单校验（`created_at`/`valid_to`/`status`），非法
-    /// 字段回落默认 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_supplier_qualifications(
-        &self,
-        filter: &SupplierQualificationFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierQualificationRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["created_at", "valid_to", "status"],
-            ))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(supplier_qualification_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<SupplierQualificationRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
-    }
-
     /// 检索资质的到期预警列表（§6.2：`valid_to + status` 到期预警索引），
     /// 按 `valid_to` 升序。
     ///
@@ -875,19 +624,6 @@ impl<'a> Repository<'a, SupplierQualificationCapability> {
         }
         let ids: Vec<String> = qualification_ids.iter().map(ToString::to_string).collect();
         self.find_many(doc! { "qualification_id": { "$in": ids } }, executor)
-            .await
-    }
-
-    /// 读取一项能力关联的全部资质关系。
-    ///
-    /// # Errors
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_by_capability_id(
-        &self,
-        capability_id: &SupplierCapabilityId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierQualificationCapability>> {
-        self.find_many(doc! { "capability_id": capability_id.to_string() }, executor)
             .await
     }
 }
@@ -1069,66 +805,6 @@ fn supplier_account_projection() -> Document {
         "supplier_no": 1,
         "default_payment_term_id": 1,
         "current_commercial_profile_revision_id": 1,
-        "status": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
-/// 商务结算版本列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn commercial_profile_projection() -> Document {
-    doc! {
-        "id": 1,
-        "supplier_id": 1,
-        "revision_no": 1,
-        "settlement_mode": 1,
-        "reconciliation_cycle": 1,
-        "payment_term_snapshot": 1,
-        "invoice_type": 1,
-        "change_reason": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
-/// 供应商能力列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn supplier_capability_projection() -> Document {
-    doc! {
-        "id": 1,
-        "supplier_id": 1,
-        "capability_code": 1,
-        "service_region": 1,
-        "owner_user_id": 1,
-        "fulfillment_note": 1,
-        "valid_from": 1,
-        "valid_to": 1,
-        "status": 1,
-        "current_revision_id": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
-/// 供应商资质列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn supplier_qualification_projection() -> Document {
-    doc! {
-        "id": 1,
-        "supplier_id": 1,
-        "qualification_type": 1,
-        "certificate_no": 1,
-        "issuer": 1,
-        "valid_from": 1,
-        "valid_to": 1,
-        "attachment_id": 1,
         "status": 1,
         "version": 1,
         "created_at": 1,

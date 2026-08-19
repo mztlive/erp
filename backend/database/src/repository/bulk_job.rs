@@ -160,30 +160,6 @@ pub struct BulkSelectionItemRow {
 }
 
 impl<'a> Repository<'a, BulkSelectionItem> {
-    /// 按快照批量取回全部冻结目标（`$in` 前缀命中唯一索引，无 N+1）。
-    ///
-    /// # 参数
-    /// * `snapshot_id` - 选择快照 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按创建时间升序排列的冻结目标。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_snapshot(
-        &self,
-        snapshot_id: &BulkSelectionSnapshotId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<BulkSelectionItem>> {
-        self.find_many_sorted(
-            doc! { "selection_snapshot_id": snapshot_id.to_string() },
-            doc! { "created_at": 1 },
-            executor,
-        )
-        .await
-    }
-
     /// 分页检索快照逐项结果（投影查询）。
     ///
     /// 只返回 [`BulkSelectionItemRow`] 所需的逐项字段，不加载整文档；
@@ -418,30 +394,6 @@ pub struct BackgroundJobItemRow {
 }
 
 impl<'a> Repository<'a, BackgroundJobItem> {
-    /// 按任务批量取回全部逐项结果（`$in` 前缀命中唯一索引，无 N+1）。
-    ///
-    /// # 参数
-    /// * `job_id` - 后台任务 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按逐项序号升序排列的结果行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_job(
-        &self,
-        job_id: &BackgroundJobId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<BackgroundJobItem>> {
-        self.find_many_sorted(
-            doc! { "background_job_id": job_id.to_string() },
-            doc! { "item_no": 1 },
-            executor,
-        )
-        .await
-    }
-
     /// 分页检索任务逐项结果（投影查询）。
     ///
     /// 只返回 [`BackgroundJobItemRow`] 所需的逐项字段，不加载整文档；

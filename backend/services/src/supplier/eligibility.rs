@@ -6,10 +6,10 @@
 use database::{NoTransaction, SupplierExt};
 use entities::{
     common::time::BusinessDate,
-    ids::{SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId},
-    supplier::{CapabilityStatus, SupplierCapabilityRevision, SupplierQualification},
+    ids::{SupplierAccountId, SupplierCapabilityRevisionId},
+    supplier::{CapabilityStatus, SupplierCapabilityRevision},
 };
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 
 use crate::errors::{Error, Result};
 
@@ -73,39 +73,4 @@ async fn load_capability_revision(
         .find_by_id(revision_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("供应商能力版本不存在".to_string()))
-}
-
-/// 校验能力至少关联一份业务日有效的资质。
-///
-/// 注意：当前被人为刻意临时关闭（见 `ensure_capability_qualified` 调用处），
-/// 代码保留以供恢复。
-#[allow(dead_code)]
-async fn ensure_linked_qualification(
-    db: &Database,
-    capability_id: &str,
-    on_date: BusinessDate,
-) -> Result<()> {
-    let links = db
-        .supplier_qualification_capabilities()
-        .list_by_capability_id(&SupplierCapabilityId::new(capability_id), &mut NoTransaction)
-        .await?;
-    let ids: Vec<String> = links
-        .iter()
-        .map(|link| link.qualification_id.to_string())
-        .collect();
-    let qualifications: Vec<SupplierQualification> = db
-        .supplier_qualifications()
-        .find_many(doc! { "id": { "$in": ids } }, &mut NoTransaction)
-        .await?;
-    for qualification in qualifications {
-        if qualification.is_valid()
-            && qualification.valid_from <= on_date
-            && qualification.valid_to.is_none_or(|end| on_date <= end)
-        {
-            return Ok(());
-        }
-    }
-    Err(Error::BusinessLogicError(
-        "供应商该项能力没有适用且有效的资质，不能用于供给或采购".to_string(),
-    ))
 }

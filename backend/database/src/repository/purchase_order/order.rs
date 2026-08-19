@@ -1,6 +1,6 @@
 //! `purchase_order` 采购主表仓储：列表投影查询与按采购单号身份查询。
 
-use entities::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
+use entities::ids::{SalesOrderId, SupplierAccountId};
 use entities::purchase_order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
 };
@@ -142,51 +142,6 @@ impl<'a> Repository<'a, PurchaseOrder> {
             items,
             total: total as i64,
         })
-    }
-
-    /// 按采购单号查找唯一采购单（身份查询）。
-    ///
-    /// 唯一性由 `uk_purchase_orders_purchase_no` 唯一索引保证；本方法用于
-    /// 单号查重与详情取回，服务层不得做「先查后插」的重复性判断。
-    ///
-    /// # 参数
-    /// * `purchase_no` - 采购单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除采购单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_purchase_no(
-        &self,
-        purchase_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<PurchaseOrder>> {
-        self.find_one(doc! { "purchase_no": purchase_no }, executor).await
-    }
-
-    /// 批量取回指定采购单（`$in`，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `ids` - 采购单 ID 集合（空集合直接返回空结果）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除采购单集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_ids(
-        &self,
-        ids: &[PurchaseOrderId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<PurchaseOrder>> {
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let filter = super::common::in_filter("id", ids.iter().map(|id| id.to_string()));
-        self.find_many(filter, executor).await
     }
 }
 

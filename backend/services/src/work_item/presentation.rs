@@ -92,53 +92,6 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     .to_string()
 }
 
-/// 用销售单号生成采购确认任务的对象标题。
-///
-/// # 参数
-/// * `order_no` - 销售单号；空则只返回「销售单」
-///
-/// # 返回
-/// 返回 `销售单 {单号}`，不重复任务类型名。
-///
-/// # 错误
-/// 无。
-#[allow(dead_code)]
-pub(crate) fn sales_order_object_label(order_no: &str) -> String {
-    let order_no = order_no.trim();
-    if order_no.is_empty() {
-        return "销售单".to_string();
-    }
-    format!("销售单 {order_no}")
-}
-
-/// 用行数和含税金额生成采购确认的业务影响。
-///
-/// # 参数
-/// * `line_count` - 销售提交行数；未知时为 `None`
-/// * `gross_amount` - 提交含税金额；未知时为 `None`
-///
-/// # 返回
-/// 返回「不确认则导入范围不能落地」，有规模时追加行数和金额。
-///
-/// # 错误
-/// 无。
-#[allow(dead_code)]
-pub(crate) fn procurement_impact_summary(line_count: Option<usize>, gross_amount: Option<&Amount>) -> String {
-    let mut summary = default_impact_summary(WorkItemType::ImportBusinessConfirmation).to_string();
-    let mut scale = Vec::new();
-    if let Some(count) = line_count.filter(|count| *count > 0) {
-        scale.push(format!("{count} 行"));
-    }
-    if let Some(amount) = gross_amount {
-        scale.push(format_yuan(amount));
-    }
-    if !scale.is_empty() {
-        summary.push_str(" · ");
-        summary.push_str(&scale.join(" / "));
-    }
-    summary
-}
-
 /// 用行数、含税金额和先款门禁生成采购财务审核的业务影响。
 ///
 /// # 参数
@@ -384,22 +337,6 @@ mod tests {
                 WorkItemType::PurchaseOrderReview
             ),
             "不审核则不能形成应付、不能付款"
-        );
-    }
-
-    #[test]
-    fn procurement_display_uses_order_identity_and_scale() {
-        assert_eq!(sales_order_object_label(" SO-12 "), "销售单 SO-12");
-        assert_eq!(sales_order_object_label("  "), "销售单");
-        let amount = "12800".parse::<Amount>().expect("测试金额必须合法");
-        assert_eq!(
-            procurement_impact_summary(Some(3), Some(&amount)),
-            "不确认则导入范围不能落地 · 3 行 / ¥12,800"
-        );
-        assert_eq!(procurement_impact_summary(None, None), "不确认则导入范围不能落地");
-        assert_eq!(
-            purchase_review_impact_summary(Some(3), Some(&amount), true),
-            "不审核则不能形成应付、不能付款 · 3 行 / ¥12,800 · 先款后货"
         );
     }
 

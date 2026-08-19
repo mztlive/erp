@@ -710,16 +710,7 @@ pub enum PurchaseOrderReviewDecisionResult {
     Rejected,
 }
 
-impl PurchaseOrderReviewDecisionResult {
-    /// 返回稳定协议代码。
-    #[allow(dead_code)]
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Approved => "APPROVED",
-            Self::Rejected => "REJECTED",
-        }
-    }
-}
+impl PurchaseOrderReviewDecisionResult {}
 
 /// W08 财务审核的完整领域决定。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -746,24 +737,7 @@ pub struct PurchaseOrderReviewDecisionCommand {
     pub comment: Option<String>,
 }
 
-impl PurchaseOrderReviewDecisionCommand {
-    /// 校验审核结论分支专属字段。
-    #[allow(dead_code)]
-    pub(crate) fn validate_branch(&self) -> Result<()> {
-        match (self.review_result, self.reason_code.as_deref()) {
-            (PurchaseOrderReviewDecisionResult::Approved, None) => Ok(()),
-            (PurchaseOrderReviewDecisionResult::Approved, Some(_)) => {
-                Err(Error::ValidationError("审核通过分支不得携带驳回原因".to_string()))
-            }
-            (PurchaseOrderReviewDecisionResult::Rejected, Some(reason)) if !reason.trim().is_empty() => {
-                Ok(())
-            }
-            (PurchaseOrderReviewDecisionResult::Rejected, _) => Err(Error::ValidationError(
-                "审核驳回分支必须携带结构化原因代码".to_string(),
-            )),
-        }
-    }
-}
+impl PurchaseOrderReviewDecisionCommand {}
 
 /// W08 唯一采购财务审核命令。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -953,10 +927,7 @@ pub struct PurchaseChangeOrderView {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_sort, PurchaseOrderListParams, PurchaseOrderReviewDecisionResult,
-        ReviewPurchaseOrderCommand, SortDir,
-    };
+    use super::{normalize_sort, PurchaseOrderListParams, SortDir};
     use entities::purchase_order::PurchaseOrderStatus;
     use serde_json::json;
     use validator::Validate;
@@ -1029,75 +1000,5 @@ mod tests {
         }))
         .unwrap();
         assert!(request.validate().is_err());
-    }
-
-    #[test]
-    fn review_command_accepts_only_nested_decision_wire() {
-        let command: ReviewPurchaseOrderCommand = serde_json::from_value(json!({
-            "work_item_id": "wi-1",
-            "expected_task_version": "2",
-            "expected_subject_version": "submission-1",
-            "decision": {
-                "purchase_order_id": "po-1",
-                "submission_id": "submission-1",
-                "expected_purchase_order_lock_version": 3,
-                "review_result": "REJECTED",
-                "reason_code": "COST_TAX"
-            },
-            "idempotency_key": "idem-1"
-        }))
-        .unwrap();
-
-        assert_eq!(
-            command.decision.review_result,
-            PurchaseOrderReviewDecisionResult::Rejected
-        );
-        assert!(command.validate().is_ok());
-        assert!(command.decision.validate_branch().is_ok());
-
-        let legacy = json!({
-            "submission_id": "submission-1",
-            "work_item_id": "wi-1",
-            "expected_task_version": 2,
-            "expected_subject_version": "submission-1",
-            "expected_lock_version": 3,
-            "reason_code": "COST_TAX",
-            "idempotency_key": "idem-1"
-        });
-        assert!(serde_json::from_value::<ReviewPurchaseOrderCommand>(legacy).is_err());
-    }
-
-    #[test]
-    fn review_decision_rejects_branch_field_drift() {
-        let approved_with_reason: ReviewPurchaseOrderCommand = serde_json::from_value(json!({
-            "work_item_id": "wi-1",
-            "expected_task_version": "2",
-            "expected_subject_version": "submission-1",
-            "decision": {
-                "purchase_order_id": "po-1",
-                "submission_id": "submission-1",
-                "expected_purchase_order_lock_version": 3,
-                "review_result": "APPROVED",
-                "reason_code": "OTHER"
-            },
-            "idempotency_key": "idem-1"
-        }))
-        .unwrap();
-        assert!(approved_with_reason.decision.validate_branch().is_err());
-
-        let rejected_without_reason: ReviewPurchaseOrderCommand = serde_json::from_value(json!({
-            "work_item_id": "wi-1",
-            "expected_task_version": "2",
-            "expected_subject_version": "submission-1",
-            "decision": {
-                "purchase_order_id": "po-1",
-                "submission_id": "submission-1",
-                "expected_purchase_order_lock_version": 3,
-                "review_result": "REJECTED"
-            },
-            "idempotency_key": "idem-2"
-        }))
-        .unwrap();
-        assert!(rejected_without_reason.decision.validate_branch().is_err());
     }
 }

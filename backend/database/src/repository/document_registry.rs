@@ -16,19 +16,12 @@ use entities::document_registry::{
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
-use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use super::bpm::{assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome};
-use super::extensions::DocumentRegistryExt;
 use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Error, Result};
-
-/// `business_document` 集合名（单一来源：`DocumentRegistryExt` 关联常量）。
-const BUSINESS_DOCUMENTS: &str = <mongodb::Database as DocumentRegistryExt>::BUSINESS_DOCUMENTS;
-/// `workflow_action` 集合名（单一来源：`DocumentRegistryExt` 关联常量）。
-const WORKFLOW_ACTIONS: &str = <mongodb::Database as DocumentRegistryExt>::WORKFLOW_ACTIONS;
 
 /// 单据注册列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -132,37 +125,6 @@ impl<'a> Repository<'a, BusinessDocument> {
             }
             Err(error) => Err(error),
         }
-    }
-
-    /// 按「单据类型 + 单据编号」查找注册行。
-    ///
-    /// 查询覆盖 `uk_business_documents_identity` 唯一索引前缀；服务层不得
-    /// 用「先查后插」做重复性判断，唯一约束由索引承担。
-    ///
-    /// # 参数
-    /// * `document_type` - 强类型业务表类型
-    /// * `document_no` - 全局可查询业务编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除注册行；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_type_and_no(
-        &self,
-        document_type: DocumentType,
-        document_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<BusinessDocument>> {
-        self.find_one(
-            doc! {
-                "document_type": document_type.as_str(),
-                "document_no": document_no,
-            },
-            executor,
-        )
-        .await
     }
 
     /// 以 `id + document_no 为空 + expected_version` 一次性赋值正式编号。
@@ -288,36 +250,6 @@ impl<'a> Repository<'a, DocumentRelation> {
 }
 
 impl<'a> Repository<'a, DocumentParticipant> {
-    /// 按「单据 + 参与人」查询参与记录（客户历史查看权依据，§4.6）。
-    ///
-    /// 参与记录只追加不删除；本方法供查看权校验使用。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    /// * `user_id` - 参与人用户 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除参与记录；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_document_and_user(
-        &self,
-        document_id: &BusinessDocumentId,
-        user_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<DocumentParticipant>> {
-        self.find_one(
-            doc! {
-                "document_id": document_id.to_string(),
-                "participant_user_id": user_id,
-            },
-            executor,
-        )
-        .await
-    }
-
     /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
     ///
     /// # 参数
@@ -469,64 +401,6 @@ impl<'a> Repository<'a, WorkflowAction> {
             executor,
         )
         .await
-    }
-}
-
-/// D02 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
-///
-/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口，由 `DocumentRegistryExt::document_registry()` 访问。
-pub struct DocumentRegistryRepository<'a> {
-    db: &'a Database,
-}
-
-impl<'a> DocumentRegistryRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    pub fn new(db: &'a Database) -> Self {
-        Self { db }
-    }
-
-    /// 注册单据并追加首个工作流动作（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `business_documents` 与 `workflow_actions`，保证「注册行 + 首个
-    /// 动作」原子可见（数据模型 §6.1）。**必须收到事务执行器**：本方法不构成
-    /// 原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，第二笔失败会留下
-    /// 只有注册没有动作的半成品；Service 必须通过
-    /// `database::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `doc` - 待注册的业务单据
-    /// * `action` - 待追加的工作流动作
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
-    pub async fn create_document_with_action(
-        &self,
-        doc: &BusinessDocument,
-        action: &WorkflowAction,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        mongo_ops::insert_one(
-            &self.db.collection::<BusinessDocument>(BUSINESS_DOCUMENTS),
-            doc,
-            executor,
-        )
-        .await?;
-        mongo_ops::insert_one(
-            &self.db.collection::<WorkflowAction>(WORKFLOW_ACTIONS),
-            action,
-            executor,
-        )
-        .await?;
-        Ok(())
     }
 }
 

@@ -8,7 +8,7 @@
 use entities::file_asset::{DocumentAttachment, FileAsset};
 use mongodb::Database;
 
-use super::super::file_asset::{FileAssetFilter, FileAssetRepository};
+use super::super::file_asset::FileAssetFilter;
 use crate::Repository;
 
 /// 域 D05 仓储访问器。
@@ -32,12 +32,6 @@ pub trait FileAssetExt {
     /// # 返回
     /// 返回 `Repository<'_, entities::file_asset::DocumentAttachment>`。
     fn document_attachments(&self) -> Repository<'_, DocumentAttachment>;
-
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 返回
-    /// 返回 `FileAssetRepository` 实例。
-    fn file_asset(&self) -> FileAssetRepository<'_>;
 }
 
 impl FileAssetExt for Database {
@@ -49,9 +43,5 @@ impl FileAssetExt for Database {
 
     fn document_attachments(&self) -> Repository<'_, DocumentAttachment> {
         Repository::new(self, Self::DOCUMENT_ATTACHMENTS)
-    }
-
-    fn file_asset(&self) -> FileAssetRepository<'_> {
-        FileAssetRepository::new(self)
     }
 }

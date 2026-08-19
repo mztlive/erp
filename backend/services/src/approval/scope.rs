@@ -1,6 +1,6 @@
 //! 阻塞审批管理接口的数据范围解析，以及定义管理的类型级可见范围。
 
-use database::{AccessControlExt, Executor, MongoCasbinAdapter, NoTransaction};
+use database::{AccessControlExt, MongoCasbinAdapter, NoTransaction};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, DataScopeType},
     document_registry::DocumentType,
@@ -316,84 +316,6 @@ pub fn approval_recovery_authorization_scope(
         ApprovalManagementScope::Company,
         ApprovalManagementScope::Organizations,
     )
-}
-
-/// 在恢复事务快照内重新证明账号、角色、权限策略版本与组织范围。
-#[allow(dead_code)]
-pub(crate) async fn ensure_recovery_authorization(
-    db: &Database,
-    authorization: &ApprovalRecoveryAuthorization,
-    actor_id: &str,
-    owner_organization_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    if authorization.granting_role_ids.is_empty()
-        || !approval_recovery_authorization_scope(authorization).covers(owner_organization_id)
-    {
-        return Err(Error::Forbidden("审批恢复授权范围不覆盖当前实例".to_string()));
-    }
-    db.accounts()
-        .find_by_id(actor_id, executor)
-        .await?
-        .filter(|account| account.kind == authorization.actor_kind && account.can_login())
-        .ok_or_else(|| Error::Forbidden("恢复账号不存在、已停用或身份已变化".to_string()))?;
-
-    let adapter = MongoCasbinAdapter::new(db.clone());
-    let revision = adapter.policy_revision(executor).await?;
-    if revision != authorization.policy_revision {
-        return Err(Error::Forbidden(
-            "审批恢复授权策略已变化，请刷新后重试".to_string(),
-        ));
-    }
-    let assigned_roles = adapter
-        .subject_roles(&subject(authorization.actor_kind, actor_id), executor)
-        .await?;
-    let user_scopes = db
-        .data_scopes()
-        .list_by_subject(DataScopeSubjectType::User, actor_id, executor)
-        .await?;
-    let mut currently_covered = false;
-    for role_id in &authorization.granting_role_ids {
-        if !assigned_roles
-            .iter()
-            .any(|role| role == &format!("role:{role_id}"))
-        {
-            return Err(Error::Forbidden(
-                "审批恢复角色绑定已变化，请刷新后重试".to_string(),
-            ));
-        }
-        db.roles()
-            .find_by_id(role_id, executor)
-            .await?
-            .filter(|role| !role.disabled)
-            .ok_or_else(|| Error::Forbidden("审批恢复角色已停用或不存在".to_string()))?;
-        let role_scopes = db
-            .data_scopes()
-            .list_by_subject(DataScopeSubjectType::Role, role_id, executor)
-            .await?;
-        let Some(role) = organization_coverage(&role_scopes, false) else {
-            continue;
-        };
-        let Some(user) = organization_coverage(&user_scopes, true) else {
-            continue;
-        };
-        currently_covered |= match intersect_coverage(role, user) {
-            OrganizationCoverage::All => true,
-            OrganizationCoverage::Targets(targets) => {
-                targets.iter().any(|target| target == owner_organization_id)
-            }
-        };
-    }
-    if !currently_covered {
-        return Err(Error::Forbidden("审批恢复数据范围已不覆盖当前实例".to_string()));
-    }
-    let final_revision = adapter.policy_revision(executor).await?;
-    if final_revision != authorization.policy_revision {
-        return Err(Error::Forbidden(
-            "审批恢复授权策略已变化，请刷新后重试".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

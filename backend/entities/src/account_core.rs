@@ -121,18 +121,6 @@ impl AccountStatus {
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
-
-    /// 返回状态在数据库中的字符串值。
-    ///
-    /// # 返回值
-    /// 返回用于持久化的状态值。
-    pub fn as_db_value(&self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Suspended => "suspended",
-            Self::Archived => "archived",
-        }
-    }
 }
 
 /// 统一账号创建数据。

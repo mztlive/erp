@@ -334,17 +334,6 @@ impl ApprovalExecutionEndReason {
             Self::AssigneeRecovered => "ASSIGNEE_RECOVERED",
         }
     }
-
-    /// 返回该结束原因对应的新执行来源。
-    ///
-    /// # 返回
-    /// 改派对应 `ADMIN_REASSIGN`，恢复对应 `ASSIGNEE_RECOVERY`。
-    pub fn next_execution_source(self) -> ApprovalExecutionAssignmentSource {
-        match self {
-            Self::AdminReassigned => ApprovalExecutionAssignmentSource::AdminReassign,
-            Self::AssigneeRecovered => ApprovalExecutionAssignmentSource::AssigneeRecovery,
-        }
-    }
 }
 
 /// 结构化阻塞原因。

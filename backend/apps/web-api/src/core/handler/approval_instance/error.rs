@@ -6,7 +6,6 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -403,20 +402,6 @@ fn map_known_message(message: &str) -> Option<&'static str> {
         return Some("APPROVAL_DEFINITION_INVALID");
     }
     None
-}
-
-/// 409 回读中允许出现的安全版本字段。
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct ApprovalConflictVersions {
-    /// 调用者可见的最新实例版本。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub latest_instance_version: Option<String>,
-    /// 调用者可见的最新任务版本。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub latest_task_version: Option<String>,
-    /// 调用者可见的最新定义锁版本。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub latest_definition_lock_version: Option<String>,
 }
 
 #[cfg(test)]

@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use entities::catalog::sku_attribute::AttributeValueType;
 use entities::catalog::{EnableStatus, SkuAttribute, SkuAttributeValue};
-use entities::ids::SkuAttributeId;
 
 use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
@@ -233,32 +232,6 @@ impl<'a> Repository<'a, SkuAttributeValue> {
             items,
             total: total as i64,
         })
-    }
-
-    /// 批量查询一组规格属性下的全部属性值（`$in`，一次取回）。
-    ///
-    /// 用于字典下拉与跨属性取值组装，避免逐属性 N+1。
-    ///
-    /// # 参数
-    /// * `attribute_ids` - 规格属性 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除属性值实体集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_attribute_ids(
-        &self,
-        attribute_ids: &[SkuAttributeId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SkuAttributeValue>> {
-        if attribute_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids: Vec<String> = attribute_ids.iter().map(|id| id.to_string()).collect();
-        self.find_many(doc! { "attribute_id": { "$in": ids } }, executor)
-            .await
     }
 }
 

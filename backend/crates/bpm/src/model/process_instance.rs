@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 use crate::model::types::{
-    base_model_at, persistence_stamp, touch_base, ApprovalBlockerCode, ApprovalProcessInstanceStatus,
-    ModelError, ModelResult,
+    base_model_at, touch_base, ApprovalBlockerCode, ApprovalProcessInstanceStatus, ModelError, ModelResult,
 };
 use crate::model::{ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
@@ -238,14 +237,6 @@ impl ApprovalProcessInstance {
     fn clear_blocker_projection(&mut self) {
         self.blocker_code = None;
         self.blocked_at = None;
-    }
-
-    /// 返回启动时间对应的持久化秒，供测试断言。
-    ///
-    /// # 错误
-    /// 时间为负时返回错误。
-    pub fn started_at_stamp(&self) -> ModelResult<u64> {
-        persistence_stamp(self.started_at)
     }
 }
 

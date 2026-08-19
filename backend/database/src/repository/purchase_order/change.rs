@@ -4,41 +4,15 @@
 //! 引用不可变变更提交。变更提交/明细**不提供软删除方法**；变更单本身是
 //! 可编辑单据草稿（`StableBase`），可软删除与恢复。
 
-use entities::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId};
+use entities::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId};
 use entities::purchase_order::{PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
 use mongodb::bson::doc;
 
-use super::common::{in_filter, sort_doc};
+use super::common::in_filter;
 use crate::executor::Executor;
 use crate::{Repository, Result};
 
-impl<'a> Repository<'a, PurchaseChangeOrder> {
-    /// 取回指定采购单的全部变更单（按创建时间升序）。
-    ///
-    /// 用于采购单详情页展示变更历史；仅单值过滤，不构成批量查询。
-    ///
-    /// # 参数
-    /// * `purchase_order_id` - 原采购单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该采购单的全部未删除变更单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_purchase_order_id(
-        &self,
-        purchase_order_id: &PurchaseOrderId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<PurchaseChangeOrder>> {
-        self.find_many_sorted(
-            doc! { "purchase_order_id": purchase_order_id.to_string() },
-            sort_doc(Some("created_at"), &["created_at"], true),
-            executor,
-        )
-        .await
-    }
-}
+impl<'a> Repository<'a, PurchaseChangeOrder> {}
 
 impl<'a> Repository<'a, PurchaseChangeSubmission> {
     /// 按「变更单 + 提交序号」查找唯一变更提交。

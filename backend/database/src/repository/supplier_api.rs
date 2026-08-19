@@ -151,29 +151,6 @@ impl<'a> Repository<'a, SupplierApiConnection> {
             total: total as i64,
         })
     }
-
-    /// 按稳定连接代码查找未删除连接。
-    ///
-    /// 唯一性由 `uk_supplier_api_connections_connection_code` 唯一索引保证
-    /// （数据模型 §6.14）；本方法用于连接查询与幂等判定。
-    ///
-    /// # 参数
-    /// * `connection_code` - ERP 内稳定连接代码
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除连接；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_connection_code(
-        &self,
-        connection_code: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierApiConnection>> {
-        self.find_one(doc! { "connection_code": connection_code }, executor)
-            .await
-    }
 }
 
 /// 连接能力列表投影行。
@@ -304,30 +281,6 @@ impl<'a> Repository<'a, SupplierApiCapability> {
         )
         .await
     }
-
-    /// 批量查找多个连接的能力声明（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `connection_ids` - 连接 ID 列表；为空时直接返回空列表
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配连接的能力声明集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_capabilities_by_connections(
-        &self,
-        connection_ids: &[SupplierApiConnectionId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SupplierApiCapability>> {
-        if connection_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids: Vec<String> = connection_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "connection_id": { "$in": ids } }, executor)
-            .await
-    }
 }
 
 impl<'a> Repository<'a, BusinessCapabilityConfirmation> {
@@ -374,25 +327,6 @@ impl<'a> Repository<'a, SupplierHealthCheckRun> {
     ) -> Result<Option<SupplierHealthCheckRun>> {
         self.find_one(doc! { "background_job_id": job_id }, executor)
             .await
-    }
-
-    /// 按连接、操作人与幂等摘要查询既有健康任务。
-    pub async fn find_health_run_receipt(
-        &self,
-        connection_id: &SupplierApiConnectionId,
-        requested_by: &str,
-        idempotency_key_hash: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierHealthCheckRun>> {
-        self.find_one(
-            doc! {
-                "connection_id": connection_id.to_string(),
-                "requested_by": requested_by,
-                "idempotency_key_hash": idempotency_key_hash,
-            },
-            executor,
-        )
-        .await
     }
 
     /// 查询连接最近的健康运行记录。
@@ -509,47 +443,6 @@ impl<'a> SupplierApiRepository<'a> {
                 .db
                 .collection::<SupplierApiConnection>(SUPPLIER_API_CONNECTIONS),
             connection,
-            executor,
-        )
-        .await?;
-        mongo_ops::insert_many(
-            &self
-                .db
-                .collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
-            capabilities.to_vec(),
-            executor,
-        )
-        .await?;
-        Ok(())
-    }
-
-    /// 原子替换连接的能力声明（先删后写）。
-    ///
-    /// 先删除该连接的全部能力声明，再写入新清单（数据模型 §6.14
-    /// `(connection_id, capability_code)` 唯一约束由唯一索引保证）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时删除与写入各自自动提交，中途失败会留下能力清单被清空或新旧混杂的
-    /// 中间态；Service 必须通过事务传入执行器。
-    ///
-    /// # 参数
-    /// * `connection_id` - 所属连接
-    /// * `capabilities` - 替换后的能力声明清单
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 错误
-    /// 当新清单与残留数据产生唯一索引冲突（透出
-    /// [`crate::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
-    pub async fn replace_connection_capabilities(
-        &self,
-        connection_id: &SupplierApiConnectionId,
-        capabilities: &[SupplierApiCapability],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        mongo_ops::delete_many(
-            &self
-                .db
-                .collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
-            doc! { "connection_id": connection_id.to_string() },
             executor,
         )
         .await?;

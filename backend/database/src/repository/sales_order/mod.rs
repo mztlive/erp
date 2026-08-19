@@ -28,8 +28,6 @@ use super::extensions::SalesOrderExt;
 
 /// `sales_order` 集合名（单一来源：`SalesOrderExt` 关联常量）。
 const SALES_ORDERS: &str = <mongodb::Database as SalesOrderExt>::SALES_ORDERS;
-/// `sales_order_line` 集合名。
-const SALES_ORDER_LINES: &str = <mongodb::Database as SalesOrderExt>::SALES_ORDER_LINES;
 /// `sales_order_working_copy` 集合名。
 const SALES_ORDER_WORKING_COPIES: &str = <mongodb::Database as SalesOrderExt>::SALES_ORDER_WORKING_COPIES;
 /// `sales_order_submission` 集合名。

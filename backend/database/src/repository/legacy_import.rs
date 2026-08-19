@@ -196,40 +196,6 @@ impl<'a> Repository<'a, LegacyImportBatch> {
         )
         .await
     }
-
-    /// 按「HMAC + 对象集合 + 基准日」查找重复导入预警候选批次。
-    ///
-    /// 数据模型 §6.12：`source_file_hmac + source_object_set + baseline_date`
-    /// 用于重复导入预警；本方法按创建时间倒序返回全部历史候选，
-    /// 预警判定由 Service 完成。
-    ///
-    /// # 参数
-    /// * `source_object_set` - 本批来源对象集合
-    /// * `baseline_date` - 期初业务基准日
-    /// * `source_file_hmac` - 受控临时区计算的 keyed HMAC
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除批次（按创建时间倒序）。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_reimport_warning_candidates(
-        &self,
-        source_object_set: &str,
-        baseline_date: BusinessDate,
-        source_file_hmac: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<LegacyImportBatch>> {
-        let filter = doc! {
-            "source_object_set": source_object_set,
-            "baseline_date": baseline_date.to_string(),
-            "source_file_hmac": source_file_hmac,
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-        };
-        self.find_many_sorted(filter, doc! { "created_at": -1 }, executor)
-            .await
-    }
 }
 
 /// 导入行列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -354,41 +320,6 @@ impl<'a> Repository<'a, LegacyImportRow> {
         })
     }
 
-    /// 按「批次 + 对象类型 + 来源行键」精确查找导入行。
-    ///
-    /// 唯一性由 `uk_legacy_import_rows_batch_identity` 唯一索引保证
-    /// （§6.12：`(batch_id, source_object_type, source_row_key)` 唯一），
-    /// 用于重跑幂等判定，服务层不得做「先查后插」的重复性判断。
-    ///
-    /// # 参数
-    /// * `batch_id` - 所属导入批次
-    /// * `source_object_type` - 来源对象类型
-    /// * `source_row_key` - 批次内来源行身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除导入行；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_row_by_identity(
-        &self,
-        batch_id: &LegacyImportBatchId,
-        source_object_type: &str,
-        source_row_key: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<LegacyImportRow>> {
-        self.find_one(
-            doc! {
-                "batch_id": batch_id.to_string(),
-                "source_object_type": source_object_type,
-                "source_row_key": source_row_key,
-            },
-            executor,
-        )
-        .await
-    }
-
     /// 按批次 ID 批量取回导入行（`$in` 一次取回，避免 N+1）。
     ///
     /// # 参数
@@ -411,33 +342,6 @@ impl<'a> Repository<'a, LegacyImportRow> {
                 "batch_id": { "$in": keys },
             },
             doc! { "created_at": 1 },
-            executor,
-        )
-        .await
-    }
-
-    /// 统计指定批次内的未删除导入行数。
-    ///
-    /// # 参数
-    /// * `batch_id` - 目标批次
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配行数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 统计失败时返回错误。
-    pub async fn count_rows_by_batch(
-        &self,
-        batch_id: &LegacyImportBatchId,
-        executor: &mut dyn Executor,
-    ) -> Result<u64> {
-        mongo_ops::count_documents(
-            &self.collection(),
-            doc! {
-                "batch_id": batch_id.to_string(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
             executor,
         )
         .await

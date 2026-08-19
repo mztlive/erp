@@ -396,33 +396,6 @@ impl<'a> Repository<'a, InboxMessage> {
         .await
     }
 
-    /// 按 ID 批量查找已接收消息（`$in` 一次取回，避免 N+1）。
-    ///
-    /// # 参数
-    /// * `ids` - 消息 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的已接收消息，按 ID 升序。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_messages_by_ids(
-        &self,
-        ids: &[InboxMessageId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<InboxMessage>> {
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let id_values: Vec<String> = ids.iter().map(ToString::to_string).collect();
-        let mut messages = self
-            .find_many(doc! { "id": { "$in": id_values } }, executor)
-            .await?;
-        messages.sort_by(|left, right| left.base.id.cmp(&right.base.id));
-        Ok(messages)
-    }
-
     /// 分页检索已接收消息列表（投影查询）。
     ///
     /// 只返回 [`InboxMessageRow`] 所需的列表字段，不加载整文档
@@ -465,39 +438,6 @@ impl<'a> Repository<'a, InboxMessage> {
 }
 
 impl<'a> Repository<'a, IntegrationErrorTask> {
-    /// 查找消息关联的进行中错误任务（未解决/未关闭）。
-    ///
-    /// 同一消息与错误分类只允许一个进行中任务，由部分唯一索引
-    /// `uk_integration_error_tasks_message_class` 保证（§6.21）；本方法用于
-    /// 重试与转人工前定位既有任务。
-    ///
-    /// # 参数
-    /// * `message_id` - 关联消息 ID
-    /// * `error_class` - 错误分类
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的进行中错误任务；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_active_by_message(
-        &self,
-        message_id: &InboxMessageId,
-        error_class: ErrorClass,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<IntegrationErrorTask>> {
-        self.find_one(
-            doc! {
-                "message_id": message_id.to_string(),
-                "error_class": error_class.as_str(),
-                "status": { "$nin": ["resolved", "closed"] },
-            },
-            executor,
-        )
-        .await
-    }
-
     /// 分页检索错误任务列表（投影查询）。
     ///
     /// 只返回 [`IntegrationErrorTaskRow`] 所需的列表字段，不加载整文档
@@ -539,40 +479,6 @@ impl<'a> Repository<'a, IntegrationErrorTask> {
 }
 
 impl<'a> Repository<'a, ReconciliationDifference> {
-    /// 按唯一键「对象类型 + 对象 ID + 差异分类」查找对账差异。
-    ///
-    /// 唯一性由 `uk_reconciliation_differences_object` 唯一索引保证；本方法用于
-    /// 差异幂等判定，服务层不得做「先查后插」的重复性判断。
-    ///
-    /// # 参数
-    /// * `business_object_type` - 差异对象类型
-    /// * `business_object_id` - 差异对象 ID
-    /// * `difference_type` - 差异分类
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的对账差异；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_object_key(
-        &self,
-        business_object_type: &str,
-        business_object_id: &str,
-        difference_type: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ReconciliationDifference>> {
-        self.find_one(
-            doc! {
-                "business_object_type": business_object_type,
-                "business_object_id": business_object_id,
-                "difference_type": difference_type,
-            },
-            executor,
-        )
-        .await
-    }
-
     /// 分页检索对账差异列表（投影查询）。
     ///
     /// 只返回 [`ReconciliationDifferenceRow`] 所需的列表字段，不加载整文档；

@@ -256,28 +256,6 @@ impl<'a> MallConsumptionBackfillItemRepository<'a> {
         mongo_ops::insert_one(&self.collection(), item, executor).await
     }
 
-    /// 批量追加回填明细。
-    ///
-    /// 明细不可变（只提供 `new()`）；`(job_id, business_fact_key)` 唯一由唯一
-    /// 索引保证（§6.17），批量中任一重复透出 [`crate::Error::DuplicateKey`]。
-    ///
-    /// # 参数
-    /// * `items` - 待追加的回填明细集合；为空时直接返回
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 追加成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
-    pub async fn create_many(
-        &self,
-        items: Vec<MallConsumptionBackfillItem>,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        mongo_ops::insert_many(&self.collection(), items, executor).await
-    }
-
     /// 按 ID 查找回填明细。
     ///
     /// # 参数

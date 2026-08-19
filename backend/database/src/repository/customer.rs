@@ -17,17 +17,12 @@ use entities::ids::{CustomerAccountId, PartyId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
-use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::CustomerExt;
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
-
-/// `customer_assignment` 集合名（单一来源：`CustomerExt` 关联常量）。
-const CUSTOMER_ASSIGNMENTS: &str = <mongodb::Database as CustomerExt>::CUSTOMER_ASSIGNMENTS;
 
 /// 客户角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -156,26 +151,6 @@ impl<'a> Repository<'a, CustomerAccount> {
             items,
             total: total as i64,
         })
-    }
-
-    /// 按客户编号查找客户角色（编号全局唯一，由 `uk_customer_accounts_customer_no`
-    /// 保证）。
-    ///
-    /// # 参数
-    /// * `customer_no` - 客户编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除客户角色；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_customer_no(
-        &self,
-        customer_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<CustomerAccount>> {
-        self.find_one(doc! { "customer_no": customer_no }, executor).await
     }
 
     /// 按共用企业主体查找客户角色（一个主体至多一个客户角色，由
@@ -368,60 +343,6 @@ impl<'a> Repository<'a, CustomerProfileCommand> {
     ) -> Result<Option<CustomerProfileCommand>> {
         self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
             .await
-    }
-}
-
-/// D08 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
-///
-/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口，由 `CustomerExt::customer()` 访问。
-pub struct CustomerRepository<'a> {
-    db: &'a Database,
-}
-
-impl<'a> CustomerRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    pub fn new(db: &'a Database) -> Self {
-        Self { db }
-    }
-
-    /// 整体替换某客户的全部归属行（先删后写，跨集合多步骤写入）。
-    ///
-    /// 先按 `customer_id` 删除 `customer_assignments` 中的全部归属，再批量
-    /// 写入新归属集合；归属是新单据参与权的来源（§6.2）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时删除先提交，后续写入失败会留下客户没有任何归属的半成品；Service
-    /// 必须通过 `database::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID
-    /// * `assignments` - 目标归属行集合（整集合覆盖语义）
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 错误
-    /// 当归属行违反 `(customer_id, user_id, assignment_role, valid_from)`
-    /// 唯一索引（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入失败时
-    /// 返回错误。
-    pub async fn replace_customer_assignments(
-        &self,
-        customer_id: &CustomerAccountId,
-        assignments: &[CustomerAssignment],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let collection = self.db.collection::<CustomerAssignment>(CUSTOMER_ASSIGNMENTS);
-        mongo_ops::delete_many(
-            &collection,
-            doc! { "customer_id": customer_id.to_string() },
-            &mut *executor,
-        )
-        .await?;
-        mongo_ops::insert_many(&collection, assignments.to_vec(), executor).await
     }
 }
 

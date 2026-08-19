@@ -135,60 +135,9 @@ impl<'a> Repository<'a, Contract> {
             total: total as i64,
         })
     }
-
-    /// 按合同编号查找合同。
-    ///
-    /// 唯一性由 `uk_contracts_contract_no` 唯一索引保证（软删除后编号不复用）。
-    ///
-    /// # 参数
-    /// * `contract_no` - 合同编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除合同；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_contract_no(
-        &self,
-        contract_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<Contract>> {
-        self.find_one_by_field("contract_no", contract_no, executor).await
-    }
 }
 
 impl<'a> Repository<'a, ContractRevision> {
-    /// 按合同与版本号查找合同版本。
-    ///
-    /// 唯一性由 `uk_contract_revisions_contract_revision` 唯一索引保证。
-    ///
-    /// # 参数
-    /// * `contract_id` - 所属合同
-    /// * `revision_no` - 聚合内版本号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的合同版本；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_contract_and_no(
-        &self,
-        contract_id: &ContractId,
-        revision_no: u32,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ContractRevision>> {
-        self.find_one(
-            doc! {
-                "contract_id": contract_id.to_string(),
-                "revision_no": revision_no as i32,
-            },
-            executor,
-        )
-        .await
-    }
-
     /// 列出合同的全部版本（新版本在前）。
     ///
     /// # 参数

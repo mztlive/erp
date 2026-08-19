@@ -72,40 +72,6 @@ impl<'a> Repository<'a, SalesOrderRevision> {
         )
         .await
     }
-
-    /// 按「销售单 + 内容指纹」查找版本（幂等与历史查询，数据模型 §6.4）。
-    ///
-    /// 指纹相同的内容可能被合法重建（如同一内容重新提交），因此索引
-    /// `idx_sales_order_revisions_order_content_hash` 是普通索引而非唯一索引；
-    /// 幂等判定由 P3 结合来源快照与业务上下文完成。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 稳定销售单
-    /// * `content_hash` - 本版全部商业字段的规范化指纹
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回最新匹配版本；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_content_hash(
-        &self,
-        sales_order_id: &SalesOrderId,
-        content_hash: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SalesOrderRevision>> {
-        mongo_ops::find_one(
-            &self.collection(),
-            doc! {
-                "sales_order_id": sales_order_id.to_string(),
-                "content_hash": content_hash,
-                "deleted_at": 0,
-            },
-            executor,
-        )
-        .await
-    }
 }
 
 impl<'a> Repository<'a, SalesOrderRevisionLine> {

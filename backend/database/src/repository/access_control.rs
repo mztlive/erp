@@ -15,7 +15,6 @@
 use entities::access_control::{
     AuditEvent, AuditEventResult, DataScope, DataScopeSubjectType, DataScopeType, Permission, UserRole,
 };
-use entities::rbac::RoleId;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -134,37 +133,6 @@ impl<'a> Repository<'a, Permission> {
             total: total as i64,
         })
     }
-
-    /// 按「资源 + 动作」精确查找权限定义。
-    ///
-    /// 查询覆盖 `uk_permissions_resource_action` 唯一索引；`resource` / `action`
-    /// 已由实体经 `entities::rbac::Permission::parse` 规范化（小写）。
-    ///
-    /// # 参数
-    /// * `resource` - 权限资源
-    /// * `action` - 权限动作
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除权限定义；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_resource_action(
-        &self,
-        resource: &str,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<Permission>> {
-        self.find_one(
-            doc! {
-                "resource": resource,
-                "action": action,
-            },
-            executor,
-        )
-        .await
-    }
 }
 
 impl<'a> Repository<'a, UserRole> {
@@ -183,40 +151,6 @@ impl<'a> Repository<'a, UserRole> {
         self.find_many_sorted(
             doc! { "user_id": user_id },
             doc! { "effective_from": -1 },
-            executor,
-        )
-        .await
-    }
-
-    /// 查询「用户 + 角色」当前全部未撤权绑定。
-    ///
-    /// 查询条件与部分唯一索引 `uk_user_roles_active` 的过滤表达式一致（空值
-    /// 相等命中缺省字段与显式 null）；服务层不得用「先查后插」做重复性判断，
-    /// 唯一约束由索引承担。
-    ///
-    /// # 参数
-    /// * `user_id` - 用户 ID
-    /// * `role_id` - 角色
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该用户该角色的未撤权绑定（正常场景最多一条）。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_active_by_user_and_role(
-        &self,
-        user_id: &str,
-        role_id: &RoleId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<UserRole>> {
-        self.find_many_sorted(
-            doc! {
-                "user_id": user_id,
-                "role_id": role_id.to_string(),
-                "revoked_at": null,
-            },
-            doc! { "created_at": 1 },
             executor,
         )
         .await

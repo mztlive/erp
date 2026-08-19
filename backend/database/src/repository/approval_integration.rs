@@ -4,7 +4,6 @@ use entities::approval_integration::{
     ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox, ApprovalSubjectSnapshot,
 };
 use entities::common::time::Instant;
-use entities::document_registry::DocumentType;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::ReturnDocument;
@@ -41,24 +40,6 @@ impl<'a> Repository<'a, ApprovalSubjectSnapshot> {
     ) -> Result<Option<ApprovalSubjectSnapshot>> {
         self.find_one(
             snapshot_by_process_instance_filter(approval_process_instance_id),
-            executor,
-        )
-        .await
-    }
-
-    /// 按业务对象身份查询快照。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_by_subject(
-        &self,
-        document_type: DocumentType,
-        business_object_id: &str,
-        subject_version: u32,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ApprovalSubjectSnapshot>> {
-        self.find_one(
-            snapshot_by_subject_filter(document_type, business_object_id, subject_version),
             executor,
         )
         .await
@@ -224,18 +205,6 @@ fn snapshot_by_process_instance_filter(approval_process_instance_id: &str) -> Do
     doc! { "approval_process_instance_id": approval_process_instance_id }
 }
 
-fn snapshot_by_subject_filter(
-    document_type: DocumentType,
-    business_object_id: &str,
-    subject_version: u32,
-) -> Document {
-    doc! {
-        "document_type": document_type.as_str(),
-        "business_object_id": business_object_id,
-        "subject_version": i64::from(subject_version),
-    }
-}
-
 fn outbox_lease_filter(now: Instant) -> Document {
     let now = now.unix_secs();
     doc! {
@@ -371,11 +340,11 @@ mod tests {
     use super::{
         clamp_outbox_limit, dead_letter_outbox_pipeline, lease_owner_filter, lease_take_pipeline,
         lease_take_sort, mark_outbox_delivered_pipeline, outbox_lease_filter, reschedule_outbox_pipeline,
-        snapshot_by_process_instance_filter, snapshot_by_subject_filter, MAX_OUTBOX_BATCH,
+        MAX_OUTBOX_BATCH,
     };
     use entities::approval_integration::ApprovalNotificationDeliveryStatus;
     use entities::common::time::Instant;
-    use entities::document_registry::DocumentType;
+
     use mongodb::bson::{doc, Bson};
 
     #[test]
@@ -516,28 +485,5 @@ mod tests {
         assert!(!lease_filter.contains("DEAD_LETTER"));
         assert!(lease_filter.contains("PENDING"));
         assert!(lease_filter.contains("IN_FLIGHT"));
-    }
-
-    #[test]
-    fn snapshot_queries_are_instance_unique_and_writes_are_insert_only() {
-        assert_eq!(
-            <mongodb::Database as crate::repository::extensions::ApprovalIntegrationExt>::APPROVAL_SUBJECT_SNAPSHOTS,
-            "approval_subject_snapshots"
-        );
-        assert_eq!(
-            snapshot_by_process_instance_filter("inst-1"),
-            doc! { "approval_process_instance_id": "inst-1" }
-        );
-        assert_eq!(
-            snapshot_by_subject_filter(DocumentType::StockAdjustment, "adj-1", 2),
-            doc! {
-                "document_type": DocumentType::StockAdjustment.as_str(),
-                "business_object_id": "adj-1",
-                "subject_version": 2_i64,
-            }
-        );
-        // 快照仅 insert_one，本模块无 update/replace API。
-        // 收据同键异载荷比较由 bpm::ApprovalCommandReceipt::reconcile 承担，
-        // 真实冲突/回读验收留给 P6。
     }
 }

@@ -863,34 +863,6 @@ impl<'a> Repository<'a, Invoice> {
         )
         .await
     }
-
-    /// 按原蓝票取回全部红票（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// 用于「累计红冲金额不得超过原蓝票有效分配」校验。
-    ///
-    /// # 参数
-    /// * `original_invoice_id` - 原蓝票 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部引用该蓝票的红票。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_red_invoices_by_original(
-        &self,
-        original_invoice_id: &InvoiceId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<Invoice>> {
-        self.find_many(
-            doc! {
-                "original_invoice_id": original_invoice_id.to_string(),
-                "invoice_kind": InvoiceKind::Red.as_str(),
-            },
-            executor,
-        )
-        .await
-    }
 }
 
 impl<'a> Repository<'a, SalesInvoiceAllocation> {

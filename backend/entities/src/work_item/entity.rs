@@ -103,17 +103,6 @@ impl WorkItemType {
             Self::DocumentApproval => "DOCUMENT_APPROVAL",
         }
     }
-
-    /// 返回当前任务类型是否允许由通用管理动作关闭。
-    ///
-    /// 当前注册表内均为审批、确认、复核或异常补偿任务，必须由强类型策略决定
-    /// 关闭原因，因此通用入口一律保守拒绝。
-    ///
-    /// # 返回
-    /// 当前注册类型均返回 `false`。
-    pub fn is_manually_closable(self) -> bool {
-        false
-    }
 }
 
 /// 任务生命周期状态；个人责任是否形成由 `owner_user_id` 独立表达。

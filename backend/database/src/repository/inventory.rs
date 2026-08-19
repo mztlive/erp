@@ -30,13 +30,10 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
 use entities::common::time::Instant;
-use entities::ids::{
-    SalesOrderLineId, SkuId, StockAdjustmentId, StockMovementId, StockReservationId, WarehouseId,
-};
+use entities::ids::{SalesOrderLineId, SkuId, StockAdjustmentId, StockMovementId, WarehouseId};
 use entities::inventory::{
     AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustment,
     StockAdjustmentLine, StockAdjustmentState, StockBalance, StockMovement, StockReservation,
-    StockReservationEntry,
 };
 use entities::money::Quantity;
 
@@ -45,10 +42,6 @@ use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
-/// `stock_movement` 集合名（单一来源：`InventoryExt` 关联常量）。
-const STOCK_MOVEMENTS: &str = <mongodb::Database as InventoryExt>::STOCK_MOVEMENTS;
-/// `stock_reservation_entry` 集合名（单一来源：`InventoryExt` 关联常量）。
-const STOCK_RESERVATION_ENTRIES: &str = <mongodb::Database as InventoryExt>::STOCK_RESERVATION_ENTRIES;
 /// `stock_adjustment_line` 集合名（单一来源：`InventoryExt` 关联常量）。
 const STOCK_ADJUSTMENT_LINES: &str = <mongodb::Database as InventoryExt>::STOCK_ADJUSTMENT_LINES;
 
@@ -812,26 +805,6 @@ impl<'a> Repository<'a, StockAdjustment> {
             total: total as i64,
         })
     }
-
-    /// 按调整单号查找调整单（唯一单号，详情查询）。
-    ///
-    /// # 参数
-    /// * `adjustment_no` - 调整单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除调整单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_adjustment_no(
-        &self,
-        adjustment_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<StockAdjustment>> {
-        self.find_one_by_field("adjustment_no", adjustment_no, executor)
-            .await
-    }
 }
 
 /// D17 域专用仓储：跨集合批量查询与多步骤事务写入。
@@ -853,64 +826,6 @@ impl<'a> InventoryRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
-    }
-
-    /// 批量读取库存流水（`$in` 一次取回）。
-    ///
-    /// 供余额重建/过账核对一次性加载指定流水，禁止 N+1。
-    ///
-    /// # 参数
-    /// * `movement_ids` - 流水主键集合（为空时直接返回空列表）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配流水。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn movements_by_ids(
-        &self,
-        movement_ids: &[StockMovementId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<StockMovement>> {
-        let mut movements = find_by_field_in(
-            self.db,
-            STOCK_MOVEMENTS,
-            "id",
-            &ids_to_strings(movement_ids),
-            executor,
-        )
-        .await?;
-        movements.sort_by(|left: &StockMovement, right: &StockMovement| left.base.id.cmp(&right.base.id));
-        Ok(movements)
-    }
-
-    /// 批量读取预占流水（`$in` 一次取回）。
-    ///
-    /// 供预占明细/冲正核对一次性加载指定预占的全部流水，禁止 N+1。
-    ///
-    /// # 参数
-    /// * `reservation_ids` - 预占主键集合（为空时直接返回空列表）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配流水。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn reservation_entries_by_reservation_ids(
-        &self,
-        reservation_ids: &[StockReservationId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<StockReservationEntry>> {
-        find_by_field_in(
-            self.db,
-            STOCK_RESERVATION_ENTRIES,
-            "reservation_id",
-            &ids_to_strings(reservation_ids),
-            executor,
-        )
-        .await
     }
 
     /// 批量读取库存调整明细（`$in` 一次取回）。

@@ -477,21 +477,6 @@ impl SalesOrderService {
         Ok(None)
     }
 
-    /// 判定原提交人是否仍可撤回卡券销售审批。
-    ///
-    /// 只有领导首步尚未形成任何决定事实时允许撤回；运营步骤即使仍开放，也因
-    /// 已存在领导不可变决定而失败关闭。阻塞首步可以没有待办，活动首步必须存在
-    /// 与实例、步骤、销售单和冻结提交一致的开放待办。
-    #[allow(dead_code)]
-    async fn can_cancel_card_sales_approval(
-        &self,
-        _order: &entities::sales_order::SalesOrder,
-        _submission: Option<&SubmissionView>,
-        _actor: &AuditActor,
-    ) -> Result<bool> {
-        Ok(false)
-    }
-
     /// 按账号 ID 查询展示姓名。
     ///
     /// 用于销售单负责人、阶段责任人和采购驳回处理人，避免把账号 ID 下发给页面。

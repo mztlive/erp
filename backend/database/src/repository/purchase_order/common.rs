@@ -4,8 +4,6 @@ use mongodb::bson::{doc, Bson, Document};
 
 /// `purchase_order` 列表允许的排序字段白名单。
 pub(super) const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase_no", "status"];
-/// `purchase_order_submission` 列表允许的排序字段白名单。
-pub(super) const SUBMISSION_SORT_FIELDS: &[&str] = &["created_at", "submission_no", "status"];
 
 /// 构建白名单校验后的排序文档。
 ///

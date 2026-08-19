@@ -2,7 +2,7 @@
 
 use bpm::engine::{cancel, CancelCommand};
 use bpm::ids::ApprovalCommandReceiptId;
-use bpm::model::types::{ApprovalBlockerCode, ApprovalCommandKind};
+use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
 
 use super::apply_plan::{apply_plan, DomainActionKind};
@@ -121,15 +121,4 @@ pub fn prepare_cancel(input: CancelExecutionInput) -> Result<PreparedExecution> 
         receipt,
         Some(DomainActionKind::Cancel),
     ))))
-}
-
-/// 内部不变量 blocker 不得构造半结构取消。
-///
-/// # 参数
-/// * `code` - 当前 blocker
-///
-/// # 返回
-/// 内部不变量返回 `true`。
-pub fn keep_frozen(code: ApprovalBlockerCode) -> bool {
-    code == ApprovalBlockerCode::InternalInvariantBroken
 }

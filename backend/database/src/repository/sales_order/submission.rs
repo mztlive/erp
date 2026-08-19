@@ -3,45 +3,15 @@
 //! 提交快照是冻结审批对象（事实类），形成后不可修改，**不提供软删除方法**；
 //! 被驳回的提交永久保留但不进入经营台账（数据模型 §6.5）。
 
-use entities::money::Amount;
 use entities::sales_order::{
-    BusinessType, SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionId, SalesOrderSubmissionLine,
-    SubmissionStatus,
+    SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionId, SalesOrderSubmissionLine, SubmissionStatus,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
-use super::sort_doc;
+use super::super::{Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
-use crate::{mongo_ops, Result};
-
-/// 提交历史列表投影行（只取列表字段，金额保持 Decimal128 原样）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SubmissionRow {
-    /// 实体主键。
-    pub id: String,
-    /// 稳定销售单。
-    pub sales_order_id: String,
-    /// 提交序号。
-    pub submission_no: u32,
-    /// 业务性质。
-    pub business_type: BusinessType,
-    /// 提交状态。
-    pub status: SubmissionStatus,
-    /// 提交行汇总（含税）。
-    pub gross_amount: Amount,
-    /// 提交行汇总（不含税）。
-    pub net_amount: Amount,
-    /// 提交行汇总（税额）。
-    pub tax_amount: Amount,
-    /// 提交审计人。
-    pub submitted_by: String,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-}
+use crate::Result;
 
 /// 提交历史筛选条件。
 #[derive(Debug, Clone)]
@@ -118,41 +88,6 @@ impl<'a> Repository<'a, SalesOrderSubmission> {
         )
         .await
     }
-
-    /// 分页检索提交历史（投影查询）。
-    ///
-    /// 只返回 [`SubmissionRow`] 所需的列表字段，不加载整文档；排序字段由
-    /// Service 层白名单校验后传入（api-contract §4）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_submissions(
-        &self,
-        filter: &SubmissionFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<SubmissionRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(submission_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<SubmissionRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
-    }
 }
 
 impl<'a> Repository<'a, SalesOrderSubmissionLine> {
@@ -178,25 +113,6 @@ impl<'a> Repository<'a, SalesOrderSubmissionLine> {
         let ids = submission_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
         self.find_many(doc! { "submission_id": { "$in": ids } }, executor)
             .await
-    }
-}
-
-/// 提交历史列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn submission_projection() -> Document {
-    doc! {
-        "id": 1,
-        "sales_order_id": 1,
-        "submission_no": 1,
-        "business_type": 1,
-        "status": 1,
-        "gross_amount": 1,
-        "net_amount": 1,
-        "tax_amount": 1,
-        "submitted_by": 1,
-        "created_at": 1,
     }
 }
 

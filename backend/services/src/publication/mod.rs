@@ -389,53 +389,6 @@ impl PublicationService {
         Ok(Some(SystemSafetyPauseOperationView::committed(operation)))
     }
 
-    /// 创建稳定发布（单集合写入，无事务）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建发布的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - ERP SKU 不存在
-    /// * `ConflictError` - `(sku_id, target_mall_id)` 已存在（唯一索引透出）
-    pub async fn create_publication(
-        &self,
-        req: CreateProductPublicationRequest,
-        actor: &AuditActor,
-    ) -> Result<ProductPublicationView> {
-        req.validate()?;
-        self.db
-            .skus()
-            .find_by_id(&req.sku_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("ERP SKU 不存在".to_string()))?;
-
-        let publication = ProductPublication::new(
-            entities::ids::ProductPublicationId::new(next_id()),
-            entities::publication::ProductPublicationData {
-                sku_id: req.sku_id,
-                target_mall_id: req.target_mall_id,
-                status: ProductPublicationStatus::Draft,
-            },
-            actor.id(),
-        )?;
-        let audit = actor.clone().resource_log(
-            "product_publication.create",
-            "product_publication",
-            publication.base.id.clone(),
-        )?;
-        self.db
-            .product_publications()
-            .create(&publication, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
-
-        Ok(publication.into())
-    }
-
     /// 分页查询商品发布列表。
     ///
     /// 排序字段白名单在 Service 层校验（api-contract §4）。

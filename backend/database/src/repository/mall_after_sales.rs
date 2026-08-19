@@ -165,31 +165,7 @@ impl<'a> Repository<'a, MallAfterSalesRequest> {
     }
 }
 
-impl<'a> Repository<'a, MallAfterSalesRequestLine> {
-    /// 按售后申请取明细行（按行号升序）。
-    ///
-    /// # 参数
-    /// * `after_sales_request_id` - 售后申请
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该申请的全部未删除明细行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_request(
-        &self,
-        after_sales_request_id: &entities::ids::MallAfterSalesRequestId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallAfterSalesRequestLine>> {
-        self.find_many_sorted(
-            doc! { "after_sales_request_id": after_sales_request_id.to_string() },
-            doc! { "line_no": 1 },
-            executor,
-        )
-        .await
-    }
-}
+impl<'a> Repository<'a, MallAfterSalesRequestLine> {}
 
 /// `mall_refund` 只读追加仓储（退款头是不可变正式事实，§4.5 不设软删除）。
 pub struct MallRefundRepository<'a> {
@@ -430,34 +406,6 @@ impl<'a> MallRefundLineRepository<'a> {
         .await
     }
 
-    /// 按退款头取退款行（按行号升序）。
-    ///
-    /// # 参数
-    /// * `mall_refund_id` - 退款头
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该退款头的退款行序列。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_refund(
-        &self,
-        mall_refund_id: &entities::ids::MallRefundId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallRefundLine>> {
-        mongo_ops::find_many(
-            &self.collection(),
-            doc! {
-                "mall_refund_id": mall_refund_id.to_string(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            FindOptions::builder().sort(doc! { "line_no": 1 }).build(),
-            executor,
-        )
-        .await
-    }
-
     /// 按退款头集合批量取退款行（`$in` 一次取回，避免 N+1）。
     ///
     /// # 参数
@@ -551,38 +499,6 @@ impl<'a> MallRefundAllocationRepository<'a> {
         mongo_ops::find_one(
             &self.collection(),
             doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            executor,
-        )
-        .await
-    }
-
-    /// 按退款行集合批量取分配（`$in` 一次取回，避免 N+1；按分配序号升序）。
-    ///
-    /// # 参数
-    /// * `mall_refund_line_ids` - 退款行 ID 集合；为空时返回空列表
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回这些退款行的全部分配。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_lines(
-        &self,
-        mall_refund_line_ids: &[entities::ids::MallRefundLineId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallRefundAllocation>> {
-        if mall_refund_line_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let line_ids: Vec<String> = mall_refund_line_ids.iter().map(|id| id.to_string()).collect();
-        mongo_ops::find_many(
-            &self.collection(),
-            doc! {
-                "mall_refund_line_id": { "$in": line_ids },
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            FindOptions::builder().sort(doc! { "allocation_no": 1 }).build(),
             executor,
         )
         .await
@@ -848,34 +764,6 @@ impl<'a> MallBalanceRestorationAllocationRepository<'a> {
         mongo_ops::find_one(
             &self.collection(),
             doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            executor,
-        )
-        .await
-    }
-
-    /// 按恢复头取分配（按分配序号升序）。
-    ///
-    /// # 参数
-    /// * `mall_balance_restoration_id` - 余额恢复头
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该恢复头的分配序列。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_restoration(
-        &self,
-        mall_balance_restoration_id: &entities::ids::MallBalanceRestorationId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallBalanceRestorationAllocation>> {
-        mongo_ops::find_many(
-            &self.collection(),
-            doc! {
-                "mall_balance_restoration_id": mall_balance_restoration_id.to_string(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            FindOptions::builder().sort(doc! { "allocation_no": 1 }).build(),
             executor,
         )
         .await

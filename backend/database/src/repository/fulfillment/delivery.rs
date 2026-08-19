@@ -125,28 +125,6 @@ impl<'a> Repository<'a, Delivery> {
             total: total as i64,
         })
     }
-
-    /// 按物流单号查找发货单（`idx_deliveries_tracking_no`，详情查询）。
-    ///
-    /// 物流单号不保证全局唯一，返回全部未删除匹配项。
-    ///
-    /// # 参数
-    /// * `tracking_no` - 物流单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除发货单集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_tracking_no(
-        &self,
-        tracking_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<Delivery>> {
-        self.find_many(doc! { "tracking_no": tracking_no }, executor)
-            .await
-    }
 }
 
 /// 发货单列表投影字段（履约地址敏感字段不进投影）。

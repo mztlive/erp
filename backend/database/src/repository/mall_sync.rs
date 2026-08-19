@@ -459,39 +459,6 @@ impl<'a> Repository<'a, MallSalesOrderSnapshot> {
             total: total as i64,
         })
     }
-
-    /// 取回指定映射状态且观察时间不晚于阈值的历史快照。
-    ///
-    /// 命中 `idx_mall_sales_order_snapshots_difference`（`mapping_status +
-    /// observed_at`，§6.13 差异处理索引），按观察时间升序返回，
-    /// 供差异处理管线批量取数。
-    ///
-    /// # 参数
-    /// * `mapping_status` - 目标映射状态
-    /// * `observed_before` - 观察时间上限（含）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除快照。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_mapping_status_before(
-        &self,
-        mapping_status: SnapshotMappingStatus,
-        observed_before: Instant,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallSalesOrderSnapshot>> {
-        self.find_many_sorted(
-            doc! {
-                "mapping_status": mapping_status.as_str(),
-                "observed_at": { "$lte": observed_before.unix_secs() },
-            },
-            doc! { "observed_at": 1 },
-            executor,
-        )
-        .await
-    }
 }
 
 /// 核对作业列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -752,32 +719,6 @@ impl<'a> Repository<'a, MallSalesReconciliationItem> {
         })
     }
 
-    /// 按核对作业取回全部差异明细（一次查询，避免 N+1）。
-    ///
-    /// # 参数
-    /// * `reconciliation_job_id` - 所属核对作业
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的未删除差异明细。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_items_by_job(
-        &self,
-        reconciliation_job_id: &entities::ids::MallSalesReconciliationJobId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallSalesReconciliationItem>> {
-        self.find_many_sorted(
-            doc! {
-                "reconciliation_job_id": reconciliation_job_id.to_string(),
-            },
-            doc! { "source_updated_at": 1 },
-            executor,
-        )
-        .await
-    }
-
     /// 按「核对作业 + 来源单比较键」精确查找差异明细。
     ///
     /// 唯一性由 `uk_mall_sales_reconciliation_items_job_key` 唯一索引保证
@@ -957,32 +898,6 @@ impl<'a> Repository<'a, MasterMappingTask> {
                 "mapping_type": mapping_type.as_str(),
                 "status": MappingTaskStatus::Pending.as_str(),
             },
-            executor,
-        )
-        .await
-    }
-
-    /// 取回指定快照的全部映射任务（一次查询，避免 N+1）。
-    ///
-    /// # 参数
-    /// * `source_snapshot_id` - 待处理快照
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除映射任务。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_by_snapshot(
-        &self,
-        source_snapshot_id: &entities::ids::MallSalesOrderSnapshotId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MasterMappingTask>> {
-        self.find_many_sorted(
-            doc! {
-                "source_snapshot_id": source_snapshot_id.to_string(),
-            },
-            doc! { "created_at": 1 },
             executor,
         )
         .await

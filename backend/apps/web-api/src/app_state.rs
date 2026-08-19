@@ -113,16 +113,6 @@ impl AppState {
         Arc::clone(&self.rbac)
     }
 
-    /// 返回进程内注入的审批定义管理服务。
-    ///
-    /// 本波次只交付注入点；Handler 改走本访问器归 P3-HTTP owns，不得在此越权改 Handler。
-    ///
-    /// # 返回
-    /// 返回启动时构造的真实 [`ApprovalDefinitionService`]，不得以 Noop 或 `Option` 绕过。
-    pub fn approval_definition_service(&self) -> Arc<ApprovalDefinitionService> {
-        Arc::clone(&self.approval_definition)
-    }
-
     /// 返回进程内注入的目标审批运行服务。
     ///
     /// 本波次只交付注入点；Handler 改走本访问器归 P3-HTTP owns，不得在此越权改 Handler。

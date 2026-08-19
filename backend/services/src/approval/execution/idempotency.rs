@@ -1,6 +1,6 @@
 //! 审批命令幂等摘要与收据分支。
 
-use bpm::model::types::{ApprovalCommandKind, DIGEST_MAX_LEN, SCOPE_MAX_LEN};
+use bpm::model::types::{DIGEST_MAX_LEN, SCOPE_MAX_LEN};
 use bpm::model::ApprovalCommandReceipt;
 use sha2::{Digest, Sha256};
 
@@ -305,17 +305,6 @@ pub fn classify_receipt<'a>(
 /// 返回 `APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT`。
 pub fn payload_conflict_error() -> Error {
     Error::ConflictError("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT".to_string())
-}
-
-/// 并发插入收据后的回读必须使用同一分类函数。
-///
-/// # 参数
-/// * `kind` - 命令种类
-///
-/// # 返回
-/// 返回种类稳定代码，供日志使用。
-pub fn command_kind_code(kind: ApprovalCommandKind) -> &'static str {
-    kind.as_str()
 }
 
 #[cfg(test)]

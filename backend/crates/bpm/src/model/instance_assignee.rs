@@ -66,14 +66,6 @@ impl ApprovalInstanceAssignee {
         })
     }
 
-    /// 返回改派乐观锁版本。
-    ///
-    /// # 返回
-    /// 返回 `base.version`。
-    pub fn assignment_version(&self) -> u64 {
-        self.base.version
-    }
-
     /// 原子更新当前审批人与改派审计，定义审批人不变。
     ///
     /// # 参数

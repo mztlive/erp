@@ -100,14 +100,6 @@ impl ApprovalNodeExecution {
         Self::new_current(input, ApprovalNodeExecutionStatus::Blocked, Some(blocker_code))
     }
 
-    /// 返回执行乐观锁版本。
-    ///
-    /// # 返回
-    /// 返回 `base.version`。
-    pub fn execution_version(&self) -> u64 {
-        self.base.version
-    }
-
     /// 将活动执行标记为通过。
     ///
     /// # 错误

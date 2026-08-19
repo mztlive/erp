@@ -8,9 +8,7 @@
 use entities::document_registry::{BusinessDocument, DocumentParticipant, DocumentRelation, WorkflowAction};
 use mongodb::Database;
 
-use super::super::document_registry::{
-    BusinessDocumentFilter, DocumentRegistryRepository, WorkflowActionFilter,
-};
+use super::super::document_registry::{BusinessDocumentFilter, WorkflowActionFilter};
 use crate::Repository;
 
 /// 域 D02 仓储访问器。
@@ -53,12 +51,6 @@ pub trait DocumentRegistryExt {
     /// # 返回
     /// 返回 `Repository<'_, entities::document_registry::WorkflowAction>`。
     fn workflow_actions(&self) -> Repository<'_, WorkflowAction>;
-
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 返回
-    /// 返回 `DocumentRegistryRepository` 实例。
-    fn document_registry(&self) -> DocumentRegistryRepository<'_>;
 }
 
 impl DocumentRegistryExt for Database {
@@ -79,9 +71,5 @@ impl DocumentRegistryExt for Database {
 
     fn workflow_actions(&self) -> Repository<'_, WorkflowAction> {
         Repository::new(self, Self::WORKFLOW_ACTIONS)
-    }
-
-    fn document_registry(&self) -> DocumentRegistryRepository<'_> {
-        DocumentRegistryRepository::new(self)
     }
 }

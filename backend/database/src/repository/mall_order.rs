@@ -16,8 +16,8 @@
 
 use entities::common::time::Instant;
 use entities::ids::{
-    CustomerAccountId, MallAfterSalesRequestId, MallCardInstanceId, MallOrderId, MallOrderItemId,
-    MallPaymentSourceId, SalesOrderId,
+    CustomerAccountId, MallAfterSalesRequestId, MallOrderId, MallOrderItemId, MallPaymentSourceId,
+    SalesOrderId,
 };
 use entities::mall_order::types::{
     AttributionStatus, DataSource, FactType, FulfillmentChain, ProcessingStatus,
@@ -225,31 +225,6 @@ impl Pagination for MallOrderFilter {
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
-}
-
-/// 消费事实列表投影行。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct MallConsumptionEntryRow {
-    /// 实体主键。
-    pub id: String,
-    /// 支付或退款事实。
-    pub mall_order_fact_id: entities::ids::MallOrderFactId,
-    /// 商品明细。
-    pub mall_order_item_id: MallOrderItemId,
-    /// 资金来源。
-    pub mall_payment_source_id: MallPaymentSourceId,
-    /// 消费或消费冲减。
-    pub direction: ConsumptionDirection,
-    /// 本来源消费金额（Decimal128 持久化）。
-    pub amount: entities::money::Amount,
-    /// 卡券经营归属：企业客户。
-    pub customer_id: Option<CustomerAccountId>,
-    /// 卡券经营归属：原销售单。
-    pub origin_sales_order_id: Option<SalesOrderId>,
-    /// 不可变业务发生时间。
-    pub occurred_at: Instant,
-    /// 归集进度状态。
-    pub attribution_status: AttributionStatus,
 }
 
 /// 消费事实列表筛选条件。
@@ -756,45 +731,6 @@ impl<'a> MallConsumptionEntryRepository<'a> {
         .await
     }
 
-    /// 分页检索消费事实列表（投影查询）。
-    ///
-    /// 只返回 [`MallConsumptionEntryRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段按白名单映射（非法字段回落到 `created_at`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_consumption_entries(
-        &self,
-        filter: &MallConsumptionEntryFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<MallConsumptionEntryRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                &["occurred_at", "created_at"],
-                filter.sort_ascending,
-            ))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(consumption_entry_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<MallConsumptionEntryRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
-    }
-
     /// 按原支付来源取消费事实序列（按 `occurred_at` 升序）。
     ///
     /// 退款分配必须引用「原商品 × 原支付来源」消费事实（§6.18），
@@ -1027,32 +963,6 @@ impl<'a> Repository<'a, MallPaymentSource> {
         )
         .await
     }
-
-    /// 按卡实例取支付来源。
-    ///
-    /// 卡券来源归集后必须沿卡实例追溯客户、原销售单与唯一卡券明细（§6.17）；
-    /// 本方法供卡实例视角的消费追溯取数。
-    ///
-    /// # 参数
-    /// * `mall_card_instance_id` - 映射后的卡实例
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该卡实例关联的全部未删除支付来源。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_card_instance(
-        &self,
-        mall_card_instance_id: &MallCardInstanceId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallPaymentSource>> {
-        self.find_many(
-            doc! { "mall_card_instance_id": mall_card_instance_id.to_string() },
-            executor,
-        )
-        .await
-    }
 }
 
 impl<'a> Repository<'a, MallItemFundingAllocation> {
@@ -1078,32 +988,6 @@ impl<'a> Repository<'a, MallItemFundingAllocation> {
         let item_ids: Vec<String> = mall_order_item_ids.iter().map(|id| id.to_string()).collect();
         self.find_many(doc! { "mall_order_item_id": { "$in": item_ids } }, executor)
             .await
-    }
-
-    /// 按支付来源取分摊记录。
-    ///
-    /// 「每个支付来源的商品分摊合计等于该来源支付金额」的列守恒校验依赖
-    /// 本查询（§6.17，聚合校验由 P3 落实）。
-    ///
-    /// # 参数
-    /// * `mall_payment_source_id` - 支付来源
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该来源的全部未删除分摊记录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_payment_source(
-        &self,
-        mall_payment_source_id: &MallPaymentSourceId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<MallItemFundingAllocation>> {
-        self.find_many(
-            doc! { "mall_payment_source_id": mall_payment_source_id.to_string() },
-            executor,
-        )
-        .await
     }
 }
 
@@ -1212,25 +1096,6 @@ fn mall_order_projection() -> Document {
         "attribution_status": 1,
         "version": 1,
         "created_at": 1,
-    }
-}
-
-/// 消费事实列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn consumption_entry_projection() -> Document {
-    doc! {
-        "id": 1,
-        "mall_order_fact_id": 1,
-        "mall_order_item_id": 1,
-        "mall_payment_source_id": 1,
-        "direction": 1,
-        "amount": 1,
-        "customer_id": 1,
-        "origin_sales_order_id": 1,
-        "occurred_at": 1,
-        "attribution_status": 1,
     }
 }
 

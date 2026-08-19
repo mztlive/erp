@@ -32,8 +32,6 @@ use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
-/// `product_publication` 集合名（单一来源：`PublicationExt` 关联常量）。
-const PRODUCT_PUBLICATIONS: &str = <mongodb::Database as PublicationExt>::PRODUCT_PUBLICATIONS;
 /// `product_publication_revision` 集合名（单一来源：`PublicationExt` 关联常量）。
 const PRODUCT_PUBLICATION_REVISIONS: &str =
     <mongodb::Database as PublicationExt>::PRODUCT_PUBLICATION_REVISIONS;
@@ -254,37 +252,6 @@ impl<'a> Repository<'a, ProductPublication> {
             items,
             total: total as i64,
         })
-    }
-
-    /// 按「SKU + 目标商城」查找唯一稳定发布。
-    ///
-    /// 唯一性由 `uk_product_publications_sku_mall` 唯一索引保证
-    /// （数据模型 §6.15）；本方法用于发布查询与幂等判定。
-    ///
-    /// # 参数
-    /// * `sku_id` - ERP SKU
-    /// * `target_mall_id` - 目标商城
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的发布；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_sku_and_mall(
-        &self,
-        sku_id: &SkuId,
-        target_mall_id: &SourceSystemId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ProductPublication>> {
-        self.find_one(
-            doc! {
-                "sku_id": sku_id.to_string(),
-                "target_mall_id": target_mall_id.to_string(),
-            },
-            executor,
-        )
-        .await
     }
 }
 
@@ -871,45 +838,6 @@ impl<'a> PublicationRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
-    }
-
-    /// 建立发布主表及其首个发布修订（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `product_publications` 与 `product_publication_revisions`，
-    /// 保证「稳定发布 + 首个不可变版本」原子可见（数据模型 §6.15）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时两笔写入各自自动提交，中途失败会留下只有发布没有版本的半成品；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `publication` - 待写入的稳定发布
-    /// * `revision` - 待写入的首个发布修订
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
-    pub async fn create_publication_revision(
-        &self,
-        publication: &ProductPublication,
-        revision: &ProductPublicationRevision,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        mongo_ops::insert_one(
-            &self.db.collection::<ProductPublication>(PRODUCT_PUBLICATIONS),
-            publication,
-            executor,
-        )
-        .await?;
-        mongo_ops::insert_one(
-            &self
-                .db
-                .collection::<ProductPublicationRevision>(PRODUCT_PUBLICATION_REVISIONS),
-            revision,
-            executor,
-        )
-        .await?;
-        Ok(())
     }
 
     /// 建立发布修订及其受控媒体（跨集合多步骤写入）。

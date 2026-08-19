@@ -293,14 +293,6 @@ impl Timestamp {
             .ok_or(Error::InvalidTimestamp("超出可表示范围"))
     }
 
-    /// 返回内部 UTC 时间。
-    ///
-    /// # 返回
-    /// 返回调用方提供的时间。
-    pub fn to_utc(self) -> DateTime<Utc> {
-        self.0
-    }
-
     /// 返回 UTC 秒级时间戳。
     ///
     /// # 返回

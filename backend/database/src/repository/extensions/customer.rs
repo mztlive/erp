@@ -8,7 +8,7 @@
 use entities::customer::{CustomerAccount, CustomerAssignment, CustomerProfileCommand};
 use mongodb::Database;
 
-use super::super::customer::{CustomerAccountFilter, CustomerAssignmentFilter, CustomerRepository};
+use super::super::customer::{CustomerAccountFilter, CustomerAssignmentFilter};
 use crate::Repository;
 
 /// 域 D08 仓储访问器。
@@ -42,12 +42,6 @@ pub trait CustomerExt {
     /// # 返回
     /// 返回 `Repository<'_, CustomerProfileCommand>`。
     fn customer_profile_commands(&self) -> Repository<'_, CustomerProfileCommand>;
-
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 返回
-    /// 返回 `CustomerRepository` 实例。
-    fn customer(&self) -> CustomerRepository<'_>;
 }
 
 impl CustomerExt for Database {
@@ -64,9 +58,5 @@ impl CustomerExt for Database {
 
     fn customer_profile_commands(&self) -> Repository<'_, CustomerProfileCommand> {
         Repository::new(self, Self::CUSTOMER_PROFILE_COMMANDS)
-    }
-
-    fn customer(&self) -> CustomerRepository<'_> {
-        CustomerRepository::new(self)
     }
 }

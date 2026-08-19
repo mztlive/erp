@@ -12,8 +12,7 @@
 
 use entities::common::stable::StableBase;
 use entities::ids::{
-    CustomerAccountId, CustomerReceiptId, PurchaseOrderId, ReceivableEntryId, SalesOrderId, SalesOrderLineId,
-    SupplierPaymentId,
+    CustomerAccountId, CustomerReceiptId, PurchaseOrderId, ReceivableEntryId, SalesOrderId, SupplierPaymentId,
 };
 use entities::returns::{
     CaseType, CustomerRefund, CustomerRefundStatus, PaymentReversal, PurchaseReturnLine, PurchaseReturnOrder,
@@ -296,25 +295,6 @@ impl<'a> Repository<'a, SalesReturnCase> {
             total: total as i64,
         })
     }
-
-    /// 按退货处理号精确查找（编号全局唯一，`uk_sales_return_cases_no` 保证）。
-    ///
-    /// # 参数
-    /// * `return_no` - 退货处理号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的处理单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_return_no(
-        &self,
-        return_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SalesReturnCase>> {
-        self.find_one_by_field("return_no", return_no, executor).await
-    }
 }
 
 impl<'a> Repository<'a, SalesReturnLine> {
@@ -340,33 +320,6 @@ impl<'a> Repository<'a, SalesReturnLine> {
         let case_ids: Vec<String> = case_ids.iter().map(ToString::to_string).collect();
         self.find_many(doc! { "sales_return_case_id": { "$in": case_ids } }, executor)
             .await
-    }
-
-    /// 批量按原销售明细集合取回退货明细（`$in`，用于累计退回数量校验）。
-    ///
-    /// # 参数
-    /// * `order_line_ids` - 原销售明细 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配明细。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_lines_by_order_lines(
-        &self,
-        order_line_ids: &[SalesOrderLineId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesReturnLine>> {
-        if order_line_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let order_line_ids: Vec<String> = order_line_ids.iter().map(ToString::to_string).collect();
-        self.find_many(
-            doc! { "sales_order_line_id": { "$in": order_line_ids } },
-            executor,
-        )
-        .await
     }
 }
 
@@ -408,26 +361,6 @@ impl<'a> Repository<'a, PurchaseReturnOrder> {
             items,
             total: total as i64,
         })
-    }
-
-    /// 按采购退货单号精确查找（编号全局唯一，`uk_purchase_return_orders_no` 保证）。
-    ///
-    /// # 参数
-    /// * `purchase_return_no` - 采购退货单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的退货单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_purchase_return_no(
-        &self,
-        purchase_return_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<PurchaseReturnOrder>> {
-        self.find_one_by_field("purchase_return_no", purchase_return_no, executor)
-            .await
     }
 }
 

@@ -372,38 +372,6 @@ impl<'a> BalanceSnapshotRepository<'a> {
         .await
     }
 
-    /// 按（卡实例, 快照时间）精确查找余额快照。
-    ///
-    /// 业务唯一键由 `uk_mall_balance_snapshots_business` 唯一索引保证（§6.17）；
-    /// 用于余额台账「按卡、按日期」取数。
-    ///
-    /// # 参数
-    /// * `mall_card_instance_id` - 卡实例
-    /// * `snapshot_at` - 快照时间
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的快照；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_at(
-        &self,
-        mall_card_instance_id: &entities::ids::MallCardInstanceId,
-        snapshot_at: entities::common::time::Instant,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<MallBalanceSnapshot>> {
-        mongo_ops::find_one(
-            &self.collection(),
-            doc! {
-                "mall_card_instance_id": mall_card_instance_id.to_string(),
-                "snapshot_at": snapshot_at.unix_secs(),
-            },
-            executor,
-        )
-        .await
-    }
-
     /// 按卡实例与时间范围取余额快照序列（按 `snapshot_at` 升序）。
     ///
     /// # 参数

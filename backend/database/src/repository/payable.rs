@@ -590,25 +590,6 @@ impl<'a> Repository<'a, SupplierPayment> {
             total: total as i64,
         })
     }
-
-    /// 按付款单号精确查找（单号全局唯一，`uk_supplier_payments_no` 保证）。
-    ///
-    /// # 参数
-    /// * `payment_no` - 付款单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的付款单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_payment_no(
-        &self,
-        payment_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierPayment>> {
-        self.find_one_by_field("payment_no", payment_no, executor).await
-    }
 }
 
 impl<'a> Repository<'a, PaymentAllocation> {

@@ -29,7 +29,6 @@ mod change_cancel;
 mod change_start;
 mod creation_basis;
 mod draft_edit;
-mod draft_from_confirmation;
 mod dto;
 mod formalization;
 mod query;

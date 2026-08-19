@@ -172,37 +172,6 @@ impl<'a> Repository<'a, Sku> {
             total: total as i64,
         })
     }
-
-    /// 按（商品，规范化规格签名）查找稳定 SKU 身份。
-    ///
-    /// 唯一性由 `uk_skus_product_spec` 唯一索引保证（数据模型 §6.3：签名在全
-    /// 生命周期永久唯一，不随停用释放）。
-    ///
-    /// # 参数
-    /// * `product_id` - 所属 SPU
-    /// * `specification_signature` - 规范化规格签名
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除 SKU；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_spec_signature(
-        &self,
-        product_id: &ProductId,
-        specification_signature: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<Sku>> {
-        self.find_one(
-            doc! {
-                "product_id": product_id.to_string(),
-                "specification_signature": specification_signature,
-            },
-            executor,
-        )
-        .await
-    }
 }
 
 /// SKU 修订列表投影行。

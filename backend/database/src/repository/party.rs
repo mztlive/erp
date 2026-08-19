@@ -140,25 +140,6 @@ impl<'a> Repository<'a, Party> {
         })
     }
 
-    /// 按主体编号查找主体（编号全局唯一，由 `uk_parties_party_no` 保证）。
-    ///
-    /// # 参数
-    /// * `party_no` - 主体编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除主体；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_party_no(
-        &self,
-        party_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<Party>> {
-        self.find_one(doc! { "party_no": party_no }, executor).await
-    }
-
     /// 按主体编号查找主体，包含已软删除记录。
     ///
     /// 全局唯一索引包含软删除记录；编号占用校验必须使用本方法，避免
@@ -314,37 +295,6 @@ impl<'a> Repository<'a, PartyRevision> {
             items,
             total: total as i64,
         })
-    }
-
-    /// 按「稳定主体 + 修订序号」查找修订。
-    ///
-    /// 唯一性由 `uk_party_revisions_party_revision` 唯一索引保证；本方法用于
-    /// 修订幂等写入前的定位与历史查询。
-    ///
-    /// # 参数
-    /// * `party_id` - 稳定主体 ID
-    /// * `revision_no` - 修订序号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的修订；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_party_and_revision(
-        &self,
-        party_id: &PartyId,
-        revision_no: u32,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<PartyRevision>> {
-        self.find_one(
-            doc! {
-                "party_id": party_id.to_string(),
-                "revision_no": revision_no as i32,
-            },
-            executor,
-        )
-        .await
     }
 
     /// 检索某主体的完整修订历史（按 `revision_no` 升序，§6.2 历史查询）。
@@ -863,55 +813,6 @@ impl<'a> Repository<'a, PartyBankAccount> {
             items,
             total: total as i64,
         })
-    }
-
-    /// 按 ERP 内部稳定账户编号查找账户（编号全局唯一，`uk` 索引保证）。
-    ///
-    /// # 参数
-    /// * `bank_account_no` - 账户编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的账户；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_bank_account_no(
-        &self,
-        bank_account_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<PartyBankAccount>> {
-        self.find_one(doc! { "bank_account_no": bank_account_no }, executor)
-            .await
-    }
-
-    /// 按「主体 + 账号查询指纹」查找账户（重复校验只使用 keyed HMAC，
-    /// §6.2；唯一性由 `uk_party_bank_accounts_party_hmac` 保证）。
-    ///
-    /// # 参数
-    /// * `party_id` - 所属企业主体 ID
-    /// * `account_number_query_hmac` - 规范化账号的查询指纹
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的账户；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_account_hmac(
-        &self,
-        party_id: &PartyId,
-        account_number_query_hmac: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<PartyBankAccount>> {
-        self.find_one(
-            doc! {
-                "party_id": party_id.to_string(),
-                "account_number_query_hmac": account_number_query_hmac,
-            },
-            executor,
-        )
-        .await
     }
 }
 

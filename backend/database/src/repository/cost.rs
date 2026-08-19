@@ -232,62 +232,6 @@ impl<'a> Repository<'a, CostEntry> {
             total: total as i64,
         })
     }
-
-    /// 批量按成本事实 ID 集合取回（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 成本事实 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的成本事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_entries_by_ids(
-        &self,
-        entry_ids: &[CostEntryId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<CostEntry>> {
-        if entry_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let entry_ids: Vec<String> = entry_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "id": { "$in": entry_ids } }, executor)
-            .await
-    }
-
-    /// 按「来源事实类型 + 来源单据」批量取回全部阶段事实。
-    ///
-    /// 同一经济来源的预计/确认/实际/冲减是不同阶段事实（数据模型 §6.10），
-    /// 本方法一次取回用于追加差额前的累计核对。
-    ///
-    /// # 参数
-    /// * `source_fact_type` - 来源事实类型
-    /// * `source_document_id` - 来源单据 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该来源的全部成本事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_entries_by_source(
-        &self,
-        source_fact_type: &str,
-        source_document_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<CostEntry>> {
-        self.find_many_sorted(
-            doc! {
-                "source_fact_type": source_fact_type,
-                "source_document_id": source_document_id,
-            },
-            doc! { "occurred_at": 1 },
-            executor,
-        )
-        .await
-    }
 }
 
 impl<'a> Repository<'a, CostAllocation> {
@@ -353,30 +297,6 @@ impl<'a> Repository<'a, CostAllocation> {
         }
         let entry_ids: Vec<String> = entry_ids.iter().map(ToString::to_string).collect();
         self.find_many(doc! { "cost_entry_id": { "$in": entry_ids } }, executor)
-            .await
-    }
-
-    /// 批量按销售单集合取回分配（`$in`，用于经营归属汇总）。
-    ///
-    /// # 参数
-    /// * `order_ids` - 销售单 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配分配。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_allocations_by_orders(
-        &self,
-        order_ids: &[SalesOrderId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<CostAllocation>> {
-        if order_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let order_ids: Vec<String> = order_ids.iter().map(ToString::to_string).collect();
-        self.find_many(doc! { "sales_order_id": { "$in": order_ids } }, executor)
             .await
     }
 }

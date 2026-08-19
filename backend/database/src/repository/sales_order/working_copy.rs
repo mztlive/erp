@@ -10,41 +10,13 @@ use entities::sales_order::{
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
 
-use super::super::{PageResult, Pagination, QueryFilter, Repository};
+use super::super::{Pagination, QueryFilter, Repository};
 use super::{
-    sort_doc, SalesOrderRepository, SALES_ORDER_SUBMISSIONS, SALES_ORDER_SUBMISSION_LINES,
-    SALES_ORDER_WORKING_COPIES,
+    SalesOrderRepository, SALES_ORDER_SUBMISSIONS, SALES_ORDER_SUBMISSION_LINES, SALES_ORDER_WORKING_COPIES,
 };
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
-
-/// 工作副本列表投影行（列表接口只取必要字段，禁止返回整文档）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WorkingCopyRow {
-    /// 实体主键。
-    pub id: String,
-    /// 稳定销售单。
-    pub sales_order_id: String,
-    /// 编辑目的。
-    pub working_purpose: WorkingPurpose,
-    /// 基准版本。
-    pub base_revision_id: Option<String>,
-    /// 草稿版本。
-    pub draft_version: u32,
-    /// 当前草稿责任人。
-    pub editor_user_id: String,
-    /// 草稿状态。
-    pub status: WorkingCopyStatus,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-    /// 更新时间（秒级时间戳）。
-    pub updated_at: u64,
-}
 
 /// 工作副本列表筛选条件。
 #[derive(Debug, Clone)]
@@ -96,41 +68,6 @@ impl Pagination for WorkingCopyFilter {
 }
 
 impl<'a> Repository<'a, SalesOrderWorkingCopy> {
-    /// 分页检索工作副本列表（投影查询）。
-    ///
-    /// 只返回 [`WorkingCopyRow`] 所需的列表字段，不加载整文档；排序字段由
-    /// Service 层白名单校验后传入（api-contract §4）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_working_copies(
-        &self,
-        filter: &WorkingCopyFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<WorkingCopyRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(working_copy_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<WorkingCopyRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
-    }
-
     /// 按销售单与编辑目的查找有效工作副本（`Editing`/`Conflict`）。
     ///
     /// 「同一销售单和编辑目的同时最多一个有效工作副本」由部分唯一索引
@@ -241,25 +178,6 @@ impl<'a> SalesOrderRepository<'a> {
         Repository::new(self.db, SALES_ORDER_WORKING_COPIES)
             .update(working_copy, executor)
             .await
-    }
-}
-
-/// 工作副本列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn working_copy_projection() -> Document {
-    doc! {
-        "id": 1,
-        "sales_order_id": 1,
-        "working_purpose": 1,
-        "base_revision_id": 1,
-        "draft_version": 1,
-        "editor_user_id": 1,
-        "status": 1,
-        "version": 1,
-        "created_at": 1,
-        "updated_at": 1,
     }
 }
 

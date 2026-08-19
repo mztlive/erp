@@ -4,46 +4,14 @@
 //! 不得审批可变采购主表。提交与明细**不提供软删除方法**。
 
 use entities::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId};
-use entities::money::Amount;
 use entities::purchase_order::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
-use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
 
-use super::common::{in_filter, sort_doc, SUBMISSION_SORT_FIELDS};
+use super::common::in_filter;
 use crate::executor::Executor;
-use crate::repository::{PageResult, Pagination, QueryFilter};
-use crate::{mongo_ops, Repository, Result};
-
-/// 采购提交列表投影行（列表接口只取必要字段，禁止返回整文档）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PurchaseOrderSubmissionRow {
-    /// 实体主键。
-    pub id: String,
-    /// 所属采购单。
-    pub purchase_order_id: PurchaseOrderId,
-    /// 提交序号（聚合内唯一）。
-    pub submission_no: String,
-    /// 供应商（拆单维度）。
-    pub supplier_id: SupplierAccountId,
-    /// 提交状态。
-    pub status: SubmissionStatus,
-    /// 含税行汇总（Decimal128）。
-    pub gross_amount: Amount,
-    /// 不含税行汇总（Decimal128）。
-    pub net_amount: Amount,
-    /// 税额行汇总（Decimal128）。
-    pub tax_amount: Amount,
-    /// 提交审计时间；与 `submitted_by` 成对出现。
-    pub submitted_at: Option<entities::common::time::Instant>,
-    /// 提交审计人；与 `submitted_at` 成对出现。
-    pub submitted_by: Option<String>,
-    /// 乐观锁版本（草稿自动保存并发版本）。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-}
+use crate::repository::{Pagination, QueryFilter};
+use crate::{Repository, Result};
 
 /// 采购提交列表筛选条件（财务审核队列）。
 #[derive(Debug, Clone)]
@@ -95,46 +63,6 @@ impl Pagination for PurchaseOrderSubmissionFilter {
 }
 
 impl<'a> Repository<'a, PurchaseOrderSubmission> {
-    /// 分页检索采购提交列表（投影查询）。
-    ///
-    /// 只返回 [`PurchaseOrderSubmissionRow`] 所需的列表字段，不加载整文档
-    /// （供应商快照与付款条件门禁快照不进入列表投影）；排序字段经白名单校验
-    /// （`created_at`/`submission_no`/`status`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_purchase_order_submissions(
-        &self,
-        filter: &PurchaseOrderSubmissionFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<PurchaseOrderSubmissionRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                SUBMISSION_SORT_FIELDS,
-                filter.sort_ascending,
-            ))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(purchase_order_submission_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<PurchaseOrderSubmissionRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
-    }
-
     /// 按「采购单 + 提交序号」查找唯一提交。
     ///
     /// 唯一性由 `uk_purchase_order_submissions_order_no` 唯一索引保证。
@@ -196,27 +124,6 @@ impl<'a> Repository<'a, PurchaseOrderSubmissionLine> {
             executor,
         )
         .await
-    }
-}
-
-/// 采购提交列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn purchase_order_submission_projection() -> Document {
-    doc! {
-        "id": 1,
-        "purchase_order_id": 1,
-        "submission_no": 1,
-        "supplier_id": 1,
-        "status": 1,
-        "gross_amount": 1,
-        "net_amount": 1,
-        "tax_amount": 1,
-        "submitted_at": 1,
-        "submitted_by": 1,
-        "version": 1,
-        "created_at": 1,
     }
 }
 

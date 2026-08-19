@@ -13,10 +13,9 @@ use entities::sales_order::BusinessType;
 use crate::errors::{Error, Result};
 
 use super::policy::{
-    policy_of, require_process_required, ApprovalDomainAction, ApprovalRequirement,
-    ApprovalSubjectSnapshotField, ApprovalSubjectVersionSource, DocumentApprovalPolicy,
-    OwnerOrganizationSource, ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy, WorkItemOwnerRole,
-    ALL_DOCUMENT_TYPES,
+    policy_of, require_process_required, ApprovalDomainAction, ApprovalSubjectSnapshotField,
+    ApprovalSubjectVersionSource, DocumentApprovalPolicy, OwnerOrganizationSource,
+    ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy, WorkItemOwnerRole, ALL_DOCUMENT_TYPES,
 };
 use super::process_kind::process_kind_of;
 
@@ -459,14 +458,6 @@ pub fn assignee_ids_of(graph: &DefinitionGraph) -> Vec<String> {
     ids.sort();
     ids.dedup();
     ids
-}
-
-/// 绑定要求：无审批跳过，必须审批查询发布定义。
-///
-/// # 返回
-/// 返回政策决定。
-pub fn binding_requirement_of(policy: &DocumentApprovalPolicy) -> ApprovalRequirement {
-    policy.requirement()
 }
 
 #[cfg(test)]

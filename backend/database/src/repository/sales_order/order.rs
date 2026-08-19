@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
-use super::{sort_doc, SalesOrderRepository, SALES_ORDER_LINES};
+use super::{sort_doc, SalesOrderRepository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
@@ -219,27 +219,6 @@ impl<'a> Repository<'a, SalesOrder> {
             total: total as i64,
         })
     }
-
-    /// 按销售单号查找销售单。
-    ///
-    /// 唯一性由 `uk_sales_orders_order_no` 唯一索引保证（软删除后单号不复用）。
-    ///
-    /// # 参数
-    /// * `order_no` - 销售单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除销售单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_order_no(
-        &self,
-        order_no: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SalesOrder>> {
-        self.find_one_by_field("order_no", order_no, executor).await
-    }
 }
 
 impl<'a> Repository<'a, SalesOrderLine> {
@@ -268,37 +247,7 @@ impl<'a> Repository<'a, SalesOrderLine> {
     }
 }
 
-impl<'a> SalesOrderRepository<'a> {
-    /// 批量替换销售单稳定明细行（先删后写）。
-    ///
-    /// **必须收到事务执行器**：本方法先按销售单删除全部明细再写入新明细，
-    /// 不构成原子边界，传入 `NoTransaction` 时中途失败会留下部分写入的明细；
-    /// Service 必须通过 `database::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 所属销售单
-    /// * `lines` - 目标稳定明细行（含被移除行，历史行号不复用）
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入失败
-    /// 时返回错误。
-    pub async fn replace_sales_order_lines(
-        &self,
-        sales_order_id: &SalesOrderId,
-        lines: &[SalesOrderLine],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let collection = self.db.collection::<SalesOrderLine>(SALES_ORDER_LINES);
-        mongo_ops::delete_many(
-            &collection,
-            doc! { "sales_order_id": sales_order_id.to_string() },
-            executor,
-        )
-        .await?;
-        mongo_ops::insert_many(&collection, lines.to_vec(), executor).await
-    }
-}
+impl<'a> SalesOrderRepository<'a> {}
 
 /// 销售单列表投影字段。
 ///

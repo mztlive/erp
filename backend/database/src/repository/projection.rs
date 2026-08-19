@@ -170,37 +170,6 @@ impl<'a> Repository<'a, SalesOrderProjection> {
             total: total as i64,
         })
     }
-
-    /// 按「销售单 + 目标商城」查找唯一稳定投影。
-    ///
-    /// 唯一性由 `uk_sales_order_projections_order_mall` 唯一索引保证
-    /// （数据模型 §6.16）；本方法用于投影查询与幂等判定。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 卡券销售单
-    /// * `target_mall_id` - 目标商城
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的投影；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_sales_order_and_mall(
-        &self,
-        sales_order_id: &SalesOrderId,
-        target_mall_id: &SourceSystemId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SalesOrderProjection>> {
-        self.find_one(
-            doc! {
-                "sales_order_id": sales_order_id.to_string(),
-                "target_mall_id": target_mall_id.to_string(),
-            },
-            executor,
-        )
-        .await
-    }
 }
 
 /// 投影修订列表投影行（Decimal128 金额原样投影，不做舍入换算）。

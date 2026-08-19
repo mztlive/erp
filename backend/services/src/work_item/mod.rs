@@ -1241,11 +1241,6 @@ impl WorkItemService {
         Ok(None)
     }
 
-    #[allow(dead_code)]
-    async fn ensure_approval_not_blocked(&self, _item: &WorkItem) -> Result<()> {
-        Ok(())
-    }
-
     /// 形成事务外的授权版本锚点；事务内仍会重新读取全部资格与业务事实。
     async fn assignment_authorization_snapshot(
         &self,
@@ -1929,39 +1924,6 @@ struct AssignmentPolicyAuditInput<'a> {
     authorization: AssignmentAuthorizationSnapshot,
 }
 
-/// 退回责任池命令的任务与审计输入。
-///
-/// # 用途
-/// 将退回事务所需字段打包，供 [`WorkItemService::release_with_assignment_policy_audit`] 使用。
-///
-/// # 参数
-/// 无
-///
-/// # 返回
-/// 无
-///
-/// # 错误
-/// 无
-///
-/// # 关键业务约束
-/// 事务内必须重验当前责任人与授权快照。
-struct ReleaseAssignmentPolicyAuditInput<'a> {
-    /// 待退回任务。
-    item: WorkItem,
-    /// 期望任务版本。
-    expected_task_version: u64,
-    /// 操作人。
-    actor: &'a AuditActor,
-    /// 审计动作。
-    action: &'a str,
-    /// 幂等审计主键。
-    audit_id: String,
-    /// 审计消息。
-    audit_message: String,
-    /// 事务外冻结的授权快照。
-    authorization: AssignmentAuthorizationSnapshot,
-}
-
 /// W29 关闭命令的领域证据与审计输入。
 ///
 /// # 用途
@@ -2098,105 +2060,6 @@ impl WorkItemService {
                     ensure_policy_revision(&db, authorization.policy_revision, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<WorkItem, WorkItemWriteError>(current)
-                })
-            })
-            .await;
-        match result {
-            Ok(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
-            Err(WorkItemWriteError::VersionConflict) => Ok(WorkItemWriteOutcome::VersionConflict),
-            Err(WorkItemWriteError::Service(error)) => match self
-                .idempotent_replay(&replay_audit_id, &replay_fingerprint, &replay_item_id)
-                .await?
-            {
-                Some(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
-                None => Err(error),
-            },
-        }
-    }
-
-    /// 在同一事务内重验当前责任人的账号、授权、参与权和岗位分离后退回责任池。
-    ///
-    /// # 用途
-    /// 校验当前责任人后拒绝退回团队动作。
-    ///
-    /// # 参数
-    /// * `input` - 任务、审计与授权快照
-    ///
-    /// # 返回
-    /// 返回写入结果或版本冲突。
-    ///
-    /// # 错误
-    /// 责任人变化、授权失败或动作已取消时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 退回团队动作已取消，校验通过后仍返回业务错误。
-    #[allow(dead_code)]
-    async fn release_with_assignment_policy_audit(
-        &self,
-        input: ReleaseAssignmentPolicyAuditInput<'_>,
-    ) -> Result<WorkItemWriteOutcome> {
-        let ReleaseAssignmentPolicyAuditInput {
-            item,
-            expected_task_version,
-            actor,
-            action,
-            audit_id,
-            audit_message,
-            authorization,
-        } = input;
-        let replay_audit_id = audit_id.clone();
-        let replay_item_id = item.base.id.clone();
-        let replay_fingerprint = audit_command_fingerprint(&audit_message)
-            .expect("服务端审计消息必须携带指纹")
-            .to_string();
-        let _audit = actor.clone().resource_log_with_id(
-            audit_id,
-            action,
-            "work_item",
-            item.base.id.clone(),
-            Some(audit_message),
-        )?;
-        let item_id = item.base.id;
-        let actor_id = actor.id().to_string();
-        let actor_kind = actor.kind();
-        let rbac = self.rbac.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let result = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    ensure_policy_revision(&db, authorization.policy_revision, session).await?;
-                    let current = db
-                        .work_items()
-                        .find_by_id(&item_id, session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
-                    if current.base.version != expected_task_version {
-                        return Err(WorkItemWriteError::VersionConflict);
-                    }
-                    if !current.is_owned_by(&actor_id) {
-                        return Err(WorkItemWriteError::Service(Error::ConflictError(
-                            "任务当前责任人已变化".to_string(),
-                        )));
-                    }
-                    ensure_assignment_policy_in_transaction(
-                        &db,
-                        &rbac,
-                        AssignmentPolicyCheck {
-                            actor_kind,
-                            actor_id: &actor_id,
-                            assignee_id: &actor_id,
-                            item: &current,
-                            require_manager: false,
-                            authorization: &authorization,
-                            allow_current_owner: true,
-                        },
-                        session,
-                    )
-                    .await?;
-                    Err(WorkItemWriteError::Service(Error::BusinessLogicError(
-                        "已取消退回团队动作".to_string(),
-                    )))
                 })
             })
             .await;

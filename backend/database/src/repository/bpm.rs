@@ -4,8 +4,7 @@
 
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 use bpm::model::types::{
-    ApprovalCommandKind, ApprovalDefinitionStatus, ApprovalExecutionEndReason, ApprovalNodeExecutionStatus,
-    ApprovalProcessInstanceStatus,
+    ApprovalCommandKind, ApprovalDefinitionStatus, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
 };
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeDefinition, ApprovalNodeExecution,
@@ -35,7 +34,6 @@ const MAX_DEFINITION_GRAPH_DOCS: i64 = 20;
 const MAX_DEFINITION_VERSIONS: i64 = 100;
 const MAX_EXECUTION_HISTORY: i64 = 50;
 const MAX_INSTANCE_PAGE: i64 = 50;
-const MAX_ASSIGNEES: i64 = 20;
 
 /// CAS 写入结果。未命中必须区分为不存在、版本冲突或状态变化。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -230,21 +228,6 @@ impl<'a> BpmWorkflowRepository<'a> {
             .await
     }
 
-    /// 按流程种类与业务版本精确查询定义。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_definition_version(
-        &self,
-        process_kind: ProcessKind,
-        version: u32,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ApprovalProcessDefinition>> {
-        self.definitions()
-            .find_one(kind_version_filter(process_kind, version), executor)
-            .await
-    }
-
     /// 列出同一流程种类的历史定义版本，按业务版本倒序且有上限。
     ///
     /// # 错误
@@ -435,46 +418,6 @@ impl<'a> BpmWorkflowRepository<'a> {
         .await
     }
 
-    /// 列出实例全部节点审批人，条数不超过定义节点上限。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn list_instance_assignees(
-        &self,
-        instance_id: &ApprovalProcessInstanceId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ApprovalInstanceAssignee>> {
-        find_limited(
-            &self.db.collection(ASSIGNEES),
-            instance_assignees_filter(instance_id),
-            instance_assignees_sort(),
-            instance_assignees_limit(MAX_ASSIGNEES as u32),
-            executor,
-        )
-        .await
-    }
-
-    /// 按实例与节点键查询当前审批人绑定。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_instance_assignee(
-        &self,
-        instance_id: &ApprovalProcessInstanceId,
-        node_key: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ApprovalInstanceAssignee>> {
-        self.assignees()
-            .find_one(
-                doc! {
-                    "process_instance_id": instance_id.as_ref(),
-                    "node_key": node_key,
-                },
-                executor,
-            )
-            .await
-    }
-
     /// 只写入 BPM 运行事实：实例、审批人、首个执行和命令收据。
     ///
     /// 实例插入必须同时写入有界列表投影；列表不得再扫执行历史补全当前节点、
@@ -597,57 +540,6 @@ impl<'a> BpmWorkflowRepository<'a> {
             execution,
             expected_execution_version,
             ApprovalNodeExecutionStatus::Active,
-            executor,
-        )
-        .await
-    }
-
-    /// 以 `id + expected_execution_version + BLOCKED` 将受阻执行固定写为 `SUPERSEDED`。
-    ///
-    /// 成功路径强制 `status=SUPERSEDED`，并要求传入合法 `ended_reason` 与 `ended_at`。
-    ///
-    /// # 错误
-    /// 缺少结束原因/结束时间、元数据越界或 MongoDB 写入失败时返回错误。
-    pub async fn supersede_blocked_execution(
-        &self,
-        execution: &ApprovalNodeExecution,
-        expected_execution_version: u64,
-        executor: &mut dyn Executor,
-    ) -> Result<CasWriteOutcome<ApprovalNodeExecution>> {
-        let write = superseded_execution_write(execution)?;
-        self.cas_end_execution(
-            &write,
-            expected_execution_version,
-            ApprovalNodeExecutionStatus::Blocked,
-            executor,
-        )
-        .await
-    }
-
-    /// 以 `instance_id + node_key + expected_assignment_version` 改派实例审批人。
-    ///
-    /// # 错误
-    /// 元数据越界或 MongoDB 写入失败时返回错误。
-    pub async fn reassign_instance_assignee(
-        &self,
-        assignee: &ApprovalInstanceAssignee,
-        expected_assignment_version: u64,
-        executor: &mut dyn Executor,
-    ) -> Result<CasWriteOutcome<ApprovalInstanceAssignee>> {
-        let filter = reassign_assignee_filter(
-            &assignee.process_instance_id,
-            &assignee.node_key,
-            expected_assignment_version,
-        )?;
-        self.cas_replace(
-            CasReplaceSpec {
-                collection: ASSIGNEES,
-                filter,
-                entity: assignee,
-                expected_version: expected_assignment_version,
-                extra_set: None,
-            },
-            |current| current.assignment_version() == expected_assignment_version,
             executor,
         )
         .await
@@ -822,10 +714,6 @@ impl<'a> BpmWorkflowRepository<'a> {
         Repository::new(self.db, EXECUTIONS)
     }
 
-    fn assignees(&self) -> Repository<'a, ApprovalInstanceAssignee> {
-        Repository::new(self.db, ASSIGNEES)
-    }
-
     fn receipts(&self) -> Repository<'a, ApprovalCommandReceipt> {
         Repository::new(self.db, RECEIPTS)
     }
@@ -849,13 +737,6 @@ fn published_kind_filter(process_kind: ProcessKind) -> Document {
     doc! {
         "process_kind": process_kind.as_str(),
         "status": ApprovalDefinitionStatus::Published.as_str(),
-    }
-}
-
-fn kind_version_filter(process_kind: ProcessKind, version: u32) -> Document {
-    doc! {
-        "process_kind": process_kind.as_str(),
-        "definition_version": i64::from(version),
     }
 }
 
@@ -904,39 +785,6 @@ fn definition_versions_sort() -> Document {
 /// 返回可交给 MongoDB `limit` 的有界整数。
 fn definition_versions_limit(limit: u32) -> i64 {
     clamp_limit(limit, MAX_DEFINITION_VERSIONS)
-}
-
-/// 构造实例审批人查询条件。
-///
-/// # 参数
-/// * `instance_id` - 所属流程实例
-///
-/// # 返回
-/// 返回含实例主键与软删除约束的查询文档。
-fn instance_assignees_filter(instance_id: &ApprovalProcessInstanceId) -> Document {
-    doc! {
-        "process_instance_id": instance_id.as_ref(),
-        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-    }
-}
-
-/// 返回实例审批人固定排序文档。
-///
-/// # 返回
-/// 返回 `{ node_key: 1 }`。
-fn instance_assignees_sort() -> Document {
-    doc! { "node_key": 1 }
-}
-
-/// 将审批人列表请求页大小夹紧到 `[1, MAX_ASSIGNEES]`。
-///
-/// # 参数
-/// * `limit` - 调用方请求条数
-///
-/// # 返回
-/// 返回可交给 MongoDB `limit` 的有界整数。
-fn instance_assignees_limit(limit: u32) -> i64 {
-    clamp_limit(limit, MAX_ASSIGNEES)
 }
 
 /// 返回定义连线一次批量读取上限（节点上限的两倍）。
@@ -1069,34 +917,6 @@ fn execution_end_filter(
         "status": required_status.as_str(),
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
     })
-}
-
-fn reassign_assignee_filter(
-    instance_id: &ApprovalProcessInstanceId,
-    node_key: &str,
-    expected_assignment_version: u64,
-) -> Result<Document> {
-    Ok(doc! {
-        "process_instance_id": instance_id.as_ref(),
-        "node_key": node_key,
-        "version": i64_version(expected_assignment_version)?,
-        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-    })
-}
-
-fn superseded_execution_write(execution: &ApprovalNodeExecution) -> Result<ApprovalNodeExecution> {
-    let Some(reason) = execution.ended_reason else {
-        return Err(Error::EntityMetadataOutOfRange("ended_reason"));
-    };
-    match reason {
-        ApprovalExecutionEndReason::AdminReassigned | ApprovalExecutionEndReason::AssigneeRecovered => {}
-    }
-    if execution.ended_at.is_none() {
-        return Err(Error::EntityMetadataOutOfRange("ended_at"));
-    }
-    let mut write = execution.clone();
-    write.status = ApprovalNodeExecutionStatus::Superseded;
-    Ok(write)
 }
 
 fn instance_insert_document(
@@ -1312,29 +1132,21 @@ pub fn classify_assign_document_no_miss<T>(
 #[cfg(test)]
 mod tests {
     use super::{
-        active_draft_filter, approval_task_cas_filter, assign_document_no_filter, clamp_limit,
-        classify_assign_document_no_miss, classify_cas_miss, current_execution_filter,
-        definition_child_filter, definition_graph_transition_limit, definition_versions_filter,
-        definition_versions_limit, definition_versions_sort, draft_or_status_filter, execution_end_filter,
-        execution_history_filter, execution_history_limit, instance_advance_filter,
-        instance_assignees_filter, instance_assignees_limit, instance_assignees_sort,
-        instance_insert_document, instance_list_filter_doc, instance_list_scope_empty, instance_list_sort,
-        instance_summary_projection, kind_version_filter, merge_documents, non_terminal_subject_filter,
-        published_kind_filter, reassign_assignee_filter, receipt_key_filter, superseded_execution_write,
-        ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
-        ApprovalInstanceListView, AssignDocumentNoOutcome, CasWriteOutcome, MAX_ASSIGNEES,
-        MAX_DEFINITION_GRAPH_DOCS, MAX_DEFINITION_VERSIONS, MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
+        approval_task_cas_filter, assign_document_no_filter, clamp_limit, classify_assign_document_no_miss,
+        classify_cas_miss, current_execution_filter, definition_child_filter,
+        definition_graph_transition_limit, execution_end_filter, execution_history_filter,
+        execution_history_limit, instance_advance_filter, instance_insert_document, instance_list_filter_doc,
+        instance_list_scope_empty, instance_list_sort, instance_summary_projection, merge_documents,
+        non_terminal_subject_filter, receipt_key_filter, ApprovalInstanceListCursor,
+        ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
+        AssignDocumentNoOutcome, CasWriteOutcome, MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY,
+        MAX_INSTANCE_PAGE,
     };
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
-        ApprovalBlockerCode, ApprovalCommandKind, ApprovalDefinitionStatus,
-        ApprovalExecutionAssignmentSource, ApprovalExecutionEndReason, ApprovalNodeExecutionStatus,
-        ApprovalProcessInstanceStatus,
+        ApprovalCommandKind, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
     };
-    use bpm::model::{
-        ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, NewProcessInstance, ParticipantId,
-        Timestamp,
-    };
+    use bpm::model::{ApprovalProcessInstance, NewProcessInstance, ParticipantId, Timestamp};
     use bpm::{ProcessKind, SubjectRef};
     use entity_core::{BaseModel, HasBaseModel};
     use mongodb::bson::{doc, to_document, Bson};
@@ -1359,27 +1171,6 @@ mod tests {
         let mut base = BaseModel::new("doc-1".to_string());
         base.version = version;
         LockProbe { base, status_ok }
-    }
-
-    #[test]
-    fn definition_filters_use_process_kind_and_status() {
-        assert_eq!(
-            published_kind_filter(ProcessKind::StockAdjustment),
-            doc! {
-                "process_kind": "stock_adjustment",
-                "status": ApprovalDefinitionStatus::Published.as_str(),
-            }
-        );
-        assert_eq!(
-            kind_version_filter(ProcessKind::StockAdjustment, 3),
-            doc! { "process_kind": "stock_adjustment", "definition_version": 3_i64 }
-        );
-        assert_eq!(
-            active_draft_filter(ProcessKind::StockAdjustment)
-                .get_str("status")
-                .unwrap(),
-            "DRAFT"
-        );
     }
 
     #[test]
@@ -1416,73 +1207,6 @@ mod tests {
         assert_eq!(
             current.get_document("status").unwrap(),
             &doc! { "$in": ["ACTIVE", "BLOCKED"] }
-        );
-    }
-
-    #[test]
-    fn draft_definition_and_reassign_cas_filters_lock_status_and_version() {
-        let draft = draft_or_status_filter("def-1", 5, &[ApprovalDefinitionStatus::Draft]).unwrap();
-        assert_eq!(draft.get_str("id").unwrap(), "def-1");
-        assert_eq!(draft.get_i64("version").unwrap(), 5);
-        assert_eq!(draft.get_str("status").unwrap(), "DRAFT");
-
-        let reassign = reassign_assignee_filter(&ApprovalProcessInstanceId::new("inst-1"), "n1", 2).unwrap();
-        assert_eq!(reassign.get_str("process_instance_id").unwrap(), "inst-1");
-        assert_eq!(reassign.get_str("node_key").unwrap(), "n1");
-        assert_eq!(reassign.get_i64("version").unwrap(), 2);
-
-        assert!(matches!(
-            classify_cas_miss(Some(probe(5, false)), 5, |item| item.status_ok),
-            CasWriteOutcome::StatusChanged(_)
-        ));
-        assert!(matches!(
-            classify_cas_miss(Some(probe(3, true)), 2, |item| item.status_ok),
-            CasWriteOutcome::VersionConflict(_)
-        ));
-    }
-
-    #[test]
-    fn supersede_write_requires_end_reason_and_forces_superseded() {
-        let mut blocked = ApprovalNodeExecution::new_blocked(
-            NewNodeExecution {
-                id: ApprovalNodeExecutionId::new("exec-1"),
-                process_instance_id: ApprovalProcessInstanceId::new("inst-1"),
-                node_key: "n1".into(),
-                node_name: "仓储复核".into(),
-                round_no: 1,
-                execution_no: 1,
-                assignment_source: ApprovalExecutionAssignmentSource::Definition,
-                replaces_execution_id: None,
-                assignee_participant_id: ParticipantId::new("u1").unwrap(),
-                assignee_name_snapshot: "张三".into(),
-                at: Timestamp::from_unix_secs(1).unwrap(),
-            },
-            ApprovalBlockerCode::ApproverAccountInactive,
-        )
-        .unwrap();
-        assert!(superseded_execution_write(&blocked).is_err());
-
-        blocked
-            .supersede(
-                ApprovalExecutionEndReason::AdminReassigned,
-                Timestamp::from_unix_secs(2).unwrap(),
-            )
-            .unwrap();
-        let write = superseded_execution_write(&blocked).unwrap();
-        assert_eq!(write.status, ApprovalNodeExecutionStatus::Superseded);
-        assert_eq!(
-            write.ended_reason,
-            Some(ApprovalExecutionEndReason::AdminReassigned)
-        );
-        assert!(write.ended_at.is_some());
-
-        blocked.status = ApprovalNodeExecutionStatus::Approved;
-        blocked.ended_reason = Some(ApprovalExecutionEndReason::AssigneeRecovered);
-        let forced = superseded_execution_write(&blocked).unwrap();
-        assert_eq!(forced.status, ApprovalNodeExecutionStatus::Superseded);
-        assert_eq!(
-            forced.ended_reason,
-            Some(ApprovalExecutionEndReason::AssigneeRecovered)
         );
     }
 
@@ -1800,32 +1524,6 @@ mod tests {
             instance_list_sort(&status_only),
             doc! { "started_at": -1, "id": -1 }
         );
-    }
-
-    #[test]
-    fn definition_versions_and_assignees_queries_are_bounded() {
-        let versions = definition_versions_filter(ProcessKind::StockAdjustment);
-        assert_eq!(versions.get_str("process_kind").unwrap(), "stock_adjustment");
-        assert_eq!(versions.get_i64("deleted_at").unwrap(), 0);
-        assert!(!versions.contains_key("status"));
-        assert_eq!(definition_versions_sort(), doc! { "definition_version": -1 });
-        assert_eq!(MAX_DEFINITION_VERSIONS, 100);
-        assert_eq!(definition_versions_limit(0), 1);
-        assert_eq!(definition_versions_limit(100), MAX_DEFINITION_VERSIONS);
-        assert_eq!(definition_versions_limit(101), MAX_DEFINITION_VERSIONS);
-        assert_eq!(definition_versions_limit(u32::MAX), MAX_DEFINITION_VERSIONS);
-
-        let instance_id = ApprovalProcessInstanceId::new("inst-1");
-        let assignees = instance_assignees_filter(&instance_id);
-        assert_eq!(assignees.get_str("process_instance_id").unwrap(), "inst-1");
-        assert_eq!(assignees.get_i64("deleted_at").unwrap(), 0);
-        assert!(!assignees.contains_key("node_key"));
-        assert_eq!(instance_assignees_sort(), doc! { "node_key": 1 });
-        assert_eq!(MAX_ASSIGNEES, 20);
-        assert_eq!(instance_assignees_limit(0), 1);
-        assert_eq!(instance_assignees_limit(20), MAX_ASSIGNEES);
-        assert_eq!(instance_assignees_limit(21), MAX_ASSIGNEES);
-        assert_eq!(instance_assignees_limit(u32::MAX), MAX_ASSIGNEES);
     }
 
     #[test]

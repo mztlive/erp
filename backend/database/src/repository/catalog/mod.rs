@@ -26,9 +26,7 @@ mod voucher;
 #[allow(unused_imports)]
 pub use attribute::{SkuAttributeFilter, SkuAttributeRow, SkuAttributeValueFilter, SkuAttributeValueRow};
 #[allow(unused_imports)]
-pub use category::{
-    ProductCategoryAttributeFilter, ProductCategoryAttributeRow, ProductCategoryFilter, ProductCategoryRow,
-};
+pub use category::{ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRow};
 #[allow(unused_imports)]
 pub use dictionary::{ProductBrandFilter, ProductBrandRow, UnitOfMeasureFilter, UnitOfMeasureRow};
 #[allow(unused_imports)]
