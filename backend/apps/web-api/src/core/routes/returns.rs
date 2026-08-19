@@ -210,6 +210,30 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/payment-reversals/{id}",
+            with_permission(
+                get(returns::payment_reversal_detail),
+                rbac,
+                returns::payment_reversal_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/payment-reversals/{id}/submit",
+            with_permission(
+                post(returns::payment_reversal_submit),
+                rbac,
+                returns::payment_reversal_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/payment-reversals/{id}/cancel-approval",
+            with_permission(
+                post(returns::payment_reversal_cancel_approval),
+                rbac,
+                returns::payment_reversal_cancel_approval_permission_key(),
+            ),
+        )
+        .route(
             "/payment-reversals/{id}/post",
             with_permission(
                 post(returns::payment_reversal_post),
@@ -262,6 +286,21 @@ mod tests {
         assert!(production.contains("receipt_reversal_submit"));
         assert!(production.contains("receipt_reversal_cancel_approval"));
         assert!(production.contains("receipt_reversal_detail"));
+        assert!(!production.contains("PENDING_REVIEW"));
+    }
+
+    /// 付款冲正路由暴露提交与撤回，不再把过账当客户端旁路入口。
+    #[test]
+    fn payment_reversal_routes_expose_submit_and_cancel() {
+        let production = include_str!("returns.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产路由必须存在");
+        assert!(production.contains("/payment-reversals/{id}/submit"));
+        assert!(production.contains("/payment-reversals/{id}/cancel-approval"));
+        assert!(production.contains("payment_reversal_submit"));
+        assert!(production.contains("payment_reversal_cancel_approval"));
+        assert!(production.contains("payment_reversal_detail"));
         assert!(!production.contains("PENDING_REVIEW"));
     }
 }
