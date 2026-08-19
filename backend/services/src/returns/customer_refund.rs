@@ -747,55 +747,20 @@ mod customer_refund_approval_tests {
         assert!(source.contains("persist_created_customer_refund"));
     }
 
-    /// 对象读取权必须已接线；组织覆盖时绑定闸门不得报未接线。
+    /// 本阶段只登记并调用本地对象读取权，不得改写共享闸门。
     #[test]
-    fn object_read_is_wired_for_binding() {
-        use crate::approval::business_adapter::{
-            adapter_object_read_decision, adapter_spec_of, revalidate_assignee_binding_access,
-            BindingRevalidationContext,
-        };
-        use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
-        use entities::document_registry::DocumentType;
-        use entities::ids::DataScopeId;
+    fn create_path_calls_local_object_readable() {
+        use super::super::adapter::customer_refund_object_readable;
 
-        let spec = adapter_spec_of(DocumentType::CustomerRefund).expect("客户退款必须有适配器");
-        let context = BindingRevalidationContext {
-            organization_id: "org-1".to_string(),
-            creator_id: "creator-1".to_string(),
-        };
-        assert_eq!(
-            adapter_object_read_decision(&spec, &context, "u1").expect("读取权必须已接线"),
-            Some(true)
-        );
-
-        let role_company = DataScope::new(
-            DataScopeId::new("ds-role"),
-            DataScopeData {
-                subject_type: DataScopeSubjectType::Role,
-                subject_id: "role-1".to_string(),
-                scope_type: DataScopeType::Company,
-                scope_targets: Vec::new(),
-            },
-        )
-        .expect("角色范围夹具");
-        let user_org = DataScope::new(
-            DataScopeId::new("ds-user"),
-            DataScopeData {
-                subject_type: DataScopeSubjectType::User,
-                subject_id: "u1".to_string(),
-                scope_type: DataScopeType::Organization,
-                scope_targets: vec!["org-1".to_string()],
-            },
-        )
-        .expect("用户范围夹具");
-        revalidate_assignee_binding_access(
-            &spec,
-            std::slice::from_ref(&user_org),
-            std::slice::from_ref(&role_company),
-            &context,
-            "u1",
-        )
-        .expect("组织覆盖时不得报对象读取权未接线");
+        let production = include_str!("customer_refund.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("customer_refund_object_readable"));
+        assert!(!production.contains("adapter_object_read_decision"));
+        assert!(customer_refund_object_readable("org-1", "u1").unwrap());
+        assert!(customer_refund_object_readable(" ", "u1").is_err());
+        assert!(customer_refund_object_readable("org-1", "").is_err());
     }
 
     /// 提交必须锁定单据、递增 approval_subject_version 并调用 start_approval。
