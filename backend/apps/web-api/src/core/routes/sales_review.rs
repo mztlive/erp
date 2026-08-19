@@ -1,8 +1,6 @@
 //! 域 D14 `sales_review` 管理端路由。
 //!
-//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/sales-order-reviews`、
-//! `/admin/sales-change-orders`；采购二次确认与低毛利路由已移除。每条路由统一
-//! 走 JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
+//! 仅保留销售变更单；卡券专用审批、采购确认与低毛利路由已删除。
 
 use axum::{
     routing::{get, post},
@@ -24,32 +22,6 @@ use crate::{
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
-        // 卡券销售审批轨（W05）
-        .route(
-            "/sales-order-reviews",
-            with_permission(
-                get(sales_review::sales_order_review_list),
-                rbac,
-                sales_review::sales_order_review_list_permission_key(),
-            ),
-        )
-        .route(
-            "/sales-order-reviews/decisions",
-            with_permission(
-                post(sales_review::sales_order_review_decide),
-                rbac,
-                sales_review::sales_order_review_decide_permission_key(),
-            ),
-        )
-        .route(
-            "/sales-order-reviews/cancellations",
-            with_permission(
-                post(sales_review::sales_order_review_cancel),
-                rbac,
-                sales_review::sales_order_review_cancel_permission_key(),
-            ),
-        )
-        // 销售变更单（W05 变更轨）
         .route(
             "/sales-change-orders",
             with_permission(
@@ -80,38 +52,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(sales_review::sales_change_order_submit_impact),
                 rbac,
                 sales_review::sales_change_order_submit_impact_permission_key(),
-            ),
-        )
-        .route(
-            "/sales-change-orders/{id}/impact-confirm",
-            with_permission(
-                post(sales_review::sales_change_order_confirm_impact),
-                rbac,
-                sales_review::sales_change_order_confirm_impact_permission_key(),
-            ),
-        )
-        .route(
-            "/sales-change-orders/{id}/impact-reject",
-            with_permission(
-                post(sales_review::sales_change_order_reject_impact),
-                rbac,
-                sales_review::sales_change_order_reject_impact_permission_key(),
-            ),
-        )
-        .route(
-            "/sales-change-orders/{id}/finance-confirm",
-            with_permission(
-                post(sales_review::sales_change_order_confirm_finance),
-                rbac,
-                sales_review::sales_change_order_confirm_finance_permission_key(),
-            ),
-        )
-        .route(
-            "/sales-change-orders/{id}/finance-reject",
-            with_permission(
-                post(sales_review::sales_change_order_reject_finance),
-                rbac,
-                sales_review::sales_change_order_reject_finance_permission_key(),
             ),
         )
         .route(

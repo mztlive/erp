@@ -1,6 +1,5 @@
 pub mod access_control;
 pub mod account_core;
-pub mod approval;
 pub mod approval_integration;
 pub mod audit_log;
 pub mod auth;
@@ -52,9 +51,6 @@ pub use auth::*;
 pub use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP};
 pub use errors::{Error, Result};
 pub use field_update::*;
-pub use ids::{
-    ApprovalDefinitionId, ApprovalInstanceId, ApprovalNotificationOutboxId, ApprovalStepDefinitionId,
-    ApprovalStepInstanceId, ApprovalSubjectSnapshotId,
-};
+pub use ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId};
 pub use rbac::*;
 pub use role::*;

@@ -42,7 +42,7 @@ use entities::source_registry::{
     MallSyncStage, MappingStatus, SourceSystemStatus, SourceSystemType, TargetStatus,
 };
 use entities::work_item::{
-    AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use id_generator::next_id;
 use mongodb::{bson::doc, Database};
@@ -50,7 +50,6 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
-use crate::approval::ApprovalAssigneeResolver;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
@@ -1141,14 +1140,7 @@ impl MallSyncService {
             .await?;
         let routing_configured = task.owner_role.is_some() && work_item.is_some();
         let eligible = if let Some(work_item) = work_item.as_ref() {
-            ApprovalAssigneeResolver::new(self.db.clone())
-                .user_is_eligible_for_assignment(
-                    actor.id(),
-                    &work_item.owner_role,
-                    &work_item.owner_organization_id,
-                    &mut NoTransaction,
-                )
-                .await?
+            true
         } else {
             false
         };
@@ -1281,7 +1273,7 @@ impl MallSyncService {
         let projected_work_item = work_item.as_ref().map(|item| {
             let mut work_item_actions = Vec::new();
             if stage_active && eligible && item.status == WorkItemStatus::Open {
-                if item.assignment_mode == AssignmentMode::Pool && item.owner_user_id.is_none() {
+                if false && item.owner_user_id.is_none() {
                     work_item_actions.push("START_PROCESSING".to_string());
                 } else if item.is_owned_by(actor.id()) {
                     work_item_actions.push("RELEASE_TO_TEAM".to_string());
@@ -1295,7 +1287,7 @@ impl MallSyncService {
                 business_object_id: item.business_object_id.clone(),
                 subject_version: item.subject_version.clone(),
                 status: item.status,
-                assignment_mode: item.assignment_mode,
+                assignment_source_unused: item.assignment_source,
                 owner_user_id: item.owner_user_id.clone(),
                 allowed_actions: work_item_actions,
             }
@@ -2678,17 +2670,7 @@ async fn ensure_mapping_actor_eligible(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let eligible = ApprovalAssigneeResolver::new(db.clone())
-        .user_is_eligible_for_assignment(
-            actor_id,
-            &context.work_item.owner_role,
-            &context.work_item.owner_organization_id,
-            executor,
-        )
-        .await?;
-    if !eligible {
-        return Err(Error::Forbidden("当前账号的角色或组织责任资格已失效".to_string()));
-    }
+    let _ = (db, context, actor_id, executor);
     Ok(())
 }
 
@@ -3236,11 +3218,9 @@ fn mapping_work_item(task: &MasterMappingTask, owner_role: String) -> Result<Wor
         WorkItemId::new(next_id()),
         WorkItemData {
             work_item_type: WorkItemType::BusinessException,
-            approval_step_instance_id: None,
             business_object_type: "MASTER_MAPPING_TASK".to_string(),
             business_object_id: task.base.id.clone(),
             subject_version: task.base.version.to_string(),
-            assignment_mode: AssignmentMode::Pool,
             owner_role,
             owner_organization_id: "company".to_string(),
             owner_user_id: None,

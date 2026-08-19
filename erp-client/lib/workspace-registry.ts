@@ -158,7 +158,7 @@ function defaultNavPermissionsFor(
         case "W06":
             return ["sales_order:list"]
         case "W07":
-            return ["procurement_confirmation:list"]
+            return []
         case "W08":
             return ["purchase_order:list"]
         case "W09":
@@ -343,8 +343,8 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         id: "W07",
         name: "二次确认队列",
         mode: "M3",
-        mainRoute: "/procurement/confirm",
-        navHref: "/procurement/confirm",
+        mainRoute: "/procurement/orders",
+        navHref: "/procurement/orders",
     },
     {
         id: "W08",
@@ -525,13 +525,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     label: "待我处理",
                     icon: ListTodoIcon,
                     badge: "todo-count",
-                    // 并入了 W07 的入口（见下方"采购与履约"分组说明）：采购角色可能只有
-                    // procurement_confirmation:list 而没有 work_item:list，任一权限满足
-                    // 即显示，避免降级后采购看不到这个入口。
-                    requiredPermissions: [
-                        "work_item:list",
-                        "procurement_confirmation:list",
-                    ],
+                    requiredPermissions: ["work_item:list"],
                 },
             ],
         },

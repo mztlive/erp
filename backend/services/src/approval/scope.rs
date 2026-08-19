@@ -184,7 +184,7 @@ fn visibility_from_enforced_permissions(
 
 /// 从已认证身份、当前角色与数据范围形成阻塞审批查询边界。
 ///
-/// 仅采用实际授予 `approval_instance:diagnose` 的角色范围，并分别与用户范围
+/// 仅采用实际授予 `approval_instance:read` 的角色范围，并分别与用户范围
 /// 求交后再合并，禁止把另一角色的权限与组织范围交叉放大。用户未配置独立范围
 /// 时沿用角色范围；角色未配置可证明范围时失败关闭为空集合。空集合会交给
 /// Repository 直接返回空页，不会查询全量后在应用层隐藏。
@@ -196,7 +196,7 @@ pub async fn approval_management_scope(
     rbac: &RbacService,
     actor: &AuditActor,
 ) -> Result<ApprovalManagementScope> {
-    permission_scope(db, rbac, actor, "approval_instance:diagnose").await
+    permission_scope(db, rbac, actor, "approval_instance:read").await
 }
 
 /// 从实际授予恢复权限的角色与用户范围形成恢复授权边界。
@@ -231,7 +231,7 @@ pub async fn approval_recovery_authorization(
             .filter(|account| account.kind == actor.kind() && account.can_login())
             .ok_or_else(|| Error::Forbidden("恢复账号不存在、已停用或身份已变化".to_string()))?;
         let (scope, granting_role_ids) =
-            permission_scope_and_roles(db, rbac, actor, "approval_instance:recover").await?;
+            permission_scope_and_roles(db, rbac, actor, "approval_instance:resume").await?;
         let after = adapter.policy_revision(&mut NoTransaction).await?;
         if before == after {
             return Ok(ApprovalRecoveryAuthorization {

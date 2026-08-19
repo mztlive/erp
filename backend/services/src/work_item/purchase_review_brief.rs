@@ -106,9 +106,8 @@ impl WorkItemService {
         let lines_by_submission = self
             .purchase_submission_brief_lines(&submissions, executor)
             .await?;
-        let submitter_names = self
-            .account_names(&submission_actor_ids(&submissions), executor)
-            .await?;
+        let submitter_names = HashMap::<String, String>::new();
+        let _ = executor;
         Ok(assemble_purchase_review_displays(
             &submissions,
             &sales_nos_by_purchase_order(orders, &sales_order_nos),

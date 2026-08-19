@@ -146,8 +146,6 @@ pub mod approval_codes {
     pub const GENERIC_WORK_ITEM_MUTATION_FORBIDDEN: &str = "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN";
     /// 同幂等键不同 canonical payload。
     pub const IDEMPOTENCY_PAYLOAD_CONFLICT: &str = "APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT";
-    /// 未完成目标 rollout 的必须审批类型，不得回退旧运行时。
-    pub const DOCUMENT_TYPE_NOT_CUT_OVER: &str = "APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER";
 
     /// 合同冻结的全部审批稳定码，供提取与测试穷尽。
     pub const ALL: &[&str] = &[
@@ -175,7 +173,6 @@ pub mod approval_codes {
         BLOCKED_CANCEL_NOT_ALLOWED,
         GENERIC_WORK_ITEM_MUTATION_FORBIDDEN,
         IDEMPOTENCY_PAYLOAD_CONFLICT,
-        DOCUMENT_TYPE_NOT_CUT_OVER,
     ];
 }
 
@@ -316,18 +313,8 @@ mod tests {
     }
 
     #[test]
-    fn uncut_document_type_is_conflict_and_not_legacy_fallback() {
-        let error = Error::from_approval_code(approval_codes::DOCUMENT_TYPE_NOT_CUT_OVER);
-        assert!(matches!(error, Error::ConflictError(_)));
-        assert_eq!(
-            error.approval_code(),
-            Some(approval_codes::DOCUMENT_TYPE_NOT_CUT_OVER)
-        );
-    }
-
-    #[test]
     fn approval_stable_codes_are_exhaustive() {
-        assert_eq!(approval_codes::ALL.len(), 25);
+        assert_eq!(approval_codes::ALL.len(), 24);
         assert!(approval_codes::ALL
             .iter()
             .all(|code| code.starts_with("APPROVAL_")));

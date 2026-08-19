@@ -16,7 +16,6 @@ const OBJECT_TYPE_MAX_LEN: usize = 64;
 const OBJECT_ID_MAX_LEN: usize = 128;
 const RESPONSIBILITY_KEY_MAX_LEN: usize = 128;
 const SUBJECT_VERSION_MAX_LEN: usize = 128;
-const APPROVAL_STEP_INSTANCE_ID_MAX_LEN: usize = 128;
 const ROLE_MAX_LEN: usize = 128;
 const ORGANIZATION_ID_MAX_LEN: usize = 128;
 const USER_ID_MAX_LEN: usize = 128;
@@ -28,10 +27,6 @@ const CLOSE_REASON_MAX_LEN: usize = 512;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WorkItemType {
-    /// 采购二次确认。
-    ProcurementConfirmation,
-    /// 低毛利上级确认。
-    LowMarginManagerConfirmation,
     /// 采购单财务审核。
     PurchaseOrderReview,
     /// 销售变更履约影响复核。
@@ -42,10 +37,6 @@ pub enum WorkItemType {
     CardFundsReview,
     /// 卡券票款差异复核。
     CardFundsDeltaReview,
-    /// 卡券销售领导审批。
-    CardSalesManagerApproval,
-    /// 卡券运营审批。
-    CardSalesOperationApproval,
     /// 归属迁移销售确认。
     OwnershipMigrationSalesConfirmation,
     /// 归属迁移财务确认。
@@ -73,15 +64,11 @@ impl WorkItemType {
     /// 返回稳定中文展示名。
     pub fn label(&self) -> &'static str {
         match self {
-            Self::ProcurementConfirmation => "采购二次确认",
-            Self::LowMarginManagerConfirmation => "低毛利上级确认",
             Self::PurchaseOrderReview => "采购单财务审核",
             Self::SalesChangeImpactReview => "销售变更履约影响复核",
             Self::SalesChangeFinanceReview => "销售变更财务影响复核",
             Self::CardFundsReview => "卡券票款复核",
             Self::CardFundsDeltaReview => "卡券票款差异复核",
-            Self::CardSalesManagerApproval => "卡券销售领导审批",
-            Self::CardSalesOperationApproval => "卡券运营审批",
             Self::OwnershipMigrationSalesConfirmation => "归属迁移销售确认",
             Self::OwnershipMigrationFinanceConfirmation => "归属迁移财务确认",
             Self::InventoryAdjustmentReview => "库存调整复核",
@@ -100,15 +87,11 @@ impl WorkItemType {
     /// 返回 `SCREAMING_SNAKE_CASE` 稳定代码。
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::ProcurementConfirmation => "PROCUREMENT_CONFIRMATION",
-            Self::LowMarginManagerConfirmation => "LOW_MARGIN_MANAGER_CONFIRMATION",
             Self::PurchaseOrderReview => "PURCHASE_ORDER_REVIEW",
             Self::SalesChangeImpactReview => "SALES_CHANGE_IMPACT_REVIEW",
             Self::SalesChangeFinanceReview => "SALES_CHANGE_FINANCE_REVIEW",
             Self::CardFundsReview => "CARD_FUNDS_REVIEW",
             Self::CardFundsDeltaReview => "CARD_FUNDS_DELTA_REVIEW",
-            Self::CardSalesManagerApproval => "CARD_SALES_MANAGER_APPROVAL",
-            Self::CardSalesOperationApproval => "CARD_SALES_OPERATION_APPROVAL",
             Self::OwnershipMigrationSalesConfirmation => "OWNERSHIP_MIGRATION_SALES_CONFIRMATION",
             Self::OwnershipMigrationFinanceConfirmation => "OWNERSHIP_MIGRATION_FINANCE_CONFIRMATION",
             Self::InventoryAdjustmentReview => "INVENTORY_ADJUSTMENT_REVIEW",
@@ -181,45 +164,14 @@ impl DocumentState for WorkItemStatus {
     }
 }
 
-/// 人工责任的分派模式。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum AssignmentMode {
-    /// 激活任务时已解析到唯一个人责任人。
-    Direct,
-    /// 激活任务时先进入责任池，由合格用户开始处理。
-    Pool,
-}
-
-impl AssignmentMode {
-    /// 返回分派模式的持久化代码。
-    ///
-    /// # 返回
-    /// 返回 `DIRECT` 或 `POOL`。
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Direct => "DIRECT",
-            Self::Pool => "POOL",
-        }
-    }
-}
-
 /// 当前个人责任的已注册形成来源。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AssignmentSource {
-    /// 审批步骤的固定处理人解析器。
-    StepResolver,
     /// 独立任务的固定系统规则。
     SystemRule,
-    /// 责任池用户主动开始处理。
-    SelfStart,
     /// 管理员受控转交。
     AdminReassign,
-    /// 管理员或已授权处理人退回责任池。
-    AdminRelease,
-    /// 阻塞恢复时重新执行冻结解析器。
-    RecoveryResolver,
     /// 审批运行时指定到人。
     ApprovalRuntime,
 }
@@ -231,12 +183,8 @@ impl AssignmentSource {
     /// 返回已注册的稳定来源代码。
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::StepResolver => "STEP_RESOLVER",
             Self::SystemRule => "SYSTEM_RULE",
-            Self::SelfStart => "SELF_START",
             Self::AdminReassign => "ADMIN_REASSIGN",
-            Self::AdminRelease => "ADMIN_RELEASE",
-            Self::RecoveryResolver => "RECOVERY_RESOLVER",
             Self::ApprovalRuntime => "APPROVAL_RUNTIME",
         }
     }
@@ -312,21 +260,17 @@ pub struct DocumentApprovalWorkItemData {
 pub struct WorkItemData {
     /// 固定任务类型。
     pub work_item_type: WorkItemType,
-    /// 审批步骤实例；独立人工任务为空。
-    pub approval_step_instance_id: Option<String>,
     /// 业务对象类型。
     pub business_object_type: String,
     /// 业务对象 ID。
     pub business_object_id: String,
     /// 被处理的不可变提交或业务版本。
     pub subject_version: String,
-    /// 责任分派模式。
-    pub assignment_mode: AssignmentMode,
     /// 责任角色。
     pub owner_role: String,
     /// 责任组织。
     pub owner_organization_id: String,
-    /// 直接分派的个人责任人；责任池创建时必须为空。
+    /// 当前个人责任人；开放任务必填。
     pub owner_user_id: Option<String>,
     /// 初始责任来源。
     pub assignment_source: AssignmentSource,
@@ -354,8 +298,6 @@ pub struct WorkItem {
     pub base: BaseModel,
     /// 固定任务类型。
     pub work_item_type: WorkItemType,
-    /// 审批步骤实例；独立任务为空。
-    pub approval_step_instance_id: Option<String>,
     /// 类型化审批节点执行；审批任务必填。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_node_execution_id: Option<ApprovalNodeExecutionId>,
@@ -370,13 +312,11 @@ pub struct WorkItem {
     pub subject_version: String,
     /// 生命周期状态。
     pub status: WorkItemStatus,
-    /// 责任分派模式。
-    pub assignment_mode: AssignmentMode,
     /// 责任角色。
     pub owner_role: String,
     /// 责任组织。
     pub owner_organization_id: String,
-    /// 当前个人责任人；责任池未开始处理时为空。
+    /// 当前个人责任人；开放任务必填。
     pub owner_user_id: Option<String>,
     /// 曾形成个人责任的用户 ID；只追加、去重，退回与终态动作均保留。
     pub responsibility_actor_ids: Vec<String>,
@@ -413,18 +353,18 @@ pub struct WorkItem {
 impl WorkItem {
     /// 创建任务并建立初始责任事实。
     ///
-    /// `DIRECT` 必须给出唯一责任人，并立即形成 `assigned_at` 与
-    /// `current_assignment_at`；`POOL` 创建时禁止预填责任人。
+    /// 开放任务必须给出唯一责任人，并立即形成 `assigned_at` 与
+    /// `current_assignment_at`。
     ///
     /// # 错误
-    /// 必填字段为空、字段超长或分派模式与个人责任不匹配时返回错误。
+    /// 必填字段为空、字段超长或缺少个人责任人时返回错误。
     pub fn new(id: WorkItemId, data: WorkItemData) -> Result<Self> {
         Self::new_at_with_optional_responsibility_key(id, data, None, Instant::now())
     }
 
     /// 创建带服务端责任维度的任务。
     ///
-    /// 责任维度在创建时规范化并冻结；后续开始处理、退回团队和转交均不得修改。
+    /// 责任维度在创建时规范化并冻结；后续转交不得修改。
     /// 客户端输入不得直接调用本入口，应用服务只能传入已注册的固定维度。
     ///
     /// # 错误
@@ -475,11 +415,9 @@ impl WorkItem {
         )?;
         let generic = WorkItemData {
             work_item_type: WorkItemType::ImportBusinessConfirmation,
-            approval_step_instance_id: None,
             business_object_type: data.business_object_type,
             business_object_id: data.business_object_id,
             subject_version: data.subject_version,
-            assignment_mode: AssignmentMode::Direct,
             owner_role: data.owner_role,
             owner_organization_id: data.owner_organization_id,
             owner_user_id: Some(owner_user_id.clone()),
@@ -507,19 +445,17 @@ impl WorkItem {
             return Err(Error::from("单据审批任务必须使用专用构造路径"));
         }
         normalized.ensure_assignment_invariant()?;
-        let has_direct_owner = normalized.assignment_mode == AssignmentMode::Direct;
+        let has_direct_owner = normalized.owner_user_id.is_some();
         let responsibility_actor_ids = normalized.owner_user_id.iter().cloned().collect();
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             work_item_type: normalized.work_item_type,
-            approval_step_instance_id: normalized.approval_step_instance_id,
             approval_node_execution_id: None,
             business_object_type: normalized.business_object_type,
             business_object_id: normalized.business_object_id,
             responsibility_key,
             subject_version: normalized.subject_version,
             status: WorkItemStatus::Open,
-            assignment_mode: normalized.assignment_mode,
             owner_role: normalized.owner_role,
             owner_organization_id: normalized.owner_organization_id,
             owner_user_id: normalized.owner_user_id,
@@ -562,25 +498,6 @@ impl WorkItem {
         Ok(())
     }
 
-    /// 将开放的责任池任务退回团队。
-    ///
-    /// 保留首次分派与首次处理时间，只清空当前个人责任和当前责任时间。
-    /// 调用方必须在应用层完成权限、原因和不可变审计校验。
-    ///
-    /// # 错误
-    /// 任务不是开放的 `POOL` 任务或尚未形成个人责任时返回错误。
-    pub fn release_to_pool(&mut self, at: Instant) -> Result<()> {
-        self.ensure_open()?;
-        if self.assignment_mode != AssignmentMode::Pool || self.owner_user_id.is_none() {
-            return Err(Error::from("只有已形成个人责任的开放POOL任务可以退回团队"));
-        }
-        self.owner_user_id = None;
-        self.current_assignment_at = None;
-        self.assignment_source = AssignmentSource::AdminRelease;
-        self.last_activity_at = Some(at);
-        Ok(())
-    }
-
     /// 转交开放任务的当前个人责任。
     ///
     /// 首次分派时间只在此前从未形成个人责任时写入；首次处理时间保持不变。
@@ -591,35 +508,6 @@ impl WorkItem {
     pub fn reassign(&mut self, target_user_id: impl Into<String>, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
         self.assign_to(target_user_id, AssignmentSource::AdminReassign, at)
-    }
-
-    /// 在审批阻塞恢复时重新形成或校正个人责任。
-    ///
-    /// 本动作保留首次分派与首次处理时间，并以 `RECOVERY_RESOLVER` 区分管理员
-    /// 主动转交；调用方必须先证明原阻塞原因已经消除。
-    ///
-    /// # 错误
-    /// 任务非开放或解析出的用户为空、超长时返回错误。
-    pub fn recover_assignment(&mut self, target_user_id: impl Into<String>, at: Instant) -> Result<()> {
-        self.assign_to(target_user_id, AssignmentSource::RecoveryResolver, at)
-    }
-
-    /// 在审批阻塞恢复时把失效的责任池个人责任清回团队。
-    ///
-    /// 保留首次时间，仅清空当前个人责任；调用方必须先证明当前责任人已经失效。
-    ///
-    /// # 错误
-    /// 任务非开放或不是 `POOL` 模式时返回错误。
-    pub fn recover_to_pool(&mut self, at: Instant) -> Result<()> {
-        self.ensure_open()?;
-        if self.assignment_mode != AssignmentMode::Pool {
-            return Err(Error::from("只有开放POOL任务可以在恢复时退回团队"));
-        }
-        self.owner_user_id = None;
-        self.current_assignment_at = None;
-        self.assignment_source = AssignmentSource::RecoveryResolver;
-        self.last_activity_at = Some(at);
-        Ok(())
     }
 
     /// 由强类型领域命令完成当前开放任务。
@@ -795,11 +683,9 @@ impl WorkItem {
 
 struct NormalizedWorkItemData {
     work_item_type: WorkItemType,
-    approval_step_instance_id: Option<String>,
     business_object_type: String,
     business_object_id: String,
     subject_version: String,
-    assignment_mode: AssignmentMode,
     owner_role: String,
     owner_organization_id: String,
     owner_user_id: Option<String>,
@@ -816,11 +702,6 @@ impl TryFrom<WorkItemData> for NormalizedWorkItemData {
     fn try_from(data: WorkItemData) -> Result<Self> {
         Ok(Self {
             work_item_type: data.work_item_type,
-            approval_step_instance_id: normalize_optional_text(
-                data.approval_step_instance_id,
-                "审批步骤实例ID",
-                APPROVAL_STEP_INSTANCE_ID_MAX_LEN,
-            )?,
             business_object_type: normalize_required_text(
                 data.business_object_type,
                 "业务对象类型不能为空",
@@ -839,7 +720,6 @@ impl TryFrom<WorkItemData> for NormalizedWorkItemData {
                 SUBJECT_VERSION_MAX_LEN,
                 "对象版本过长",
             )?,
-            assignment_mode: data.assignment_mode,
             owner_role: normalize_required_text(
                 data.owner_role,
                 "责任角色不能为空",
@@ -864,10 +744,10 @@ impl TryFrom<WorkItemData> for NormalizedWorkItemData {
 
 impl NormalizedWorkItemData {
     fn ensure_assignment_invariant(&self) -> Result<()> {
-        match (self.assignment_mode, self.owner_user_id.is_some()) {
-            (AssignmentMode::Direct, true) | (AssignmentMode::Pool, false) => Ok(()),
-            (AssignmentMode::Direct, false) => Err(Error::from("DIRECT任务必须有唯一个人责任人")),
-            (AssignmentMode::Pool, true) => Err(Error::from("POOL任务创建时不得预填个人责任人")),
+        if self.owner_user_id.is_some() {
+            Ok(())
+        } else {
+            Err(Error::from("开放任务必须有唯一个人责任人"))
         }
     }
 }
@@ -875,24 +755,22 @@ impl NormalizedWorkItemData {
 #[cfg(test)]
 mod tests {
     use super::{
-        AssignmentMode, AssignmentSource, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority,
-        WorkItemStatus, WorkItemType,
+        AssignmentSource, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
+        WorkItemType,
     };
     use crate::common::state::ensure_transition;
     use crate::common::time::Instant;
     use crate::ids::WorkItemId;
 
-    fn pool_data() -> WorkItemData {
+    fn direct_data() -> WorkItemData {
         WorkItemData {
             work_item_type: WorkItemType::ImportBusinessConfirmation,
-            approval_step_instance_id: None,
             business_object_type: " LEGACY_IMPORT_BATCH ".to_string(),
             business_object_id: " batch-1 ".to_string(),
             subject_version: " v3 ".to_string(),
-            assignment_mode: AssignmentMode::Pool,
             owner_role: " sales ".to_string(),
             owner_organization_id: " org-1 ".to_string(),
-            owner_user_id: None,
+            owner_user_id: Some(" alice ".to_string()),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::Normal,
             due_at: Some(Instant::from_unix_secs(1_700_086_400)),
@@ -902,207 +780,55 @@ mod tests {
     }
 
     #[test]
-    fn pool_starts_open_without_personal_responsibility() {
-        let item =
-            WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), Instant::from_unix_secs(100)).unwrap();
-
-        assert_eq!(item.status, WorkItemStatus::Open);
-        assert_eq!(item.business_object_type, "LEGACY_IMPORT_BATCH");
-        assert_eq!(item.subject_version, "v3");
-        assert_eq!(item.responsibility_key(), None);
-        assert_eq!(item.owner_role, "sales");
-        assert!(item.owner_user_id.is_none());
-        assert!(item.responsibility_actor_ids.is_empty());
-        assert!(item.assigned_at.is_none());
-        assert!(item.current_assignment_at.is_none());
-    }
-
-    #[test]
-    fn server_responsibility_key_is_normalized_and_frozen_at_creation() {
-        let mut item =
-            WorkItem::new_with_responsibility_key(WorkItemId::new("wi-scope"), pool_data(), " SALES ")
-                .unwrap();
-
-        assert_eq!(item.responsibility_key(), Some("SALES"));
-        item.reassign("alice", Instant::from_unix_secs(110)).unwrap();
-        item.release_to_pool(Instant::from_unix_secs(120)).unwrap();
-        assert_eq!(item.responsibility_key(), Some("SALES"));
-        assert!(
-            WorkItem::new_with_responsibility_key(WorkItemId::new("wi-empty-scope"), pool_data(), "   ",)
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn direct_requires_owner_and_records_first_assignment() {
-        let at = Instant::from_unix_secs(100);
-        let direct = WorkItemData {
-            assignment_mode: AssignmentMode::Direct,
-            owner_user_id: Some(" alice ".to_string()),
-            assignment_source: AssignmentSource::StepResolver,
-            ..pool_data()
-        };
-        let item = WorkItem::new_at(WorkItemId::new("wi-1"), direct, at).unwrap();
-
-        assert_eq!(item.owner_user_id.as_deref(), Some("alice"));
-        assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
-        assert_eq!(item.assigned_at, Some(at));
-        assert_eq!(item.current_assignment_at, Some(at));
-        assert!(item.started_at.is_none());
-
-        let missing_owner = WorkItemData {
-            assignment_mode: AssignmentMode::Direct,
-            ..pool_data()
-        };
-        assert!(WorkItem::new_at(WorkItemId::new("wi-2"), missing_owner, at).is_err());
-    }
-
-    #[test]
-    fn pool_rejects_prefilled_owner() {
-        let data = WorkItemData {
-            owner_user_id: Some("alice".to_string()),
-            ..pool_data()
-        };
-
-        assert!(WorkItem::new(WorkItemId::new("wi-1"), data).is_err());
-    }
-
-    #[test]
-    fn responsibility_changes_preserve_first_times() {
-        let first = Instant::from_unix_secs(100);
-        let mut item = WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), first).unwrap();
-        item.reassign("alice", first).unwrap();
-        let started = Instant::from_unix_secs(110);
-        item.record_activity("alice", started).unwrap();
-        item.release_to_pool(Instant::from_unix_secs(120)).unwrap();
-        item.reassign("bob", Instant::from_unix_secs(130)).unwrap();
-        item.reassign("bob", Instant::from_unix_secs(140)).unwrap();
-        item.complete_by_domain_command("bob", Instant::from_unix_secs(150))
-            .unwrap();
-
-        assert_eq!(item.assigned_at, Some(first));
-        assert_eq!(item.started_at, Some(started));
-        assert_eq!(item.current_assignment_at, Some(Instant::from_unix_secs(140)));
-        assert_eq!(item.owner_user_id.as_deref(), Some("bob"));
-        assert_eq!(item.completed_by.as_deref(), Some("bob"));
-        assert_eq!(
-            item.responsibility_actor_ids,
-            vec!["alice".to_string(), "bob".to_string()]
-        );
-        assert_eq!(item.assignment_source, AssignmentSource::AdminReassign);
-    }
-
-    #[test]
-    fn recovery_uses_registered_source_without_rewriting_first_times() {
-        let first = Instant::from_unix_secs(100);
-        let mut item = WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), first).unwrap();
-        item.recover_assignment("alice", Instant::from_unix_secs(110))
-            .unwrap();
-        item.record_activity("alice", Instant::from_unix_secs(120))
-            .unwrap();
-        item.recover_to_pool(Instant::from_unix_secs(130)).unwrap();
-
-        assert_eq!(item.assigned_at, Some(Instant::from_unix_secs(110)));
-        assert_eq!(item.started_at, Some(Instant::from_unix_secs(120)));
-        assert!(item.owner_user_id.is_none());
-        assert!(item.current_assignment_at.is_none());
-        assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
-        assert_eq!(item.assignment_source, AssignmentSource::RecoveryResolver);
-    }
-
-    #[test]
-    fn complete_requires_current_owner_and_is_terminal() {
-        let mut item = WorkItem::new_at(
+    fn open_task_requires_personal_owner() {
+        let item = WorkItem::new_at(
             WorkItemId::new("wi-1"),
-            WorkItemData {
-                assignment_mode: AssignmentMode::Direct,
-                owner_user_id: Some("alice".to_string()),
-                assignment_source: AssignmentSource::StepResolver,
-                ..pool_data()
-            },
+            direct_data(),
             Instant::from_unix_secs(100),
         )
         .unwrap();
-
-        assert!(item
-            .complete_by_domain_command("bob", Instant::from_unix_secs(110))
-            .is_err());
-        item.complete_by_domain_command("alice", Instant::from_unix_secs(110))
-            .unwrap();
-
-        assert_eq!(item.status, WorkItemStatus::Completed);
-        assert_eq!(item.started_at, Some(Instant::from_unix_secs(110)));
-        assert_eq!(item.completed_by.as_deref(), Some("alice"));
+        assert_eq!(item.status, WorkItemStatus::Open);
+        assert_eq!(item.owner_user_id.as_deref(), Some("alice"));
         assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
+        let missing = WorkItemData {
+            owner_user_id: None,
+            ..direct_data()
+        };
+        assert!(WorkItem::new_at(WorkItemId::new("wi-2"), missing, Instant::from_unix_secs(100)).is_err());
+    }
+
+    #[test]
+    fn reassign_and_complete_preserve_first_times() {
+        let first = Instant::from_unix_secs(100);
+        let mut item = WorkItem::new_at(WorkItemId::new("wi-1"), direct_data(), first).unwrap();
+        item.record_activity("alice", Instant::from_unix_secs(110))
+            .unwrap();
+        item.reassign("bob", Instant::from_unix_secs(130)).unwrap();
+        item.complete_by_domain_command("bob", Instant::from_unix_secs(150))
+            .unwrap();
+        assert_eq!(item.assigned_at, Some(first));
+        assert_eq!(item.started_at, Some(Instant::from_unix_secs(110)));
+        assert_eq!(item.owner_user_id.as_deref(), Some("bob"));
+        assert_eq!(item.assignment_source, AssignmentSource::AdminReassign);
         assert!(item.is_terminal());
     }
 
     #[test]
-    fn close_records_full_audit_and_rejects_terminal() {
-        let mut item =
-            WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), Instant::from_unix_secs(100)).unwrap();
-        item.reassign("alice", Instant::from_unix_secs(110)).unwrap();
-        let at = Instant::from_unix_secs(120);
-
-        item.close(
-            "admin",
-            WorkItemCloseData {
-                close_reason: " 重复任务 ".to_string(),
-            },
-            at,
+    fn codes_and_bson_shape_are_stable() {
+        assert_eq!(AssignmentSource::SystemRule.as_str(), "SYSTEM_RULE");
+        assert_eq!(WorkItemType::DocumentApproval.as_str(), "DOCUMENT_APPROVAL");
+        let item = WorkItem::new_at(
+            WorkItemId::new("wi-1"),
+            direct_data(),
+            Instant::from_unix_secs(100),
         )
         .unwrap();
-
-        assert_eq!(item.status, WorkItemStatus::Closed);
-        assert_eq!(item.closed_at, Some(at));
-        assert_eq!(item.closed_by.as_deref(), Some("admin"));
-        assert_eq!(item.close_reason.as_deref(), Some("重复任务"));
-        assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
-        assert!(item
-            .close(
-                "admin",
-                WorkItemCloseData {
-                    close_reason: "再次关闭".to_string(),
-                },
-                Instant::from_unix_secs(130),
-            )
-            .is_err());
-    }
-
-    #[test]
-    fn state_machine_has_only_open_to_terminal_edges() {
-        assert!(ensure_transition(WorkItemStatus::Open, WorkItemStatus::Completed).is_ok());
-        assert!(ensure_transition(WorkItemStatus::Open, WorkItemStatus::Closed).is_ok());
-        assert!(ensure_transition(WorkItemStatus::Completed, WorkItemStatus::Open).is_err());
-        assert!(ensure_transition(WorkItemStatus::Closed, WorkItemStatus::Open).is_err());
-        assert_eq!(WorkItemStatus::Open.as_str(), "OPEN");
-        assert_eq!(WorkItemStatus::Open.label(), "待处理");
-    }
-
-    #[test]
-    fn codes_and_bson_shape_are_stable() {
-        assert_eq!(AssignmentMode::Pool.as_str(), "POOL");
-        assert_eq!(AssignmentSource::SelfStart.as_str(), "SELF_START");
-        assert_eq!(
-            WorkItemType::CardSalesManagerApproval.as_str(),
-            "CARD_SALES_MANAGER_APPROVAL"
-        );
-        assert_eq!(WorkItemPriority::High.label(), "高");
-
-        let item =
-            WorkItem::new_at(WorkItemId::new("wi-1"), pool_data(), Instant::from_unix_secs(100)).unwrap();
-        assert_eq!(WorkItemType::DocumentApproval.as_str(), "DOCUMENT_APPROVAL");
-        assert_eq!(AssignmentSource::ApprovalRuntime.as_str(), "APPROVAL_RUNTIME");
         let document = bson::to_document(&item).unwrap();
         assert_eq!(document.get_str("status").unwrap(), "OPEN");
-        assert_eq!(document.get_str("assignment_mode").unwrap(), "POOL");
-        assert!(!document.contains_key("responsibility_key"));
-        assert!(document.get_array("responsibility_actor_ids").unwrap().is_empty());
         let roundtrip: WorkItem = bson::from_document(document).unwrap();
         assert_eq!(roundtrip, item);
     }
 
-    /// 单据审批任务缺少责任人或执行 ID 时失败，通用动作被拒绝。
     #[test]
     fn document_approval_requires_owner_and_execution() {
         let at = Instant::from_unix_secs(100);
@@ -1123,47 +849,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(item.work_item_type, WorkItemType::DocumentApproval);
-        assert_eq!(item.owner_user_id.as_deref(), Some("alice"));
-        assert_eq!(item.assignment_source, AssignmentSource::ApprovalRuntime);
-        assert!(item.approval_node_execution_id.is_some());
-        assert!(item
-            .complete_by_domain_command("alice", Instant::from_unix_secs(110))
-            .is_err());
-        assert!(item
-            .close(
-                "admin",
-                WorkItemCloseData {
-                    close_reason: "x".into(),
-                },
-                Instant::from_unix_secs(110),
-            )
-            .is_err());
         assert!(item.reassign("bob", Instant::from_unix_secs(110)).is_err());
         item.complete_by_approval_runtime("alice", Instant::from_unix_secs(110))
             .unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
-
-        assert!(WorkItem::new_document_approval(
-            WorkItemId::new("wi-empty"),
-            super::DocumentApprovalWorkItemData {
-                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-2"),
-                business_object_type: "stock_adjustment".into(),
-                business_object_id: "adj-1".into(),
-                subject_version: "1".into(),
-                owner_role: "stock_adjustment_approver".into(),
-                owner_organization_id: "org-1".into(),
-                owner_user_id: "  ".into(),
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-            },
-            at,
-        )
-        .is_err());
-
-        let generic = WorkItemData {
-            work_item_type: WorkItemType::DocumentApproval,
-            ..pool_data()
-        };
-        assert!(WorkItem::new_at(WorkItemId::new("wi-generic"), generic, at).is_err());
+        assert!(ensure_transition(WorkItemStatus::Open, WorkItemStatus::Completed).is_ok());
     }
 }

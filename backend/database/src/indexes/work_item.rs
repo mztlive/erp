@@ -148,7 +148,7 @@ mod tests {
         assert!(indexes.iter().all(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 != Some("idx_work_items_team_pool")
-                && !index.keys.contains_key("assignment_mode")
+                && !index.keys.contains_key("owner_pool")
         }));
         assert_eq!(
             index_named(&indexes, "idx_work_items_managed").keys,

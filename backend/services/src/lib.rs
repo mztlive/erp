@@ -42,7 +42,6 @@ pub mod supplier_settlement;
 pub mod warehouse;
 pub mod work_item;
 
-pub use approval::business_adapter::APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER;
 pub use approval::definition::ApprovalDefinitionService;
 pub use approval::execution::{ApprovalNotificationOutboxPort, ApprovalRuntimeService};
 pub use errors::{approval_codes, Error};

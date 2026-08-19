@@ -2,9 +2,7 @@
 
 use entities::ids::WorkItemId;
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
-use entities::work_item::{
-    AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
-};
+use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use id_generator::next_id;
 
 use crate::errors::{Error, Result};
@@ -70,11 +68,9 @@ pub(crate) fn error_work_item(task: &IntegrationErrorTask) -> Result<WorkItem> {
         WorkItemId::new(next_id()),
         WorkItemData {
             work_item_type: error_work_item_type(task.error_class),
-            approval_step_instance_id: None,
             business_object_type: "integration_error_task".to_string(),
             business_object_id: task.base.id.clone(),
             subject_version: task.base.version.to_string(),
-            assignment_mode: AssignmentMode::Pool,
             owner_role: error_owner_role(task.error_class).to_string(),
             owner_organization_id: OWNER_ORGANIZATION.to_string(),
             owner_user_id: None,
@@ -98,11 +94,9 @@ pub(super) fn difference_work_item(difference: &ReconciliationDifference) -> Res
         WorkItemId::new(next_id()),
         WorkItemData {
             work_item_type: WorkItemType::BusinessException,
-            approval_step_instance_id: None,
             business_object_type: "reconciliation_difference".to_string(),
             business_object_id: difference.base.id.clone(),
             subject_version: "0".to_string(),
-            assignment_mode: AssignmentMode::Pool,
             owner_role: owner_role.to_string(),
             owner_organization_id: OWNER_ORGANIZATION.to_string(),
             owner_user_id: None,

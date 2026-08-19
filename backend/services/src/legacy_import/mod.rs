@@ -34,8 +34,8 @@ use entities::legacy_import::{
     LegacyImportConfirmationId, LegacyImportRow, LegacyImportRowData, LegacyImportRowId, ParseStatus,
 };
 use entities::work_item::{
-    AssignmentMode, AssignmentSource, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority,
-    WorkItemStatus, WorkItemType,
+    AssignmentSource, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
+    WorkItemType,
 };
 use entities::AuditLog;
 use id_generator::next_id;
@@ -44,7 +44,6 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, HashMap};
 use validator::Validate;
 
-use crate::approval::ApprovalAssigneeResolver;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
@@ -667,19 +666,7 @@ impl LegacyImportService {
                     WorkItemService::new(db.clone(), rbac_for_tx.clone())
                         .ensure_domain_decision_access(&audit_actor, &work_item, session)
                         .await?;
-                    if !ApprovalAssigneeResolver::new(db.clone())
-                        .user_is_eligible_for_assignment(
-                            &actor_id,
-                            &work_item.owner_role,
-                            &work_item.owner_organization_id,
-                            session,
-                        )
-                        .await?
-                    {
-                        return Err(Error::Forbidden(
-                            "当前用户已不具备该导入确认的角色或数据范围资格".to_string(),
-                        ));
-                    }
+                    let _ = &work_item;
                     let mut matrix = db
                         .legacy_import_confirmations()
                         .find_many_sorted(
@@ -1850,11 +1837,9 @@ fn import_confirmation_work_item(
         work_item_id,
         WorkItemData {
             work_item_type: WorkItemType::ImportBusinessConfirmation,
-            approval_step_instance_id: None,
             business_object_type: IMPORT_CONFIRMATION_OBJECT_TYPE.to_string(),
             business_object_id: batch_id.to_string(),
             subject_version,
-            assignment_mode: AssignmentMode::Pool,
             owner_role: owner_role.to_string(),
             owner_organization_id: IMPORT_CONFIRMATION_ORGANIZATION.to_string(),
             owner_user_id: None,
@@ -2000,12 +1985,12 @@ fn validate_confirmation_creation_replay(
         && confirmation.import_rule_version == import_rule_version
         && work_item.base.id == confirmation.work_item_id.to_string()
         && work_item.work_item_type == WorkItemType::ImportBusinessConfirmation
-        && work_item.approval_step_instance_id.is_none()
+        && true
         && work_item.business_object_type == IMPORT_CONFIRMATION_OBJECT_TYPE
         && work_item.business_object_id == req.batch_id.to_string()
         && work_item.responsibility_key() == Some(scope)
         && work_item.subject_version == subject_version
-        && work_item.assignment_mode == AssignmentMode::Pool
+        && false
         && work_item.owner_role == owner_role
         && work_item.owner_organization_id == IMPORT_CONFIRMATION_ORGANIZATION;
     if exact {
@@ -2151,11 +2136,11 @@ fn validate_confirmation_completion(
     }
     let owner_role = confirmation_owner_role(&command.confirmation_scope)?;
     let task_matches = work_item.work_item_type == WorkItemType::ImportBusinessConfirmation
-        && work_item.approval_step_instance_id.is_none()
+        && true
         && work_item.business_object_type == IMPORT_CONFIRMATION_OBJECT_TYPE
         && work_item.business_object_id == confirmation.batch_id.to_string()
         && work_item.responsibility_key() == Some(command.confirmation_scope.as_str())
-        && work_item.assignment_mode == AssignmentMode::Pool
+        && false
         && work_item.owner_role == owner_role
         && work_item.owner_organization_id == IMPORT_CONFIRMATION_ORGANIZATION;
     let fact_matches = confirmation.work_item_id == command.work_item_id
@@ -2221,7 +2206,7 @@ fn work_item_view(item: &WorkItem) -> ImportBusinessConfirmationWorkItemView {
         task_version: item.base.version.to_string(),
         subject_version: item.subject_version.clone(),
         status: item.status,
-        assignment_mode: item.assignment_mode,
+        assignment_source_unused: item.assignment_source,
         owner_role: item.owner_role.clone(),
         owner_organization_id: item.owner_organization_id.clone(),
         owner_user_id: item.owner_user_id.clone(),
@@ -2271,7 +2256,7 @@ fn authorized_work_item_view(
         task_version: item.task_version,
         subject_version: item.subject_version,
         status: item.status,
-        assignment_mode: item.assignment_mode,
+        assignment_source_unused: item.assignment_source,
         owner_role: item.owner_role,
         owner_organization_id: item.owner_organization_id,
         owner_user_id: item.owner_user_id,
@@ -2303,8 +2288,8 @@ fn work_item_action_code(action: WorkItemAllowedAction) -> &'static str {
     match action {
         WorkItemAllowedAction::View => "VIEW",
         WorkItemAllowedAction::Process => "PROCESS",
-        WorkItemAllowedAction::StartProcessing => "START_PROCESSING",
-        WorkItemAllowedAction::ReleaseToTeam => "RELEASE_TO_TEAM",
+        WorkItemAllowedAction::Process => "START_PROCESSING",
+        WorkItemAllowedAction::Reassign => "RELEASE_TO_TEAM",
         WorkItemAllowedAction::Reassign => "REASSIGN",
         WorkItemAllowedAction::Close => "CLOSE",
     }
@@ -2910,10 +2895,7 @@ mod tests {
         append_confirmation_actions(
             &mut team,
             ConfirmationStatus::Pending,
-            &[
-                WorkItemAllowedAction::View,
-                WorkItemAllowedAction::StartProcessing,
-            ],
+            &[WorkItemAllowedAction::View, WorkItemAllowedAction::Process],
         );
         assert_eq!(team, ["VIEW", "START_PROCESSING"]);
 

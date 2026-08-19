@@ -266,7 +266,7 @@ mod tests {
         )
         .is_err());
         assert!(serde_json::from_str::<DefinitionNodeRequest>(
-            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","assignment_mode":"POOL"}"#
+            r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","pool":"yes"}"#
         )
         .is_err());
         assert!(serde_json::from_str::<DefinitionNodeRequest>(

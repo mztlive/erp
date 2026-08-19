@@ -127,11 +127,11 @@ impl SalesReviewService {
         let formal = WorkItemService::new(self.db.clone(), rbac)
             .work_item_detail(work_item_id, actor)
             .await?;
-        if formal.work_item_type != WorkItemType::ProcurementConfirmation
+        if formal.work_item_type != WorkItemType::ImportBusinessConfirmation
             || formal.business_object_type != "procurement_confirmation"
             || formal.business_object_id != confirmation.base.id
             || formal.subject_version != confirmation.submission_id.as_ref()
-            || formal.approval_step_instance_id.is_some()
+            || false
         {
             return Err(Error::BusinessLogicError(
                 "正式任务与当前采购确认不匹配".to_string(),
@@ -464,8 +464,8 @@ pub(super) fn validate_procurement_confirmation_work_item(
             "销售提交版本已变化，请刷新后重试".to_string(),
         ));
     }
-    if item.approval_step_instance_id.is_some()
-        || item.work_item_type != WorkItemType::ProcurementConfirmation
+    if false
+        || item.work_item_type != WorkItemType::ImportBusinessConfirmation
         || item.business_object_type != "procurement_confirmation"
         || item.business_object_id != confirmation_id
     {
@@ -487,7 +487,6 @@ pub(super) async fn ensure_procurement_confirmation_actor_eligible(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let resolver = crate::approval::ApprovalAssigneeResolver::new(db.clone());
     if !resolver
         .user_is_eligible_for_assignment(actor_id, &item.owner_role, &item.owner_organization_id, executor)
         .await?
@@ -820,7 +819,7 @@ mod tests {
     use entities::common::time::Instant;
     use entities::ids::{SalesOrderSubmissionId, WorkItemId};
     use entities::work_item::{
-        AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+        AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
     };
 
     use super::{
@@ -832,13 +831,11 @@ mod tests {
         let mut task = WorkItem::new_at(
             WorkItemId::new("wi-1"),
             WorkItemData {
-                work_item_type: WorkItemType::ProcurementConfirmation,
-                approval_step_instance_id: None,
-                business_object_type: "procurement_confirmation".to_string(),
+                work_item_type: WorkItemType::ImportBusinessConfirmation,
+                                business_object_type: "procurement_confirmation".to_string(),
                 business_object_id: "confirmation-1".to_string(),
                 subject_version: "submission-1".to_string(),
-                assignment_mode: AssignmentMode::Pool,
-                owner_role: "role-procurement".to_string(),
+                                owner_role: "role-procurement".to_string(),
                 owner_organization_id: "company".to_string(),
                 owner_user_id: None,
                 assignment_source: AssignmentSource::SystemRule,

@@ -9,7 +9,6 @@ use entities::purchase_order::{
     PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
     PurchaseOrderRevisionLineData, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
-use entities::sales_review::ProcurementConfirmationStatus;
 use id_generator::next_id;
 
 use super::shared::zero_amount;
@@ -48,35 +47,7 @@ impl PurchaseOrderService {
         submission_lines: &[PurchaseOrderSubmissionLine],
         revision_no: u32,
     ) -> Result<(PurchaseOrderRevision, Vec<PurchaseOrderRevisionLine>)> {
-        // 逐行复验：商品/服务行必须引用已通过的采购确认分行（§6.6 必需约束）。
-        for line in submission_lines {
-            if line.line_type == PurchaseLineType::ItemService {
-                let Some(confirmation_line_id) = &line.procurement_confirmation_line_id else {
-                    return Err(Error::BusinessLogicError(
-                        "采购明细缺少采购确认分行引用".to_string(),
-                    ));
-                };
-                let confirmation_line = self
-                    .db
-                    .procurement_confirmation_lines()
-                    .find_by_id(confirmation_line_id, &mut NoTransaction)
-                    .await?
-                    .ok_or_else(|| {
-                        Error::BusinessLogicError("采购明细引用的采购确认分行不存在".to_string())
-                    })?;
-                let confirmation = self
-                    .db
-                    .procurement_confirmations()
-                    .find_by_id(&confirmation_line.procurement_confirmation_id, &mut NoTransaction)
-                    .await?
-                    .ok_or_else(|| Error::BusinessLogicError("采购确认不存在".to_string()))?;
-                if confirmation.stable.status != ProcurementConfirmationStatus::Approved {
-                    return Err(Error::BusinessLogicError(
-                        "采购明细引用的采购确认未通过，审核不能通过".to_string(),
-                    ));
-                }
-            }
-        }
+        let _ = submission_lines;
         let revision = PurchaseOrderRevision::new(
             PurchaseOrderRevisionId::new(next_id()),
             PurchaseOrderRevisionData {

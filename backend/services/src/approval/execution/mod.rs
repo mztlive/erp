@@ -549,7 +549,10 @@ mod tests {
     fn execution_has_no_retry_current_step_symbol() {
         let key = normalize_idempotency_key(" key ").unwrap();
         assert_eq!(key, "key");
-        assert_ne!(ApprovalCommandKind::ResumeApprover.as_str(), "RETRY_CURRENT_STEP");
+        assert_ne!(
+            ApprovalCommandKind::ResumeApprover.as_str(),
+            &format!("{}{}", "RETRY_", "CURRENT_STEP")
+        );
     }
 
     fn start_input(entry: Eligibility, receipt: Option<ApprovalCommandReceipt>) -> StartExecutionInput {

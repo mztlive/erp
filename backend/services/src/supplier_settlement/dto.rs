@@ -14,7 +14,7 @@ use entities::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SettlementReviewResult, SettlementStatus,
     SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
-use entities::work_item::{AssignmentMode, WorkItemStatus, WorkItemType};
+use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use validator::Validate;
@@ -929,7 +929,7 @@ pub struct SettlementReviewWorkItemView {
     /// 当前正式处理状态。
     pub processing_state: SettlementReviewProcessingState,
     /// 分派模式。
-    pub assignment_mode: AssignmentMode,
+    pub assignment_source_unused: AssignmentSource,
     /// 责任角色。
     pub owner_role: String,
     /// 责任组织。

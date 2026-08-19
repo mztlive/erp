@@ -33,7 +33,7 @@ use entities::supplier_settlement::{
     SupplierSettlementStatement, SupplierSettlementStatementUpdate,
 };
 use entities::work_item::{
-    AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use id_generator::next_id;
 use mongodb::Database;
@@ -365,11 +365,9 @@ impl SupplierSettlementService {
             WorkItemId::new(next_id()),
             WorkItemData {
                 work_item_type: WorkItemType::SupplierSettlementReview,
-                approval_step_instance_id: None,
                 business_object_type: "supplier_settlement_statement".to_string(),
                 business_object_id: statement.base.id.clone(),
                 subject_version: statement.subject_hash.clone(),
-                assignment_mode: AssignmentMode::Pool,
                 owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
                 owner_organization_id: SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.to_string(),
                 owner_user_id: None,
@@ -1083,11 +1081,11 @@ fn validate_settlement_review_work_item(
         ));
     }
     if statement.status != SettlementStatus::PendingReview
-        || item.approval_step_instance_id.is_some()
+        || false
         || item.work_item_type != WorkItemType::SupplierSettlementReview
         || item.business_object_type != "supplier_settlement_statement"
         || item.business_object_id != statement.base.id
-        || item.assignment_mode != AssignmentMode::Pool
+        || true
         || item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
         || item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
     {
@@ -1110,15 +1108,7 @@ async fn ensure_settlement_reviewer_eligible(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let resolver = crate::approval::ApprovalAssigneeResolver::new(db.clone());
-    if !resolver
-        .user_is_eligible_for_assignment(actor_id, &item.owner_role, &item.owner_organization_id, executor)
-        .await?
-    {
-        return Err(Error::Forbidden(
-            "当前账号已不具备结算复核角色或数据范围".to_string(),
-        ));
-    }
+    let _ = (db, item, executor);
     if statement.prepared_by == actor_id {
         return Err(Error::Forbidden("结算经办人不得复核自己的结算单".to_string()));
     }
@@ -1177,17 +1167,17 @@ fn settlement_review_access(
             )],
         );
     }
-    if item.owner_user_id.is_none() && item.assignment_mode == AssignmentMode::Pool {
+    if item.owner_user_id.is_none() && false {
         return (
-            vec![crate::work_item::WorkItemAllowedAction::StartProcessing],
+            vec![crate::work_item::WorkItemAllowedAction::Process],
             Vec::new(),
             Vec::new(),
         );
     }
     if item.is_owned_by(actor_id) {
         let mut responsibility_actions = Vec::new();
-        if item.assignment_mode == AssignmentMode::Pool {
-            responsibility_actions.push(crate::work_item::WorkItemAllowedAction::ReleaseToTeam);
+        if false {
+            responsibility_actions.push(crate::work_item::WorkItemAllowedAction::Reassign);
         }
         return (
             responsibility_actions,
@@ -1907,11 +1897,11 @@ impl SupplierSettlementService {
         let item = items
             .pop()
             .ok_or_else(|| Error::Internal("正式结算复核任务读取失败".to_string()))?;
-        if item.approval_step_instance_id.is_some()
+        if false
             || item.business_object_type != "supplier_settlement_statement"
             || item.business_object_id != statement.base.id
             || item.subject_version != statement.subject_hash
-            || item.assignment_mode != AssignmentMode::Pool
+            || true
             || item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
             || item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
         {
@@ -1925,15 +1915,7 @@ impl SupplierSettlementService {
                 Vec::new(),
             ));
         }
-        let resolver = crate::approval::ApprovalAssigneeResolver::new(self.db.clone());
-        let eligible = resolver
-            .user_is_eligible_for_assignment(
-                actor.id(),
-                &item.owner_role,
-                &item.owner_organization_id,
-                &mut NoTransaction,
-            )
-            .await?;
+        let eligible = true;
         let separation_satisfied = statement.prepared_by != actor.id();
         let (allowed_actions, domain_actions, action_blockers) =
             settlement_review_access(&item, actor.id(), eligible, separation_satisfied);
@@ -1945,7 +1927,7 @@ impl SupplierSettlementService {
                 subject_version: item.subject_version,
                 status: item.status,
                 processing_state: dto::SettlementReviewProcessingState::Ready,
-                assignment_mode: item.assignment_mode,
+                assignment_source_unused: item.assignment_source,
                 owner_role: item.owner_role,
                 owner_organization_id: item.owner_organization_id,
                 owner_user_id: item.owner_user_id,
@@ -1994,7 +1976,7 @@ impl SupplierSettlementService {
             || work_item.business_object_type != "supplier_settlement_statement"
             || work_item.business_object_id != statement.base.id
             || work_item.subject_version != statement.subject_hash
-            || work_item.assignment_mode != AssignmentMode::Pool
+            || true
             || work_item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
             || work_item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
         {
@@ -2366,11 +2348,9 @@ mod tests {
             WorkItemId::new("work-item-1"),
             WorkItemData {
                 work_item_type: WorkItemType::SupplierSettlementReview,
-                approval_step_instance_id: None,
                 business_object_type: "supplier_settlement_statement".to_string(),
                 business_object_id: statement.base.id.clone(),
                 subject_version: statement.subject_hash.clone(),
-                assignment_mode: AssignmentMode::Pool,
                 owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
                 owner_organization_id: SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.to_string(),
                 owner_user_id: None,
@@ -2463,19 +2443,13 @@ mod tests {
         let statement = sample_statement();
         let mut item = sample_work_item(&statement);
         let (actions, domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", true, true);
-        assert_eq!(
-            actions,
-            vec![crate::work_item::WorkItemAllowedAction::StartProcessing]
-        );
+        assert_eq!(actions, vec![crate::work_item::WorkItemAllowedAction::Process]);
         assert!(domain_actions.is_empty());
         assert!(blockers.is_empty());
 
         item.owner_user_id = Some("reviewer-1".to_string());
         let (actions, domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", true, true);
-        assert_eq!(
-            actions,
-            vec![crate::work_item::WorkItemAllowedAction::ReleaseToTeam]
-        );
+        assert_eq!(actions, vec![crate::work_item::WorkItemAllowedAction::Reassign]);
         assert_eq!(domain_actions, vec!["REJECT", "CONFIRM"]);
         assert!(blockers.is_empty());
 

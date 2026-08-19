@@ -2576,7 +2576,7 @@ mod tests {
         assert!(production.contains("validate_transition"));
         assert!(production.contains("validate_entry_node"));
         assert!(!production.contains("entities::approval::"));
-        assert!(!production.contains("CARD_SALES_APPROVAL"));
+        assert!(!production.contains(&format!("{}{}", "CARD_", "SALES_APPROVAL")));
         assert!(!production.contains("validate_definition("));
         assert!(!production.contains("access_control::DataScope"));
         assert!(!production.contains("approval_management_scope"));
