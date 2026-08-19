@@ -19,6 +19,14 @@ function SalesOrdersListFallback() {
     )
 }
 
+/**
+ * SPA 壳：URL 查询由客户端恢复 mode / nature / customerId 等。
+ * 业务数据不在服务端 fetch。
+ *
+ * 实物/卡券销售单与销售变更单走通用审批区。
+ * SalesReturnCase 为 NO_APPROVAL：本页列表与建单路径不展示销售退货审批区，
+ * 不接入绑定卡、运行摘要或决定弹窗。
+ */
 export default async function SalesOrdersPage({
     searchParams,
 }: {

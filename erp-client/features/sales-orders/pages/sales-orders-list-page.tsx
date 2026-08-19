@@ -24,6 +24,10 @@ import {
 import { SORT_COLUMN_TO_FIELD } from "@/features/sales-orders/lib/sales-orders-list-query"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
+/**
+ * 销售单列表。实物/卡券销售单走各自审批入口。
+ * SalesReturnCase 为 NO_APPROVAL，列表不展示销售退货审批区或审批动作。
+ */
 export function SalesOrdersListPage() {
     const router = useRouter()
     const { url, pushUrl } = useSalesOrdersListUrlState()
