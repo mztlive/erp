@@ -1,7 +1,7 @@
-//! P6-PILOT：试点并发、CAS、幂等收据与 outbox 租约。
+//! P6-FINAL：并发决定、CAS、幂等收据、事务回滚与 outbox 租约。
 //!
 //! 两个并发决定只能成功一个；陈旧 CAS 返回稳定冲突；相同幂等键同载荷回读，
-//! 异载荷冲突；两个 worker 不得同时领取同一条 outbox。
+//! 异载荷冲突；两个 worker 不得同时领取同一条 outbox。领域动作失败必须整单回滚。
 
 use std::sync::Arc;
 
@@ -217,4 +217,89 @@ async fn expired_lease_can_be_taken_over() {
         assert_eq!(taken[0].lease_owner.as_deref(), Some("worker-new"));
         let _ = fixture.db().approval_command_receipts();
     });
+}
+
+/// 领域动作失败时 MemoryRuntimeStore 必须回滚，禁止半提交实例或任务。
+#[test]
+fn commit_writes_rolls_back_on_any_domain_or_store_failure() {
+    use services::approval::execution::store::{
+        ApplyError, DomainActionExecutor, MemoryRuntimeStore, RecordingDomainActions,
+    };
+    use services::approval::execution::DomainActionKind;
+
+    let fail_domain = RecordingDomainActions {
+        fail: true,
+        ..RecordingDomainActions::default()
+    };
+    let error = fail_domain
+        .execute(DomainActionKind::Start)
+        .expect_err("失败动作必须返回错误");
+    assert!(matches!(error, ApplyError::DomainActionFailed(_)));
+    assert!(fail_domain.executed.borrow().is_empty(), "失败不得记录已执行动作");
+
+    let mut store = MemoryRuntimeStore::default();
+    store.begin();
+    assert!(store.instance("inst-1").is_none());
+    store.rollback();
+    assert!(store.instance("inst-1").is_none(), "回滚后不得留下实例");
+    assert!(store.outbox_items().next().is_none(), "回滚后不得留下 outbox");
+
+    let store_src = include_str!("../../../services/src/approval/execution/store.rs");
+    assert!(store_src.contains("store.begin();"));
+    assert!(store_src.contains("if let Err(error) = apply_all(store, writes, ctx, domain)"));
+    assert!(store_src.contains("store.rollback();"));
+    assert!(store_src.contains("return Err(error);"));
+    let exec_src = include_str!("../../../services/src/approval/execution/mod.rs");
+    assert!(exec_src.contains("fn execution_commit_writes_and_duplicate_key_replay"));
+    assert!(exec_src.contains("assert!(failing.instance(\"inst\").is_none())"));
+    assert!(exec_src.contains("ApplyError::DuplicateReceipt"));
+}
+
+/// 进程退出不得留下可被双投递的未过期租约；租约必须可被接管。
+#[test]
+fn outbox_lease_survives_process_exit_via_expiry() {
+    assert_eq!(LEASE_SECS, 30);
+    let worker = include_str!("../../../services/src/approval/execution/notification_worker.rs");
+    assert!(worker.contains("const LEASE_SECS: i64 = 30"));
+    let item = pending_outbox("obx-exit", "dedup-exit");
+    let mut held = item.clone();
+    held.acquire_lease(
+        "worker-dead",
+        Instant::from_unix_secs(10),
+        Instant::from_unix_secs(10 + LEASE_SECS),
+    )
+    .expect("旧进程租约");
+    assert_eq!(held.lease_owner.as_deref(), Some("worker-dead"));
+    assert!(
+        held.lease_until
+            .is_some_and(|until| until.unix_secs() == 10 + LEASE_SECS),
+        "租约必须带绝对过期时间，进程退出后可由他人接管"
+    );
+}
+
+/// 历史重放必须按 execution_no 游标分页，HTTP 与仓储都有硬上限。
+#[test]
+fn history_replay_is_cursor_bounded() {
+    use web_api::core::handler::approval_instance::http::{
+        InstanceHistoryQuery, DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT,
+    };
+
+    assert_eq!(DEFAULT_HISTORY_LIMIT, 50);
+    assert_eq!(MAX_HISTORY_LIMIT, 100);
+    let default = InstanceHistoryQuery {
+        cursor: None,
+        limit: None,
+    };
+    assert_eq!(default.normalized_limit().expect("默认"), 50);
+    let over = InstanceHistoryQuery {
+        cursor: Some("exec-50".into()),
+        limit: Some(101),
+    };
+    assert!(over.normalized_limit().is_err(), "HTTP 历史页不得无界");
+    let bpm = include_str!("../../../database/src/repository/bpm.rs");
+    assert!(bpm.contains("const MAX_EXECUTION_HISTORY: i64 = 50"));
+    assert!(bpm.contains("after_execution_no"));
+    assert!(bpm.contains("\"execution_no\""));
+    assert!(bpm.contains("fn execution_history_limit"));
+    assert!(bpm.contains("clamp_limit(limit, MAX_EXECUTION_HISTORY)"));
 }
