@@ -15,6 +15,7 @@ import {
     nowIso,
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
+import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import type {
     BackendDelivery,
     BackendDeliveryDetail,
@@ -25,19 +26,27 @@ import type {
 } from "./documents"
 import { formalFromDelivery, formalFromReceipt } from "./outcomes"
 
+/**
+ * 保存履约草稿。PurchaseReceipt 为 NO_APPROVAL，入库保存不绑定、不启动审批。
+ *
+ * @param input 保存命令。
+ * @returns 新的单据版本。
+ */
 export async function saveFulfillmentOperation(
     input: SaveFulfillmentOperationCommand,
 ): Promise<{ editVersion: number }> {
     const draft = input.draft
     if (draft.type === "RECEIPT") {
-        const updated = await apiPut<BackendPurchaseReceipt>(
-            `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}`,
-            {
-                version: input.expectedDocumentVersion,
-                expected_source_version: input.expectedSourceVersion,
-                idempotency_key: input.idempotencyKey,
-                warehouse_id: draft.warehouseId || undefined,
-            },
+        const updated = stripPurchaseReceiptApprovalField(
+            await apiPut<BackendPurchaseReceipt>(
+                `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}`,
+                {
+                    version: input.expectedDocumentVersion,
+                    expected_source_version: input.expectedSourceVersion,
+                    idempotency_key: input.idempotencyKey,
+                    warehouse_id: draft.warehouseId || undefined,
+                },
+            ),
         )
         return { editVersion: updated.version }
     }
@@ -57,6 +66,12 @@ export async function saveFulfillmentOperation(
     throw new Error("电子交付与服务履约草稿不支持保存；请直接确认正式单据")
 }
 
+/**
+ * 确认正式单据。PurchaseReceipt 为 NO_APPROVAL，入库确认直接过账，不提交审批。
+ *
+ * @param input 确认命令。
+ * @returns 成功/失败/待确认结果；入库成功结果不含审批区。
+ */
 export async function postFulfillmentOperation(
     input: PostFulfillmentOperationCommand,
 ): Promise<FormalActionResponse> {
@@ -71,7 +86,8 @@ export async function postFulfillmentOperation(
                 const detail = await apiGet<BackendPurchaseReceiptDetail>(
                     `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}`,
                 )
-                receipt = detail.receipt
+                // PurchaseReceipt 为 NO_APPROVAL，确认前丢弃误带的审批绑定。
+                receipt = stripPurchaseReceiptApprovalField(detail.receipt)
             } catch (error) {
                 if (!(isApiError(error) && error.status === 404)) throw error
             }
@@ -98,25 +114,30 @@ export async function postFulfillmentOperation(
                 receipt.warehouse_id !== draft.warehouseId &&
                 draft.warehouseId
             ) {
-                const updated = await apiPut<BackendPurchaseReceipt>(
-                    `/admin/purchase-receipts/${encodeURIComponent(receiptId)}`,
-                    {
-                        version: input.expectedDocumentVersion,
-                        expected_source_version: input.expectedSourceVersion,
-                        idempotency_key: input.idempotencyKey,
-                        warehouse_id: draft.warehouseId,
-                    },
+                const updated = stripPurchaseReceiptApprovalField(
+                    await apiPut<BackendPurchaseReceipt>(
+                        `/admin/purchase-receipts/${encodeURIComponent(receiptId)}`,
+                        {
+                            version: input.expectedDocumentVersion,
+                            expected_source_version:
+                                input.expectedSourceVersion,
+                            idempotency_key: input.idempotencyKey,
+                            warehouse_id: draft.warehouseId,
+                        },
+                    ),
                 )
                 commandVersion = updated.version
             }
 
-            const posted = await apiPost<BackendPurchaseReceipt>(
-                `/admin/purchase-receipts/${encodeURIComponent(receiptId)}/post`,
-                {
-                    version: commandVersion,
-                    expected_source_version: input.expectedSourceVersion,
-                    idempotency_key: input.idempotencyKey,
-                },
+            const posted = stripPurchaseReceiptApprovalField(
+                await apiPost<BackendPurchaseReceipt>(
+                    `/admin/purchase-receipts/${encodeURIComponent(receiptId)}/post`,
+                    {
+                        version: commandVersion,
+                        expected_source_version: input.expectedSourceVersion,
+                        idempotency_key: input.idempotencyKey,
+                    },
+                ),
             )
             return {
                 status: "succeeded",
@@ -283,6 +304,12 @@ export async function postFulfillmentOperation(
     }
 }
 
+/**
+ * 复核暂未确认的处理结果。PurchaseReceipt 为 NO_APPROVAL，已入库事实不含审批绑定。
+ *
+ * @param input 复核命令。
+ * @returns 已过账则返回正式结果，否则保持未知。
+ */
 export async function resolveUnknownFulfillmentResult(
     input: ResolveFulfillmentOperationCommand,
 ): Promise<FormalActionResponse> {
@@ -293,18 +320,19 @@ export async function resolveUnknownFulfillmentResult(
                 const d = await apiGet<BackendPurchaseReceiptDetail>(
                     `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}`,
                 )
-                if (d.receipt.status === "POSTED") {
+                const receipt = stripPurchaseReceiptApprovalField(d.receipt)
+                if (receipt.status === "POSTED") {
                     return {
                         status: "succeeded",
                         outcome: {
                             kind: "POSTED",
                             operationId: input.operationId,
                             factType: "PURCHASE_RECEIPT",
-                            factId: d.receipt.id,
-                            factNo: d.receipt.receipt_no,
+                            factId: receipt.id,
+                            factNo: receipt.receipt_no,
                             formalStatus: "POSTED",
                             occurredAt:
-                                secsToIso(d.receipt.posted_at) || nowIso(),
+                                secsToIso(receipt.posted_at) || nowIso(),
                             operationType: "RECEIPT",
                             inventoryDelta: [],
                             reservationDelta: [],
@@ -312,7 +340,7 @@ export async function resolveUnknownFulfillmentResult(
                             acceptanceRequired: false,
                             acceptanceNextStep: "",
                             inventoryImpactSummary: "",
-                            reference: d.receipt.receipt_no,
+                            reference: receipt.receipt_no,
                             salesOrderId: "",
                             salesOrderNo: "",
                         },

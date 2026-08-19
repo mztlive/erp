@@ -20,7 +20,10 @@ export type FulfillmentResultPanelProps = {
     onNext: () => void
 }
 
-/** 确认/查询之后的结果面板：结果、记录要点与后续动作。 */
+/**
+ * 确认/查询之后的结果面板：结果、记录要点与后续动作。
+ * PurchaseReceipt 为 NO_APPROVAL，入库创建结果不展示绑定卡、决定或审批历史。
+ */
 export function FulfillmentResultPanel({
     lastResult,
     currentUrl,
@@ -86,11 +89,7 @@ export function FulfillmentResultPanel({
                     ) : null}
                     {lastResult.stayOnItem === false ||
                     lastResult.status === "blocked" ? null : (
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={onNext}
-                        >
+                        <Button type="button" size="sm" onClick={onNext}>
                             下一条
                         </Button>
                     )}

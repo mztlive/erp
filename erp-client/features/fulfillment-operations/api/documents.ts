@@ -14,9 +14,11 @@ import {
     nowIso,
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
+import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 
 // ─── backend DTO shapes ─────────────────────────────────────────────────────
 
+/** PurchaseReceipt 为 NO_APPROVAL：创建/详情 DTO 不得携带审批绑定。 */
 export type BackendPurchaseReceipt = {
     id: string
     receipt_no: string
@@ -38,6 +40,7 @@ export type BackendPurchaseReceiptLine = {
     quality_result: string
 }
 
+/** PurchaseReceipt 为 NO_APPROVAL：详情不得嵌入审批区。 */
 export type BackendPurchaseReceiptDetail = {
     receipt: BackendPurchaseReceipt
     lines: BackendPurchaseReceiptLine[]
@@ -107,30 +110,38 @@ export type BackendWarehouse = {
 
 // ─── DTO → 工作单投影 ───────────────────────────────────────────────────────
 
-export function receiptToOperation(r: BackendPurchaseReceipt): FulfillmentOperation {
-    const dueAt = secsToIso(r.created_at) || nowIso()
+/**
+ * 把采购收货草稿投影为入库工作单。PurchaseReceipt 为 NO_APPROVAL，丢弃误带的审批字段。
+ *
+ * @param r 采购收货 HTTP 载荷。
+ */
+export function receiptToOperation(
+    r: BackendPurchaseReceipt,
+): FulfillmentOperation {
+    const receipt = stripPurchaseReceiptApprovalField(r)
+    const dueAt = secsToIso(receipt.created_at) || nowIso()
     return baseOperation({
-        operationId: r.id,
+        operationId: receipt.id,
         operationType: "RECEIPT",
-        editVersion: r.version,
-        sourceVersion: String(r.version),
+        editVersion: receipt.version,
+        sourceVersion: String(receipt.version),
         dueAt,
-        summary: r.receipt_no,
+        summary: receipt.receipt_no,
         source: {
-            purchaseOrderId: r.purchase_order_id,
-            purchaseNo: r.purchase_order_id,
+            purchaseOrderId: receipt.purchase_order_id,
+            purchaseNo: receipt.purchase_order_id,
             purchaseRevisionId: "",
             salesOrderId: "",
             salesOrderNo: "",
             salesRevisionId: "",
             customerLabel: "",
-            warehouseId: r.warehouse_id,
-            warehouseLabel: r.warehouse_id,
+            warehouseId: receipt.warehouse_id,
+            warehouseLabel: receipt.warehouse_id,
         },
         draft: {
             type: "RECEIPT",
-            warehouseId: r.warehouse_id,
-            warehouseLabel: r.warehouse_id,
+            warehouseId: receipt.warehouse_id,
+            warehouseLabel: receipt.warehouse_id,
             occurredAt: nowIso().slice(0, 16),
             lines: [],
         },

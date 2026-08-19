@@ -15,9 +15,7 @@ import {
     postFulfillmentOperation,
     saveFulfillmentOperation,
 } from "@/features/fulfillment-operations/api"
-import type {
-    FulfillmentQueueFilters,
-} from "@/features/fulfillment-operations/api"
+import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
 import type { FulfillmentQueueView } from "@/features/fulfillment-operations/types"
 import {
     createFreshQueryClient,
@@ -102,9 +100,7 @@ describe("useFulfillmentQueueQuery", () => {
         await waitFor(() => expect(result.current.data).toBeDefined())
         const entries = client.getQueryCache().findAll()
         expect(entries).toHaveLength(1)
-        expect(entries[0]?.queryKey).toEqual(
-            fulfillmentKeys.queue(FILTERS),
-        )
+        expect(entries[0]?.queryKey).toEqual(fulfillmentKeys.queue(FILTERS))
     })
 
     it("refetches when the filters change", async () => {
@@ -256,6 +252,67 @@ describe("usePostFulfillmentMutation", () => {
         await waitFor(() => expect(invalidate).toHaveBeenCalled())
         expect(invalidate).toHaveBeenCalledWith({
             queryKey: fulfillmentKeys.all,
+        })
+        expect(invalidate).not.toHaveBeenCalledWith({
+            queryKey: ["approval", "document", "PurchaseReceipt", "f_1"],
+        })
+    })
+
+    it("does not invalidate approval cache after a purchase receipt post", async () => {
+        mockedPost.mockResolvedValue({
+            status: "succeeded",
+            outcome: {
+                kind: "POSTED",
+                operationId: "pr-1",
+                factType: "PURCHASE_RECEIPT",
+                factId: "pr-1",
+                factNo: "RK-1",
+                formalStatus: "POSTED",
+                occurredAt: "2026-08-14T09:00:00.000Z",
+                operationType: "RECEIPT",
+                inventoryDelta: [],
+                reservationDelta: [],
+                remainingByLine: [],
+                acceptanceRequired: false,
+                acceptanceNextStep: "由销售登记客户验收",
+                inventoryImpactSummary: "中心仓 +10",
+                reference: "RK-1",
+                salesOrderId: "so_1",
+                salesOrderNo: "SO-1",
+            },
+        })
+        const client = createFreshQueryClient()
+        const invalidate = vi.spyOn(client, "invalidateQueries")
+        const wrapper = makeMutationWrapper(client)
+        const { result } = renderHook(() => usePostFulfillmentMutation(), {
+            wrapper,
+        })
+
+        await act(async () => {
+            await result.current.mutateAsync({
+                operationId: "pr-1",
+                expectedSourceVersion: "sv_1",
+                expectedDocumentVersion: 1,
+                idempotencyKey: "k-pr-1",
+                draft: {
+                    type: "RECEIPT",
+                    warehouseId: "wh_1",
+                    warehouseLabel: "中心仓",
+                    occurredAt: "2026-08-14T09:00:00.000Z",
+                    lines: [],
+                },
+            })
+        })
+
+        await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1))
+        expect(invalidate).toHaveBeenCalledWith({
+            queryKey: fulfillmentKeys.all,
+        })
+        expect(invalidate).not.toHaveBeenCalledWith({
+            queryKey: ["approval", "document", "PurchaseReceipt", "pr-1"],
+        })
+        expect(invalidate).not.toHaveBeenCalledWith({
+            queryKey: ["approval"],
         })
     })
 })
