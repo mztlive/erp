@@ -1,5 +1,8 @@
 //! `electronic_delivery`：电子交付记录（数据模型 §6.7）。
 //!
+//! 合同 §4.3 签署为 `NO_APPROVAL`：实体只保留业务状态，不得新增审批绑定字段
+//! 或审批状态机。
+//!
 //! 公共关键字段按 §6.7 字典；字典含 `occurred_at` 等正式事实字段，按 §4.3
 //! 组合 `FactBase`。敏感交付对象（`recipient_snapshot`）按 §4.5.5 建模为
 //! **加密快照 + 带密钥 HMAC 查询指纹**两个字段，自定义 `Debug` 不泄漏。
@@ -14,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::fact::FactBase;
 use crate::common::source::SourceType;
-use crate::common::state::{ensure_transition, DocumentState};
+use crate::common::state::{DocumentState, ensure_transition};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
@@ -23,7 +26,7 @@ use crate::ids::{
 use crate::money::Quantity;
 use crate::validation::normalize_required_text;
 
-use super::fingerprint::{hmac_sha256_hex, validate_fingerprint, FINGERPRINT_HEX_LEN};
+use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
 
 /// 履约记录号最大长度。
 const FULFILLMENT_NO_MAX_LEN: usize = 64;
@@ -534,12 +537,14 @@ mod tests {
     fn state_machine_directed_edges() {
         let mut delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-7"), data()).unwrap();
         assert!(delivery.reverse().is_err(), "草稿不能直接冲正");
-        assert!(delivery
-            .update(ElectronicDeliveryUpdate {
-                result: Some(FulfillmentResult::Failure),
-                evidence_attachment_id: None,
-            })
-            .is_ok());
+        assert!(
+            delivery
+                .update(ElectronicDeliveryUpdate {
+                    result: Some(FulfillmentResult::Failure),
+                    evidence_attachment_id: None,
+                })
+                .is_ok()
+        );
         delivery.confirm().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；CONFIRMED 不可编辑由 update 把关。
         assert!(delivery.confirm().is_ok());
@@ -562,22 +567,26 @@ mod tests {
         assert!(
             ensure_transition(ElectronicDeliveryState::Draft, ElectronicDeliveryState::Confirmed).is_ok()
         );
-        assert!(ensure_transition(
-            ElectronicDeliveryState::Confirmed,
-            ElectronicDeliveryState::Reversed
-        )
-        .is_ok());
+        assert!(
+            ensure_transition(
+                ElectronicDeliveryState::Confirmed,
+                ElectronicDeliveryState::Reversed
+            )
+            .is_ok()
+        );
         assert!(
             ensure_transition(ElectronicDeliveryState::Draft, ElectronicDeliveryState::Reversed).is_err()
         );
         assert!(
             ensure_transition(ElectronicDeliveryState::Confirmed, ElectronicDeliveryState::Draft).is_err()
         );
-        assert!(ensure_transition(
-            ElectronicDeliveryState::Reversed,
-            ElectronicDeliveryState::Confirmed
-        )
-        .is_err());
+        assert!(
+            ensure_transition(
+                ElectronicDeliveryState::Reversed,
+                ElectronicDeliveryState::Confirmed
+            )
+            .is_err()
+        );
     }
 
     /// 敏感字段：指纹稳定且带密钥；Debug 不泄漏明文/密文/指纹。
@@ -619,5 +628,30 @@ mod tests {
         let roundtrip: ElectronicDelivery =
             bson::from_document(bson::to_document(&delivery).unwrap()).unwrap();
         assert_eq!(roundtrip, delivery);
+    }
+
+    /// 电子交付无审批约束：不得出现绑定字段或审批状态机。
+    #[test]
+    fn electronic_delivery_has_no_approval_binding_or_state_machine() {
+        let delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-1"), data()).unwrap();
+        let value = serde_json::to_value(&delivery).unwrap();
+        let object = value.as_object().expect("电子交付序列化为对象");
+        assert!(!object.contains_key("approval_binding"));
+        assert!(!object.contains_key("approval_subject_version"));
+        assert!(!object.contains_key("pending_allocations"));
+        assert_eq!(delivery.status, ElectronicDeliveryState::Draft);
+        assert_eq!(ElectronicDeliveryState::Draft.as_str(), "DRAFT");
+        assert_eq!(ElectronicDeliveryState::Confirmed.as_str(), "CONFIRMED");
+        assert_eq!(ElectronicDeliveryState::Reversed.as_str(), "REVERSED");
+
+        let production = include_str!("electronic_delivery.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("IN_APPROVAL"));
+        assert!(!production.contains("fn start_approval"));
+        assert!(!production.contains("approval_subject_version"));
+        assert!(!production.contains("ApprovalDefinitionBinding"));
+        assert!(!production.contains("PENDING_REVIEW"));
     }
 }
