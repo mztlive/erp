@@ -118,6 +118,33 @@ export type PaymentRow = Readonly<{
     approval?: DocumentApprovalView
 }>
 
+/** SupplierRefund 为 PROCESS_REQUIRED：行投影携带只读审批区。 */
+export type SupplierRefundRow = Readonly<{
+    refundId: string
+    refundNo: string
+    supplierId: string
+    originalPaymentId?: string
+    originalPayableEntryId?: string
+    reasonText: string
+    amount: string
+    occurredAt: string
+    status: "draft" | "in_approval" | "posted" | "reversed"
+    statusLabel: string
+    statusTone: StatusTone
+    baselineVersion: number
+    allowedActions: readonly string[]
+    actionBlockers: readonly ActionBlocker[]
+    approval?: DocumentApprovalView
+}>
+
+/** 从已过账付款发起供应商退款所需的原事实。 */
+export type SupplierRefundRequest = Readonly<{
+    sourcePaymentId: string
+    sourcePaymentNo: string
+    supplierId: string
+    amount?: string
+}>
+
 type InvoiceAllocationLine = Readonly<{
     allocationId: string
     action: "APPLY" | "REVERSE"

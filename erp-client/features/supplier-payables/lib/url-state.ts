@@ -2,7 +2,7 @@
 
 import type { SupplierAccountsView } from "@/features/supplier-payables/types"
 
-export type SupplierAccountsPreviewKind = "payable" | "payment"
+export type SupplierAccountsPreviewKind = "payable" | "payment" | "refund"
 
 /**
  * 解析详情预览种类。缺省或未知值按应付台账处理。
@@ -12,7 +12,8 @@ export type SupplierAccountsPreviewKind = "payable" | "payment"
 export function parsePreviewKind(
     raw: string | null,
 ): SupplierAccountsPreviewKind {
-    return raw === "payment" ? "payment" : "payable"
+    if (raw === "payment" || raw === "refund") return raw
+    return "payable"
 }
 
 /**

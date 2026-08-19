@@ -19,6 +19,7 @@ import {
     type SessionState,
     type SupplierAccountsListView,
     type SupplierAccountsView,
+    type SupplierRefundRequest,
     type UnallocatedRow,
 } from "@/features/supplier-payables/types"
 
@@ -49,6 +50,9 @@ export interface SupplierAccountsTableProps {
     openSession: (next: SessionState) => void
     setReverseTarget: React.Dispatch<React.SetStateAction<ReverseTarget | null>>
     setRedInvoiceNo: React.Dispatch<React.SetStateAction<string>>
+    setRefundRequest?: React.Dispatch<
+        React.SetStateAction<SupplierRefundRequest | null>
+    >
     toolbar: React.ReactNode
 }
 
@@ -69,6 +73,7 @@ export function SupplierAccountsTable({
     openSession,
     setReverseTarget,
     setRedInvoiceNo,
+    setRefundRequest,
     toolbar,
 }: SupplierAccountsTableProps) {
     const {
@@ -85,6 +90,7 @@ export function SupplierAccountsTable({
         openSession,
         setReverseTarget,
         setRedInvoiceNo,
+        setRefundRequest,
     })
 
     return (

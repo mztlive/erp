@@ -327,6 +327,20 @@ describe("useSupplierAccountsPage", () => {
         expect(lastReplaceHref(router)?.has("detailId")).toBe(false)
     })
 
+    it("openRefundPreview writes refund previewKind and clears other previews", () => {
+        const { view, router } = renderPage("previewKind=payment&detailId=PMT-1")
+
+        act(() => {
+            view.result.current.openRefundPreview("srf-1")
+        })
+        expect(view.result.current.previewRefundId).toBe("srf-1")
+        expect(view.result.current.previewPaymentId).toBeNull()
+        expect(view.result.current.previewPayableId).toBeNull()
+        const href = lastReplaceHref(router)
+        expect(href?.get("detailId")).toBe("srf-1")
+        expect(href?.get("previewKind")).toBe("refund")
+    })
+
     it("openSession/closeSession write and clear session URL params", () => {
         const { view, router } = renderPage("")
 

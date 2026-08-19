@@ -26,8 +26,9 @@ describe('parseView', () => {
 })
 
 describe('parsePreviewKind', () => {
-    it('only promotes payment when the query is exact', () => {
+    it('only promotes payment or refund when the query is exact', () => {
         expect(parsePreviewKind('payment')).toBe('payment')
+        expect(parsePreviewKind('refund')).toBe('refund')
         expect(parsePreviewKind('payable')).toBe('payable')
         expect(parsePreviewKind(null)).toBe('payable')
         expect(parsePreviewKind('invoice')).toBe('payable')

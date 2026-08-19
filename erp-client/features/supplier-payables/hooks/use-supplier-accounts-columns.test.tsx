@@ -54,7 +54,7 @@ const paymentRow: PaymentRow = {
     statusTone: 'success',
     baselineVersion: 1,
     allocations: [],
-    allowedActions: ['VIEW_DETAIL', 'CONTINUE_ALLOCATE', 'REVERSE'],
+    allowedActions: ['VIEW_DETAIL', 'CONTINUE_ALLOCATE', 'REVERSE', 'REFUND'],
     actionBlockers: [],
 }
 
@@ -373,6 +373,23 @@ describe('useSupplierAccountsColumns', () => {
             kind: 'payment',
             id: 'pay-1',
             no: 'FK-001',
+        })
+    })
+
+    it('opens the supplier refund request from the payment actions cell', () => {
+        const setRefundRequest = vi.fn()
+        const { result } = setup({ setRefundRequest })
+        const screen = renderColumnCell(
+            result.current.paymentColumns,
+            'actions',
+            paymentRow,
+        )
+        fireEvent.click(screen.getByText('退款'))
+        expect(setRefundRequest).toHaveBeenCalledWith({
+            sourcePaymentId: 'pay-1',
+            sourcePaymentNo: 'FK-001',
+            supplierId: 'sup-1',
+            amount: '1000.00',
         })
     })
 
