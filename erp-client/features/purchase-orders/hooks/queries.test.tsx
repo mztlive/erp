@@ -8,11 +8,13 @@ vi.mock("@/features/purchase-orders/api/purchase-orders", () => ({
     fetchPurchaseOrderExportData: vi.fn(),
     fetchPurchaseOrderCenter: vi.fn(),
     fetchCreationBases: vi.fn(),
+    fetchPurchaseChangeOrderDetail: vi.fn(),
     acquireDraftEditToken: vi.fn(),
     savePurchaseOrderDraft: vi.fn(),
     submitPurchaseOrderForReview: vi.fn(),
     reviewPurchaseOrder: vi.fn(),
     startPurchaseChange: vi.fn(),
+    submitPurchaseChange: vi.fn(),
     createPurchaseOrderFromBasis: vi.fn(),
 }))
 
@@ -20,12 +22,14 @@ import {
     acquireDraftEditToken,
     createPurchaseOrderFromBasis,
     fetchCreationBases,
+    fetchPurchaseChangeOrderDetail,
     fetchPurchaseOrderCenter,
     fetchPurchaseOrderExportData,
     fetchPurchaseOrders,
     reviewPurchaseOrder,
     savePurchaseOrderDraft,
     startPurchaseChange,
+    submitPurchaseChange,
     submitPurchaseOrderForReview,
 } from "@/features/purchase-orders/api/purchase-orders"
 import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
@@ -49,6 +53,7 @@ import {
     useReviewPurchaseOrderMutation,
     useSavePurchaseOrderDraftMutation,
     useStartPurchaseChangeMutation,
+    useSubmitPurchaseChangeMutation,
     useSubmitPurchaseOrderMutation,
 } from "./queries"
 
@@ -61,6 +66,8 @@ const mockedSave = vi.mocked(savePurchaseOrderDraft)
 const mockedSubmit = vi.mocked(submitPurchaseOrderForReview)
 const mockedReview = vi.mocked(reviewPurchaseOrder)
 const mockedStartChange = vi.mocked(startPurchaseChange)
+const mockedSubmitChange = vi.mocked(submitPurchaseChange)
+const mockedFetchChange = vi.mocked(fetchPurchaseChangeOrderDetail)
 const mockedCreate = vi.mocked(createPurchaseOrderFromBasis)
 
 const LIST_QUERY: PurchaseOrderListQuery = {
@@ -222,6 +229,11 @@ describe("purchaseOrderKeys", () => {
             "purchase-orders",
             "detail",
             "po_1",
+        ])
+        expect(purchaseOrderKeys.changeOrder("pco_1")).toEqual([
+            "purchase-orders",
+            "change-order",
+            "pco_1",
         ])
         expect(purchaseOrderKeys.bases()).toEqual([
             "purchase-orders",
@@ -535,6 +547,47 @@ describe("useReviewPurchaseOrderMutation", () => {
         expect(invalidate).toHaveBeenCalledWith({
             queryKey: purchaseOrderKeys.all,
         })
+    })
+})
+
+describe("useSubmitPurchaseChangeMutation", () => {
+    const input = {
+        purchaseChangeOrderId: "pco_1",
+        purchaseOrderId: "po_1",
+        expectedLockVersion: 2,
+        idempotencyKey: "change-submit-1",
+    }
+
+    it("成功时失效采购单与审批缓存", async () => {
+        mockedSubmitChange.mockResolvedValue({
+            status: "succeeded",
+            data: {
+                id: "pco_1",
+                purchaseOrderId: "po_1",
+                statusLabel: "审批中",
+                statusTone: "warning",
+                statusCode: "IN_APPROVAL",
+                version: 3,
+                reason: "采购变更",
+                baseRevisionId: "rev_1",
+                createdAt: "2026-08-14T00:00:00.000Z",
+            },
+            reference: "CHANGE-SUB-1",
+        })
+        const client = createFreshQueryClient()
+        const invalidate = vi.spyOn(client, "invalidateQueries")
+        const { result } = renderHook(() => useSubmitPurchaseChangeMutation(), {
+            wrapper: makeMutationWrapper(client),
+        })
+        await act(async () => {
+            await result.current.mutateAsync(input)
+        })
+        expect(mockedSubmitChange).toHaveBeenCalledWith(input, expect.anything())
+        await waitFor(() => expect(invalidate).toHaveBeenCalled())
+        expect(invalidate).toHaveBeenCalledWith({
+            queryKey: purchaseOrderKeys.all,
+        })
+        expect(mockedFetchChange).not.toHaveBeenCalled()
     })
 })
 

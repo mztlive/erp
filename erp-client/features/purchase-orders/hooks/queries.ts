@@ -7,12 +7,14 @@ import {
     acquireDraftEditToken,
     createPurchaseOrderFromBasis,
     fetchCreationBases,
+    fetchPurchaseChangeOrderDetail,
     fetchPurchaseOrderCenter,
     fetchPurchaseOrderExportData,
     fetchPurchaseOrders,
     reviewPurchaseOrder,
     savePurchaseOrderDraft,
     startPurchaseChange,
+    submitPurchaseChange,
     submitPurchaseOrderForReview,
 } from "@/features/purchase-orders/api/purchase-orders"
 import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
@@ -23,6 +25,8 @@ export const purchaseOrderKeys = {
     list: (query: PurchaseOrderListQuery) =>
         [...purchaseOrderKeys.all, "list", query] as const,
     detail: (id: string) => [...purchaseOrderKeys.all, "detail", id] as const,
+    changeOrder: (id: string) =>
+        [...purchaseOrderKeys.all, "change-order", id] as const,
     bases: () => [...purchaseOrderKeys.all, "creation-bases"] as const,
     exportData: (query: PurchaseOrderListQuery) =>
         [...purchaseOrderKeys.all, "export", query] as const,
@@ -58,11 +62,43 @@ export function usePurchaseOrderExportDataQuery(query: PurchaseOrderListQuery) {
     })
 }
 
-export function usePurchaseOrderCenterQuery(purchaseOrderId: string) {
+/**
+ * 读取采购单对象中心。可按变更单 ID 精确挂上对应审批投影。
+ *
+ * @param purchaseOrderId 采购单 ID。
+ * @param options.changeOrderId 任务或 URL 指定的采购变更单。
+ */
+export function usePurchaseOrderCenterQuery(
+    purchaseOrderId: string,
+    options?: { changeOrderId?: string },
+) {
     return useQuery({
-        queryKey: purchaseOrderKeys.detail(purchaseOrderId),
-        queryFn: () => fetchPurchaseOrderCenter(purchaseOrderId),
+        queryKey: [
+            ...purchaseOrderKeys.detail(purchaseOrderId),
+            options?.changeOrderId ?? "",
+        ],
+        queryFn: () =>
+            options?.changeOrderId
+                ? fetchPurchaseOrderCenter(purchaseOrderId, options)
+                : fetchPurchaseOrderCenter(purchaseOrderId),
         enabled: Boolean(purchaseOrderId),
+    })
+}
+
+/**
+ * 读取指定采购变更单详情。成功后页面消费只读审批投影。
+ *
+ * @param changeOrderId 变更单 ID。
+ * @param enabled 是否发起请求。
+ */
+export function usePurchaseChangeOrderQuery(
+    changeOrderId: string,
+    enabled = true,
+) {
+    return useQuery({
+        queryKey: purchaseOrderKeys.changeOrder(changeOrderId),
+        queryFn: () => fetchPurchaseChangeOrderDetail(changeOrderId),
+        enabled: enabled && Boolean(changeOrderId),
     })
 }
 
@@ -129,6 +165,20 @@ export function useStartPurchaseChangeMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: startPurchaseChange,
+        onSuccess: async (result) => {
+            if (result.status !== "succeeded") return
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
+        },
+    })
+}
+
+/**
+ * 提交采购变更并启动统一审批。成功后失效单据、审批与任务缓存。
+ */
+export function useSubmitPurchaseChangeMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: submitPurchaseChange,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
             await invalidatePurchaseOrderApprovalCaches(queryClient)

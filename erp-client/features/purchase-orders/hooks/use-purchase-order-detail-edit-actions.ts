@@ -334,6 +334,9 @@ export function usePurchaseOrderDetailEditActions({
                 ],
             })
             await refetch()
+            router.replace(
+                `/procurement/orders/${purchaseOrderId}?section=changes`,
+            )
         } else if (response.status === "unknown") {
             setResult({
                 status: "unknown",

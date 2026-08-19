@@ -22,6 +22,7 @@ const apiMocks = vi.hoisted(() => ({
     reviewPurchaseOrder: vi.fn(),
     savePurchaseOrderDraft: vi.fn(),
     startPurchaseChange: vi.fn(),
+    submitPurchaseChange: vi.fn(),
     submitPurchaseOrderForReview: vi.fn(),
 }))
 
@@ -35,6 +36,7 @@ vi.mock("@/features/purchase-orders/api/purchase-orders", () => ({
     reviewPurchaseOrder: apiMocks.reviewPurchaseOrder,
     savePurchaseOrderDraft: apiMocks.savePurchaseOrderDraft,
     startPurchaseChange: apiMocks.startPurchaseChange,
+    submitPurchaseChange: apiMocks.submitPurchaseChange,
     submitPurchaseOrderForReview: apiMocks.submitPurchaseOrderForReview,
 }))
 

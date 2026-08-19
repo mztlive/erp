@@ -197,6 +197,100 @@ describe("fetchPurchaseOrderCenter", () => {
         expect(center?.approval?.instance?.currentAssigneeName).toBe("张三")
         expect(center?.reviewWorkItem).toBeUndefined()
     })
+
+    it("maps the purchase change order binding without inventing a work item", async () => {
+        mockedApiGet.mockImplementation(async (path: string) => {
+            if (path === "/admin/purchase-change-orders") {
+                return {
+                    items: [
+                        {
+                            id: "pco_1",
+                            purchase_order_id: "po_3",
+                            base_revision_id: "rev_1",
+                            reason: "采购变更",
+                            status: "DRAFT",
+                            version: 2,
+                            created_at: 1_700_000_000,
+                        },
+                    ],
+                    total: 1,
+                    page: 1,
+                    page_size: 10,
+                }
+            }
+            if (path === "/admin/purchase-change-orders/pco_1") {
+                return {
+                    id: "pco_1",
+                    purchase_order_id: "po_3",
+                    base_revision_id: "rev_1",
+                    reason: "采购变更",
+                    status: "DRAFT",
+                    version: 2,
+                    created_at: 1_700_000_000,
+                    approval: {
+                        requirement: "PROCESS_REQUIRED",
+                        definition: {
+                            id: "def-pco-1",
+                            name: "采购变更审批",
+                            version: 2,
+                            nodes: [
+                                {
+                                    key: "n1",
+                                    name: "仓配影响确认",
+                                    assignee_name: "张三",
+                                },
+                            ],
+                        },
+                        instance: null,
+                        recent_history: [],
+                        allowed_actions: ["SUBMIT", "UPGRADE_BINDING"],
+                    },
+                }
+            }
+            return {
+                id: "po_3",
+                purchase_no: "PO-3",
+                status: "EFFECTIVE",
+                review_status: "APPROVED",
+                version: 3,
+                sales_order_id: "so_1",
+                supplier_id: "sup_1",
+                supplier_name: "供应商A",
+                purchase_type: "PHYSICAL",
+                payment_term_code: "POSTPAY_NET30",
+                fulfillment_responsibility: "WAREHOUSE",
+                payment_progress: "NONE",
+                invoice_progress: "NONE",
+                fulfillment_progress: "NONE",
+                content_source: "REVISION",
+                lines: [],
+                totals: { gross: "0", net: "0", tax: "0" },
+                allocations: [],
+                changes: [
+                    {
+                        change_id: "pco_1",
+                        status: "DRAFT",
+                        base_revision_id: "rev_1",
+                        reason: "采购变更",
+                        created_at: 1_700_000_000,
+                    },
+                ],
+                created_at: 1_700_000_000,
+            }
+        })
+
+        const center = await fetchPurchaseOrderCenter("po_3")
+        expect(center?.changes[0]?.statusLabel).toBe("草稿")
+        expect(center?.activeChangeOrder?.id).toBe("pco_1")
+        expect(center?.activeChangeOrder?.approval?.instance).toBeUndefined()
+        expect(center?.activeChangeOrder?.approval?.definition?.name).toBe(
+            "采购变更审批",
+        )
+        expect(center?.activeChangeOrder?.approval?.allowedActions).toEqual([
+            "SUBMIT",
+            "UPGRADE_BINDING",
+        ])
+    })
 })
 
 describe("fetchCreationBases", () => {

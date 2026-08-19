@@ -13,6 +13,7 @@ import {
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/components/purchase-change-order-approval-section"
 import { PurchaseOrderApprovalArea } from "@/features/purchase-orders/components/purchase-order-approval-area"
 import { EditSurface } from "@/features/purchase-orders/components/purchase-order-surfaces"
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
@@ -24,6 +25,7 @@ import { usePurchaseOrderDetailEditActions } from "@/features/purchase-orders/ho
 import { usePurchaseOrderDetailEditGuard } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-guard"
 import { usePurchaseOrderDetailPermissions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-permissions"
 import { usePurchaseOrderDetailReviewActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-review-actions"
+import { isPurchaseChangeOrderWorkItem } from "@/features/purchase-orders/lib/purchase-change-order-approval"
 import { purchaseOrderApprovalPhase } from "@/features/purchase-orders/lib/purchase-order-approval"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
@@ -35,27 +37,38 @@ import {
 import { purchaseOrderDraftFormSchema } from "@/features/purchase-orders/lib/purchase-order-validation"
 
 /**
- * 采购单详情。创建结果、编辑与运行中都嵌入通用审批区，不复制状态推导。
+ * 采购单详情。创建结果、编辑与运行中都嵌入通用审批区；
+ * 采购变更单走独立 DocumentType，不复制状态推导。
  */
 export function PurchaseOrderDetailPage({
     purchaseOrderId,
     section,
     mode: modeParam,
     workItemId,
+    changeOrderId,
 }: {
     purchaseOrderId: string
     section?: string
     mode?: string
     workItemId?: string
+    changeOrderId?: string
 }) {
     const router = useRouter()
-    const query = usePurchaseOrderCenterQuery(purchaseOrderId)
     const focusedWorkItemQuery = useWorkItemDetailQuery(workItemId ?? "")
     const focusedWorkItem = focusedWorkItemQuery.data
         ? mapWorkItemDto(focusedWorkItemQuery.data)
         : undefined
+    const isChangeOrderTask = isPurchaseChangeOrderWorkItem(focusedWorkItem)
+    const focusedChangeOrderId =
+        changeOrderId ??
+        (isChangeOrderTask ? focusedWorkItem?.businessObjectId : undefined)
+    const query = usePurchaseOrderCenterQuery(purchaseOrderId, {
+        changeOrderId: focusedChangeOrderId,
+    })
 
-    const activeSection = resolvePurchaseOrderDetailSection(section)
+    const activeSection = resolvePurchaseOrderDetailSection(
+        section ?? (isChangeOrderTask ? "changes" : undefined),
+    )
     const mode = resolvePurchaseOrderDetailMode(modeParam)
     const order = query.data
 
@@ -235,37 +248,48 @@ export function PurchaseOrderDetailPage({
                 onDismissResult={() => setResult(null)}
             />
 
-            <PurchaseOrderApprovalArea
-                phase={purchaseOrderApprovalPhase(
-                    order.approval,
-                    order.identity.status,
-                )}
-                approval={order.approval}
-                documentId={order.identity.purchaseOrderId}
-                workItemId={focusedWorkItem?.workItemId}
-                expectedTaskVersion={focusedWorkItem?.taskVersion}
-                workItemAllowedActions={focusedWorkItem?.allowedActions}
-                onDecisionApplied={(view: ApprovalCommandView) =>
-                    setResult({
-                        status: "succeeded",
-                        title: "审批决定已提交",
-                        description: view.latestRejectionReason
-                            ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                            : "已按当前任务提交决定。",
-                        reference:
-                            order.identity.purchaseNo ??
-                            order.identity.draftLabel,
-                        facts: view.currentAssigneeName
-                            ? [
-                                  {
-                                      label: "当前审批人",
-                                      value: view.currentAssigneeName,
-                                  },
-                              ]
-                            : undefined,
-                    })
-                }
-            />
+            {isChangeOrderTask && activeSection !== "changes" ? (
+                <PurchaseChangeOrderApprovalSection
+                    purchaseOrderId={order.identity.purchaseOrderId}
+                    changeOrder={order.activeChangeOrder ?? null}
+                    workItemId={focusedWorkItem?.workItemId}
+                    expectedTaskVersion={focusedWorkItem?.taskVersion}
+                    workItemAllowedActions={focusedWorkItem?.allowedActions}
+                    onResult={setResult}
+                />
+            ) : !isChangeOrderTask ? (
+                <PurchaseOrderApprovalArea
+                    phase={purchaseOrderApprovalPhase(
+                        order.approval,
+                        order.identity.status,
+                    )}
+                    approval={order.approval}
+                    documentId={order.identity.purchaseOrderId}
+                    workItemId={focusedWorkItem?.workItemId}
+                    expectedTaskVersion={focusedWorkItem?.taskVersion}
+                    workItemAllowedActions={focusedWorkItem?.allowedActions}
+                    onDecisionApplied={(view: ApprovalCommandView) =>
+                        setResult({
+                            status: "succeeded",
+                            title: "审批决定已提交",
+                            description: view.latestRejectionReason
+                                ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                                : "已按当前任务提交决定。",
+                            reference:
+                                order.identity.purchaseNo ??
+                                order.identity.draftLabel,
+                            facts: view.currentAssigneeName
+                                ? [
+                                      {
+                                          label: "当前审批人",
+                                          value: view.currentAssigneeName,
+                                      },
+                                  ]
+                                : undefined,
+                        })
+                    }
+                />
+            ) : null}
 
             {mode === "edit" && permissions.canEdit ? (
                 <EditSurface
@@ -297,6 +321,20 @@ export function PurchaseOrderDetailPage({
                 baseHref={baseHref}
                 w12PayHref={w12PayHref}
                 onRequestChange={() => editActions.setChangeConfirmOpen(true)}
+                changeWorkItemId={
+                    isChangeOrderTask ? focusedWorkItem?.workItemId : undefined
+                }
+                changeExpectedTaskVersion={
+                    isChangeOrderTask
+                        ? focusedWorkItem?.taskVersion
+                        : undefined
+                }
+                changeWorkItemAllowedActions={
+                    isChangeOrderTask
+                        ? focusedWorkItem?.allowedActions
+                        : undefined
+                }
+                onChangeApprovalResult={setResult}
             />
 
             <PurchaseOrderDetailDialogs

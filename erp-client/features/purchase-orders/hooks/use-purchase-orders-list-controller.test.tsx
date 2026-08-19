@@ -23,6 +23,7 @@ vi.mock("@/features/purchase-orders/api/purchase-orders", () => ({
     submitPurchaseOrderForReview: vi.fn(),
     reviewPurchaseOrder: vi.fn(),
     startPurchaseChange: vi.fn(),
+    submitPurchaseChange: vi.fn(),
     createPurchaseOrderFromBasis: vi.fn(),
 }))
 

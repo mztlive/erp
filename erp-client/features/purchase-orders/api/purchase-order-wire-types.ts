@@ -195,3 +195,25 @@ export type BackendChangeStartResult = {
     lock_version: number
     reference: string
 }
+
+export type BackendPurchaseChangeOrder = {
+    id: string
+    purchase_order_id: string
+    base_revision_id: string
+    reason: string
+    status: string
+    current_submission_id?: string | null
+    effective_revision_id?: string | null
+    version: number
+    created_at: number
+    approval?: DocumentApprovalViewDto | null
+}
+
+export type BackendPurchaseChangeSubmitResult = {
+    change_id: string
+    submission_id: string
+    submission_no: string
+    status: string
+    lock_version: number
+    reference: string
+}

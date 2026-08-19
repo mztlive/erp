@@ -8,7 +8,8 @@ export const metadata: Metadata = {
 }
 
 /**
- * 采购单对象页壳。审批任务从 URL `workItemId` 进入，业务取数在客户端完成。
+ * 采购单对象页壳。审批任务从 URL `workItemId` 进入；
+ * 采购变更单由 `changeOrderId` 或任务对象类型定位，业务取数在客户端完成。
  */
 export default async function PurchaseOrderObjectPage({
     params,
@@ -19,10 +20,11 @@ export default async function PurchaseOrderObjectPage({
         section?: string
         mode?: string
         workItemId?: string
+        changeOrderId?: string
     }>
 }) {
     const { purchaseOrderId } = await params
-    const { section, mode, workItemId } = await searchParams
+    const { section, mode, workItemId, changeOrderId } = await searchParams
     return (
         <Suspense
             fallback={
@@ -32,11 +34,12 @@ export default async function PurchaseOrderObjectPage({
             }
         >
             <PurchaseOrderDetailPage
-                key={`${purchaseOrderId}-${section ?? "overview"}-${mode ?? "view"}-${workItemId ?? ""}`}
+                key={`${purchaseOrderId}-${section ?? "overview"}-${mode ?? "view"}-${workItemId ?? ""}-${changeOrderId ?? ""}`}
                 purchaseOrderId={purchaseOrderId}
                 section={section}
                 mode={mode}
                 workItemId={workItemId}
+                changeOrderId={changeOrderId}
             />
         </Suspense>
     )

@@ -1,17 +1,24 @@
 import { apiGet } from "@/lib/api"
 import type {
+    PurchaseChangeOrderSummary,
     PurchaseCreationBasis,
     PurchaseOrderCenterView,
     PurchaseOrderListItem,
 } from "@/features/purchase-orders/types"
 import { isApiError } from "./purchase-order-errors"
-import { mapBasis, mapCenter, mapListItem } from "./purchase-order-mapping"
+import {
+    mapBasis,
+    mapCenter,
+    mapListItem,
+    mapPurchaseChangeOrder,
+} from "./purchase-order-mapping"
 import { metricStatusParam, toBackendStatus } from "./purchase-order-status"
 import type {
     BackendBasis,
     BackendCenter,
     BackendListItem,
     BackendPage,
+    BackendPurchaseChangeOrder,
 } from "./purchase-order-wire-types"
 import type {
     PurchaseOrderListQuery,
@@ -90,16 +97,120 @@ export async function fetchPurchaseOrderExportData(
     return result.rows
 }
 
+/**
+ * 读取采购变更单详情，补齐统一只读审批投影。
+ *
+ * @param id 变更单 ID。
+ */
+export async function fetchPurchaseChangeOrderDetail(
+    id: string,
+): Promise<PurchaseChangeOrderSummary> {
+    const detail = await apiGet<BackendPurchaseChangeOrder>(
+        `/admin/purchase-change-orders/${encodeURIComponent(id)}`,
+    )
+    return mapPurchaseChangeOrder(detail)
+}
+
+const isOpenPurchaseChangeStatus = (status?: string): boolean =>
+    status !== "EFFECTIVE" && status !== "VOIDED" && status !== "VOID"
+
+/**
+ * 读取原采购单上尚未终态的采购变更，并补详情审批投影。
+ *
+ * @param purchaseOrderId 原采购单 ID。
+ * @param preferredChangeId 任务或 URL 指定的变更单；缺省取第一条在途改单。
+ */
+export async function fetchActivePurchaseChangeOrder(
+    purchaseOrderId: string,
+    preferredChangeId?: string,
+): Promise<PurchaseChangeOrderSummary | null> {
+    if (preferredChangeId) {
+        try {
+            const preferred =
+                await fetchPurchaseChangeOrderDetail(preferredChangeId)
+            if (preferred.purchaseOrderId === purchaseOrderId) {
+                return preferred
+            }
+        } catch (error) {
+            if (!(isApiError(error) && error.status === 404)) throw error
+        }
+    }
+
+    try {
+        const page = await apiGet<BackendPage<BackendPurchaseChangeOrder>>(
+            "/admin/purchase-change-orders",
+            {
+                purchase_order_id: purchaseOrderId,
+                page: 1,
+                page_size: 10,
+            },
+        )
+        const active =
+            (page.items ?? []).find(
+                (change) =>
+                    change.purchase_order_id === purchaseOrderId &&
+                    isOpenPurchaseChangeStatus(change.status),
+            ) ?? null
+        if (!active) return null
+        try {
+            return await fetchPurchaseChangeOrderDetail(active.id)
+        } catch {
+            return mapPurchaseChangeOrder(active)
+        }
+    } catch {
+        return null
+    }
+}
+
+/**
+ * 路径若是变更单 ID，回落到原采购单对象中心并挂上该改单。
+ *
+ * @param changeId 采购变更单 ID。
+ */
+const loadCenterFromChangeOrder = async (
+    changeId: string,
+): Promise<PurchaseOrderCenterView | null> => {
+    try {
+        const change = await fetchPurchaseChangeOrderDetail(changeId)
+        const center = await apiGet<BackendCenter>(
+            `/admin/purchase-orders/${encodeURIComponent(change.purchaseOrderId)}`,
+        )
+        return {
+            ...mapCenter(center),
+            activeChangeOrder: change,
+        }
+    } catch (error) {
+        if (isApiError(error) && error.status === 404) return null
+        throw error
+    }
+}
+
+/**
+ * 读取采购单对象中心，并挂上在途采购变更单的只读审批投影。
+ *
+ * 路径若是变更单 ID，回落到原采购单详情。
+ *
+ * @param purchaseOrderId 采购单或变更单 ID。
+ * @param options.changeOrderId 任务或 URL 指定的变更单。
+ */
 export async function fetchPurchaseOrderCenter(
     purchaseOrderId: string,
+    options?: { changeOrderId?: string },
 ): Promise<PurchaseOrderCenterView | null> {
     try {
         const center = await apiGet<BackendCenter>(
             `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`,
         )
-        return mapCenter(center)
+        const view = mapCenter(center)
+        const activeChangeOrder = await fetchActivePurchaseChangeOrder(
+            center.id,
+            options?.changeOrderId,
+        )
+        return { ...view, activeChangeOrder }
     } catch (error) {
-        if (isApiError(error) && error.status === 404) return null
+        if (isApiError(error) && error.status === 404) {
+            return loadCenterFromChangeOrder(purchaseOrderId)
+        }
         throw error
     }
 }
