@@ -23,4 +23,8 @@ export {
     postAllocation,
     resolvePostUnknown,
 } from "./post-allocation"
-export { reverseFact } from "./reverse-fact"
+export {
+    ensureCustomerRefundDraft,
+    reverseFact,
+    submitCustomerRefund,
+} from "./reverse-fact"

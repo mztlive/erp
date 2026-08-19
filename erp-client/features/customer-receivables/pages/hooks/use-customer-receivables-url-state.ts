@@ -31,7 +31,7 @@ export interface CustomerReceivablesUrlState {
     returnTo: string | undefined
     from: string | undefined
     sessionId: string | undefined
-    previewKind: "receivable" | "receipt" | "invoice" | null
+    previewKind: "receivable" | "receipt" | "invoice" | "refund" | null
     previewId: string | undefined
     workItemId: string | undefined
     query: CustomerAccountsQuery
@@ -65,11 +65,14 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
     const returnTo = searchParams.get("returnTo") ?? undefined
     const from = searchParams.get("from") ?? undefined
     const sessionId = searchParams.get("sessionId") ?? undefined
-    const previewKind = searchParams.get("previewKind") as
-        | "receivable"
-        | "receipt"
-        | "invoice"
-        | null
+    const previewKindRaw = searchParams.get("previewKind")
+    const previewKind =
+        previewKindRaw === "receivable" ||
+        previewKindRaw === "receipt" ||
+        previewKindRaw === "invoice" ||
+        previewKindRaw === "refund"
+            ? previewKindRaw
+            : null
     const previewId = searchParams.get("previewId") ?? undefined
     const workItemId =
         searchParams.get("currentWorkItemId") ??

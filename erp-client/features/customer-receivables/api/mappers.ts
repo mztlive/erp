@@ -6,6 +6,7 @@ import type {
     AllocationLine,
     AllowedAction,
     CustomerAccountsQuery,
+    CustomerRefundRow,
     ReceiptRow,
     ReceivableAccountRow,
     ReceivableEntry,
@@ -17,10 +18,16 @@ import {
     customerReceiptStatusTone,
     mapCustomerReceiptApproval,
 } from "@/features/customer-receivables/lib/customer-receipt-approval"
+import {
+    customerRefundStatusLabel,
+    customerRefundStatusTone,
+    mapCustomerRefundApproval,
+} from "@/features/customer-receivables/lib/customer-refund-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 
 import type {
     BackendCustomerReceipt,
+    BackendCustomerRefund,
     BackendInvoice,
     BackendInvoiceAllocation,
     BackendReceiptAllocation,
@@ -87,6 +94,20 @@ function statusMeta(status: ReceivableAccountRow["status"]): {
 }
 
 function mapReceiptStatus(s: string): ReceiptRow["status"] {
+    if (s === "reversed" || s === "REVERSED") return "reversed"
+    if (s === "posted" || s === "POSTED") return "posted"
+    if (
+        s === "IN_APPROVAL" ||
+        s === "in_approval" ||
+        s === "pending_review" ||
+        s === "PENDING_REVIEW"
+    ) {
+        return "in_approval"
+    }
+    return "draft"
+}
+
+function mapRefundStatus(s: string): CustomerRefundRow["status"] {
     if (s === "reversed" || s === "REVERSED") return "reversed"
     if (s === "posted" || s === "POSTED") return "posted"
     if (
@@ -240,6 +261,35 @@ export function projectReceipt(r: BackendCustomerReceipt): ReceiptRow {
         canEdit: false,
         canDelete: false,
         approval: mapCustomerReceiptApproval(r.approval),
+    }
+}
+
+/**
+ * 把客户退款详情投影为预览行。CustomerRefund 为 PROCESS_REQUIRED，只读映射审批绑定。
+ *
+ * @param refund 退款 HTTP 载荷。
+ */
+export function projectCustomerRefund(
+    refund: BackendCustomerRefund,
+): CustomerRefundRow {
+    const status = mapRefundStatus(refund.status)
+    return {
+        refundId: refund.id,
+        refundNo: refund.refund_no,
+        customerId: refund.customer_id,
+        originalReceiptId: refund.original_receipt_id ?? undefined,
+        originalReceivableEntryId:
+            refund.original_receivable_entry_id ?? undefined,
+        reasonText: refund.reason_text,
+        amount: refund.amount,
+        occurredAt: instantToIso(refund.occurred_at),
+        status,
+        statusLabel: customerRefundStatusLabel(refund.status),
+        statusTone: customerRefundStatusTone(refund.status),
+        baselineVersion: refund.version,
+        allowedActions: ["VIEW_DETAIL"],
+        actionBlockers: [],
+        approval: mapCustomerRefundApproval(refund.approval),
     }
 }
 

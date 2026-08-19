@@ -100,6 +100,28 @@ describe('useCustomerReceivablesUrlState', () => {
         expect(result.current.pagination.pageIndex).toBe(2)
     })
 
+    it('parses refund previewKind without treating it as invoice', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=receipt&previewKind=refund&previewId=crf-1',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        const { result } = renderHook(() => useCustomerReceivablesUrlState())
+        expect(result.current.previewKind).toBe('refund')
+        expect(result.current.previewId).toBe('crf-1')
+    })
+
+    it('keeps invoice previewKind on the no-approval path', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=sales_invoice&previewKind=invoice&previewId=inv-1',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        const { result } = renderHook(() => useCustomerReceivablesUrlState())
+        expect(result.current.previewKind).toBe('invoice')
+        expect(result.current.previewId).toBe('inv-1')
+    })
+
     it('reads workItemId when currentWorkItemId is absent', () => {
         mockedSearchParams.mockReturnValue(
             new URLSearchParams(

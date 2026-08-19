@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { projectInvoice, projectReceipt } from "./mappers"
-import type { BackendCustomerReceipt, BackendInvoice } from "./dto"
+import { projectCustomerRefund, projectInvoice, projectReceipt } from "./mappers"
+import type {
+    BackendCustomerReceipt,
+    BackendCustomerRefund,
+    BackendInvoice,
+} from "./dto"
 import { invoiceActionsExcludeApproval } from "@/features/customer-receivables/lib/invoice-no-approval"
 
 const seed = (): BackendCustomerReceipt => ({
@@ -129,5 +133,69 @@ describe("projectInvoice", () => {
         } as BackendInvoice & { approval: unknown })
         expect("approval" in row).toBe(false)
         expect(invoiceActionsExcludeApproval(row.allowedActions)).toBe(true)
+    })
+})
+
+const refundSeed = (): BackendCustomerRefund => ({
+    id: "crf-1",
+    refund_no: "TK-1",
+    status: "draft",
+    customer_id: "c1",
+    original_receipt_id: "cr-1",
+    reason_text: "退差额",
+    amount: "50.00",
+    handled_by: "finance_handler",
+    reviewed_by: "finance_reviewer",
+    occurred_at: 1_700_000_000,
+    version: 1,
+    created_at: 1_700_000_000,
+})
+
+describe("projectCustomerRefund", () => {
+    it("maps the created binding without turning it into a work item", () => {
+        const row = projectCustomerRefund({
+            ...refundSeed(),
+            approval: {
+                requirement: "PROCESS_REQUIRED",
+                definition: {
+                    id: "def-crf-1",
+                    name: "客户退款审批",
+                    version: 2,
+                    nodes: [
+                        { key: "n1", name: "退款复核", assignee_name: "张三" },
+                    ],
+                },
+                instance: null,
+                recent_history: [],
+                allowed_actions: ["SUBMIT"],
+            },
+        })
+        expect(row.status).toBe("draft")
+        expect(row.statusLabel).toBe("草稿")
+        expect(row.approval?.instance).toBeUndefined()
+        expect(row.approval?.definition?.name).toBe("客户退款审批")
+        expect(row.approval?.allowedActions).toEqual(["SUBMIT"])
+    })
+
+    it("converges pending review into in-approval", () => {
+        const row = projectCustomerRefund({
+            ...refundSeed(),
+            status: "IN_APPROVAL",
+            approval: {
+                requirement: "PROCESS_REQUIRED",
+                instance: {
+                    id: "inst-crf-1",
+                    status: "RUNNING",
+                    current_round_no: 1,
+                    current_node: "退款复核",
+                    current_assignee: "张三",
+                },
+                recent_history: [],
+                allowed_actions: ["CANCEL"],
+            },
+        })
+        expect(row.status).toBe("in_approval")
+        expect(row.statusLabel).toBe("审批中")
+        expect(row.approval?.instance?.currentAssigneeName).toBe("张三")
     })
 })

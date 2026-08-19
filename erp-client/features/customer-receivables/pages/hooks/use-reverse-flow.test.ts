@@ -3,9 +3,12 @@ import { act } from '@testing-library/react'
 
 import { renderHookWithProviders } from '@/features/test-utils'
 import { useReverseFlow } from './use-reverse-flow'
+import type { CustomerRefundRow } from '@/features/customer-receivables/types'
 
-const { mutateAsyncMock } = vi.hoisted(() => ({
+const { mutateAsyncMock, ensureRefundMock, submitRefundMock } = vi.hoisted(() => ({
     mutateAsyncMock: vi.fn(),
+    ensureRefundMock: vi.fn(),
+    submitRefundMock: vi.fn(),
 }))
 
 vi.mock('@/features/customer-receivables/hooks/queries', () => ({
@@ -13,15 +16,54 @@ vi.mock('@/features/customer-receivables/hooks/queries', () => ({
         mutateAsync: mutateAsyncMock,
         isPending: false,
     }),
+    useEnsureCustomerRefundDraftMutation: () => ({
+        mutateAsync: ensureRefundMock,
+        isPending: false,
+    }),
+    useSubmitCustomerRefundMutation: () => ({
+        mutateAsync: submitRefundMock,
+        isPending: false,
+    }),
 }))
+
+const refundRow = (overrides: Partial<CustomerRefundRow> = {}): CustomerRefundRow => ({
+    refundId: 'crf-1',
+    refundNo: 'TK-1',
+    customerId: 'c1',
+    originalReceiptId: 'src_3',
+    reasonText: '退差额',
+    amount: '50.00',
+    occurredAt: '',
+    status: 'draft',
+    statusLabel: '草稿',
+    statusTone: 'neutral',
+    baselineVersion: 1,
+    allowedActions: ['VIEW_DETAIL'],
+    actionBlockers: [],
+    approval: {
+        requirement: 'PROCESS_REQUIRED',
+        definition: {
+            id: 'def-crf-1',
+            name: '客户退款审批',
+            version: 1,
+            nodes: [{ key: 'n1', name: '退款复核', assigneeName: '张三' }],
+            publishedNodes: [],
+        },
+        recentHistory: [],
+        historyHasMore: false,
+        allowedActions: ['SUBMIT'],
+    },
+    ...overrides,
+})
 
 function setup() {
     const closePreview = vi.fn()
+    const openRefundPreview = vi.fn()
     const setLastResult = vi.fn()
     const setActionError = vi.fn()
-    const args = { closePreview, setLastResult, setActionError }
+    const args = { closePreview, openRefundPreview, setLastResult, setActionError }
     const rendered = renderHookWithProviders(() => useReverseFlow(args))
-    return { ...rendered, args, closePreview, setLastResult, setActionError }
+    return { ...rendered, args, closePreview, openRefundPreview, setLastResult, setActionError }
 }
 
 beforeEach(() => {
@@ -89,6 +131,65 @@ describe('useReverseFlow', () => {
         )
     })
 
+    it('creates a refund draft then submits approval without posting', async () => {
+        ensureRefundMock.mockResolvedValue({
+            status: 'succeeded',
+            refund: refundRow(),
+        })
+        submitRefundMock.mockResolvedValue({
+            status: 'succeeded',
+            refund: refundRow({
+                status: 'in_approval',
+                statusLabel: '审批中',
+                baselineVersion: 2,
+            }),
+        })
+        const { result, openRefundPreview, setLastResult, setActionError } = setup()
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'refund',
+                sourceFactId: 'src_3',
+                label: 'RCP-3',
+                amount: '50.00',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareRefundDraft('退差额')
+        })
+        expect(ensureRefundMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sourceFactId: 'src_3',
+                amount: '50.00',
+                reason: '退差额',
+            }),
+        )
+        expect(mutateAsyncMock).not.toHaveBeenCalled()
+        expect(openRefundPreview).toHaveBeenCalledWith('crf-1')
+        expect(result.current.refundSubmitOpen).toBe(true)
+        expect(result.current.reverseConfirm).toBeNull()
+
+        await act(async () => {
+            await result.current.confirmRefundSubmit()
+        })
+        expect(submitRefundMock).toHaveBeenCalledWith({
+            refundId: 'crf-1',
+            expectedVersion: 1,
+            idempotencyKey: expect.stringMatching(/^w11-rev-src_3-\d+$/),
+        })
+        expect(setLastResult).toHaveBeenCalledWith({
+            status: 'succeeded',
+            title: '退款已提交审批',
+            description: '已按已绑定的审批流程启动审批，原回款保留。',
+            reference: expect.stringMatching(/^w11-rev-src_3-\d+$/),
+            facts: [
+                { label: '退款单号', value: 'TK-1' },
+                { label: '当前状态', value: '审批中' },
+            ],
+        })
+        expect(setActionError).not.toHaveBeenCalled()
+        expect(result.current.refundSubmitOpen).toBe(false)
+    })
+
     it('reports success, clears all fields and closes the preview', async () => {
         mutateAsyncMock.mockResolvedValue({
             status: 'succeeded',
@@ -100,7 +201,7 @@ describe('useReverseFlow', () => {
         const { result, closePreview, setLastResult, setActionError } = setup()
         act(() => {
             result.current.setReverseConfirm({
-                kind: 'refund',
+                kind: 'receipt_reverse',
                 sourceFactId: 'src_3',
                 label: 'RCP-3',
                 amount: '50.00',
@@ -168,7 +269,7 @@ describe('useReverseFlow', () => {
         const { result, setActionError, setLastResult } = setup()
         act(() => {
             result.current.setReverseConfirm({
-                kind: 'refund',
+                kind: 'receipt_reverse',
                 sourceFactId: 'src_5',
                 label: 'RCP-5',
             })

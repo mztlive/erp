@@ -82,6 +82,26 @@ export type BackendInvoiceAllocation = {
     reverses_allocation_id?: string | null
 }
 
+/** CustomerRefund 为 PROCESS_REQUIRED：创建/详情 DTO 必须携带只读审批绑定。 */
+export type BackendCustomerRefund = {
+    id: string
+    refund_no: string
+    status: string
+    sales_return_case_id?: string | null
+    customer_id: string
+    original_receipt_id?: string | null
+    original_receivable_entry_id?: string | null
+    reason_code?: string | null
+    reason_text: string
+    amount: string
+    handled_by: string
+    reviewed_by: string
+    occurred_at: number
+    version: number
+    created_at: number
+    approval?: DocumentApprovalViewDto | null
+}
+
 /** Invoice 为 NO_APPROVAL：创建/详情 DTO 不得携带审批绑定。 */
 export type BackendInvoice = {
     id: string

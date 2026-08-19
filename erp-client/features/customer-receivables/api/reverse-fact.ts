@@ -6,9 +6,140 @@ import type {
     ReverseFactInput,
     ReverseFactResult,
 } from "@/features/customer-receivables/types"
-import type { BackendCustomerReceipt, BackendInvoice } from "./dto"
+import { buildCustomerRefundSubmitRequest } from "@/features/customer-receivables/lib/customer-refund-approval"
+import { projectCustomerRefund } from "./mappers"
+import type {
+    BackendCustomerReceipt,
+    BackendCustomerRefund,
+    BackendInvoice,
+} from "./dto"
 
 export const reverseIdempotency = new Map<string, ReverseFactResult>()
+
+export const refundDrafts = new Map<string, BackendCustomerRefund>()
+
+function failedResult(
+    code: string,
+    message: string,
+): Extract<ReverseFactResult, { status: "failed" }> {
+    return { status: "failed", code, message }
+}
+
+function isPostedRefundStatus(status?: string): boolean {
+    return status === "posted" || status === "POSTED" || status === "reversed"
+}
+
+function isInApprovalRefundStatus(status?: string): boolean {
+    return (
+        status === "IN_APPROVAL" ||
+        status === "in_approval" ||
+        status === "pending_review"
+    )
+}
+
+/**
+ * 按原回款创建客户退款草稿，只读带回服务端审批绑定。
+ *
+ * 已存在草稿时只刷新版本与绑定，不得调用过账旁路。
+ *
+ * @param input 退款草稿创建所需字段。
+ */
+export async function ensureCustomerRefundDraft(input: {
+    sourceFactId: string
+    amount?: string
+    reason: string
+    idempotencyKey: string
+}): Promise<
+    | {
+          status: "succeeded"
+          refund: ReturnType<typeof projectCustomerRefund>
+      }
+    | Extract<ReverseFactResult, { status: "failed" }>
+> {
+    const cached = refundDrafts.get(input.idempotencyKey)
+    if (cached) {
+        const latest = await apiGet<BackendCustomerRefund>(
+            `/admin/customer-refunds/${encodeURIComponent(cached.id)}`,
+        )
+        if (isPostedRefundStatus(latest.status)) {
+            return failedResult(
+                "REFUND_ALREADY_POSTED",
+                "已过账退款不得再次提交。",
+            )
+        }
+        if (isInApprovalRefundStatus(latest.status)) {
+            return failedResult(
+                "REFUND_IN_APPROVAL",
+                "退款正在审批中，不能重复提交。",
+            )
+        }
+        refundDrafts.set(input.idempotencyKey, latest)
+        return {
+            status: "succeeded",
+            refund: projectCustomerRefund(latest),
+        }
+    }
+
+    const receipt = await apiGet<BackendCustomerReceipt>(
+        `/admin/customer-receipts/${encodeURIComponent(input.sourceFactId)}`,
+    )
+    const customerId = receipt.customer_id
+    if (!customerId) {
+        return failedResult(
+            "CUSTOMER_REQUIRED",
+            "回款未关联经营客户，无法登记退款。",
+        )
+    }
+    const nowSecs = Math.floor(Date.now() / 1000)
+    const noSuffix = input.idempotencyKey.slice(-8)
+    const created = await apiPost<BackendCustomerRefund>(
+        "/admin/customer-refunds",
+        {
+            refund_no: `TK-${noSuffix}`,
+            customer_id: customerId,
+            original_receipt_id: input.sourceFactId,
+            reason_text: input.reason,
+            amount: input.amount ?? receipt.amount,
+            handled_by: "finance_handler",
+            reviewed_by: "finance_reviewer",
+            occurred_at: nowSecs,
+        },
+    )
+    refundDrafts.set(input.idempotencyKey, created)
+    return {
+        status: "succeeded",
+        refund: projectCustomerRefund(created),
+    }
+}
+
+/**
+ * 提交客户退款并启动审批。不得选择定义、下一节点或审批人。
+ *
+ * @param input 提交所需版本与幂等键。
+ */
+export async function submitCustomerRefund(input: {
+    refundId: string
+    expectedVersion: number
+    idempotencyKey: string
+}): Promise<
+    | {
+          status: "succeeded"
+          refund: ReturnType<typeof projectCustomerRefund>
+      }
+    | Extract<ReverseFactResult, { status: "failed" }>
+> {
+    const submitted = await apiPost<BackendCustomerRefund>(
+        `/admin/customer-refunds/${encodeURIComponent(input.refundId)}/submit`,
+        buildCustomerRefundSubmitRequest({
+            expectedVersion: input.expectedVersion,
+            idempotencyKey: input.idempotencyKey,
+        }),
+    )
+    return {
+        status: "succeeded",
+        refund: projectCustomerRefund(submitted),
+    }
+}
 
 export async function reverseFact(
     input: ReverseFactInput,
@@ -52,43 +183,32 @@ export async function reverseFact(
         }
 
         if (input.kind === "refund") {
-            const receipt = await apiGet<BackendCustomerReceipt>(
-                `/admin/customer-receipts/${encodeURIComponent(input.sourceFactId)}`,
-            )
-            const customerId = receipt.customer_id
-            if (!customerId) {
-                const failed: ReverseFactResult = {
-                    status: "failed",
-                    code: "CUSTOMER_REQUIRED",
-                    message:
-                        "回款未关联经营客户，无法登记退款（后端要求 customer_id）。",
-                }
-                reverseIdempotency.set(input.idempotencyKey, failed)
-                return failed
+            const ensured = await ensureCustomerRefundDraft({
+                sourceFactId: input.sourceFactId,
+                amount: input.amount,
+                reason: input.reason,
+                idempotencyKey: input.idempotencyKey,
+            })
+            if (ensured.status !== "succeeded") {
+                reverseIdempotency.set(input.idempotencyKey, ensured)
+                return ensured
             }
-            const created = await apiPost<{ id: string; refund_no: string }>(
-                "/admin/customer-refunds",
-                {
-                    refund_no: `TK-${noSuffix}`,
-                    customer_id: customerId,
-                    original_receipt_id: input.sourceFactId,
-                    reason_text: input.reason,
-                    amount: input.amount ?? receipt.amount,
-                    handled_by: "finance_handler",
-                    reviewed_by: "finance_reviewer",
-                    occurred_at: nowSecs,
-                },
-            )
-            const posted = await apiPost<{ id: string; refund_no: string }>(
-                `/admin/customer-refunds/${encodeURIComponent(created.id)}/post`,
-                {},
-            )
+            const submitted = await submitCustomerRefund({
+                refundId: ensured.refund.refundId,
+                expectedVersion: ensured.refund.baselineVersion,
+                idempotencyKey: input.idempotencyKey,
+            })
+            if (submitted.status !== "succeeded") {
+                return submitted
+            }
             const result: ReverseFactResult = {
                 status: "succeeded",
-                reverseFactId: posted.id,
-                reverseFactNo: posted.refund_no,
+                reverseFactId: submitted.refund.refundId,
+                reverseFactNo: submitted.refund.refundNo,
                 operationId: input.idempotencyKey,
-                message: "已追加退款记录，原回款保留。",
+                message: "已提交客户退款审批，原回款保留。",
+                approval: submitted.refund.approval,
+                subjectStatus: submitted.refund.status,
             }
             reverseIdempotency.set(input.idempotencyKey, result)
             return result

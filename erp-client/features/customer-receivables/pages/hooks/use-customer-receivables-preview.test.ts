@@ -27,6 +27,7 @@ function setup(args: {
             | 'receivable'
             | 'receipt'
             | 'invoice'
+            | 'refund'
             | null,
         previewId: args.previewId,
         focusId: args.focusId,
