@@ -17,6 +17,7 @@ import {
     customerReceiptStatusTone,
     mapCustomerReceiptApproval,
 } from "@/features/customer-receivables/lib/customer-receipt-approval"
+import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 
 import type {
     BackendCustomerReceipt,
@@ -257,31 +258,37 @@ function projectInvoiceAllocation(
     }
 }
 
+/**
+ * 把发票详情投影为列表/预览行。Invoice 为 NO_APPROVAL，丢弃误带的审批字段。
+ *
+ * @param inv 发票 HTTP 载荷。
+ */
 export function projectInvoice(inv: BackendInvoice): SalesInvoiceRow {
-    const status = mapInvoiceStatus(inv.status)
+    const invoice = stripInvoiceApprovalField(inv)
+    const status = mapInvoiceStatus(invoice.status)
     const isPosted = status === "registered" || status === "reversed"
     const allowed: AllowedAction[] = ["VIEW_DETAIL"]
-    if (inv.invoice_kind === "blue" && status === "registered") {
+    if (invoice.invoice_kind === "blue" && status === "registered") {
         allowed.push("CONTINUE_ALLOCATE", "ISSUE_RED_INVOICE")
     }
     return {
-        invoiceId: inv.id,
-        invoiceCode: inv.invoice_code ?? undefined,
-        invoiceNo: inv.invoice_no,
-        invoiceKind: inv.invoice_kind,
-        invoiceKindLabel: inv.invoice_kind === "red" ? "红票" : "蓝票",
-        counterpartyPartyId: inv.party_id,
-        counterpartyPartyName: inv.party_id,
+        invoiceId: invoice.id,
+        invoiceCode: invoice.invoice_code ?? undefined,
+        invoiceNo: invoice.invoice_no,
+        invoiceKind: invoice.invoice_kind,
+        invoiceKindLabel: invoice.invoice_kind === "red" ? "红票" : "蓝票",
+        counterpartyPartyId: invoice.party_id,
+        counterpartyPartyName: invoice.party_id,
         customerId: "",
         customerName: "",
-        invoiceDate: inv.invoice_date,
-        grossAmount: inv.gross_amount,
-        netAmount: inv.net_amount,
-        taxAmount: inv.tax_amount,
-        roundingAdjustmentAmount: inv.rounding_adjustment_amount,
-        roundingAdjustmentReason: inv.rounding_reason ?? undefined,
-        allocatedTotal: inv.allocated_total,
-        unallocatedAmount: inv.unallocated_amount,
+        invoiceDate: invoice.invoice_date,
+        grossAmount: invoice.gross_amount,
+        netAmount: invoice.net_amount,
+        taxAmount: invoice.tax_amount,
+        roundingAdjustmentAmount: invoice.rounding_adjustment_amount,
+        roundingAdjustmentReason: invoice.rounding_reason ?? undefined,
+        allocatedTotal: invoice.allocated_total,
+        unallocatedAmount: invoice.unallocated_amount,
         status,
         statusLabel:
             status === "draft"
@@ -290,14 +297,14 @@ export function projectInvoice(inv: BackendInvoice): SalesInvoiceRow {
                   ? "已作废"
                   : "已登记",
         statusTone:
-            inv.invoice_kind === "red"
+            invoice.invoice_kind === "red"
                 ? "warning"
                 : status === "registered"
                   ? "success"
                   : "neutral",
-        originalInvoiceId: inv.original_invoice_id ?? undefined,
-        baselineVersion: inv.version,
-        allocations: (inv.allocations ?? []).map(projectInvoiceAllocation),
+        originalInvoiceId: invoice.original_invoice_id ?? undefined,
+        baselineVersion: invoice.version,
+        allocations: (invoice.allocations ?? []).map(projectInvoiceAllocation),
         allowedActions: allowed,
         actionBlockers: [],
         isPosted,

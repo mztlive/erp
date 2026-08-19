@@ -4,6 +4,14 @@ import type { useAllocationSession } from "@/features/customer-receivables/hooks
 
 type AllocationForm = ReturnType<typeof useAllocationSession>["form"]
 
+/**
+ * 核销记录表单。发票字段只有号码/金额/日期，不含审批流程选择。
+ *
+ * @param form 核销会话表单。
+ * @param isReceipt 回款模式为 true，发票模式为 false。
+ * @param existing 是否继续已有记录。
+ * @param locked 已确认或已提交后只读。
+ */
 export function SessionFactFields({
     form,
     isReceipt,

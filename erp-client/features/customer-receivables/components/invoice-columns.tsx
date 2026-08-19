@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button"
 import type { SalesInvoiceRow } from "@/features/customer-receivables/types"
 import type { ColumnActions } from "./column-types"
 
+/**
+ * 销项发票列表列。操作仅预览与继续分配，不含审批流程选择或审批动作。
+ *
+ * @param onPreview 打开发票预览。
+ * @param onStartSession 继续分配已登记发票。
+ */
 export function createInvoiceColumns({
     onPreview,
     onStartSession,

@@ -50,7 +50,8 @@ import { useCustomerReceivablesUrlState } from "./hooks/use-customer-receivables
 import { useReverseFlow } from "./hooks/use-reverse-flow"
 
 /**
- * 客户往来工作面。客户回款嵌入通用审批区，发票不展示审批。
+ * 客户往来工作面。客户回款嵌入通用审批区；
+ * Invoice 为 NO_APPROVAL，详情/预览/登记路径不展示审批区。
  */
 export function CustomerReceivablesPage() {
     const router = useRouter()

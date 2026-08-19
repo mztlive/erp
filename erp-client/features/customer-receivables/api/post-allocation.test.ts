@@ -176,3 +176,102 @@ describe("postAllocation receipt submit", () => {
         ).toBe(true)
     })
 })
+
+const invoiceSession = (): AllocationSessionView => ({
+    draftSessionId: "alloc_inv_1",
+    mode: "invoice",
+    counterpartyPartyId: "p1",
+    counterpartyPartyName: "主体甲",
+    customerId: "c1",
+    customerName: "客户甲",
+    status: "draft",
+    fact: {
+        invoiceNo: "FP-1",
+        invoiceDate: "2026-01-15",
+        grossAmount: "113.00",
+        netAmount: "100.00",
+        taxAmount: "13.00",
+        invoiceKind: "blue",
+    },
+    pool: [],
+    allocations: [
+        {
+            lineKey: "line_a1",
+            targetId: "acc-1",
+            targetKind: "receivable_account",
+            label: "应收子账 #1",
+            salesOrderNo: "SO-1",
+            openAmount: "113.00",
+            amount: "113.00",
+            baselineVersion: 1,
+        },
+    ],
+    proposedAllocatedTotal: "113.00",
+    proposedUnallocated: "0.00",
+    factAmount: "113.00",
+    submitPolicy: {
+        allowUnallocatedRemainder: true,
+        label: "允许保留未分配余额",
+    },
+    leaseValid: true,
+    editVersion: 1,
+    note: "",
+})
+
+describe("postAllocation invoice register", () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        sessions.clear()
+        postIdempotency.clear()
+        sessions.set("alloc_inv_1", invoiceSession())
+    })
+
+    it("creates and posts the invoice without binding or starting approval", async () => {
+        apiMocks.apiPost
+            .mockResolvedValueOnce({
+                id: "inv-1",
+                invoice_no: "FP-1",
+                status: "draft",
+                version: 1,
+                allocated_total: "0.00",
+                unallocated_amount: "113.00",
+            })
+            .mockResolvedValueOnce({
+                id: "inv-1",
+                invoice_no: "FP-1",
+                status: "registered",
+                version: 2,
+                allocated_total: "113.00",
+                unallocated_amount: "0.00",
+            })
+
+        const result = await postAllocation({
+            draftSessionId: "alloc_inv_1",
+            editVersion: 1,
+            idempotencyKey: "k-inv-1",
+        })
+
+        expect(result).toMatchObject({
+            status: "succeeded",
+            mode: "invoice",
+            factId: "inv-1",
+            factNo: "FP-1",
+        })
+        if (result.status === "succeeded") {
+            expect(result.approval).toBeUndefined()
+            expect(result.subjectStatus).toBeUndefined()
+        }
+        expect(apiMocks.apiPost.mock.calls.map(([path]) => path)).toEqual([
+            "/admin/invoices",
+            "/admin/invoices/inv-1/post",
+        ])
+        expect(
+            apiMocks.apiPost.mock.calls.every(
+                ([path]) =>
+                    typeof path === "string" &&
+                    !path.includes("approval") &&
+                    !path.includes("submit"),
+            ),
+        ).toBe(true)
+    })
+})

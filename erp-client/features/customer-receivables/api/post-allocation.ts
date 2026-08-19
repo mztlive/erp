@@ -11,6 +11,7 @@ import {
     buildCustomerReceiptSubmitRequest,
     mapCustomerReceiptApproval,
 } from "@/features/customer-receivables/lib/customer-receipt-approval"
+import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 import type { BackendCustomerReceipt, BackendInvoice } from "./dto"
 import { sessions } from "./session"
 
@@ -242,17 +243,19 @@ export async function postAllocation(
         let factNo = s.existingFactNo ?? (s.fact.invoiceNo ?? "").trim()
 
         if (!factId) {
-            const created = await apiPost<BackendInvoice>("/admin/invoices", {
-                invoice_direction: "sales",
-                invoice_kind: s.fact.invoiceKind ?? "blue",
-                party_id: s.counterpartyPartyId,
-                invoice_code: s.fact.invoiceCode?.trim() || undefined,
-                invoice_no: factNo,
-                invoice_date: s.fact.invoiceDate,
-                gross_amount: s.fact.grossAmount ?? "0",
-                net_amount: s.fact.netAmount || s.fact.grossAmount || "0",
-                tax_amount: s.fact.taxAmount || "0",
-            })
+            const created = stripInvoiceApprovalField(
+                await apiPost<BackendInvoice>("/admin/invoices", {
+                    invoice_direction: "sales",
+                    invoice_kind: s.fact.invoiceKind ?? "blue",
+                    party_id: s.counterpartyPartyId,
+                    invoice_code: s.fact.invoiceCode?.trim() || undefined,
+                    invoice_no: factNo,
+                    invoice_date: s.fact.invoiceDate,
+                    gross_amount: s.fact.grossAmount ?? "0",
+                    net_amount: s.fact.netAmount || s.fact.grossAmount || "0",
+                    tax_amount: s.fact.taxAmount || "0",
+                }),
+            )
             factId = created.id
             factNo = created.invoice_no
         }
@@ -277,16 +280,18 @@ export async function postAllocation(
         const gross = s.fact.grossAmount ?? "0"
         const net = s.fact.netAmount || gross
         const tax = s.fact.taxAmount || "0"
-        const posted = await apiPost<BackendInvoice>(
-            `/admin/invoices/${encodeURIComponent(factId!)}/post`,
-            {
-                allocations: positiveLines.map((line) => ({
-                    receivable_account_id: line.targetId,
-                    allocated_gross_amount: line.amount,
-                    allocated_net_amount: net,
-                    allocated_tax_amount: tax,
-                })),
-            },
+        const posted = stripInvoiceApprovalField(
+            await apiPost<BackendInvoice>(
+                `/admin/invoices/${encodeURIComponent(factId!)}/post`,
+                {
+                    allocations: positiveLines.map((line) => ({
+                        receivable_account_id: line.targetId,
+                        allocated_gross_amount: line.amount,
+                        allocated_net_amount: net,
+                        allocated_tax_amount: tax,
+                    })),
+                },
+            ),
         )
         sessions.set(input.draftSessionId, { ...s, status: "posted" })
         const result: PostAllocationResult = {

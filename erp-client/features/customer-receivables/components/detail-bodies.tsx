@@ -211,6 +211,10 @@ export function ReceiptDetailBody({
     )
 }
 
+/**
+ * 发票详情。Invoice 为 NO_APPROVAL，只展示发票事实与分配明细，
+ * 不嵌入绑定卡、决定弹窗、撤回或改派入口。
+ */
 export function InvoiceDetailBody({ row }: { row: SalesInvoiceRow }) {
     return (
         <div className="space-y-5 overflow-auto p-6">

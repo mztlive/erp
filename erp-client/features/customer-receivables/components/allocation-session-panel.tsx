@@ -27,6 +27,7 @@ import type { AllocationSessionView } from "@/features/customer-receivables/type
 
 /**
  * 核销工作区。回款创建后只读展示绑定，提交确认走通用审批路线。
+ * 发票登记确认使用业务确认框，不接入通用审批区。
  */
 export function AllocationSessionPanel({
     session,

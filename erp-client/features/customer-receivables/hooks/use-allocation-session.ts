@@ -34,6 +34,7 @@ import type {
 /**
  * 核销工作区控制器：草稿分配行、记录表单、校验问题、保存/提交/结果回填。
  * 组件层只消费返回值渲染，不持有业务状态。
+ * 发票模式不读取、不回填审批绑定，也不创建回款草稿。
  */
 export function useAllocationSession({
     session,
@@ -66,7 +67,7 @@ export function useAllocationSession({
     const baselineRef = React.useRef("")
     const [receiptApproval, setReceiptApproval] = React.useState<
         DocumentApprovalView | undefined
-    >(session.approval)
+    >(() => (session.mode === "receipt" ? session.approval : undefined))
 
     const isReceipt = session.mode === "receipt"
     const existing = Boolean(session.existingFactId)
@@ -93,7 +94,9 @@ export function useAllocationSession({
         setEditVersion(session.editVersion)
         setDraftSavedAt(session.savedAt)
         setPostedLocally(false)
-        setReceiptApproval(session.approval)
+        setReceiptApproval(
+            session.mode === "receipt" ? session.approval : undefined,
+        )
         baselineRef.current = snapshot()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [session.draftSessionId, session.editVersion, session.savedAt])
@@ -255,7 +258,7 @@ export function useAllocationSession({
             })
             setEditVersion(next.editVersion)
             setDraftSavedAt(next.savedAt)
-            if (next.approval) setReceiptApproval(next.approval)
+            if (isReceipt && next.approval) setReceiptApproval(next.approval)
             baselineRef.current = snapshot()
         } catch (err) {
             setActionError(getErrorMessage(err, "保存草稿失败"))
@@ -330,9 +333,9 @@ export function useAllocationSession({
     function applyPostResult(res: PostAllocationResult) {
         if (res.status === "succeeded") {
             setPostedLocally(true)
-            if (res.approval) setReceiptApproval(res.approval)
+            if (isReceipt && res.approval) setReceiptApproval(res.approval)
             const responsibility = readCustomerReceiptApprovalResponsibility(
-                res.approval,
+                isReceipt ? res.approval : undefined,
             )
             setResult({
                 status: "succeeded",

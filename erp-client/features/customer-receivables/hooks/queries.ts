@@ -108,6 +108,9 @@ export function useEnsureCustomerReceiptDraftMutation() {
     })
 }
 
+/**
+ * 提交核销。回款成功后刷新审批单据缓存；发票为 NO_APPROVAL，不触达审批键。
+ */
 export function usePostAllocationMutation() {
     const queryClient = useQueryClient()
     return useMutation({

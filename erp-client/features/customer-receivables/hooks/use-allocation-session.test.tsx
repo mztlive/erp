@@ -424,4 +424,41 @@ describe('useAllocationSession', () => {
         })
         await waitFor(() => expect(result.current.factAmountStr).toBe('300'))
     })
+
+    it('does not keep a stray approval binding on invoice sessions', () => {
+        const { result } = setup({
+            mode: 'invoice',
+            fact: { invoiceNo: 'FP-1', invoiceDate: '2026-01-01', grossAmount: '100' },
+            approval: {
+                requirement: 'PROCESS_REQUIRED',
+                recentHistory: [],
+                historyHasMore: false,
+                allowedActions: ['SUBMIT', 'APPROVE'],
+            },
+        })
+        expect(result.current.isReceipt).toBe(false)
+        expect(result.current.receiptApproval).toBeUndefined()
+    })
+
+    it('opens invoice confirmation without creating a receipt draft', async () => {
+        mutationMocks.save.mutateAsync.mockResolvedValue(
+            session({
+                mode: 'invoice',
+                fact: { invoiceNo: 'FP-1', invoiceDate: '2026-01-01', grossAmount: '100' },
+                editVersion: 2,
+            }),
+        )
+        const { result } = setup({
+            mode: 'invoice',
+            fact: { invoiceNo: 'FP-1', invoiceDate: '2026-01-01', grossAmount: '100' },
+        })
+
+        await act(async () => {
+            await result.current.form.handleSubmit()
+        })
+
+        expect(mutationMocks.ensure.mutateAsync).not.toHaveBeenCalled()
+        expect(result.current.confirmOpen).toBe(true)
+        expect(result.current.receiptApproval).toBeUndefined()
+    })
 })
