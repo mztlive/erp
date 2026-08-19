@@ -4,7 +4,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
+use crate::common::state::{DocumentState, ensure_transition};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{FileAssetId, PaymentReversalId, SupplierPaymentId};
@@ -20,21 +20,19 @@ const REASON_CODE_MAX_LEN: usize = 32;
 /// 原因文本最大长度。
 const REASON_TEXT_MAX_LEN: usize = 512;
 
-/// 冲正状态（数据模型 §6.11；§7.5 资金单据状态机：财务纠错强制经过复核）。
+/// 冲正状态（合同 §4.4.1 / §4.4.2：复核态收敛为唯一 `IN_APPROVAL`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PaymentReversalStatus {
     /// 草稿。
     Draft,
-    /// 待复核（财务纠错必过）。
-    PendingReview,
+    /// 审批中。
+    #[serde(rename = "IN_APPROVAL")]
+    InApproval,
     /// 已过账。
     Posted,
     /// 已冲正（存在正式反向事实，原事实不删除）。
     Reversed,
-    /// 审批中。
-    #[serde(rename = "IN_APPROVAL")]
-    InApproval,
 }
 
 impl PaymentReversalStatus {
@@ -45,10 +43,9 @@ impl PaymentReversalStatus {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
-            Self::PendingReview => "待复核",
+            Self::InApproval => "审批中",
             Self::Posted => "已过账",
             Self::Reversed => "已冲正",
-            Self::InApproval => "审批中",
         }
     }
 
@@ -59,24 +56,22 @@ impl PaymentReversalStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
-            Self::PendingReview => "pending_review",
+            Self::InApproval => "IN_APPROVAL",
             Self::Posted => "posted",
             Self::Reversed => "reversed",
-            Self::InApproval => "IN_APPROVAL",
         }
     }
 }
 
 impl DocumentState for PaymentReversalStatus {
-    /// 返回全部合法后继状态（数据模型 §7.5 资金单据状态机）。
+    /// 返回全部合法后继状态（合同 §4.4.1 / §4.4.2）。
     ///
-    /// 财务纠错必须经过 `PENDING_REVIEW`（经办/复核分离，§7.5），草稿不得
-    /// 直接过账；`REVERSED` 是终态。
+    /// 复核态唯一为 `IN_APPROVAL`；草稿不得直接过账；审批中可过账或受控
+    /// 撤回回草稿；`REVERSED` 是终态。审批导致的业务 `REJECTED` 已删除。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::PendingReview, Self::InApproval],
+            Self::Draft => &[Self::InApproval],
             Self::InApproval => &[Self::Posted, Self::Draft],
-            Self::PendingReview => &[Self::Posted],
             Self::Posted => &[Self::Reversed],
             Self::Reversed => &[],
         }
@@ -219,7 +214,7 @@ impl PaymentReversal {
     /// 当状态非草稿或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: PaymentReversalUpdate) -> Result<()> {
         if self.status != PaymentReversalStatus::Draft {
-            return Err(Error::from("已过账或已冲正的冲正单不可编辑"));
+            return Err(Error::from("非草稿状态的冲正单不可编辑"));
         }
         if let Some(amount) = update.amount {
             if amount.to_decimal().is_sign_negative() || amount.to_decimal().is_zero() {
@@ -260,6 +255,50 @@ impl PaymentReversal {
         ensure_transition(self.status, to)?;
         self.status = to;
         Ok(())
+    }
+
+    /// 提交并启动审批：递增 `approval_subject_version` 并进入 `IN_APPROVAL`。
+    ///
+    /// 版本使用 checked add，成功后不回退。不得改写 `BaseModel.version`。
+    ///
+    /// # 返回
+    /// 返回冻结后的提交版本。
+    ///
+    /// # 错误
+    /// 非草稿或版本溢出时返回冲突。
+    pub fn start_approval(&mut self) -> Result<u32> {
+        if self.status != PaymentReversalStatus::Draft {
+            return Err(Error::from("只有草稿状态的付款冲正单可以提交审批"));
+        }
+        let next = self
+            .approval_subject_version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        self.approval_subject_version = next;
+        self.transition(PaymentReversalStatus::InApproval)?;
+        Ok(next)
+    }
+
+    /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
+    ///
+    /// # 错误
+    /// 非审批中时返回冲突。
+    pub fn cancel_approval(&mut self) -> Result<()> {
+        if self.status != PaymentReversalStatus::InApproval {
+            return Err(Error::from("只有审批中的付款冲正单可以撤回审批"));
+        }
+        self.transition(PaymentReversalStatus::Draft)
+    }
+
+    /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
+    ///
+    /// # 错误
+    /// 状态不是审批中时返回冲突。
+    pub fn mark_posted(&mut self) -> Result<()> {
+        if self.status != PaymentReversalStatus::InApproval {
+            return Err(Error::from("只有审批中的付款冲正单可以由最终通过动作过账"));
+        }
+        self.transition(PaymentReversalStatus::Posted)
     }
 
     /// 判断冲正是否已过账。
@@ -344,47 +383,70 @@ mod tests {
         assert_eq!(reversal.amount, Amount::from_str("500.00").unwrap());
         assert_eq!(reversal.reversal_no, "PRR-2026-001", "关键字段不改");
 
-        reversal.transition(PaymentReversalStatus::PendingReview).unwrap();
-        reversal.transition(PaymentReversalStatus::Posted).unwrap();
+        reversal.start_approval().unwrap();
+        reversal.mark_posted().unwrap();
         assert!(reversal.is_posted());
-        assert!(reversal
-            .update(PaymentReversalUpdate {
-                amount: Some(Amount::from_str("1.00").unwrap()),
-                ..Default::default()
-            })
-            .is_err());
+        assert!(
+            reversal
+                .update(PaymentReversalUpdate {
+                    amount: Some(Amount::from_str("1.00").unwrap()),
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 
     #[test]
-    fn state_machine_forces_review_before_posting() {
+    fn state_machine_forces_in_approval_before_posting() {
         use crate::common::state::ensure_transition as tr;
         use PaymentReversalStatus as S;
 
-        assert!(tr(S::Draft, S::PendingReview).is_ok());
-        assert!(tr(S::PendingReview, S::Posted).is_ok());
+        assert!(tr(S::Draft, S::InApproval).is_ok());
+        assert!(tr(S::InApproval, S::Posted).is_ok());
+        assert!(tr(S::InApproval, S::Draft).is_ok());
         assert!(tr(S::Posted, S::Reversed).is_ok());
+        assert!(tr(S::Reversed, S::Reversed).is_ok(), "幂等迁移恒合法");
 
-        assert!(tr(S::Draft, S::Posted).is_err(), "财务纠错必须经过复核");
+        assert!(tr(S::Draft, S::Posted).is_err(), "草稿不得绕过审批直接过账");
         assert!(tr(S::Draft, S::Reversed).is_err());
         assert!(tr(S::Posted, S::Draft).is_err());
+        assert!(tr(S::Posted, S::InApproval).is_err());
         assert!(tr(S::Reversed, S::Posted).is_err());
+        assert!(tr(S::Reversed, S::Draft).is_err());
 
         let mut reversal = PaymentReversal::new(PaymentReversalId::new("prr-1"), data()).unwrap();
-        assert!(
-            reversal.transition(PaymentReversalStatus::Posted).is_err(),
-            "草稿不得直接过账"
-        );
-        reversal.transition(PaymentReversalStatus::PendingReview).unwrap();
-        assert!(reversal.transition(PaymentReversalStatus::Posted).is_ok());
+        assert!(reversal.transition(S::Posted).is_err(), "草稿不得直接过账");
+        reversal.start_approval().unwrap();
+        assert!(reversal.mark_posted().is_ok());
+    }
+
+    #[test]
+    fn start_approval_increments_version_and_cancel_does_not_rollback() {
+        let mut reversal = PaymentReversal::new(PaymentReversalId::new("prr-1"), data()).unwrap();
+        assert_eq!(reversal.approval_subject_version, 0);
+        let version = reversal.start_approval().unwrap();
+        assert_eq!(version, 1);
+        assert_eq!(reversal.status, PaymentReversalStatus::InApproval);
+        reversal.cancel_approval().unwrap();
+        assert_eq!(reversal.status, PaymentReversalStatus::Draft);
+        assert_eq!(reversal.approval_subject_version, 1);
+        assert!(reversal.mark_posted().is_err());
     }
 
     #[test]
     fn status_serializes_with_stable_codes_and_labels() {
         assert_eq!(
-            serde_json::to_string(&PaymentReversalStatus::Reversed).unwrap(),
-            "\"reversed\""
+            serde_json::to_string(&PaymentReversalStatus::InApproval).unwrap(),
+            "\"IN_APPROVAL\""
         );
-        assert_eq!(PaymentReversalStatus::PendingReview.label(), "待复核");
-        assert_eq!(PaymentReversalStatus::Posted.as_str(), "posted");
+        assert_eq!(PaymentReversalStatus::Posted.label(), "已过账");
+        assert_eq!(PaymentReversalStatus::Reversed.as_str(), "reversed");
+        assert_eq!(PaymentReversalStatus::Draft.as_str(), "draft");
+        let production = include_str!("payment_reversal.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("PendingReview"));
+        assert!(!production.contains("pending_review"));
     }
 }

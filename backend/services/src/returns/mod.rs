@@ -2,14 +2,14 @@
 //! W12 供应商往来）。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
-//! - 客户退款、供应商退款与回款冲正创建必须在同一事务注册
+//! - 客户退款、供应商退款、回款冲正与付款冲正创建必须在同一事务注册
 //!   `BusinessDocument` 并绑定发布定义；
 //! - 跨集合写入（处理单 + 明细行、退款/冲正过账）→
 //!   `database::Transactional::with_transaction`；
 //! - 单集合草稿写入 → `&mut NoTransaction`。
 //! - 资金类入口（退款、冲正过账）以业务单号（退款单号/冲正单号）唯一索引 +
 //!   状态迁移构成去重机制，重复提交只产生一条正式事实。
-//!   客户退款、供应商退款与回款冲正过账只能作为审批最终通过动作。
+//!   客户退款、供应商退款、回款冲正与付款冲正过账只能作为审批最终通过动作。
 //!
 //! 跨域只经 `DatabaseExt` 调对方域 Repository：D18 回款/应收分录/核销分配，
 //! D19 付款/应付分录/核销分配（退款、冲正事务内写入反向事实与反向核销，
@@ -30,18 +30,19 @@ mod supplier_refund;
 use mongodb::Database;
 
 pub use self::adapter::{
-    customer_refund_object_readable, receipt_reversal_object_readable, supplier_refund_object_readable,
+    customer_refund_object_readable, payment_reversal_object_readable, receipt_reversal_object_readable,
+    supplier_refund_object_readable,
 };
 pub use self::dto::{
-    CancelCustomerRefundApprovalRequest, CancelReceiptReversalApprovalRequest,
-    CancelSupplierRefundApprovalRequest, CreateCustomerRefundRequest, CreatePaymentReversalRequest,
-    CreatePurchaseReturnOrderRequest, CreateReceiptReversalRequest, CreateSalesReturnCaseRequest,
-    CreateSupplierRefundRequest, CustomerRefundListParams, CustomerRefundView, DocumentApprovalView,
-    PageView, PaymentReversalView, PostCustomerRefundRequest, PostPaymentReversalRequest,
-    PostReceiptReversalRequest, PostSupplierRefundRequest, PurchaseReturnOrderListParams,
-    PurchaseReturnOrderView, ReceiptReversalView, SalesReturnCaseListParams, SalesReturnCaseView,
-    SubmitCustomerRefundRequest, SubmitReceiptReversalRequest, SubmitSupplierRefundRequest,
-    SupplierRefundView,
+    CancelCustomerRefundApprovalRequest, CancelPaymentReversalApprovalRequest,
+    CancelReceiptReversalApprovalRequest, CancelSupplierRefundApprovalRequest, CreateCustomerRefundRequest,
+    CreatePaymentReversalRequest, CreatePurchaseReturnOrderRequest, CreateReceiptReversalRequest,
+    CreateSalesReturnCaseRequest, CreateSupplierRefundRequest, CustomerRefundListParams, CustomerRefundView,
+    DocumentApprovalView, PageView, PaymentReversalView, PostCustomerRefundRequest,
+    PostPaymentReversalRequest, PostReceiptReversalRequest, PostSupplierRefundRequest,
+    PurchaseReturnOrderListParams, PurchaseReturnOrderView, ReceiptReversalView, SalesReturnCaseListParams,
+    SalesReturnCaseView, SubmitCustomerRefundRequest, SubmitPaymentReversalRequest,
+    SubmitReceiptReversalRequest, SubmitSupplierRefundRequest, SupplierRefundView,
 };
 use crate::iam::{self, SharedRbacService};
 
