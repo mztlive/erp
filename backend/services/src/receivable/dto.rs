@@ -468,12 +468,42 @@ pub struct ReceiptAllocationLineRequest {
     pub allocated_amount: Amount,
 }
 
-/// 客户回款过账请求（资金入口，回款单号 + 状态迁移构成去重机制）。
+/// 客户回款过账请求（仅由最终通过动作内部消费冻结分配；HTTP 旁路已关闭）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PostCustomerReceiptRequest {
     /// 核销分配行（允许保留未分配余额）。
     #[validate(length(min = 1, message = "至少提供一条核销分配"))]
     pub allocations: Vec<ReceiptAllocationLineRequest>,
+}
+
+/// 客户回款提交审批请求。客户端不得选择定义或审批人。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SubmitCustomerReceiptRequest {
+    /// 期望的单据乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub expected_version: u64,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+    /// 提交时冻结的待过账核销分配。
+    #[validate(length(min = 1, message = "至少提供一条核销分配"))]
+    pub allocations: Vec<ReceiptAllocationLineRequest>,
+}
+
+/// 撤回客户回款审批请求。原因必填。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CancelCustomerReceiptApprovalRequest {
+    /// 期望的单据乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub expected_version: u64,
+    /// 非空撤回原因。
+    #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
+    pub reason: String,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
 }
 
 /// 回款核销分配视图。
@@ -524,6 +554,86 @@ pub struct CustomerReceiptView {
     pub unallocated_amount: Amount,
     /// 核销分配行。
     pub allocations: Vec<ReceiptAllocationView>,
+    /// 统一只读审批结构。客户端不得据此选择定义或审批人。
+    pub approval: DocumentApprovalView,
+}
+
+/// 单据详情返回的统一只读审批结构。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DocumentApprovalView {
+    /// `PROCESS_REQUIRED` 或 `NO_APPROVAL`。
+    pub requirement: String,
+    /// 创建时冻结的定义摘要；未绑定为空。
+    pub definition: Option<DocumentApprovalDefinitionView>,
+    /// 已启动后的实例摘要；未提交为空。
+    pub instance: Option<DocumentApprovalInstanceView>,
+    /// 有界最近历史。
+    pub recent_history: Vec<DocumentApprovalHistoryItemView>,
+    /// 完整历史分页游标。
+    pub history_page: DocumentApprovalHistoryPageView,
+    /// 服务端允许的动作；不含选择定义或审批人。
+    pub allowed_actions: Vec<String>,
+}
+
+/// 绑定定义只读摘要。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DocumentApprovalDefinitionView {
+    /// 定义主键。
+    pub id: String,
+    /// 定义名称。
+    pub name: String,
+    /// 定义业务版本。
+    pub version: u32,
+    /// 节点摘要。单据详情不展开审批人。
+    pub nodes: Vec<DocumentApprovalNodeView>,
+}
+
+/// 定义节点只读摘要。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DocumentApprovalNodeView {
+    /// 节点键。
+    pub key: String,
+    /// 节点名称。
+    pub name: String,
+}
+
+/// 运行实例只读摘要。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DocumentApprovalInstanceView {
+    /// 实例主键。
+    pub id: String,
+    /// 实例状态。
+    pub status: String,
+    /// 当前轮次。
+    pub current_round_no: u32,
+    /// 当前节点键。
+    pub current_node: Option<String>,
+    /// 当前审批人。
+    pub current_assignee: Option<String>,
+    /// 最近驳回原因。
+    pub latest_rejection: Option<String>,
+}
+
+/// 有界历史项。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DocumentApprovalHistoryItemView {
+    /// 执行主键。
+    pub execution_id: String,
+    /// 轮次。
+    pub round_no: u32,
+    /// 节点键。
+    pub node_key: String,
+    /// 结束结果。
+    pub result: String,
+}
+
+/// 完整历史分页。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DocumentApprovalHistoryPageView {
+    /// 下一页游标。
+    pub next_cursor: Option<String>,
+    /// 是否还有更多。
+    pub has_more: bool,
 }
 
 /// 客户回款单列表查询参数（分页参数与筛选字段扁平传递）。
@@ -1167,5 +1277,36 @@ mod tests {
             "idempotency_key": "card-review-2"
         });
         assert!(serde_json::from_value::<CompleteCardFundsReviewCommand>(invented_subject_hash).is_err());
+    }
+
+    #[test]
+    fn submit_and_cancel_requests_reject_client_assignee_choice() {
+        use super::{CancelCustomerReceiptApprovalRequest, SubmitCustomerReceiptRequest};
+
+        assert!(
+            serde_json::from_value::<SubmitCustomerReceiptRequest>(serde_json::json!({
+                "expected_version": 1,
+                "idempotency_key": "k1",
+                "allocations": [{"receivable_entry_id": "re-1", "allocated_amount": "10"}],
+                "definition_id": "forged"
+            }))
+            .is_err()
+        );
+        let submit: SubmitCustomerReceiptRequest = serde_json::from_value(serde_json::json!({
+            "expected_version": 1,
+            "idempotency_key": "k1",
+            "allocations": [{"receivable_entry_id": "re-1", "allocated_amount": "10"}]
+        }))
+        .unwrap();
+        assert_eq!(submit.expected_version, 1);
+        assert!(
+            serde_json::from_value::<CancelCustomerReceiptApprovalRequest>(serde_json::json!({
+                "expected_version": 1,
+                "reason": "改金额",
+                "idempotency_key": "k2",
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
     }
 }
