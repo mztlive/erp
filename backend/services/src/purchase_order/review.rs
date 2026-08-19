@@ -1062,7 +1062,7 @@ mod tests {
                 subject_version: "submission-1".to_string(),
                 owner_role: "role-finance".to_string(),
                 owner_organization_id: "company".to_string(),
-                owner_user_id: None,
+                owner_user_id: Some("reviewer-1".to_string()),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::Normal,
                 due_at: None,
@@ -1072,7 +1072,6 @@ mod tests {
             Instant::from_unix_secs(1),
         )
         .unwrap();
-        task.reassign("reviewer-1", Instant::from_unix_secs(2)).unwrap();
         task.base.version = 2;
         task
     }

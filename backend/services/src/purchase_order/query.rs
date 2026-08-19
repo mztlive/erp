@@ -573,7 +573,6 @@ mod tests {
 
     use super::review_task_access;
     use crate::purchase_order::PurchaseReviewDomainAction;
-    use crate::work_item::WorkItemAllowedAction;
 
     fn review_task() -> WorkItem {
         WorkItem::new_at(
@@ -585,7 +584,7 @@ mod tests {
                 subject_version: "submission-1".to_string(),
                 owner_role: "role-finance".to_string(),
                 owner_organization_id: "company".to_string(),
-                owner_user_id: None,
+                owner_user_id: Some("reviewer-1".to_string()),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::Normal,
                 due_at: None,
@@ -598,26 +597,25 @@ mod tests {
     }
 
     #[test]
-    fn unassigned_pool_only_allows_start_processing() {
+    fn other_actor_cannot_review_owned_task() {
+        let task = review_task();
+
+        let (responsibility_actions, domain_actions, blockers) =
+            review_task_access(&task, "other-reviewer", true, true);
+
+        assert!(responsibility_actions.is_empty());
+        assert!(domain_actions.is_empty());
+        assert_eq!(blockers[0].code, "TASK_OWNED_BY_ANOTHER");
+    }
+
+    #[test]
+    fn current_owner_allows_strong_decisions() {
         let task = review_task();
 
         let (responsibility_actions, domain_actions, blockers) =
             review_task_access(&task, "reviewer-1", true, true);
 
-        assert_eq!(responsibility_actions, vec![WorkItemAllowedAction::Process]);
-        assert!(domain_actions.is_empty());
-        assert!(blockers.is_empty());
-    }
-
-    #[test]
-    fn owned_pool_allows_strong_decisions_and_release() {
-        let mut task = review_task();
-        task.reassign("reviewer-1", Instant::from_unix_secs(2)).unwrap();
-
-        let (responsibility_actions, domain_actions, blockers) =
-            review_task_access(&task, "reviewer-1", true, true);
-
-        assert_eq!(responsibility_actions, vec![WorkItemAllowedAction::Reassign]);
+        assert!(responsibility_actions.is_empty());
         assert_eq!(
             domain_actions,
             vec![
@@ -630,8 +628,7 @@ mod tests {
 
     #[test]
     fn ineligible_or_submitter_gets_no_review_action() {
-        let mut task = review_task();
-        task.reassign("reviewer-1", Instant::from_unix_secs(2)).unwrap();
+        let task = review_task();
 
         let (responsibility_actions, domain_actions, blockers) =
             review_task_access(&task, "reviewer-1", false, true);

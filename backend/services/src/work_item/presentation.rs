@@ -118,7 +118,7 @@ pub(crate) fn sales_order_object_label(order_no: &str) -> String {
 /// * `gross_amount` - 提交含税金额；未知时为 `None`
 ///
 /// # 返回
-/// 返回「不确认则销售单不能生效」，有规模时追加行数和金额。
+/// 返回「不确认则导入范围不能落地」，有规模时追加行数和金额。
 ///
 /// # 错误
 /// 无。
@@ -365,10 +365,10 @@ mod tests {
     fn impact_summary_rejects_templates_and_mechanism_words() {
         assert_eq!(
             usable_impact_summary(
-                Some("采购二次确认：销售提交 1"),
+                Some("导入业务确认：销售提交 1"),
                 WorkItemType::ImportBusinessConfirmation
             ),
-            "不确认则销售单不能生效"
+            "不确认则导入范围不能落地"
         );
         assert_eq!(
             usable_impact_summary(Some("请打开业务对象核对影响。"), WorkItemType::CardFundsReview),
@@ -394,9 +394,9 @@ mod tests {
         let amount = "12800".parse::<Amount>().expect("测试金额必须合法");
         assert_eq!(
             procurement_impact_summary(Some(3), Some(&amount)),
-            "不确认则销售单不能生效 · 3 行 / ¥12,800"
+            "不确认则导入范围不能落地 · 3 行 / ¥12,800"
         );
-        assert_eq!(procurement_impact_summary(None, None), "不确认则销售单不能生效");
+        assert_eq!(procurement_impact_summary(None, None), "不确认则导入范围不能落地");
         assert_eq!(
             purchase_review_impact_summary(Some(3), Some(&amount), true),
             "不审核则不能形成应付、不能付款 · 3 行 / ¥12,800 · 先款后货"

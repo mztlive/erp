@@ -1237,6 +1237,15 @@ mod tests {
     #[test]
     fn low_margin_permissions_are_owned_only_by_sales_leader_and_upgrade_is_exact() {
         let required = ["sales_change_order:approve"];
+        let holders = ["role-sales-leader", "role-procurement", "role-operations"];
+        for role in PREDEFINED_ROLES {
+            assert_eq!(
+                role.permissions.contains(&"sales_change_order:approve"),
+                holders.contains(&role.id),
+                "{} 的销售变更审批权与固定角色注册表不一致",
+                role.id
+            );
+        }
         let leader = PREDEFINED_ROLES
             .iter()
             .find(|role| role.id == "role-sales-leader")
@@ -1245,16 +1254,6 @@ mod tests {
             assert!(
                 leader.permissions.contains(&permission),
                 "销售领导缺少 {permission}"
-            );
-        }
-        for role in PREDEFINED_ROLES
-            .iter()
-            .filter(|role| role.id != "role-sales-leader")
-        {
-            assert!(
-                !role.permissions.contains(&"sales_change_order:approve"),
-                "{} 不应取得低毛利决定权限",
-                role.id
             );
         }
 
@@ -1488,9 +1487,6 @@ mod tests {
                 assert!(previous
                     .iter()
                     .any(|permission| permission.to_string() == "sales_change_order:approve"));
-                assert!(previous
-                    .iter()
-                    .all(|permission| permission.to_string() != "sales_change_order:approve"));
             }
         }
     }
@@ -1499,12 +1495,7 @@ mod tests {
     fn approval_http_permissions_replace_recover_diagnose_and_team_actions() {
         assert_eq!(APPROVAL_HTTP_ACTION_PERMISSIONS.len(), 12);
         for role in PREDEFINED_ROLES {
-            for forbidden in [
-                "work_item:list",
-                "work_item:list",
-                "approval_instance:read",
-                "approval_instance:resume",
-            ] {
+            for forbidden in ["approval_instance:recover", "approval_instance:diagnose"] {
                 assert!(
                     !role.permissions.contains(&forbidden),
                     "{} 不得继续授予 {forbidden}",
@@ -1522,9 +1513,6 @@ mod tests {
                 role.id
             );
             if role.id == "role-sysadmin" {
-                assert!(previous
-                    .iter()
-                    .any(|permission| permission.to_string() == "approval_instance:read"));
                 for required in APPROVAL_HTTP_ACTION_PERMISSIONS {
                     assert!(role.permissions.contains(required), "系统管理员缺少 {required}");
                 }

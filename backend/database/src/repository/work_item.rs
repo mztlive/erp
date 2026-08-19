@@ -910,7 +910,7 @@ mod tests {
         AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
     };
 
-    fn pool_item() -> WorkItem {
+    fn assigned_item() -> WorkItem {
         WorkItem::new_at(
             WorkItemId::new("wi-1"),
             WorkItemData {
@@ -920,7 +920,7 @@ mod tests {
                 subject_version: "v1".to_string(),
                 owner_role: "sales".to_string(),
                 owner_organization_id: "org-1".to_string(),
-                owner_user_id: None,
+                owner_user_id: Some("alice".to_string()),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::Normal,
                 due_at: None,
@@ -1128,7 +1128,7 @@ mod tests {
                 ]
             }
         );
-        assert_eq!(set.get_str("assignment_source").unwrap(), "SELF_START");
+        assert_eq!(set.get_str("assignment_source").unwrap(), "SYSTEM_RULE");
         assert_eq!(
             set.get_document("assigned_at").unwrap(),
             &doc! { "$ifNull": ["$assigned_at", 123_i64] }
@@ -1145,21 +1145,21 @@ mod tests {
 
     #[test]
     fn missed_start_distinguishes_idempotency_owner_and_version() {
-        let mut same_actor = pool_item();
-        same_actor.owner_user_id = Some("alice".to_string());
+        let same_actor = assigned_item();
         assert!(matches!(
             classify_start_processing_miss(Some(same_actor), 0, "alice"),
             StartProcessingOutcome::AlreadyOwned(_)
         ));
 
-        let mut other_actor = pool_item();
+        let mut other_actor = assigned_item();
         other_actor.owner_user_id = Some("bob".to_string());
         assert!(matches!(
             classify_start_processing_miss(Some(other_actor), 0, "alice"),
             StartProcessingOutcome::OwnershipConflict(_)
         ));
 
-        let mut stale = pool_item();
+        let mut stale = assigned_item();
+        stale.owner_user_id = None;
         stale.base_mut().version = 2;
         assert!(matches!(
             classify_start_processing_miss(Some(stale), 1, "alice"),
@@ -1293,7 +1293,7 @@ mod tests {
         assert_eq!(filter.get_str("status").unwrap(), "OPEN");
         assert_eq!(filter.get_str("approval_node_execution_id").unwrap(), "exec-1");
 
-        let mut closed = pool_item();
+        let mut closed = assigned_item();
         closed.status = WorkItemStatus::Closed;
         closed.approval_node_execution_id = Some(execution.clone());
         assert!(!approval_task_still_open(&closed, &execution));
@@ -1305,7 +1305,7 @@ mod tests {
             CasWriteOutcome::StatusChanged(_)
         ));
 
-        let mut stale = pool_item();
+        let mut stale = assigned_item();
         stale.approval_node_execution_id = Some(execution.clone());
         stale.base_mut().version = 4;
         assert!(matches!(
@@ -1313,7 +1313,7 @@ mod tests {
             CasWriteOutcome::VersionConflict(_)
         ));
 
-        let mut open_wrong = pool_item();
+        let mut open_wrong = assigned_item();
         open_wrong.approval_node_execution_id = Some(ApprovalNodeExecutionId::new("exec-2"));
         let open_version = open_wrong.base().version;
         assert!(!approval_task_still_open(&open_wrong, &execution));

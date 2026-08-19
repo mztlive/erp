@@ -414,10 +414,11 @@ impl LegacyImportService {
     ///
     /// 批次推进到 `PendingConfirmation`（试算完成）；同一
     /// `(batch_id, scope, trial_version)` 重复提交按幂等返回既有事实。
+    /// 新建开放任务指定当前操作人为个人责任人，责任角色仍按确认范围注册表确定。
     ///
     /// # 参数
     /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// * `actor` - 已通过鉴权的审计操作人；新建任务以其为个人责任人
     ///
     /// # 返回
     /// 返回新建（或既有）确认事实的响应视图。
@@ -456,6 +457,7 @@ impl LegacyImportService {
             &req.batch_id,
             subject_version.clone(),
             &confirmation_scope,
+            actor.id(),
         )?;
         let audit = actor.clone().resource_log(
             "legacy_import_confirmation.create",
@@ -1825,11 +1827,28 @@ fn confirmation_owner_role(scope: &str) -> Result<&'static str> {
 }
 
 /// 构造采用固定责任范围维度的 W18 正常导入确认任务。
+///
+/// 开放任务必须在创建时指定唯一个人责任人，责任角色仍由已注册
+/// `confirmation_scope` 决定。
+///
+/// # 参数
+/// * `work_item_id` - 任务主键
+/// * `batch_id` - 导入批次
+/// * `subject_version` - 确认任务对应的试算版本
+/// * `confirmation_scope` - 已注册确认范围
+/// * `owner_user_id` - 当前个人责任人
+///
+/// # 返回
+/// 返回带冻结 `responsibility_key` 的开放任务。
+///
+/// # 错误
+/// 确认范围未注册、责任角色无法解析，或任务字段校验失败时返回错误。
 fn import_confirmation_work_item(
     work_item_id: WorkItemId,
     batch_id: &LegacyImportBatchId,
     subject_version: String,
     confirmation_scope: &str,
+    owner_user_id: &str,
 ) -> Result<WorkItem> {
     let confirmation_scope = registered_confirmation_scope(confirmation_scope)?;
     let owner_role = confirmation_owner_role(confirmation_scope)?;
@@ -1842,7 +1861,7 @@ fn import_confirmation_work_item(
             subject_version,
             owner_role: owner_role.to_string(),
             owner_organization_id: IMPORT_CONFIRMATION_ORGANIZATION.to_string(),
-            owner_user_id: None,
+            owner_user_id: Some(owner_user_id.to_string()),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::Normal,
             due_at: None,
@@ -1985,12 +2004,10 @@ fn validate_confirmation_creation_replay(
         && confirmation.import_rule_version == import_rule_version
         && work_item.base.id == confirmation.work_item_id.to_string()
         && work_item.work_item_type == WorkItemType::ImportBusinessConfirmation
-        && true
         && work_item.business_object_type == IMPORT_CONFIRMATION_OBJECT_TYPE
         && work_item.business_object_id == req.batch_id.to_string()
         && work_item.responsibility_key() == Some(scope)
         && work_item.subject_version == subject_version
-        && false
         && work_item.owner_role == owner_role
         && work_item.owner_organization_id == IMPORT_CONFIRMATION_ORGANIZATION;
     if exact {
@@ -2136,11 +2153,9 @@ fn validate_confirmation_completion(
     }
     let owner_role = confirmation_owner_role(&command.confirmation_scope)?;
     let task_matches = work_item.work_item_type == WorkItemType::ImportBusinessConfirmation
-        && true
         && work_item.business_object_type == IMPORT_CONFIRMATION_OBJECT_TYPE
         && work_item.business_object_id == confirmation.batch_id.to_string()
         && work_item.responsibility_key() == Some(command.confirmation_scope.as_str())
-        && false
         && work_item.owner_role == owner_role
         && work_item.owner_organization_id == IMPORT_CONFIRMATION_ORGANIZATION;
     let fact_matches = confirmation.work_item_id == command.work_item_id
@@ -2747,11 +2762,10 @@ mod tests {
             &LegacyImportBatchId::new("batch-1"),
             confirmation_subject_version(1, 2, "rule-1"),
             "SALES",
+            "user-1",
         )
         .unwrap();
         item.base.version = 3;
-        item.owner_user_id = Some("user-1".to_string());
-        item.assignment_source = AssignmentSource::SystemRule;
         item
     }
 
@@ -2845,6 +2859,7 @@ mod tests {
             &batch_id,
             subject_version.clone(),
             " sales ",
+            "user-sales",
         )
         .unwrap();
         let procurement = import_confirmation_work_item(
@@ -2852,6 +2867,7 @@ mod tests {
             &batch_id,
             subject_version,
             "PROCUREMENT",
+            "user-procurement",
         )
         .unwrap();
 
@@ -2889,13 +2905,13 @@ mod tests {
         );
         assert_eq!(mine, ["VIEW", "PROCESS", "CONFIRM_SCOPE", "RETURN_FOR_FIX"]);
 
-        let mut team = vec!["VIEW".to_string(), "START_PROCESSING".to_string()];
+        let mut view_only = vec!["VIEW".to_string()];
         append_confirmation_actions(
-            &mut team,
+            &mut view_only,
             ConfirmationStatus::Pending,
-            &[WorkItemAllowedAction::View, WorkItemAllowedAction::Process],
+            &[WorkItemAllowedAction::View],
         );
-        assert_eq!(team, ["VIEW", "START_PROCESSING"]);
+        assert_eq!(view_only, ["VIEW"]);
 
         let mut completed = vec!["VIEW".to_string(), "PROCESS".to_string()];
         append_confirmation_actions(

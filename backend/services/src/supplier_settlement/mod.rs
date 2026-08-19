@@ -1081,11 +1081,9 @@ fn validate_settlement_review_work_item(
         ));
     }
     if statement.status != SettlementStatus::PendingReview
-        || false
         || item.work_item_type != WorkItemType::SupplierSettlementReview
         || item.business_object_type != "supplier_settlement_statement"
         || item.business_object_id != statement.base.id
-        || true
         || item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
         || item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
     {
@@ -1897,11 +1895,9 @@ impl SupplierSettlementService {
         let item = items
             .pop()
             .ok_or_else(|| Error::Internal("正式结算复核任务读取失败".to_string()))?;
-        if false
-            || item.business_object_type != "supplier_settlement_statement"
+        if item.business_object_type != "supplier_settlement_statement"
             || item.business_object_id != statement.base.id
             || item.subject_version != statement.subject_hash
-            || true
             || item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
             || item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
         {
@@ -1976,7 +1972,6 @@ impl SupplierSettlementService {
             || work_item.business_object_type != "supplier_settlement_statement"
             || work_item.business_object_id != statement.base.id
             || work_item.subject_version != statement.subject_hash
-            || true
             || work_item.owner_role != SETTLEMENT_REVIEW_OWNER_ROLE
             || work_item.owner_organization_id != SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID
         {
@@ -2353,7 +2348,7 @@ mod tests {
                 subject_version: statement.subject_hash.clone(),
                 owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
                 owner_organization_id: SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.to_string(),
-                owner_user_id: None,
+                owner_user_id: Some("reviewer-1".to_string()),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::High,
                 due_at: None,
@@ -2441,15 +2436,15 @@ mod tests {
     #[test]
     fn review_access_is_actor_specific_and_fail_closed() {
         let statement = sample_statement();
-        let mut item = sample_work_item(&statement);
-        let (actions, domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", true, true);
-        assert_eq!(actions, vec![crate::work_item::WorkItemAllowedAction::Process]);
+        let item = sample_work_item(&statement);
+        let (actions, domain_actions, blockers) =
+            settlement_review_access(&item, "other-reviewer", true, true);
+        assert!(actions.is_empty());
         assert!(domain_actions.is_empty());
-        assert!(blockers.is_empty());
+        assert_eq!(blockers[0].code, "CURRENT_OWNER_MISMATCH");
 
-        item.owner_user_id = Some("reviewer-1".to_string());
         let (actions, domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", true, true);
-        assert_eq!(actions, vec![crate::work_item::WorkItemAllowedAction::Reassign]);
+        assert!(actions.is_empty());
         assert_eq!(domain_actions, vec!["REJECT", "CONFIRM"]);
         assert!(blockers.is_empty());
 
@@ -2468,7 +2463,6 @@ mod tests {
         let mut statement = sample_statement();
         statement.submit_review().unwrap();
         let mut item = sample_work_item(&statement);
-        item.owner_user_id = Some("reviewer-1".to_string());
         let actor = AuditActor::new(
             "reviewer-1".to_string(),
             "reviewer".to_string(),

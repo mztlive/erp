@@ -4161,8 +4161,9 @@ mod tests {
                 .contains(&WorkItemAllowedAction::Process)
         );
         assert!(
-            allowed_actions(&eligible, WorkItemScope::Team, &access.actor_id, &access, true)
-                .contains(&WorkItemAllowedAction::Process)
+            !allowed_actions(&eligible, WorkItemScope::Team, &access.actor_id, &access, true)
+                .contains(&WorkItemAllowedAction::Process),
+            "任务已指定到人后，团队队列不得再授予开始处理"
         );
     }
 
