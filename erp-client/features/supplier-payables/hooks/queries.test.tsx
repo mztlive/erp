@@ -38,6 +38,8 @@ vi.mock('@/features/supplier-payables/api/requests', () => ({
     saveAllocationDraft: vi.fn(),
     submitInvoice: vi.fn(),
     submitPayment: vi.fn(),
+    ensureSupplierPaymentDraft: vi.fn(),
+    fetchSupplierPayment: vi.fn(),
 }))
 
 const mockedApi = vi.mocked(payablesApi)
@@ -325,7 +327,7 @@ describe('useSubmitPaymentMutation', () => {
             expect.anything(),
         )
         expect(value?.status).toBe('succeeded')
-        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(3))
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(5))
         expect(invalidateSpy).toHaveBeenCalledWith(
             expect.objectContaining({ queryKey: ['supplier-payables'] }),
         )
@@ -334,6 +336,12 @@ describe('useSubmitPaymentMutation', () => {
         )
         expect(invalidateSpy).toHaveBeenCalledWith(
             expect.objectContaining({ queryKey: ['fulfillment-operations'] }),
+        )
+        expect(invalidateSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ queryKey: ['work-items'] }),
+        )
+        expect(invalidateSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ queryKey: ['approval'] }),
         )
     })
 
@@ -396,7 +404,7 @@ describe('useSubmitInvoiceMutation', () => {
             invoiceInput,
             expect.anything(),
         )
-        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(3))
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(5))
         expect(invalidateSpy).toHaveBeenCalledWith(
             expect.objectContaining({ queryKey: ['supplier-payables'] }),
         )
@@ -448,7 +456,7 @@ describe('useReversePaymentMutation', () => {
             input,
             expect.anything(),
         )
-        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(3))
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(5))
         expect(invalidateSpy).toHaveBeenCalledWith(
             expect.objectContaining({ queryKey: ['supplier-payables'] }),
         )
@@ -505,7 +513,7 @@ describe('useReverseInvoiceMutation', () => {
             input,
             expect.anything(),
         )
-        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(3))
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(5))
     })
 
     it('skips invalidation when the result is not succeeded', async () => {
@@ -593,7 +601,7 @@ describe('useResolveUnknownMutation', () => {
             'key-1',
             expect.anything(),
         )
-        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(3))
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(5))
     })
 
     it('does not invalidate when no result is recorded', async () => {

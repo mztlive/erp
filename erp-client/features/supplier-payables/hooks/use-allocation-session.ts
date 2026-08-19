@@ -5,11 +5,17 @@ import * as React from "react"
 import { useAppForm } from "@/components/form"
 import {
     useAllocationSessionQuery,
+    useEnsureSupplierPaymentDraftMutation,
     useResolveUnknownMutation,
     useSaveAllocationDraftMutation,
     useSubmitInvoiceMutation,
     useSubmitPaymentMutation,
 } from "@/features/supplier-payables/hooks/queries"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
+import {
+    mapSupplierPaymentApproval,
+    readSupplierPaymentApprovalResponsibility,
+} from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { buildAllocationIssues } from "@/features/supplier-payables/lib/allocation-validation"
 import {
     cents,
@@ -69,6 +75,7 @@ export function useAllocationSession(
     const submitInvoice = useSubmitInvoiceMutation()
     const saveDraft = useSaveAllocationDraftMutation()
     const resolveUnknown = useResolveUnknownMutation()
+    const ensurePaymentDraft = useEnsureSupplierPaymentDraftMutation()
 
     const session = sessionQuery.data
     const policy = session?.payablePriorityPolicy
@@ -78,6 +85,9 @@ export function useAllocationSession(
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [result, setResult] = React.useState<FormalSubmitResult | null>(null)
     const [draftHint, setDraftHint] = React.useState<string | null>(null)
+    const [paymentApproval, setPaymentApproval] = React.useState<
+        DocumentApprovalView | undefined
+    >(undefined)
     const idempotencyRef = React.useRef<string | null>(null)
 
     const paymentForm = useAppForm({
@@ -90,6 +100,8 @@ export function useAllocationSession(
         },
         validators: { onChange: paymentSchema },
         onSubmit: async () => {
+            const prepared = await preparePaymentDraft()
+            if (!prepared) return
             setConfirmOpen(true)
         },
     })
@@ -136,6 +148,9 @@ export function useAllocationSession(
                 invoiceForm.setFieldValue("grossAmount", prefill)
             }
         }
+        setPaymentApproval(
+            session.track === "payment" ? session.approval : undefined,
+        )
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 会话与预选变化时同步
     }, [session?.draftSessionId, preselectKey])
 
@@ -278,13 +293,54 @@ export function useAllocationSession(
         )
     }
 
+    /**
+     * 提交确认前先创建付款草稿，只读展示服务端绑定。
+     *
+     * @returns 创建或刷新成功为 true。
+     */
+    async function preparePaymentDraft(): Promise<boolean> {
+        if (!session || track !== "payment") return false
+        if (!idempotencyRef.current) {
+            idempotencyRef.current = `w12_${track}_${session.draftSessionId}_${Date.now()}`
+        }
+        try {
+            const v = paymentForm.state.values
+            const ensured = await ensurePaymentDraft.mutateAsync({
+                draftSessionId: session.draftSessionId,
+                supplierId,
+                paidAt: v.paidAt,
+                amount: session.existingPaymentId
+                    ? (session.existingAmount ?? v.amount)
+                    : v.amount,
+                bankReference: v.bankReference,
+                existingPaymentId: session.existingPaymentId,
+                idempotencyKey: idempotencyRef.current,
+            })
+            if (ensured.status !== "succeeded") {
+                setDraftHint(ensured.description)
+                return false
+            }
+            setPaymentApproval(
+                ensured.session?.approval ??
+                    mapSupplierPaymentApproval(ensured.payment.approval),
+            )
+            return true
+        } catch {
+            setDraftHint("创建付款草稿失败，请刷新后重试。")
+            return false
+        }
+    }
+
     function requestSubmit() {
-        if (session?.existingPaymentId || session?.existingInvoiceId) {
+        if (track === "payment") {
+            void paymentForm.handleSubmit()
+            return
+        }
+        if (session?.existingInvoiceId) {
             setConfirmOpen(true)
             return
         }
-        if (track === "payment") void paymentForm.handleSubmit()
-        else void invoiceForm.handleSubmit()
+        void invoiceForm.handleSubmit()
     }
 
     async function doSubmit() {
@@ -325,8 +381,42 @@ export function useAllocationSession(
                     policy?.payablePriorityPolicyVersion,
                 explicitSelection,
                 existingPaymentId: session.existingPaymentId,
+                expectedVersion: session.existingPaymentVersion,
                 idempotencyKey: idempotencyRef.current,
             })
+            if (res.approval) setPaymentApproval(res.approval)
+            if (res.status === "succeeded") {
+                const responsibility =
+                    readSupplierPaymentApprovalResponsibility(res.approval)
+                res = {
+                    ...res,
+                    title: "付款已提交审批",
+                    description: `已进入审批。单号 ${res.documentNo ?? res.reference ?? ""}。全部节点通过后过账核销。`,
+                    facts: [
+                        {
+                            label: "付款单号",
+                            value: res.documentNo ?? res.reference ?? "",
+                        },
+                        {
+                            label: "净已分配",
+                            value: res.allocatedTotal ?? "0.00",
+                        },
+                        {
+                            label: "未分配余额",
+                            value: res.unallocatedAmount ?? "0.00",
+                        },
+                        { label: "供应商", value: session.supplierName },
+                        ...(responsibility.nextResponsible
+                            ? [
+                                  {
+                                      label: "当前审批人",
+                                      value: responsibility.nextResponsible,
+                                  },
+                              ]
+                            : []),
+                    ],
+                }
+            }
         } else {
             const v = invoiceForm.state.values
             res = await submitInvoice.mutateAsync({
@@ -379,6 +469,7 @@ export function useAllocationSession(
         setConfirmOpen,
         result,
         draftHint,
+        paymentApproval,
         paymentForm,
         invoiceForm,
         factAmount,
@@ -388,7 +479,10 @@ export function useAllocationSession(
         policyBlocksAuto,
         issues,
         canSubmit,
-        isSubmitting: submitPayment.isPending || submitInvoice.isPending,
+        isSubmitting:
+            submitPayment.isPending ||
+            submitInvoice.isPending ||
+            ensurePaymentDraft.isPending,
         isSavingDraft: saveDraft.isPending,
         hasSubmitKey: idempotencyRef.current !== null,
         toggleItem,

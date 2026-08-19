@@ -2,6 +2,7 @@ import { act, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+    ensureSupplierPaymentDraft,
     fetchAllocationSession,
     resolveUnknownResult,
     saveAllocationDraft,
@@ -28,13 +29,17 @@ vi.mock("@/features/supplier-payables/api/requests", () => ({
     saveAllocationDraft: vi.fn(),
     submitInvoice: vi.fn(),
     submitPayment: vi.fn(),
+    ensureSupplierPaymentDraft: vi.fn(),
 }))
 
 const SUCCESS_RESULT: FormalSubmitResult = {
     status: "succeeded",
-    title: "付款已确认",
-    description: "付款与核销已提交。",
+    title: "付款已提交审批",
+    description: "已进入审批。全部节点通过后过账并核销。",
     reference: "FK-0001",
+    documentNo: "FK-0001",
+    allocatedTotal: "60.00",
+    unallocatedAmount: "0.00",
     operationId: "op-1",
 }
 
@@ -122,7 +127,24 @@ beforeEach(() => {
     vi.mocked(submitPayment).mockReset()
     vi.mocked(submitInvoice).mockReset()
     vi.mocked(resolveUnknownResult).mockReset()
+    vi.mocked(ensureSupplierPaymentDraft).mockReset()
     vi.mocked(fetchAllocationSession).mockResolvedValue(makeSession())
+    vi.mocked(ensureSupplierPaymentDraft).mockResolvedValue({
+        status: "succeeded",
+        payment: {
+            id: "pay-1",
+            payment_no: "FK-0001",
+            status: "draft",
+            supplier_id: "sup-1",
+            paid_at: 1,
+            amount: "60.00",
+            version: 1,
+            created_at: 1,
+            allocated_total: "0.00",
+            unallocated_amount: "60.00",
+            allocations: [],
+        },
+    })
 })
 
 describe("useAllocationSession", () => {
@@ -334,9 +356,15 @@ describe("useAllocationSession", () => {
                 accountLockVersion: 1,
             },
         ])
-        expect(result.current.result).toEqual(SUCCESS_RESULT)
+        expect(result.current.result).toMatchObject({
+            status: "succeeded",
+            title: "付款已提交审批",
+            reference: "FK-0001",
+            operationId: "op-1",
+        })
+        expect(result.current.result?.description).toContain("已进入审批")
         expect(result.current.confirmOpen).toBe(false)
-        expect(onCompleted).toHaveBeenCalledWith(SUCCESS_RESULT)
+        expect(onCompleted).toHaveBeenCalledWith(result.current.result)
     })
 
     it("doSubmit for an existing payment uses existingAmount and keeps unallocated fact", async () => {
@@ -486,17 +514,27 @@ describe("useAllocationSession", () => {
         expect(result.current.draftHint).toMatch(/^草稿已保存 /)
     })
 
-    it("requestSubmit opens the confirm dialog directly for existing documents", async () => {
+    it("requestSubmit prepares the payment draft then opens confirm", async () => {
         vi.mocked(fetchAllocationSession).mockResolvedValue(
-            makeSession({ existingPaymentId: "pmt-1" }),
+            makeSession({
+                existingPaymentId: "pmt-1",
+                existingAmount: "100.00",
+                existingUnallocated: "40.00",
+            }),
         )
         const { result } = renderSession()
         await loadSession(result)
 
         act(() => {
+            result.current.paymentForm.setFieldValue("bankReference", "BANK-1")
+        })
+        await act(async () => {
             result.current.requestSubmit()
         })
-        expect(result.current.confirmOpen).toBe(true)
+        await waitFor(() => {
+            expect(result.current.confirmOpen).toBe(true)
+        })
+        expect(ensureSupplierPaymentDraft).toHaveBeenCalledTimes(1)
         expect(submitPayment).not.toHaveBeenCalled()
     })
 

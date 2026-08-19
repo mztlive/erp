@@ -1,5 +1,6 @@
 /** W12 供应商往来 · 后端 DTO 与视图映射（纯函数，无 HTTP 无 React）。 */
 
+import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type {
     PayableRow,
     PaymentRow,
@@ -12,6 +13,11 @@ import {
     SOURCE_TYPE_LABEL,
     VIEW_LABEL,
 } from "@/features/supplier-payables/types"
+import {
+    mapSupplierPaymentApproval,
+    supplierPaymentStatusLabel,
+    supplierPaymentStatusTone,
+} from "@/features/supplier-payables/lib/supplier-payment-approval"
 
 // ─── Backend DTOs ──────────────────────────────────────────────────────────
 
@@ -66,6 +72,7 @@ export type BackendSupplierPayment = {
     allocated_total: string
     unallocated_amount: string
     allocations: BackendPaymentAllocation[]
+    approval?: DocumentApprovalViewDto | null
 }
 
 export type BackendInvoice = {
@@ -135,9 +142,22 @@ export function mapSourceType(s: string): PayableRow["sourceType"] {
     return "PURCHASE_ORDER"
 }
 
-function mapPaymentStatus(s: string): PaymentRow["status"] {
-    if (s === "reversed") return "REVERSED"
-    if (s === "posted") return "POSTED"
+/**
+ * 把后端付款状态映射为页面稳定码。审批中不得伪装成草稿或已过账。
+ *
+ * @param s 服务端状态字面量。
+ */
+export function mapPaymentStatus(s: string): PaymentRow["status"] {
+    if (s === "reversed" || s === "REVERSED") return "REVERSED"
+    if (s === "posted" || s === "POSTED") return "POSTED"
+    if (
+        s === "IN_APPROVAL" ||
+        s === "in_approval" ||
+        s === "pending_review" ||
+        s === "PENDING_REVIEW"
+    ) {
+        return "IN_APPROVAL"
+    }
     return "DRAFT"
 }
 
@@ -196,8 +216,20 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
     }
 }
 
+/**
+ * 把付款 HTTP 视图投影为列表/详情行。审批绑定只透传，不推导责任。
+ *
+ * @param p 付款 HTTP 载荷。
+ */
 export function projectPayment(p: BackendSupplierPayment): PaymentRow {
     const status = mapPaymentStatus(p.status)
+    const allowed: string[] = ["VIEW_DETAIL"]
+    if (status === "DRAFT") {
+        allowed.push("CONTINUE_ALLOCATE")
+    }
+    if (status === "POSTED") {
+        allowed.push("REVERSE_PAYMENT", "REVERSE")
+    }
     return {
         paymentId: p.id,
         paymentNo: p.payment_no,
@@ -209,20 +241,9 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         allocatedTotal: p.allocated_total,
         unallocatedAmount: p.unallocated_amount,
         status,
-        statusLabel:
-            p.status === "pending_review"
-                ? "待复核"
-                : status === "DRAFT"
-                  ? "草稿"
-                  : status === "REVERSED"
-                    ? "已冲正"
-                    : "已确认",
-        statusTone:
-            status === "REVERSED"
-                ? "destructive"
-                : status === "POSTED"
-                  ? "success"
-                  : "neutral",
+        statusLabel: supplierPaymentStatusLabel(p.status),
+        statusTone: supplierPaymentStatusTone(p.status),
+        baselineVersion: p.version,
         allocations: (p.allocations ?? []).map((a) => ({
             allocationId: a.id,
             action: a.allocation_action === "reverse" ? "REVERSE" : "APPLY",
@@ -234,11 +255,9 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
             occurredAt: instantToIso(a.allocated_at),
             reverseOfAllocationId: a.reverses_allocation_id ?? undefined,
         })),
-        allowedActions:
-            status === "POSTED"
-                ? ["VIEW_DETAIL", "CONTINUE_ALLOCATE", "REVERSE_PAYMENT"]
-                : ["VIEW_DETAIL"],
+        allowedActions: allowed,
         actionBlockers: [],
+        approval: mapSupplierPaymentApproval(p.approval),
     }
 }
 

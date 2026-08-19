@@ -2,10 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
+    ensureSupplierPaymentDraft,
     fetchAllocationSession,
     fetchPayableDetail,
     fetchSupplierAccounts,
+    fetchSupplierPayment,
     resolveUnknownResult,
     reverseInvoice,
     reversePayment,
@@ -13,12 +16,14 @@ import {
     submitInvoice,
     submitPayment,
 } from "@/features/supplier-payables/api/requests"
+import { SUPPLIER_PAYMENT_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import type {
     AllocationTrack,
     SupplierAccountsQuery,
 } from "@/features/supplier-payables/types"
 import { purchaseOrderKeys } from "@/features/purchase-orders/queries"
 import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
+import { workItemKeys } from "@/features/work-items/queries"
 
 const supplierPayablesKeys = {
     all: ["supplier-payables"] as const,
@@ -26,6 +31,8 @@ const supplierPayablesKeys = {
         [...supplierPayablesKeys.all, "list", query] as const,
     detail: (payableAccountId: string) =>
         [...supplierPayablesKeys.all, "detail", payableAccountId] as const,
+    payment: (paymentId: string) =>
+        [...supplierPayablesKeys.all, "payment", paymentId] as const,
     session: (params: {
         track: AllocationTrack
         supplierId: string
@@ -48,6 +55,19 @@ export function usePayableDetailQuery(payableAccountId: string | null) {
         queryKey: supplierPayablesKeys.detail(payableAccountId ?? ""),
         queryFn: () => fetchPayableDetail(payableAccountId!),
         enabled: Boolean(payableAccountId),
+    })
+}
+
+/**
+ * 读取供应商付款详情，含只读审批绑定。
+ *
+ * @param paymentId 付款主键；空值不发请求。
+ */
+export function useSupplierPaymentQuery(paymentId: string | null) {
+    return useQuery({
+        queryKey: supplierPayablesKeys.payment(paymentId ?? ""),
+        queryFn: () => fetchSupplierPayment(paymentId!),
+        enabled: Boolean(paymentId),
     })
 }
 
@@ -84,10 +104,21 @@ export function useAllocationSessionQuery(
 
 async function invalidateFinanceAndSources(
     queryClient: ReturnType<typeof useQueryClient>,
+    paymentId?: string,
 ) {
     await queryClient.invalidateQueries({ queryKey: supplierPayablesKeys.all })
     await queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all })
     await queryClient.invalidateQueries({ queryKey: fulfillmentKeys.all })
+    await queryClient.invalidateQueries({ queryKey: workItemKeys.all })
+    await queryClient.invalidateQueries({ queryKey: approvalKeys.all })
+    if (paymentId) {
+        await queryClient.invalidateQueries({
+            queryKey: approvalKeys.document(
+                SUPPLIER_PAYMENT_DOCUMENT_TYPE,
+                paymentId,
+            ),
+        })
+    }
 }
 
 export function useSubmitPaymentMutation() {
@@ -96,7 +127,27 @@ export function useSubmitPaymentMutation() {
         mutationFn: submitPayment,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
-                await invalidateFinanceAndSources(queryClient)
+                await invalidateFinanceAndSources(
+                    queryClient,
+                    result.existingDocumentId ?? result.documentNo,
+                )
+            }
+        },
+    })
+}
+
+/**
+ * 提交确认前创建或刷新付款草稿，只读带回服务端绑定。
+ */
+export function useEnsureSupplierPaymentDraftMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ensureSupplierPaymentDraft,
+        onSuccess: async (result) => {
+            if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: supplierPayablesKeys.all,
+                })
             }
         },
     })

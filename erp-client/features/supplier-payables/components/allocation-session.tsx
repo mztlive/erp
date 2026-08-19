@@ -13,7 +13,10 @@ import { Button } from "@/components/ui/button"
 import { AllocationFactFormCard } from "@/features/supplier-payables/components/allocation-fact-form-card"
 import { AllocationPoolCard } from "@/features/supplier-payables/components/allocation-pool-card"
 import { AllocationResultView } from "@/features/supplier-payables/components/allocation-result-view"
+import { SupplierPaymentApprovalArea } from "@/features/supplier-payables/components/supplier-payment-approval-area"
+import { SupplierPaymentSubmitConfirmDialog } from "@/features/supplier-payables/components/supplier-payment-submit-confirm-dialog"
 import { useAllocationSession } from "@/features/supplier-payables/hooks/use-allocation-session"
+import { supplierPaymentApprovalPhase } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import type {
     AllocationTrack,
     FormalSubmitResult,
@@ -60,6 +63,7 @@ export function AllocationSession({
         setConfirmOpen,
         result,
         draftHint,
+        paymentApproval,
         paymentForm,
         invoiceForm,
         factAmount,
@@ -219,6 +223,19 @@ export function AllocationSession({
                 </Alert>
             ) : null}
 
+            {track === "payment" && paymentApproval ? (
+                <SupplierPaymentApprovalArea
+                    phase={supplierPaymentApprovalPhase(
+                        paymentApproval,
+                        result?.status === "succeeded"
+                            ? "IN_APPROVAL"
+                            : "DRAFT",
+                    )}
+                    approval={paymentApproval}
+                    documentId={session.existingPaymentId}
+                />
+            ) : null}
+
             {result ? (
                 <AllocationResultView
                     result={result}
@@ -268,42 +285,42 @@ export function AllocationSession({
                 </>
             ) : null}
 
-            <FormalActionConfirmDialog
-                open={confirmOpen}
-                onOpenChange={setConfirmOpen}
-                actionLabel={
-                    track === "payment"
-                        ? "登记付款并核销"
-                        : "登记进项发票并核销"
-                }
-                title={
-                    track === "payment"
-                        ? "确认登记付款并核销"
-                        : "确认登记进项发票并核销"
-                }
-                description="提交后形成不可编辑记录；纠错须追加冲正/红票。提交时系统将校验供应商、余额与混合来源规则。"
-                confirmLabel="确认提交"
-                fromStatus={{ label: "本次草稿", tone: "neutral" }}
-                toStatus={{ label: "已确认", tone: "success" }}
-                lockedFields={[
-                    `供应商 ${session.supplierName}`,
-                    `目标 ${selected.size} 笔`,
-                    `拟分配 ${allocatedHint}`,
-                ]}
-                effects={[
-                    track === "payment"
-                        ? "形成供应商付款单与有效分配"
-                        : "形成进项发票与有效分配",
-                    "同步更新应付开放余额",
-                    "未分配余额保留在待核销视图",
-                    "来源页须重新校验先款条件，未核销付款不满足",
-                ]}
-                irreversibleEffects={[
-                    "已确认记录不可编辑删除，纠错追加反向记录",
-                ]}
-                pending={isSubmitting}
-                onConfirm={() => void doSubmit()}
-            />
+            {track === "payment" ? (
+                <SupplierPaymentSubmitConfirmDialog
+                    open={confirmOpen}
+                    pending={isSubmitting}
+                    approval={paymentApproval}
+                    onOpenChange={setConfirmOpen}
+                    onConfirm={() => void doSubmit()}
+                />
+            ) : (
+                <FormalActionConfirmDialog
+                    open={confirmOpen}
+                    onOpenChange={setConfirmOpen}
+                    actionLabel="登记进项发票并核销"
+                    title="确认登记进项发票并核销"
+                    description="提交后形成不可编辑记录；纠错须追加红票。提交时系统将校验供应商、余额与混合来源规则。"
+                    confirmLabel="确认提交"
+                    fromStatus={{ label: "本次草稿", tone: "neutral" }}
+                    toStatus={{ label: "已确认", tone: "success" }}
+                    lockedFields={[
+                        `供应商 ${session.supplierName}`,
+                        `目标 ${selected.size} 笔`,
+                        `拟分配 ${allocatedHint}`,
+                    ]}
+                    effects={[
+                        "形成进项发票与有效分配",
+                        "同步更新应付开放余额",
+                        "未分配余额保留在待核销视图",
+                        "来源页须重新校验先款条件，未核销付款不满足",
+                    ]}
+                    irreversibleEffects={[
+                        "已确认记录不可编辑删除，纠错追加反向记录",
+                    ]}
+                    pending={isSubmitting}
+                    onConfirm={() => void doSubmit()}
+                />
+            )}
         </section>
     )
 }

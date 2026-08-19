@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 
-import { parseView } from '@/features/supplier-payables/lib/url-state'
+import {
+    parsePreviewKind,
+    parseView,
+    parseWorkItemId,
+} from '@/features/supplier-payables/lib/url-state'
 
 describe('parseView', () => {
     it('defaults to payable for a missing param', () => {
@@ -18,5 +22,28 @@ describe('parseView', () => {
         expect(parseView('unknown')).toBe('payable')
         expect(parseView('')).toBe('payable')
         expect(parseView('PAYMENT')).toBe('payable')
+    })
+})
+
+describe('parsePreviewKind', () => {
+    it('only promotes payment when the query is exact', () => {
+        expect(parsePreviewKind('payment')).toBe('payment')
+        expect(parsePreviewKind('payable')).toBe('payable')
+        expect(parsePreviewKind(null)).toBe('payable')
+        expect(parsePreviewKind('invoice')).toBe('payable')
+    })
+})
+
+describe('parseWorkItemId', () => {
+    it('prefers currentWorkItemId and falls back to workItemId', () => {
+        expect(
+            parseWorkItemId(
+                new URLSearchParams('currentWorkItemId=wi-1&workItemId=wi-2'),
+            ),
+        ).toBe('wi-1')
+        expect(parseWorkItemId(new URLSearchParams('workItemId=wi-2'))).toBe(
+            'wi-2',
+        )
+        expect(parseWorkItemId(new URLSearchParams('view=payment'))).toBeUndefined()
     })
 })

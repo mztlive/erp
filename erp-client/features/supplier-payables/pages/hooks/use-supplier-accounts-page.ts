@@ -6,7 +6,11 @@ import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { useSupplierAccountsQuery } from "@/features/supplier-payables/hooks/queries"
-import { parseView } from "@/features/supplier-payables/lib/url-state"
+import {
+    parsePreviewKind,
+    parseView,
+    parseWorkItemId,
+} from "@/features/supplier-payables/lib/url-state"
 import type {
     AllocationTrack,
     FormalSubmitResult,
@@ -52,6 +56,8 @@ export function useSupplierAccountsPage() {
     const returnTo = searchParams.get("returnTo") ?? undefined
     const sessionTrack = searchParams.get("session") as AllocationTrack | null
     const detailId = searchParams.get("detailId") ?? undefined
+    const previewKind = parsePreviewKind(searchParams.get("previewKind"))
+    const workItemId = parseWorkItemId(searchParams)
     const existingPaymentId = searchParams.get("paymentId") ?? undefined
     const existingInvoiceId = searchParams.get("invoiceId") ?? undefined
 
@@ -70,7 +76,10 @@ export function useSupplierAccountsPage() {
     )
     const [previewPayableId, setPreviewPayableId] = React.useState<
         string | null
-    >(detailId ?? null)
+    >(previewKind === "payable" ? (detailId ?? null) : null)
+    const [previewPaymentId, setPreviewPaymentId] = React.useState<
+        string | null
+    >(previewKind === "payment" ? (detailId ?? null) : null)
     const [session, setSession] = React.useState<SessionState | null>(null)
     const [pickSupplierOpen, setPickSupplierOpen] =
         React.useState<null | AllocationTrack>(null)
@@ -294,13 +303,32 @@ export function useSupplierAccountsPage() {
     }
 
     function openPreview(payableAccountId: string) {
+        setPreviewPaymentId(null)
         setPreviewPayableId(payableAccountId)
-        patchUrl({ detailId: payableAccountId }, { replace: true })
+        patchUrl(
+            { detailId: payableAccountId, previewKind: null },
+            { replace: true },
+        )
+    }
+
+    /**
+     * 打开供应商付款详情，嵌入通用审批区。
+     *
+     * @param paymentId 付款主键。
+     */
+    function openPaymentPreview(paymentId: string) {
+        setPreviewPayableId(null)
+        setPreviewPaymentId(paymentId)
+        patchUrl(
+            { detailId: paymentId, previewKind: "payment" },
+            { replace: true },
+        )
     }
 
     function closePreview() {
         setPreviewPayableId(null)
-        patchUrl({ detailId: null }, { replace: true })
+        setPreviewPaymentId(null)
+        patchUrl({ detailId: null, previewKind: null }, { replace: true })
     }
 
     function openSettlements() {
@@ -331,7 +359,10 @@ export function useSupplierAccountsPage() {
         sorting,
         setSorting,
         previewPayableId,
+        previewPaymentId,
+        workItemId,
         openPreview,
+        openPaymentPreview,
         closePreview,
         session,
         openSession,
