@@ -22,21 +22,19 @@ const REASON_TEXT_MAX_LEN: usize = 512;
 /// 经办人/复核人标识最大长度。
 const ACTOR_MAX_LEN: usize = 128;
 
-/// 退款状态（数据模型 §6.11；§7.5 资金单据状态机：财务纠错强制经过复核）。
+/// 退款状态（合同 §4.4.1 / §4.4.2：复核态收敛为唯一 `IN_APPROVAL`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CustomerRefundStatus {
     /// 草稿。
     Draft,
-    /// 待复核（财务纠错必过）。
-    PendingReview,
+    /// 审批中。
+    #[serde(rename = "IN_APPROVAL")]
+    InApproval,
     /// 已过账。
     Posted,
     /// 已冲正（存在正式反向事实，原事实不删除）。
     Reversed,
-    /// 审批中。
-    #[serde(rename = "IN_APPROVAL")]
-    InApproval,
 }
 
 impl CustomerRefundStatus {
@@ -47,10 +45,9 @@ impl CustomerRefundStatus {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
-            Self::PendingReview => "待复核",
+            Self::InApproval => "审批中",
             Self::Posted => "已过账",
             Self::Reversed => "已冲正",
-            Self::InApproval => "审批中",
         }
     }
 
@@ -61,24 +58,22 @@ impl CustomerRefundStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
-            Self::PendingReview => "pending_review",
+            Self::InApproval => "IN_APPROVAL",
             Self::Posted => "posted",
             Self::Reversed => "reversed",
-            Self::InApproval => "IN_APPROVAL",
         }
     }
 }
 
 impl DocumentState for CustomerRefundStatus {
-    /// 返回全部合法后继状态（数据模型 §7.5 资金单据状态机）。
+    /// 返回全部合法后继状态（合同 §4.4.1 / §4.4.2）。
     ///
-    /// 财务纠错必须经过 `PENDING_REVIEW`（经办/复核分离，§7.5），草稿不得
-    /// 直接过账；`REVERSED` 是终态。
+    /// 复核态唯一为 `IN_APPROVAL`；草稿不得直接过账；审批中可过账或受控
+    /// 撤回回草稿；`REVERSED` 是终态。审批导致的业务 `REJECTED` 已删除。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::PendingReview, Self::InApproval],
+            Self::Draft => &[Self::InApproval],
             Self::InApproval => &[Self::Posted, Self::Draft],
-            Self::PendingReview => &[Self::Posted],
             Self::Posted => &[Self::Reversed],
             Self::Reversed => &[],
         }
@@ -225,8 +220,8 @@ impl CustomerRefund {
 
     /// 更新客户退款草稿。
     ///
-    /// 复用 `new` 的校验规则；`POSTED` 后内容不可编辑（§7.5）；退款单号、
-    /// 客户与原事实引用是固定字段不允许修改。
+    /// 复用 `new` 的校验规则；仅草稿可编辑；退款单号、客户与原事实引用是
+    /// 固定字段不允许修改。
     ///
     /// # 参数
     /// * `update` - 更新数据
@@ -238,7 +233,7 @@ impl CustomerRefund {
     /// 当状态非草稿或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: CustomerRefundUpdate) -> Result<()> {
         if self.status != CustomerRefundStatus::Draft {
-            return Err(Error::from("已过账或已冲正的退款不可编辑"));
+            return Err(Error::from("非草稿状态的退款不可编辑"));
         }
         if let Some(amount) = update.amount {
             if amount.to_decimal().is_sign_negative() || amount.to_decimal().is_zero() {
@@ -279,6 +274,50 @@ impl CustomerRefund {
         ensure_transition(self.status, to)?;
         self.status = to;
         Ok(())
+    }
+
+    /// 提交并启动审批：递增 `approval_subject_version` 并进入 `IN_APPROVAL`。
+    ///
+    /// 版本使用 checked add，成功后不回退。不得改写 `BaseModel.version`。
+    ///
+    /// # 返回
+    /// 返回冻结后的提交版本。
+    ///
+    /// # 错误
+    /// 非草稿或版本溢出时返回冲突。
+    pub fn start_approval(&mut self) -> Result<u32> {
+        if self.status != CustomerRefundStatus::Draft {
+            return Err(Error::from("只有草稿状态的客户退款单可以提交审批"));
+        }
+        let next = self
+            .approval_subject_version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        self.approval_subject_version = next;
+        self.transition(CustomerRefundStatus::InApproval)?;
+        Ok(next)
+    }
+
+    /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
+    ///
+    /// # 错误
+    /// 非审批中时返回冲突。
+    pub fn cancel_approval(&mut self) -> Result<()> {
+        if self.status != CustomerRefundStatus::InApproval {
+            return Err(Error::from("只有审批中的客户退款单可以撤回审批"));
+        }
+        self.transition(CustomerRefundStatus::Draft)
+    }
+
+    /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
+    ///
+    /// # 错误
+    /// 状态不是审批中时返回冲突。
+    pub fn mark_posted(&mut self) -> Result<()> {
+        if self.status != CustomerRefundStatus::InApproval {
+            return Err(Error::from("只有审批中的客户退款单可以由最终通过动作过账"));
+        }
+        self.transition(CustomerRefundStatus::Posted)
     }
 
     /// 判断退款是否已过账。
@@ -430,8 +469,8 @@ mod tests {
         assert_eq!(refund.amount, Amount::from_str("800.00").unwrap());
         assert_eq!(refund.refund_no, "RF-2026-001", "关键字段不改");
 
-        refund.transition(CustomerRefundStatus::PendingReview).unwrap();
-        refund.transition(CustomerRefundStatus::Posted).unwrap();
+        refund.start_approval().unwrap();
+        refund.mark_posted().unwrap();
         assert!(refund.is_posted());
         assert!(refund
             .update(CustomerRefundUpdate {
@@ -442,35 +481,56 @@ mod tests {
     }
 
     #[test]
-    fn state_machine_forces_review_before_posting() {
+    fn state_machine_forces_in_approval_before_posting() {
         use crate::common::state::ensure_transition as tr;
         use CustomerRefundStatus as S;
 
-        assert!(tr(S::Draft, S::PendingReview).is_ok());
-        assert!(tr(S::PendingReview, S::Posted).is_ok());
+        assert!(tr(S::Draft, S::InApproval).is_ok());
+        assert!(tr(S::InApproval, S::Posted).is_ok());
+        assert!(tr(S::InApproval, S::Draft).is_ok());
         assert!(tr(S::Posted, S::Reversed).is_ok());
         assert!(tr(S::Reversed, S::Reversed).is_ok(), "幂等迁移恒合法");
 
-        assert!(tr(S::Draft, S::Posted).is_err(), "财务纠错必须经过复核");
+        assert!(tr(S::Draft, S::Posted).is_err(), "草稿不得绕过审批直接过账");
         assert!(tr(S::Draft, S::Reversed).is_err());
-        assert!(tr(S::PendingReview, S::Reversed).is_err());
-        assert!(tr(S::PendingReview, S::Draft).is_err());
         assert!(tr(S::Posted, S::Draft).is_err());
+        assert!(tr(S::Posted, S::InApproval).is_err());
         assert!(tr(S::Reversed, S::Posted).is_err());
+        assert!(tr(S::Reversed, S::Draft).is_err());
 
         let mut refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data()).unwrap();
         assert!(refund.transition(S::Posted).is_err(), "草稿不得直接过账");
-        refund.transition(S::PendingReview).unwrap();
-        assert!(refund.transition(S::Posted).is_ok());
+        refund.start_approval().unwrap();
+        assert!(refund.mark_posted().is_ok());
+    }
+
+    #[test]
+    fn start_approval_increments_version_and_cancel_does_not_rollback() {
+        let mut refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data()).unwrap();
+        assert_eq!(refund.approval_subject_version, 0);
+        let version = refund.start_approval().unwrap();
+        assert_eq!(version, 1);
+        assert_eq!(refund.status, CustomerRefundStatus::InApproval);
+        refund.cancel_approval().unwrap();
+        assert_eq!(refund.status, CustomerRefundStatus::Draft);
+        assert_eq!(refund.approval_subject_version, 1);
+        assert!(refund.mark_posted().is_err());
     }
 
     #[test]
     fn status_serializes_with_stable_codes_and_labels() {
         assert_eq!(
-            serde_json::to_string(&CustomerRefundStatus::PendingReview).unwrap(),
-            "\"pending_review\""
+            serde_json::to_string(&CustomerRefundStatus::InApproval).unwrap(),
+            "\"IN_APPROVAL\""
         );
         assert_eq!(CustomerRefundStatus::Posted.label(), "已过账");
         assert_eq!(CustomerRefundStatus::Reversed.as_str(), "reversed");
+        assert_eq!(CustomerRefundStatus::Draft.as_str(), "draft");
+        let production = include_str!("customer_refund.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("PendingReview"));
+        assert!(!production.contains("pending_review"));
     }
 }

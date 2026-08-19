@@ -98,6 +98,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/customer-refunds/{id}/submit",
+            with_permission(
+                post(returns::customer_refund_submit),
+                rbac,
+                returns::customer_refund_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-refunds/{id}/cancel-approval",
+            with_permission(
+                post(returns::customer_refund_cancel_approval),
+                rbac,
+                returns::customer_refund_cancel_approval_permission_key(),
+            ),
+        )
+        .route(
             "/customer-refunds/{id}/post",
             with_permission(
                 post(returns::customer_refund_post),
@@ -153,4 +169,21 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 returns::payment_reversal_post_permission_key(),
             ),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    /// 客户退款路由暴露提交与撤回，不再把过账当客户端旁路入口。
+    #[test]
+    fn customer_refund_routes_expose_submit_and_cancel() {
+        let production = include_str!("returns.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产路由必须存在");
+        assert!(production.contains("/customer-refunds/{id}/submit"));
+        assert!(production.contains("/customer-refunds/{id}/cancel-approval"));
+        assert!(production.contains("customer_refund_submit"));
+        assert!(production.contains("customer_refund_cancel_approval"));
+        assert!(!production.contains("PENDING_REVIEW"));
+    }
 }
