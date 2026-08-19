@@ -442,9 +442,8 @@ mod tests {
     use entities::common::time::Instant;
     use entities::ids::{
         CustomerAccountId, PartyId, ProcurementConfirmationLineId, PurchaseOrderId,
-        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
-        SalesOrderSubmissionLineId, SkuId, SkuRevisionId, SupplierAccountId,
-        SupplierCommercialProfileRevisionId,
+        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId, SalesOrderSubmissionLineId,
+        SkuId, SkuRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
     };
     use entities::money::{Amount, Quantity, Rate, UnitPrice};
     use entities::purchase_order::{
