@@ -8,14 +8,18 @@ import {
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AllocationSession } from "@/features/supplier-payables/components/allocation-session"
+import { SupplierRefundRequestDialog } from "@/features/supplier-payables/components/supplier-refund-request-dialog"
+import { SupplierRefundSubmitConfirmDialog } from "@/features/supplier-payables/components/supplier-refund-submit-confirm-dialog"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
     usePayableDetailQuery,
     useReverseInvoiceMutation,
     useReversePaymentMutation,
     useSupplierPaymentQuery,
+    useSupplierRefundQuery,
 } from "@/features/supplier-payables/hooks/queries"
 import { isSupplierPaymentWorkItem } from "@/features/supplier-payables/lib/supplier-payment-approval"
+import { isSupplierRefundWorkItem } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import {
@@ -34,6 +38,7 @@ import { SupplierAccountsTable } from "./components/supplier-accounts-table"
 import { SupplierAccountsToolbar } from "./components/supplier-accounts-toolbar"
 import { PickSupplierDialog } from "./components/pick-supplier-dialog"
 import { ReverseDialog } from "./components/reverse-dialog"
+import { useSupplierRefundFlow } from "./hooks/use-supplier-refund-flow"
 
 export function SupplierAccountsPage() {
     const {
@@ -56,9 +61,11 @@ export function SupplierAccountsPage() {
         setSorting,
         previewPayableId,
         previewPaymentId,
+        previewRefundId,
         workItemId,
         openPreview,
         openPaymentPreview,
+        openRefundPreview,
         closePreview,
         session,
         openSession,
@@ -91,11 +98,29 @@ export function SupplierAccountsPage() {
     const workItemPaymentId = isSupplierPaymentWorkItem(focusedWorkItem)
         ? focusedWorkItem?.businessObjectId
         : undefined
+    const workItemRefundId = isSupplierRefundWorkItem(focusedWorkItem)
+        ? focusedWorkItem?.businessObjectId
+        : undefined
     const focusedPaymentId = previewPaymentId ?? workItemPaymentId ?? null
+    const focusedRefundId = previewRefundId ?? workItemRefundId ?? null
     const detailQuery = usePayableDetailQuery(previewPayableId)
     const paymentQuery = useSupplierPaymentQuery(focusedPaymentId)
+    const refundQuery = useSupplierRefundQuery(focusedRefundId)
     const reversePayment = useReversePaymentMutation()
     const reverseInvoice = useReverseInvoiceMutation()
+    const refundFlow = useSupplierRefundFlow({
+        openRefundPreview,
+        setLastResult,
+        setActionError: (message) => {
+            if (message) {
+                setLastResult({
+                    status: "failed",
+                    title: "退款失败",
+                    description: message,
+                })
+            }
+        },
+    })
 
     if (session) {
         return (
@@ -275,6 +300,7 @@ export function SupplierAccountsPage() {
                 openSession={openSession}
                 setReverseTarget={setReverseTarget}
                 setRedInvoiceNo={setRedInvoiceNo}
+                setRefundRequest={refundFlow.setRefundRequest}
                 toolbar={
                     <SupplierAccountsToolbar
                         view={view}
@@ -295,8 +321,14 @@ export function SupplierAccountsPage() {
             <SupplierAccountsPreview
                 previewPayableId={previewPayableId}
                 previewPaymentId={focusedPaymentId}
+                previewRefundId={focusedRefundId}
                 detailQuery={detailQuery}
                 paymentQuery={paymentQuery}
+                refundQuery={refundQuery}
+                onRequestRefundSubmit={() => {
+                    const refund = refundQuery.data
+                    if (refund) refundFlow.beginRefundSubmit(refund)
+                }}
                 returnTo={returnTo}
                 fromWorkspace={fromWorkspace}
                 onClose={closePreview}
@@ -306,6 +338,7 @@ export function SupplierAccountsPage() {
                 workItemAllowedActions={focusedWorkItem?.allowedActions}
                 onDecisionApplied={(view: ApprovalCommandView) => {
                     void paymentQuery.refetch()
+                    void refundQuery.refetch()
                     void listQuery.refetch()
                     setLastResult({
                         status: "succeeded",
@@ -313,7 +346,8 @@ export function SupplierAccountsPage() {
                         description: view.latestRejectionReason
                             ? `已按当前任务提交决定。${view.latestRejectionReason}`
                             : "已按当前任务提交决定。",
-                        reference: focusedPaymentId ?? undefined,
+                        reference:
+                            focusedRefundId ?? focusedPaymentId ?? undefined,
                         facts: view.currentAssigneeName
                             ? [
                                   {
@@ -342,6 +376,28 @@ export function SupplierAccountsPage() {
                         purchaseOrderId,
                     })
                 }}
+            />
+
+            <SupplierRefundRequestDialog
+                open={Boolean(refundFlow.refundRequest)}
+                pending={refundFlow.refundDraftPending}
+                sourceLabel={refundFlow.refundRequest?.sourcePaymentNo}
+                amount={refundFlow.refundRequest?.amount}
+                onOpenChange={(open) => {
+                    if (!open) refundFlow.setRefundRequest(null)
+                }}
+                onSubmit={(reason) => void refundFlow.prepareRefundDraft(reason)}
+            />
+
+            <SupplierRefundSubmitConfirmDialog
+                open={refundFlow.refundSubmitOpen}
+                pending={refundFlow.refundSubmitPending}
+                approval={
+                    refundFlow.refundDraft?.approval ??
+                    refundQuery.data?.approval
+                }
+                onOpenChange={refundFlow.setRefundSubmitOpen}
+                onConfirm={() => void refundFlow.confirmRefundSubmit()}
             />
 
             {reverseTarget ? (

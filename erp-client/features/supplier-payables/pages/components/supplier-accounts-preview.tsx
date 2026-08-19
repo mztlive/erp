@@ -21,17 +21,23 @@ import { Separator } from "@/components/ui/separator"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { SupplierPaymentDetailBody } from "@/features/supplier-payables/components/supplier-payment-detail-body"
+import { SupplierRefundDetailBody } from "@/features/supplier-payables/components/supplier-refund-detail-body"
+import { isUnsubmittedSupplierRefundStatus } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import type {
     PayableDetailView,
     PaymentRow,
     SessionState,
+    SupplierRefundRow,
 } from "@/features/supplier-payables/types"
 
 export interface SupplierAccountsPreviewProps {
     previewPayableId: string | null
     previewPaymentId: string | null
+    previewRefundId: string | null
     detailQuery: UseQueryResult<PayableDetailView | null, Error>
     paymentQuery: UseQueryResult<PaymentRow | null, Error>
+    refundQuery: UseQueryResult<SupplierRefundRow | null, Error>
+    onRequestRefundSubmit?: () => void
     returnTo: string | undefined
     fromWorkspace: string | undefined
     onClose: () => void
@@ -43,13 +49,16 @@ export interface SupplierAccountsPreviewProps {
 }
 
 /**
- * 供应商往来详情抽屉。付款嵌入通用审批区；应付预览不展示审批。
+ * 供应商往来详情抽屉。付款与供应商退款嵌入通用审批区；应付预览不展示审批。
  */
 export function SupplierAccountsPreview({
     previewPayableId,
     previewPaymentId,
+    previewRefundId,
     detailQuery,
     paymentQuery,
+    refundQuery,
+    onRequestRefundSubmit,
     returnTo,
     fromWorkspace,
     onClose,
@@ -59,6 +68,70 @@ export function SupplierAccountsPreview({
     workItemAllowedActions,
     onDecisionApplied,
 }: SupplierAccountsPreviewProps) {
+    if (previewRefundId) {
+        const canSubmitDraft =
+            Boolean(refundQuery.data) &&
+            isUnsubmittedSupplierRefundStatus(refundQuery.data?.status) &&
+            Boolean(
+                refundQuery.data?.approval?.allowedActions.includes("SUBMIT"),
+            ) &&
+            Boolean(onRequestRefundSubmit)
+        return (
+            <QuickPreviewSheet
+                open
+                onOpenChange={(open) => {
+                    if (!open) onClose()
+                }}
+                size="detail"
+                title={refundQuery.data?.refundNo ?? "退款详情"}
+                description="退款事实与审批区只读服务端投影"
+                footer={
+                    canSubmitDraft ? (
+                        <Button
+                            type="button"
+                            onClick={onRequestRefundSubmit}
+                        >
+                            提交审批
+                        </Button>
+                    ) : null
+                }
+            >
+                {refundQuery.isPending ? (
+                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                ) : refundQuery.data ? (
+                    <SupplierRefundDetailBody
+                        row={refundQuery.data}
+                        workItemId={workItemId}
+                        expectedTaskVersion={expectedTaskVersion}
+                        workItemAllowedActions={workItemAllowedActions}
+                        onDecisionApplied={onDecisionApplied}
+                    />
+                ) : refundQuery.isError ? (
+                    <div className="space-y-3 p-6">
+                        <p className="text-sm text-muted-foreground">
+                            {getErrorMessage(
+                                refundQuery.error,
+                                "退款详情加载失败，请重试。",
+                            )}
+                        </p>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void refundQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    </div>
+                ) : (
+                    <p className="p-6 text-sm text-muted-foreground">
+                        未找到退款详情
+                    </p>
+                )}
+            </QuickPreviewSheet>
+        )
+    }
+
     if (previewPaymentId) {
         return (
             <QuickPreviewSheet

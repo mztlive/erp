@@ -28,8 +28,12 @@ function SupplierAccountsFallback() {
 
 /**
  * SPA 壳：URL 查询由客户端 useSearchParams 恢复
- * view / supplierId / q / purchaseOrderId / from / returnTo / session。
+ * view / supplierId / q / purchaseOrderId / from / returnTo / session /
+ * previewKind / detailId / currentWorkItemId。
  * 业务数据不在服务端 fetch。
+ *
+ * Invoice 为 NO_APPROVAL：本页进项发票详情/预览/登记不显示审批流程选择或审批动作。
+ * SupplierRefund 为 PROCESS_REQUIRED：退款详情/预览/提交走通用审批区。
  */
 export default function Page() {
     return (

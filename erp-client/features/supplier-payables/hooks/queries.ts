@@ -5,18 +5,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     ensureSupplierPaymentDraft,
+    ensureSupplierRefundDraft,
     fetchAllocationSession,
     fetchPayableDetail,
     fetchSupplierAccounts,
     fetchSupplierPayment,
+    fetchSupplierRefund,
     resolveUnknownResult,
     reverseInvoice,
     reversePayment,
     saveAllocationDraft,
     submitInvoice,
     submitPayment,
+    submitSupplierRefund,
 } from "@/features/supplier-payables/api/requests"
 import { SUPPLIER_PAYMENT_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/supplier-payment-approval"
+import { SUPPLIER_REFUND_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import type {
     AllocationTrack,
     SupplierAccountsQuery,
@@ -33,6 +37,8 @@ const supplierPayablesKeys = {
         [...supplierPayablesKeys.all, "detail", payableAccountId] as const,
     payment: (paymentId: string) =>
         [...supplierPayablesKeys.all, "payment", paymentId] as const,
+    refund: (refundId: string) =>
+        [...supplierPayablesKeys.all, "refund", refundId] as const,
     session: (params: {
         track: AllocationTrack
         supplierId: string
@@ -68,6 +74,19 @@ export function useSupplierPaymentQuery(paymentId: string | null) {
         queryKey: supplierPayablesKeys.payment(paymentId ?? ""),
         queryFn: () => fetchSupplierPayment(paymentId!),
         enabled: Boolean(paymentId),
+    })
+}
+
+/**
+ * 读取供应商退款详情，含只读审批绑定。
+ *
+ * @param refundId 退款主键；空值不发请求。
+ */
+export function useSupplierRefundQuery(refundId: string | null) {
+    return useQuery({
+        queryKey: supplierPayablesKeys.refund(refundId ?? ""),
+        queryFn: () => fetchSupplierRefund(refundId!),
+        enabled: Boolean(refundId),
     })
 }
 
@@ -184,6 +203,54 @@ export function useReverseInvoiceMutation() {
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
                 await invalidateFinanceAndSources(queryClient)
+            }
+        },
+    })
+}
+
+/**
+ * 提交确认前创建供应商退款草稿，并刷新只读审批绑定。
+ */
+export function useEnsureSupplierRefundDraftMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ensureSupplierRefundDraft,
+        onSuccess: async (result) => {
+            if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: approvalKeys.document(
+                        SUPPLIER_REFUND_DOCUMENT_TYPE,
+                        result.refund.refundId,
+                    ),
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: supplierPayablesKeys.refund(
+                        result.refund.refundId,
+                    ),
+                })
+            }
+        },
+    })
+}
+
+/**
+ * 提交供应商退款审批。成功后刷新退款详情与审批单据缓存。
+ */
+export function useSubmitSupplierRefundMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: submitSupplierRefund,
+        onSuccess: async (result) => {
+            if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: supplierPayablesKeys.all,
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: approvalKeys.document(
+                        SUPPLIER_REFUND_DOCUMENT_TYPE,
+                        result.refund.refundId,
+                    ),
+                })
             }
         },
     })

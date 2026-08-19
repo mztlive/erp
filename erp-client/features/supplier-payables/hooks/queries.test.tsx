@@ -13,7 +13,10 @@ import {
     useSaveAllocationDraftMutation,
     useSubmitInvoiceMutation,
     useSubmitPaymentMutation,
+    useSubmitSupplierRefundMutation,
     useSupplierAccountsQuery,
+    useEnsureSupplierRefundDraftMutation,
+    useSupplierRefundQuery,
 } from '@/features/supplier-payables/hooks/queries'
 import type {
     AllocationSessionView,
@@ -40,6 +43,10 @@ vi.mock('@/features/supplier-payables/api/requests', () => ({
     submitPayment: vi.fn(),
     ensureSupplierPaymentDraft: vi.fn(),
     fetchSupplierPayment: vi.fn(),
+    fetchSupplierRefund: vi.fn(),
+    ensureSupplierRefundDraft: vi.fn(),
+    submitSupplierRefund: vi.fn(),
+    forgetSupplierRefundDraft: vi.fn(),
 }))
 
 const mockedApi = vi.mocked(payablesApi)
@@ -636,5 +643,116 @@ describe('useResolveUnknownMutation', () => {
         })
 
         expect(invalidateSpy).not.toHaveBeenCalled()
+    })
+})
+
+const refundRow = {
+    refundId: 'srf-1',
+    refundNo: 'GTK-1',
+    supplierId: 'sup-1',
+    reasonText: '退差额',
+    amount: '10.00',
+    occurredAt: '',
+    status: 'draft' as const,
+    statusLabel: '草稿',
+    statusTone: 'neutral' as const,
+    baselineVersion: 1,
+    allowedActions: ['VIEW_DETAIL'] as const,
+    actionBlockers: [],
+}
+
+describe('useSupplierRefundQuery', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('stays disabled and never fetches for a null id', () => {
+        const { result } = renderHookWithProviders(() =>
+            useSupplierRefundQuery(null),
+        )
+        expect(result.current.fetchStatus).toBe('idle')
+        expect(mockedApi.fetchSupplierRefund).not.toHaveBeenCalled()
+    })
+
+    it('fetches the refund under the refund key', async () => {
+        mockedApi.fetchSupplierRefund.mockResolvedValue(refundRow)
+        const client = createFreshQueryClient()
+        const { result } = renderHookWithProviders(
+            () => useSupplierRefundQuery('srf-1'),
+            { queryClient: client },
+        )
+        await waitFor(() => expect(result.current.data).toEqual(refundRow))
+        expect(mockedApi.fetchSupplierRefund).toHaveBeenCalledWith('srf-1')
+        expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+            ['supplier-payables', 'refund', 'srf-1'],
+        ])
+    })
+})
+
+describe('useEnsureSupplierRefundDraftMutation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('invalidates refund detail and approval keys on a succeeded draft', async () => {
+        mockedApi.ensureSupplierRefundDraft.mockResolvedValue({
+            status: 'succeeded',
+            refund: refundRow,
+        })
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => useEnsureSupplierRefundDraftMutation(),
+            { queryClient: client },
+        )
+        await result.current.mutateAsync({
+            sourcePaymentId: 'sp-1',
+            supplierId: 'sup-1',
+            reason: '退差额',
+            idempotencyKey: 'k-srf',
+        })
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'SupplierRefund', 'srf-1'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['supplier-payables', 'refund', 'srf-1'],
+        })
+    })
+})
+
+describe('useSubmitSupplierRefundMutation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('invalidates payables and approval keys after submit', async () => {
+        mockedApi.submitSupplierRefund.mockResolvedValue({
+            status: 'succeeded',
+            refund: {
+                ...refundRow,
+                status: 'in_approval',
+                statusLabel: '审批中',
+                baselineVersion: 2,
+            },
+        })
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => useSubmitSupplierRefundMutation(),
+            { queryClient: client },
+        )
+        await result.current.mutateAsync({
+            refundId: 'srf-1',
+            expectedVersion: 1,
+            idempotencyKey: 'k-srf-2',
+        })
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['supplier-payables'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'SupplierRefund', 'srf-1'],
+        })
     })
 })

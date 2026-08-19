@@ -6,6 +6,7 @@ import type {
     PaymentRow,
     PurchaseInvoiceRow,
     SupplierAccountsQuery,
+    SupplierRefundRow,
 } from "@/features/supplier-payables/types"
 import {
     PAYABLE_STATUS_LABEL,
@@ -18,6 +19,11 @@ import {
     supplierPaymentStatusLabel,
     supplierPaymentStatusTone,
 } from "@/features/supplier-payables/lib/supplier-payment-approval"
+import {
+    mapSupplierRefundApproval,
+    supplierRefundStatusLabel,
+    supplierRefundStatusTone,
+} from "@/features/supplier-payables/lib/supplier-refund-approval"
 
 // ─── Backend DTOs ──────────────────────────────────────────────────────────
 
@@ -72,6 +78,26 @@ export type BackendSupplierPayment = {
     allocated_total: string
     unallocated_amount: string
     allocations: BackendPaymentAllocation[]
+    approval?: DocumentApprovalViewDto | null
+}
+
+/** SupplierRefund 为 PROCESS_REQUIRED：创建/详情 DTO 必须携带只读审批绑定。 */
+export type BackendSupplierRefund = {
+    id: string
+    refund_no: string
+    status: string
+    purchase_return_order_id?: string | null
+    supplier_id: string
+    original_payment_id?: string | null
+    original_payable_entry_id?: string | null
+    reason_code?: string | null
+    reason_text: string
+    amount: string
+    handled_by: string
+    reviewed_by: string
+    occurred_at: number
+    version: number
+    created_at: number
     approval?: DocumentApprovalViewDto | null
 }
 
@@ -228,7 +254,7 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         allowed.push("CONTINUE_ALLOCATE")
     }
     if (status === "POSTED") {
-        allowed.push("REVERSE_PAYMENT", "REVERSE")
+        allowed.push("REVERSE_PAYMENT", "REVERSE", "REFUND")
     }
     return {
         paymentId: p.id,
@@ -258,6 +284,48 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         allowedActions: allowed,
         actionBlockers: [],
         approval: mapSupplierPaymentApproval(p.approval),
+    }
+}
+
+function mapRefundStatus(s: string): SupplierRefundRow["status"] {
+    if (s === "reversed" || s === "REVERSED") return "reversed"
+    if (s === "posted" || s === "POSTED") return "posted"
+    if (
+        s === "IN_APPROVAL" ||
+        s === "in_approval" ||
+        s === "pending_review" ||
+        s === "PENDING_REVIEW"
+    ) {
+        return "in_approval"
+    }
+    return "draft"
+}
+
+/**
+ * 把供应商退款详情投影为预览行。SupplierRefund 为 PROCESS_REQUIRED，只读映射审批绑定。
+ *
+ * @param refund 退款 HTTP 载荷。
+ */
+export function projectSupplierRefund(
+    refund: BackendSupplierRefund,
+): SupplierRefundRow {
+    const status = mapRefundStatus(refund.status)
+    return {
+        refundId: refund.id,
+        refundNo: refund.refund_no,
+        supplierId: refund.supplier_id,
+        originalPaymentId: refund.original_payment_id ?? undefined,
+        originalPayableEntryId: refund.original_payable_entry_id ?? undefined,
+        reasonText: refund.reason_text,
+        amount: refund.amount,
+        occurredAt: instantToIso(refund.occurred_at),
+        status,
+        statusLabel: supplierRefundStatusLabel(refund.status),
+        statusTone: supplierRefundStatusTone(refund.status),
+        baselineVersion: refund.version,
+        allowedActions: ["VIEW_DETAIL"],
+        actionBlockers: [],
+        approval: mapSupplierRefundApproval(refund.approval),
     }
 }
 

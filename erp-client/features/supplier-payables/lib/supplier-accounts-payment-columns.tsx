@@ -6,7 +6,12 @@ import type { Dispatch, SetStateAction } from "react"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/datetime"
-import type { PaymentRow, ReverseTarget, SessionState } from "@/features/supplier-payables/types"
+import type {
+    PaymentRow,
+    ReverseTarget,
+    SessionState,
+    SupplierRefundRequest,
+} from "@/features/supplier-payables/types"
 
 export function buildPaymentColumns(input: {
     returnTo?: string
@@ -14,6 +19,7 @@ export function buildPaymentColumns(input: {
     openSession: (next: SessionState) => void
     openPaymentPreview: (paymentId: string) => void
     setReverseTarget: Dispatch<SetStateAction<ReverseTarget | null>>
+    setRefundRequest?: Dispatch<SetStateAction<SupplierRefundRequest | null>>
 }): ColumnDef<PaymentRow>[] {
     const {
         returnTo,
@@ -21,6 +27,7 @@ export function buildPaymentColumns(input: {
         openSession,
         openPaymentPreview,
         setReverseTarget,
+        setRefundRequest,
     } = input
     return [
         {
@@ -155,6 +162,24 @@ export function buildPaymentColumns(input: {
                             }
                         >
                             冲正
+                        </Button>
+                    ) : null}
+                    {row.original.allowedActions.includes("REFUND") &&
+                    setRefundRequest ? (
+                        <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            onClick={() =>
+                                setRefundRequest({
+                                    sourcePaymentId: row.original.paymentId,
+                                    sourcePaymentNo: row.original.paymentNo,
+                                    supplierId: row.original.supplierId,
+                                    amount: row.original.amount,
+                                })
+                            }
+                        >
+                            退款
                         </Button>
                     ) : null}
                 </div>

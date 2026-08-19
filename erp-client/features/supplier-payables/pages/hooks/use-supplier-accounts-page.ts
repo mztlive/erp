@@ -80,6 +80,9 @@ export function useSupplierAccountsPage() {
     const [previewPaymentId, setPreviewPaymentId] = React.useState<
         string | null
     >(previewKind === "payment" ? (detailId ?? null) : null)
+    const [previewRefundId, setPreviewRefundId] = React.useState<string | null>(
+        previewKind === "refund" ? (detailId ?? null) : null,
+    )
     const [session, setSession] = React.useState<SessionState | null>(null)
     const [pickSupplierOpen, setPickSupplierOpen] =
         React.useState<null | AllocationTrack>(null)
@@ -304,6 +307,7 @@ export function useSupplierAccountsPage() {
 
     function openPreview(payableAccountId: string) {
         setPreviewPaymentId(null)
+        setPreviewRefundId(null)
         setPreviewPayableId(payableAccountId)
         patchUrl(
             { detailId: payableAccountId, previewKind: null },
@@ -318,6 +322,7 @@ export function useSupplierAccountsPage() {
      */
     function openPaymentPreview(paymentId: string) {
         setPreviewPayableId(null)
+        setPreviewRefundId(null)
         setPreviewPaymentId(paymentId)
         patchUrl(
             { detailId: paymentId, previewKind: "payment" },
@@ -325,9 +330,25 @@ export function useSupplierAccountsPage() {
         )
     }
 
+    /**
+     * 打开供应商退款详情，嵌入通用审批区。
+     *
+     * @param refundId 退款主键。
+     */
+    function openRefundPreview(refundId: string) {
+        setPreviewPayableId(null)
+        setPreviewPaymentId(null)
+        setPreviewRefundId(refundId)
+        patchUrl(
+            { detailId: refundId, previewKind: "refund" },
+            { replace: true },
+        )
+    }
+
     function closePreview() {
         setPreviewPayableId(null)
         setPreviewPaymentId(null)
+        setPreviewRefundId(null)
         patchUrl({ detailId: null, previewKind: null }, { replace: true })
     }
 
@@ -360,9 +381,11 @@ export function useSupplierAccountsPage() {
         setSorting,
         previewPayableId,
         previewPaymentId,
+        previewRefundId,
         workItemId,
         openPreview,
         openPaymentPreview,
+        openRefundPreview,
         closePreview,
         session,
         openSession,

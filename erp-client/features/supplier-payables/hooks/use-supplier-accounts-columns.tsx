@@ -10,6 +10,7 @@ import type {
     ReverseTarget,
     SessionState,
     SupplierAccountsListView,
+    SupplierRefundRequest,
     UnallocatedRow,
 } from "@/features/supplier-payables/types"
 import { buildPayableColumns } from "@/features/supplier-payables/lib/supplier-accounts-payable-columns"
@@ -26,6 +27,9 @@ export function useSupplierAccountsColumns(input: {
     openSession: (next: SessionState) => void
     setReverseTarget: React.Dispatch<React.SetStateAction<ReverseTarget | null>>
     setRedInvoiceNo: React.Dispatch<React.SetStateAction<string>>
+    setRefundRequest?: React.Dispatch<
+        React.SetStateAction<SupplierRefundRequest | null>
+    >
 }) {
     const {
         data,
@@ -36,6 +40,7 @@ export function useSupplierAccountsColumns(input: {
         openSession,
         setReverseTarget,
         setRedInvoiceNo,
+        setRefundRequest,
     } = input
 
     const payableColumns = React.useMemo<ColumnDef<PayableRow>[]>(
@@ -59,9 +64,10 @@ export function useSupplierAccountsColumns(input: {
                 openSession,
                 openPaymentPreview,
                 setReverseTarget,
+                setRefundRequest,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [returnTo, fromWorkspace],
+        [returnTo, fromWorkspace, setRefundRequest],
     )
 
     const invoiceColumns = React.useMemo<ColumnDef<PurchaseInvoiceRow>[]>(
