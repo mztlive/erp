@@ -8,7 +8,7 @@
 //!   建模；§6.9 字典未含 FactBase 全部语义字段（fact_no/occurred_at/recorded_at/
 //!   recorded_by/source_type/source_reference/reason_code/reason_text），因此不
 //!   组合 FactBase，仅用 `BaseModel` 持久化元数据；
-//! - 状态机 §7.5 只覆盖付款（DRAFT→PENDING_REVIEW→POSTED→REVERSED）；
+//! - 状态机合同 §4.4 只覆盖付款（DRAFT→IN_APPROVAL→POSTED→REVERSED）；
 //! - `invoice` 表归属 D18，本域仅通过 `entities::ids::InvoiceId` 引用。
 
 pub mod payable_account;

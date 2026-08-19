@@ -73,6 +73,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-payments/{id}/submit",
+            with_permission(
+                post(payable::supplier_payment_submit),
+                rbac,
+                payable::supplier_payment_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-payments/{id}/cancel-approval",
+            with_permission(
+                post(payable::supplier_payment_cancel_approval),
+                rbac,
+                payable::supplier_payment_cancel_approval_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-payments/{id}/post",
             with_permission(
                 post(payable::supplier_payment_post),
@@ -96,4 +112,21 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 payable::purchase_invoice_allocation_post_permission_key(),
             ),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    /// 供应商付款路由暴露提交与撤回，不再把过账当客户端旁路入口。
+    #[test]
+    fn supplier_payment_routes_expose_submit_and_cancel() {
+        let production = include_str!("payable.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产路由必须存在");
+        assert!(production.contains("/supplier-payments/{id}/submit"));
+        assert!(production.contains("/supplier-payments/{id}/cancel-approval"));
+        assert!(production.contains("supplier_payment_submit"));
+        assert!(production.contains("supplier_payment_cancel_approval"));
+        assert!(!production.contains("PENDING_REVIEW"));
+    }
 }
