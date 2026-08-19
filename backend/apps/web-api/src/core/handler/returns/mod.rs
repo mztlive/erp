@@ -4,20 +4,21 @@
 //! 直接复用 `services::returns` 的 DTO。
 
 use axum::{
-    extract::{Path, Query, State},
     Extension, Json,
+    extract::{Path, Query, State},
 };
 use services::{
     audit::AuditActor,
     returns::{
-        CancelCustomerRefundApprovalRequest, CancelSupplierRefundApprovalRequest,
-        CreateCustomerRefundRequest, CreatePaymentReversalRequest, CreatePurchaseReturnOrderRequest,
-        CreateReceiptReversalRequest, CreateSalesReturnCaseRequest, CreateSupplierRefundRequest,
-        CustomerRefundListParams, CustomerRefundView, PageView, PaymentReversalView,
-        PostCustomerRefundRequest, PostPaymentReversalRequest, PostReceiptReversalRequest,
-        PostSupplierRefundRequest, PurchaseReturnOrderListParams, PurchaseReturnOrderView,
-        ReceiptReversalView, ReturnsService, SalesReturnCaseListParams, SalesReturnCaseView,
-        SubmitCustomerRefundRequest, SubmitSupplierRefundRequest, SupplierRefundView,
+        CancelCustomerRefundApprovalRequest, CancelReceiptReversalApprovalRequest,
+        CancelSupplierRefundApprovalRequest, CreateCustomerRefundRequest, CreatePaymentReversalRequest,
+        CreatePurchaseReturnOrderRequest, CreateReceiptReversalRequest, CreateSalesReturnCaseRequest,
+        CreateSupplierRefundRequest, CustomerRefundListParams, CustomerRefundView, PageView,
+        PaymentReversalView, PostCustomerRefundRequest, PostPaymentReversalRequest,
+        PostReceiptReversalRequest, PostSupplierRefundRequest, PurchaseReturnOrderListParams,
+        PurchaseReturnOrderView, ReceiptReversalView, ReturnsService, SalesReturnCaseListParams,
+        SalesReturnCaseView, SubmitCustomerRefundRequest, SubmitReceiptReversalRequest,
+        SubmitSupplierRefundRequest, SupplierRefundView,
     },
 };
 
@@ -501,6 +502,32 @@ pub async fn supplier_refund_post(
 #[permission_macros::permission(
     group = "退货退款",
     group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "查询回款冲正详情",
+    resource = "receipt_reversal",
+    action = "detail"
+)]
+/// 查询回款冲正详情。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 冲正单 ID
+///
+/// # 返回
+/// 返回冲正单视图。
+pub async fn receipt_reversal_detail(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<ReceiptReversalView> {
+    let view = ReturnsService::new(state.db())
+        .receipt_reversal_detail(&id)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
     desc = "登记回款冲正草稿",
     resource = "receipt_reversal",
     action = "create"
@@ -529,31 +556,90 @@ pub async fn receipt_reversal_create(
 #[permission_macros::permission(
     group = "退货退款",
     group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "回款冲正过账",
+    desc = "提交回款冲正审批",
     resource = "receipt_reversal",
-    action = "post"
+    action = "submit"
 )]
-/// 回款冲正过账（§8.3-3 事务不变量：保留原事实，写反向核销）。
+/// 提交回款冲正并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 冲正单 ID
-/// * `req` - 过账请求（占位）
+/// * `req` - 提交请求（版本与幂等键）
 ///
 /// # 返回
-/// 返回过账后冲正单视图。
-pub async fn receipt_reversal_post(
+/// 返回提交后的冲正单视图。
+pub async fn receipt_reversal_submit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<PostReceiptReversalRequest>,
+    Json(req): Json<SubmitReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
     let view = ReturnsService::new(state.db())
-        .post_receipt_reversal(&id, req, &actor)
+        .submit_receipt_reversal(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "撤回回款冲正审批",
+    resource = "receipt_reversal",
+    action = "cancel_approval"
+)]
+/// 撤回尚未最终通过的回款冲正审批。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 冲正单 ID
+/// * `req` - 撤回请求（原因必填）
+///
+/// # 返回
+/// 返回撤回后的冲正单视图。
+pub async fn receipt_reversal_cancel_approval(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CancelReceiptReversalApprovalRequest>,
+) -> Result<ReceiptReversalView> {
+    let view = ReturnsService::new(state.db())
+        .cancel_receipt_reversal_approval(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "回款冲正过账",
+    resource = "receipt_reversal",
+    action = "post"
+)]
+/// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
+///
+/// # 参数
+/// * `_state` - 应用状态
+/// * `_actor` - 已通过鉴权的审计操作人
+/// * `_id` - 冲正单 ID
+/// * `_req` - 过账请求（客户端不得据此形成资金事实）
+///
+/// # 错误
+/// 始终返回冲突，防止 HTTP 旁路过账。
+pub async fn receipt_reversal_post(
+    State(_state): State<AppState>,
+    Extension(_actor): Extension<AuditActor>,
+    Path(_id): Path<String>,
+    Json(_req): Json<PostReceiptReversalRequest>,
+) -> Result<ReceiptReversalView> {
+    match ReturnsService::reject_receipt_reversal_client_post() {
+        Err(error) => Err(error.into()),
+        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+    }
 }
 
 #[permission_macros::permission(
@@ -616,7 +702,9 @@ pub async fn payment_reversal_post(
 
 #[cfg(test)]
 mod tests {
-    use services::returns::{SubmitCustomerRefundRequest, SubmitSupplierRefundRequest};
+    use services::returns::{
+        SubmitCustomerRefundRequest, SubmitReceiptReversalRequest, SubmitSupplierRefundRequest,
+    };
 
     /// 客户退款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
@@ -657,6 +745,29 @@ mod tests {
         assert!(!production.contains("PENDING_REVIEW"));
         assert!(
             serde_json::from_value::<SubmitSupplierRefundRequest>(serde_json::json!({
+                "expected_version": 1,
+                "idempotency_key": "k1",
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
+    }
+
+    /// 回款冲正 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
+    #[test]
+    fn receipt_reversal_http_uses_unified_ports() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("submit_receipt_reversal"));
+        assert!(production.contains("cancel_receipt_reversal_approval"));
+        assert!(production.contains("reject_receipt_reversal_client_post"));
+        assert!(production.contains("receipt_reversal_detail"));
+        assert!(!production.contains(".post_receipt_reversal("));
+        assert!(!production.contains("PENDING_REVIEW"));
+        assert!(
+            serde_json::from_value::<SubmitReceiptReversalRequest>(serde_json::json!({
                 "expected_version": 1,
                 "idempotency_key": "k1",
                 "assignee": "forged"

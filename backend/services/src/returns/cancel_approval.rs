@@ -8,7 +8,7 @@ use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{AccessControlExt, BpmExt, NoTransaction, ReturnsExt, Transactional, WorkItemExt};
 use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
-use entities::returns::{CustomerRefund, SupplierRefund};
+use entities::returns::{CustomerRefund, ReceiptReversal, SupplierRefund};
 use entities::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus};
 use id_generator::next_id;
 use mongodb::Database;
@@ -294,6 +294,76 @@ pub(super) async fn persist_supplier_refund_cancel(
                         .await?;
                 }
                 db.supplier_refunds().update(&mut refund, session).await?;
+                db.audit_logs().create(&audit, session).await?;
+                Ok::<(), crate::errors::Error>(())
+            })
+        })
+        .await
+}
+
+/// 构造回款冲正统一 `cancel_approval` 输入。
+///
+/// 人员失效走业务取消；非人员一致性 blocker 必须走受阻取消。
+/// 撤回与受阻取消共用同一 `cancel_action`。
+///
+/// # 参数
+/// * `runtime` - 已加载运行事实
+/// * `reason` - 已校验的非空原因
+/// * `actor_id` - 撤回人
+/// * `idempotency_key` - 幂等键
+/// * `receipt` - 已存在收据
+/// * `now` - 调用方时间
+///
+/// # 错误
+/// 原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
+pub fn build_receipt_reversal_cancel_input(
+    runtime: &LoadedCancelRuntime,
+    reason: &str,
+    actor_id: &str,
+    idempotency_key: &str,
+    receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    now: Instant,
+) -> Result<CancelExecutionInput> {
+    build_customer_refund_cancel_input(runtime, reason, actor_id, idempotency_key, receipt, now)
+}
+
+/// 在同一事务内应用取消计划、关闭任务并写回回款冲正单。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `reversal` - 已执行 `cancel_action` 的冲正单
+/// * `prepared` - `prepare_cancel` 结果
+/// * `open_tasks` - 待关闭的开放任务
+/// * `actor_id` - 撤回人
+/// * `reason` - 撤回原因
+/// * `now` - 调用方时间
+/// * `audit` - 已构造审计
+///
+/// # 错误
+/// CAS 冲突或仓储失败时返回错误，事务回滚。
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn persist_receipt_reversal_cancel(
+    db: &Database,
+    mut reversal: ReceiptReversal,
+    prepared: PreparedExecution,
+    open_tasks: Vec<WorkItem>,
+    actor_id: &str,
+    reason: &str,
+    now: Instant,
+    audit: entities::AuditLog,
+) -> Result<()> {
+    let db = db.clone();
+    let client = db.client().clone();
+    let actor_id = actor_id.to_string();
+    let reason = reason.to_string();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move {
+                if let PreparedExecution::Apply(writes) = prepared {
+                    persist_cancel_runtime(&db, &writes, &open_tasks, &actor_id, &reason, now, session)
+                        .await?;
+                }
+                db.receipt_reversals().update(&mut reversal, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
             })
