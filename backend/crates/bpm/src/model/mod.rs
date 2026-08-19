@@ -14,10 +14,10 @@ pub mod types;
 
 pub use command_receipt::ApprovalCommandReceipt;
 pub use instance_assignee::ApprovalInstanceAssignee;
-pub use node_definition::ApprovalNodeDefinition;
+pub use node_definition::{ApprovalNodeDefinition, NewNodeDefinition};
 pub use node_execution::{ApprovalNodeExecution, NewNodeExecution};
 pub use process_definition::ApprovalProcessDefinition;
-pub use process_instance::ApprovalProcessInstance;
+pub use process_instance::{ApprovalProcessInstance, NewProcessInstance};
 pub use transition_definition::ApprovalTransitionDefinition;
 pub use types::{
     ApprovalAssigneeBindingSource, ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision,

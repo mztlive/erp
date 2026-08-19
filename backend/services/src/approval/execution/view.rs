@@ -68,7 +68,6 @@ pub struct ApprovalCommandView {
 ///
 /// # 返回
 /// 返回不得用命令输入拼装的最新视图。
-#[allow(clippy::too_many_arguments)]
 pub fn map_command_view(
     instance: &ApprovalProcessInstance,
     current_execution: Option<&ApprovalNodeExecution>,
@@ -114,21 +113,23 @@ mod tests {
     use super::{map_command_view, ApprovalCommandOutcome, OpenTaskSummary};
     use bpm::engine::CommitRequired;
     use bpm::ids::{ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
-    use bpm::model::{ApprovalProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp};
+    use bpm::model::{
+        ApprovalProcessInstance, NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
+    };
 
     /// 视图取自持久化事实，幂等回读不重放可变快照承诺。
     #[test]
     fn execution_view_maps_persisted_facts() {
-        let instance = ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst"),
-            ApprovalProcessDefinitionId::new("def"),
-            1,
-            ProcessKind::StockAdjustment,
-            SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
-            1,
-            ParticipantId::new("u1").unwrap(),
-            Timestamp::from_unix_secs(1).unwrap(),
-        )
+        let instance = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("u1").unwrap(),
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
         .unwrap();
         let view = map_command_view(
             &instance,

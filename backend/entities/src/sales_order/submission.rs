@@ -248,6 +248,41 @@ impl PartialEq for SalesOrderSubmission {
 
 impl Eq for SalesOrderSubmission {}
 
+/// 卡券商城执行投影校验输入。
+///
+/// # 用途
+/// 将卡券投影字段与提交时间打包，供提交构造时一次性校验。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 卡券必须全字段同时存在；非卡券不得携带任一投影字段。
+struct CardProjectionInputs<'a> {
+    /// 业务性质。
+    business_type: BusinessType,
+    /// 卡券类目 SKU。
+    voucher_category_sku_id: Option<&'a SkuId>,
+    /// 卡券履约期限。
+    voucher_expiry_at: Option<Instant>,
+    /// 目标商城。
+    target_mall_id: Option<&'a SourceSystemId>,
+    /// 商城客户外部身份。
+    customer_external_identity: Option<&'a str>,
+    /// 商城卡券类目外部身份。
+    voucher_category_external_identity: Option<&'a str>,
+    /// 应收到期日。
+    receivable_due_date: Option<BusinessDate>,
+    /// 提交时间。
+    submitted_at: Instant,
+}
+
 impl SalesOrderSubmission {
     /// 创建提交（不可变快照）。
     ///
@@ -291,16 +326,16 @@ impl SalesOrderSubmission {
             "商城卡券类目身份",
             EXTERNAL_IDENTITY_MAX_LEN,
         )?;
-        Self::validate_card_projection_inputs(
-            data.business_type,
-            data.voucher_category_sku_id.as_ref(),
-            data.voucher_expiry_at,
-            data.target_mall_id.as_ref(),
-            customer_external_identity.as_deref(),
-            voucher_category_external_identity.as_deref(),
-            data.receivable_due_date,
-            data.submitted_at,
-        )?;
+        Self::validate_card_projection_inputs(CardProjectionInputs {
+            business_type: data.business_type,
+            voucher_category_sku_id: data.voucher_category_sku_id.as_ref(),
+            voucher_expiry_at: data.voucher_expiry_at,
+            target_mall_id: data.target_mall_id.as_ref(),
+            customer_external_identity: customer_external_identity.as_deref(),
+            voucher_category_external_identity: voucher_category_external_identity.as_deref(),
+            receivable_due_date: data.receivable_due_date,
+            submitted_at: data.submitted_at,
+        })?;
         validate_amount_triple(data.gross_amount, data.net_amount, data.tax_amount)?;
         let lines = data
             .lines
@@ -410,19 +445,31 @@ impl SalesOrderSubmission {
     /// 应收到期日；非卡券提交不得携带这些商城投影字段。应收到期日不得早于服务端
     /// 记录的提交自然日。
     ///
+    /// # 用途
+    /// 按业务性质校验卡券商城投影字段组是否完整、互斥且到期日合法。
+    ///
+    /// # 参数
+    /// * `inputs` - 业务性质、卡券投影字段与提交时间
+    ///
+    /// # 返回
+    /// 校验通过时返回 `Ok(())`。
+    ///
     /// # 错误
     /// 字段组不完整、业务性质不匹配或应收到期日早于提交日时返回错误。
-    #[allow(clippy::too_many_arguments)]
-    fn validate_card_projection_inputs(
-        business_type: BusinessType,
-        voucher_category_sku_id: Option<&SkuId>,
-        voucher_expiry_at: Option<Instant>,
-        target_mall_id: Option<&SourceSystemId>,
-        customer_external_identity: Option<&str>,
-        voucher_category_external_identity: Option<&str>,
-        receivable_due_date: Option<BusinessDate>,
-        submitted_at: Instant,
-    ) -> Result<()> {
+    ///
+    /// # 关键业务约束
+    /// 卡券必须全字段冻结；非卡券不得携带任一投影字段。
+    fn validate_card_projection_inputs(inputs: CardProjectionInputs<'_>) -> Result<()> {
+        let CardProjectionInputs {
+            business_type,
+            voucher_category_sku_id,
+            voucher_expiry_at,
+            target_mall_id,
+            customer_external_identity,
+            voucher_category_external_identity,
+            receivable_due_date,
+            submitted_at,
+        } = inputs;
         let all_present = voucher_category_sku_id.is_some()
             && voucher_expiry_at.is_some()
             && target_mall_id.is_some()

@@ -657,7 +657,6 @@ pub(super) fn prior_query_confirmed_no_result(task: &IntegrationErrorTask) -> bo
 }
 
 /// 校验直接对账原因注册表身份、原因、结论与所需证据类型。
-#[allow(clippy::too_many_arguments)]
 pub(super) fn ensure_direct_reason(
     registry_id: &str,
     registry_version: u64,

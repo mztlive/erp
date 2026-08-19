@@ -144,13 +144,15 @@ impl PurchaseOrderService {
         let payable_entry_id = payable.1.base.id.clone();
         persist_formalized_order(
             &self.db,
-            order,
-            submission,
-            submission_lines,
-            revision,
-            revision_lines,
-            payable,
-            cost_entries,
+            FormalizedOrderPersist {
+                order,
+                submission,
+                submission_lines,
+                revision,
+                revision_lines,
+                payable,
+                cost_entries,
+            },
             actor,
         )
         .await?;
@@ -714,22 +716,71 @@ impl PurchaseOrderService {
     }
 }
 
+/// 采购单正式生效写入所需的单据、版本、应付与成本。
+///
+/// # 用途
+/// 将生效版本、提交结论、应付与成本打包后一次写入。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 提交必须仍为待审核；来源复验失败必须回滚。
+struct FormalizedOrderPersist {
+    /// 待正式化的采购单。
+    order: PurchaseOrder,
+    /// 待记录结论的提交。
+    submission: PurchaseOrderSubmission,
+    /// 提交行。
+    submission_lines: Vec<PurchaseOrderSubmissionLine>,
+    /// 生效版本。
+    revision: entities::purchase_order::PurchaseOrderRevision,
+    /// 生效版本行。
+    revision_lines: Vec<entities::purchase_order::PurchaseOrderRevisionLine>,
+    /// 应付账户与分录。
+    payable: (entities::payable::PayableAccount, entities::payable::PayableEntry),
+    /// 确认成本分录。
+    cost_entries: Vec<entities::cost::CostEntry>,
+}
+
 /// 在同一事务内写入生效版本、采购单、提交结论、应付与成本。
+///
+/// # 用途
+/// 正式化已通过审核的采购提交。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `persist` - 采购单、提交、版本、应付与成本
+/// * `actor` - 审计操作人
+///
+/// # 返回
+/// 写入成功时返回 `Ok(())`。
 ///
 /// # 错误
 /// 状态不允许、来源复验失败或仓储失败时返回错误。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 必须与审核结论同一事务写入。
 async fn persist_formalized_order(
     db: &mongodb::Database,
-    order: PurchaseOrder,
-    submission: PurchaseOrderSubmission,
-    submission_lines: Vec<PurchaseOrderSubmissionLine>,
-    revision: entities::purchase_order::PurchaseOrderRevision,
-    revision_lines: Vec<entities::purchase_order::PurchaseOrderRevisionLine>,
-    payable: (entities::payable::PayableAccount, entities::payable::PayableEntry),
-    cost_entries: Vec<entities::cost::CostEntry>,
+    persist: FormalizedOrderPersist,
     actor: &AuditActor,
 ) -> Result<()> {
+    let FormalizedOrderPersist {
+        order,
+        submission,
+        submission_lines,
+        revision,
+        revision_lines,
+        payable,
+        cost_entries,
+    } = persist;
     let actor_id = actor.id().to_string();
     let audit = actor.clone().resource_log(
         "purchase_order.formalize",

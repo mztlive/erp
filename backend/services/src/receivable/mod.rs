@@ -76,6 +76,7 @@ use self::adapter::{
 };
 use self::cancel_approval::{
     build_customer_receipt_cancel_input, load_cancel_runtime, persist_customer_receipt_cancel,
+    CustomerReceiptCancelPersistInput,
 };
 use self::dto::SortDir;
 pub use self::dto::{
@@ -92,7 +93,7 @@ pub use self::dto::{
 };
 use self::start_approval::{
     build_customer_receipt_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_customer_receipt_start,
+    persist_customer_receipt_start, CustomerReceiptStartInput, CustomerReceiptStartPersistInput,
 };
 
 /// 应收往来子账列表筛选条件类型（经 `ReceivableExt` 关联类型跨 crate 可达）。
@@ -894,28 +895,30 @@ impl ReceivableService {
             &idempotency_key,
         )
         .await?;
-        let start_input = build_customer_receipt_start_input(
+        let start_input = build_customer_receipt_start_input(CustomerReceiptStartInput {
             graph,
-            &binding,
+            binding: &binding,
             subject,
-            receipt.approval_subject_version,
-            actor.id(),
-            &organization_id,
-            &idempotency_key,
-            existing_receipt,
+            subject_version: receipt.approval_subject_version,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
+            idempotency_key: &idempotency_key,
+            receipt: existing_receipt,
             now,
-        )?;
+        })?;
         let prepared = prepare_start(start_input)?;
         persist_customer_receipt_start(
             &self.db,
-            receipt,
-            actor,
-            id,
-            snapshot,
-            prepared,
-            adapter.owner_role,
-            organization_id,
-            now,
+            CustomerReceiptStartPersistInput {
+                receipt,
+                actor: actor.clone(),
+                id: id.to_string(),
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role: adapter.owner_role,
+                organization_id,
+                now,
+            },
         )
         .await?;
         self.customer_receipt_detail(id).await
@@ -956,13 +959,15 @@ impl ReceivableService {
         )?;
         persist_customer_receipt_cancel(
             &self.db,
-            receipt.clone(),
-            prepared,
-            runtime.open_tasks,
-            actor.id(),
-            &req.reason,
-            now,
-            audit,
+            CustomerReceiptCancelPersistInput {
+                receipt: receipt.clone(),
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
         )
         .await
     }

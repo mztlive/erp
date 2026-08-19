@@ -19,7 +19,7 @@ use super::adapter::{
 use super::dto::{SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult};
 use super::start_approval::{
     build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_purchase_order_start, PurchaseOrderStartPersistInput,
+    persist_purchase_order_start, PurchaseOrderStartInput, PurchaseOrderStartPersistInput,
 };
 use super::PurchaseOrderService;
 use crate::approval::execution::prepare_start;
@@ -146,17 +146,17 @@ impl PurchaseOrderService {
             &req.idempotency_key,
         )
         .await?;
-        let start_input = build_purchase_order_start_input(
+        let start_input = build_purchase_order_start_input(PurchaseOrderStartInput {
             graph,
-            &binding,
+            binding: &binding,
             subject,
-            order.approval_subject_version,
-            actor.id(),
-            &organization_id,
-            &req.idempotency_key,
-            existing_receipt,
+            subject_version: order.approval_subject_version,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
+            idempotency_key: &req.idempotency_key,
+            receipt: existing_receipt,
             now,
-        )?;
+        })?;
         let prepared = prepare_start(start_input)?;
         let audit = actor.clone().resource_log_with_id(
             audit_id.clone(),
@@ -184,13 +184,13 @@ impl PurchaseOrderService {
                 superseded_draft,
                 submission: submission.clone(),
                 submission_lines: draft_lines,
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role,
+                organization_id,
+                now,
+                audit,
             },
-            snapshot,
-            prepared,
-            owner_role,
-            organization_id,
-            now,
-            audit,
         )
         .await;
         let first_task = match first_task {

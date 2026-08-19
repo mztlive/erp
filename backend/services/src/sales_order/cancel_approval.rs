@@ -189,35 +189,71 @@ fn cancel_eligibility(current: &ApprovalNodeExecution) -> Result<Eligibility> {
     )
 }
 
+/// 销售单撤回事务写入集合。
+///
+/// # 用途
+/// 收拢取消计划、开放任务、撤回人与审计，供同一事务写入。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、任务关闭与单据回写必须同事务；CAS 失败时回滚。
+pub(super) struct SalesOrderCancelPersistInput {
+    /// 已执行 `cancel_action` 的销售单。
+    pub order: SalesOrder,
+    /// `prepare_cancel` 结果。
+    pub prepared: PreparedExecution,
+    /// 待关闭的开放任务。
+    pub open_tasks: Vec<WorkItem>,
+    /// 撤回人。
+    pub actor_id: String,
+    /// 撤回原因。
+    pub reason: String,
+    /// 调用方时间。
+    pub now: Instant,
+    /// 已构造审计。
+    pub audit: entities::AuditLog,
+}
+
 /// 在同一事务内应用取消计划、关闭任务并写回销售单。
+///
+/// # 用途
+/// 撤回审批后原子写回运行事实与销售单。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `order` - 已执行 `cancel_action` 的销售单
-/// * `prepared` - `prepare_cancel` 结果
-/// * `open_tasks` - 待关闭的开放任务
-/// * `actor_id` - 撤回人
-/// * `reason` - 撤回原因
-/// * `now` - 调用方时间
-/// * `audit` - 已构造审计
+/// * `input` - 销售单、取消计划与开放任务
+///
+/// # 返回
+/// 成功时无返回值。
 ///
 /// # 错误
 /// CAS 冲突或仓储失败时返回错误，事务回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 pub(super) async fn persist_sales_order_cancel(
     db: &Database,
-    mut order: SalesOrder,
-    prepared: PreparedExecution,
-    open_tasks: Vec<WorkItem>,
-    actor_id: &str,
-    reason: &str,
-    now: Instant,
-    audit: entities::AuditLog,
+    input: SalesOrderCancelPersistInput,
 ) -> Result<()> {
+    let SalesOrderCancelPersistInput {
+        mut order,
+        prepared,
+        open_tasks,
+        actor_id,
+        reason,
+        now,
+        audit,
+    } = input;
     let db = db.clone();
     let client = db.client().clone();
-    let actor_id = actor_id.to_string();
-    let reason = reason.to_string();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
@@ -416,17 +452,17 @@ mod tests {
                 started,
             )
             .expect("定义"),
-            nodes: vec![ApprovalNodeDefinition::new(
-                ApprovalNodeDefinitionId::new("nd-1"),
-                definition_id.clone(),
-                "n1",
-                "入口",
-                None,
-                1,
-                participant("u1"),
-                "张三",
-                started,
-            )
+            nodes: vec![ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
+                id: ApprovalNodeDefinitionId::new("nd-1"),
+                process_definition_id: definition_id.clone(),
+                node_key: "n1".into(),
+                node_name: "入口".into(),
+                node_purpose: None,
+                display_order: 1,
+                assignee_participant_id: participant("u1"),
+                assignee_label_snapshot: "张三".into(),
+                at: started,
+            })
             .expect("节点")],
             transitions: vec![ApprovalTransitionDefinition::to_approved(
                 ApprovalTransitionDefinitionId::new("tr-1"),
@@ -440,16 +476,16 @@ mod tests {
     }
 
     fn running_instance() -> ApprovalProcessInstance {
-        let mut instance = ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst-1"),
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            ProcessKind::SalesOrder,
-            SubjectRef::new("sales_order", "so-1").expect("主体"),
-            1,
-            participant("submitter"),
-            at(10),
-        )
+        let mut instance = ApprovalProcessInstance::start_running(bpm::model::NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst-1"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def-1"),
+            definition_version: 1,
+            process_kind: ProcessKind::SalesOrder,
+            subject: SubjectRef::new("sales_order", "so-1").expect("主体"),
+            subject_version: 1,
+            started_by: participant("submitter"),
+            at: at(10),
+        })
         .expect("实例");
         instance.current_node_execution_id = Some(ApprovalNodeExecutionId::new("e1"));
         instance

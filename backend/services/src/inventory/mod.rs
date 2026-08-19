@@ -550,12 +550,14 @@ impl InventoryService {
         persist_created_adjustment(
             &self.db,
             &self.rbac,
-            adjustment.clone(),
-            lines,
-            document,
-            bind_command,
-            audit,
-            actor.clone(),
+            CreatedAdjustmentPersist {
+                adjustment: adjustment.clone(),
+                lines,
+                document,
+                bind_command,
+                audit,
+                actor: actor.clone(),
+            },
         )
         .await?;
         Ok(adjustment.into())
@@ -669,28 +671,31 @@ impl InventoryService {
             &req.idempotency_key,
         )
         .await?;
-        let start_input = start_approval::build_stock_adjustment_start_input(
-            graph,
-            &binding,
-            subject,
-            adjustment.approval_subject_version,
-            actor.id(),
-            &organization_id,
-            &req.idempotency_key,
-            existing_receipt,
-            now,
-        )?;
+        let start_input =
+            start_approval::build_stock_adjustment_start_input(start_approval::StockAdjustmentStartInput {
+                graph,
+                binding: &binding,
+                subject,
+                subject_version: adjustment.approval_subject_version,
+                actor_id: actor.id(),
+                organization_id: &organization_id,
+                idempotency_key: &req.idempotency_key,
+                receipt: existing_receipt,
+                now,
+            })?;
         let prepared = prepare_start(start_input)?;
         start_approval::persist_stock_adjustment_start(
             &self.db,
-            adjustment,
-            actor,
-            id,
-            snapshot,
-            prepared,
-            adapter.owner_role,
-            organization_id,
-            now,
+            start_approval::StockAdjustmentStartPersistInput {
+                adjustment,
+                actor: actor.clone(),
+                id: id.to_string(),
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role: adapter.owner_role,
+                organization_id,
+                now,
+            },
         )
         .await
     }
@@ -847,23 +852,70 @@ fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
     ))
 }
 
+/// 库存调整单创建事务的单据、绑定与审计载荷。
+///
+/// # 用途
+/// 将调整单、明细、单据注册、绑定命令与审计打包后一次写入。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
+struct CreatedAdjustmentPersist {
+    /// 已构造的调整单。
+    adjustment: StockAdjustment,
+    /// 调整明细。
+    lines: Vec<StockAdjustmentLine>,
+    /// 待登记单据。
+    document: BusinessDocument,
+    /// 发布定义绑定命令。
+    bind_command: BindPublishedDefinitionCommand,
+    /// 已构造审计。
+    audit: entities::AuditLog,
+    /// 审计操作人。
+    actor: AuditActor,
+}
+
 /// 在创建事务内写入调整单、绑定发布定义并登记单据。
 ///
 /// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
 ///
+/// # 用途
+/// 在同一事务内写入调整单、绑定与审计。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `persist` - 调整单、单据绑定与审计
+///
+/// # 返回
+/// 写入成功时返回 `Ok(())`。
+///
 /// # 错误
 /// 无发布定义、人员重验失败或写入失败时返回错误。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 绑定失败必须整体回滚。
 async fn persist_created_adjustment(
     db: &Database,
     rbac: &SharedRbacService,
-    adjustment: StockAdjustment,
-    lines: Vec<StockAdjustmentLine>,
-    mut document: BusinessDocument,
-    bind_command: BindPublishedDefinitionCommand,
-    audit: entities::AuditLog,
-    actor: AuditActor,
+    persist: CreatedAdjustmentPersist,
 ) -> Result<()> {
+    let CreatedAdjustmentPersist {
+        adjustment,
+        lines,
+        mut document,
+        bind_command,
+        audit,
+        actor,
+    } = persist;
     let db = db.clone();
     let rbac = rbac.clone();
     let client = db.client().clone();

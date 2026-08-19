@@ -17,12 +17,9 @@
 //! P1 §3 跨域约束），待 `chore/erp-p0-amend-*` 地基修订统一收口到
 //! `entities/src/common/`。
 
-// 实体文件按表名命名（表 `sales_order` → sales_order.rs），与 `ids.rs` 映射表一致；
-// 父模块同名，按约定关闭 module_inception 提示。
 mod amount_validation;
+mod entity;
 pub mod revision;
-#[allow(clippy::module_inception)]
-pub mod sales_order;
 pub mod snapshot;
 pub mod submission;
 pub mod types;
@@ -32,14 +29,14 @@ mod working_copy_line;
 mod working_copy_test_support;
 mod working_copy_types;
 
+pub use entity::{
+    CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, LineStatus,
+    ReviewStatus, SalesOrder, SalesOrderData, SalesOrderLine, SalesOrderLineData, SalesOrderUpdate,
+};
 pub use revision::{
     RevisionSource, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
     SalesOrderRevision, SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
     SalesOrderVoucherLineRevision, SalesOrderVoucherLineRevisionData,
-};
-pub use sales_order::{
-    CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, LineStatus,
-    ReviewStatus, SalesOrder, SalesOrderData, SalesOrderLine, SalesOrderLineData, SalesOrderUpdate,
 };
 pub use snapshot::{
     ContractSnapshot, CustomerSnapshot, HeaderSnapshotData, HeaderSnapshots, InvoiceRequirementSnapshot,

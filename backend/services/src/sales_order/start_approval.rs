@@ -19,7 +19,7 @@ use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use entities::sales_order::SalesOrder;
-use entities::work_item::work_item::DocumentApprovalWorkItemData;
+use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
 use id_generator::next_id;
 use mongodb::Database;
@@ -30,7 +30,6 @@ use crate::approval::execution::authorization::{converge_eligibility, Authorizat
 use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
 use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
 use crate::approval::process_kind::process_kind_of;
-use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 
@@ -112,40 +111,76 @@ pub(super) async fn load_start_receipt(
         .await?)
 }
 
+/// 销售单启动输入。
+///
+/// # 用途
+/// 收拢 `build_sales_order_start_input` 的定义图、绑定、单据类型与提交人参数。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 审批人取自已发布节点，不接受客户端选择；`document_type` 必须按业务性质分派。
+pub(super) struct SalesOrderStartInput<'a> {
+    /// 绑定定义图。
+    pub graph: DefinitionGraph,
+    /// 冻结绑定。
+    pub binding: &'a ApprovalDefinitionBinding,
+    /// 按业务性质分派的单据类型。
+    pub document_type: DocumentType,
+    /// 业务对象引用。
+    pub subject: SubjectRef,
+    /// 冻结提交版本。
+    pub subject_version: u32,
+    /// 提交人。
+    pub actor_id: &'a str,
+    /// 单据责任组织。
+    pub organization_id: &'a str,
+    /// 规范化前的幂等键。
+    pub idempotency_key: &'a str,
+    /// 已存在收据。
+    pub receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 由定义图与单据组织构造启动输入。
 ///
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
 ///
+/// # 用途
+/// 把启动参数收敛为引擎 `prepare_start` 输入。
+///
 /// # 参数
-/// * `graph` - 绑定定义图
-/// * `binding` - 冻结绑定
-/// * `document_type` - 按业务性质分派的单据类型
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `actor_id` - 提交人
-/// * `organization_id` - 单据责任组织
-/// * `idempotency_key` - 规范化前的幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// * `input` - 定义图、绑定、单据类型、主体与提交人
 ///
 /// # 返回
 /// 返回可交给 `prepare_start` 的输入。
 ///
 /// # 错误
 /// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-#[allow(clippy::too_many_arguments)]
-pub(super) fn build_sales_order_start_input(
-    graph: DefinitionGraph,
-    binding: &ApprovalDefinitionBinding,
-    document_type: DocumentType,
-    subject: SubjectRef,
-    subject_version: u32,
-    actor_id: &str,
-    organization_id: &str,
-    idempotency_key: &str,
-    receipt: Option<bpm::model::ApprovalCommandReceipt>,
-    now: Instant,
-) -> Result<StartExecutionInput> {
+///
+/// # 关键业务约束
+/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
+pub(super) fn build_sales_order_start_input(input: SalesOrderStartInput<'_>) -> Result<StartExecutionInput> {
+    let SalesOrderStartInput {
+        graph,
+        binding,
+        document_type,
+        subject,
+        subject_version,
+        actor_id,
+        organization_id,
+        idempotency_key,
+        receipt,
+        now,
+    } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError(
             "销售单绑定定义版本与已加载定义不一致".to_string(),
@@ -224,6 +259,21 @@ fn start_bindings_from_graph(
 }
 
 /// 销售提交事务内需要一并写入的冻结提交。
+///
+/// # 用途
+/// 收拢提交快照、启动计划、责任组织与审计，供同一事务写入。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、不可变快照与入口任务必须与提交快照同事务。
 pub(super) struct SalesOrderStartPersistInput {
     /// 已进入审批中的销售单。
     pub order: SalesOrder,
@@ -237,41 +287,41 @@ pub(super) struct SalesOrderStartPersistInput {
     pub workflow_action: entities::document_registry::WorkflowAction,
     /// 按业务性质分派的单据类型。
     pub document_type: DocumentType,
+    /// 冻结快照载荷。
+    pub snapshot_payload: ApprovalSubjectSnapshotPayload,
+    /// `prepare_start` 结果。
+    pub prepared: PreparedExecution,
+    /// 合同签署的责任角色。
+    pub owner_role: &'static str,
+    /// 责任组织。
+    pub organization_id: String,
+    /// 调用方时间。
+    pub now: Instant,
+    /// 已构造审计。
+    pub audit: entities::AuditLog,
 }
 
 /// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
 ///
+/// # 用途
+/// 提交启动后原子写入销售单、提交快照与运行事实。
+///
 /// # 参数
 /// * `db` - 数据库
 /// * `input` - 提交写入集合
-/// * `actor` - 审计操作人
-/// * `id` - 销售单主键
-/// * `snapshot_payload` - 冻结快照载荷
-/// * `prepared` - `prepare_start` 结果
-/// * `owner_role` - 合同签署的责任角色
-/// * `organization_id` - 责任组织
-/// * `now` - 调用方时间
-/// * `audit` - 已构造审计
 ///
 /// # 返回
 /// 返回提交快照视图。
 ///
 /// # 错误
 /// 仓储写入失败或计划不完整时返回错误，事务回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_sales_order_start(
     db: &Database,
     input: SalesOrderStartPersistInput,
-    actor: &AuditActor,
-    id: &str,
-    snapshot_payload: ApprovalSubjectSnapshotPayload,
-    prepared: PreparedExecution,
-    owner_role: &'static str,
-    organization_id: String,
-    now: Instant,
-    audit: entities::AuditLog,
 ) -> Result<SubmissionView> {
-    let _ = (actor, id);
     let db = db.clone();
     let client = db.client().clone();
     let SalesOrderStartPersistInput {
@@ -281,6 +331,12 @@ pub(super) async fn persist_sales_order_start(
         submission_lines,
         workflow_action,
         document_type,
+        snapshot_payload,
+        prepared,
+        owner_role,
+        organization_id,
+        now,
+        audit,
     } = input;
     let submission_view = super::mapper::submission_view(submission.clone(), submission_lines.clone());
     client
@@ -296,11 +352,13 @@ pub(super) async fn persist_sales_order_start(
                         persist_runtime_writes(
                             &db,
                             &writes,
-                            document_type,
-                            &snapshot_payload,
-                            owner_role,
-                            &organization_id,
-                            now,
+                            SalesOrderRuntimeWriteInput {
+                                document_type,
+                                snapshot_payload: &snapshot_payload,
+                                owner_role,
+                                organization_id: &organization_id,
+                                now,
+                            },
                             session,
                         )
                         .await?;
@@ -315,31 +373,67 @@ pub(super) async fn persist_sales_order_start(
     Ok(submission_view)
 }
 
+/// 销售单启动运行事实写入上下文。
+///
+/// # 用途
+/// 收拢快照、单据类型、责任组织与时间，供 `persist_runtime_writes` 使用。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// `document_type` 必须与提交分派一致，不得在此改写。
+struct SalesOrderRuntimeWriteInput<'a> {
+    /// 按业务性质分派的单据类型。
+    document_type: DocumentType,
+    /// 冻结快照载荷。
+    snapshot_payload: &'a ApprovalSubjectSnapshotPayload,
+    /// 责任角色。
+    owner_role: &'a str,
+    /// 责任组织。
+    organization_id: &'a str,
+    /// 调用方时间。
+    now: Instant,
+}
+
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
+///
+/// # 用途
+/// 把启动计划落到 BPM 运行事实、不可变快照与入口任务。
 ///
 /// # 参数
 /// * `db` - 数据库
 /// * `writes` - 启动写入集合
-/// * `document_type` - 按业务性质分派的单据类型
-/// * `snapshot_payload` - 快照载荷
-/// * `owner_role` - 责任角色
-/// * `organization_id` - 责任组织
-/// * `now` - 调用方时间
+/// * `input` - 快照、单据类型与责任组织
 /// * `session` - 当前事务
+///
+/// # 返回
+/// 成功时无返回值。
 ///
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 缺少入口执行时不得提交销售单。
 async fn persist_runtime_writes(
     db: &Database,
     writes: &crate::approval::execution::apply_plan::PlannedWrites,
-    document_type: DocumentType,
-    snapshot_payload: &ApprovalSubjectSnapshotPayload,
-    owner_role: &str,
-    organization_id: &str,
-    now: Instant,
+    input: SalesOrderRuntimeWriteInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
+    let SalesOrderRuntimeWriteInput {
+        document_type,
+        snapshot_payload,
+        owner_role,
+        organization_id,
+        now,
+    } = input;
     let first = writes
         .created_executions
         .first()

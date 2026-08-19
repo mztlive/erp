@@ -66,6 +66,7 @@ use self::adapter::{
 };
 use self::cancel_approval::{
     build_supplier_payment_cancel_input, load_cancel_runtime, persist_supplier_payment_cancel,
+    SupplierPaymentCancelPersistInput,
 };
 use self::dto::SortDir;
 pub use self::dto::{
@@ -78,7 +79,7 @@ pub use self::dto::{
 };
 use self::start_approval::{
     build_supplier_payment_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_supplier_payment_start,
+    persist_supplier_payment_start, SupplierPaymentStartInput, SupplierPaymentStartPersistInput,
 };
 
 /// 应付往来子账列表筛选条件类型（经 `PayableExt` 关联类型跨 crate 可达）。
@@ -449,28 +450,30 @@ impl PayableService {
             &idempotency_key,
         )
         .await?;
-        let start_input = build_supplier_payment_start_input(
+        let start_input = build_supplier_payment_start_input(SupplierPaymentStartInput {
             graph,
-            &binding,
+            binding: &binding,
             subject,
-            payment.approval_subject_version,
-            actor.id(),
-            &organization_id,
-            &idempotency_key,
-            existing_receipt,
+            subject_version: payment.approval_subject_version,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
+            idempotency_key: &idempotency_key,
+            receipt: existing_receipt,
             now,
-        )?;
+        })?;
         let prepared = prepare_start(start_input)?;
         persist_supplier_payment_start(
             &self.db,
-            payment,
-            actor,
-            id,
-            snapshot,
-            prepared,
-            adapter.owner_role,
-            organization_id,
-            now,
+            SupplierPaymentStartPersistInput {
+                payment,
+                actor: actor.clone(),
+                id: id.to_string(),
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role: adapter.owner_role,
+                organization_id,
+                now,
+            },
         )
         .await?;
         self.supplier_payment_detail(id).await
@@ -511,13 +514,15 @@ impl PayableService {
         )?;
         persist_supplier_payment_cancel(
             &self.db,
-            payment.clone(),
-            prepared,
-            runtime.open_tasks,
-            actor.id(),
-            &req.reason,
-            now,
-            audit,
+            SupplierPaymentCancelPersistInput {
+                payment: payment.clone(),
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
         )
         .await
     }

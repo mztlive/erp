@@ -195,7 +195,6 @@ impl BackgroundJobItem {
     ///
     /// # 错误
     /// 当该项已记录结果、`Failed` 未携带原因代码或结果对象不成对时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn record_result(
         &mut self,
         status: ItemStatus,

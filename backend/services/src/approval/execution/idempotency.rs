@@ -222,7 +222,6 @@ pub fn resume_digest(
 ///
 /// # 返回
 /// 返回改派载荷摘要。
-#[allow(clippy::too_many_arguments)]
 pub fn reassign_digest(
     target_user: &str,
     expected_instance_version: u64,

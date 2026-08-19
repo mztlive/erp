@@ -539,14 +539,16 @@ impl SupplierProfileService {
             .await?;
         let ratings = self.prepare_rating_changes(&supplier_id, &req).await?;
         PreparedUpdate::new(
-            party,
-            party_revision,
-            supplier,
-            commercial_profile,
-            facts,
-            capabilities,
-            qualifications,
-            ratings,
+            PreparedUpdateContext {
+                party,
+                party_revision,
+                supplier,
+                commercial_profile,
+                facts,
+                capabilities,
+                qualifications,
+                ratings,
+            },
             req.idempotency_key,
             request_fingerprint,
             req.effective_from,
@@ -1065,6 +1067,41 @@ struct RatingChanges {
     created: Option<SupplierRatingRevision>,
 }
 
+/// 供应商资料修订的主体与变更集合。
+///
+/// # 用途
+/// 将 Party/供应商根与事实差异打包，供 [`PreparedUpdate::new`] 构造事务载荷。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 主体与差异必须已完成实体构造，本结构不再二次校验。
+struct PreparedUpdateContext {
+    /// 已更新的 Party 根。
+    party: Party,
+    /// 新 Party 修订。
+    party_revision: PartyRevision,
+    /// 已更新的供应商根。
+    supplier: SupplierAccount,
+    /// 新商业资料修订。
+    commercial_profile: SupplierCommercialProfileRevision,
+    /// 从属事实差异。
+    facts: PartyFactChanges,
+    /// 能力差异。
+    capabilities: CapabilityChanges,
+    /// 资质差异。
+    qualifications: QualificationChanges,
+    /// 评级差异。
+    ratings: RatingChanges,
+}
+
 /// 已校验并完成实体构造的修订事务载荷。
 struct PreparedUpdate {
     party: Party,
@@ -1082,22 +1119,44 @@ struct PreparedUpdate {
 
 impl PreparedUpdate {
     /// 构造修订结果、幂等记录与根审计。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 用途
+    /// 由已构造主体与变更集合生成幂等命令、审计与稳定结果。
+    ///
+    /// # 参数
+    /// * `context` - Party/供应商根与变更集合
+    /// * `idempotency_key` - 客户端幂等键
+    /// * `request_fingerprint` - 请求摘要
+    /// * `effective_from` - 生效起始日
+    /// * `change_reason` - 变更原因
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回可落库的修订事务载荷。
+    ///
+    /// # 错误
+    /// 命令字段非法时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 供应商版本按当前根版本加一写入命令。
     fn new(
-        party: Party,
-        party_revision: PartyRevision,
-        supplier: SupplierAccount,
-        commercial_profile: SupplierCommercialProfileRevision,
-        facts: PartyFactChanges,
-        capabilities: CapabilityChanges,
-        qualifications: QualificationChanges,
-        ratings: RatingChanges,
+        context: PreparedUpdateContext,
         idempotency_key: String,
         request_fingerprint: String,
         effective_from: entities::common::time::BusinessDate,
         change_reason: String,
         actor: &AuditActor,
     ) -> Result<Self> {
+        let PreparedUpdateContext {
+            party,
+            party_revision,
+            supplier,
+            commercial_profile,
+            facts,
+            capabilities,
+            qualifications,
+            ratings,
+        } = context;
         let command = SupplierProfileCommand::new(
             next_id(),
             SupplierProfileCommandData {

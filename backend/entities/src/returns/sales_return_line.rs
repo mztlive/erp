@@ -112,7 +112,6 @@ impl SalesReturnLine {
     ///
     /// # 错误
     /// 当申请数量非正或验收信息不一致时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn new(id: SalesReturnLineId, data: SalesReturnLineData) -> Result<Self> {
         if data.requested_quantity.to_decimal().is_sign_negative()
             || data.requested_quantity.to_decimal().is_zero()

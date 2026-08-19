@@ -709,7 +709,6 @@ fn current_default<T>(
 }
 
 /// 构造带短时揭示令牌的敏感字段视图。
-#[allow(clippy::too_many_arguments)]
 fn sensitive_field(
     codec: &SensitiveDataCodec,
     kind: SensitiveFieldKind,

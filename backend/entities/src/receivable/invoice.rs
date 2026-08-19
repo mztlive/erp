@@ -305,7 +305,6 @@ impl Invoice {
     ///
     /// # 错误
     /// 当金额三元组不一致、蓝红与引用关系矛盾或代码/号码为空/超长时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn new(id: InvoiceId, data: InvoiceData, created_by: impl Into<String>) -> Result<Self> {
         validate_amounts(data.gross_amount, data.net_amount, data.tax_amount)?;
         match data.invoice_kind {

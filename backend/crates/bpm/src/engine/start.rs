@@ -60,32 +60,32 @@ pub fn start(
     bindings: &[StartAssigneeBinding],
 ) -> EngineResult<TransitionPlan> {
     ensure_all_assignees_eligible(bindings)?;
-    let instance = ApprovalProcessInstance::start_running(
-        command.instance_id.clone(),
-        graph.definition.base.id.clone().into_definition(),
-        graph.definition.definition_version,
-        command.process_kind,
-        command.subject,
-        command.subject_version,
-        command.started_by.clone(),
-        command.now,
-    )?;
+    let instance = ApprovalProcessInstance::start_running(crate::model::NewProcessInstance {
+        id: command.instance_id.clone(),
+        process_definition_id: graph.definition.base.id.clone().into_definition(),
+        definition_version: graph.definition.definition_version,
+        process_kind: command.process_kind,
+        subject: command.subject,
+        subject_version: command.subject_version,
+        started_by: command.started_by.clone(),
+        at: command.now,
+    })?;
     let assignees = freeze_assignees(&instance, graph, bindings, command.now)?;
     let entry = graph.entry_node()?;
     let entry_binding = binding_for(bindings, &entry.node_key)?;
-    let mut plan = plan_enter_node(
+    let mut plan = plan_enter_node(super::EnterNodeInput {
         instance,
         graph,
-        &entry.node_key,
-        1,
-        entry_binding.participant.clone(),
-        entry_binding.eligibility.clone(),
-        command.entry_execution_id,
-        1,
-        ApprovalExecutionAssignmentSource::Definition,
-        None,
-        command.now,
-    )?;
+        node_key: &entry.node_key,
+        round_no: 1,
+        participant: entry_binding.participant.clone(),
+        eligibility: entry_binding.eligibility.clone(),
+        execution_id: command.entry_execution_id,
+        execution_no: 1,
+        assignment_source: ApprovalExecutionAssignmentSource::Definition,
+        replaces_execution_id: None,
+        now: command.now,
+    })?;
     plan.created_assignees = assignees;
     plan.events.insert(
         0,

@@ -11,7 +11,7 @@ use bpm::model::{
 use entities::approval_integration::{ApprovalNotificationOutbox, ApprovalNotificationTemplateParams};
 use entities::common::time::Instant;
 use entities::ids::{ApprovalNotificationOutboxId, WorkItemId};
-use entities::work_item::work_item::DocumentApprovalWorkItemData;
+use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemCloseData, WorkItemPriority};
 
 use super::apply_plan::{DomainActionKind, PlannedWrites};

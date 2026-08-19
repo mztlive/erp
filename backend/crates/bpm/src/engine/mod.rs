@@ -14,7 +14,7 @@ mod transition_plan;
 
 pub use cancel::{cancel, CancelCommand};
 pub use decision::{decide, DecideCommand};
-pub use enter_node::plan_enter_node;
+pub use enter_node::{plan_enter_node, EnterNodeInput};
 pub use event::{BpmEvent, BpmEventKind};
 pub use reassign::{reassign, ReassignCommand};
 pub use resume::{resume, ResumeCommand};
@@ -160,8 +160,8 @@ pub fn refuse_unwired() -> Result<TransitionPlan> {
 mod tests {
     use super::{
         cancel, decide, plan_enter_node, reassign, refuse_unwired, resume, start, CancelCommand,
-        CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError, ReassignCommand,
-        ResumeCommand, StartAssigneeBinding, StartCommand, TaskCloseReason, TaskIntent,
+        CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError, EnterNodeInput,
+        ReassignCommand, ResumeCommand, StartAssigneeBinding, StartCommand, TaskCloseReason, TaskIntent,
     };
     use crate::error::Error;
     use crate::ids::{
@@ -541,19 +541,20 @@ mod tests {
     #[test]
     fn engine_enter_missing_node_is_uncommittable() {
         let instance = running_instance();
-        let error = plan_enter_node(
+        let graph = two_node_graph();
+        let error = plan_enter_node(EnterNodeInput {
             instance,
-            &two_node_graph(),
-            "missing",
-            1,
-            participant("u1"),
-            eligible("u1", "张三"),
-            ApprovalNodeExecutionId::new("e9"),
-            1,
-            ApprovalExecutionAssignmentSource::Definition,
-            None,
-            at(30),
-        )
+            graph: &graph,
+            node_key: "missing",
+            round_no: 1,
+            participant: participant("u1"),
+            eligibility: eligible("u1", "张三"),
+            execution_id: ApprovalNodeExecutionId::new("e9"),
+            execution_no: 1,
+            assignment_source: ApprovalExecutionAssignmentSource::Definition,
+            replaces_execution_id: None,
+            now: at(30),
+        })
         .unwrap_err();
         assert!(matches!(error, EngineError::Uncommittable(_)));
     }
@@ -749,31 +750,31 @@ mod tests {
         label: &str,
         at: Timestamp,
     ) -> ApprovalNodeDefinition {
-        ApprovalNodeDefinition::new(
-            ApprovalNodeDefinitionId::new(id),
-            ApprovalProcessDefinitionId::new("def"),
-            key,
-            name,
-            None,
-            order,
-            participant(user),
-            label,
+        ApprovalNodeDefinition::new(crate::model::NewNodeDefinition {
+            id: ApprovalNodeDefinitionId::new(id),
+            process_definition_id: ApprovalProcessDefinitionId::new("def"),
+            node_key: key.into(),
+            node_name: name.into(),
+            node_purpose: None,
+            display_order: order,
+            assignee_participant_id: participant(user),
+            assignee_label_snapshot: label.into(),
             at,
-        )
+        })
         .unwrap()
     }
 
     fn running_instance() -> ApprovalProcessInstance {
-        ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst"),
-            ApprovalProcessDefinitionId::new("def"),
-            1,
-            ProcessKind::StockAdjustment,
-            SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
-            1,
-            participant("starter"),
-            at(10),
-        )
+        ApprovalProcessInstance::start_running(crate::model::NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+            subject_version: 1,
+            started_by: participant("starter"),
+            at: at(10),
+        })
         .unwrap()
     }
 

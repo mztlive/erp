@@ -7,6 +7,7 @@ use super::adapter::{
 };
 use super::cancel_approval::{
     build_payment_reversal_cancel_input, load_cancel_runtime, persist_payment_reversal_cancel,
+    PaymentReversalCancelPersistInput,
 };
 use super::dto::{
     CancelPaymentReversalApprovalRequest, CreatePaymentReversalRequest, PaymentReversalView,
@@ -15,7 +16,7 @@ use super::dto::{
 use super::reversal_plan::{plan_payment_reverse, zero_amount};
 use super::start_approval::{
     build_payment_reversal_start_input, load_bound_definition_graph, load_payment_reversal_start_receipt,
-    persist_payment_reversal_start,
+    persist_payment_reversal_start, PaymentReversalStartInput, PaymentReversalStartPersistInput,
 };
 use super::ReturnsService;
 use crate::approval::binding::{
@@ -212,28 +213,30 @@ impl ReturnsService {
             &idempotency_key,
         )
         .await?;
-        let start_input = build_payment_reversal_start_input(
+        let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
             graph,
-            &binding,
+            binding: &binding,
             subject,
-            reversal.approval_subject_version,
-            actor.id(),
-            &organization_id,
-            &idempotency_key,
-            existing_receipt,
+            subject_version: reversal.approval_subject_version,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
+            idempotency_key: &idempotency_key,
+            receipt: existing_receipt,
             now,
-        )?;
+        })?;
         let prepared = prepare_start(start_input)?;
         persist_payment_reversal_start(
             &self.db,
-            reversal,
-            actor,
-            id,
-            snapshot,
-            prepared,
-            adapter.owner_role,
-            organization_id,
-            now,
+            PaymentReversalStartPersistInput {
+                reversal,
+                actor: actor.clone(),
+                id: id.to_string(),
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role: adapter.owner_role,
+                organization_id,
+                now,
+            },
         )
         .await?;
         self.payment_reversal_detail(id).await
@@ -274,13 +277,15 @@ impl ReturnsService {
         )?;
         persist_payment_reversal_cancel(
             &self.db,
-            reversal.clone(),
-            prepared,
-            runtime.open_tasks,
-            actor.id(),
-            &req.reason,
-            now,
-            audit,
+            PaymentReversalCancelPersistInput {
+                reversal: reversal.clone(),
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
         )
         .await
     }

@@ -25,10 +25,11 @@ use super::change_adapter::{
 };
 use super::change_cancel::{
     build_purchase_change_cancel_input, load_cancel_runtime, persist_purchase_change_cancel,
+    PurchaseChangeCancelPersistInput,
 };
 use super::change_start::{
     build_purchase_change_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_purchase_change_start, PurchaseChangeStartPersistInput,
+    persist_purchase_change_start, PurchaseChangeStartInput, PurchaseChangeStartPersistInput,
 };
 use super::dto::{
     CancelPurchaseChangeApprovalRequest, EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult,
@@ -444,8 +445,17 @@ impl PurchaseOrderService {
             prepared.content_hash.clone(),
             actor.id(),
         )?;
-        self.dispatch_change_start(id, change, order, sales_order, prepared, actor, adapter)
-            .await
+        self.dispatch_change_start(
+            ChangeStartDispatch {
+                id,
+                change,
+                sales_order,
+                prepared,
+                adapter,
+            },
+            actor,
+        )
+        .await
     }
 
     /// 构造冻结提交与明细。
@@ -487,19 +497,33 @@ impl PurchaseOrderService {
 
     /// 从绑定读取定义并持久化启动事实。
     ///
+    /// # 用途
+    /// 加载冻结绑定并写入采购变更启动事实。
+    ///
+    /// # 参数
+    /// * `dispatch` - 变更单、原单、提交与适配器
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回提交结果。
+    ///
     /// # 错误
     /// 无绑定、定义缺失或写入失败时返回错误。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 关键业务约束
+    /// 必须使用单据创建时冻结的发布定义。
     async fn dispatch_change_start(
         &self,
-        id: &str,
-        change: PurchaseChangeOrder,
-        _order: PurchaseOrder,
-        sales_order: entities::sales_order::SalesOrder,
-        prepared: FrozenChangeSubmission,
+        dispatch: ChangeStartDispatch<'_>,
         actor: &AuditActor,
-        adapter: super::change_adapter::PurchaseChangeOrderAdapter,
     ) -> Result<PurchaseChangeSubmitResult> {
+        let ChangeStartDispatch {
+            id,
+            change,
+            sales_order,
+            prepared,
+            adapter,
+        } = dispatch;
         let subject = purchase_change_order_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
@@ -529,17 +553,17 @@ impl PurchaseOrderService {
             &prepared.idempotency_key,
         )
         .await?;
-        let start_input = build_purchase_change_start_input(
+        let start_input = build_purchase_change_start_input(PurchaseChangeStartInput {
             graph,
-            &binding,
+            binding: &binding,
             subject,
-            change.approval_subject_version,
-            actor.id(),
-            &organization_id,
-            &prepared.idempotency_key,
-            existing_receipt,
+            subject_version: change.approval_subject_version,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
+            idempotency_key: &prepared.idempotency_key,
+            receipt: existing_receipt,
             now,
-        )?;
+        })?;
         let prepared_exec = prepare_start(start_input)?;
         let audit = actor.clone().resource_log(
             "purchase_change_order.submit",
@@ -552,13 +576,13 @@ impl PurchaseOrderService {
                 change_order: change.clone(),
                 submission: prepared.submission.clone(),
                 submission_lines: prepared.lines,
+                snapshot_payload: snapshot,
+                prepared: prepared_exec,
+                owner_role: adapter.owner_role,
+                organization_id,
+                now,
+                audit,
             },
-            snapshot,
-            prepared_exec,
-            adapter.owner_role,
-            organization_id,
-            now,
-            audit,
         )
         .await?;
         Ok(PurchaseChangeSubmitResult {
@@ -606,13 +630,15 @@ impl PurchaseOrderService {
         )?;
         persist_purchase_change_cancel(
             &self.db,
-            change.clone(),
-            prepared,
-            runtime.open_tasks,
-            actor.id(),
-            &req.reason,
-            now,
-            audit,
+            PurchaseChangeCancelPersistInput {
+                change_order: change.clone(),
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
         )
         .await
     }
@@ -651,12 +677,14 @@ impl PurchaseOrderService {
         let payable_delta_entry_id = delta.0.as_ref().map(|(_, entry)| entry.base.id.clone());
         write_effective_change(
             &self.db,
-            order.clone(),
-            change.clone(),
-            submission,
-            revision.clone(),
-            revision_lines,
-            delta,
+            EffectiveChangeWrite {
+                order: order.clone(),
+                change: change.clone(),
+                submission,
+                revision: revision.clone(),
+                revision_lines,
+                delta,
+            },
             actor,
         )
         .await?;
@@ -759,6 +787,35 @@ impl PurchaseOrderService {
             .unwrap_or(0);
         Ok(format!("CS-{:06}", max_no + 1))
     }
+}
+
+/// 采购变更启动所需的单据、提交与适配器。
+///
+/// # 用途
+/// 将变更单、原采购单、来源销售单、冻结提交与适配器打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 变更提交必须已冻结；原采购单仅用于来源复验。
+struct ChangeStartDispatch<'a> {
+    /// 变更单主键。
+    id: &'a str,
+    /// 已进入审批中的变更单。
+    change: PurchaseChangeOrder,
+    /// 来源销售单。
+    sales_order: entities::sales_order::SalesOrder,
+    /// 冻结提交。
+    prepared: FrozenChangeSubmission,
+    /// 采购变更审批适配器。
+    adapter: super::change_adapter::PurchaseChangeOrderAdapter,
 }
 
 /// 已冻结的变更提交与指纹。
@@ -883,72 +940,114 @@ async fn persist_bound_change_document(
     Ok(())
 }
 
-/// 写入生效修订、应付差额与变更单状态。
+/// 采购变更生效写入所需的单据、版本与差额。
+///
+/// # 用途
+/// 将采购单、变更单、提交、生效版本与应付/成本差额打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
 ///
 /// # 错误
-/// 仓储失败时返回错误。
-#[allow(clippy::too_many_arguments)]
-async fn write_effective_change(
-    db: &mongodb::Database,
+/// 无
+///
+/// # 关键业务约束
+/// 生效版本必须基于当前基准版本；差额可为空。
+struct EffectiveChangeWrite {
+    /// 原采购单。
     order: PurchaseOrder,
-    mut change: PurchaseChangeOrder,
+    /// 待生效的变更单。
+    change: PurchaseChangeOrder,
+    /// 待通过的变更提交。
     submission: PurchaseChangeSubmission,
+    /// 生效版本。
     revision: entities::purchase_order::PurchaseOrderRevision,
+    /// 生效版本行。
     revision_lines: Vec<entities::purchase_order::PurchaseOrderRevisionLine>,
+    /// 应付差额与成本差额。
     delta: (
         Option<(entities::payable::PayableAccount, entities::payable::PayableEntry)>,
         Vec<entities::cost::CostEntry>,
     ),
+}
+
+/// 写入生效修订、应付差额与变更单状态。
+///
+/// # 用途
+/// 将变更单标为已生效并提交事务写入。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `write` - 采购单、变更单、版本与差额
+/// * `actor` - 审计操作人
+///
+/// # 返回
+/// 写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 仓储失败时返回错误。
+///
+/// # 关键业务约束
+/// 变更单状态迁移必须与版本指针同一事务。
+async fn write_effective_change(
+    db: &mongodb::Database,
+    mut write: EffectiveChangeWrite,
     actor: &AuditActor,
 ) -> Result<()> {
     let audit = actor.clone().resource_log(
         "purchase_change_order.effect",
         "purchase_change_order",
-        change.base.id.clone(),
+        write.change.base.id.clone(),
     )?;
     let actor_id = actor.id().to_string();
-    change.apply_effective(revision.base.id.clone().into(), &actor_id)?;
+    write
+        .change
+        .apply_effective(write.revision.base.id.clone().into(), &actor_id)?;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
-            Box::pin(async move {
-                persist_effective_writes(
-                    &db,
-                    order,
-                    change,
-                    submission,
-                    revision,
-                    revision_lines,
-                    delta,
-                    audit,
-                    session,
-                )
-                .await
-            })
+            Box::pin(async move { persist_effective_writes(&db, write, audit, session).await })
         })
         .await
 }
 
 /// 事务内写入生效修订、指针、差额与变更单。
 ///
+/// # 用途
+/// 在已开启事务中落库生效版本、差额与变更结论。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `write` - 采购单、变更单、版本与差额
+/// * `audit` - 已构造审计
+/// * `session` - 事务会话
+///
+/// # 返回
+/// 写入成功时返回 `Ok(())`。
+///
 /// # 错误
 /// 仓储失败时返回错误。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 采购单当前版本指针必须切到新修订。
 async fn persist_effective_writes(
     db: &mongodb::Database,
-    mut order: PurchaseOrder,
-    mut change: PurchaseChangeOrder,
-    mut submission: PurchaseChangeSubmission,
-    revision: entities::purchase_order::PurchaseOrderRevision,
-    revision_lines: Vec<entities::purchase_order::PurchaseOrderRevisionLine>,
-    delta: (
-        Option<(entities::payable::PayableAccount, entities::payable::PayableEntry)>,
-        Vec<entities::cost::CostEntry>,
-    ),
+    write: EffectiveChangeWrite,
     audit: entities::AuditLog,
     session: &mut ClientSession,
 ) -> Result<()> {
+    let EffectiveChangeWrite {
+        mut order,
+        mut change,
+        mut submission,
+        revision,
+        revision_lines,
+        delta,
+    } = write;
     db.purchase_order()
         .create_effective_revision(&revision, &revision_lines, session)
         .await?;

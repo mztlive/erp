@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use bpm::engine::{
     cancel, decide, plan_enter_node, reassign, resume, start, CancelCommand, DecideCommand, DefinitionGraph,
-    Eligibility, ReassignCommand, ResumeCommand, StartAssigneeBinding, StartCommand,
+    Eligibility, EnterNodeInput, ReassignCommand, ResumeCommand, StartAssigneeBinding, StartCommand,
 };
 use bpm::graph::generate_linear_transitions;
 use bpm::ids::{
@@ -22,8 +22,8 @@ use bpm::model::types::{
 };
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalNodeExecution, ApprovalProcessDefinition,
-    ApprovalProcessInstance, ApprovalTransitionDefinition, NewNodeExecution, ParticipantId, ProcessKind,
-    SubjectRef, Timestamp,
+    ApprovalProcessInstance, ApprovalTransitionDefinition, NewNodeDefinition, NewNodeExecution,
+    NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
 };
 use database::repository::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView, CasWriteOutcome,
@@ -39,7 +39,7 @@ use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
 use entities::money::Quantity;
-use entities::work_item::work_item::DocumentApprovalWorkItemData;
+use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority, WorkItemType};
 use test_support::{assert_indexes, require_mongo, TestDb};
 use tokio::sync::Barrier;
@@ -175,17 +175,17 @@ fn node(
     order: u32,
     user: &str,
 ) -> ApprovalNodeDefinition {
-    ApprovalNodeDefinition::new(
-        ApprovalNodeDefinitionId::new(id),
-        ApprovalProcessDefinitionId::new(definition_id),
-        key,
-        name,
-        None,
-        order,
-        participant(user),
-        user,
-        at(1),
-    )
+    ApprovalNodeDefinition::new(NewNodeDefinition {
+        id: ApprovalNodeDefinitionId::new(id),
+        process_definition_id: ApprovalProcessDefinitionId::new(definition_id),
+        node_key: key.into(),
+        node_name: name.into(),
+        node_purpose: None,
+        display_order: order,
+        assignee_participant_id: participant(user),
+        assignee_label_snapshot: user.into(),
+        at: at(1),
+    })
     .expect("节点必须可构造")
 }
 
@@ -542,19 +542,19 @@ fn bpm_engine_start_decide_cancel_reassign_are_pure() {
 
     let two = two_node_graph();
     let two_started = start_stock(&two, "inst-2", "adj-2");
-    let entered = plan_enter_node(
-        two_started.instance.clone(),
-        &two,
-        "n2",
-        1,
-        participant("u2"),
-        eligible("u2", "财务"),
-        ApprovalNodeExecutionId::new("exec-n2"),
-        2,
-        ApprovalExecutionAssignmentSource::Definition,
-        None,
-        at(23),
-    )
+    let entered = plan_enter_node(EnterNodeInput {
+        instance: two_started.instance.clone(),
+        graph: &two,
+        node_key: "n2",
+        round_no: 1,
+        participant: participant("u2"),
+        eligibility: eligible("u2", "财务"),
+        execution_id: ApprovalNodeExecutionId::new("exec-n2"),
+        execution_no: 2,
+        assignment_source: ApprovalExecutionAssignmentSource::Definition,
+        replaces_execution_id: None,
+        now: at(23),
+    })
     .expect("enter_node 必须可计算");
     assert_eq!(entered.created_executions[0].node_key, "n2");
 }
@@ -1043,16 +1043,16 @@ async fn active_subject_is_unique_even_with_different_definition_ids() {
         let fixture = TestDb::new("awf_repo_subj").await.expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let subject = stock_subject("adj-unique");
-        let first = ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst-a"),
-            ApprovalProcessDefinitionId::new("def-old"),
-            1,
-            PILOT_KIND,
-            subject.clone(),
-            1,
-            participant("starter"),
-            at(10),
-        )
+        let first = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst-a"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def-old"),
+            definition_version: 1,
+            process_kind: PILOT_KIND,
+            subject: subject.clone(),
+            subject_version: 1,
+            started_by: participant("starter"),
+            at: at(10),
+        })
         .expect("实例 A");
         fixture
             .db()
@@ -1060,16 +1060,16 @@ async fn active_subject_is_unique_even_with_different_definition_ids() {
             .create(&first, &mut NoTransaction)
             .await
             .expect("首条活动链");
-        let second = ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst-b"),
-            ApprovalProcessDefinitionId::new("def-new"),
-            2,
-            PILOT_KIND,
+        let second = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst-b"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def-new"),
+            definition_version: 2,
+            process_kind: PILOT_KIND,
             subject,
-            1,
-            participant("starter"),
-            at(11),
-        )
+            subject_version: 1,
+            started_by: participant("starter"),
+            at: at(11),
+        })
         .expect("实例 B");
         let conflict = fixture
             .db()

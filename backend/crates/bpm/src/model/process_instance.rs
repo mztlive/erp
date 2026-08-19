@@ -11,6 +11,26 @@ use crate::model::types::{
 };
 use crate::model::{ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
+/// 创建运行中第 1 轮实例所需的身份与绑定快照。
+pub struct NewProcessInstance {
+    /// 实例主键。
+    pub id: ApprovalProcessInstanceId,
+    /// 绑定定义。
+    pub process_definition_id: ApprovalProcessDefinitionId,
+    /// 绑定定义版本。
+    pub definition_version: u32,
+    /// 流程种类。
+    pub process_kind: ProcessKind,
+    /// 业务对象引用。
+    pub subject: SubjectRef,
+    /// 冻结提交版本。
+    pub subject_version: u32,
+    /// 启动人。
+    pub started_by: ParticipantId,
+    /// 启动时间。
+    pub at: Timestamp,
+}
+
 /// 单据审批运行实例。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct ApprovalProcessInstance {
@@ -48,45 +68,34 @@ impl ApprovalProcessInstance {
     /// 创建运行中的第 1 轮实例。
     ///
     /// # 参数
-    /// * `id` - 实例主键
-    /// * `process_definition_id` - 绑定定义
-    /// * `definition_version` - 绑定定义版本
-    /// * `process_kind` - 流程种类
-    /// * `subject` - 业务对象引用
-    /// * `subject_version` - 冻结提交版本
-    /// * `started_by` - 启动人
-    /// * `at` - 启动时间
+    /// * `input` - 实例身份、绑定定义与启动人
+    ///
+    /// # 返回
+    /// 返回运行中、第 1 轮、尚未进入节点的实例。
     ///
     /// # 错误
     /// 定义版本为零时返回错误。
-    #[allow(clippy::too_many_arguments)]
-    pub fn start_running(
-        id: ApprovalProcessInstanceId,
-        process_definition_id: ApprovalProcessDefinitionId,
-        definition_version: u32,
-        process_kind: ProcessKind,
-        subject: SubjectRef,
-        subject_version: u32,
-        started_by: ParticipantId,
-        at: Timestamp,
-    ) -> ModelResult<Self> {
-        if definition_version == 0 {
+    ///
+    /// # 约束
+    /// 启动后不得改写 `subject` 与 `subject_version`。
+    pub fn start_running(input: NewProcessInstance) -> ModelResult<Self> {
+        if input.definition_version == 0 {
             return Err(ModelError::InvalidField("定义版本必须从 1 开始"));
         }
         Ok(Self {
-            base: base_model_at(id.to_string(), at)?,
-            process_definition_id,
-            definition_version,
-            process_kind,
-            subject,
-            subject_version,
+            base: base_model_at(input.id.to_string(), input.at)?,
+            process_definition_id: input.process_definition_id,
+            definition_version: input.definition_version,
+            process_kind: input.process_kind,
+            subject: input.subject,
+            subject_version: input.subject_version,
             status: ApprovalProcessInstanceStatus::Running,
             current_round_no: 1,
             current_node_execution_id: None,
             blocker_code: None,
             blocked_at: None,
-            started_by,
-            started_at: at,
+            started_by: input.started_by,
+            started_at: input.at,
             ended_at: None,
         })
     }
@@ -248,16 +257,16 @@ mod tests {
     use crate::model::{ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
     fn instance() -> ApprovalProcessInstance {
-        ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst"),
-            ApprovalProcessDefinitionId::new("def"),
-            1,
-            ProcessKind::StockAdjustment,
-            SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
-            1,
-            ParticipantId::new("user").unwrap(),
-            Timestamp::from_unix_secs(10).unwrap(),
-        )
+        ApprovalProcessInstance::start_running(super::NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("user").unwrap(),
+            at: Timestamp::from_unix_secs(10).unwrap(),
+        })
         .unwrap()
     }
 

@@ -58,6 +58,41 @@ pub(super) fn stage_code_label_tone(
     }
 }
 
+/// 结案资格判定所需的状态、进度与金额。
+///
+/// # 用途
+/// 将商业状态、履约/回款/开票进度与应收合计打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 开票进度只展示、不参与是否可结案。
+pub(super) struct CloseEligibilityInputs {
+    /// 业务性质。
+    pub business_type: BusinessType,
+    /// 商业状态。
+    pub commercial: CommercialStatus,
+    /// 结案状态。
+    pub close: CloseStatus,
+    /// 履约进度。
+    pub fulfillment: FulfillmentProgress,
+    /// 回款进度。
+    pub collection: CollectionProgress,
+    /// 开票进度。
+    pub invoice: InvoiceProgress,
+    /// 应收已结算合计。
+    pub settled_total: Amount,
+    /// 应收含税合计。
+    pub gross_total: Amount,
+}
+
 /// 结案资格判定（服务端权威；移植自 erp-client `close-eligibility.ts::computeCloseEligibility`）。
 ///
 /// 规则（W05 §5.3/§12）：非卡券以客户验收完成判定交付；卡券以履约期限到期判定
@@ -65,17 +100,32 @@ pub(super) fn stage_code_label_tone(
 /// 结案门槛为交付完成且回款收齐，开票进度不参与。回款是否收齐优先看
 /// `collection_progress`，辅以应收子账合计兜底（两者任一满足即视为收齐，
 /// 与前端原实现的双重判断保持一致）。
-#[allow(clippy::too_many_arguments)]
-pub(super) fn compute_close_eligibility(
-    business_type: BusinessType,
-    commercial: CommercialStatus,
-    close: CloseStatus,
-    fulfillment: FulfillmentProgress,
-    collection: CollectionProgress,
-    invoice: InvoiceProgress,
-    settled_total: Amount,
-    gross_total: Amount,
-) -> dto::CloseEligibilityView {
+///
+/// # 用途
+/// 计算结案资格、阻断原因与说明。
+///
+/// # 参数
+/// * `inputs` - 状态、进度与金额
+///
+/// # 返回
+/// 返回结案资格视图。
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 作废/草稿不可结案；开票进度永不阻断。
+pub(super) fn compute_close_eligibility(inputs: CloseEligibilityInputs) -> dto::CloseEligibilityView {
+    let CloseEligibilityInputs {
+        business_type,
+        commercial,
+        close,
+        fulfillment,
+        collection,
+        invoice,
+        settled_total,
+        gross_total,
+    } = inputs;
     let invoice_complete = invoice == InvoiceProgress::Completed;
     let fulfillment_done = fulfillment == FulfillmentProgress::Completed;
     let collection_settled = collection == CollectionProgress::Settled;
@@ -196,7 +246,7 @@ mod tests {
 
     use super::{
         compute_can_start_sales_change, compute_close_eligibility, detail_owner_user_id,
-        stage_code_label_tone,
+        stage_code_label_tone, CloseEligibilityInputs,
     };
 
     #[test]
@@ -293,16 +343,16 @@ mod tests {
 
     #[test]
     fn close_eligibility_closed_branch_is_always_eligible() {
-        let view = compute_close_eligibility(
-            BusinessType::GoodsService,
-            CommercialStatus::Effective,
-            CloseStatus::Closed,
-            FulfillmentProgress::NotStarted,
-            CollectionProgress::NotCollected,
-            InvoiceProgress::NotInvoiced,
-            Amount::from_str("0").unwrap(),
-            Amount::from_str("100").unwrap(),
-        );
+        let view = compute_close_eligibility(CloseEligibilityInputs {
+            business_type: BusinessType::GoodsService,
+            commercial: CommercialStatus::Effective,
+            close: CloseStatus::Closed,
+            fulfillment: FulfillmentProgress::NotStarted,
+            collection: CollectionProgress::NotCollected,
+            invoice: InvoiceProgress::NotInvoiced,
+            settled_total: Amount::from_str("0").unwrap(),
+            gross_total: Amount::from_str("100").unwrap(),
+        });
         assert!(view.eligible_to_close);
         assert!(view.fulfillment_complete);
         assert!(view.receivable_settled);
@@ -311,57 +361,57 @@ mod tests {
 
     #[test]
     fn close_eligibility_voided_and_draft_block_with_reason() {
-        let voided = compute_close_eligibility(
-            BusinessType::GoodsService,
-            CommercialStatus::Voided,
-            CloseStatus::NotSatisfied,
-            FulfillmentProgress::NotStarted,
-            CollectionProgress::NotCollected,
-            InvoiceProgress::NotInvoiced,
-            Amount::from_str("0").unwrap(),
-            Amount::from_str("100").unwrap(),
-        );
+        let voided = compute_close_eligibility(CloseEligibilityInputs {
+            business_type: BusinessType::GoodsService,
+            commercial: CommercialStatus::Voided,
+            close: CloseStatus::NotSatisfied,
+            fulfillment: FulfillmentProgress::NotStarted,
+            collection: CollectionProgress::NotCollected,
+            invoice: InvoiceProgress::NotInvoiced,
+            settled_total: Amount::from_str("0").unwrap(),
+            gross_total: Amount::from_str("100").unwrap(),
+        });
         assert!(!voided.eligible_to_close);
         assert_eq!(voided.blockers, vec!["本单已作废，不会再结案".to_string()]);
 
-        let draft = compute_close_eligibility(
-            BusinessType::GoodsService,
-            CommercialStatus::Draft,
-            CloseStatus::NotSatisfied,
-            FulfillmentProgress::NotStarted,
-            CollectionProgress::NotCollected,
-            InvoiceProgress::NotInvoiced,
-            Amount::from_str("0").unwrap(),
-            Amount::from_str("100").unwrap(),
-        );
+        let draft = compute_close_eligibility(CloseEligibilityInputs {
+            business_type: BusinessType::GoodsService,
+            commercial: CommercialStatus::Draft,
+            close: CloseStatus::NotSatisfied,
+            fulfillment: FulfillmentProgress::NotStarted,
+            collection: CollectionProgress::NotCollected,
+            invoice: InvoiceProgress::NotInvoiced,
+            settled_total: Amount::from_str("0").unwrap(),
+            gross_total: Amount::from_str("100").unwrap(),
+        });
         assert!(!draft.eligible_to_close);
         assert_eq!(draft.blockers, vec!["草稿尚未生效，谈不上结案".to_string()]);
     }
 
     #[test]
     fn close_eligibility_goods_vs_voucher_blocker_text() {
-        let goods = compute_close_eligibility(
-            BusinessType::GoodsService,
-            CommercialStatus::Effective,
-            CloseStatus::NotSatisfied,
-            FulfillmentProgress::NotStarted,
-            CollectionProgress::NotCollected,
-            InvoiceProgress::NotInvoiced,
-            Amount::from_str("0").unwrap(),
-            Amount::from_str("100").unwrap(),
-        );
+        let goods = compute_close_eligibility(CloseEligibilityInputs {
+            business_type: BusinessType::GoodsService,
+            commercial: CommercialStatus::Effective,
+            close: CloseStatus::NotSatisfied,
+            fulfillment: FulfillmentProgress::NotStarted,
+            collection: CollectionProgress::NotCollected,
+            invoice: InvoiceProgress::NotInvoiced,
+            settled_total: Amount::from_str("0").unwrap(),
+            gross_total: Amount::from_str("100").unwrap(),
+        });
         assert_eq!(goods.blockers[0], "客户验收还没做完");
 
-        let voucher = compute_close_eligibility(
-            BusinessType::Voucher,
-            CommercialStatus::Effective,
-            CloseStatus::NotSatisfied,
-            FulfillmentProgress::NotStarted,
-            CollectionProgress::NotCollected,
-            InvoiceProgress::NotInvoiced,
-            Amount::from_str("0").unwrap(),
-            Amount::from_str("100").unwrap(),
-        );
+        let voucher = compute_close_eligibility(CloseEligibilityInputs {
+            business_type: BusinessType::Voucher,
+            commercial: CommercialStatus::Effective,
+            close: CloseStatus::NotSatisfied,
+            fulfillment: FulfillmentProgress::NotStarted,
+            collection: CollectionProgress::NotCollected,
+            invoice: InvoiceProgress::NotInvoiced,
+            settled_total: Amount::from_str("0").unwrap(),
+            gross_total: Amount::from_str("100").unwrap(),
+        });
         assert_eq!(
             voucher.blockers[0],
             "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
@@ -372,32 +422,32 @@ mod tests {
     fn close_eligibility_receivable_settled_falls_back_to_amount_comparison() {
         // collection_progress 还没被标记 SETTLED，但应收子账合计已收齐——
         // 与前端原实现的双重判断保持一致。
-        let view = compute_close_eligibility(
-            BusinessType::GoodsService,
-            CommercialStatus::Effective,
-            CloseStatus::NotSatisfied,
-            FulfillmentProgress::Completed,
-            CollectionProgress::PartiallyCollected,
-            InvoiceProgress::NotInvoiced,
-            Amount::from_str("100").unwrap(),
-            Amount::from_str("100").unwrap(),
-        );
+        let view = compute_close_eligibility(CloseEligibilityInputs {
+            business_type: BusinessType::GoodsService,
+            commercial: CommercialStatus::Effective,
+            close: CloseStatus::NotSatisfied,
+            fulfillment: FulfillmentProgress::Completed,
+            collection: CollectionProgress::PartiallyCollected,
+            invoice: InvoiceProgress::NotInvoiced,
+            settled_total: Amount::from_str("100").unwrap(),
+            gross_total: Amount::from_str("100").unwrap(),
+        });
         assert!(view.receivable_settled);
         assert!(view.eligible_to_close);
     }
 
     #[test]
     fn close_eligibility_invoice_progress_never_blocks() {
-        let view = compute_close_eligibility(
-            BusinessType::GoodsService,
-            CommercialStatus::Effective,
-            CloseStatus::NotSatisfied,
-            FulfillmentProgress::Completed,
-            CollectionProgress::Settled,
-            InvoiceProgress::NotInvoiced,
-            Amount::from_str("100").unwrap(),
-            Amount::from_str("100").unwrap(),
-        );
+        let view = compute_close_eligibility(CloseEligibilityInputs {
+            business_type: BusinessType::GoodsService,
+            commercial: CommercialStatus::Effective,
+            close: CloseStatus::NotSatisfied,
+            fulfillment: FulfillmentProgress::Completed,
+            collection: CollectionProgress::Settled,
+            invoice: InvoiceProgress::NotInvoiced,
+            settled_total: Amount::from_str("100").unwrap(),
+            gross_total: Amount::from_str("100").unwrap(),
+        });
         assert!(view.eligible_to_close);
         assert!(!view.invoice_complete);
     }

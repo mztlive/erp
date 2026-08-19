@@ -20,6 +20,7 @@ use super::mapper::{submission_view, working_copy_line_view};
 use super::pricing::zero_amount;
 use super::status::{
     compute_can_start_sales_change, compute_close_eligibility, detail_owner_user_id, stage_code_label_tone,
+    CloseEligibilityInputs,
 };
 use super::SalesOrderService;
 use crate::document_registry::find_approval_binding;
@@ -311,16 +312,16 @@ impl SalesOrderService {
                         gross.checked_add(account.gross_total),
                     )
                 });
-        let close_eligibility = compute_close_eligibility(
-            order.business_type,
-            order.commercial_status,
-            order.close_status,
-            order.fulfillment_progress,
-            order.collection_progress,
-            order.invoice_progress,
+        let close_eligibility = compute_close_eligibility(CloseEligibilityInputs {
+            business_type: order.business_type,
+            commercial: order.commercial_status,
+            close: order.close_status,
+            fulfillment: order.fulfillment_progress,
+            collection: order.collection_progress,
+            invoice: order.invoice_progress,
             settled_total,
             gross_total,
-        );
+        });
 
         let has_active_change_order = match order.stable.current_revision_id.as_ref() {
             Some(revision_id) => self

@@ -16,7 +16,7 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
 use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use entities::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
-use entities::work_item::work_item::DocumentApprovalWorkItemData;
+use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
 use id_generator::next_id;
 use mongodb::Database;
@@ -108,38 +108,75 @@ pub(super) async fn load_start_receipt(
         .await?)
 }
 
+/// 客户退款启动输入。
+///
+/// # 用途
+/// 收拢 `build_customer_refund_start_input` 的定义图、绑定与提交人参数。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 审批人取自已发布节点，不接受客户端选择。
+pub(super) struct CustomerRefundStartInput<'a> {
+    /// 绑定定义图。
+    pub graph: DefinitionGraph,
+    /// 冻结绑定。
+    pub binding: &'a ApprovalDefinitionBinding,
+    /// 业务对象引用。
+    pub subject: SubjectRef,
+    /// 冻结提交版本。
+    pub subject_version: u32,
+    /// 提交人。
+    pub actor_id: &'a str,
+    /// 单据责任组织。
+    pub organization_id: &'a str,
+    /// 规范化前的幂等键。
+    pub idempotency_key: &'a str,
+    /// 已存在收据。
+    pub receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 由定义图与单据组织构造启动输入。
 ///
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
 ///
+/// # 用途
+/// 把启动参数收敛为引擎 `prepare_start` 输入。
+///
 /// # 参数
-/// * `graph` - 绑定定义图
-/// * `binding` - 冻结绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `actor_id` - 提交人
-/// * `organization_id` - 单据责任组织
-/// * `idempotency_key` - 规范化前的幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// * `input` - 定义图、绑定、主体与提交人
 ///
 /// # 返回
 /// 返回可交给 `prepare_start` 的输入。
 ///
 /// # 错误
 /// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(super) fn build_customer_refund_start_input(
-    graph: DefinitionGraph,
-    binding: &ApprovalDefinitionBinding,
-    subject: SubjectRef,
-    subject_version: u32,
-    actor_id: &str,
-    organization_id: &str,
-    idempotency_key: &str,
-    receipt: Option<bpm::model::ApprovalCommandReceipt>,
-    now: Instant,
+    input: CustomerRefundStartInput<'_>,
 ) -> Result<StartExecutionInput> {
+    let CustomerRefundStartInput {
+        graph,
+        binding,
+        subject,
+        subject_version,
+        actor_id,
+        organization_id,
+        idempotency_key,
+        receipt,
+        now,
+    } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError(
             "客户退款单绑定定义版本与已加载定义不一致".to_string(),
@@ -217,39 +254,73 @@ fn start_bindings_from_graph(
     Ok(bindings)
 }
 
+/// 客户退款启动事务写入集合。
+///
+/// # 用途
+/// 收拢提交后需一并写入的退款单、快照、启动计划与审计身份。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
+pub(super) struct CustomerRefundStartPersistInput {
+    /// 已进入 `IN_APPROVAL` 的退款单。
+    pub refund: CustomerRefund,
+    /// 审计操作人。
+    pub actor: AuditActor,
+    /// 退款单主键。
+    pub id: String,
+    /// 冻结快照载荷。
+    pub snapshot_payload: ApprovalSubjectSnapshotPayload,
+    /// `prepare_start` 结果。
+    pub prepared: PreparedExecution,
+    /// 合同签署的责任角色。
+    pub owner_role: &'static str,
+    /// 责任组织。
+    pub organization_id: String,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 在同一事务中写入单据迁移、快照、BPM 运行事实与入口任务。
+///
+/// # 用途
+/// 提交启动后原子写入退款单、快照与运行事实。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `refund` - 已进入 `IN_APPROVAL` 的退款单
-/// * `actor` - 审计操作人
-/// * `id` - 退款单主键
-/// * `snapshot_payload` - 冻结快照载荷
-/// * `prepared` - `prepare_start` 结果
-/// * `owner_role` - 合同签署的责任角色
-/// * `organization_id` - 责任组织
-/// * `now` - 调用方时间
+/// * `input` - 退款单、快照与启动计划
 ///
 /// # 返回
 /// 返回提交后的退款单实体，由调用方装配视图。
 ///
 /// # 错误
 /// 仓储写入失败或计划不完整时返回错误，事务回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_customer_refund_start(
     db: &Database,
-    refund: CustomerRefund,
-    actor: &AuditActor,
-    id: &str,
-    snapshot_payload: ApprovalSubjectSnapshotPayload,
-    prepared: PreparedExecution,
-    owner_role: &'static str,
-    organization_id: String,
-    now: Instant,
+    input: CustomerRefundStartPersistInput,
 ) -> Result<CustomerRefund> {
-    let audit = actor
-        .clone()
-        .resource_log("customer_refund.submit", "customer_refund", id.to_string())?;
+    let CustomerRefundStartPersistInput {
+        refund,
+        actor,
+        id,
+        snapshot_payload,
+        prepared,
+        owner_role,
+        organization_id,
+        now,
+    } = input;
+    let audit = actor.resource_log("customer_refund.submit", "customer_refund", id)?;
     let db = db.clone();
     let client = db.client().clone();
     client
@@ -423,38 +494,75 @@ pub(super) async fn load_supplier_refund_start_receipt(
         .await?)
 }
 
+/// 供应商退款启动输入。
+///
+/// # 用途
+/// 收拢 `build_supplier_refund_start_input` 的定义图、绑定与提交人参数。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 审批人取自已发布节点，不接受客户端选择。
+pub(super) struct SupplierRefundStartInput<'a> {
+    /// 绑定定义图。
+    pub graph: DefinitionGraph,
+    /// 冻结绑定。
+    pub binding: &'a ApprovalDefinitionBinding,
+    /// 业务对象引用。
+    pub subject: SubjectRef,
+    /// 冻结提交版本。
+    pub subject_version: u32,
+    /// 提交人。
+    pub actor_id: &'a str,
+    /// 单据责任组织。
+    pub organization_id: &'a str,
+    /// 规范化前的幂等键。
+    pub idempotency_key: &'a str,
+    /// 已存在收据。
+    pub receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 由定义图与单据组织构造供应商退款启动输入。
 ///
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
 ///
+/// # 用途
+/// 把启动参数收敛为引擎 `prepare_start` 输入。
+///
 /// # 参数
-/// * `graph` - 绑定定义图
-/// * `binding` - 冻结绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `actor_id` - 提交人
-/// * `organization_id` - 单据责任组织
-/// * `idempotency_key` - 规范化前的幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// * `input` - 定义图、绑定、主体与提交人
 ///
 /// # 返回
 /// 返回可交给 `prepare_start` 的输入。
 ///
 /// # 错误
 /// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(super) fn build_supplier_refund_start_input(
-    graph: DefinitionGraph,
-    binding: &ApprovalDefinitionBinding,
-    subject: SubjectRef,
-    subject_version: u32,
-    actor_id: &str,
-    organization_id: &str,
-    idempotency_key: &str,
-    receipt: Option<bpm::model::ApprovalCommandReceipt>,
-    now: Instant,
+    input: SupplierRefundStartInput<'_>,
 ) -> Result<StartExecutionInput> {
+    let SupplierRefundStartInput {
+        graph,
+        binding,
+        subject,
+        subject_version,
+        actor_id,
+        organization_id,
+        idempotency_key,
+        receipt,
+        now,
+    } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError(
             "供应商退款单绑定定义版本与已加载定义不一致".to_string(),
@@ -532,39 +640,73 @@ fn supplier_refund_start_bindings(
     Ok(bindings)
 }
 
+/// 供应商退款启动事务写入集合。
+///
+/// # 用途
+/// 收拢提交后需一并写入的退款单、快照、启动计划与审计身份。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
+pub(super) struct SupplierRefundStartPersistInput {
+    /// 已进入 `IN_APPROVAL` 的退款单。
+    pub refund: SupplierRefund,
+    /// 审计操作人。
+    pub actor: AuditActor,
+    /// 退款单主键。
+    pub id: String,
+    /// 冻结快照载荷。
+    pub snapshot_payload: ApprovalSubjectSnapshotPayload,
+    /// `prepare_start` 结果。
+    pub prepared: PreparedExecution,
+    /// 合同签署的责任角色。
+    pub owner_role: &'static str,
+    /// 责任组织。
+    pub organization_id: String,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 在同一事务中写入供应商退款迁移、快照、BPM 运行事实与入口任务。
+///
+/// # 用途
+/// 提交启动后原子写入退款单、快照与运行事实。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `refund` - 已进入 `IN_APPROVAL` 的退款单
-/// * `actor` - 审计操作人
-/// * `id` - 退款单主键
-/// * `snapshot_payload` - 冻结快照载荷
-/// * `prepared` - `prepare_start` 结果
-/// * `owner_role` - 合同签署的责任角色
-/// * `organization_id` - 责任组织
-/// * `now` - 调用方时间
+/// * `input` - 退款单、快照与启动计划
 ///
 /// # 返回
 /// 返回提交后的退款单实体，由调用方装配视图。
 ///
 /// # 错误
 /// 仓储写入失败或计划不完整时返回错误，事务回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_supplier_refund_start(
     db: &Database,
-    refund: SupplierRefund,
-    actor: &AuditActor,
-    id: &str,
-    snapshot_payload: ApprovalSubjectSnapshotPayload,
-    prepared: PreparedExecution,
-    owner_role: &'static str,
-    organization_id: String,
-    now: Instant,
+    input: SupplierRefundStartPersistInput,
 ) -> Result<SupplierRefund> {
-    let audit = actor
-        .clone()
-        .resource_log("supplier_refund.submit", "supplier_refund", id.to_string())?;
+    let SupplierRefundStartPersistInput {
+        refund,
+        actor,
+        id,
+        snapshot_payload,
+        prepared,
+        owner_role,
+        organization_id,
+        now,
+    } = input;
+    let audit = actor.resource_log("supplier_refund.submit", "supplier_refund", id)?;
     let db = db.clone();
     let client = db.client().clone();
     client
@@ -715,38 +857,75 @@ pub(super) async fn load_receipt_reversal_start_receipt(
         .await?)
 }
 
+/// 回款冲正启动输入。
+///
+/// # 用途
+/// 收拢 `build_receipt_reversal_start_input` 的定义图、绑定与提交人参数。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 审批人取自已发布节点，不接受客户端选择。
+pub(super) struct ReceiptReversalStartInput<'a> {
+    /// 绑定定义图。
+    pub graph: DefinitionGraph,
+    /// 冻结绑定。
+    pub binding: &'a ApprovalDefinitionBinding,
+    /// 业务对象引用。
+    pub subject: SubjectRef,
+    /// 冻结提交版本。
+    pub subject_version: u32,
+    /// 提交人。
+    pub actor_id: &'a str,
+    /// 单据责任组织。
+    pub organization_id: &'a str,
+    /// 规范化前的幂等键。
+    pub idempotency_key: &'a str,
+    /// 已存在收据。
+    pub receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 由定义图与单据组织构造回款冲正启动输入。
 ///
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
 ///
+/// # 用途
+/// 把启动参数收敛为引擎 `prepare_start` 输入。
+///
 /// # 参数
-/// * `graph` - 绑定定义图
-/// * `binding` - 冻结绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `actor_id` - 提交人
-/// * `organization_id` - 单据责任组织
-/// * `idempotency_key` - 规范化前的幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// * `input` - 定义图、绑定、主体与提交人
 ///
 /// # 返回
 /// 返回可交给 `prepare_start` 的输入。
 ///
 /// # 错误
 /// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(super) fn build_receipt_reversal_start_input(
-    graph: DefinitionGraph,
-    binding: &ApprovalDefinitionBinding,
-    subject: SubjectRef,
-    subject_version: u32,
-    actor_id: &str,
-    organization_id: &str,
-    idempotency_key: &str,
-    receipt: Option<bpm::model::ApprovalCommandReceipt>,
-    now: Instant,
+    input: ReceiptReversalStartInput<'_>,
 ) -> Result<StartExecutionInput> {
+    let ReceiptReversalStartInput {
+        graph,
+        binding,
+        subject,
+        subject_version,
+        actor_id,
+        organization_id,
+        idempotency_key,
+        receipt,
+        now,
+    } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError(
             "回款冲正单绑定定义版本与已加载定义不一致".to_string(),
@@ -824,39 +1003,73 @@ fn receipt_reversal_start_bindings(
     Ok(bindings)
 }
 
+/// 回款冲正启动事务写入集合。
+///
+/// # 用途
+/// 收拢提交后需一并写入的冲正单、快照、启动计划与审计身份。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
+pub(super) struct ReceiptReversalStartPersistInput {
+    /// 已进入 `IN_APPROVAL` 的冲正单。
+    pub reversal: ReceiptReversal,
+    /// 审计操作人。
+    pub actor: AuditActor,
+    /// 冲正单主键。
+    pub id: String,
+    /// 冻结快照载荷。
+    pub snapshot_payload: ApprovalSubjectSnapshotPayload,
+    /// `prepare_start` 结果。
+    pub prepared: PreparedExecution,
+    /// 合同签署的责任角色。
+    pub owner_role: &'static str,
+    /// 责任组织。
+    pub organization_id: String,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 在同一事务中写入回款冲正迁移、快照、BPM 运行事实与入口任务。
+///
+/// # 用途
+/// 提交启动后原子写入冲正单、快照与运行事实。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `reversal` - 已进入 `IN_APPROVAL` 的冲正单
-/// * `actor` - 审计操作人
-/// * `id` - 冲正单主键
-/// * `snapshot_payload` - 冻结快照载荷
-/// * `prepared` - `prepare_start` 结果
-/// * `owner_role` - 合同签署的责任角色
-/// * `organization_id` - 责任组织
-/// * `now` - 调用方时间
+/// * `input` - 冲正单、快照与启动计划
 ///
 /// # 返回
 /// 返回提交后的冲正单实体，由调用方装配视图。
 ///
 /// # 错误
 /// 仓储写入失败或计划不完整时返回错误，事务回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_receipt_reversal_start(
     db: &Database,
-    reversal: ReceiptReversal,
-    actor: &AuditActor,
-    id: &str,
-    snapshot_payload: ApprovalSubjectSnapshotPayload,
-    prepared: PreparedExecution,
-    owner_role: &'static str,
-    organization_id: String,
-    now: Instant,
+    input: ReceiptReversalStartPersistInput,
 ) -> Result<ReceiptReversal> {
-    let audit = actor
-        .clone()
-        .resource_log("receipt_reversal.submit", "receipt_reversal", id.to_string())?;
+    let ReceiptReversalStartPersistInput {
+        reversal,
+        actor,
+        id,
+        snapshot_payload,
+        prepared,
+        owner_role,
+        organization_id,
+        now,
+    } = input;
+    let audit = actor.resource_log("receipt_reversal.submit", "receipt_reversal", id)?;
     let db = db.clone();
     let client = db.client().clone();
     client
@@ -1007,38 +1220,75 @@ pub(super) async fn load_payment_reversal_start_receipt(
         .await?)
 }
 
+/// 付款冲正启动输入。
+///
+/// # 用途
+/// 收拢 `build_payment_reversal_start_input` 的定义图、绑定与提交人参数。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 审批人取自已发布节点，不接受客户端选择。
+pub(super) struct PaymentReversalStartInput<'a> {
+    /// 绑定定义图。
+    pub graph: DefinitionGraph,
+    /// 冻结绑定。
+    pub binding: &'a ApprovalDefinitionBinding,
+    /// 业务对象引用。
+    pub subject: SubjectRef,
+    /// 冻结提交版本。
+    pub subject_version: u32,
+    /// 提交人。
+    pub actor_id: &'a str,
+    /// 单据责任组织。
+    pub organization_id: &'a str,
+    /// 规范化前的幂等键。
+    pub idempotency_key: &'a str,
+    /// 已存在收据。
+    pub receipt: Option<bpm::model::ApprovalCommandReceipt>,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 由定义图与单据组织构造付款冲正启动输入。
 ///
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
 ///
+/// # 用途
+/// 把启动参数收敛为引擎 `prepare_start` 输入。
+///
 /// # 参数
-/// * `graph` - 绑定定义图
-/// * `binding` - 冻结绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `actor_id` - 提交人
-/// * `organization_id` - 单据责任组织
-/// * `idempotency_key` - 规范化前的幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// * `input` - 定义图、绑定、主体与提交人
 ///
 /// # 返回
 /// 返回可交给 `prepare_start` 的输入。
 ///
 /// # 错误
 /// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(super) fn build_payment_reversal_start_input(
-    graph: DefinitionGraph,
-    binding: &ApprovalDefinitionBinding,
-    subject: SubjectRef,
-    subject_version: u32,
-    actor_id: &str,
-    organization_id: &str,
-    idempotency_key: &str,
-    receipt: Option<bpm::model::ApprovalCommandReceipt>,
-    now: Instant,
+    input: PaymentReversalStartInput<'_>,
 ) -> Result<StartExecutionInput> {
+    let PaymentReversalStartInput {
+        graph,
+        binding,
+        subject,
+        subject_version,
+        actor_id,
+        organization_id,
+        idempotency_key,
+        receipt,
+        now,
+    } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError(
             "付款冲正单绑定定义版本与已加载定义不一致".to_string(),
@@ -1116,39 +1366,73 @@ fn payment_reversal_start_bindings(
     Ok(bindings)
 }
 
+/// 付款冲正启动事务写入集合。
+///
+/// # 用途
+/// 收拢提交后需一并写入的冲正单、快照、启动计划与审计身份。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
+pub(super) struct PaymentReversalStartPersistInput {
+    /// 已进入 `IN_APPROVAL` 的冲正单。
+    pub reversal: PaymentReversal,
+    /// 审计操作人。
+    pub actor: AuditActor,
+    /// 冲正单主键。
+    pub id: String,
+    /// 冻结快照载荷。
+    pub snapshot_payload: ApprovalSubjectSnapshotPayload,
+    /// `prepare_start` 结果。
+    pub prepared: PreparedExecution,
+    /// 合同签署的责任角色。
+    pub owner_role: &'static str,
+    /// 责任组织。
+    pub organization_id: String,
+    /// 调用方时间。
+    pub now: Instant,
+}
+
 /// 在同一事务中写入付款冲正迁移、快照、BPM 运行事实与入口任务。
+///
+/// # 用途
+/// 提交启动后原子写入冲正单、快照与运行事实。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `reversal` - 已进入 `IN_APPROVAL` 的冲正单
-/// * `actor` - 审计操作人
-/// * `id` - 冲正单主键
-/// * `snapshot_payload` - 冻结快照载荷
-/// * `prepared` - `prepare_start` 结果
-/// * `owner_role` - 合同签署的责任角色
-/// * `organization_id` - 责任组织
-/// * `now` - 调用方时间
+/// * `input` - 冲正单、快照与启动计划
 ///
 /// # 返回
 /// 返回提交后的冲正单实体，由调用方装配视图。
 ///
 /// # 错误
 /// 仓储写入失败或计划不完整时返回错误，事务回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_payment_reversal_start(
     db: &Database,
-    reversal: PaymentReversal,
-    actor: &AuditActor,
-    id: &str,
-    snapshot_payload: ApprovalSubjectSnapshotPayload,
-    prepared: PreparedExecution,
-    owner_role: &'static str,
-    organization_id: String,
-    now: Instant,
+    input: PaymentReversalStartPersistInput,
 ) -> Result<PaymentReversal> {
-    let audit = actor
-        .clone()
-        .resource_log("payment_reversal.submit", "payment_reversal", id.to_string())?;
+    let PaymentReversalStartPersistInput {
+        reversal,
+        actor,
+        id,
+        snapshot_payload,
+        prepared,
+        owner_role,
+        organization_id,
+        now,
+    } = input;
+    let audit = actor.resource_log("payment_reversal.submit", "payment_reversal", id)?;
     let db = db.clone();
     let client = db.client().clone();
     client

@@ -182,7 +182,7 @@ mod tests {
     };
     use bpm::model::{
         ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition,
-        ApprovalTransitionDefinition, ParticipantId, ProcessKind, SubjectRef, Timestamp,
+        ApprovalTransitionDefinition, NewNodeDefinition, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
 
     /// 运行编排占位必须失败关闭，并钉死稳定文案。
@@ -782,17 +782,17 @@ mod tests {
         label: &str,
         at: Timestamp,
     ) -> ApprovalNodeDefinition {
-        ApprovalNodeDefinition::new(
-            ApprovalNodeDefinitionId::new(id),
-            ApprovalProcessDefinitionId::new("def"),
-            key,
-            name,
-            None,
-            order,
-            participant(user),
-            label,
+        ApprovalNodeDefinition::new(NewNodeDefinition {
+            id: ApprovalNodeDefinitionId::new(id),
+            process_definition_id: ApprovalProcessDefinitionId::new("def"),
+            node_key: key.into(),
+            node_name: name.into(),
+            node_purpose: None,
+            display_order: order,
+            assignee_participant_id: participant(user),
+            assignee_label_snapshot: label.into(),
             at,
-        )
+        })
         .unwrap()
     }
 

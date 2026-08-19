@@ -34,13 +34,14 @@ use super::adapter::{
 };
 use super::cancel_approval::{
     build_sales_change_cancel_input, load_cancel_runtime, persist_sales_change_cancel,
+    SalesChangeCancelPersistInput,
 };
 use super::dto;
 use super::formalization::{build_change_revision, build_receivable_delta};
 use super::sales_change_mapping::{change_copy_goods, change_copy_voucher, convert_line_type};
 use super::start_approval::{
     build_sales_change_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_sales_change_start, SalesChangeStartPersistInput,
+    persist_sales_change_start, SalesChangeStartInput, SalesChangeStartPersistInput,
 };
 use super::{
     CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, PageView, SalesChangeDraftRequest,
@@ -315,13 +316,15 @@ impl SalesReviewService {
         persist_created_change_order(
             &self.db,
             rbac,
-            change_order.clone(),
-            working_copy,
-            lines,
-            document,
-            bind_command,
-            audit,
-            actor.clone(),
+            CreatedChangeOrderPersistInput {
+                change_order: change_order.clone(),
+                working_copy,
+                lines,
+                document,
+                bind_command,
+                audit,
+                actor: actor.clone(),
+            },
         )
         .await?;
 
@@ -494,13 +497,15 @@ impl SalesReviewService {
         )?;
         persist_sales_change_cancel(
             &self.db,
-            change_order,
-            prepared,
-            runtime.open_tasks,
-            actor.id(),
-            &req.reason,
-            now,
-            audit,
+            SalesChangeCancelPersistInput {
+                change_order,
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
         )
         .await?;
         self.sales_change_order_detail(id).await
@@ -587,17 +592,17 @@ impl SalesReviewService {
         let graph = load_bound_definition_graph(&self.db, &binding).await?;
         let existing_receipt =
             load_start_receipt(&self.db, &subject, submission.submission_no, &idempotency_key).await?;
-        let start_input = build_sales_change_start_input(
+        let start_input = build_sales_change_start_input(SalesChangeStartInput {
             graph,
-            &binding,
+            binding: &binding,
             subject,
-            submission.submission_no,
-            actor.id(),
-            &organization_id,
-            &idempotency_key,
-            existing_receipt,
+            subject_version: submission.submission_no,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
+            idempotency_key: &idempotency_key,
+            receipt: existing_receipt,
             now,
-        )?;
+        })?;
         let prepared = prepare_start(start_input)?;
         let workflow_action = WorkflowAction::new(
             WorkflowActionId::new(next_id()),
@@ -623,13 +628,13 @@ impl SalesReviewService {
                 submission,
                 submission_lines,
                 workflow_action,
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role: adapter.owner_role,
+                organization_id,
+                now,
+                audit,
             },
-            snapshot,
-            prepared,
-            adapter.owner_role,
-            organization_id,
-            now,
-            audit,
         )
         .await?;
         self.sales_change_order_detail(id).await
@@ -890,22 +895,71 @@ fn build_change_submission_lines(
     Ok(built)
 }
 
+/// 销售变更单创建事务写入集合。
+///
+/// # 用途
+/// 收拢创建变更单时需一并持久化的单据、工作副本、注册行与审计。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 必须绑定已发布定义；人员重验失败时不得写入。
+struct CreatedChangeOrderPersistInput {
+    /// 待创建的变更单。
+    change_order: SalesChangeOrder,
+    /// 工作副本头。
+    working_copy: entities::sales_order::SalesOrderWorkingCopy,
+    /// 工作副本行。
+    lines: Vec<entities::sales_order::SalesOrderWorkingCopyLine>,
+    /// 待登记的业务单据。
+    document: BusinessDocument,
+    /// 发布定义绑定命令。
+    bind_command: BindPublishedDefinitionCommand,
+    /// 已构造审计。
+    audit: entities::AuditLog,
+    /// 审计操作人。
+    actor: AuditActor,
+}
+
 /// 在创建事务内写入变更单、绑定发布定义并登记单据。
+///
+/// # 用途
+/// 创建变更单时原子写入单据、工作副本与发布定义绑定。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `input` - 变更单、工作副本、注册行与审计
+///
+/// # 返回
+/// 成功时无返回值。
 ///
 /// # 错误
 /// 无发布定义、人员重验失败或写入失败时返回错误，调用方必须回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// 销售变更单必须绑定已发布定义，不得无定义创建。
 async fn persist_created_change_order(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
-    change_order: SalesChangeOrder,
-    working_copy: entities::sales_order::SalesOrderWorkingCopy,
-    lines: Vec<entities::sales_order::SalesOrderWorkingCopyLine>,
-    mut document: BusinessDocument,
-    bind_command: BindPublishedDefinitionCommand,
-    audit: entities::AuditLog,
-    actor: AuditActor,
+    input: CreatedChangeOrderPersistInput,
 ) -> Result<()> {
+    let CreatedChangeOrderPersistInput {
+        change_order,
+        working_copy,
+        lines,
+        mut document,
+        bind_command,
+        audit,
+        actor,
+    } = input;
     let db = db.clone();
     let rbac = rbac.clone();
     let client = db.client().clone();

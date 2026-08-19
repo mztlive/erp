@@ -75,7 +75,6 @@ impl CostAllocation {
     ///
     /// # 错误
     /// 当归属目标缺失或重复、金额非正或含税金额小于不含税金额时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn new(id: CostAllocationId, data: CostAllocationData) -> Result<Self> {
         validate_target(
             &data.sales_order_id,

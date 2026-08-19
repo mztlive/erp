@@ -59,19 +59,19 @@ pub fn resume(
         .with_execution(ApprovalNodeExecutionId::new(current.base.id.clone()))
         .with_node_key(current.node_key.clone()),
     );
-    let enter = plan_enter_node(
-        plan.instance.clone(),
+    let enter = plan_enter_node(super::EnterNodeInput {
+        instance: plan.instance.clone(),
         graph,
-        &current.node_key,
-        current.round_no,
-        current.assignee_participant_id.clone(),
-        command.eligibility,
-        command.next_execution_id,
-        command.next_execution_no,
-        ApprovalExecutionAssignmentSource::AssigneeRecovery,
-        Some(ApprovalNodeExecutionId::new(current.base.id.clone())),
-        command.now,
-    )?;
+        node_key: &current.node_key,
+        round_no: current.round_no,
+        participant: current.assignee_participant_id.clone(),
+        eligibility: command.eligibility,
+        execution_id: command.next_execution_id,
+        execution_no: command.next_execution_no,
+        assignment_source: ApprovalExecutionAssignmentSource::AssigneeRecovery,
+        replaces_execution_id: Some(ApprovalNodeExecutionId::new(current.base.id.clone())),
+        now: command.now,
+    })?;
     plan.updated_executions.push(current);
     plan.merge_enter(enter, false);
     plan.events.push(BpmEvent::new(

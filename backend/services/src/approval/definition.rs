@@ -416,7 +416,19 @@ impl ApprovalDefinitionService {
         let client = db.client().clone();
         let outcome = client.with_transaction(move |session| {
             Box::pin(async move {
-                create_draft_tx(&db, &rbac, &policy, &name, &request, &actor, &digest, session).await
+                create_draft_tx(
+                    &db,
+                    &rbac,
+                    CreateDraftTxInput {
+                        policy: &policy,
+                        name: &name,
+                        request: &request,
+                        actor: &actor,
+                        digest: &digest,
+                    },
+                    session,
+                )
+                .await
             })
         });
         match outcome.await {
@@ -510,9 +522,21 @@ impl ApprovalDefinitionService {
         let replay_type = policy.document_type;
         let client = db.client().clone();
         let outcome = client.with_transaction(move |session| {
-            Box::pin(
-                async move { publish_tx(&db, &rbac, graph, policy, request, &actor, &digest, session).await },
-            )
+            Box::pin(async move {
+                publish_tx(
+                    &db,
+                    &rbac,
+                    graph,
+                    PublishTxInput {
+                        policy,
+                        request,
+                        actor: &actor,
+                        digest: &digest,
+                    },
+                    session,
+                )
+                .await
+            })
         });
         self.recover_lock_command(
             outcome.await,
@@ -595,18 +619,67 @@ impl ApprovalDefinitionService {
     }
 }
 
+/// 创建草稿事务的政策、请求、摘要与操作人。
+///
+/// # 用途
+/// 将草稿创建命令上下文字段打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 同一流程种类只允许一个活动草稿。
+struct CreateDraftTxInput<'a> {
+    /// 单据审批政策。
+    policy: &'a ProcessRequiredApprovalPolicy,
+    /// 已规范化的定义名称。
+    name: &'a str,
+    /// 创建草稿请求。
+    request: &'a CreateDefinitionDraftRequest,
+    /// 审计操作人。
+    actor: &'a AuditActor,
+    /// 命令摘要。
+    digest: &'a str,
+}
+
 /// 事务内创建草稿。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 回放收据或构造并持久化新草稿。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `input` - 政策、请求、摘要与操作人
+/// * `session` - 事务会话
+///
+/// # 返回
+/// 返回草稿详情。
+///
+/// # 错误
+/// 已有活动草稿、缺发布源或写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 已有收据必须原样回放，不得重复 persist。
 async fn create_draft_tx(
     db: &Database,
     rbac: &SharedRbacService,
-    policy: &ProcessRequiredApprovalPolicy,
-    name: &str,
-    request: &CreateDefinitionDraftRequest,
-    actor: &AuditActor,
-    digest: &str,
+    input: CreateDraftTxInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
+    let CreateDraftTxInput {
+        policy,
+        name,
+        request,
+        actor,
+        digest,
+    } = input;
     if let Some(view) = replay_existing_receipt(
         db,
         ApprovalCommandKind::DefinitionWrite,
@@ -679,18 +752,66 @@ async fn replace_nodes_tx(
     .await
 }
 
+/// 发布草稿事务的政策、请求、摘要与操作人。
+///
+/// # 用途
+/// 将发布命令上下文字段打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 图、用途、账号或动作任一失败都不得进入发布写库。
+struct PublishTxInput<'a> {
+    /// 单据审批政策。
+    policy: ProcessRequiredApprovalPolicy,
+    /// 发布请求。
+    request: PublishDefinitionRequest,
+    /// 审计操作人。
+    actor: &'a AuditActor,
+    /// 命令摘要。
+    digest: &'a str,
+}
+
 /// 事务内发布草稿。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 回放收据或刷新快照并发布当前草稿。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `graph` - 当前草稿图
+/// * `input` - 政策、请求、摘要与操作人
+/// * `session` - 事务会话
+///
+/// # 返回
+/// 返回发布后的定义详情。
+///
+/// # 错误
+/// 陈旧锁、图校验失败或写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 任一校验失败必须整体回滚。
 async fn publish_tx(
     db: &Database,
     rbac: &SharedRbacService,
     graph: DefinitionGraph,
-    policy: ProcessRequiredApprovalPolicy,
-    request: PublishDefinitionRequest,
-    actor: &AuditActor,
-    digest: &str,
+    input: PublishTxInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
+    let PublishTxInput {
+        policy,
+        request,
+        actor,
+        digest,
+    } = input;
     if let Some(view) = replay_existing_receipt(
         db,
         ApprovalCommandKind::PublishDefinition,
@@ -874,17 +995,17 @@ fn copy_nodes(
     let mut nodes = Vec::with_capacity(source.len());
     for node in sorted_nodes(source)? {
         nodes.push(
-            ApprovalNodeDefinition::new(
-                ApprovalNodeDefinitionId::new(next_id()),
-                process_id.clone(),
-                next_id(),
-                node.node_name.clone(),
-                node.node_purpose.clone(),
-                node.display_order,
-                node.assignee_participant_id.clone(),
-                node.assignee_label_snapshot.clone(),
+            ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
+                id: ApprovalNodeDefinitionId::new(next_id()),
+                process_definition_id: process_id.clone(),
+                node_key: next_id(),
+                node_name: node.node_name.clone(),
+                node_purpose: node.node_purpose.clone(),
+                display_order: node.display_order,
+                assignee_participant_id: node.assignee_participant_id.clone(),
+                assignee_label_snapshot: node.assignee_label_snapshot.clone(),
                 at,
-            )
+            })
             .map_err(map_model_error)?,
         );
     }
@@ -1124,17 +1245,17 @@ fn plan_one_node(
     let name = normalize_node_name(&request.node_name)?;
     let assignee = ParticipantId::new(request.assignee_user_id.trim()).map_err(map_bpm_error)?;
     let (node_id, node_key, purpose) = resolve_node_identity(existing, seen_ids, request)?;
-    ApprovalNodeDefinition::new(
-        node_id,
-        ApprovalProcessDefinitionId::new(definition_id.to_string()),
+    ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
+        id: node_id,
+        process_definition_id: ApprovalProcessDefinitionId::new(definition_id.to_string()),
         node_key,
-        name,
-        purpose,
-        request.display_order,
-        assignee,
-        "pending",
-        now()?,
-    )
+        node_name: name,
+        node_purpose: purpose,
+        display_order: request.display_order,
+        assignee_participant_id: assignee,
+        assignee_label_snapshot: "pending".to_string(),
+        at: now()?,
+    })
     .map_err(map_model_error)
 }
 
@@ -1289,17 +1410,17 @@ fn apply_snapshots(
             .get(node.assignee_participant_id.as_str())
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         refreshed.push(
-            ApprovalNodeDefinition::new(
-                ApprovalNodeDefinitionId::new(node.base.id.clone()),
-                node.process_definition_id.clone(),
-                node.node_key.clone(),
-                node.node_name.clone(),
-                node.node_purpose.clone(),
-                node.display_order,
-                node.assignee_participant_id.clone(),
-                account.name.clone(),
+            ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
+                id: ApprovalNodeDefinitionId::new(node.base.id.clone()),
+                process_definition_id: node.process_definition_id.clone(),
+                node_key: node.node_key.clone(),
+                node_name: node.node_name.clone(),
+                node_purpose: node.node_purpose.clone(),
+                display_order: node.display_order,
+                assignee_participant_id: node.assignee_participant_id.clone(),
+                assignee_label_snapshot: account.name.clone(),
                 at,
-            )
+            })
             .map_err(map_model_error)?,
         );
     }
@@ -2118,17 +2239,17 @@ mod tests {
     }
 
     fn node(id: &str, key: &str, order: u32, purpose: Option<&str>, user: &str) -> ApprovalNodeDefinition {
-        ApprovalNodeDefinition::new(
-            ApprovalNodeDefinitionId::new(id),
-            ApprovalProcessDefinitionId::new("def-1"),
-            key,
-            format!("节点{order}"),
-            purpose.map(ToOwned::to_owned),
-            order,
-            ParticipantId::new(user).unwrap(),
-            "张三",
-            Timestamp::from_unix_secs(1).unwrap(),
-        )
+        ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
+            id: ApprovalNodeDefinitionId::new(id),
+            process_definition_id: ApprovalProcessDefinitionId::new("def-1"),
+            node_key: key.into(),
+            node_name: format!("节点{order}"),
+            node_purpose: purpose.map(ToOwned::to_owned),
+            display_order: order,
+            assignee_participant_id: ParticipantId::new(user).unwrap(),
+            assignee_label_snapshot: "张三".to_string(),
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
         .unwrap()
     }
 

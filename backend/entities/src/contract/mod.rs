@@ -11,16 +11,12 @@
 //! 跨域约束），各域各自定义同形结构，待 `chore/erp-p0-amend-*` 地基修订统一下沉到
 //! `entities/src/common/`。
 
-// 实体文件按表名命名（表 `contract` → contract.rs），与 `ids.rs` 映射表一致；
-// 父模块同名，按约定关闭 module_inception 提示。
-#[allow(clippy::module_inception)]
-pub mod contract;
-#[allow(clippy::module_inception)]
 pub mod contract_revision;
+mod entity;
 pub mod snapshot;
 
-pub use contract::{Contract, ContractData, ContractStatus, ContractUpdate};
 pub use contract_revision::{ArchiveSource, ContractRevision, ContractRevisionData};
+pub use entity::{Contract, ContractData, ContractStatus, ContractUpdate};
 pub use snapshot::{
     CustomerSnapshot, InvoiceRequirementSnapshot, PaymentTermSnapshot, SettlementPartySnapshot,
 };

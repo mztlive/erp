@@ -321,7 +321,6 @@ impl CostEntry {
     /// # 错误
     /// 当来源字段为空/超长、金额恒等不成立或为负、税率为负、商城消费缺
     /// `cost_basis` 或使用 `NONE` 取值时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn new(id: CostEntryId, data: CostEntryData) -> Result<Self> {
         validate_amounts(data.gross_amount, data.net_amount, data.tax_amount)?;
         if data.input_tax_rate.to_decimal().is_sign_negative() {

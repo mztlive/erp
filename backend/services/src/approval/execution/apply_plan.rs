@@ -115,22 +115,23 @@ mod tests {
     };
     use bpm::model::types::{ApprovalCommandKind, ApprovalProcessInstanceStatus};
     use bpm::model::{
-        ApprovalCommandReceipt, ApprovalProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
+        ApprovalCommandReceipt, ApprovalProcessInstance, NewProcessInstance, ParticipantId, ProcessKind,
+        SubjectRef, Timestamp,
     };
 
     /// 任务意图按类型拆分，终态通过必须带最终动作。
     #[test]
     fn execution_apply_plan_splits_task_intents() {
-        let instance = ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst"),
-            ApprovalProcessDefinitionId::new("def"),
-            1,
-            ProcessKind::StockAdjustment,
-            SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
-            1,
-            ParticipantId::new("u1").unwrap(),
-            Timestamp::from_unix_secs(1).unwrap(),
-        )
+        let instance = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("u1").unwrap(),
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
         .unwrap();
         let mut plan = TransitionPlan::for_instance(instance, CommitRequired::TerminalApproved);
         plan.task_intents.push(TaskIntent::CompleteTask {

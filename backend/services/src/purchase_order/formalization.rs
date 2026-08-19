@@ -39,7 +39,6 @@ impl PurchaseOrderService {
     /// 说明：`purchase_line_sales_allocation` 的 Data 类型未从实体层导出
     /// （entities 冻结），分配写入本阶段无法构造实体，已在报告中提出；
     /// 版本行保留销售提交行引用与分配数量，供入库预占沿分配关系回查。
-    #[allow(clippy::too_many_arguments)]
     pub(super) async fn build_effective_revision(
         &self,
         order: &PurchaseOrder,

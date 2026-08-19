@@ -229,7 +229,6 @@ fn convert_welfare_scenario_to_sales(
 /// # 错误
 /// 实物及服务行缺商品字段组时返回错误。
 pub(super) fn change_submission_goods(line: &SalesChangeSubmissionLine) -> Result<GoodsLineFields> {
-    #[allow(clippy::redundant_closure_call)]
     let sku_id = line
         .sku_id
         .clone()

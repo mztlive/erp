@@ -412,7 +412,7 @@ fn cancel_requires_reason_and_legacy_symbols_are_absent_from_target_paths() {
     assert!(!routes.contains("approval_instance::recover)"));
     assert!(!routes.contains("RETRY_CURRENT_STEP"));
     assert!(routes.contains("recovery-options"));
-    let work_item = production(include_str!("../../../entities/src/work_item/work_item.rs"));
+    let work_item = production(include_str!("../../../entities/src/work_item/entity.rs"));
     assert!(work_item.contains("DocumentApproval"));
     assert!(!work_item.contains("AssignmentMode"));
 }

@@ -187,35 +187,71 @@ fn cancel_eligibility(current: &ApprovalNodeExecution) -> Result<Eligibility> {
     )
 }
 
+/// 客户回款撤回事务写入集合。
+///
+/// # 用途
+/// 收拢取消计划、开放任务、撤回人与审计，供同一事务写入。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、任务关闭与单据回写必须同事务；CAS 失败时回滚。
+pub(super) struct CustomerReceiptCancelPersistInput {
+    /// 已执行 `cancel_action` 的回款单。
+    pub receipt: CustomerReceipt,
+    /// `prepare_cancel` 结果。
+    pub prepared: PreparedExecution,
+    /// 待关闭的开放任务。
+    pub open_tasks: Vec<WorkItem>,
+    /// 撤回人。
+    pub actor_id: String,
+    /// 撤回原因。
+    pub reason: String,
+    /// 调用方时间。
+    pub now: Instant,
+    /// 已构造审计。
+    pub audit: entities::AuditLog,
+}
+
 /// 在同一事务内应用取消计划、关闭任务并写回回款单。
+///
+/// # 用途
+/// 撤回审批后原子写回运行事实与回款单。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `receipt` - 已执行 `cancel_action` 的回款单
-/// * `prepared` - `prepare_cancel` 结果
-/// * `open_tasks` - 待关闭的开放任务
-/// * `actor_id` - 撤回人
-/// * `reason` - 撤回原因
-/// * `now` - 调用方时间
-/// * `audit` - 已构造审计
+/// * `input` - 回款单、取消计划与开放任务
+///
+/// # 返回
+/// 成功时无返回值。
 ///
 /// # 错误
 /// CAS 冲突或仓储失败时返回错误，事务回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 pub(super) async fn persist_customer_receipt_cancel(
     db: &Database,
-    mut receipt: CustomerReceipt,
-    prepared: PreparedExecution,
-    open_tasks: Vec<WorkItem>,
-    actor_id: &str,
-    reason: &str,
-    now: Instant,
-    audit: entities::AuditLog,
+    input: CustomerReceiptCancelPersistInput,
 ) -> Result<()> {
+    let CustomerReceiptCancelPersistInput {
+        mut receipt,
+        prepared,
+        open_tasks,
+        actor_id,
+        reason,
+        now,
+        audit,
+    } = input;
     let db = db.clone();
     let client = db.client().clone();
-    let actor_id = actor_id.to_string();
-    let reason = reason.to_string();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
@@ -362,16 +398,16 @@ mod tests {
     use bpm::model::{ApprovalProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
     fn instance(status: ApprovalProcessInstanceStatus) -> ApprovalProcessInstance {
-        let mut item = ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst-1"),
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            ProcessKind::CustomerReceipt,
-            SubjectRef::new("customer_receipt", "cr-1").unwrap(),
-            1,
-            ParticipantId::new("u1").unwrap(),
-            Timestamp::from_unix_secs(1).unwrap(),
-        )
+        let mut item = ApprovalProcessInstance::start_running(bpm::model::NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst-1"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def-1"),
+            definition_version: 1,
+            process_kind: ProcessKind::CustomerReceipt,
+            subject: SubjectRef::new("customer_receipt", "cr-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("u1").unwrap(),
+            at: Timestamp::from_unix_secs(1).unwrap(),
+        })
         .expect("实例夹具");
         item.status = status;
         item

@@ -13,15 +13,14 @@
 //!
 //! 两者都必须收到事务执行器（P2 §2.1）。
 
+mod order;
 mod revision;
-#[allow(clippy::module_inception)]
-mod sales_order;
 mod submission;
 mod working_copy;
 
 use mongodb::bson::{doc, Document};
 use mongodb::Database;
-pub use sales_order::SalesOrderFilter;
+pub use order::SalesOrderFilter;
 pub use submission::SubmissionFilter;
 pub use working_copy::WorkingCopyFilter;
 

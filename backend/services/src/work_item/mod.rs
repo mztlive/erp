@@ -956,16 +956,16 @@ impl WorkItemService {
             .assignment_authorization_snapshot(actor, &target_user_id, &item, true)
             .await?;
         let updated = self
-            .reassign_with_assignment_policy_audit(
+            .reassign_with_assignment_policy_audit(AssignmentPolicyAuditInput {
                 item,
                 expected_task_version,
                 target_user_id,
                 actor,
                 action,
                 audit_id,
-                command_audit_message(&fingerprint, Some(&reason)),
+                audit_message: command_audit_message(&fingerprint, Some(&reason)),
                 authorization,
-            )
+            })
             .await?;
         match updated {
             WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, actor).await,
@@ -1027,16 +1027,16 @@ impl WorkItemService {
                 .await?;
         }
         let updated = self
-            .close_with_domain_evidence(
+            .close_with_domain_evidence(CloseDomainEvidenceInput {
                 item,
                 actor,
-                &reason_code,
-                replacement_id.as_deref(),
+                reason_code: &reason_code,
+                replacement_work_item_id: replacement_id.as_deref(),
                 action,
                 audit_id,
-                command_audit_message(&fingerprint, Some(&close_reason)),
+                audit_message: command_audit_message(&fingerprint, Some(&close_reason)),
                 close_reason,
-            )
+            })
             .await?;
         match updated {
             WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, actor).await,
@@ -1892,20 +1892,142 @@ impl WorkItemService {
         }
         Err(Error::Forbidden("当前账号没有任务责任管理权限".to_string()))
     }
+}
 
+/// 转交命令的任务、目标责任人与审计输入。
+///
+/// # 用途
+/// 将转交事务所需字段打包，供 [`WorkItemService::reassign_with_assignment_policy_audit`] 使用。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 事务内必须重验管理人、目标责任人与授权快照。
+struct AssignmentPolicyAuditInput<'a> {
+    /// 待转交任务。
+    item: WorkItem,
+    /// 期望任务版本。
+    expected_task_version: u64,
+    /// 目标责任人。
+    target_user_id: String,
+    /// 操作人。
+    actor: &'a AuditActor,
+    /// 审计动作。
+    action: &'a str,
+    /// 幂等审计主键。
+    audit_id: String,
+    /// 审计消息。
+    audit_message: String,
+    /// 事务外冻结的授权快照。
+    authorization: AssignmentAuthorizationSnapshot,
+}
+
+/// 退回责任池命令的任务与审计输入。
+///
+/// # 用途
+/// 将退回事务所需字段打包，供 [`WorkItemService::release_with_assignment_policy_audit`] 使用。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 事务内必须重验当前责任人与授权快照。
+struct ReleaseAssignmentPolicyAuditInput<'a> {
+    /// 待退回任务。
+    item: WorkItem,
+    /// 期望任务版本。
+    expected_task_version: u64,
+    /// 操作人。
+    actor: &'a AuditActor,
+    /// 审计动作。
+    action: &'a str,
+    /// 幂等审计主键。
+    audit_id: String,
+    /// 审计消息。
+    audit_message: String,
+    /// 事务外冻结的授权快照。
+    authorization: AssignmentAuthorizationSnapshot,
+}
+
+/// W29 关闭命令的领域证据与审计输入。
+///
+/// # 用途
+/// 将关闭事务所需字段打包，供 [`WorkItemService::close_with_domain_evidence`] 使用。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 关闭必须在同一事务内写入领域证据与任务终态。
+struct CloseDomainEvidenceInput<'a> {
+    /// 待关闭任务。
+    item: WorkItem,
+    /// 操作人。
+    actor: &'a AuditActor,
+    /// 关闭原因代码。
+    reason_code: &'a str,
+    /// 替代任务 ID。
+    replacement_work_item_id: Option<&'a str>,
+    /// 审计动作。
+    action: &'a str,
+    /// 幂等审计主键。
+    audit_id: String,
+    /// 审计消息。
+    audit_message: String,
+    /// 面向用户的关闭原因。
+    close_reason: String,
+}
+
+impl WorkItemService {
     /// 在同一事务内重验管理人、目标责任人及全部业务事实后执行转交与审计。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 用途
+    /// 按授权快照转交任务并写入幂等审计。
+    ///
+    /// # 参数
+    /// * `input` - 任务、目标责任人与审计字段
+    ///
+    /// # 返回
+    /// 返回写入结果或版本冲突。
+    ///
+    /// # 错误
+    /// 授权变化、版本冲突或仓储失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 事务内必须重验管理人、目标责任人与 Casbin 策略修订。
     async fn reassign_with_assignment_policy_audit(
         &self,
-        item: WorkItem,
-        expected_task_version: u64,
-        target_user_id: String,
-        actor: &AuditActor,
-        action: &str,
-        audit_id: String,
-        audit_message: String,
-        authorization: AssignmentAuthorizationSnapshot,
+        input: AssignmentPolicyAuditInput<'_>,
     ) -> Result<WorkItemWriteOutcome> {
+        let AssignmentPolicyAuditInput {
+            item,
+            expected_task_version,
+            target_user_id,
+            actor,
+            action,
+            audit_id,
+            audit_message,
+            authorization,
+        } = input;
         let replay_audit_id = audit_id.clone();
         let replay_item_id = item.base.id.clone();
         let replay_fingerprint = audit_command_fingerprint(&audit_message)
@@ -1941,13 +2063,15 @@ impl WorkItemService {
                     ensure_assignment_policy_in_transaction(
                         &db,
                         &rbac,
-                        actor_kind,
-                        &actor_id,
-                        &target_user_id,
-                        &current,
-                        true,
-                        &authorization,
-                        allow_current_owner,
+                        AssignmentPolicyCheck {
+                            actor_kind,
+                            actor_id: &actor_id,
+                            assignee_id: &target_user_id,
+                            item: &current,
+                            require_manager: true,
+                            authorization: &authorization,
+                            allow_current_owner,
+                        },
                         session,
                     )
                     .await?;
@@ -1959,13 +2083,15 @@ impl WorkItemService {
                     ensure_assignment_policy_in_transaction(
                         &db,
                         &rbac,
-                        actor_kind,
-                        &actor_id,
-                        &target_user_id,
-                        &current,
-                        true,
-                        &authorization,
-                        true,
+                        AssignmentPolicyCheck {
+                            actor_kind,
+                            actor_id: &actor_id,
+                            assignee_id: &target_user_id,
+                            item: &current,
+                            require_manager: true,
+                            authorization: &authorization,
+                            allow_current_owner: true,
+                        },
                         session,
                     )
                     .await?;
@@ -1989,18 +2115,35 @@ impl WorkItemService {
     }
 
     /// 在同一事务内重验当前责任人的账号、授权、参与权和岗位分离后退回责任池。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 用途
+    /// 校验当前责任人后拒绝退回团队动作。
+    ///
+    /// # 参数
+    /// * `input` - 任务、审计与授权快照
+    ///
+    /// # 返回
+    /// 返回写入结果或版本冲突。
+    ///
+    /// # 错误
+    /// 责任人变化、授权失败或动作已取消时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 退回团队动作已取消，校验通过后仍返回业务错误。
     #[allow(dead_code)]
     async fn release_with_assignment_policy_audit(
         &self,
-        item: WorkItem,
-        expected_task_version: u64,
-        actor: &AuditActor,
-        action: &str,
-        audit_id: String,
-        audit_message: String,
-        authorization: AssignmentAuthorizationSnapshot,
+        input: ReleaseAssignmentPolicyAuditInput<'_>,
     ) -> Result<WorkItemWriteOutcome> {
+        let ReleaseAssignmentPolicyAuditInput {
+            item,
+            expected_task_version,
+            actor,
+            action,
+            audit_id,
+            audit_message,
+            authorization,
+        } = input;
         let replay_audit_id = audit_id.clone();
         let replay_item_id = item.base.id.clone();
         let replay_fingerprint = audit_command_fingerprint(&audit_message)
@@ -2039,13 +2182,15 @@ impl WorkItemService {
                     ensure_assignment_policy_in_transaction(
                         &db,
                         &rbac,
-                        actor_kind,
-                        &actor_id,
-                        &actor_id,
-                        &current,
-                        false,
-                        &authorization,
-                        true,
+                        AssignmentPolicyCheck {
+                            actor_kind,
+                            actor_id: &actor_id,
+                            assignee_id: &actor_id,
+                            item: &current,
+                            require_manager: false,
+                            authorization: &authorization,
+                            allow_current_owner: true,
+                        },
                         session,
                     )
                     .await?;
@@ -2068,18 +2213,36 @@ impl WorkItemService {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    /// 在同一事务内写入 W29 领域证据、关闭任务并登记审计。
+    ///
+    /// # 用途
+    /// 将任务关闭与领域对象证据写入同一事务。
+    ///
+    /// # 参数
+    /// * `input` - 任务、关闭原因与审计字段
+    ///
+    /// # 返回
+    /// 返回写入结果或版本冲突。
+    ///
+    /// # 错误
+    /// 替代任务非法、领域对象不存在或仓储失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 仅 W29 可关闭任务允许走此路径；替代任务必须是同类开放正式任务。
     async fn close_with_domain_evidence(
         &self,
-        mut item: WorkItem,
-        actor: &AuditActor,
-        reason_code: &str,
-        replacement_work_item_id: Option<&str>,
-        action: &str,
-        audit_id: String,
-        audit_message: String,
-        close_reason: String,
+        input: CloseDomainEvidenceInput<'_>,
     ) -> Result<WorkItemWriteOutcome> {
+        let CloseDomainEvidenceInput {
+            mut item,
+            actor,
+            reason_code,
+            replacement_work_item_id,
+            action,
+            audit_id,
+            audit_message,
+            close_reason,
+        } = input;
         let closed_at = Instant::now();
         item.close(actor.id(), WorkItemCloseData { close_reason }, closed_at)?;
         let replay_audit_id = audit_id.clone();
@@ -2104,12 +2267,14 @@ impl WorkItemService {
                 Box::pin(async move {
                     close_w29_domain_object(
                         &db,
-                        &item,
-                        &reason_code,
-                        replacement_work_item_id.as_deref(),
-                        &actor_id,
-                        &audit_id,
-                        closed_at,
+                        CloseW29DomainObjectInput {
+                            item: &item,
+                            reason_code: &reason_code,
+                            replacement_work_item_id: replacement_work_item_id.as_deref(),
+                            actor_id: &actor_id,
+                            audit_id: &audit_id,
+                            closed_at,
+                        },
                         session,
                     )
                     .await?;
@@ -2220,41 +2385,85 @@ impl WorkItemService {
     }
 }
 
+/// 事务内分派策略重验输入。
+///
+/// # 用途
+/// 将操作人、候选人与授权快照打包，供 [`ensure_assignment_policy_in_transaction`] 使用。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 操作人身份必须与授权快照一致。
+struct AssignmentPolicyCheck<'a> {
+    /// 操作人账号类型。
+    actor_kind: entities::AccountKind,
+    /// 操作人 ID。
+    actor_id: &'a str,
+    /// 目标责任人 ID。
+    assignee_id: &'a str,
+    /// 当前任务。
+    item: &'a WorkItem,
+    /// 是否要求管理人权限。
+    require_manager: bool,
+    /// 事务外冻结的授权快照。
+    authorization: &'a AssignmentAuthorizationSnapshot,
+    /// 是否允许候选人为当前责任人。
+    allow_current_owner: bool,
+}
+
 /// 在任务责任事务内重放全部固定分派策略。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 用途
+/// 重验操作人授权与候选人资格后再允许写入。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `check` - 分派策略重验输入
+/// * `executor` - 事务执行器
+///
+/// # 返回
+/// 策略仍成立时返回 `Ok(())`。
+///
+/// # 错误
+/// 身份变化、授权不足或候选人非法时返回错误。
+///
+/// # 关键业务约束
+/// 必须在同一任务责任事务内调用。
 async fn ensure_assignment_policy_in_transaction(
     db: &Database,
     rbac: &SharedRbacService,
-    actor_kind: entities::AccountKind,
-    actor_id: &str,
-    assignee_id: &str,
-    item: &WorkItem,
-    require_manager: bool,
-    authorization: &AssignmentAuthorizationSnapshot,
-    allow_current_owner: bool,
+    check: AssignmentPolicyCheck<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if actor_kind != authorization.actor_kind {
+    if check.actor_kind != check.authorization.actor_kind {
         return Err(Error::Forbidden("操作账号身份已变化".to_string()));
     }
     let service = WorkItemService::new(db.clone(), rbac.clone());
     service
         .ensure_assignment_actor_access(
-            actor_kind,
-            actor_id,
-            item,
-            require_manager,
-            authorization,
+            check.actor_kind,
+            check.actor_id,
+            check.item,
+            check.require_manager,
+            check.authorization,
             executor,
         )
         .await?;
     service
         .ensure_assignment_candidate(
-            assignee_id,
-            authorization.assignee_kind,
-            item,
-            authorization,
-            allow_current_owner,
+            check.assignee_id,
+            check.authorization.assignee_kind,
+            check.item,
+            check.authorization,
+            check.allow_current_owner,
             executor,
         )
         .await
@@ -2334,17 +2543,68 @@ fn approval_assignment_separated(
     !decided_by.contains(&candidate_id)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// W29 领域对象关闭输入。
+///
+/// # 用途
+/// 将关闭证据字段打包，供 [`close_w29_domain_object`] 在事务内写入。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 替代任务不得引用自身，且必须仍是同类开放正式任务。
+struct CloseW29DomainObjectInput<'a> {
+    /// 被关闭的任务。
+    item: &'a WorkItem,
+    /// 关闭原因代码。
+    reason_code: &'a str,
+    /// 替代任务 ID。
+    replacement_work_item_id: Option<&'a str>,
+    /// 操作人 ID。
+    actor_id: &'a str,
+    /// 审计主键。
+    audit_id: &'a str,
+    /// 关闭时间。
+    closed_at: Instant,
+}
+
+/// 事务内关闭 W29 领域对象并登记证据引用。
+///
+/// # 用途
+/// 校验替代任务后把关闭证据写入对应领域对象。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `input` - 任务、原因与证据字段
+/// * `executor` - 事务执行器
+///
+/// # 返回
+/// 写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 替代任务非法、领域对象不存在或类型不一致时返回错误。
+///
+/// # 关键业务约束
+/// 必须与任务关闭写入同一事务。
 async fn close_w29_domain_object(
     db: &Database,
-    item: &WorkItem,
-    reason_code: &str,
-    replacement_work_item_id: Option<&str>,
-    actor_id: &str,
-    audit_id: &str,
-    closed_at: Instant,
+    input: CloseW29DomainObjectInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let CloseW29DomainObjectInput {
+        item,
+        reason_code,
+        replacement_work_item_id,
+        actor_id,
+        audit_id,
+        closed_at,
+    } = input;
     let evidence_reference =
         w29_domain_evidence_reference(&item.base.id, reason_code, replacement_work_item_id, audit_id)?;
     if let Some(replacement_work_item_id) = replacement_work_item_id {

@@ -325,7 +325,7 @@ fn no_runtime_mode_switch_or_dual_write() {
 /// 生产路径旧步骤字段、责任池动作与卡券旧定义必须零命中。
 #[test]
 fn production_legacy_fields_and_pool_actions_are_gone() {
-    let work_item = production(include_str!("../../../entities/src/work_item/work_item.rs"));
+    let work_item = production(include_str!("../../../entities/src/work_item/entity.rs"));
     let work_item_svc = production(include_str!("../../../services/src/work_item/mod.rs"));
     let routes = production(include_str!("../src/core/routes/approval_instance.rs"));
     let action_bar =

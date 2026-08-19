@@ -19,6 +19,39 @@ use super::query::{MallOrderFactFilter, OrderFactMap};
 use super::MallOrderService;
 use crate::errors::Result;
 
+/// `ACTUAL` 成本评估的金额、税率与来源。
+///
+/// # 用途
+/// 将分摊金额、进项税率与明细/分摊/消费事实打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 金额与税额必须已由调用方按支付比例舍入完成。
+struct ActualAssessmentInput<'a> {
+    /// 消费事实。
+    entry: &'a MallConsumptionEntry,
+    /// 分摊含税成本。
+    gross: Amount,
+    /// 分摊不含税成本。
+    net: Amount,
+    /// 分摊税额。
+    tax: Amount,
+    /// 进项税率（不含税成本时为空）。
+    input_rate: Option<Rate>,
+    /// 商品明细。
+    item: &'a MallOrderItem,
+    /// 分摊记录。
+    allocation: &'a MallItemFundingAllocation,
+}
+
 impl MallOrderService {
     /// 构建消费成本评估（§8.4 第 7 条，P3 只落 `ACTUAL`/`NONE` 两级）。
     ///
@@ -117,13 +150,15 @@ impl MallOrderService {
                     _ => (gross, Amount::from_str("0.00").expect("零常量可解析"), None),
                 };
                 let assessment = self.actual_assessment(
-                    entry,
-                    gross,
-                    net,
-                    tax,
-                    input_rate,
-                    item,
-                    allocation,
+                    ActualAssessmentInput {
+                        entry,
+                        gross,
+                        net,
+                        tax,
+                        input_rate,
+                        item,
+                        allocation,
+                    },
                     occurred,
                     &assessed_by,
                 );
@@ -219,32 +254,37 @@ impl MallOrderService {
 
     /// 构造 `ACTUAL` 成本评估（商城成本快照来源，§12.1 第 5 项）。
     ///
+    /// # 用途
+    /// 按明细与分摊金额生成链首 `ACTUAL` 评估。
+    ///
     /// # 参数
-    /// * `entry` - 消费事实
-    /// * `gross` - 分摊含税成本
-    /// * `net` - 分摊不含税成本
-    /// * `tax` - 分摊税额
-    /// * `input_rate` - 进项税率（不含税成本时为空）
-    /// * `item` - 商品明细
-    /// * `allocation` - 分摊记录
+    /// * `input` - 消费事实、分摊金额与明细来源
     /// * `occurred` - 评估时间
     /// * `assessed_by` - 评估人
     ///
     /// # 返回
     /// 返回链首 `ACTUAL` 评估。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 错误
+    /// 无；金额与来源已由调用方校验。
+    ///
+    /// # 关键业务约束
+    /// 来源固定为商城成本快照；不含税成本不写进项税率。
     fn actual_assessment(
         &self,
-        entry: &MallConsumptionEntry,
-        gross: Amount,
-        net: Amount,
-        tax: Amount,
-        input_rate: Option<Rate>,
-        item: &MallOrderItem,
-        allocation: &MallItemFundingAllocation,
+        input: ActualAssessmentInput<'_>,
         occurred: Instant,
         assessed_by: &str,
     ) -> MallConsumptionCostAssessment {
+        let ActualAssessmentInput {
+            entry,
+            gross,
+            net,
+            tax,
+            input_rate,
+            item,
+            allocation,
+        } = input;
         MallConsumptionCostAssessment::new(
             MallConsumptionCostAssessmentId::new(next_id()),
             MallConsumptionCostAssessmentData {

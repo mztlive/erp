@@ -100,6 +100,39 @@ struct MappingCommandContext {
     work_item: WorkItem,
 }
 
+/// 确认映射事务的命令、审计与谱系标识。
+///
+/// # 用途
+/// 将确认命令、操作人、幂等审计与谱系主键打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 谱系 ID 必须与命令引用或服务端生成值一致。
+struct ConfirmMappingTxInput {
+    /// 确认映射命令。
+    command: ConfirmMappingCommand,
+    /// 审计操作人。
+    actor: AuditActor,
+    /// 期望任务版本。
+    expected_task_version: u64,
+    /// 请求摘要。
+    fingerprint: String,
+    /// 幂等审计主键。
+    audit_id: String,
+    /// 谱系主键。
+    map_id: String,
+    /// 目标主键。
+    target_id: String,
+}
+
 struct MappingLineageWrite {
     mapping: ExternalIdentityMap,
     target: ExternalIdentityTarget,
@@ -1799,15 +1832,15 @@ impl MallSyncService {
         }
 
         let transaction_result = self
-            .confirm_mapping_transaction(
-                command.clone(),
-                actor.clone(),
+            .confirm_mapping_transaction(ConfirmMappingTxInput {
+                command: command.clone(),
+                actor: actor.clone(),
                 expected_task_version,
-                fingerprint.clone(),
-                audit_id.clone(),
-                map_id.clone(),
-                target_id.clone(),
-            )
+                fingerprint: fingerprint.clone(),
+                audit_id: audit_id.clone(),
+                map_id: map_id.clone(),
+                target_id: target_id.clone(),
+            })
             .await;
         match transaction_result {
             Ok(result) => Ok(result),
@@ -2041,17 +2074,35 @@ impl MallSyncService {
         Ok(Some(operation))
     }
 
-    #[allow(clippy::too_many_arguments)]
+    /// 在同一事务内确认映射并写入谱系。
+    ///
+    /// # 用途
+    /// 重验任务上下文后写入谱系、完成任务并登记审计。
+    ///
+    /// # 参数
+    /// * `input` - 命令、审计与谱系标识
+    ///
+    /// # 返回
+    /// 返回确认结果。
+    ///
+    /// # 错误
+    /// 版本冲突、谱系变化或仓储失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 必须与任务完成同一事务。
     async fn confirm_mapping_transaction(
         &self,
-        command: ConfirmMappingCommand,
-        actor: AuditActor,
-        expected_task_version: u64,
-        fingerprint: String,
-        audit_id: String,
-        map_id: String,
-        target_id: String,
+        input: ConfirmMappingTxInput,
     ) -> Result<ConfirmMappingResult> {
+        let ConfirmMappingTxInput {
+            command,
+            actor,
+            expected_task_version,
+            fingerprint,
+            audit_id,
+            map_id,
+            target_id,
+        } = input;
         let db = self.db.clone();
         let client = db.client().clone();
         client
@@ -2089,13 +2140,15 @@ impl MallSyncService {
                     let now = Instant::now();
                     let mut lineage = prepare_mapping_lineage(
                         &db,
-                        &context,
-                        &command,
-                        actor.id(),
-                        &external_id,
-                        &map_id,
-                        &target_id,
-                        now,
+                        MappingLineagePrep {
+                            context: &context,
+                            command: &command,
+                            actor_id: actor.id(),
+                            external_id: &external_id,
+                            map_id: &map_id,
+                            target_id: &target_id,
+                            now,
+                        },
                         session,
                     )
                     .await?;
@@ -2890,18 +2943,71 @@ fn external_id_value(value: &serde_json::Value) -> Result<String> {
     Ok(value)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// 映射谱系准备所需的命令、上下文与标识。
+///
+/// # 用途
+/// 将确认命令、任务上下文与谱系主键打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 命令引用的谱系 ID 必须与当前来源身份一致。
+struct MappingLineagePrep<'a> {
+    /// 已加载的映射任务上下文。
+    context: &'a MappingCommandContext,
+    /// 确认映射命令。
+    command: &'a ConfirmMappingCommand,
+    /// 操作人 ID。
+    actor_id: &'a str,
+    /// 来源外部身份。
+    external_id: &'a str,
+    /// 谱系主键。
+    map_id: &'a str,
+    /// 目标主键。
+    target_id: &'a str,
+    /// 调用方时间。
+    now: Instant,
+}
+
+/// 按命令准备外部身份谱系写入。
+///
+/// # 用途
+/// 复用或新建谱系并准备过期目标与新目标。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `prep` - 命令、上下文与标识
+/// * `executor` - 事务执行器
+///
+/// # 返回
+/// 返回待写入的谱系、目标与过期目标。
+///
+/// # 错误
+/// 谱系冲突、标识非法或仓储失败时返回错误。
+///
+/// # 关键业务约束
+/// 已有谱系必须匹配命令引用；新谱系不得携带陈旧谱系 ID。
 async fn prepare_mapping_lineage(
     db: &Database,
-    context: &MappingCommandContext,
-    command: &ConfirmMappingCommand,
-    actor_id: &str,
-    external_id: &str,
-    map_id: &str,
-    target_id: &str,
-    now: Instant,
+    prep: MappingLineagePrep<'_>,
     executor: &mut dyn Executor,
 ) -> Result<MappingLineageWrite> {
+    let MappingLineagePrep {
+        context,
+        command,
+        actor_id,
+        external_id,
+        map_id,
+        target_id,
+        now,
+    } = prep;
     let registration = context
         .task
         .mapping_type

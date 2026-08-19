@@ -34,6 +34,7 @@ use super::adapter::{
 };
 use super::cancel_approval::{
     build_sales_order_cancel_input, load_cancel_runtime, persist_sales_order_cancel,
+    SalesOrderCancelPersistInput,
 };
 use super::dto::{
     CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, SalesOrderCreateIntent, SalesOrderDetailView,
@@ -47,7 +48,7 @@ use super::mapper::{
 use super::pricing::line_totals;
 use super::start_approval::{
     build_sales_order_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_sales_order_start, SalesOrderStartPersistInput,
+    persist_sales_order_start, SalesOrderStartInput, SalesOrderStartPersistInput,
 };
 use super::SalesOrderService;
 use crate::approval::binding::{
@@ -65,6 +66,39 @@ use crate::iam::SharedRbacService;
 struct ResolvedCardExternalIdentities {
     customer: String,
     voucher_category: String,
+}
+
+/// 销售单提交并启动审批所需的单据集合。
+///
+/// # 用途
+/// 将销售单、工作副本、冻结提交与外部身份打包。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 提交行必须由当前工作副本冻结；卡券身份在提交期间不得变化。
+struct ApprovalSubmissionStart<'a> {
+    /// 销售单主键。
+    id: &'a str,
+    /// 已进入审批中的销售单。
+    order: SalesOrder,
+    /// 已锁定的工作副本。
+    working_copy: SalesOrderWorkingCopy,
+    /// 冻结提交头。
+    submission: entities::sales_order::SalesOrderSubmission,
+    /// 冻结提交行。
+    submission_lines: Vec<entities::sales_order::SalesOrderSubmissionLine>,
+    /// 提交时解析的卡券外部身份。
+    resolved_identities: Option<ResolvedCardExternalIdentities>,
+    /// 工作副本行，用于可售引用重验。
+    copy_lines: Vec<SalesOrderWorkingCopyLine>,
 }
 
 /// 为销售提交幂等命令生成不泄露原始幂等键的稳定收据 ID。
@@ -601,13 +635,15 @@ impl SalesOrderService {
         let submission_lines = build_submission_lines(&submission, &copy_lines)?;
         working_copy.submit()?;
         self.start_approval_submission(
-            id,
-            order,
-            working_copy,
-            submission,
-            submission_lines,
-            resolved_identities,
-            copy_lines,
+            ApprovalSubmissionStart {
+                id,
+                order,
+                working_copy,
+                submission,
+                submission_lines,
+                resolved_identities,
+                copy_lines,
+            },
             actor,
             &req.idempotency_key,
             audit_id,
@@ -618,23 +654,41 @@ impl SalesOrderService {
 
     /// 销售单提交并启动统一审批。
     ///
+    /// # 用途
+    /// 冻结提交快照并启动统一审批。
+    ///
+    /// # 参数
+    /// * `start` - 销售单、工作副本、提交与外部身份
+    /// * `actor` - 审计操作人
+    /// * `idempotency_key` - 客户端幂等键
+    /// * `audit_id` - 幂等审计主键
+    /// * `fingerprint` - 请求摘要
+    ///
+    /// # 返回
+    /// 返回提交快照视图。
+    ///
     /// # 错误
     /// 无绑定、定义缺失、状态不允许或写入失败时返回错误。
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// # 关键业务约束
+    /// 提交期间目标商城外部身份不得变化。
     async fn start_approval_submission(
         &self,
-        id: &str,
-        mut order: SalesOrder,
-        working_copy: SalesOrderWorkingCopy,
-        submission: entities::sales_order::SalesOrderSubmission,
-        submission_lines: Vec<entities::sales_order::SalesOrderSubmissionLine>,
-        resolved_identities: Option<ResolvedCardExternalIdentities>,
-        copy_lines: Vec<SalesOrderWorkingCopyLine>,
+        start: ApprovalSubmissionStart<'_>,
         actor: &AuditActor,
         idempotency_key: &str,
         audit_id: String,
         fingerprint: String,
     ) -> Result<SubmissionView> {
+        let ApprovalSubmissionStart {
+            id,
+            mut order,
+            working_copy,
+            submission,
+            submission_lines,
+            resolved_identities,
+            copy_lines,
+        } = start;
         let ports = sales_approval_ports(order.business_type)?;
         let subject = subject_ref_for_sales_business(order.business_type, id)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
@@ -661,18 +715,18 @@ impl SalesOrderService {
             idempotency_key,
         )
         .await?;
-        let start_input = build_sales_order_start_input(
+        let start_input = build_sales_order_start_input(SalesOrderStartInput {
             graph,
-            &binding,
-            ports.document_type,
+            binding: &binding,
+            document_type: ports.document_type,
             subject,
-            submission.submission_no,
-            actor.id(),
-            &organization_id,
+            subject_version: submission.submission_no,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
             idempotency_key,
-            existing_receipt,
+            receipt: existing_receipt,
             now,
-        )?;
+        })?;
         let prepared = prepare_start(start_input)?;
         let workflow_action = WorkflowAction::new(
             WorkflowActionId::new(next_id()),
@@ -714,15 +768,13 @@ impl SalesOrderService {
                 submission_lines,
                 workflow_action,
                 document_type: ports.document_type,
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role: ports.owner_role,
+                organization_id,
+                now,
+                audit,
             },
-            actor,
-            id,
-            snapshot,
-            prepared,
-            ports.owner_role,
-            organization_id,
-            now,
-            audit,
         )
         .await
     }
@@ -784,13 +836,15 @@ impl SalesOrderService {
                 .resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
         persist_sales_order_cancel(
             &self.db,
-            order,
-            prepared,
-            runtime.open_tasks,
-            actor.id(),
-            &req.reason,
-            now,
-            audit,
+            SalesOrderCancelPersistInput {
+                order,
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
         )
         .await?;
         self.sales_order_detail(id, None).await
@@ -901,7 +955,6 @@ impl SalesOrderService {
     }
 
     /// 要求目标商城下给定 ERP 对象恰好存在一条当前有效外部身份。
-    #[allow(clippy::too_many_arguments)]
     async fn unique_card_external_identity(
         &self,
         target_mall_id: &entities::ids::SourceSystemId,

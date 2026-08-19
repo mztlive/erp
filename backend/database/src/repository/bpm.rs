@@ -1332,7 +1332,8 @@ mod tests {
         ApprovalProcessInstanceStatus,
     };
     use bpm::model::{
-        ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId, Timestamp,
+        ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, NewProcessInstance, ParticipantId,
+        Timestamp,
     };
     use bpm::{ProcessKind, SubjectRef};
     use entity_core::{BaseModel, HasBaseModel};
@@ -1487,16 +1488,16 @@ mod tests {
 
     #[test]
     fn start_instance_insert_includes_bounded_list_projection() {
-        let instance = ApprovalProcessInstance::start_running(
-            ApprovalProcessInstanceId::new("inst-1"),
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            ProcessKind::StockAdjustment,
-            SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
-            1,
-            ParticipantId::new("u1").unwrap(),
-            Timestamp::from_unix_secs(10).unwrap(),
-        )
+        let instance = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst-1"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def-1"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("u1").unwrap(),
+            at: Timestamp::from_unix_secs(10).unwrap(),
+        })
         .unwrap();
         let projection = ApprovalInstanceListProjection {
             current_node_key: Some("n1".into()),

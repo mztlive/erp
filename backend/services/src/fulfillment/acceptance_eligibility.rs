@@ -150,17 +150,17 @@ impl FulfillmentService {
                 &mut NoTransaction,
             )
             .await?;
-        let groups = build_eligibility_groups(
-            &revision_lines,
-            &goods_service_lines,
-            &deliveries,
-            &delivery_lines,
-            &electronic,
-            &service,
-            &delivery_allocations,
-            &electronic_allocations,
-            &service_allocations,
-        );
+        let groups = build_eligibility_groups(EligibilityGroupSources {
+            revision_lines: &revision_lines,
+            goods_service_lines: &goods_service_lines,
+            deliveries: &deliveries,
+            delivery_lines: &delivery_lines,
+            electronic: &electronic,
+            service: &service,
+            delivery_allocations: &delivery_allocations,
+            electronic_allocations: &electronic_allocations,
+            service_allocations: &service_allocations,
+        });
         Ok(AcceptanceEligibilityView {
             sales_order_id: so_id.to_string(),
             sales_lines: groups,
@@ -183,35 +183,71 @@ fn so_line_ids(revision_lines: &[entities::sales_order::SalesOrderRevisionLine])
         .collect()
 }
 
-/// 构建验收工作台分组（销售行 + 可验收事实 + 净数量守恒计算）。
+/// 验收工作台分组的销售行、履约事实与分配集合。
+///
+/// # 用途
+/// 将构建分组所需的版本行、履约集合与分配一次性传入。
 ///
 /// # 参数
-/// * `revision_lines` - 销售版本公共行
-/// * `goods_service_lines` - 实物及服务行（数量/单位）
-/// * `deliveries` - 有效发货单
-/// * `delivery_lines` - 发货行
-/// * `electronic` - 已确认电子交付
-/// * `service` - 已确认服务履约
-/// * `delivery_allocations` - 发货事实的验收分配
-/// * `electronic_allocations` - 电子交付事实的验收分配
-/// * `service_allocations` - 服务履约事实的验收分配
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 事实/分配由数据模型 §6.7 固定为三类来源，字段不可压缩。
+struct EligibilityGroupSources<'a> {
+    /// 销售版本公共行。
+    revision_lines: &'a [entities::sales_order::SalesOrderRevisionLine],
+    /// 实物及服务行（数量/单位）。
+    goods_service_lines: &'a [entities::sales_order::SalesOrderGoodsServiceLineRevision],
+    /// 有效发货单。
+    deliveries: &'a [Delivery],
+    /// 发货行。
+    delivery_lines: &'a [DeliveryLine],
+    /// 已确认电子交付。
+    electronic: &'a [ElectronicDelivery],
+    /// 已确认服务履约。
+    service: &'a [ServiceFulfillment],
+    /// 发货事实的验收分配。
+    delivery_allocations: &'a [AcceptanceFulfillmentAllocation],
+    /// 电子交付事实的验收分配。
+    electronic_allocations: &'a [AcceptanceFulfillmentAllocation],
+    /// 服务履约事实的验收分配。
+    service_allocations: &'a [AcceptanceFulfillmentAllocation],
+}
+
+/// 构建验收工作台分组（销售行 + 可验收事实 + 净数量守恒计算）。
+///
+/// # 用途
+/// 按销售稳定明细汇总可验收事实与净数量。
+///
+/// # 参数
+/// * `sources` - 版本行、履约集合与分配
 ///
 /// # 返回
 /// 返回按销售稳定明细分组的工作台视图。
 ///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
 /// 事实/分配入参由数据模型 §6.7 固定为三类来源，字段不可压缩。
-#[allow(clippy::too_many_arguments)]
-fn build_eligibility_groups(
-    revision_lines: &[entities::sales_order::SalesOrderRevisionLine],
-    goods_service_lines: &[entities::sales_order::SalesOrderGoodsServiceLineRevision],
-    deliveries: &[Delivery],
-    delivery_lines: &[DeliveryLine],
-    electronic: &[ElectronicDelivery],
-    service: &[ServiceFulfillment],
-    delivery_allocations: &[AcceptanceFulfillmentAllocation],
-    electronic_allocations: &[AcceptanceFulfillmentAllocation],
-    service_allocations: &[AcceptanceFulfillmentAllocation],
-) -> Vec<AcceptanceSalesLineGroupView> {
+fn build_eligibility_groups(sources: EligibilityGroupSources<'_>) -> Vec<AcceptanceSalesLineGroupView> {
+    let EligibilityGroupSources {
+        revision_lines,
+        goods_service_lines,
+        deliveries,
+        delivery_lines,
+        electronic,
+        service,
+        delivery_allocations,
+        electronic_allocations,
+        service_allocations,
+    } = sources;
     let mut groups: HashMap<String, AcceptanceSalesLineGroupView> = HashMap::new();
     for line in revision_lines {
         let goods = goods_service_lines

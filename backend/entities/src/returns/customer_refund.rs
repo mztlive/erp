@@ -179,7 +179,6 @@ impl CustomerRefund {
     /// # 错误
     /// 当编号/原因/经办复核人为空或超长、金额非正、经办与复核人相同、原回款
     /// 与原应收同时或均未提供时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn new(id: CustomerRefundId, data: CustomerRefundData) -> Result<Self> {
         let refund_no = normalize_required_text(
             data.refund_no,

@@ -173,19 +173,19 @@ fn enter_after_decision(
         Some(binding) => binding.assignment_source.to_execution_source(),
         None => ApprovalExecutionAssignmentSource::Definition,
     };
-    let enter = plan_enter_node(
-        plan.instance.clone(),
+    let enter = plan_enter_node(super::EnterNodeInput {
+        instance: plan.instance.clone(),
         graph,
         node_key,
-        plan.instance.current_round_no,
-        command.next_eligibility.participant(),
-        command.next_eligibility,
-        command.next_execution_id,
-        command.next_execution_no,
-        source,
-        None,
-        command.now,
-    )?;
+        round_no: plan.instance.current_round_no,
+        participant: command.next_eligibility.participant(),
+        eligibility: command.next_eligibility,
+        execution_id: command.next_execution_id,
+        execution_no: command.next_execution_no,
+        assignment_source: source,
+        replaces_execution_id: None,
+        now: command.now,
+    })?;
     plan.merge_enter(enter, keep_commit);
     Ok(plan)
 }

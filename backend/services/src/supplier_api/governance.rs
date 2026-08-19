@@ -18,8 +18,8 @@ use entities::supplier_api::{
     CapabilityVersionSnapshot, ConnectionEnvironment, HealthCheckResult, SupplierApiCapability,
     SupplierApiCapabilityData, SupplierApiCapabilityStatus, SupplierApiConnection,
     SupplierApiConnectionStatus, SupplierCommandOutcome, SupplierConnectionAction,
-    SupplierConnectionCommandReceipt, SupplierHealthCheckRun, SupplierHealthCheckRunData,
-    SupplierHealthCheckStatus, SupplierHealthCheckType,
+    SupplierConnectionCommandReceipt, SupplierConnectionCommandReceiptData, SupplierHealthCheckRun,
+    SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
 };
 use entities::Permission;
 use id_generator::next_id;
@@ -1195,15 +1195,17 @@ async fn persist_command_receipt(
     } = write;
     let receipt = SupplierConnectionCommandReceipt::new(
         identity.receipt_id.clone(),
-        SupplierApiConnectionId::new(&connection.base.id),
-        action,
-        actor.id().to_string(),
-        identity.idempotency_hash.clone(),
-        identity.fingerprint.clone(),
-        outcome,
-        connection.base.version,
-        job_id.clone(),
-        identity.audit_id.clone(),
+        SupplierConnectionCommandReceiptData {
+            connection_id: SupplierApiConnectionId::new(&connection.base.id),
+            action,
+            actor_id: actor.id().to_string(),
+            idempotency_key_hash: identity.idempotency_hash.clone(),
+            request_fingerprint: identity.fingerprint.clone(),
+            outcome,
+            connection_version: connection.base.version,
+            job_id: job_id.clone(),
+            audit_event_id: identity.audit_id.clone(),
+        },
     )?;
     let audit = actor.clone().resource_log_with_id(
         identity.audit_id.clone(),

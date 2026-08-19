@@ -90,13 +90,15 @@ impl PurchaseOrderService {
                 .resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
         persist_purchase_order_cancel(
             &self.db,
-            order,
-            prepared,
-            runtime.open_tasks,
-            actor.id(),
-            &req.reason,
-            now,
-            audit,
+            PurchaseOrderCancelPersistInput {
+                order,
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
         )
         .await
     }
@@ -270,35 +272,71 @@ fn cancel_eligibility(current: &ApprovalNodeExecution) -> Result<Eligibility> {
     )
 }
 
+/// 采购单撤回事务写入集合。
+///
+/// # 用途
+/// 收拢取消计划、开放任务、撤回人与审计，供同一事务写入。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 运行事实、任务关闭与单据回写必须同事务；CAS 失败时回滚。
+pub(super) struct PurchaseOrderCancelPersistInput {
+    /// 已执行 `cancel_action` 的采购单。
+    pub order: PurchaseOrder,
+    /// `prepare_cancel` 结果。
+    pub prepared: PreparedExecution,
+    /// 待关闭的开放任务。
+    pub open_tasks: Vec<WorkItem>,
+    /// 撤回人。
+    pub actor_id: String,
+    /// 撤回原因。
+    pub reason: String,
+    /// 调用方时间。
+    pub now: Instant,
+    /// 已构造审计。
+    pub audit: entities::AuditLog,
+}
+
 /// 在同一事务内应用取消计划、关闭任务并写回采购单。
+///
+/// # 用途
+/// 撤回审批后原子写回运行事实与采购单。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `order` - 已执行 `cancel_action` 的采购单
-/// * `prepared` - `prepare_cancel` 结果
-/// * `open_tasks` - 待关闭的开放任务
-/// * `actor_id` - 撤回人
-/// * `reason` - 撤回原因
-/// * `now` - 调用方时间
-/// * `audit` - 已构造审计
+/// * `input` - 采购单、取消计划与开放任务
+///
+/// # 返回
+/// 成功时无返回值。
 ///
 /// # 错误
 /// CAS 冲突或仓储失败时返回错误，事务回滚。
-#[allow(clippy::too_many_arguments)]
+///
+/// # 关键业务约束
+/// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 pub(super) async fn persist_purchase_order_cancel(
     db: &Database,
-    mut order: PurchaseOrder,
-    prepared: PreparedExecution,
-    open_tasks: Vec<WorkItem>,
-    actor_id: &str,
-    reason: &str,
-    now: Instant,
-    audit: entities::AuditLog,
+    input: PurchaseOrderCancelPersistInput,
 ) -> Result<()> {
+    let PurchaseOrderCancelPersistInput {
+        mut order,
+        prepared,
+        open_tasks,
+        actor_id,
+        reason,
+        now,
+        audit,
+    } = input;
     let db = db.clone();
     let client = db.client().clone();
-    let actor_id = actor_id.to_string();
-    let reason = reason.to_string();
     client
         .with_transaction(move |session| {
             Box::pin(async move {

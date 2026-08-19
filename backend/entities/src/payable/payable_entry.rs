@@ -169,7 +169,6 @@ impl PayableEntry {
     ///
     /// # 错误
     /// 当来源字段为空/超长、金额非正、来源序号为 0 或类型与方向矛盾时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn new(id: PayableEntryId, data: PayableEntryData) -> Result<Self> {
         let source_fact_type = normalize_required_text(
             data.source_fact_type,

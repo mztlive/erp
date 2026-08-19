@@ -30,6 +30,41 @@ pub(super) type MallOrderFilter = <mongodb::Database as MallOrderExt>::MallOrder
 /// 关键事实列表筛选条件类型。
 pub(super) type MallOrderFactFilter = <mongodb::Database as MallOrderExt>::MallOrderFactFilter;
 
+/// 订单详情装配所需的订单图集合。
+///
+/// # 用途
+/// 将订单、明细、支付、事实、消费与评估一次性传入详情投影。
+///
+/// # 参数
+/// 无
+///
+/// # 返回
+/// 无
+///
+/// # 错误
+/// 无
+///
+/// # 关键业务约束
+/// 评估映射按消费事实 ID 对齐当前评估。
+struct MallOrderDetailGraph {
+    /// 订单实体。
+    order: MallOrder,
+    /// 商品明细。
+    items: Vec<MallOrderItem>,
+    /// 支付来源。
+    sources: Vec<MallPaymentSource>,
+    /// 分摊记录。
+    allocations: Vec<MallItemFundingAllocation>,
+    /// 关键事实。
+    facts: Vec<MallOrderFact>,
+    /// 消费事实。
+    entries: Vec<MallConsumptionEntry>,
+    /// 消费 → 当前评估映射。
+    assessments: std::collections::HashMap<String, MallConsumptionCostAssessment>,
+    /// 该商城已启用的切换记录。
+    cutover: Option<MallConsumptionCutover>,
+}
+
 impl MallOrderService {
     /// 分页查询商城订单列表（W25 列表页）。
     ///
@@ -145,7 +180,7 @@ impl MallOrderService {
             .find_enabled_cutover_by_mall_id(&order.mall_id, &mut NoTransaction)
             .await?;
 
-        Ok(self.build_detail_view(
+        Ok(self.build_detail_view(MallOrderDetailGraph {
             order,
             items,
             sources,
@@ -154,7 +189,7 @@ impl MallOrderService {
             entries,
             assessments,
             cutover,
-        ))
+        }))
     }
 
     /// 分页查询关键事实列表。
@@ -358,30 +393,31 @@ impl MallOrderService {
 
     /// 组装订单详情视图（W25 §8.2 对象中心）。
     ///
+    /// # 用途
+    /// 将订单图集合投影为详情视图。
+    ///
     /// # 参数
-    /// * `order` - 订单实体
-    /// * `items` - 商品明细
-    /// * `sources` - 支付来源
-    /// * `allocations` - 分摊记录
-    /// * `facts` - 关键事实
-    /// * `entries` - 消费事实
-    /// * `assessments` - 消费 → 当前评估映射
-    /// * `cutover` - 该商城已启用的切换记录
+    /// * `graph` - 订单、明细、支付、事实与评估集合
     ///
     /// # 返回
     /// 返回订单详情视图。
-    #[allow(clippy::too_many_arguments)]
-    fn build_detail_view(
-        &self,
-        order: MallOrder,
-        items: Vec<MallOrderItem>,
-        sources: Vec<MallPaymentSource>,
-        allocations: Vec<MallItemFundingAllocation>,
-        facts: Vec<MallOrderFact>,
-        entries: Vec<MallConsumptionEntry>,
-        assessments: std::collections::HashMap<String, MallConsumptionCostAssessment>,
-        cutover: Option<MallConsumptionCutover>,
-    ) -> MallOrderDetailView {
+    ///
+    /// # 错误
+    /// 无
+    ///
+    /// # 关键业务约束
+    /// 支付来源任一待归属时明细归属状态为待归属。
+    fn build_detail_view(&self, graph: MallOrderDetailGraph) -> MallOrderDetailView {
+        let MallOrderDetailGraph {
+            order,
+            items,
+            sources,
+            allocations,
+            facts,
+            entries,
+            assessments,
+            cutover,
+        } = graph;
         let source_views: Vec<PaymentSourceView> = sources
             .iter()
             .map(|source| PaymentSourceView {

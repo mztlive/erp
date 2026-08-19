@@ -164,7 +164,6 @@ impl ReceiptReversal {
     ///
     /// # 错误
     /// 当编号/原因/经办复核人为空或超长、金额非正、经办与复核人相同时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn new(id: ReceiptReversalId, data: ReceiptReversalData) -> Result<Self> {
         let reversal_no = normalize_required_text(
             data.reversal_no,

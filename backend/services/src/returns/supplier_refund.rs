@@ -7,6 +7,7 @@ use super::adapter::{
 };
 use super::cancel_approval::{
     build_supplier_refund_cancel_input, load_cancel_runtime, persist_supplier_refund_cancel,
+    SupplierRefundCancelPersistInput,
 };
 use super::dto::{
     CancelSupplierRefundApprovalRequest, CreateSupplierRefundRequest, SubmitSupplierRefundRequest,
@@ -15,7 +16,7 @@ use super::dto::{
 use super::reversal_plan::{plan_payment_reverse, zero_amount};
 use super::start_approval::{
     build_supplier_refund_start_input, load_bound_definition_graph, load_supplier_refund_start_receipt,
-    persist_supplier_refund_start,
+    persist_supplier_refund_start, SupplierRefundStartInput, SupplierRefundStartPersistInput,
 };
 use super::ReturnsService;
 use crate::approval::binding::{
@@ -210,28 +211,30 @@ impl ReturnsService {
             &idempotency_key,
         )
         .await?;
-        let start_input = build_supplier_refund_start_input(
+        let start_input = build_supplier_refund_start_input(SupplierRefundStartInput {
             graph,
-            &binding,
+            binding: &binding,
             subject,
-            refund.approval_subject_version,
-            actor.id(),
-            &organization_id,
-            &idempotency_key,
-            existing_receipt,
+            subject_version: refund.approval_subject_version,
+            actor_id: actor.id(),
+            organization_id: &organization_id,
+            idempotency_key: &idempotency_key,
+            receipt: existing_receipt,
             now,
-        )?;
+        })?;
         let prepared = prepare_start(start_input)?;
         persist_supplier_refund_start(
             &self.db,
-            refund,
-            actor,
-            id,
-            snapshot,
-            prepared,
-            adapter.owner_role,
-            organization_id,
-            now,
+            SupplierRefundStartPersistInput {
+                refund,
+                actor: actor.clone(),
+                id: id.to_string(),
+                snapshot_payload: snapshot,
+                prepared,
+                owner_role: adapter.owner_role,
+                organization_id,
+                now,
+            },
         )
         .await?;
         self.supplier_refund_detail(id).await
@@ -272,13 +275,15 @@ impl ReturnsService {
         )?;
         persist_supplier_refund_cancel(
             &self.db,
-            refund.clone(),
-            prepared,
-            runtime.open_tasks,
-            actor.id(),
-            &req.reason,
-            now,
-            audit,
+            SupplierRefundCancelPersistInput {
+                refund: refund.clone(),
+                prepared,
+                open_tasks: runtime.open_tasks,
+                actor_id: actor.id().to_string(),
+                reason: req.reason.clone(),
+                now,
+                audit,
+            },
         )
         .await
     }

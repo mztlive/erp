@@ -44,7 +44,6 @@ impl ApprovalCommandReceipt {
     ///
     /// # 错误
     /// 作用域、幂等键、摘要或结果引用非法时返回错误。
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: ApprovalCommandReceiptId,
         command_kind: ApprovalCommandKind,
