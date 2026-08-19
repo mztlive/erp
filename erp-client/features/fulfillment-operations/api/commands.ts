@@ -39,6 +39,7 @@ import {
  * Delivery 为 NO_APPROVAL，仓发/直发保存不绑定、不启动审批。
  * ElectronicDelivery 为 NO_APPROVAL，电子交付无草稿保存命令，也不绑定或启动审批。
  * ServiceFulfillment 为 NO_APPROVAL，服务履约无草稿保存命令，也不绑定或启动审批。
+ * CustomerAcceptance 为 NO_APPROVAL，本命令不保存客户验收，也不绑定或启动审批。
  *
  * @param input 保存命令。
  * @returns 新的单据版本。
@@ -84,6 +85,7 @@ export async function saveFulfillmentOperation(
  * Delivery 为 NO_APPROVAL，仓发/直发确认直接过账，不提交审批。
  * ElectronicDelivery 为 NO_APPROVAL，电子交付确认直接落账，不提交审批。
  * ServiceFulfillment 为 NO_APPROVAL，服务履约确认直接落账，不提交审批。
+ * CustomerAcceptance 为 NO_APPROVAL，确认结果只交接销售验收，不提交审批。
  *
  * @param input 确认命令。
  * @returns 成功/失败/待确认结果；入库、仓发、电子交付与服务履约成功结果不含审批区。
@@ -301,6 +303,7 @@ export async function postFulfillmentOperation(
  * Delivery 为 NO_APPROVAL，已发货事实不含审批绑定。
  * ElectronicDelivery 为 NO_APPROVAL，已确认电子交付不含审批绑定。
  * ServiceFulfillment 为 NO_APPROVAL，已确认服务履约不含审批绑定。
+ * CustomerAcceptance 为 NO_APPROVAL，复核结果交接客户验收时不含审批绑定。
  *
  * @param input 复核命令。
  * @returns 已过账则返回正式结果，否则保持未知。

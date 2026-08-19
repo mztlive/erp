@@ -40,7 +40,8 @@ export function useFulfillmentCountQuery(lane: FulfillmentLane) {
 }
 
 /**
- * 保存入库/发货草稿。PurchaseReceipt、Delivery、ElectronicDelivery 与 ServiceFulfillment 均为 NO_APPROVAL，不触达审批缓存。
+ * 保存入库/发货草稿。PurchaseReceipt、Delivery、ElectronicDelivery、
+ * ServiceFulfillment 与 CustomerAcceptance 均为 NO_APPROVAL，不触达审批缓存。
  */
 export function useSaveFulfillmentMutation() {
     const queryClient = useQueryClient()
@@ -55,7 +56,8 @@ export function useSaveFulfillmentMutation() {
 }
 
 /**
- * 确认正式单据。PurchaseReceipt、Delivery、ElectronicDelivery 与 ServiceFulfillment 均为 NO_APPROVAL，
+ * 确认正式单据。PurchaseReceipt、Delivery、ElectronicDelivery、
+ * ServiceFulfillment 与 CustomerAcceptance 均为 NO_APPROVAL，
  * 成功后只刷新履约队列，不触达审批键。
  */
 export function usePostFulfillmentMutation() {
