@@ -19,6 +19,10 @@ function PurchaseOrdersFallback() {
 
 /**
  * SPA 壳：业务数据与筛选在客户端 TanStack Query 完成。
+ *
+ * PurchaseReturnOrder 为 NO_APPROVAL：本页不显示采购退货审批流程选择
+ * 或审批动作；采购退货创建结果、详情、提交确认不展示绑定卡、决定、
+ * 撤回或审批历史。PENDING_EXECUTION 是待执行分工态，不是审批复核。
  */
 export default function PurchaseOrdersPage() {
     return (

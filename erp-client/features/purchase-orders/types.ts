@@ -134,6 +134,22 @@ export type PurchaseChangeOrderSummary = Readonly<{
     approval?: DocumentApprovalView
 }>
 
+/** PurchaseReturnOrder 为 NO_APPROVAL：行投影不得携带审批区。 */
+export type PurchaseReturnOrderRow = Readonly<{
+    purchaseReturnOrderId: string
+    purchaseReturnNo: string
+    purchaseOrderId: string
+    salesReturnCaseId?: string
+    returnMode: string
+    returnModeLabel: string
+    status: string
+    statusLabel: string
+    statusTone: StatusTone
+    version: number
+    createdAt: string
+    allowedActions: readonly string[]
+}>
+
 type WorkflowActionView = Readonly<{
     id: string
     actionLabel: string

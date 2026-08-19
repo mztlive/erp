@@ -29,6 +29,7 @@ type ActionBlocker =
 
 /**
  * 采购单详情子区。变更页签承接 PurchaseChangeOrder 通用审批区。
+ * PurchaseReturnOrder 为 NO_APPROVAL，关联采购退货不接入审批区。
  */
 export function PurchaseOrderDetailSections({
     order,
