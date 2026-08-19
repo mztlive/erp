@@ -10,10 +10,11 @@ use axum::{
 use services::{
     audit::AuditActor,
     payable::{
-        CreatePayableAccountRequest, CreateSupplierPaymentRequest, PageView, PayableAccountListParams,
-        PayableAccountView, PayableService, PostSupplierPaymentRequest, PurchaseInvoiceAllocationListParams,
-        PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest,
-        SupplierPaymentListParams, SupplierPaymentView,
+        CancelSupplierPaymentApprovalRequest, CreatePayableAccountRequest, CreateSupplierPaymentRequest,
+        PageView, PayableAccountListParams, PayableAccountView, PayableService, PostSupplierPaymentRequest,
+        PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
+        RegisterPurchaseInvoiceRequest, SubmitSupplierPaymentRequest, SupplierPaymentListParams,
+        SupplierPaymentView,
     },
 };
 
@@ -185,31 +186,90 @@ pub async fn supplier_payment_create(
 #[permission_macros::permission(
     group = "供应商往来",
     group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "供应商付款过账并核销",
+    desc = "提交供应商付款审批",
     resource = "supplier_payment",
-    action = "post"
+    action = "submit"
 )]
-/// 供应商付款过账并核销（§8.3-1 事务不变量，资金入口幂等去重）。
+/// 提交供应商付款并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 付款单 ID
-/// * `req` - 过账请求（核销分配行）
+/// * `req` - 提交请求（版本、幂等键与冻结分配）
 ///
 /// # 返回
-/// 返回过账后付款单视图。
-pub async fn supplier_payment_post(
+/// 返回提交后的付款单视图。
+pub async fn supplier_payment_submit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<PostSupplierPaymentRequest>,
+    Json(req): Json<SubmitSupplierPaymentRequest>,
 ) -> Result<SupplierPaymentView> {
     let view = PayableService::new(state.db())
-        .post_supplier_payment(&id, req, &actor)
+        .submit_supplier_payment(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商往来",
+    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
+    desc = "撤回供应商付款审批",
+    resource = "supplier_payment",
+    action = "cancel_approval"
+)]
+/// 撤回尚未最终通过的供应商付款审批。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 付款单 ID
+/// * `req` - 撤回请求（原因必填）
+///
+/// # 返回
+/// 返回撤回后的付款单视图。
+pub async fn supplier_payment_cancel_approval(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CancelSupplierPaymentApprovalRequest>,
+) -> Result<SupplierPaymentView> {
+    let view = PayableService::new(state.db())
+        .cancel_supplier_payment_approval(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商往来",
+    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
+    desc = "供应商付款过账并核销",
+    resource = "supplier_payment",
+    action = "post"
+)]
+/// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
+///
+/// # 参数
+/// * `_state` - 应用状态
+/// * `_actor` - 已通过鉴权的审计操作人
+/// * `_id` - 付款单 ID
+/// * `_req` - 过账请求（客户端不得据此形成资金事实）
+///
+/// # 错误
+/// 始终返回冲突，防止 HTTP 旁路过账。
+pub async fn supplier_payment_post(
+    State(_state): State<AppState>,
+    Extension(_actor): Extension<AuditActor>,
+    Path(_id): Path<String>,
+    Json(_req): Json<PostSupplierPaymentRequest>,
+) -> Result<SupplierPaymentView> {
+    match PayableService::reject_client_post() {
+        Err(error) => Err(error.into()),
+        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+    }
 }
 
 #[permission_macros::permission(
@@ -266,4 +326,34 @@ pub async fn purchase_invoice_allocation_list(
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[cfg(test)]
+mod tests {
+    use services::payable::SubmitSupplierPaymentRequest;
+
+    /// 供应商付款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
+    #[test]
+    fn supplier_payment_http_uses_unified_ports() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("submit_supplier_payment"));
+        assert!(production.contains("cancel_supplier_payment_approval"));
+        assert!(production.contains("reject_client_post"));
+        assert!(production.contains("supplier_payment_detail"));
+        assert!(!production.contains(".post_supplier_payment("));
+        assert!(!production.contains("definition_id"));
+        assert!(!production.contains("PENDING_REVIEW"));
+        assert!(
+            serde_json::from_value::<SubmitSupplierPaymentRequest>(serde_json::json!({
+                "expected_version": 1,
+                "idempotency_key": "k1",
+                "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}],
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
+    }
 }
