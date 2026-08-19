@@ -1,4 +1,7 @@
 //! `purchase_return_line` 采购退货明细（数据模型 §6.11）。
+//!
+//! 合同 §4.3 签署为 `NO_APPROVAL`：明细只保留业务数量与仓库，不得新增审批绑定
+//! 字段或审批状态机。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -162,5 +165,27 @@ mod tests {
             line.purchase_order_revision_line_id,
             PurchaseOrderRevisionLineId::new("po-1-r1-l1")
         );
+    }
+
+    /// 采购退货明细无审批约束：不得出现绑定字段或审批状态机。
+    #[test]
+    fn purchase_return_line_has_no_approval_binding_or_state_machine() {
+        let line = PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-1"), data()).unwrap();
+        let value = serde_json::to_value(&line).unwrap();
+        let object = value.as_object().expect("采购退货明细序列化为对象");
+        assert!(!object.contains_key("approval_binding"));
+        assert!(!object.contains_key("approval_subject_version"));
+        assert!(!object.contains_key("pending_allocations"));
+
+        let production = include_str!("purchase_return_line.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("IN_APPROVAL"));
+        assert!(!production.contains("fn start_approval"));
+        assert!(!production.contains("approval_subject_version"));
+        assert!(!production.contains("ApprovalDefinitionBinding"));
+        assert!(!production.contains("PENDING_REVIEW"));
+        assert!(!production.contains("WorkItem"));
     }
 }
