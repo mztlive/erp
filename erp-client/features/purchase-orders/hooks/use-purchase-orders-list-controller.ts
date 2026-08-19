@@ -182,7 +182,7 @@ export function usePurchaseOrdersListController() {
             setActionResult({
                 status: "succeeded",
                 title: "已创建采购草稿",
-                description: `${result.data.draftLabel} · 已使用采购二次确认创建依据（销售单 ${basis?.salesOrderNo ?? "—"} · ${basis?.supplierName ?? "—"}）。`,
+                description: `${result.data.draftLabel} · 已绑定审批流程，尚未形成待办。已使用采购二次确认创建依据（销售单 ${basis?.salesOrderNo ?? "—"} · ${basis?.supplierName ?? "—"}）。`,
                 reference: result.reference,
             })
             router.push(

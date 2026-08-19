@@ -303,6 +303,9 @@ describe("usePurchaseOrdersListController", () => {
         expect(result.current.actionResult?.description).toContain(
             "草稿 · PO-NEW",
         )
+        expect(result.current.actionResult?.description).toContain(
+            "已绑定审批流程，尚未形成待办",
+        )
     })
 
     it("建单失败：记录失败结果且不跳转", async () => {

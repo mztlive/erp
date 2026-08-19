@@ -225,7 +225,7 @@ export function PurchaseOrderDetailHeader({
                 statuses={[
                     {
                         id: "review",
-                        label: "审核",
+                        label: "审批",
                         status: {
                             label: order.identity.reviewLabel,
                             tone:

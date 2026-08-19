@@ -43,7 +43,7 @@ type UsePurchaseOrderDetailEditActionsInput = {
 
 /**
  * 详情页草稿编辑动作：进入编辑取令牌、行级编辑缓存、保存草稿、
- * 提交财务审核与发起采购变更的正式命令编排。
+ * 提交审批与发起采购变更的正式命令编排。
  */
 export function usePurchaseOrderDetailEditActions({
     purchaseOrderId,
@@ -269,9 +269,8 @@ export function usePurchaseOrderDetailEditActions({
             setDraftEditToken(null)
             setResult({
                 status: "succeeded",
-                title: "已提交财务审核",
-                description:
-                    "已形成不可修改的采购提交与采购审核任务；编辑已结束。",
+                title: "已提交审批",
+                description: "已形成不可修改的采购提交并进入审批；编辑已结束。",
                 reference: response.reference,
                 facts: [
                     { label: "单据编号", value: response.data.purchaseNo },
@@ -283,10 +282,9 @@ export function usePurchaseOrderDetailEditActions({
                         label: "数据版本",
                         value: `v${response.data.lockVersion}`,
                     },
-                    { label: "审核任务", value: "已创建" },
                 ],
             })
-            router.replace(`/procurement/orders/${purchaseOrderId}?mode=review`)
+            router.replace(`/procurement/orders/${purchaseOrderId}`)
         } else if (response.status === "unknown") {
             setResult({
                 status: "unknown",

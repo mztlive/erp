@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     acquireDraftEditToken,
     createPurchaseOrderFromBasis,
@@ -15,6 +16,7 @@ import {
     submitPurchaseOrderForReview,
 } from "@/features/purchase-orders/api/purchase-orders"
 import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
+import { workItemKeys } from "@/features/work-items/queries"
 
 export const purchaseOrderKeys = {
     all: ["purchase-orders"] as const,
@@ -24,6 +26,21 @@ export const purchaseOrderKeys = {
     bases: () => [...purchaseOrderKeys.all, "creation-bases"] as const,
     exportData: (query: PurchaseOrderListQuery) =>
         [...purchaseOrderKeys.all, "export", query] as const,
+}
+
+/**
+ * 采购单写操作成功后失效单据、审批实例与任务缓存。
+ *
+ * @param queryClient 当前 QueryClient。
+ */
+const invalidatePurchaseOrderApprovalCaches = async (
+    queryClient: ReturnType<typeof useQueryClient>,
+) => {
+    await Promise.all([
+        queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
+        queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+        queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
+    ])
 }
 
 export function usePurchaseOrdersQuery(query: PurchaseOrderListQuery) {
@@ -77,54 +94,58 @@ export function useSavePurchaseOrderDraftMutation() {
     })
 }
 
+/**
+ * 提交采购单并启动统一审批。成功后失效单据、审批与任务缓存。
+ */
 export function useSubmitPurchaseOrderMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: submitPurchaseOrderForReview,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
-            await queryClient.invalidateQueries({
-                queryKey: purchaseOrderKeys.all,
-            })
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
         },
     })
 }
 
+/**
+ * 旧财务审核命令。成功后同样失效审批缓存，避免与统一决定双写。
+ */
 export function useReviewPurchaseOrderMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: reviewPurchaseOrder,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
-            await queryClient.invalidateQueries({
-                queryKey: purchaseOrderKeys.all,
-            })
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
         },
     })
 }
 
+/**
+ * 发起采购变更工作副本。成功后失效单据与审批缓存。
+ */
 export function useStartPurchaseChangeMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: startPurchaseChange,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
-            await queryClient.invalidateQueries({
-                queryKey: purchaseOrderKeys.all,
-            })
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
         },
     })
 }
 
+/**
+ * 按创建依据建草稿。成功后失效列表、审批绑定与任务缓存。
+ */
 export function useCreateFromBasisMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: createPurchaseOrderFromBasis,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
-            await queryClient.invalidateQueries({
-                queryKey: purchaseOrderKeys.all,
-            })
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
         },
     })
 }

@@ -7,6 +7,9 @@ export const metadata: Metadata = {
     title: "采购单详情",
 }
 
+/**
+ * 采购单对象页壳。审批任务从 URL `workItemId` 进入，业务取数在客户端完成。
+ */
 export default async function PurchaseOrderObjectPage({
     params,
     searchParams,
@@ -15,10 +18,11 @@ export default async function PurchaseOrderObjectPage({
     searchParams: Promise<{
         section?: string
         mode?: string
+        workItemId?: string
     }>
 }) {
     const { purchaseOrderId } = await params
-    const { section, mode } = await searchParams
+    const { section, mode, workItemId } = await searchParams
     return (
         <Suspense
             fallback={
@@ -28,10 +32,11 @@ export default async function PurchaseOrderObjectPage({
             }
         >
             <PurchaseOrderDetailPage
-                key={`${purchaseOrderId}-${section ?? "overview"}-${mode ?? "view"}`}
+                key={`${purchaseOrderId}-${section ?? "overview"}-${mode ?? "view"}-${workItemId ?? ""}`}
                 purchaseOrderId={purchaseOrderId}
                 section={section}
                 mode={mode}
+                workItemId={workItemId}
             />
         </Suspense>
     )

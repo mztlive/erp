@@ -73,7 +73,7 @@ function makeReviewOrder(): PurchaseOrderCenterView {
             purchaseOrderId: "po-1",
             purchaseNo: "PO-2026-001",
             status: "PENDING_REVIEW",
-            statusLabel: "待财务审核",
+            statusLabel: "审批中",
             statusTone: "warning",
             reviewStatus: "PENDING",
             reviewLabel: "待审核",

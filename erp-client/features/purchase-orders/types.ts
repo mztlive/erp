@@ -1,6 +1,7 @@
 /** W08 采购单 · 客户端契约类型（对齐工作面文档 §5/§8）。 */
 
 import type { StatusTone } from "@/components/ui/status-badge"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     AssignmentMode,
     WorkItemAllowedAction,
@@ -44,7 +45,7 @@ export const PO_METRIC_LABEL: Record<PurchaseOrderMetricFilter, string> = {
     all: "全部采购单",
     pending_create: "可建单依据",
     draft: "草稿",
-    review: "待财务审核",
+    review: "审批中",
     fulfill: "待履约",
     gate_blocked: "先款门禁阻塞",
 }
@@ -53,7 +54,7 @@ export const PO_STATUS_FILTER_LABEL: Record<PurchaseOrderStatusFilter, string> =
     {
         all: "全部状态",
         DRAFT: "草稿",
-        PENDING_REVIEW: "待财务审核",
+        PENDING_REVIEW: "审批中",
         EFFECTIVE: "已生效",
         PARTIAL: "部分执行",
         COMPLETED: "已完成",
@@ -216,6 +217,8 @@ export type PurchaseOrderCenterView = Readonly<{
     allowedActions: readonly string[]
     actionBlockers: readonly ActionBlocker[]
     fieldVisibility: Record<string, "full" | "masked" | "hidden">
+    /** 统一只读审批投影；缺省表示服务端未返回绑定。 */
+    approval?: DocumentApprovalView
     /** 审核任务（仅待审核且存在提交时） */
     reviewWorkItem?: {
         workItemId: string
@@ -342,7 +345,7 @@ export const FULFILLMENT_RESPONSIBILITY_LABEL: Record<
 
 export const PO_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
     DRAFT: "草稿",
-    PENDING_REVIEW: "待财务审核",
+    PENDING_REVIEW: "审批中",
     EFFECTIVE: "已生效",
     PARTIAL: "部分执行",
     COMPLETED: "已完成",
@@ -360,7 +363,7 @@ export const PO_STATUS_TONE: Record<PurchaseOrderStatus, StatusTone> = {
 
 export const REVIEW_STATUS_LABEL: Record<PurchaseReviewStatus, string> = {
     NONE: "—",
-    PENDING: "待审核",
+    PENDING: "审批中",
     APPROVED: "已通过",
     REJECTED: "已驳回",
 }

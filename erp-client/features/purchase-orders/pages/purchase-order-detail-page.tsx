@@ -12,10 +12,9 @@ import {
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
-import {
-    EditSurface,
-    ReviewSurface,
-} from "@/features/purchase-orders/components/purchase-order-surfaces"
+import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { PurchaseOrderApprovalArea } from "@/features/purchase-orders/components/purchase-order-approval-area"
+import { EditSurface } from "@/features/purchase-orders/components/purchase-order-surfaces"
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
 import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
 import { PurchaseOrderDetailSections } from "@/features/purchase-orders/components/purchase-order-detail-sections"
@@ -25,27 +24,36 @@ import { usePurchaseOrderDetailEditActions } from "@/features/purchase-orders/ho
 import { usePurchaseOrderDetailEditGuard } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-guard"
 import { usePurchaseOrderDetailPermissions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-permissions"
 import { usePurchaseOrderDetailReviewActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-review-actions"
+import { purchaseOrderApprovalPhase } from "@/features/purchase-orders/lib/purchase-order-approval"
+import { mapWorkItemDto } from "@/features/work-items/types"
+import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import {
     buildPurchaseOrderDetailNavItems,
     resolvePurchaseOrderDetailMode,
     resolvePurchaseOrderDetailSection,
 } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
-import {
-    purchaseOrderDraftFormSchema,
-    purchaseOrderReviewFormSchema,
-} from "@/features/purchase-orders/lib/purchase-order-validation"
+import { purchaseOrderDraftFormSchema } from "@/features/purchase-orders/lib/purchase-order-validation"
 
+/**
+ * 采购单详情。创建结果、编辑与运行中都嵌入通用审批区，不复制状态推导。
+ */
 export function PurchaseOrderDetailPage({
     purchaseOrderId,
     section,
     mode: modeParam,
+    workItemId,
 }: {
     purchaseOrderId: string
     section?: string
     mode?: string
+    workItemId?: string
 }) {
     const router = useRouter()
     const query = usePurchaseOrderCenterQuery(purchaseOrderId)
+    const focusedWorkItemQuery = useWorkItemDetailQuery(workItemId ?? "")
+    const focusedWorkItem = focusedWorkItemQuery.data
+        ? mapWorkItemDto(focusedWorkItemQuery.data)
+        : undefined
 
     const activeSection = resolvePurchaseOrderDetailSection(section)
     const mode = resolvePurchaseOrderDetailMode(modeParam)
@@ -60,17 +68,6 @@ export function PurchaseOrderDetailPage({
         refetch: query.refetch,
         commandLedger,
         setResult,
-    })
-
-    const reviewForm = useAppForm({
-        defaultValues: {
-            reasonCode: "COST_TAX",
-            comment: "",
-        },
-        validators: { onChange: purchaseOrderReviewFormSchema },
-        onSubmit: async ({ value }) => {
-            await reviewActions.handleReject(value.reasonCode, value.comment)
-        },
     })
 
     const draftForm = useAppForm({
@@ -212,7 +209,7 @@ export function PurchaseOrderDetailPage({
                 ? "被驳回待修改"
                 : "采购草稿编辑"
             : mode === "review"
-              ? "财务审核（只读）"
+              ? "审批中（只读）"
               : "详情"
 
     return (
@@ -238,29 +235,37 @@ export function PurchaseOrderDetailPage({
                 onDismissResult={() => setResult(null)}
             />
 
-            {mode === "review" && order.reviewWorkItem ? (
-                <ReviewSurface
-                    order={order}
-                    // @ts-expect-error useAppForm generic variance vs surface prop
-                    reviewForm={reviewForm}
-                    pending={
-                        reviewActions.reviewPending ||
-                        reviewActions.responsibilityPending
-                    }
-                    canApprove={permissions.canApprove}
-                    canReject={permissions.canReject}
-                    canStartProcessing={permissions.canStartReview}
-                    canReleaseToTeam={permissions.canReleaseReview}
-                    onApprove={() => reviewActions.setApproveConfirmOpen(true)}
-                    onStartProcessing={() =>
-                        void reviewActions.handleStartProcessing()
-                    }
-                    onReleaseToTeam={() =>
-                        reviewActions.setReleaseConfirmOpen(true)
-                    }
-                    costMasked={costMasked}
-                />
-            ) : null}
+            <PurchaseOrderApprovalArea
+                phase={purchaseOrderApprovalPhase(
+                    order.approval,
+                    order.identity.status,
+                )}
+                approval={order.approval}
+                documentId={order.identity.purchaseOrderId}
+                workItemId={focusedWorkItem?.workItemId}
+                expectedTaskVersion={focusedWorkItem?.taskVersion}
+                workItemAllowedActions={focusedWorkItem?.allowedActions}
+                onDecisionApplied={(view: ApprovalCommandView) =>
+                    setResult({
+                        status: "succeeded",
+                        title: "审批决定已提交",
+                        description: view.latestRejectionReason
+                            ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                            : "已按当前任务提交决定。",
+                        reference:
+                            order.identity.purchaseNo ??
+                            order.identity.draftLabel,
+                        facts: view.currentAssigneeName
+                            ? [
+                                  {
+                                      label: "当前审批人",
+                                      value: view.currentAssigneeName,
+                                  },
+                              ]
+                            : undefined,
+                    })
+                }
+            />
 
             {mode === "edit" && permissions.canEdit ? (
                 <EditSurface

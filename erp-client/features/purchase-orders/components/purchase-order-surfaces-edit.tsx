@@ -28,7 +28,10 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
-import { positiveDecimal, taxRateValid } from "@/features/purchase-orders/lib/purchase-order-validation"
+import {
+    positiveDecimal,
+    taxRateValid,
+} from "@/features/purchase-orders/lib/purchase-order-validation"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     PAYMENT_TERM_OPTIONS,
@@ -381,7 +384,7 @@ export function EditSurface({
                         disabled={!draftEditToken || !canSubmit || savePending}
                         onClick={onSubmitOpen}
                     >
-                        提交财务审核
+                        提交审批
                     </Button>
                 </div>
             </CardContent>
