@@ -1,5 +1,8 @@
 //! `customer_acceptance` / `customer_acceptance_line`：客户验收单及行（数据模型 §6.7）。
 //!
+//! 合同 §4.3 签署为 `NO_APPROVAL`：实体只保留业务状态，不得新增审批绑定字段
+//! 或审批状态机。
+//!
 //! 状态机按 §7.5：草稿 → 已过账 → 已冲正（`POSTED` 后不可编辑，误录时新增
 //! 反向验收及反向分配，不覆盖原行）。非卡券明细只有累计净有效验收通过数量
 //! 达到当前有效履约数量时才算履约完成；短少、拒收和服务不通过只记录结果，
@@ -10,7 +13,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::common::state::{ensure_transition, DocumentState};
+use crate::common::state::{DocumentState, ensure_transition};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
@@ -448,11 +451,13 @@ mod tests {
     #[test]
     fn state_machine_directed_edges() {
         let mut acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("a5"), data()).unwrap();
-        assert!(acceptance
-            .update(CustomerAcceptanceUpdate {
-                result: Some(AcceptanceResult::Shortage),
-            })
-            .is_ok());
+        assert!(
+            acceptance
+                .update(CustomerAcceptanceUpdate {
+                    result: Some(AcceptanceResult::Shortage),
+                })
+                .is_ok()
+        );
         assert_eq!(acceptance.result, AcceptanceResult::Shortage);
         acceptance.mark_posted().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；POSTED 不可编辑由 update 把关。
@@ -530,5 +535,30 @@ mod tests {
         let roundtrip: CustomerAcceptance =
             bson::from_document(bson::to_document(&acceptance).unwrap()).unwrap();
         assert_eq!(roundtrip, acceptance);
+    }
+
+    /// 客户验收单无审批约束：不得出现绑定字段或审批状态机。
+    #[test]
+    fn customer_acceptance_has_no_approval_binding_or_state_machine() {
+        let acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("acceptance-1"), data()).unwrap();
+        let value = serde_json::to_value(&acceptance).unwrap();
+        let object = value.as_object().expect("验收单序列化为对象");
+        assert!(!object.contains_key("approval_binding"));
+        assert!(!object.contains_key("approval_subject_version"));
+        assert!(!object.contains_key("pending_allocations"));
+        assert_eq!(acceptance.status, CustomerAcceptanceState::Draft);
+        assert_eq!(CustomerAcceptanceState::Draft.as_str(), "DRAFT");
+        assert_eq!(CustomerAcceptanceState::Posted.as_str(), "POSTED");
+        assert_eq!(CustomerAcceptanceState::Reversed.as_str(), "REVERSED");
+
+        let production = include_str!("customer_acceptance.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("IN_APPROVAL"));
+        assert!(!production.contains("fn start_approval"));
+        assert!(!production.contains("approval_subject_version"));
+        assert!(!production.contains("ApprovalDefinitionBinding"));
+        assert!(!production.contains("PENDING_REVIEW"));
     }
 }
