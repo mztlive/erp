@@ -187,10 +187,11 @@ describe("useFulfillmentOperationsController", () => {
         })
 
         const { result } = renderController()
-        await waitFor(() =>
-            expect(result.current.queueQuery.isPending).toBe(false),
-        )
-        expect(result.current.canPost).toBe(true)
+        await waitFor(() => {
+            expect(result.current.queueQuery.isPending).toBe(false)
+            expect(result.current.draft).not.toBeNull()
+            expect(result.current.canPost).toBe(true)
+        })
 
         await act(async () => {
             await result.current.handlePost()
