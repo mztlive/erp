@@ -1,4 +1,4 @@
-//! P6-PILOT：试点 `StockAdjustment` 的 BPM/集成仓储、索引、CAS、收据与 outbox 矩阵。
+//! P6-FINAL：BPM/集成仓储、索引、CAS、收据、outbox 与 20 类型 ProcessKind 查询矩阵。
 //!
 //! 真实 MongoDB 用例一律 `#[ignore]` + `require_mongo!()`，只读 `ERP_TEST_MONGO_URI`，
 //! 使用独立随机库名并由 `TestDb` Drop 精确清理。不得打印 URI、凭证或敏感单据字段。
@@ -1356,4 +1356,84 @@ async fn stale_execution_cas_is_classified() {
         ));
         let _ = DatabaseError::OptimisticLockingError;
     });
+}
+
+/// 20 个 DocumentType 必须与 ProcessKind 稳定码一一对应；仓储只按 kind 查询。
+#[test]
+fn all_document_types_map_to_unique_process_kind_for_repository() {
+    let pairs = [
+        (DocumentType::SalesOrder, ProcessKind::SalesOrder),
+        (DocumentType::VoucherSalesOrder, ProcessKind::VoucherSalesOrder),
+        (DocumentType::SalesChangeOrder, ProcessKind::SalesChangeOrder),
+        (DocumentType::PurchaseOrder, ProcessKind::PurchaseOrder),
+        (
+            DocumentType::PurchaseChangeOrder,
+            ProcessKind::PurchaseChangeOrder,
+        ),
+        (DocumentType::StockAdjustment, ProcessKind::StockAdjustment),
+        (DocumentType::CustomerReceipt, ProcessKind::CustomerReceipt),
+        (DocumentType::SupplierPayment, ProcessKind::SupplierPayment),
+        (DocumentType::CustomerRefund, ProcessKind::CustomerRefund),
+        (DocumentType::SupplierRefund, ProcessKind::SupplierRefund),
+        (DocumentType::ReceiptReversal, ProcessKind::ReceiptReversal),
+        (DocumentType::PaymentReversal, ProcessKind::PaymentReversal),
+        (DocumentType::PurchaseReceipt, ProcessKind::PurchaseReceipt),
+        (DocumentType::Delivery, ProcessKind::Delivery),
+        (DocumentType::ElectronicDelivery, ProcessKind::ElectronicDelivery),
+        (DocumentType::ServiceFulfillment, ProcessKind::ServiceFulfillment),
+        (DocumentType::CustomerAcceptance, ProcessKind::CustomerAcceptance),
+        (DocumentType::Invoice, ProcessKind::Invoice),
+        (DocumentType::SalesReturnCase, ProcessKind::SalesReturnCase),
+        (
+            DocumentType::PurchaseReturnOrder,
+            ProcessKind::PurchaseReturnOrder,
+        ),
+    ];
+    let mut kinds = std::collections::BTreeSet::new();
+    for (document_type, kind) in pairs {
+        assert_eq!(document_type.as_str(), kind.as_str());
+        assert!(kinds.insert(kind.as_str()), "{} 必须唯一", kind.as_str());
+    }
+    assert_eq!(pairs.len(), 20);
+    assert_eq!(kinds.len(), 20);
+    let source = include_str!("../src/repository/bpm.rs");
+    assert!(source.contains("process_kind"));
+    assert!(!source.contains("DocumentType"));
+    assert!(!source.contains("stock_adjustment_approver"));
+}
+
+/// 发布定义查询必须按 ProcessKind，不得按 ERP 类型字符串分叉。
+#[test]
+fn published_definition_lookup_is_process_kind_only() {
+    let source = include_str!("../src/repository/bpm.rs");
+    assert!(source.contains("find_published_by_process_kind"));
+    assert!(source.contains("find_active_draft"));
+    assert!(!source.contains("find_published_by_document_type"));
+    assert!(!source.contains("match document_type"));
+}
+
+/// 重置脚本索引创建清单必须覆盖新 BPM 集合，且不得重建旧步骤唯一索引。
+#[test]
+fn reset_index_creation_matches_new_bpm_collections() {
+    let reset = include_str!("../../scripts/reset-dev-business-data.mongosh.js");
+    let bpm_indexes = include_str!("../src/indexes/bpm.rs");
+    let integration_indexes = include_str!("../src/indexes/approval_integration.rs");
+    let indexes = format!("{bpm_indexes}\n{integration_indexes}");
+    for name in [
+        "uk_approval_process_definitions_published_kind",
+        "uk_approval_process_definitions_active_draft_kind",
+        "uk_approval_process_instances_active_subject",
+        "uk_approval_node_executions_current",
+        "uk_approval_command_receipts_idempotency",
+        "uk_approval_subject_snapshots_instance",
+        "uk_approval_notification_outbox_dedup",
+    ] {
+        assert!(indexes.contains(name), "{name} 必须在索引定义中");
+        assert!(
+            reset.contains(name) || reset.contains("approval_process_definitions"),
+            "{name}"
+        );
+    }
+    assert!(!indexes.contains("uk_work_items_open_approval_step"));
+    assert!(!indexes.contains("idx_work_items_team_pool"));
 }

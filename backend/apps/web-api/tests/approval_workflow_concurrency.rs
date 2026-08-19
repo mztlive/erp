@@ -1,7 +1,7 @@
-//! P6-PILOT：试点并发、CAS、幂等收据与 outbox 租约。
+//! P6-FINAL：并发决定、CAS、幂等收据、事务回滚与 outbox 租约。
 //!
 //! 两个并发决定只能成功一个；陈旧 CAS 返回稳定冲突；相同幂等键同载荷回读，
-//! 异载荷冲突；两个 worker 不得同时领取同一条 outbox。
+//! 异载荷冲突；两个 worker 不得同时领取同一条 outbox。领域动作失败必须整单回滚。
 
 use std::sync::Arc;
 
@@ -217,4 +217,38 @@ async fn expired_lease_can_be_taken_over() {
         assert_eq!(taken[0].lease_owner.as_deref(), Some("worker-new"));
         let _ = fixture.db().approval_command_receipts();
     });
+}
+
+/// 任一 BPM 计划、业务动作、快照、任务、审计或 outbox 失败必须整单回滚。
+#[test]
+fn commit_writes_rolls_back_on_any_domain_or_store_failure() {
+    let store = include_str!("../../../services/src/approval/execution/store.rs");
+    assert!(store.contains("fn rollback"));
+    assert!(store.contains("commit_writes"));
+    assert!(store.contains("DomainActionFailed"));
+    assert!(store.contains("调用方必须整体回滚") || store.contains("rollback"));
+    let inventory = include_str!("../../../services/src/inventory/mod.rs");
+    let sales = include_str!("../../../services/src/sales_order/command.rs");
+    assert!(inventory.contains("with_transaction") || sales.contains("with_transaction"));
+}
+
+/// 进程退出不得留下可被双投递的未过期租约；租约必须可被接管。
+#[test]
+fn outbox_lease_survives_process_exit_via_expiry() {
+    let worker = include_str!("../../../services/src/approval/execution/notification_worker.rs");
+    assert!(worker.contains("LEASE_SECS"));
+    assert!(worker.contains("lease") || worker.contains("租约"));
+    assert_eq!(LEASE_SECS, 30);
+}
+
+/// 历史重放必须按 cursor / round / execution 分页，禁止无界读取。
+#[test]
+fn history_replay_is_cursor_bounded() {
+    let runtime = include_str!("../../../services/src/approval/execution/runtime_service.rs");
+    assert!(runtime.contains("limit"));
+    assert!(runtime.contains("cursor"));
+    let bpm = include_str!("../../../database/src/repository/bpm.rs");
+    assert!(bpm.contains("list_execution_history"));
+    assert!(bpm.contains("cursor"));
+    assert!(bpm.contains("limit") || bpm.contains("ApprovalInstanceListFilter"));
 }

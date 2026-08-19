@@ -1,4 +1,4 @@
-//! P6-PILOT：试点 `StockAdjustment` 的定义/运行 HTTP、权限双门禁与稳定错误矩阵。
+//! P6-FINAL：定义/运行 HTTP、20 类型目录、权限双门禁与稳定错误矩阵。
 //!
 //! 真实 MongoDB 用例一律 `#[ignore]` + `require_mongo!()`。客户端不得提交 node key、
 //! 连线、角色、handler 或 action。未提供数据库时不得把 ignored 表述为通过。
@@ -239,22 +239,27 @@ fn policy_not_registered_maps_to_internal_error() {
     assert_eq!(error.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
 }
 
-/// 未切换类型必须返回稳定 cut-over 码，不得回退旧运行时。
+/// P0-D 后全部固定类型进入新运行时；HTTP 不得再映射未切换失败码。
 #[test]
-fn uncut_over_process_required_types_fail_closed() {
+fn all_fixed_types_cut_over_and_http_has_no_uncut_over_code() {
     use entities::document_registry::DocumentType;
     use services::approval::business_adapter::ensure_runtime_cut_over;
-    use services::APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER;
+    use services::approval::policy::ALL_DOCUMENT_TYPES;
+    use services::approval_codes;
 
-    assert!(ensure_runtime_cut_over(DocumentType::StockAdjustment).is_ok());
-    for document_type in [
-        DocumentType::SalesOrder,
-        DocumentType::PurchaseOrder,
-        DocumentType::CustomerReceipt,
-    ] {
-        let error = ensure_runtime_cut_over(document_type).expect_err("未切换必须失败");
-        assert!(error.to_string().contains(APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER));
+    for document_type in ALL_DOCUMENT_TYPES {
+        assert!(
+            ensure_runtime_cut_over(document_type).is_ok(),
+            "{} 必须进入新运行时",
+            document_type.as_str()
+        );
     }
+    assert!(ensure_runtime_cut_over(DocumentType::SalesOrder).is_ok());
+    assert!(ensure_runtime_cut_over(DocumentType::PurchaseOrder).is_ok());
+    assert!(ensure_runtime_cut_over(DocumentType::CustomerReceipt).is_ok());
+    assert!(!approval_codes::ALL.contains(&"APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER"));
+    let http_error = include_str!("../src/core/handler/approval_instance/error.rs");
+    assert!(!http_error.contains("APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER"));
 }
 
 #[tokio::test]
@@ -276,13 +281,38 @@ async fn catalog_requires_only_process_read_and_hides_sensitive_fields() {
         assert_eq!(status, 200, "{body}");
         let items = body["data"].as_array().expect("目录必须是数组");
         assert_eq!(items.len(), 20);
-        let stock = items
-            .iter()
-            .find(|item| item["document_type"] == "stock_adjustment")
-            .expect("必须包含试点类型");
-        assert_eq!(stock["approval_requirement"], "PROCESS_REQUIRED");
-        assert!(stock.get("process_kind").is_none());
-        assert!(stock.get("node_key").is_none());
+        let requirement = |code: &str| {
+            items
+                .iter()
+                .find(|item| item["document_type"] == code)
+                .and_then(|item| item["approval_requirement"].as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        assert_eq!(requirement("sales_order"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("voucher_sales_order"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("sales_change_order"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("purchase_order"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("purchase_change_order"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("stock_adjustment"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("customer_receipt"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("supplier_payment"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("customer_refund"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("supplier_refund"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("receipt_reversal"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("payment_reversal"), "PROCESS_REQUIRED");
+        assert_eq!(requirement("purchase_receipt"), "NO_APPROVAL");
+        assert_eq!(requirement("delivery"), "NO_APPROVAL");
+        assert_eq!(requirement("electronic_delivery"), "NO_APPROVAL");
+        assert_eq!(requirement("service_fulfillment"), "NO_APPROVAL");
+        assert_eq!(requirement("customer_acceptance"), "NO_APPROVAL");
+        assert_eq!(requirement("invoice"), "NO_APPROVAL");
+        assert_eq!(requirement("sales_return_case"), "NO_APPROVAL");
+        assert_eq!(requirement("purchase_return_order"), "NO_APPROVAL");
+        for item in items {
+            assert!(item.get("process_kind").is_none(), "目录不得暴露 ProcessKind");
+            assert!(item.get("node_key").is_none(), "目录不得暴露 node key");
+        }
     });
 }
 
@@ -497,4 +527,39 @@ async fn replace_nodes_rejects_client_node_key_and_sales_purpose() {
             "purpose 必须拒绝: {status} {body}"
         );
     });
+}
+
+/// HTTP 必须覆盖 2xx/403/404/409/422/500 与权限失败不泄露存在性。
+#[test]
+fn http_status_matrix_covers_stable_approval_codes() {
+    use axum::http::HeaderMap;
+    use web_api::core::handler::approval_instance::error::ApprovalHttpError;
+
+    let headers = HeaderMap::new();
+    let policy = ApprovalHttpError::from_service(
+        services::Error::Internal("APPROVAL_POLICY_NOT_REGISTERED".to_string()),
+        &headers,
+    );
+    assert_eq!(policy.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+    let forbidden = ApprovalHttpError::from_service(
+        services::Error::Forbidden("APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR".to_string()),
+        &headers,
+    );
+    assert_eq!(forbidden.status(), axum::http::StatusCode::FORBIDDEN);
+    assert_eq!(forbidden.code(), "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR");
+    let conflict = ApprovalHttpError::from_service(
+        services::Error::ConflictError("APPROVAL_INSTANCE_VERSION_CONFLICT".to_string()),
+        &headers,
+    );
+    assert_eq!(conflict.status(), axum::http::StatusCode::CONFLICT);
+    let invalid = ApprovalHttpError::from_service(
+        services::Error::BusinessLogicError("APPROVAL_DEFINITION_INVALID".to_string()),
+        &headers,
+    );
+    assert_eq!(invalid.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    let not_configured = ApprovalHttpError::from_service(
+        services::Error::ConflictError("APPROVAL_PROCESS_NOT_CONFIGURED".to_string()),
+        &headers,
+    );
+    assert_eq!(not_configured.status(), axum::http::StatusCode::CONFLICT);
 }
