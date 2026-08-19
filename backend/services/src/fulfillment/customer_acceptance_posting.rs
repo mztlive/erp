@@ -25,6 +25,9 @@ use super::{
 impl FulfillmentService {
     /// 过账客户验收（草稿 → 已过账；§8.2 第 5 条跨集合事务）。
     ///
+    /// 客户验收签署为 `NO_APPROVAL`：过账只写履约分配与状态迁移，不得绑定
+    /// 定义、启动审批实例或创建审批任务。
+    ///
     /// 在同一事务内：锁定验收行与履约事实、校验逐行分配守恒（分配合计等于
     /// 通过数量）、校验每个履约事实的净验收数量不超过净成功履约数量、写
     /// `APPLY` 分配、迁移验收单状态、写审计。重复过账由状态守卫（仅草稿）
@@ -108,6 +111,9 @@ impl FulfillmentService {
     }
 
     /// 冲正客户验收（已过账 → 已冲正；§8.2 第 5 条反向分配事务）。
+    ///
+    /// 客户验收签署为 `NO_APPROVAL`：冲正只追加反向验收事实，不得启动审批
+    /// 或创建任务。
     ///
     /// 误录时新增反向验收单：原验收行的通过/短少/拒收数量镜像复制，原
     /// `APPLY` 分配逐条生成 `REVERSE` 分配（引用原分配），新验收单立即过账，
@@ -548,5 +554,38 @@ mod tests {
             allocated_quantity: Quantity::from_str("4").unwrap(),
         }];
         assert!(ensure_line_allocations_conserved(&line, &not_conserved).is_err());
+    }
+
+    /// 过账与冲正路径不得启动审批、不得创建任务、不得选择定义。
+    #[test]
+    fn post_does_not_start_approval_or_create_tasks() {
+        let production = include_str!("customer_acceptance_posting.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("pub async fn post_customer_acceptance"));
+        assert!(production.contains("pub async fn reverse_customer_acceptance"));
+        assert!(!production.contains("start_approval"));
+        assert!(!production.contains("prepare_start"));
+        assert!(!production.contains("WorkItem"));
+        assert!(!production.contains("definition_id"));
+        assert!(!production.contains("CustomerAcceptanceAdapter"));
+        assert!(!production.contains("bind_published_definition_on_document_create"));
+        let post = production
+            .split("pub async fn post_customer_acceptance")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn reverse_customer_acceptance").next())
+            .expect("post_customer_acceptance 生产片段");
+        assert!(post.contains("mark_posted"));
+        assert!(!post.contains("submit_"));
+        assert!(!post.contains("start_approval"));
+        let reverse = production
+            .split("pub async fn reverse_customer_acceptance")
+            .nth(1)
+            .and_then(|rest| rest.split("fn ensure_post_lines_match").next())
+            .expect("reverse_customer_acceptance 生产片段");
+        assert!(reverse.contains("original.reverse"));
+        assert!(!reverse.contains("start_approval"));
+        assert!(!reverse.contains("WorkItem"));
     }
 }

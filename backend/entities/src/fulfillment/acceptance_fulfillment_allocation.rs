@@ -1,5 +1,8 @@
 //! `acceptance_fulfillment_allocation`：验收行对履约事实的分配（数据模型 §6.7）。
 //!
+//! 合同 §4.3 将所属 `CustomerAcceptance` 签署为 `NO_APPROVAL`：分配只表达履约
+//! 事实覆盖，不得新增审批绑定字段、审批实例引用或任务归属。
+//!
 //! 同一验收行可以对应多批履约，同一履约事实可以分批验收；分配是正式事实，
 //! 纠错通过追加 `REVERSE` 分配表达（§6.7）。「每个履约事实的净验收数量不得
 //! 超过其净成功履约数量」与「验收行的通过、短少、拒收数量必须由其有效分配
@@ -224,42 +227,44 @@ mod tests {
             allocated_quantity: Quantity::from_str("0").unwrap(),
             ..apply_data()
         };
-        assert!(AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("a1"),
-            zero_quantity
-        )
-        .is_err());
+        assert!(
+            AcceptanceFulfillmentAllocation::new(AcceptanceFulfillmentAllocationId::new("a1"), zero_quantity)
+                .is_err()
+        );
 
         let blank_line = AcceptanceFulfillmentAllocationData {
             fulfillment_line_id: "   ".to_string(),
             ..apply_data()
         };
-        assert!(AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("a2"),
-            blank_line
-        )
-        .is_err());
+        assert!(
+            AcceptanceFulfillmentAllocation::new(AcceptanceFulfillmentAllocationId::new("a2"), blank_line)
+                .is_err()
+        );
 
         let reverse_without_reference = AcceptanceFulfillmentAllocationData {
             allocation_action: AllocationAction::Reverse,
             reverses_allocation_id: None,
             ..apply_data()
         };
-        assert!(AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("a3"),
-            reverse_without_reference
-        )
-        .is_err());
+        assert!(
+            AcceptanceFulfillmentAllocation::new(
+                AcceptanceFulfillmentAllocationId::new("a3"),
+                reverse_without_reference
+            )
+            .is_err()
+        );
 
         let apply_with_reference = AcceptanceFulfillmentAllocationData {
             reverses_allocation_id: Some(AcceptanceFulfillmentAllocationId::new("allocation-9")),
             ..apply_data()
         };
-        assert!(AcceptanceFulfillmentAllocation::new(
-            AcceptanceFulfillmentAllocationId::new("a4"),
-            apply_with_reference
-        )
-        .is_err());
+        assert!(
+            AcceptanceFulfillmentAllocation::new(
+                AcceptanceFulfillmentAllocationId::new("a4"),
+                apply_with_reference
+            )
+            .is_err()
+        );
     }
 
     /// 序列化：枚举稳定代码；实体 BSON 往返。
@@ -283,5 +288,31 @@ mod tests {
         let roundtrip: AcceptanceFulfillmentAllocation =
             bson::from_document(bson::to_document(&allocation).unwrap()).unwrap();
         assert_eq!(roundtrip, allocation);
+    }
+
+    /// 验收分配无审批约束：不得出现绑定字段、实例或任务归属。
+    #[test]
+    fn allocation_has_no_approval_binding_or_work_item() {
+        let allocation = AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("allocation-1"),
+            apply_data(),
+        )
+        .unwrap();
+        let value = serde_json::to_value(&allocation).unwrap();
+        let object = value.as_object().expect("分配序列化为对象");
+        assert!(!object.contains_key("approval_binding"));
+        assert!(!object.contains_key("approval_instance_id"));
+        assert!(!object.contains_key("work_item_id"));
+        assert!(!object.contains_key("approval_subject_version"));
+
+        let production = include_str!("acceptance_fulfillment_allocation.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("IN_APPROVAL"));
+        assert!(!production.contains("fn start_approval"));
+        assert!(!production.contains("ApprovalDefinitionBinding"));
+        assert!(!production.contains("WorkItem"));
+        assert!(!production.contains("approval_instance"));
     }
 }

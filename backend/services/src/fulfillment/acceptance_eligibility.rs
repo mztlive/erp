@@ -20,6 +20,9 @@ use super::{
 impl FulfillmentService {
     /// 查询客户验收工作台（W06：销售行 + 可验收事实 + 验收历史）。
     ///
+    /// 客户验收签署为 `NO_APPROVAL`：工作台只计算可验收事实，不得查询审批
+    /// 定义、不得展示或创建审批任务。
+    ///
     /// 可验收数量守恒：`eligible = 净成功履约数量 − 净已验收分配（APPLY −
     /// REVERSE）`，全部由服务端计算（§8.2 第 5 条）。
     ///
@@ -405,4 +408,32 @@ fn group_item_snapshot(groups: &HashMap<String, AcceptanceSalesLineGroupView>, l
 /// 取分组单位快照。
 fn group_unit_code(groups: &HashMap<String, AcceptanceSalesLineGroupView>, line_id: &str) -> Option<String> {
     groups.get(line_id).and_then(|group| group.unit_code.clone())
+}
+
+#[cfg(test)]
+mod customer_acceptance_eligibility_no_approval_tests {
+    /// 验收工作台不得查询定义、启动审批或创建任务。
+    #[test]
+    fn eligibility_does_not_start_approval_or_create_tasks() {
+        let production = include_str!("acceptance_eligibility.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("pub async fn acceptance_eligibility"));
+        assert!(!production.contains("start_approval"));
+        assert!(!production.contains("prepare_start"));
+        assert!(!production.contains("WorkItem"));
+        assert!(!production.contains("definition_id"));
+        assert!(!production.contains("CustomerAcceptanceAdapter"));
+        assert!(!production.contains("bind_published_definition_on_document_create"));
+        assert!(!production.contains("load_published_graph"));
+        let eligibility = production
+            .split("pub async fn acceptance_eligibility")
+            .nth(1)
+            .and_then(|rest| rest.split("fn so_line_ids").next())
+            .expect("acceptance_eligibility 生产片段");
+        assert!(eligibility.contains("build_eligibility_groups"));
+        assert!(!eligibility.contains("submit_"));
+        assert!(!eligibility.contains("start_approval"));
+    }
 }
