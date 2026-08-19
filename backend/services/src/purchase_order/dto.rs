@@ -488,6 +488,21 @@ pub struct DocumentApprovalHistoryPageView {
     pub has_more: bool,
 }
 
+/// 撤回采购变更审批请求。原因必填。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CancelPurchaseChangeApprovalRequest {
+    /// 期望的单据乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub expected_lock_version: u64,
+    /// 非空撤回原因。
+    #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
+    pub reason: String,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
 /// 撤回采购单审批请求。原因必填。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
@@ -930,6 +945,8 @@ pub struct PurchaseChangeOrderView {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 统一只读审批结构。客户端不得据此选择定义或审批人。
+    pub approval: DocumentApprovalView,
 }
 
 #[cfg(test)]
