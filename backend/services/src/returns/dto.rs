@@ -655,9 +655,36 @@ pub struct CreateSupplierRefundRequest {
     pub occurred_at: Instant,
 }
 
-/// 供应商退款过账请求（资金入口，退款单号 + 状态迁移构成去重机制；空请求体占位）。
+/// 供应商退款过账请求（仅由最终通过动作内部消费；HTTP 旁路已关闭）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
 pub struct PostSupplierRefundRequest {}
+
+/// 供应商退款提交审批请求。客户端不得选择定义或审批人。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SubmitSupplierRefundRequest {
+    /// 期望的单据乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub expected_version: u64,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 撤回供应商退款审批请求。原因必填。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CancelSupplierRefundApprovalRequest {
+    /// 期望的单据乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub expected_version: u64,
+    /// 非空撤回原因。
+    #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
+    pub reason: String,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
 
 /// 供应商退款响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -692,6 +719,8 @@ pub struct SupplierRefundView {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 统一只读审批结构。客户端不得据此选择定义或审批人。
+    pub approval: DocumentApprovalView,
 }
 
 // ---------------------------------------------------------------------------

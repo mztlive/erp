@@ -130,6 +130,30 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-refunds/{id}",
+            with_permission(
+                get(returns::supplier_refund_detail),
+                rbac,
+                returns::supplier_refund_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-refunds/{id}/submit",
+            with_permission(
+                post(returns::supplier_refund_submit),
+                rbac,
+                returns::supplier_refund_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-refunds/{id}/cancel-approval",
+            with_permission(
+                post(returns::supplier_refund_cancel_approval),
+                rbac,
+                returns::supplier_refund_cancel_approval_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-refunds/{id}/post",
             with_permission(
                 post(returns::supplier_refund_post),
@@ -184,6 +208,21 @@ mod tests {
         assert!(production.contains("/customer-refunds/{id}/cancel-approval"));
         assert!(production.contains("customer_refund_submit"));
         assert!(production.contains("customer_refund_cancel_approval"));
+        assert!(!production.contains("PENDING_REVIEW"));
+    }
+
+    /// 供应商退款路由暴露提交与撤回，不再把过账当客户端旁路入口。
+    #[test]
+    fn supplier_refund_routes_expose_submit_and_cancel() {
+        let production = include_str!("returns.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产路由必须存在");
+        assert!(production.contains("/supplier-refunds/{id}/submit"));
+        assert!(production.contains("/supplier-refunds/{id}/cancel-approval"));
+        assert!(production.contains("supplier_refund_submit"));
+        assert!(production.contains("supplier_refund_cancel_approval"));
+        assert!(production.contains("supplier_refund_detail"));
         assert!(!production.contains("PENDING_REVIEW"));
     }
 }
