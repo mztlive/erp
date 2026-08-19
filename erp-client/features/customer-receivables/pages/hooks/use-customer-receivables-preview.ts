@@ -9,7 +9,13 @@ import type { CustomerReceivablesPatchUrl } from "./use-customer-receivables-url
 
 export function useCustomerReceivablesPreview(args: {
     view: CustomerAccountsView
-    previewKind: "receivable" | "receipt" | "invoice" | "refund" | null
+    previewKind:
+        | "receivable"
+        | "receipt"
+        | "invoice"
+        | "refund"
+        | "reversal"
+        | null
     previewId: string | undefined
     focusId: string | undefined
     patchUrl: CustomerReceivablesPatchUrl

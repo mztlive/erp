@@ -25,7 +25,10 @@ export {
 } from "./post-allocation"
 export {
     ensureCustomerRefundDraft,
+    ensureReceiptReversalDraft,
     forgetRefundDraft,
+    forgetReversalDraft,
     reverseFact,
     submitCustomerRefund,
+    submitReceiptReversal,
 } from "./reverse-fact"

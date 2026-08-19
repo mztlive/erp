@@ -7,6 +7,7 @@ import {
     createAllocationSession,
     ensureCustomerReceiptDraft,
     ensureCustomerRefundDraft,
+    ensureReceiptReversalDraft,
     fetchAllocationSession,
     fetchCustomerAccountsDetail,
     fetchCustomerAccountsList,
@@ -15,10 +16,15 @@ import {
     reverseFact,
     saveAllocationDraft,
     submitCustomerRefund,
+    submitReceiptReversal,
 } from "@/features/customer-receivables/api"
 import { CUSTOMER_RECEIPT_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { CUSTOMER_REFUND_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/customer-refund-approval"
-import type { CustomerAccountsQuery } from "@/features/customer-receivables/types"
+import { RECEIPT_REVERSAL_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/receipt-reversal-approval"
+import type {
+    CustomerAccountsDetailKind,
+    CustomerAccountsQuery,
+} from "@/features/customer-receivables/types"
 
 const customerReceivableKeys = {
     all: ["customer-receivables"] as const,
@@ -38,7 +44,7 @@ export function useCustomerAccountsListQuery(query: CustomerAccountsQuery) {
 }
 
 export function useCustomerAccountsDetailQuery(
-    kind: "receivable" | "receipt" | "invoice" | "refund" | null,
+    kind: CustomerAccountsDetailKind | null,
     id: string | null,
 ) {
     return useQuery({
@@ -200,25 +206,80 @@ export function useSubmitCustomerRefundMutation() {
 }
 
 /**
- * 冲正/红票一次提交；退款成功后还会刷新审批单据缓存。
+ * 提交确认前创建回款冲正草稿，并刷新只读审批绑定。
  */
-export function useReverseFactMutation() {
+export function useEnsureReceiptReversalDraftMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: reverseFact,
+        mutationFn: ensureReceiptReversalDraft,
+        onSuccess: async (result) => {
+            if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: approvalKeys.document(
+                        RECEIPT_REVERSAL_DOCUMENT_TYPE,
+                        result.reversal.reversalId,
+                    ),
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: customerReceivableKeys.detail(
+                        "reversal",
+                        result.reversal.reversalId,
+                    ),
+                })
+            }
+        },
+    })
+}
+
+/**
+ * 提交回款冲正审批。成功后刷新冲正详情与审批单据缓存。
+ */
+export function useSubmitReceiptReversalMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: submitReceiptReversal,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
                 await queryClient.invalidateQueries({
                     queryKey: customerReceivableKeys.all,
                 })
-                if (result.approval) {
-                    await queryClient.invalidateQueries({
-                        queryKey: approvalKeys.document(
-                            CUSTOMER_REFUND_DOCUMENT_TYPE,
-                            result.reverseFactId,
-                        ),
-                    })
-                }
+                await queryClient.invalidateQueries({
+                    queryKey: approvalKeys.document(
+                        RECEIPT_REVERSAL_DOCUMENT_TYPE,
+                        result.reversal.reversalId,
+                    ),
+                })
+            }
+        },
+    })
+}
+
+/**
+ * 冲正/红票一次提交；退款或冲正成功后还会刷新对应审批单据缓存。
+ */
+export function useReverseFactMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: reverseFact,
+        onSuccess: async (result, variables) => {
+            if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: customerReceivableKeys.all,
+                })
+                if (!result.approval) return
+                const documentType =
+                    variables.kind === "refund"
+                        ? CUSTOMER_REFUND_DOCUMENT_TYPE
+                        : variables.kind === "receipt_reverse"
+                          ? RECEIPT_REVERSAL_DOCUMENT_TYPE
+                          : undefined
+                if (!documentType) return
+                await queryClient.invalidateQueries({
+                    queryKey: approvalKeys.document(
+                        documentType,
+                        result.reverseFactId,
+                    ),
+                })
             }
         },
     })

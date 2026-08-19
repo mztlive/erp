@@ -12,6 +12,7 @@ import {
     projectCustomerRefund,
     projectInvoice,
     projectReceipt,
+    projectReceiptReversal,
     projectReceivable,
 } from "./mappers"
 import { loadReceipts, loadReceivables, loadSalesInvoices } from "./loaders"
@@ -19,8 +20,10 @@ import type {
     BackendCustomerReceipt,
     BackendCustomerRefund,
     BackendInvoice,
+    BackendReceiptReversal,
     BackendReceivableAccount,
 } from "./dto"
+import type { CustomerAccountsDetailKind } from "@/features/customer-receivables/types"
 
 function emptyView(
     query: CustomerAccountsQuery,
@@ -201,7 +204,7 @@ export async function fetchCustomerAccountsList(
 }
 
 export async function fetchCustomerAccountsDetail(
-    kind: "receivable" | "receipt" | "invoice" | "refund",
+    kind: CustomerAccountsDetailKind,
     id: string,
 ): Promise<CustomerAccountsDetailView | null> {
     if (kind === "receivable") {
@@ -240,6 +243,20 @@ export async function fetchCustomerAccountsDetail(
             return {
                 kind,
                 refund: projectCustomerRefund(seed),
+                queriedAt: new Date().toISOString(),
+            }
+        } catch {
+            return null
+        }
+    }
+    if (kind === "reversal") {
+        try {
+            const seed = await apiGet<BackendReceiptReversal>(
+                `/admin/receipt-reversals/${encodeURIComponent(id)}`,
+            )
+            return {
+                kind,
+                reversal: projectReceiptReversal(seed),
                 queriedAt: new Date().toISOString(),
             }
         } catch {

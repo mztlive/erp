@@ -3,12 +3,23 @@ import { act } from '@testing-library/react'
 
 import { renderHookWithProviders } from '@/features/test-utils'
 import { useReverseFlow } from './use-reverse-flow'
-import type { CustomerRefundRow } from '@/features/customer-receivables/types'
+import type {
+    CustomerRefundRow,
+    ReceiptReversalRow,
+} from '@/features/customer-receivables/types'
 
-const { mutateAsyncMock, ensureRefundMock, submitRefundMock } = vi.hoisted(() => ({
+const {
+    mutateAsyncMock,
+    ensureRefundMock,
+    submitRefundMock,
+    ensureReversalMock,
+    submitReversalMock,
+} = vi.hoisted(() => ({
     mutateAsyncMock: vi.fn(),
     ensureRefundMock: vi.fn(),
     submitRefundMock: vi.fn(),
+    ensureReversalMock: vi.fn(),
+    submitReversalMock: vi.fn(),
 }))
 
 vi.mock('@/features/customer-receivables/hooks/queries', () => ({
@@ -22,6 +33,14 @@ vi.mock('@/features/customer-receivables/hooks/queries', () => ({
     }),
     useSubmitCustomerRefundMutation: () => ({
         mutateAsync: submitRefundMock,
+        isPending: false,
+    }),
+    useEnsureReceiptReversalDraftMutation: () => ({
+        mutateAsync: ensureReversalMock,
+        isPending: false,
+    }),
+    useSubmitReceiptReversalMutation: () => ({
+        mutateAsync: submitReversalMock,
         isPending: false,
     }),
 }))
@@ -56,14 +75,60 @@ const refundRow = (overrides: Partial<CustomerRefundRow> = {}): CustomerRefundRo
     ...overrides,
 })
 
+const reversalRow = (
+    overrides: Partial<ReceiptReversalRow> = {},
+): ReceiptReversalRow => ({
+    reversalId: 'rr-1',
+    reversalNo: 'CZ-1',
+    originalReceiptId: 'src_2',
+    reasonText: '录入错误',
+    amount: '80.00',
+    occurredAt: '',
+    status: 'draft',
+    statusLabel: '草稿',
+    statusTone: 'neutral',
+    baselineVersion: 1,
+    allowedActions: ['VIEW_DETAIL'],
+    actionBlockers: [],
+    approval: {
+        requirement: 'PROCESS_REQUIRED',
+        definition: {
+            id: 'def-rr-1',
+            name: '回款冲正审批',
+            version: 1,
+            nodes: [{ key: 'n1', name: '冲正复核', assigneeName: '张三' }],
+            publishedNodes: [],
+        },
+        recentHistory: [],
+        historyHasMore: false,
+        allowedActions: ['SUBMIT'],
+    },
+    ...overrides,
+})
+
 function setup() {
     const closePreview = vi.fn()
     const openRefundPreview = vi.fn()
+    const openReversalPreview = vi.fn()
     const setLastResult = vi.fn()
     const setActionError = vi.fn()
-    const args = { closePreview, openRefundPreview, setLastResult, setActionError }
+    const args = {
+        closePreview,
+        openRefundPreview,
+        openReversalPreview,
+        setLastResult,
+        setActionError,
+    }
     const rendered = renderHookWithProviders(() => useReverseFlow(args))
-    return { ...rendered, args, closePreview, openRefundPreview, setLastResult, setActionError }
+    return {
+        ...rendered,
+        args,
+        closePreview,
+        openRefundPreview,
+        openReversalPreview,
+        setLastResult,
+        setActionError,
+    }
 }
 
 beforeEach(() => {
@@ -101,34 +166,62 @@ describe('useReverseFlow', () => {
         })
     })
 
-    it('submits a receipt reverse without amount and with an explicit reason', async () => {
-        mutateAsyncMock.mockResolvedValue({
+    it('creates a receipt reversal draft then submits approval without posting', async () => {
+        ensureReversalMock.mockResolvedValue({
             status: 'succeeded',
-            reverseFactId: 'rf_2',
-            reverseFactNo: 'RF-2',
-            operationId: 'op_2',
-            message: '已记录',
+            reversal: reversalRow(),
         })
-        const { result } = setup()
+        submitReversalMock.mockResolvedValue({
+            status: 'succeeded',
+            reversal: reversalRow({
+                status: 'in_approval',
+                statusLabel: '审批中',
+                baselineVersion: 2,
+            }),
+        })
+        const { result, openReversalPreview, setLastResult, setActionError } =
+            setup()
         act(() => {
             result.current.setReverseConfirm({
                 kind: 'receipt_reverse',
                 sourceFactId: 'src_2',
                 label: 'RCP-2',
             })
-            result.current.setReverseReason('录入错误')
         })
         await act(async () => {
-            await result.current.confirmReverse()
+            await result.current.prepareReversalDraft('录入错误')
         })
-        expect(mutateAsyncMock).toHaveBeenCalledWith(
+        expect(ensureReversalMock).toHaveBeenCalledWith(
             expect.objectContaining({
-                kind: 'receipt_reverse',
                 sourceFactId: 'src_2',
-                amount: undefined,
                 reason: '录入错误',
             }),
         )
+        expect(mutateAsyncMock).not.toHaveBeenCalled()
+        expect(openReversalPreview).toHaveBeenCalledWith('rr-1')
+        expect(result.current.reversalSubmitOpen).toBe(true)
+        expect(result.current.reverseConfirm).toBeNull()
+
+        await act(async () => {
+            await result.current.confirmReversalSubmit()
+        })
+        expect(submitReversalMock).toHaveBeenCalledWith({
+            reversalId: 'rr-1',
+            expectedVersion: 1,
+            idempotencyKey: expect.stringMatching(/^w11-rr-src_2-/),
+        })
+        expect(setLastResult).toHaveBeenCalledWith({
+            status: 'succeeded',
+            title: '冲正已提交审批',
+            description: '已按已绑定的审批流程启动审批，原回款保留。',
+            reference: expect.stringMatching(/^w11-rr-src_2-/),
+            facts: [
+                { label: '冲正单号', value: 'CZ-1' },
+                { label: '当前状态', value: '审批中' },
+            ],
+        })
+        expect(setActionError).not.toHaveBeenCalled()
+        expect(result.current.reversalSubmitOpen).toBe(false)
     })
 
     it('creates a refund draft then submits approval without posting', async () => {
@@ -201,12 +294,12 @@ describe('useReverseFlow', () => {
         const { result, closePreview, setLastResult, setActionError } = setup()
         act(() => {
             result.current.setReverseConfirm({
-                kind: 'receipt_reverse',
+                kind: 'red_invoice',
                 sourceFactId: 'src_3',
-                label: 'RCP-3',
+                label: 'INV-3',
                 amount: '50.00',
             })
-            result.current.setReverseReason('退差额')
+            result.current.setReverseReason('冲红')
             result.current.setReverseAmount('50.00')
         })
         await act(async () => {
@@ -219,7 +312,7 @@ describe('useReverseFlow', () => {
             reference: 'op_3',
             facts: [
                 { label: '反向单号', value: 'RF-3' },
-                { label: '原记录', value: 'RCP-3' },
+                { label: '原记录', value: 'INV-3' },
             ],
         })
         expect(closePreview).toHaveBeenCalledTimes(1)
@@ -269,9 +362,9 @@ describe('useReverseFlow', () => {
         const { result, setActionError, setLastResult } = setup()
         act(() => {
             result.current.setReverseConfirm({
-                kind: 'receipt_reverse',
+                kind: 'red_invoice',
                 sourceFactId: 'src_5',
-                label: 'RCP-5',
+                label: 'INV-5',
             })
         })
         await act(async () => {
@@ -469,6 +562,103 @@ describe('useReverseFlow', () => {
         expect(submitRefundMock.mock.calls[0][0].idempotencyKey).not.toBe(
             firstKey,
         )
+    })
+
+    it('reuses the reversal key for the same receipt and reason retry', async () => {
+        ensureReversalMock.mockResolvedValue({
+            status: 'succeeded',
+            reversal: reversalRow(),
+        })
+        const { result } = setup()
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'receipt_reverse',
+                sourceFactId: 'src_2',
+                label: 'RCP-2',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareReversalDraft('录入错误')
+        })
+        const firstKey = ensureReversalMock.mock.calls[0][0].idempotencyKey
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'receipt_reverse',
+                sourceFactId: 'src_2',
+                label: 'RCP-2',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareReversalDraft('录入错误')
+        })
+        expect(ensureReversalMock.mock.calls[1][0].idempotencyKey).toBe(firstKey)
+        expect(ensureReversalMock.mock.calls[1][0].sourceFactId).toBe('src_2')
+    })
+
+    it('rotates the reversal key when the source receipt or reason changes', async () => {
+        ensureReversalMock
+            .mockResolvedValueOnce({
+                status: 'succeeded',
+                reversal: reversalRow({ originalReceiptId: 'src_2' }),
+            })
+            .mockResolvedValueOnce({
+                status: 'succeeded',
+                reversal: reversalRow({
+                    reversalId: 'rr-2',
+                    reversalNo: 'CZ-2',
+                    originalReceiptId: 'src_9',
+                }),
+            })
+            .mockResolvedValueOnce({
+                status: 'succeeded',
+                reversal: reversalRow({
+                    reversalId: 'rr-3',
+                    reversalNo: 'CZ-3',
+                    originalReceiptId: 'src_9',
+                    reasonText: '金额错误',
+                }),
+            })
+        const { result } = setup()
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'receipt_reverse',
+                sourceFactId: 'src_2',
+                label: 'RCP-2',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareReversalDraft('录入错误')
+        })
+        const firstKey = ensureReversalMock.mock.calls[0][0].idempotencyKey
+
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'receipt_reverse',
+                sourceFactId: 'src_9',
+                label: 'RCP-9',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareReversalDraft('录入错误')
+        })
+        const secondKey = ensureReversalMock.mock.calls[1][0].idempotencyKey
+        expect(secondKey).not.toBe(firstKey)
+        expect(ensureReversalMock.mock.calls[1][0].sourceFactId).toBe('src_9')
+
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'receipt_reverse',
+                sourceFactId: 'src_9',
+                label: 'RCP-9',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareReversalDraft('金额错误')
+        })
+        expect(ensureReversalMock.mock.calls[2][0].idempotencyKey).not.toBe(
+            secondKey,
+        )
+        expect(ensureReversalMock.mock.calls[2][0].reason).toBe('金额错误')
     })
 
     it('does nothing when no reverse request is pending', async () => {

@@ -1,7 +1,7 @@
 import type { AllocationMode } from "@/features/customer-receivables/types"
 
 export type CustomerAccountPreviewTarget = Readonly<{
-    kind: "receivable" | "receipt" | "invoice" | "refund"
+    kind: "receivable" | "receipt" | "invoice" | "refund" | "reversal"
     id: string
 }>
 

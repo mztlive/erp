@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest"
 
-import { projectCustomerRefund, projectInvoice, projectReceipt } from "./mappers"
+import {
+    projectCustomerRefund,
+    projectInvoice,
+    projectReceipt,
+    projectReceiptReversal,
+} from "./mappers"
 import type {
     BackendCustomerReceipt,
     BackendCustomerRefund,
     BackendInvoice,
+    BackendReceiptReversal,
 } from "./dto"
 import { invoiceActionsExcludeApproval } from "@/features/customer-receivables/lib/invoice-no-approval"
 
@@ -188,6 +194,69 @@ describe("projectCustomerRefund", () => {
                     status: "RUNNING",
                     current_round_no: 1,
                     current_node: "退款复核",
+                    current_assignee: "张三",
+                },
+                recent_history: [],
+                allowed_actions: ["CANCEL"],
+            },
+        })
+        expect(row.status).toBe("in_approval")
+        expect(row.statusLabel).toBe("审批中")
+        expect(row.approval?.instance?.currentAssigneeName).toBe("张三")
+    })
+})
+
+const reversalSeed = (): BackendReceiptReversal => ({
+    id: "rr-1",
+    reversal_no: "CZ-1",
+    status: "draft",
+    original_customer_receipt_id: "cr-1",
+    reason_text: "录入错误",
+    amount: "80.00",
+    handled_by: "finance_handler",
+    reviewed_by: "finance_reviewer",
+    occurred_at: 1_700_000_000,
+    version: 1,
+    created_at: 1_700_000_000,
+})
+
+describe("projectReceiptReversal", () => {
+    it("maps the created binding without turning it into a work item", () => {
+        const row = projectReceiptReversal({
+            ...reversalSeed(),
+            approval: {
+                requirement: "PROCESS_REQUIRED",
+                definition: {
+                    id: "def-rr-1",
+                    name: "回款冲正审批",
+                    version: 2,
+                    nodes: [
+                        { key: "n1", name: "冲正复核", assignee_name: "张三" },
+                    ],
+                },
+                instance: null,
+                recent_history: [],
+                allowed_actions: ["SUBMIT"],
+            },
+        })
+        expect(row.status).toBe("draft")
+        expect(row.statusLabel).toBe("草稿")
+        expect(row.approval?.instance).toBeUndefined()
+        expect(row.approval?.definition?.name).toBe("回款冲正审批")
+        expect(row.approval?.allowedActions).toEqual(["SUBMIT"])
+    })
+
+    it("converges pending review into in-approval", () => {
+        const row = projectReceiptReversal({
+            ...reversalSeed(),
+            status: "IN_APPROVAL",
+            approval: {
+                requirement: "PROCESS_REQUIRED",
+                instance: {
+                    id: "inst-rr-1",
+                    status: "RUNNING",
+                    current_round_no: 1,
+                    current_node: "冲正复核",
                     current_assignee: "张三",
                 },
                 recent_history: [],

@@ -23,6 +23,8 @@ import {
 } from "@/features/customer-receivables/components/customer-account-detail-preview"
 import { CustomerRefundRequestDialog } from "@/features/customer-receivables/components/customer-refund-request-dialog"
 import { CustomerRefundSubmitConfirmDialog } from "@/features/customer-receivables/components/customer-refund-submit-confirm-dialog"
+import { ReceiptReversalRequestDialog } from "@/features/customer-receivables/components/receipt-reversal-request-dialog"
+import { ReceiptReversalSubmitConfirmDialog } from "@/features/customer-receivables/components/receipt-reversal-submit-confirm-dialog"
 import { ReceivableActionDialogs } from "@/features/customer-receivables/components/receivable-action-dialogs"
 import {
     useAllocationSessionQuery,
@@ -38,6 +40,7 @@ import {
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { isCustomerReceiptWorkItem } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { isCustomerRefundWorkItem } from "@/features/customer-receivables/lib/customer-refund-approval"
+import { isReceiptReversalWorkItem } from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import { getErrorMessage } from "@/lib/api/errors"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
@@ -53,7 +56,7 @@ import { useCustomerReceivablesUrlState } from "./hooks/use-customer-receivables
 import { useReverseFlow } from "./hooks/use-reverse-flow"
 
 /**
- * 客户往来工作面。客户回款与客户退款嵌入通用审批区；
+ * 客户往来工作面。客户回款、客户退款与回款冲正嵌入通用审批区；
  * Invoice 为 NO_APPROVAL，详情/预览/登记路径不展示审批区。
  */
 export function CustomerReceivablesPage() {
@@ -82,6 +85,9 @@ export function CustomerReceivablesPage() {
         openRefundPreview: (refundId) => {
             openPreview({ kind: "refund", id: refundId })
         },
+        openReversalPreview: (reversalId) => {
+            openPreview({ kind: "reversal", id: reversalId })
+        },
         setLastResult,
         setActionError,
     })
@@ -96,15 +102,24 @@ export function CustomerReceivablesPage() {
     const workItemRefundId = isCustomerRefundWorkItem(focusedWorkItem)
         ? focusedWorkItem?.businessObjectId
         : undefined
+    const workItemReversalId = isReceiptReversalWorkItem(focusedWorkItem)
+        ? focusedWorkItem?.businessObjectId
+        : undefined
     const previewKind =
         preview?.kind ??
         (workItemReceiptId
             ? "receipt"
             : workItemRefundId
               ? "refund"
-              : null)
+              : workItemReversalId
+                ? "reversal"
+                : null)
     const previewId =
-        preview?.id ?? workItemReceiptId ?? workItemRefundId ?? null
+        preview?.id ??
+        workItemReceiptId ??
+        workItemRefundId ??
+        workItemReversalId ??
+        null
 
     const listQuery = useCustomerAccountsListQuery(urlState.query)
     const detailQuery = useCustomerAccountsDetailQuery(previewKind, previewId)
@@ -357,7 +372,8 @@ export function CustomerReceivablesPage() {
                 open={
                     preview != null ||
                     Boolean(workItemReceiptId) ||
-                    Boolean(workItemRefundId)
+                    Boolean(workItemRefundId) ||
+                    Boolean(workItemReversalId)
                 }
                 data={detailQuery.data}
                 isPending={detailQuery.isPending}
@@ -379,7 +395,9 @@ export function CustomerReceivablesPage() {
                             ? `已按当前任务提交决定。${view.latestRejectionReason}`
                             : "已按当前任务提交决定。",
                         reference:
-                            workItemReceiptId ?? workItemRefundId,
+                            workItemReceiptId ??
+                            workItemRefundId ??
+                            workItemReversalId,
                         facts: view.currentAssigneeName
                             ? [
                                   {
@@ -400,6 +418,10 @@ export function CustomerReceivablesPage() {
                     const refund = detailQuery.data?.refund
                     if (refund) reverseFlow.beginRefundSubmit(refund)
                 }}
+                onRequestReversalSubmit={() => {
+                    const reversal = detailQuery.data?.reversal
+                    if (reversal) reverseFlow.beginReversalSubmit(reversal)
+                }}
             />
 
             <ReceivableActionDialogs
@@ -413,7 +435,8 @@ export function CustomerReceivablesPage() {
                     void startSession(mode, partyId)
                 }
                 reverseRequest={
-                    reverseFlow.reverseConfirm?.kind === "refund"
+                    reverseFlow.reverseConfirm?.kind === "refund" ||
+                    reverseFlow.reverseConfirm?.kind === "receipt_reverse"
                         ? null
                         : reverseFlow.reverseConfirm
                 }
@@ -461,6 +484,33 @@ export function CustomerReceivablesPage() {
                 }
                 onOpenChange={reverseFlow.setRefundSubmitOpen}
                 onConfirm={() => void reverseFlow.confirmRefundSubmit()}
+            />
+
+            <ReceiptReversalRequestDialog
+                open={reverseFlow.reverseConfirm?.kind === "receipt_reverse"}
+                pending={reverseFlow.reversalDraftPending}
+                sourceLabel={reverseFlow.reverseConfirm?.label}
+                amount={reverseFlow.reverseConfirm?.amount}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        reverseFlow.setReverseConfirm(null)
+                        reverseFlow.setReverseReason("")
+                    }
+                }}
+                onSubmit={(reason) =>
+                    void reverseFlow.prepareReversalDraft(reason)
+                }
+            />
+
+            <ReceiptReversalSubmitConfirmDialog
+                open={reverseFlow.reversalSubmitOpen}
+                pending={reverseFlow.reversalSubmitPending}
+                approval={
+                    reverseFlow.reversalDraft?.approval ??
+                    detailQuery.data?.reversal?.approval
+                }
+                onOpenChange={reverseFlow.setReversalSubmitOpen}
+                onConfirm={() => void reverseFlow.confirmReversalSubmit()}
             />
         </PageScaffold>
     )

@@ -7,16 +7,20 @@ import type {
     ReverseFactResult,
 } from "@/features/customer-receivables/types"
 import { buildCustomerRefundSubmitRequest } from "@/features/customer-receivables/lib/customer-refund-approval"
-import { projectCustomerRefund } from "./mappers"
+import { buildReceiptReversalSubmitRequest } from "@/features/customer-receivables/lib/receipt-reversal-approval"
+import { projectCustomerRefund, projectReceiptReversal } from "./mappers"
 import type {
     BackendCustomerReceipt,
     BackendCustomerRefund,
     BackendInvoice,
+    BackendReceiptReversal,
 } from "./dto"
 
 export const reverseIdempotency = new Map<string, ReverseFactResult>()
 
 export const refundDrafts = new Map<string, BackendCustomerRefund>()
+
+export const reversalDrafts = new Map<string, BackendReceiptReversal>()
 
 /**
  * 丢弃指定幂等键下的退款草稿缓存。
@@ -27,6 +31,17 @@ export const refundDrafts = new Map<string, BackendCustomerRefund>()
  */
 export const forgetRefundDraft = (idempotencyKey: string): void => {
     refundDrafts.delete(idempotencyKey)
+}
+
+/**
+ * 丢弃指定幂等键下的回款冲正草稿缓存。
+ *
+ * 来源单据或原因变化后必须调用，避免把上一张冲正单当成当前意图。
+ *
+ * @param idempotencyKey 即将作废的幂等键。
+ */
+export const forgetReversalDraft = (idempotencyKey: string): void => {
+    reversalDrafts.delete(idempotencyKey)
 }
 
 function failedResult(
@@ -139,6 +154,124 @@ export async function ensureCustomerRefundDraft(input: {
  *
  * @param input 提交所需版本与幂等键。
  */
+function isPostedReversalStatus(status?: string): boolean {
+    return status === "posted" || status === "POSTED" || status === "reversed"
+}
+
+function isInApprovalReversalStatus(status?: string): boolean {
+    return (
+        status === "IN_APPROVAL" ||
+        status === "in_approval" ||
+        status === "pending_review"
+    )
+}
+
+/**
+ * 按原回款创建回款冲正草稿，只读带回服务端审批绑定。
+ *
+ * 已存在草稿时只刷新版本与绑定，不得调用过账旁路。
+ *
+ * @param input 冲正草稿创建所需字段。
+ */
+export async function ensureReceiptReversalDraft(input: {
+    sourceFactId: string
+    amount?: string
+    reason: string
+    idempotencyKey: string
+}): Promise<
+    | {
+          status: "succeeded"
+          reversal: ReturnType<typeof projectReceiptReversal>
+      }
+    | Extract<ReverseFactResult, { status: "failed" }>
+> {
+    const cached = reversalDrafts.get(input.idempotencyKey)
+    if (cached) {
+        if (
+            cached.original_customer_receipt_id !== input.sourceFactId ||
+            cached.reason_text !== input.reason
+        ) {
+            forgetReversalDraft(input.idempotencyKey)
+            return failedResult(
+                "REVERSAL_INTENT_MISMATCH",
+                "当前冲正草稿已不是这次提交意图，请重新发起。",
+            )
+        }
+        const latest = await apiGet<BackendReceiptReversal>(
+            `/admin/receipt-reversals/${encodeURIComponent(cached.id)}`,
+        )
+        if (isPostedReversalStatus(latest.status)) {
+            return failedResult(
+                "REVERSAL_ALREADY_POSTED",
+                "已过账冲正不得再次提交。",
+            )
+        }
+        if (isInApprovalReversalStatus(latest.status)) {
+            return failedResult(
+                "REVERSAL_IN_APPROVAL",
+                "冲正正在审批中，不能重复提交。",
+            )
+        }
+        reversalDrafts.set(input.idempotencyKey, latest)
+        return {
+            status: "succeeded",
+            reversal: projectReceiptReversal(latest),
+        }
+    }
+
+    const receipt = await apiGet<BackendCustomerReceipt>(
+        `/admin/customer-receipts/${encodeURIComponent(input.sourceFactId)}`,
+    )
+    const nowSecs = Math.floor(Date.now() / 1000)
+    const noSuffix = input.idempotencyKey.slice(-8)
+    const created = await apiPost<BackendReceiptReversal>(
+        "/admin/receipt-reversals",
+        {
+            reversal_no: `CZ-${noSuffix}`,
+            original_customer_receipt_id: input.sourceFactId,
+            reason_text: input.reason,
+            amount: input.amount ?? receipt.amount,
+            handled_by: "finance_handler",
+            reviewed_by: "finance_reviewer",
+            occurred_at: nowSecs,
+        },
+    )
+    reversalDrafts.set(input.idempotencyKey, created)
+    return {
+        status: "succeeded",
+        reversal: projectReceiptReversal(created),
+    }
+}
+
+/**
+ * 提交回款冲正并启动审批。不得选择定义、下一节点或审批人，也不得调用过账旁路。
+ *
+ * @param input 提交所需版本与幂等键。
+ */
+export async function submitReceiptReversal(input: {
+    reversalId: string
+    expectedVersion: number
+    idempotencyKey: string
+}): Promise<
+    | {
+          status: "succeeded"
+          reversal: ReturnType<typeof projectReceiptReversal>
+      }
+    | Extract<ReverseFactResult, { status: "failed" }>
+> {
+    const submitted = await apiPost<BackendReceiptReversal>(
+        `/admin/receipt-reversals/${encodeURIComponent(input.reversalId)}/submit`,
+        buildReceiptReversalSubmitRequest({
+            expectedVersion: input.expectedVersion,
+            idempotencyKey: input.idempotencyKey,
+        }),
+    )
+    return {
+        status: "succeeded",
+        reversal: projectReceiptReversal(submitted),
+    }
+}
+
 export async function submitCustomerRefund(input: {
     refundId: string
     expectedVersion: number
@@ -169,36 +302,34 @@ export async function reverseFact(
     const cached = reverseIdempotency.get(input.idempotencyKey)
     if (cached) return cached
 
-    const nowSecs = Math.floor(Date.now() / 1000)
-    const noSuffix = input.idempotencyKey.slice(-8)
-
     try {
         if (input.kind === "receipt_reverse") {
-            const receipt = await apiGet<BackendCustomerReceipt>(
-                `/admin/customer-receipts/${encodeURIComponent(input.sourceFactId)}`,
-            )
-            const created = await apiPost<{ id: string; reversal_no: string }>(
-                "/admin/receipt-reversals",
-                {
-                    reversal_no: `CZ-${noSuffix}`,
-                    original_customer_receipt_id: input.sourceFactId,
-                    reason_text: input.reason,
-                    amount: input.amount ?? receipt.amount,
-                    handled_by: "finance_handler",
-                    reviewed_by: "finance_reviewer",
-                    occurred_at: nowSecs,
-                },
-            )
-            const posted = await apiPost<{ id: string; reversal_no: string }>(
-                `/admin/receipt-reversals/${encodeURIComponent(created.id)}/post`,
-                {},
-            )
+            const ensured = await ensureReceiptReversalDraft({
+                sourceFactId: input.sourceFactId,
+                amount: input.amount,
+                reason: input.reason,
+                idempotencyKey: input.idempotencyKey,
+            })
+            if (ensured.status !== "succeeded") {
+                reverseIdempotency.set(input.idempotencyKey, ensured)
+                return ensured
+            }
+            const submitted = await submitReceiptReversal({
+                reversalId: ensured.reversal.reversalId,
+                expectedVersion: ensured.reversal.baselineVersion,
+                idempotencyKey: input.idempotencyKey,
+            })
+            if (submitted.status !== "succeeded") {
+                return submitted
+            }
             const result: ReverseFactResult = {
                 status: "succeeded",
-                reverseFactId: posted.id,
-                reverseFactNo: posted.reversal_no,
+                reverseFactId: submitted.reversal.reversalId,
+                reverseFactNo: submitted.reversal.reversalNo,
                 operationId: input.idempotencyKey,
-                message: "已追加回款冲正记录，原回款保留。",
+                message: "已提交回款冲正审批，原回款保留。",
+                approval: submitted.reversal.approval,
+                subjectStatus: submitted.reversal.status,
             }
             reverseIdempotency.set(input.idempotencyKey, result)
             return result
