@@ -138,7 +138,10 @@ pub struct PurchaseReceiptLineInput {
 }
 
 /// 采购入库单创建请求（表头 + 行一次提交，初始状态为草稿）。
+///
+/// 客户端不得提交定义 ID 或审批人；未知字段失败关闭。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreatePurchaseReceiptRequest {
     /// 采购入库单号（全局唯一）。
     #[validate(custom(function = "non_blank", message = "采购入库单号不能为空"))]
@@ -923,7 +926,10 @@ pub struct AcceptanceEligibilityView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, DeliveryListParams, PurchaseReceiptListParams, SortDir};
+    use super::{
+        normalize_sort, CreatePurchaseReceiptRequest, DeliveryListParams, PurchaseReceiptListParams,
+        PurchaseReceiptView, SortDir,
+    };
     use entities::fulfillment::{DeliveryState, PurchaseReceiptState};
     use entities::ids::SalesOrderId;
     use validator::Validate;
@@ -983,5 +989,52 @@ mod tests {
         let query = delivery.normalized().unwrap();
         assert_eq!(query.sales_order_id.as_deref(), Some("so-1"));
         assert_eq!(query.paging.page_size, 30);
+    }
+
+    /// 采购收货创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
+    #[test]
+    fn purchase_receipt_create_and_view_have_no_approval_surface() {
+        let valid = serde_json::json!({
+            "receipt_no": "PR-1",
+            "purchase_order_id": "po-1",
+            "warehouse_id": "wh-1",
+            "lines": [{
+                "purchase_order_revision_line_id": "porl-1",
+                "received_quantity": "10",
+                "qualified_quantity": "10",
+                "rejected_quantity": "0"
+            }]
+        });
+        assert!(serde_json::from_value::<CreatePurchaseReceiptRequest>(valid).is_ok());
+        let forged = serde_json::json!({
+            "receipt_no": "PR-1",
+            "purchase_order_id": "po-1",
+            "warehouse_id": "wh-1",
+            "lines": [{
+                "purchase_order_revision_line_id": "porl-1",
+                "received_quantity": "10",
+                "qualified_quantity": "10",
+                "rejected_quantity": "0"
+            }],
+            "definition_id": "forged",
+            "assignee": "forged"
+        });
+        assert!(serde_json::from_value::<CreatePurchaseReceiptRequest>(forged).is_err());
+
+        let view = PurchaseReceiptView {
+            id: "pr-1".into(),
+            receipt_no: "PR-1".into(),
+            purchase_order_id: "po-1".into(),
+            warehouse_id: "wh-1".into(),
+            status: PurchaseReceiptState::Draft,
+            posted_at: None,
+            version: 1,
+            created_at: 1,
+        };
+        let value = serde_json::to_value(&view).expect("视图可序列化");
+        let object = value.as_object().expect("视图为对象");
+        assert!(!object.contains_key("approval"));
+        assert!(!object.contains_key("definition_id"));
+        assert!(!object.contains_key("assignee"));
     }
 }
