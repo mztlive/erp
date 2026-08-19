@@ -14,10 +14,12 @@ import {
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
 import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
+import { stripServiceFulfillmentApprovalField } from "@/features/fulfillment-operations/lib/service-fulfillment-no-approval"
 import type {
     BackendDelivery,
     BackendElectronicDelivery,
     BackendPurchaseReceipt,
+    BackendServiceFulfillment,
 } from "./documents"
 
 /**
@@ -129,6 +131,42 @@ export function formalFromElectronic(
         acceptanceRequired: !failed,
         acceptanceNextStep:
             "电子交付已确认，不影响自有库存。请销售在客户验收登记。",
+        inventoryImpactSummary: "不影响自有库存。",
+        reference: posted.fulfillment_no,
+        salesOrderId: "",
+        salesOrderNo: "",
+    }
+}
+
+/**
+ * 把已确认的服务履约投影为创建结果。ServiceFulfillment 为 NO_APPROVAL，
+ * 丢弃误带的审批字段，结果面板不得渲染绑定卡或审批历史。
+ *
+ * @param service 服务履约 HTTP 载荷。
+ * @param draft 线下服务草稿。
+ * @param operationId 当前工作单 ID。
+ */
+export function formalFromService(
+    service: BackendServiceFulfillment,
+    draft: Extract<FulfillmentDraft, { type: "SERVICE" }>,
+    operationId: string,
+): FulfillmentFormalOutcome {
+    const posted = stripServiceFulfillmentApprovalField(service)
+    const failed = posted.result === "FAILED"
+    return {
+        kind: "POSTED",
+        operationId,
+        factType: "SERVICE_FULFILLMENT",
+        factId: posted.id,
+        factNo: posted.fulfillment_no,
+        formalStatus: failed ? "FAILED" : "CONFIRMED",
+        occurredAt: secsToIso(posted.occurred_at) || draft.startedAt || nowIso(),
+        operationType: "SERVICE",
+        inventoryDelta: [],
+        reservationDelta: [],
+        remainingByLine: [],
+        acceptanceRequired: !failed,
+        acceptanceNextStep: "服务履约已确认。请销售在客户验收登记。",
         inventoryImpactSummary: "不影响自有库存。",
         reference: posted.fulfillment_no,
         salesOrderId: "",
