@@ -82,6 +82,7 @@ export type BackendInvoiceAllocation = {
     reverses_allocation_id?: string | null
 }
 
+/** Invoice 为 NO_APPROVAL：创建/详情 DTO 不得携带审批绑定。 */
 export type BackendInvoice = {
     id: string
     invoice_direction: string

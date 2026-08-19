@@ -50,6 +50,7 @@ type CustomerAccountDetailPreviewProps = Readonly<{
 
 /**
  * 客户往来详情抽屉。回款嵌入通用审批区；决定与恢复只读服务端白名单。
+ * 发票分支只渲染 InvoiceDetailBody，不展示审批流程选择或审批动作。
  */
 export function CustomerAccountDetailPreview({
     open,

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 
-import { projectReceipt } from "./mappers"
-import type { BackendCustomerReceipt } from "./dto"
+import { projectInvoice, projectReceipt } from "./mappers"
+import type { BackendCustomerReceipt, BackendInvoice } from "./dto"
+import { invoiceActionsExcludeApproval } from "@/features/customer-receivables/lib/invoice-no-approval"
 
 const seed = (): BackendCustomerReceipt => ({
     id: "cr-1",
@@ -81,5 +82,52 @@ describe("projectReceipt", () => {
             "REFUND",
         ])
         expect(row.approval).toBeUndefined()
+    })
+})
+
+const invoiceSeed = (): BackendInvoice => ({
+    id: "inv-1",
+    invoice_direction: "sales",
+    invoice_kind: "blue",
+    party_id: "p1",
+    invoice_no: "FP-1",
+    invoice_date: "2026-01-15",
+    gross_amount: "113.00",
+    net_amount: "100.00",
+    tax_amount: "13.00",
+    rounding_adjustment_amount: "0.00",
+    status: "registered",
+    version: 1,
+    created_at: 1_700_000_000,
+    allocated_total: "50.00",
+    unallocated_amount: "63.00",
+    allocations: [],
+})
+
+describe("projectInvoice", () => {
+    it("maps registered invoice facts without an approval projection", () => {
+        const row = projectInvoice(invoiceSeed())
+        expect(row.invoiceNo).toBe("FP-1")
+        expect(row.statusLabel).toBe("已登记")
+        expect(row.allowedActions).toEqual([
+            "VIEW_DETAIL",
+            "CONTINUE_ALLOCATE",
+            "ISSUE_RED_INVOICE",
+        ])
+        expect(invoiceActionsExcludeApproval(row.allowedActions)).toBe(true)
+        expect("approval" in row).toBe(false)
+        expect(row.status).toBe("registered")
+    })
+
+    it("strips a stray approval field instead of rendering a binding", () => {
+        const row = projectInvoice({
+            ...invoiceSeed(),
+            approval: {
+                requirement: "PROCESS_REQUIRED",
+                allowed_actions: ["SUBMIT", "APPROVE"],
+            },
+        } as BackendInvoice & { approval: unknown })
+        expect("approval" in row).toBe(false)
+        expect(invoiceActionsExcludeApproval(row.allowedActions)).toBe(true)
     })
 })

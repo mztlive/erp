@@ -132,6 +132,7 @@ export type ReceiptRow = Readonly<{
     approval?: DocumentApprovalView
 }>
 
+/** Invoice 为 NO_APPROVAL：行投影不得携带审批区。 */
 export type SalesInvoiceRow = Readonly<{
     invoiceId: string
     invoiceCode?: string

@@ -21,6 +21,9 @@ type CustomerReceivablesHeaderProps = {
     onRegisterReceipt: () => void
 }
 
+/**
+ * 客户往来页头。登记销项发票直接进入核销会话，不提供审批流程选择。
+ */
 export function CustomerReceivablesHeader({
     data,
     onExport,

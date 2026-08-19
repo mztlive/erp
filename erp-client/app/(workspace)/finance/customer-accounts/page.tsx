@@ -31,6 +31,9 @@ function CustomerAccountsFallback() {
  * view / counterpartyId / customerId / q / sessionId / returnTo /
  * previewKind / previewId / currentWorkItemId。
  * 业务数据不在服务端 fetch。
+ *
+ * Invoice 为 NO_APPROVAL：本页不显示审批流程选择或审批动作，
+ * 发票详情/预览/登记由客户往来工作面的无审批分支承接。
  */
 export default function Page() {
     return (

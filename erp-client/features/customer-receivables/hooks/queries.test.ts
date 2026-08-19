@@ -361,6 +361,43 @@ describe('usePostAllocationMutation', () => {
         })
     })
 
+    it('does not invalidate approval cache after an invoice post', async () => {
+        mockedApi.postAllocation.mockResolvedValue({
+            status: 'succeeded',
+            mode: 'invoice',
+            factId: 'inv-1',
+            factNo: 'FP-1',
+            allocatedTotal: '113.00',
+            unallocatedAmount: '0.00',
+            operationId: 'op-inv-1',
+            watermark: '2026-01-01T00:00:00.000Z',
+        })
+
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => usePostAllocationMutation(),
+            { queryClient: client },
+        )
+
+        await result.current.mutateAsync({
+            draftSessionId: 'alloc_inv_1',
+            editVersion: 1,
+            idempotencyKey: 'k-inv-1',
+        })
+
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(1))
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['customer-receivables'],
+        })
+        expect(invalidateSpy).not.toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'Invoice', 'inv-1'],
+        })
+        expect(invalidateSpy).not.toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'CustomerReceipt', 'inv-1'],
+        })
+    })
+
     it('does not invalidate when the post failed', async () => {
         mockedApi.postAllocation.mockResolvedValue({
             status: 'failed',

@@ -18,6 +18,7 @@ import type {
 } from "./dto"
 import { instantToIso } from "./mappers"
 import { mapCustomerReceiptApproval } from "@/features/customer-receivables/lib/customer-receipt-approval"
+import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 
 export const sessions = new Map<string, AllocationSessionView>()
 let sessionSeq = 100
@@ -118,8 +119,10 @@ export async function createAllocationSession(
             bankReference: r.bank_reference ?? undefined,
         }
     } else if (input.mode === "invoice" && input.existingFactId) {
-        const inv = await apiGet<BackendInvoice>(
-            `/admin/invoices/${encodeURIComponent(input.existingFactId)}`,
+        const inv = stripInvoiceApprovalField(
+            await apiGet<BackendInvoice>(
+                `/admin/invoices/${encodeURIComponent(input.existingFactId)}`,
+            ),
         )
         existingFactNo = inv.invoice_no
         fact = {
@@ -224,7 +227,8 @@ export async function createAllocationSession(
         existingFactId: input.existingFactId,
         existingFactNo,
         existingFactVersion,
-        approval,
+        // Invoice 为 NO_APPROVAL，会话不得携带审批绑定。
+        approval: input.mode === "receipt" ? approval : undefined,
         fact,
         pool,
         allocations: prefillAllocations,
