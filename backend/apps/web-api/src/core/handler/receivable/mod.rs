@@ -356,7 +356,7 @@ pub async fn invoice_detail(State(state): State<AppState>, Path(id): Path<String
     resource = "invoice",
     action = "create"
 )]
-/// 登记发票草稿（单集合写入）。
+/// 登记发票草稿。不绑定审批定义，不启动审批实例，不创建审批任务。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -439,7 +439,50 @@ pub async fn invoice_red_issue(
 
 #[cfg(test)]
 mod tests {
-    use services::receivable::SubmitCustomerReceiptRequest;
+    use services::receivable::{CreateInvoiceRequest, SubmitCustomerReceiptRequest};
+
+    /// 发票 HTTP 只暴露创建/过账/红冲，不得提交审批或选择定义。
+    #[test]
+    fn invoice_http_proves_no_approval() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("create_invoice"));
+        assert!(production.contains("invoice_create"));
+        assert!(production.contains("invoice_detail"));
+        assert!(production.contains("invoice_post"));
+        assert!(!production.contains("submit_invoice"));
+        assert!(!production.contains("invoice_submit"));
+        assert!(!production.contains("cancel_invoice"));
+        assert!(!production.contains("invoice_cancel"));
+        assert!(!production.contains("start_invoice"));
+        assert!(!production.contains("InvoiceAdapter"));
+        let invoice_create = production
+            .split("pub async fn invoice_create")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn invoice_post").next())
+            .expect("invoice_create 生产片段");
+        assert!(invoice_create.contains("create_invoice"));
+        assert!(!invoice_create.contains("submit_"));
+        assert!(!invoice_create.contains("start_approval"));
+        assert!(!invoice_create.contains("definition_id"));
+        assert!(
+            serde_json::from_value::<CreateInvoiceRequest>(serde_json::json!({
+                "invoice_direction": "sales",
+                "invoice_kind": "blue",
+                "party_id": "p-1",
+                "invoice_no": "001",
+                "invoice_date": "2026-08-06",
+                "gross_amount": "100.00",
+                "net_amount": "88.50",
+                "tax_amount": "11.50",
+                "definition_id": "forged",
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
+    }
 
     /// 客户回款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
