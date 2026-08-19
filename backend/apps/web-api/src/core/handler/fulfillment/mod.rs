@@ -223,6 +223,8 @@ pub async fn delivery_detail(
 )]
 /// 创建发货单（草稿；仓发/直发表头与行归属由实体校验）。
 ///
+/// 发货为 `NO_APPROVAL`：HTTP 创建路径不启动审批、不接受定义 ID。
+///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
@@ -610,7 +612,7 @@ pub async fn customer_acceptance_eligible(
 
 #[cfg(test)]
 mod tests {
-    use services::fulfillment::CreatePurchaseReceiptRequest;
+    use services::fulfillment::{CreateDeliveryRequest, CreatePurchaseReceiptRequest};
 
     /// 采购收货 HTTP 只暴露创建/过账，不得提交审批或选择定义。
     #[test]
@@ -657,6 +659,73 @@ mod tests {
                     "received_quantity": "10",
                     "qualified_quantity": "10",
                     "rejected_quantity": "0"
+                }],
+                "definition_id": "forged",
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
+    }
+
+    /// 发货 HTTP 只暴露创建/过账，不得提交审批或选择定义。
+    #[test]
+    fn delivery_http_proves_no_approval() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("create_delivery"));
+        assert!(production.contains("delivery_create"));
+        assert!(production.contains("delivery_detail"));
+        assert!(production.contains("delivery_post"));
+        assert!(!production.contains("submit_delivery"));
+        assert!(!production.contains("delivery_submit"));
+        assert!(!production.contains("cancel_delivery"));
+        assert!(!production.contains("delivery_cancel"));
+        assert!(!production.contains("start_delivery"));
+        assert!(!production.contains("DeliveryAdapter"));
+        let create = production
+            .split("pub async fn delivery_create")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn delivery_update").next())
+            .expect("delivery_create 生产片段");
+        assert!(create.contains("create_delivery"));
+        assert!(!create.contains("submit_"));
+        assert!(!create.contains("start_approval"));
+        assert!(!create.contains("definition_id"));
+        let post = production
+            .split("pub async fn delivery_post")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn electronic_delivery_list").next())
+            .expect("delivery_post 生产片段");
+        assert!(post.contains("post_delivery"));
+        assert!(!post.contains("start_approval"));
+        assert!(!post.contains("WorkItem"));
+        assert!(!post.contains("definition_id"));
+        assert!(
+            serde_json::from_value::<CreateDeliveryRequest>(serde_json::json!({
+                "delivery_no": "DV-1",
+                "delivery_type": "WAREHOUSE_SHIP",
+                "sales_order_id": "so-1",
+                "warehouse_id": "wh-1",
+                "lines": [{
+                    "sales_order_line_id": "so-line-1",
+                    "quantity": "2",
+                    "stock_reservation_id": "rsv-1"
+                }]
+            }))
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<CreateDeliveryRequest>(serde_json::json!({
+                "delivery_no": "DV-1",
+                "delivery_type": "WAREHOUSE_SHIP",
+                "sales_order_id": "so-1",
+                "warehouse_id": "wh-1",
+                "lines": [{
+                    "sales_order_line_id": "so-line-1",
+                    "quantity": "2",
+                    "stock_reservation_id": "rsv-1"
                 }],
                 "definition_id": "forged",
                 "assignee": "forged"

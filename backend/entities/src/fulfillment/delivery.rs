@@ -1,5 +1,8 @@
 //! `delivery` / `delivery_line`：履约发货单及行（数据模型 §6.7）。
 //!
+//! 合同 §4.3 签署为 `NO_APPROVAL`：实体只保留业务状态，不得新增审批绑定字段
+//! 或审批状态机。
+//!
 //! - 状态机按 §6.7/§7.5：草稿 → 已发货 → 已签收 → 已冲正（`SHIPPED`/`SIGNED`
 //!   均可冲正，`REVERSED` 为不可逆终态）；已发货事实不因销售或采购变更被删除；
 //! - 履约地址等敏感值按 §4.5.5/P1 §2.1 建模为**加密值 + 带密钥 HMAC 查询指纹**
@@ -807,5 +810,31 @@ mod tests {
             .unwrap();
         let roundtrip: Delivery = bson::from_document(bson::to_document(&delivery).unwrap()).unwrap();
         assert_eq!(roundtrip, delivery);
+    }
+
+    /// 发货单无审批约束：不得出现绑定字段或审批状态机。
+    #[test]
+    fn delivery_has_no_approval_binding_or_state_machine() {
+        let delivery = Delivery::new(DeliveryId::new("delivery-1"), delivery_data()).unwrap();
+        let value = serde_json::to_value(&delivery).unwrap();
+        let object = value.as_object().expect("发货单序列化为对象");
+        assert!(!object.contains_key("approval_binding"));
+        assert!(!object.contains_key("approval_subject_version"));
+        assert!(!object.contains_key("pending_allocations"));
+        assert_eq!(delivery.status, DeliveryState::Draft);
+        assert_eq!(DeliveryState::Draft.as_str(), "DRAFT");
+        assert_eq!(DeliveryState::Shipped.as_str(), "SHIPPED");
+        assert_eq!(DeliveryState::Signed.as_str(), "SIGNED");
+        assert_eq!(DeliveryState::Reversed.as_str(), "REVERSED");
+
+        let production = include_str!("delivery.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("IN_APPROVAL"));
+        assert!(!production.contains("fn start_approval"));
+        assert!(!production.contains("approval_subject_version"));
+        assert!(!production.contains("ApprovalDefinitionBinding"));
+        assert!(!production.contains("PENDING_REVIEW"));
     }
 }

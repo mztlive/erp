@@ -286,7 +286,10 @@ pub struct DeliveryLineInput {
 }
 
 /// 发货单创建请求（表头 + 行一次提交，初始状态为草稿）。
+///
+/// 客户端不得提交定义 ID 或审批人；未知字段失败关闭。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreateDeliveryRequest {
     /// 履约发货单号（全局唯一）。
     #[validate(custom(function = "non_blank", message = "发货单号不能为空"))]
@@ -927,10 +930,10 @@ pub struct AcceptanceEligibilityView {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_sort, CreatePurchaseReceiptRequest, DeliveryListParams, PurchaseReceiptListParams,
-        PurchaseReceiptView, SortDir,
+        normalize_sort, CreateDeliveryRequest, CreatePurchaseReceiptRequest, DeliveryListParams,
+        DeliveryView, PurchaseReceiptListParams, PurchaseReceiptView, SortDir,
     };
-    use entities::fulfillment::{DeliveryState, PurchaseReceiptState};
+    use entities::fulfillment::{DeliveryState, DeliveryType, PurchaseReceiptState};
     use entities::ids::SalesOrderId;
     use validator::Validate;
 
@@ -1028,6 +1031,57 @@ mod tests {
             warehouse_id: "wh-1".into(),
             status: PurchaseReceiptState::Draft,
             posted_at: None,
+            version: 1,
+            created_at: 1,
+        };
+        let value = serde_json::to_value(&view).expect("视图可序列化");
+        let object = value.as_object().expect("视图为对象");
+        assert!(!object.contains_key("approval"));
+        assert!(!object.contains_key("definition_id"));
+        assert!(!object.contains_key("assignee"));
+    }
+
+    /// 发货创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
+    #[test]
+    fn delivery_create_and_view_have_no_approval_surface() {
+        let valid = serde_json::json!({
+            "delivery_no": "DV-1",
+            "delivery_type": "WAREHOUSE_SHIP",
+            "sales_order_id": "so-1",
+            "warehouse_id": "wh-1",
+            "lines": [{
+                "sales_order_line_id": "so-line-1",
+                "quantity": "2",
+                "stock_reservation_id": "rsv-1"
+            }]
+        });
+        assert!(serde_json::from_value::<CreateDeliveryRequest>(valid).is_ok());
+        let forged = serde_json::json!({
+            "delivery_no": "DV-1",
+            "delivery_type": "WAREHOUSE_SHIP",
+            "sales_order_id": "so-1",
+            "warehouse_id": "wh-1",
+            "lines": [{
+                "sales_order_line_id": "so-line-1",
+                "quantity": "2",
+                "stock_reservation_id": "rsv-1"
+            }],
+            "definition_id": "forged",
+            "assignee": "forged"
+        });
+        assert!(serde_json::from_value::<CreateDeliveryRequest>(forged).is_err());
+
+        let view = DeliveryView {
+            id: "dv-1".into(),
+            delivery_no: "DV-1".into(),
+            delivery_type: DeliveryType::WarehouseShip,
+            sales_order_id: "so-1".into(),
+            purchase_order_id: None,
+            warehouse_id: Some("wh-1".into()),
+            status: DeliveryState::Draft,
+            carrier: None,
+            tracking_no: None,
+            shipped_at: None,
             version: 1,
             created_at: 1,
         };

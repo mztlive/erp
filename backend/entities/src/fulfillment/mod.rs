@@ -12,7 +12,8 @@
 //!   两个字段，自定义 `Debug` 不泄漏明文（实现见 [`fingerprint`]）；
 //! - 状态机按 §7.5：单据 `DRAFT → POSTED → REVERSED`（交付为 `SHIPPED/SIGNED`、
 //!   电子与服务为 `CONFIRMED`），`REVERSED` 为不可逆终态；
-//! - `PurchaseReceipt` 签署为 `NO_APPROVAL`，不得新增审批绑定字段或审批状态机。
+//! - `PurchaseReceipt` 签署为 `NO_APPROVAL`，不得新增审批绑定字段或审批状态机；
+//! - `Delivery` 签署为 `NO_APPROVAL`，不得新增审批绑定字段或审批状态机。
 
 pub mod acceptance_fulfillment_allocation;
 pub mod customer_acceptance;
