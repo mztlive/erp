@@ -12,8 +12,13 @@ import {
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
+import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
-import type { BackendDelivery, BackendPurchaseReceipt } from "./documents"
+import type {
+    BackendDelivery,
+    BackendElectronicDelivery,
+    BackendPurchaseReceipt,
+} from "./documents"
 
 /**
  * 把已确认的采购收货投影为创建结果。PurchaseReceipt 为 NO_APPROVAL，
@@ -91,5 +96,42 @@ export function formalFromDelivery(
         reference: posted.delivery_no,
         salesOrderId: posted.sales_order_id,
         salesOrderNo: posted.sales_order_id,
+    }
+}
+
+/**
+ * 把已确认的电子交付投影为创建结果。ElectronicDelivery 为 NO_APPROVAL，
+ * 丢弃误带的审批字段，结果面板不得渲染绑定卡或审批历史。
+ *
+ * @param electronic 电子交付 HTTP 载荷。
+ * @param draft 电子交付草稿。
+ * @param operationId 当前工作单 ID。
+ */
+export function formalFromElectronic(
+    electronic: BackendElectronicDelivery,
+    draft: Extract<FulfillmentDraft, { type: "ELECTRONIC" }>,
+    operationId: string,
+): FulfillmentFormalOutcome {
+    const posted = stripElectronicDeliveryApprovalField(electronic)
+    const failed = posted.result === "FAILED"
+    return {
+        kind: "POSTED",
+        operationId,
+        factType: "ELECTRONIC_DELIVERY",
+        factId: posted.id,
+        factNo: posted.fulfillment_no,
+        formalStatus: failed ? "FAILED" : "CONFIRMED",
+        occurredAt: secsToIso(posted.occurred_at) || draft.occurredAt || nowIso(),
+        operationType: "ELECTRONIC",
+        inventoryDelta: [],
+        reservationDelta: [],
+        remainingByLine: [],
+        acceptanceRequired: !failed,
+        acceptanceNextStep:
+            "电子交付已确认，不影响自有库存。请销售在客户验收登记。",
+        inventoryImpactSummary: "不影响自有库存。",
+        reference: posted.fulfillment_no,
+        salesOrderId: "",
+        salesOrderNo: "",
     }
 }

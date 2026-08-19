@@ -11,6 +11,15 @@ import type {
 } from "@/features/fulfillment-operations/types"
 import { RESULT_OPTIONS } from "@/features/fulfillment-operations/types"
 
+/**
+ * 电子交付表单。ElectronicDelivery 为 NO_APPROVAL，只收集交付对象、时间、
+ * 履约结果与数量，不嵌入绑定卡、决定弹窗、撤回或改派入口。
+ *
+ * @param operation 电子交付工作单。
+ * @param draft 电子交付草稿。
+ * @param onChange 草稿变更回调。
+ * @param disabled 只读或提交中禁用。
+ */
 export function FulfillmentElectronicForm({
     operation,
     draft,

@@ -15,6 +15,7 @@ import {
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
+import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 
 // ─── backend DTO shapes ─────────────────────────────────────────────────────
@@ -78,6 +79,7 @@ export type BackendDeliveryDetail = {
     lines: BackendDeliveryLine[]
 }
 
+/** ElectronicDelivery 为 NO_APPROVAL：创建/详情 DTO 不得携带审批绑定。 */
 export type BackendElectronicDelivery = {
     id: string
     fulfillment_no: string
@@ -216,19 +218,25 @@ export function deliveryToOperation(d: BackendDelivery): FulfillmentOperation {
     })
 }
 
+/**
+ * 把电子交付草稿投影为电子交付工作单。ElectronicDelivery 为 NO_APPROVAL，丢弃误带的审批字段。
+ *
+ * @param e 电子交付 HTTP 载荷。
+ */
 export function electronicToOperation(
     e: BackendElectronicDelivery,
 ): FulfillmentOperation {
+    const electronic = stripElectronicDeliveryApprovalField(e)
     return baseOperation({
-        operationId: e.id,
+        operationId: electronic.id,
         operationType: "ELECTRONIC",
-        editVersion: e.version,
-        sourceVersion: String(e.version),
-        dueAt: secsToIso(e.occurred_at) || nowIso(),
-        summary: e.fulfillment_no,
+        editVersion: electronic.version,
+        sourceVersion: String(electronic.version),
+        dueAt: secsToIso(electronic.occurred_at) || nowIso(),
+        summary: electronic.fulfillment_no,
         source: {
-            purchaseOrderId: e.purchase_order_id,
-            purchaseNo: e.purchase_order_id,
+            purchaseOrderId: electronic.purchase_order_id,
+            purchaseNo: electronic.purchase_order_id,
             salesOrderId: "",
             salesOrderNo: "",
             salesRevisionId: "",
@@ -236,26 +244,29 @@ export function electronicToOperation(
         },
         lines: [
             emptySourceLine({
-                lineId: e.sales_order_line_id,
-                salesOrderLineId: e.sales_order_line_id,
+                lineId: electronic.sales_order_line_id,
+                salesOrderLineId: electronic.sales_order_line_id,
                 purchaseLineSalesAllocationId:
-                    e.purchase_line_sales_allocation_id,
-                remainingQuantity: e.quantity,
-                orderedQuantity: e.quantity,
+                    electronic.purchase_line_sales_allocation_id,
+                remainingQuantity: electronic.quantity,
+                orderedQuantity: electronic.quantity,
             }),
         ],
         draft: {
             type: "ELECTRONIC",
             occurredAt:
-                secsToIso(e.occurred_at).slice(0, 16) || nowIso().slice(0, 16),
+                secsToIso(electronic.occurred_at).slice(0, 16) ||
+                nowIso().slice(0, 16),
             recipientMasked: "",
-            result: (e.result as "SUCCESS" | "PARTIAL" | "FAILED") || "SUCCESS",
+            result:
+                (electronic.result as "SUCCESS" | "PARTIAL" | "FAILED") ||
+                "SUCCESS",
             lines: [
                 {
-                    salesOrderLineId: e.sales_order_line_id,
+                    salesOrderLineId: electronic.sales_order_line_id,
                     purchaseLineSalesAllocationId:
-                        e.purchase_line_sales_allocation_id,
-                    quantity: e.quantity,
+                        electronic.purchase_line_sales_allocation_id,
+                    quantity: electronic.quantity,
                 },
             ],
         },

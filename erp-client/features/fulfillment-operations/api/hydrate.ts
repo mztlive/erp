@@ -19,6 +19,7 @@ import type {
 /**
  * 按作业类型补全当前单据明细。PurchaseReceipt 为 NO_APPROVAL，入库明细不得携带审批绑定。
  * Delivery 为 NO_APPROVAL，仓发/直发明细不得携带审批绑定。
+ * ElectronicDelivery 为 NO_APPROVAL，电子交付无独立明细接口，不得补拉审批绑定。
  *
  * @param operation 队列列表投影。
  * @returns 可编辑草稿；补全失败时保留原投影。
