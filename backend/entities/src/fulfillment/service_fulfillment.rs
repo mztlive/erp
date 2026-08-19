@@ -1,5 +1,8 @@
 //! `service_fulfillment`：线下服务履约记录（数据模型 §6.7）。
 //!
+//! 合同 §4.3 签署为 `NO_APPROVAL`：实体只保留业务状态，不得新增审批绑定字段
+//! 或审批状态机。
+//!
 //! 公共关键字段与 `electronic_delivery` 一致（含 `occurred_at` 等正式事实字段，
 //! 组合 `FactBase`）；另保存服务地点、开始时间、结束时间和完成说明。
 //! 服务地点是履约地址类敏感值，按 §4.5.5 建模为**加密值 + 带密钥 HMAC 查询
@@ -14,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::fact::FactBase;
 use crate::common::source::SourceType;
-use crate::common::state::{ensure_transition, DocumentState};
+use crate::common::state::{DocumentState, ensure_transition};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
@@ -25,7 +28,7 @@ use crate::validation::normalize_optional_text;
 use crate::validation::normalize_required_text;
 
 use super::electronic_delivery::FulfillmentResult;
-use super::fingerprint::{hmac_sha256_hex, validate_fingerprint, FINGERPRINT_HEX_LEN};
+use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
 
 /// 履约记录号最大长度。
 const FULFILLMENT_NO_MAX_LEN: usize = 64;
@@ -597,11 +600,13 @@ mod tests {
         assert!(
             ensure_transition(ServiceFulfillmentState::Draft, ServiceFulfillmentState::Confirmed).is_ok()
         );
-        assert!(ensure_transition(
-            ServiceFulfillmentState::Confirmed,
-            ServiceFulfillmentState::Reversed
-        )
-        .is_ok());
+        assert!(
+            ensure_transition(
+                ServiceFulfillmentState::Confirmed,
+                ServiceFulfillmentState::Reversed
+            )
+            .is_ok()
+        );
         assert!(
             ensure_transition(ServiceFulfillmentState::Draft, ServiceFulfillmentState::Reversed).is_err()
         );
