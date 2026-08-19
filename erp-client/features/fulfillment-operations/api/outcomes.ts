@@ -7,26 +7,35 @@ import type {
     FulfillmentDraft,
     FulfillmentFormalOutcome,
 } from "@/features/fulfillment-operations/types"
-import { nowIso, secsToIso } from "@/features/fulfillment-operations/lib/projection"
-import type {
-    BackendDelivery,
-    BackendPurchaseReceipt,
-} from "./documents"
+import {
+    nowIso,
+    secsToIso,
+} from "@/features/fulfillment-operations/lib/projection"
+import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
+import type { BackendDelivery, BackendPurchaseReceipt } from "./documents"
 
+/**
+ * 把已确认的采购收货投影为创建结果。PurchaseReceipt 为 NO_APPROVAL，
+ * 丢弃误带的审批字段，结果面板不得渲染绑定卡或审批历史。
+ *
+ * @param receipt 采购收货 HTTP 载荷。
+ * @param draft 入库草稿。
+ * @param operationId 当前工作单 ID。
+ */
 export function formalFromReceipt(
     receipt: BackendPurchaseReceipt,
     draft: Extract<FulfillmentDraft, { type: "RECEIPT" }>,
     operationId: string,
 ): FulfillmentFormalOutcome {
+    const posted = stripPurchaseReceiptApprovalField(receipt)
     return {
         kind: "POSTED",
         operationId,
         factType: "PURCHASE_RECEIPT",
-        factId: receipt.id,
-        factNo: receipt.receipt_no,
-        formalStatus: receipt.status || "POSTED",
-        occurredAt:
-            secsToIso(receipt.posted_at) || draft.occurredAt || nowIso(),
+        factId: posted.id,
+        factNo: posted.receipt_no,
+        formalStatus: posted.status || "POSTED",
+        occurredAt: secsToIso(posted.posted_at) || draft.occurredAt || nowIso(),
         operationType: "RECEIPT",
         inventoryDelta: [],
         reservationDelta: [],
@@ -35,7 +44,7 @@ export function formalFromReceipt(
         acceptanceNextStep:
             "入库不等于验收。合格的货已入库并按销售单留好；等发货之后，再由销售去登记客户验收。",
         inventoryImpactSummary: "单据已确认；库存影响以库存台账为准。",
-        reference: receipt.receipt_no,
+        reference: posted.receipt_no,
         salesOrderId: "",
         salesOrderNo: "",
     }

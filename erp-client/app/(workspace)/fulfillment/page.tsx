@@ -26,6 +26,9 @@ function FulfillmentFallback() {
  * purchaseOrderId / warehouseId / returnTo / from / autoNext。
  * lane=warehouse → 收货与发货；lane=procurement → 交付与代发。
  * 业务数据不在服务端 fetch。
+ *
+ * PurchaseReceipt 为 NO_APPROVAL：本页入库路径不显示审批流程选择或审批动作，
+ * 采购收货创建结果、详情、提交确认不展示绑定卡、决定、撤回或审批历史。
  */
 export default function Page() {
     return (

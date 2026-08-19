@@ -5,12 +5,22 @@
 
 import { apiGet } from "@/lib/api"
 import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
-import { emptySourceLine, nowIso } from "@/features/fulfillment-operations/lib/projection"
+import {
+    emptySourceLine,
+    nowIso,
+} from "@/features/fulfillment-operations/lib/projection"
+import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import type {
     BackendDeliveryDetail,
     BackendPurchaseReceiptDetail,
 } from "./documents"
 
+/**
+ * 按作业类型补全当前单据明细。PurchaseReceipt 为 NO_APPROVAL，入库明细不得携带审批绑定。
+ *
+ * @param operation 队列列表投影。
+ * @returns 可编辑草稿；补全失败时保留原投影。
+ */
 export async function hydrateOperationDetail(
     operation: FulfillmentOperation,
 ): Promise<FulfillmentOperation> {
@@ -19,6 +29,8 @@ export async function hydrateOperationDetail(
             const detail = await apiGet<BackendPurchaseReceiptDetail>(
                 `/admin/purchase-receipts/${encodeURIComponent(operation.operationId)}`,
             )
+            // PurchaseReceipt 为 NO_APPROVAL，明细补全丢弃误带的审批字段。
+            const receipt = stripPurchaseReceiptApprovalField(detail.receipt)
             const lines = detail.lines.map((l) =>
                 emptySourceLine({
                     lineId: l.id,
@@ -37,13 +49,13 @@ export async function hydrateOperationDetail(
             }))
             return {
                 ...operation,
-                editVersion: detail.receipt.version,
-                sourceVersion: String(detail.receipt.version),
+                editVersion: receipt.version,
+                sourceVersion: String(receipt.version),
                 lines,
                 draft: {
                     type: "RECEIPT",
-                    warehouseId: detail.receipt.warehouse_id,
-                    warehouseLabel: detail.receipt.warehouse_id,
+                    warehouseId: receipt.warehouse_id,
+                    warehouseLabel: receipt.warehouse_id,
                     occurredAt:
                         operation.draft.type === "RECEIPT"
                             ? operation.draft.occurredAt

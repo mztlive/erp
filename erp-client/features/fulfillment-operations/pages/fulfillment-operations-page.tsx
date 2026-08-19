@@ -48,6 +48,11 @@ import {
     sourceReturnHref,
 } from "./lib/presentation"
 
+/**
+ * 履约工作面。
+ * PurchaseReceipt 为 NO_APPROVAL，入库创建结果、详情、提交确认
+ * 不展示绑定卡、决定、撤回或审批历史。
+ */
 export function FulfillmentOperationsPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -108,12 +113,16 @@ export function FulfillmentOperationsPage() {
         onSave: () => void controller.handleSave(),
         onConfirm: () => controller.setConfirmOpen(true),
         onNavigate: controller.handleNavigate,
-        onToggleShortcuts: () =>
-            controller.setShortcutsOpen((v) => !v),
+        onToggleShortcuts: () => controller.setShortcutsOpen((v) => !v),
     })
 
     if (controller.queueQuery.isPending) {
-        return <FulfillmentPageStates status="pending" headerDescription={header.label} />
+        return (
+            <FulfillmentPageStates
+                status="pending"
+                headerDescription={header.label}
+            />
+        )
     }
     if (controller.queueQuery.isError) {
         return (
@@ -128,7 +137,10 @@ export function FulfillmentOperationsPage() {
 
     const context = controller.context
     const activeTypeSlug = typeParamValue(operationTypes)
-    const status = responsibilityStatus(controller.operation, controller.canExecute)
+    const status = responsibilityStatus(
+        controller.operation,
+        controller.canExecute,
+    )
 
     return (
         <PageScaffold>
@@ -221,11 +233,15 @@ export function FulfillmentOperationsPage() {
             {controller.actionError ? (
                 <Alert variant="destructive">
                     <AlertTitle>没有生效</AlertTitle>
-                    <AlertDescription>{controller.actionError}</AlertDescription>
+                    <AlertDescription>
+                        {controller.actionError}
+                    </AlertDescription>
                 </Alert>
             ) : null}
 
-            {controller.completed || !controller.operation || !controller.draft ? (
+            {controller.completed ||
+            !controller.operation ||
+            !controller.draft ? (
                 <FulfillmentPageStates
                     status="empty"
                     headerDescription={header.label}
@@ -233,8 +249,7 @@ export function FulfillmentOperationsPage() {
                     operationTypes={operationTypes}
                     emptyReason={controller.view?.emptyReason}
                     roleLabel={
-                        context?.roleLabel ??
-                        FULFILLMENT_ROLES[roleValue].label
+                        context?.roleLabel ?? FULFILLMENT_ROLES[roleValue].label
                     }
                     visibleTypes={controller.visibleTypes}
                     filterSummary={context?.filterSummary}
@@ -252,7 +267,8 @@ export function FulfillmentOperationsPage() {
                         onSelect={(operationId) => {
                             if (
                                 controller.dirty &&
-                                operationId !== controller.operation?.operationId
+                                operationId !==
+                                    controller.operation?.operationId
                             ) {
                                 controller.setActionError(
                                     "有未保存修改，请先保存或放弃后再切换",
@@ -282,11 +298,15 @@ export function FulfillmentOperationsPage() {
                         )}
                         currentUrl={controller.currentUrl}
                         snapshotUpdatedAt={context?.snapshotUpdatedAt ?? ""}
-                        position={context?.position ?? controller.currentIndex + 1}
+                        position={
+                            context?.position ?? controller.currentIndex + 1
+                        }
                         total={context?.total ?? controller.operations.length}
                         shortcutsOpen={controller.shortcutsOpen}
                         headingRef={controller.headingRef}
-                        resultUnknown={controller.lastResult?.status === "unknown"}
+                        resultUnknown={
+                            controller.lastResult?.status === "unknown"
+                        }
                         onDraftChange={controller.updateDraft}
                         onSkip={controller.handleSkip}
                         onDiscard={controller.handleDiscard}

@@ -11,6 +11,15 @@ import type {
 } from "@/features/fulfillment-operations/types"
 import { withDerivedQualified } from "@/features/fulfillment-operations/lib/validation"
 
+/**
+ * 采购入库表单。PurchaseReceipt 为 NO_APPROVAL，只收集仓、时间与到货数量，
+ * 不嵌入绑定卡、决定弹窗、撤回或改派入口。
+ *
+ * @param operation 入库工作单。
+ * @param draft 入库草稿。
+ * @param onChange 草稿变更回调。
+ * @param disabled 只读或提交中禁用。
+ */
 export function FulfillmentReceiptForm({
     operation,
     draft,
