@@ -174,13 +174,13 @@ describe('useReverseFlow', () => {
         expect(submitRefundMock).toHaveBeenCalledWith({
             refundId: 'crf-1',
             expectedVersion: 1,
-            idempotencyKey: expect.stringMatching(/^w11-rev-src_3-\d+$/),
+            idempotencyKey: expect.stringMatching(/^w11-rev-src_3-/),
         })
         expect(setLastResult).toHaveBeenCalledWith({
             status: 'succeeded',
             title: '退款已提交审批',
             description: '已按已绑定的审批流程启动审批，原回款保留。',
-            reference: expect.stringMatching(/^w11-rev-src_3-\d+$/),
+            reference: expect.stringMatching(/^w11-rev-src_3-/),
             facts: [
                 { label: '退款单号', value: 'TK-1' },
                 { label: '当前状态', value: '审批中' },
@@ -282,6 +282,193 @@ describe('useReverseFlow', () => {
         )
         expect(setLastResult).not.toHaveBeenCalled()
         expect(result.current.reverseConfirm).toBeNull()
+    })
+
+    it('reuses the refund key for the same receipt and reason retry', async () => {
+        ensureRefundMock.mockResolvedValue({
+            status: 'succeeded',
+            refund: refundRow(),
+        })
+        const { result } = setup()
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'refund',
+                sourceFactId: 'src_3',
+                label: 'RCP-3',
+                amount: '50.00',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareRefundDraft('退差额')
+        })
+        const firstKey = ensureRefundMock.mock.calls[0][0].idempotencyKey
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'refund',
+                sourceFactId: 'src_3',
+                label: 'RCP-3',
+                amount: '50.00',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareRefundDraft('退差额')
+        })
+        expect(ensureRefundMock.mock.calls[1][0].idempotencyKey).toBe(firstKey)
+        expect(ensureRefundMock.mock.calls[1][0].sourceFactId).toBe('src_3')
+    })
+
+    it('rotates the refund key when the source receipt or reason changes', async () => {
+        ensureRefundMock
+            .mockResolvedValueOnce({
+                status: 'succeeded',
+                refund: refundRow({ refundId: 'crf-1', originalReceiptId: 'src_3' }),
+            })
+            .mockResolvedValueOnce({
+                status: 'succeeded',
+                refund: refundRow({
+                    refundId: 'crf-2',
+                    refundNo: 'TK-2',
+                    originalReceiptId: 'src_9',
+                }),
+            })
+            .mockResolvedValueOnce({
+                status: 'succeeded',
+                refund: refundRow({
+                    refundId: 'crf-3',
+                    refundNo: 'TK-3',
+                    originalReceiptId: 'src_9',
+                    reasonText: '全额退',
+                }),
+            })
+        const { result } = setup()
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'refund',
+                sourceFactId: 'src_3',
+                label: 'RCP-3',
+                amount: '50.00',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareRefundDraft('退差额')
+        })
+        const firstKey = ensureRefundMock.mock.calls[0][0].idempotencyKey
+
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'refund',
+                sourceFactId: 'src_9',
+                label: 'RCP-9',
+                amount: '80.00',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareRefundDraft('退差额')
+        })
+        const secondKey = ensureRefundMock.mock.calls[1][0].idempotencyKey
+        expect(secondKey).not.toBe(firstKey)
+        expect(ensureRefundMock.mock.calls[1][0].sourceFactId).toBe('src_9')
+
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'refund',
+                sourceFactId: 'src_9',
+                label: 'RCP-9',
+                amount: '80.00',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareRefundDraft('全额退')
+        })
+        expect(ensureRefundMock.mock.calls[2][0].idempotencyKey).not.toBe(
+            secondKey,
+        )
+        expect(ensureRefundMock.mock.calls[2][0].reason).toBe('全额退')
+    })
+
+    it('keeps the prepare key when submitting the same draft', async () => {
+        ensureRefundMock.mockResolvedValue({
+            status: 'succeeded',
+            refund: refundRow(),
+        })
+        submitRefundMock.mockResolvedValue({
+            status: 'succeeded',
+            refund: refundRow({
+                status: 'in_approval',
+                statusLabel: '审批中',
+            }),
+        })
+        const { result } = setup()
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'refund',
+                sourceFactId: 'src_3',
+                label: 'RCP-3',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareRefundDraft('退差额')
+        })
+        const prepareKey = ensureRefundMock.mock.calls[0][0].idempotencyKey
+        act(() => {
+            result.current.beginRefundSubmit(refundRow())
+        })
+        await act(async () => {
+            await result.current.confirmRefundSubmit()
+        })
+        expect(submitRefundMock).toHaveBeenCalledWith({
+            refundId: 'crf-1',
+            expectedVersion: 1,
+            idempotencyKey: prepareKey,
+        })
+    })
+
+    it('does not reuse the first refund key when submitting another draft', async () => {
+        ensureRefundMock.mockResolvedValue({
+            status: 'succeeded',
+            refund: refundRow(),
+        })
+        submitRefundMock.mockResolvedValue({
+            status: 'succeeded',
+            refund: refundRow({
+                refundId: 'crf-9',
+                status: 'in_approval',
+                statusLabel: '审批中',
+            }),
+        })
+        const { result } = setup()
+        act(() => {
+            result.current.setReverseConfirm({
+                kind: 'refund',
+                sourceFactId: 'src_3',
+                label: 'RCP-3',
+            })
+        })
+        await act(async () => {
+            await result.current.prepareRefundDraft('退差额')
+        })
+        const firstKey = ensureRefundMock.mock.calls[0][0].idempotencyKey
+        act(() => {
+            result.current.beginRefundSubmit(
+                refundRow({
+                    refundId: 'crf-9',
+                    refundNo: 'TK-9',
+                    originalReceiptId: 'src_9',
+                    reasonText: '另一笔',
+                }),
+            )
+        })
+        await act(async () => {
+            await result.current.confirmRefundSubmit()
+        })
+        expect(submitRefundMock).toHaveBeenCalledWith({
+            refundId: 'crf-9',
+            expectedVersion: 1,
+            idempotencyKey: expect.stringMatching(/^w11-rev-crf-9-/),
+        })
+        expect(submitRefundMock.mock.calls[0][0].idempotencyKey).not.toBe(
+            firstKey,
+        )
     })
 
     it('does nothing when no reverse request is pending', async () => {

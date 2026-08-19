@@ -4,11 +4,16 @@ import * as React from "react"
 
 import type { ResultState } from "@/components/business/feedback"
 import type { ReverseRequest } from "@/features/customer-receivables/components/customer-account-detail-preview"
+import { forgetRefundDraft } from "@/features/customer-receivables/api/reverse-fact"
 import {
     useEnsureCustomerRefundDraftMutation,
     useReverseFactMutation,
     useSubmitCustomerRefundMutation,
 } from "@/features/customer-receivables/hooks/queries"
+import {
+    slotForCustomerRefundIntent,
+    type CustomerRefundIdempotencySlot,
+} from "@/features/customer-receivables/lib/customer-refund-approval"
 import type { CustomerRefundRow } from "@/features/customer-receivables/types"
 
 /**
@@ -54,7 +59,28 @@ export function useReverseFlow(args: {
     const [refundDraft, setRefundDraft] =
         React.useState<CustomerRefundRow | null>(null)
     const [refundSubmitOpen, setRefundSubmitOpen] = React.useState(false)
-    const refundIdempotencyRef = React.useRef<string | null>(null)
+    const refundSlotRef = React.useRef<CustomerRefundIdempotencySlot | null>(
+        null,
+    )
+
+    /**
+     * 按当前意图绑定退款幂等槽。换单或改原因时轮换并丢弃旧草稿缓存。
+     *
+     * @param scopeId 原回款 ID 或已有退款单 ID。
+     * @param reason 退款原因。
+     */
+    function bindRefundSlot(
+        scopeId: string,
+        reason: string,
+    ): CustomerRefundIdempotencySlot {
+        const current = refundSlotRef.current
+        const next = slotForCustomerRefundIntent(current, scopeId, reason)
+        if (current && current.key !== next.key) {
+            forgetRefundDraft(current.key)
+        }
+        refundSlotRef.current = next
+        return next
+    }
 
     /**
      * 登记客户退款草稿并打开提交确认。
@@ -63,19 +89,21 @@ export function useReverseFlow(args: {
      */
     async function prepareRefundDraft(reason: string) {
         if (!reverseConfirm || reverseConfirm.kind !== "refund") return
-        if (!refundIdempotencyRef.current) {
-            refundIdempotencyRef.current = `w11-rev-${reverseConfirm.sourceFactId}-${Date.now()}`
-        }
+        const slot = bindRefundSlot(reverseConfirm.sourceFactId, reason)
         const res = await ensureRefundMutation.mutateAsync({
             sourceFactId: reverseConfirm.sourceFactId,
             amount: reverseConfirm.amount,
             reason,
-            idempotencyKey: refundIdempotencyRef.current,
+            idempotencyKey: slot.key,
         })
         if (res.status !== "succeeded") {
             setActionError(res.message)
             setReverseConfirm(null)
             return
+        }
+        refundSlotRef.current = {
+            ...slot,
+            refundId: res.refund.refundId,
         }
         setRefundDraft(res.refund)
         setReverseReason(reason)
@@ -91,8 +119,15 @@ export function useReverseFlow(args: {
      */
     function beginRefundSubmit(row: CustomerRefundRow) {
         setRefundDraft(row)
-        if (!refundIdempotencyRef.current) {
-            refundIdempotencyRef.current = `w11-rev-${row.refundId}-${Date.now()}`
+        const current = refundSlotRef.current
+        if (current?.refundId === row.refundId) {
+            setRefundSubmitOpen(true)
+            return
+        }
+        const slot = bindRefundSlot(row.refundId, row.reasonText)
+        refundSlotRef.current = {
+            ...slot,
+            refundId: row.refundId,
         }
         setRefundSubmitOpen(true)
     }
@@ -101,11 +136,12 @@ export function useReverseFlow(args: {
      * 按冻结路线提交客户退款审批。
      */
     async function confirmRefundSubmit() {
-        if (!refundDraft || !refundIdempotencyRef.current) return
+        const slot = refundSlotRef.current
+        if (!refundDraft || !slot) return
         const res = await submitRefundMutation.mutateAsync({
             refundId: refundDraft.refundId,
             expectedVersion: refundDraft.baselineVersion,
-            idempotencyKey: refundIdempotencyRef.current,
+            idempotencyKey: slot.key,
         })
         if (res.status !== "succeeded") {
             setActionError(res.message)
@@ -116,17 +152,18 @@ export function useReverseFlow(args: {
             status: "succeeded",
             title: "退款已提交审批",
             description: "已按已绑定的审批流程启动审批，原回款保留。",
-            reference: refundIdempotencyRef.current,
+            reference: slot.key,
             facts: [
                 { label: "退款单号", value: res.refund.refundNo },
                 { label: "当前状态", value: res.refund.statusLabel },
             ],
         })
+        forgetRefundDraft(slot.key)
+        refundSlotRef.current = null
         setRefundDraft(res.refund)
         setRefundSubmitOpen(false)
         setReverseReason("")
         setReverseAmount("")
-        refundIdempotencyRef.current = null
         openRefundPreview(res.refund.refundId)
     }
 

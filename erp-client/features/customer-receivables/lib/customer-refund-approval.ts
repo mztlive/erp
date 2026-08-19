@@ -174,3 +174,45 @@ export const buildCustomerRefundSubmitRequest = (input: {
     expected_version: input.expectedVersion,
     idempotency_key: input.idempotencyKey,
 })
+
+/** 客户退款提交意图对应的幂等槽。 */
+export type CustomerRefundIdempotencySlot = Readonly<{
+    key: string
+    fingerprint: string
+    refundId?: string
+}>
+
+/**
+ * 计算客户退款草稿意图指纹。
+ *
+ * 来源单据或原因变化即视为新意图，不得复用上一张退款单的键。
+ *
+ * @param scopeId 原回款 ID 或已有退款单 ID。
+ * @param reason 退款原因。
+ */
+export const customerRefundIntentFingerprint = (
+    scopeId: string,
+    reason: string,
+): string => `${scopeId}:${reason.trim()}`
+
+/**
+ * 按当前意图复用或轮换退款幂等键。
+ *
+ * 同一来源且同一原因的重试保持原键；换单或改原因必须换新键。
+ *
+ * @param current 当前槽位。
+ * @param scopeId 原回款 ID 或已有退款单 ID。
+ * @param reason 退款原因。
+ */
+export const slotForCustomerRefundIntent = (
+    current: CustomerRefundIdempotencySlot | null,
+    scopeId: string,
+    reason: string,
+): CustomerRefundIdempotencySlot => {
+    const fingerprint = customerRefundIntentFingerprint(scopeId, reason)
+    if (current && current.fingerprint === fingerprint) return current
+    return {
+        key: `w11-rev-${scopeId}-${crypto.randomUUID()}`,
+        fingerprint,
+    }
+}

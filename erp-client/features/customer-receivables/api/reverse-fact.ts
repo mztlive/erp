@@ -18,6 +18,17 @@ export const reverseIdempotency = new Map<string, ReverseFactResult>()
 
 export const refundDrafts = new Map<string, BackendCustomerRefund>()
 
+/**
+ * 丢弃指定幂等键下的退款草稿缓存。
+ *
+ * 来源单据或原因变化后必须调用，避免把上一张退款单当成当前意图。
+ *
+ * @param idempotencyKey 即将作废的幂等键。
+ */
+export const forgetRefundDraft = (idempotencyKey: string): void => {
+    refundDrafts.delete(idempotencyKey)
+}
+
 function failedResult(
     code: string,
     message: string,
@@ -58,6 +69,17 @@ export async function ensureCustomerRefundDraft(input: {
 > {
     const cached = refundDrafts.get(input.idempotencyKey)
     if (cached) {
+        const cachedSource = cached.original_receipt_id ?? undefined
+        if (
+            (cachedSource && cachedSource !== input.sourceFactId) ||
+            cached.reason_text !== input.reason
+        ) {
+            forgetRefundDraft(input.idempotencyKey)
+            return failedResult(
+                "REFUND_INTENT_MISMATCH",
+                "当前退款草稿已不是这次提交意图，请重新发起。",
+            )
+        }
         const latest = await apiGet<BackendCustomerRefund>(
             `/admin/customer-refunds/${encodeURIComponent(cached.id)}`,
         )

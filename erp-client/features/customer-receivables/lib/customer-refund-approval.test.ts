@@ -13,9 +13,11 @@ import {
     customerRefundStatusLabel,
     customerRefundStatusTone,
     isCustomerRefundWorkItem,
+    customerRefundIntentFingerprint,
     mapCustomerRefundApproval,
     mergeCustomerRefundAllowedActions,
     readCustomerRefundApprovalResponsibility,
+    slotForCustomerRefundIntent,
 } from "./customer-refund-approval"
 import { CUSTOMER_RECEIPT_DOCUMENT_TYPE } from "./customer-receipt-approval"
 import { INVOICE_DOCUMENT_TYPE } from "./invoice-no-approval"
@@ -189,6 +191,34 @@ describe("buildCustomerRefundSubmitRequest", () => {
             expected_version: 3,
             idempotency_key: "k-crf-1",
         })
+    })
+})
+
+describe("slotForCustomerRefundIntent", () => {
+    it("reuses the key for the same source and reason", () => {
+        const first = slotForCustomerRefundIntent(null, "src-a", "退差额")
+        const retry = slotForCustomerRefundIntent(first, "src-a", "退差额")
+        expect(retry.key).toBe(first.key)
+        expect(retry.fingerprint).toBe(
+            customerRefundIntentFingerprint("src-a", "退差额"),
+        )
+    })
+
+    it("rotates when the source receipt or reason changes", () => {
+        const first = slotForCustomerRefundIntent(null, "src-a", "退差额")
+        const otherSource = slotForCustomerRefundIntent(
+            first,
+            "src-b",
+            "退差额",
+        )
+        const otherReason = slotForCustomerRefundIntent(
+            otherSource,
+            "src-b",
+            "全额退",
+        )
+        expect(otherSource.key).not.toBe(first.key)
+        expect(otherReason.key).not.toBe(otherSource.key)
+        expect(otherSource.key.startsWith("w11-rev-src-b-")).toBe(true)
     })
 })
 

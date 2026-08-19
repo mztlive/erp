@@ -103,6 +103,47 @@ describe("ensureCustomerRefundDraft", () => {
             ),
         ).toBe(false)
     })
+
+    it("does not reuse a cached draft for another receipt or reason", async () => {
+        apiMocks.apiGet.mockResolvedValueOnce(receipt)
+        apiMocks.apiPost.mockResolvedValueOnce(draftRefund)
+
+        const first = await ensureCustomerRefundDraft({
+            sourceFactId: "cr-1",
+            reason: "退差额",
+            idempotencyKey: "k-crf-shared",
+        })
+        expect(first.status).toBe("succeeded")
+
+        const otherSource = await ensureCustomerRefundDraft({
+            sourceFactId: "cr-2",
+            reason: "退差额",
+            idempotencyKey: "k-crf-shared",
+        })
+        expect(otherSource).toEqual({
+            status: "failed",
+            code: "REFUND_INTENT_MISMATCH",
+            message: "当前退款草稿已不是这次提交意图，请重新发起。",
+        })
+        expect(refundDrafts.has("k-crf-shared")).toBe(false)
+
+        apiMocks.apiGet.mockResolvedValueOnce(receipt)
+        apiMocks.apiPost.mockResolvedValueOnce(draftRefund)
+        const recreated = await ensureCustomerRefundDraft({
+            sourceFactId: "cr-1",
+            reason: "退差额",
+            idempotencyKey: "k-crf-shared",
+        })
+        expect(recreated.status).toBe("succeeded")
+
+        const otherReason = await ensureCustomerRefundDraft({
+            sourceFactId: "cr-1",
+            reason: "全额退",
+            idempotencyKey: "k-crf-shared",
+        })
+        expect(otherReason.status).toBe("failed")
+        expect(otherReason).toMatchObject({ code: "REFUND_INTENT_MISMATCH" })
+    })
 })
 
 describe("submitCustomerRefund", () => {
