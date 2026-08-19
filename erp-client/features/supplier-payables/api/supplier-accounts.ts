@@ -31,6 +31,7 @@ import type {
     AllocationSessionView,
     AllocationTrack,
     PayableDetailView,
+    PaymentRow,
     SupplierAccountsListView,
     SupplierAccountsQuery,
     UnallocatedRow,
@@ -267,6 +268,24 @@ export async function fetchPayableDetail(
     }
 }
 
+/**
+ * 读取供应商付款详情，含只读审批投影。缺失时返回 null。
+ *
+ * @param paymentId 付款主键。
+ */
+export async function fetchSupplierPayment(
+    paymentId: string,
+): Promise<PaymentRow | null> {
+    try {
+        const payment = await apiGet<BackendSupplierPayment>(
+            `/admin/supplier-payments/${encodeURIComponent(paymentId)}`,
+        )
+        return projectPayment(payment)
+    } catch {
+        return null
+    }
+}
+
 export async function fetchAllocationSession(input: {
     track: AllocationTrack
     supplierId: string
@@ -317,6 +336,8 @@ export async function fetchAllocationSession(input: {
     let existingAmount: string | undefined
     let existingUnallocated: string | undefined
     let existingDocumentNo: string | undefined
+    let existingPaymentVersion: number | undefined
+    let approval: AllocationSessionView["approval"]
 
     if (input.existingPaymentId) {
         const p = await apiGet<BackendSupplierPayment>(
@@ -325,6 +346,8 @@ export async function fetchAllocationSession(input: {
         existingAmount = p.amount
         existingUnallocated = p.unallocated_amount
         existingDocumentNo = p.payment_no
+        existingPaymentVersion = p.version
+        approval = projectPayment(p).approval
     } else if (input.existingInvoiceId) {
         const inv = await apiGet<BackendInvoice>(
             `/admin/invoices/${encodeURIComponent(input.existingInvoiceId)}`,
@@ -360,6 +383,8 @@ export async function fetchAllocationSession(input: {
         existingAmount,
         existingUnallocated,
         existingDocumentNo,
+        existingPaymentVersion,
+        approval,
     }
     sessions.set(draftSessionId, view)
     return view

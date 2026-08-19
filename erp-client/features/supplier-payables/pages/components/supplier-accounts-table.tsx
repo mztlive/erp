@@ -45,6 +45,7 @@ export interface SupplierAccountsTableProps {
     returnTo: string | undefined
     fromWorkspace: string | undefined
     openPreview: (payableAccountId: string) => void
+    openPaymentPreview: (paymentId: string) => void
     openSession: (next: SessionState) => void
     setReverseTarget: React.Dispatch<React.SetStateAction<ReverseTarget | null>>
     setRedInvoiceNo: React.Dispatch<React.SetStateAction<string>>
@@ -64,6 +65,7 @@ export function SupplierAccountsTable({
     returnTo,
     fromWorkspace,
     openPreview,
+    openPaymentPreview,
     openSession,
     setReverseTarget,
     setRedInvoiceNo,
@@ -79,6 +81,7 @@ export function SupplierAccountsTable({
         returnTo,
         fromWorkspace,
         openPreview,
+        openPaymentPreview,
         openSession,
         setReverseTarget,
         setRedInvoiceNo,

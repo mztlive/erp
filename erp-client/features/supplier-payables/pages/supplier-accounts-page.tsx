@@ -8,11 +8,16 @@ import {
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AllocationSession } from "@/features/supplier-payables/components/allocation-session"
+import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
     usePayableDetailQuery,
     useReverseInvoiceMutation,
     useReversePaymentMutation,
+    useSupplierPaymentQuery,
 } from "@/features/supplier-payables/hooks/queries"
+import { isSupplierPaymentWorkItem } from "@/features/supplier-payables/lib/supplier-payment-approval"
+import { mapWorkItemDto } from "@/features/work-items/types"
+import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import {
     VIEW_LABEL,
     type FormalSubmitResult,
@@ -50,7 +55,10 @@ export function SupplierAccountsPage() {
         sorting,
         setSorting,
         previewPayableId,
+        previewPaymentId,
+        workItemId,
         openPreview,
+        openPaymentPreview,
         closePreview,
         session,
         openSession,
@@ -76,7 +84,16 @@ export function SupplierAccountsPage() {
         openSettlements,
     } = useSupplierAccountsPage()
 
+    const workItemQuery = useWorkItemDetailQuery(workItemId ?? "")
+    const focusedWorkItem = workItemQuery.data
+        ? mapWorkItemDto(workItemQuery.data)
+        : undefined
+    const workItemPaymentId = isSupplierPaymentWorkItem(focusedWorkItem)
+        ? focusedWorkItem?.businessObjectId
+        : undefined
+    const focusedPaymentId = previewPaymentId ?? workItemPaymentId ?? null
     const detailQuery = usePayableDetailQuery(previewPayableId)
+    const paymentQuery = useSupplierPaymentQuery(focusedPaymentId)
     const reversePayment = useReversePaymentMutation()
     const reverseInvoice = useReverseInvoiceMutation()
 
@@ -254,6 +271,7 @@ export function SupplierAccountsPage() {
                 returnTo={returnTo}
                 fromWorkspace={fromWorkspace}
                 openPreview={openPreview}
+                openPaymentPreview={openPaymentPreview}
                 openSession={openSession}
                 setReverseTarget={setReverseTarget}
                 setRedInvoiceNo={setRedInvoiceNo}
@@ -276,11 +294,36 @@ export function SupplierAccountsPage() {
 
             <SupplierAccountsPreview
                 previewPayableId={previewPayableId}
+                previewPaymentId={focusedPaymentId}
                 detailQuery={detailQuery}
+                paymentQuery={paymentQuery}
                 returnTo={returnTo}
                 fromWorkspace={fromWorkspace}
                 onClose={closePreview}
                 onOpenSession={openSession}
+                workItemId={focusedWorkItem?.workItemId}
+                expectedTaskVersion={focusedWorkItem?.taskVersion}
+                workItemAllowedActions={focusedWorkItem?.allowedActions}
+                onDecisionApplied={(view: ApprovalCommandView) => {
+                    void paymentQuery.refetch()
+                    void listQuery.refetch()
+                    setLastResult({
+                        status: "succeeded",
+                        title: "审批决定已提交",
+                        description: view.latestRejectionReason
+                            ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                            : "已按当前任务提交决定。",
+                        reference: focusedPaymentId ?? undefined,
+                        facts: view.currentAssigneeName
+                            ? [
+                                  {
+                                      label: "当前审批人",
+                                      value: view.currentAssigneeName,
+                                  },
+                              ]
+                            : undefined,
+                    })
+                }}
             />
 
             <PickSupplierDialog

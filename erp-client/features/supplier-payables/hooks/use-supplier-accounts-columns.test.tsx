@@ -50,8 +50,9 @@ const paymentRow: PaymentRow = {
     allocatedTotal: '800.00',
     unallocatedAmount: '200.00',
     status: 'POSTED',
-    statusLabel: '已确认',
+    statusLabel: '已过账',
     statusTone: 'success',
+    baselineVersion: 1,
     allocations: [],
     allowedActions: ['VIEW_DETAIL', 'CONTINUE_ALLOCATE', 'REVERSE'],
     actionBlockers: [],
@@ -137,6 +138,7 @@ const baseData: SupplierAccountsListView = {
 
 function setup(overrides: Partial<Parameters<typeof useSupplierAccountsColumns>[0]> = {}) {
     const openPreview = vi.fn()
+    const openPaymentPreview = vi.fn()
     const openSession = vi.fn()
     const setReverseTarget = vi.fn()
     const setRedInvoiceNo = vi.fn()
@@ -145,6 +147,7 @@ function setup(overrides: Partial<Parameters<typeof useSupplierAccountsColumns>[
         returnTo: '/finance/supplier-accounts',
         fromWorkspace: '/w/finance',
         openPreview,
+        openPaymentPreview,
         openSession,
         setReverseTarget,
         setRedInvoiceNo,
@@ -237,6 +240,7 @@ describe('useSupplierAccountsColumns', () => {
         const input = {
             data: baseData,
             openPreview: vi.fn(),
+            openPaymentPreview: vi.fn(),
             openSession: vi.fn(),
             setReverseTarget: vi.fn(),
             setRedInvoiceNo: vi.fn(),
@@ -327,6 +331,17 @@ describe('useSupplierAccountsColumns', () => {
         )
         expect(screen.getByText(/先款条件/)).toBeTruthy()
         expect(screen.getByText(/已满足/)).toBeTruthy()
+    })
+
+    it('opens the payment preview from the payment actions cell', () => {
+        const { result, openPaymentPreview } = setup()
+        const screen = renderColumnCell(
+            result.current.paymentColumns,
+            'actions',
+            paymentRow,
+        )
+        fireEvent.click(screen.getByText('查看'))
+        expect(openPaymentPreview).toHaveBeenCalledWith('pay-1')
     })
 
     it('opens the continue-allocation session from the payment actions cell', () => {

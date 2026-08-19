@@ -1,5 +1,6 @@
 /** W12 供应商往来 · 客户端契约类型（对齐 w12-supplier-payables §5/§8） */
 
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type { StatusTone } from "@/components/ui/status-badge"
 
 export type SupplierAccountsView =
@@ -12,7 +13,7 @@ export type PayableSourceType = "PURCHASE_ORDER" | "SUPPLIER_SETTLEMENT"
 
 export type PayableStatus = "OPEN" | "PARTIAL" | "SETTLED"
 
-type PaymentStatus = "DRAFT" | "POSTED" | "REVERSED"
+export type PaymentStatus = "DRAFT" | "IN_APPROVAL" | "POSTED" | "REVERSED"
 
 type InvoiceKind = "BLUE" | "RED"
 
@@ -108,11 +109,13 @@ export type PaymentRow = Readonly<{
     status: PaymentStatus
     statusLabel: string
     statusTone: StatusTone
+    baselineVersion: number
     allocations: readonly PaymentAllocationLine[]
     allowedActions: readonly string[]
     actionBlockers: readonly ActionBlocker[]
     reversedByPaymentId?: string
     reverseOfPaymentId?: string
+    approval?: DocumentApprovalView
 }>
 
 type InvoiceAllocationLine = Readonly<{
@@ -259,6 +262,8 @@ export type AllocationSessionView = Readonly<{
     existingAmount?: string
     existingUnallocated?: string
     existingDocumentNo?: string
+    existingPaymentVersion?: number
+    approval?: DocumentApprovalView
 }>
 
 type AllocationTargetInput = {
@@ -282,6 +287,7 @@ export type PostPaymentInput = {
     /** 用户显式逐项选择（策略缺失时必须） */
     explicitSelection: boolean
     existingPaymentId?: string
+    expectedVersion?: number
     idempotencyKey: string
 }
 
@@ -333,6 +339,8 @@ export type FormalSubmitResult = {
     existingDocumentId?: string
     errorCode?: string
     facts?: Array<{ label: string; value: string }>
+    approval?: DocumentApprovalView
+    subjectStatus?: string
 }
 
 export type SaveAllocationDraftInput = {

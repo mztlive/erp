@@ -262,9 +262,11 @@ describe('submitPayment', () => {
         vi.clearAllMocks()
     })
 
-    it('creates and posts a payment with targets and returns success', async () => {
-        mockedHttp.apiPost.mockResolvedValueOnce(supplierPayment())
-        mockedHttp.apiPost.mockResolvedValueOnce(supplierPayment())
+    it('creates a draft then submits approval without posting', async () => {
+        mockedHttp.apiPost.mockResolvedValueOnce(supplierPayment({ status: 'draft' }))
+        mockedHttp.apiPost.mockResolvedValueOnce(
+            supplierPayment({ status: 'IN_APPROVAL' }),
+        )
 
         const result = await submitPayment({
             draftSessionId: 'sess-p1',
@@ -285,7 +287,9 @@ describe('submitPayment', () => {
         })
 
         expect(result.status).toBe('succeeded')
+        expect(result.title).toBe('付款已提交审批')
         expect(result.documentNo).toBe('FK-001')
+        expect(result.subjectStatus).toBe('IN_APPROVAL')
         expect(mockedHttp.apiPost).toHaveBeenNthCalledWith(
             1,
             '/admin/supplier-payments',
@@ -296,8 +300,10 @@ describe('submitPayment', () => {
         )
         expect(mockedHttp.apiPost).toHaveBeenNthCalledWith(
             2,
-            '/admin/supplier-payments/pay-1/post',
+            '/admin/supplier-payments/pay-1/submit',
             expect.objectContaining({
+                expected_version: 1,
+                idempotency_key: 'test-pay-success',
                 allocations: [
                     {
                         payable_entry_id: 'pa-1',
@@ -306,6 +312,9 @@ describe('submitPayment', () => {
                 ],
             }),
         )
+        expect(mockedHttp.apiPost.mock.calls.some((call) =>
+            String(call[0]).includes('/post'),
+        )).toBe(false)
     })
 
     it('returns failure with the api error message on failure', async () => {
@@ -317,7 +326,14 @@ describe('submitPayment', () => {
             paidAt: '',
             amount: '100.00',
             bankReference: '',
-            targets: [],
+            targets: [
+                {
+                    payableAccountId: 'pa-1',
+                    amount: '50.00',
+                    entryLockVersion: 1,
+                    accountLockVersion: 1,
+                },
+            ],
             explicitSelection: true,
             idempotencyKey: 'test-pay-fail',
         })
@@ -327,9 +343,7 @@ describe('submitPayment', () => {
         expect(result.errorCode).toBe('HTTP_ERROR')
     })
 
-    it('returns a draft-success result when no positive targets remain', async () => {
-        mockedHttp.apiPost.mockResolvedValueOnce(supplierPayment())
-
+    it('rejects submit when no positive allocations remain', async () => {
         const result = await submitPayment({
             draftSessionId: 'sess-p3',
             supplierId: 'sup-1',
@@ -348,10 +362,10 @@ describe('submitPayment', () => {
             idempotencyKey: 'test-pay-draft',
         })
 
-        expect(result.status).toBe('succeeded')
-        expect(result.title).toBe('付款草稿已创建')
-        expect(result.allocatedTotal).toBe('0.00')
-        expect(mockedHttp.apiPost).toHaveBeenCalledTimes(1)
+        expect(result.status).toBe('failed')
+        expect(result.errorCode).toBe('NEED_ALLOCATION')
+        expect(result.description).toBe('提交审批至少需要一条核销分配。')
+        expect(mockedHttp.apiPost).not.toHaveBeenCalled()
     })
 })
 
@@ -551,18 +565,29 @@ describe('saveAllocationDraft and resolveUnknownResult', () => {
     })
 
     it('returns the recorded result after a successful submit', async () => {
-        mockedHttp.apiPost.mockResolvedValueOnce(supplierPayment())
+        mockedHttp.apiPost.mockResolvedValueOnce(supplierPayment({ status: 'draft' }))
+        mockedHttp.apiPost.mockResolvedValueOnce(
+            supplierPayment({ status: 'IN_APPROVAL' }),
+        )
         const first = await submitPayment({
             draftSessionId: 'sess-p4',
             supplierId: 'sup-1',
             paidAt: '',
             amount: '100.00',
             bankReference: '',
-            targets: [],
+            targets: [
+                {
+                    payableAccountId: 'pa-1',
+                    amount: '50.00',
+                    entryLockVersion: 1,
+                    accountLockVersion: 1,
+                },
+            ],
             explicitSelection: true,
             idempotencyKey: 'test-resolve-key',
         })
         const resolved = await resolveUnknownResult('test-resolve-key')
+        expect(first.status).toBe('succeeded')
         expect(resolved).toEqual(first)
     })
 })

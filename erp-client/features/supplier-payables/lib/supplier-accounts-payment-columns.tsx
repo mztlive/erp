@@ -12,9 +12,16 @@ export function buildPaymentColumns(input: {
     returnTo?: string
     fromWorkspace?: string
     openSession: (next: SessionState) => void
+    openPaymentPreview: (paymentId: string) => void
     setReverseTarget: Dispatch<SetStateAction<ReverseTarget | null>>
 }): ColumnDef<PaymentRow>[] {
-    const { returnTo, fromWorkspace, openSession, setReverseTarget } = input
+    const {
+        returnTo,
+        fromWorkspace,
+        openSession,
+        openPaymentPreview,
+        setReverseTarget,
+    } = input
     return [
         {
             id: "doc",
@@ -74,8 +81,10 @@ export function buildPaymentColumns(input: {
                     tone={row.original.statusTone}
                     description={
                         row.original.status === "POSTED"
-                            ? "已确认不可编辑；纠错请冲正"
-                            : undefined
+                            ? "已过账不可编辑；纠错请冲正"
+                            : row.original.status === "IN_APPROVAL"
+                              ? "审批中，只读服务端当前审批人"
+                              : undefined
                     }
                 />
             ),
@@ -100,6 +109,18 @@ export function buildPaymentColumns(input: {
             meta: { label: "操作", width: "default", align: "end" },
             cell: ({ row }) => (
                 <div className="flex flex-wrap justify-end gap-1">
+                    {row.original.allowedActions.includes("VIEW_DETAIL") ? (
+                        <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            onClick={() =>
+                                openPaymentPreview(row.original.paymentId)
+                            }
+                        >
+                            查看
+                        </Button>
+                    ) : null}
                     {row.original.allowedActions.includes(
                         "CONTINUE_ALLOCATE",
                     ) ? (

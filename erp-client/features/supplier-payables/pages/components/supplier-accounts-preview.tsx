@@ -19,28 +19,93 @@ import {
 } from "@/components/ui/description-list"
 import { Separator } from "@/components/ui/separator"
 import { getErrorMessage } from "@/lib/api/errors"
+import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { SupplierPaymentDetailBody } from "@/features/supplier-payables/components/supplier-payment-detail-body"
 import type {
     PayableDetailView,
+    PaymentRow,
     SessionState,
 } from "@/features/supplier-payables/types"
 
 export interface SupplierAccountsPreviewProps {
     previewPayableId: string | null
+    previewPaymentId: string | null
     detailQuery: UseQueryResult<PayableDetailView | null, Error>
+    paymentQuery: UseQueryResult<PaymentRow | null, Error>
     returnTo: string | undefined
     fromWorkspace: string | undefined
     onClose: () => void
     onOpenSession: (next: SessionState) => void
+    workItemId?: string
+    expectedTaskVersion?: string
+    workItemAllowedActions?: readonly string[]
+    onDecisionApplied?: (view: ApprovalCommandView) => void
 }
 
+/**
+ * 供应商往来详情抽屉。付款嵌入通用审批区；应付预览不展示审批。
+ */
 export function SupplierAccountsPreview({
     previewPayableId,
+    previewPaymentId,
     detailQuery,
+    paymentQuery,
     returnTo,
     fromWorkspace,
     onClose,
     onOpenSession,
+    workItemId,
+    expectedTaskVersion,
+    workItemAllowedActions,
+    onDecisionApplied,
 }: SupplierAccountsPreviewProps) {
+    if (previewPaymentId) {
+        return (
+            <QuickPreviewSheet
+                open
+                onOpenChange={(open) => {
+                    if (!open) onClose()
+                }}
+                size="detail"
+                title={paymentQuery.data?.paymentNo ?? "付款详情"}
+                description="付款事实与审批区只读服务端投影"
+            >
+                {paymentQuery.isPending ? (
+                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                ) : paymentQuery.data ? (
+                    <SupplierPaymentDetailBody
+                        row={paymentQuery.data}
+                        workItemId={workItemId}
+                        expectedTaskVersion={expectedTaskVersion}
+                        workItemAllowedActions={workItemAllowedActions}
+                        onDecisionApplied={onDecisionApplied}
+                    />
+                ) : paymentQuery.isError ? (
+                    <div className="space-y-3 p-6">
+                        <p className="text-sm text-muted-foreground">
+                            {getErrorMessage(
+                                paymentQuery.error,
+                                "付款详情加载失败，请重试。",
+                            )}
+                        </p>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void paymentQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    </div>
+                ) : (
+                    <p className="p-6 text-sm text-muted-foreground">
+                        未找到付款详情
+                    </p>
+                )}
+            </QuickPreviewSheet>
+        )
+    }
+
     return (
         <QuickPreviewSheet
             open={Boolean(previewPayableId)}

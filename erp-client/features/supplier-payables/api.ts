@@ -4,9 +4,11 @@
  */
 
 export {
+    ensureSupplierPaymentDraft,
     fetchAllocationSession,
     fetchPayableDetail,
     fetchSupplierAccounts,
+    fetchSupplierPayment,
     resolveUnknownResult,
     reverseInvoice,
     reversePayment,
