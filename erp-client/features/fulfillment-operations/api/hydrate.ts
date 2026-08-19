@@ -9,6 +9,7 @@ import {
     emptySourceLine,
     nowIso,
 } from "@/features/fulfillment-operations/lib/projection"
+import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import type {
     BackendDeliveryDetail,
@@ -17,6 +18,7 @@ import type {
 
 /**
  * 按作业类型补全当前单据明细。PurchaseReceipt 为 NO_APPROVAL，入库明细不得携带审批绑定。
+ * Delivery 为 NO_APPROVAL，仓发/直发明细不得携带审批绑定。
  *
  * @param operation 队列列表投影。
  * @returns 可编辑草稿；补全失败时保留原投影。
@@ -71,6 +73,8 @@ export async function hydrateOperationDetail(
             const detail = await apiGet<BackendDeliveryDetail>(
                 `/admin/deliveries/${encodeURIComponent(operation.operationId)}`,
             )
+            // Delivery 为 NO_APPROVAL，明细补全丢弃误带的审批字段。
+            const delivery = stripDeliveryApprovalField(detail.delivery)
             const lines = detail.lines.map((l) =>
                 emptySourceLine({
                     lineId: l.id,
@@ -88,15 +92,15 @@ export async function hydrateOperationDetail(
             if (operation.operationType === "WAREHOUSE_SHIP") {
                 return {
                     ...operation,
-                    editVersion: detail.delivery.version,
-                    sourceVersion: String(detail.delivery.version),
+                    editVersion: delivery.version,
+                    sourceVersion: String(delivery.version),
                     lines,
                     draft: {
                         type: "WAREHOUSE_SHIP",
-                        warehouseId: detail.delivery.warehouse_id ?? "",
-                        warehouseLabel: detail.delivery.warehouse_id ?? "",
-                        carrier: detail.delivery.carrier ?? "",
-                        trackingNo: detail.delivery.tracking_no ?? "",
+                        warehouseId: delivery.warehouse_id ?? "",
+                        warehouseLabel: delivery.warehouse_id ?? "",
+                        carrier: delivery.carrier ?? "",
+                        trackingNo: delivery.tracking_no ?? "",
                         shippedAt: nowIso().slice(0, 16),
                         lines: detail.lines.map((l) => ({
                             salesOrderLineId: l.sales_order_line_id,
@@ -108,13 +112,13 @@ export async function hydrateOperationDetail(
             }
             return {
                 ...operation,
-                editVersion: detail.delivery.version,
-                sourceVersion: String(detail.delivery.version),
+                editVersion: delivery.version,
+                sourceVersion: String(delivery.version),
                 lines,
                 draft: {
                     type: "SUPPLIER_DIRECT",
-                    carrier: detail.delivery.carrier ?? "",
-                    trackingNo: detail.delivery.tracking_no ?? "",
+                    carrier: delivery.carrier ?? "",
+                    trackingNo: delivery.tracking_no ?? "",
                     shippedAt: nowIso().slice(0, 16),
                     lines: detail.lines.map((l) => ({
                         salesOrderLineId: l.sales_order_line_id,

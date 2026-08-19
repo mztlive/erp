@@ -11,6 +11,7 @@ import {
     nowIso,
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
+import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import type { BackendDelivery, BackendPurchaseReceipt } from "./documents"
 
@@ -50,6 +51,14 @@ export function formalFromReceipt(
     }
 }
 
+/**
+ * 把已确认的仓发投影为创建结果。Delivery 为 NO_APPROVAL，
+ * 丢弃误带的审批字段，结果面板不得渲染绑定卡或审批历史。
+ *
+ * @param delivery 仓发 HTTP 载荷。
+ * @param draft 仓发或直发草稿。
+ * @param operationId 当前工作单 ID。
+ */
 export function formalFromDelivery(
     delivery: BackendDelivery,
     draft: Extract<
@@ -58,16 +67,16 @@ export function formalFromDelivery(
     >,
     operationId: string,
 ): FulfillmentFormalOutcome {
+    const posted = stripDeliveryApprovalField(delivery)
     const isWh = draft.type === "WAREHOUSE_SHIP"
     return {
         kind: "POSTED",
         operationId,
         factType: "DELIVERY",
-        factId: delivery.id,
-        factNo: delivery.delivery_no,
-        formalStatus: delivery.status || "SHIPPED",
-        occurredAt:
-            secsToIso(delivery.shipped_at) || draft.shippedAt || nowIso(),
+        factId: posted.id,
+        factNo: posted.delivery_no,
+        formalStatus: posted.status || "SHIPPED",
+        occurredAt: secsToIso(posted.shipped_at) || draft.shippedAt || nowIso(),
         operationType: draft.type,
         inventoryDelta: [],
         reservationDelta: [],
@@ -79,8 +88,8 @@ export function formalFromDelivery(
         inventoryImpactSummary: isWh
             ? "发货单已确认；库存与留货影响以库存台账为准。"
             : "供应商直发不影响自有库存。",
-        reference: delivery.delivery_no,
-        salesOrderId: delivery.sales_order_id,
-        salesOrderNo: delivery.sales_order_id,
+        reference: posted.delivery_no,
+        salesOrderId: posted.sales_order_id,
+        salesOrderNo: posted.sales_order_id,
     }
 }

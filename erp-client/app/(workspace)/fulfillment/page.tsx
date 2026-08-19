@@ -29,6 +29,8 @@ function FulfillmentFallback() {
  *
  * PurchaseReceipt 为 NO_APPROVAL：本页入库路径不显示审批流程选择或审批动作，
  * 采购收货创建结果、详情、提交确认不展示绑定卡、决定、撤回或审批历史。
+ * Delivery 为 NO_APPROVAL：本页仓发与直发路径不显示审批流程选择或审批动作，
+ * 仓发创建结果、详情、提交确认不展示绑定卡、待办或审批入口。
  */
 export default function Page() {
     return (

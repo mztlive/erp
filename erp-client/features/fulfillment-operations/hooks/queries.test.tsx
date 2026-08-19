@@ -315,4 +315,64 @@ describe("usePostFulfillmentMutation", () => {
             queryKey: ["approval"],
         })
     })
+
+    it("does not invalidate approval cache after a delivery post", async () => {
+        mockedPost.mockResolvedValue({
+            status: "succeeded",
+            outcome: {
+                kind: "POSTED",
+                operationId: "dl-1",
+                factType: "DELIVERY",
+                factId: "dl-1",
+                factNo: "FH-1",
+                formalStatus: "SHIPPED",
+                occurredAt: "2026-08-14T09:00:00.000Z",
+                operationType: "WAREHOUSE_SHIP",
+                inventoryDelta: [],
+                reservationDelta: [],
+                remainingByLine: [],
+                acceptanceRequired: true,
+                acceptanceNextStep: "请销售在客户验收登记",
+                inventoryImpactSummary: "发货单已确认",
+                reference: "FH-1",
+                salesOrderId: "so_1",
+                salesOrderNo: "SO-1",
+            },
+        })
+        const client = createFreshQueryClient()
+        const invalidate = vi.spyOn(client, "invalidateQueries")
+        const wrapper = makeMutationWrapper(client)
+        const { result } = renderHook(() => usePostFulfillmentMutation(), {
+            wrapper,
+        })
+
+        await act(async () => {
+            await result.current.mutateAsync({
+                operationId: "dl-1",
+                expectedSourceVersion: "sv_1",
+                expectedDocumentVersion: 1,
+                idempotencyKey: "k-dl-1",
+                draft: {
+                    type: "WAREHOUSE_SHIP",
+                    warehouseId: "wh_1",
+                    warehouseLabel: "中心仓",
+                    carrier: "顺丰",
+                    trackingNo: "SF-1",
+                    shippedAt: "2026-08-14T09:00:00.000Z",
+                    lines: [],
+                },
+            })
+        })
+
+        await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1))
+        expect(invalidate).toHaveBeenCalledWith({
+            queryKey: fulfillmentKeys.all,
+        })
+        expect(invalidate).not.toHaveBeenCalledWith({
+            queryKey: ["approval", "document", "Delivery", "dl-1"],
+        })
+        expect(invalidate).not.toHaveBeenCalledWith({
+            queryKey: ["approval"],
+        })
+    })
 })

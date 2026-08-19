@@ -14,6 +14,7 @@ import {
     nowIso,
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
+import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 
 // ─── backend DTO shapes ─────────────────────────────────────────────────────
@@ -46,6 +47,7 @@ export type BackendPurchaseReceiptDetail = {
     lines: BackendPurchaseReceiptLine[]
 }
 
+/** Delivery 为 NO_APPROVAL：创建/详情 DTO 不得携带审批绑定。 */
 export type BackendDelivery = {
     id: string
     delivery_no: string
@@ -70,6 +72,7 @@ export type BackendDeliveryLine = {
     purchase_line_sales_allocation_id?: string | null
 }
 
+/** Delivery 为 NO_APPROVAL：详情不得嵌入审批区。 */
 export type BackendDeliveryDetail = {
     delivery: BackendDelivery
     lines: BackendDeliveryLine[]
@@ -148,59 +151,65 @@ export function receiptToOperation(
     })
 }
 
+/**
+ * 把仓发草稿投影为仓发或直发工作单。Delivery 为 NO_APPROVAL，丢弃误带的审批字段。
+ *
+ * @param d 仓发 HTTP 载荷。
+ */
 export function deliveryToOperation(d: BackendDelivery): FulfillmentOperation {
+    const delivery = stripDeliveryApprovalField(d)
     const op: FulfillmentOperationType =
-        d.delivery_type === "SUPPLIER_DIRECT"
+        delivery.delivery_type === "SUPPLIER_DIRECT"
             ? "SUPPLIER_DIRECT"
             : "WAREHOUSE_SHIP"
-    const dueAt = secsToIso(d.created_at) || nowIso()
+    const dueAt = secsToIso(delivery.created_at) || nowIso()
     if (op === "WAREHOUSE_SHIP") {
         return baseOperation({
-            operationId: d.id,
+            operationId: delivery.id,
             operationType: "WAREHOUSE_SHIP",
-            editVersion: d.version,
-            sourceVersion: String(d.version),
+            editVersion: delivery.version,
+            sourceVersion: String(delivery.version),
             dueAt,
-            summary: d.delivery_no,
+            summary: delivery.delivery_no,
             source: {
-                purchaseOrderId: d.purchase_order_id ?? undefined,
-                salesOrderId: d.sales_order_id,
-                salesOrderNo: d.sales_order_id,
+                purchaseOrderId: delivery.purchase_order_id ?? undefined,
+                salesOrderId: delivery.sales_order_id,
+                salesOrderNo: delivery.sales_order_id,
                 salesRevisionId: "",
                 customerLabel: "",
-                warehouseId: d.warehouse_id ?? undefined,
-                warehouseLabel: d.warehouse_id ?? undefined,
+                warehouseId: delivery.warehouse_id ?? undefined,
+                warehouseLabel: delivery.warehouse_id ?? undefined,
             },
             gate: { state: "SATISFIED", message: "" },
             draft: {
                 type: "WAREHOUSE_SHIP",
-                warehouseId: d.warehouse_id ?? "",
-                warehouseLabel: d.warehouse_id ?? "",
-                carrier: d.carrier ?? "",
-                trackingNo: d.tracking_no ?? "",
+                warehouseId: delivery.warehouse_id ?? "",
+                warehouseLabel: delivery.warehouse_id ?? "",
+                carrier: delivery.carrier ?? "",
+                trackingNo: delivery.tracking_no ?? "",
                 shippedAt: nowIso().slice(0, 16),
                 lines: [],
             },
         })
     }
     return baseOperation({
-        operationId: d.id,
+        operationId: delivery.id,
         operationType: "SUPPLIER_DIRECT",
-        editVersion: d.version,
-        sourceVersion: String(d.version),
+        editVersion: delivery.version,
+        sourceVersion: String(delivery.version),
         dueAt,
-        summary: d.delivery_no,
+        summary: delivery.delivery_no,
         source: {
-            purchaseOrderId: d.purchase_order_id ?? undefined,
-            salesOrderId: d.sales_order_id,
-            salesOrderNo: d.sales_order_id,
+            purchaseOrderId: delivery.purchase_order_id ?? undefined,
+            salesOrderId: delivery.sales_order_id,
+            salesOrderNo: delivery.sales_order_id,
             salesRevisionId: "",
             customerLabel: "",
         },
         draft: {
             type: "SUPPLIER_DIRECT",
-            carrier: d.carrier ?? "",
-            trackingNo: d.tracking_no ?? "",
+            carrier: delivery.carrier ?? "",
+            trackingNo: delivery.tracking_no ?? "",
             shippedAt: nowIso().slice(0, 16),
             lines: [],
         },
