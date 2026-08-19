@@ -10,13 +10,14 @@ use axum::{
 use services::{
     audit::AuditActor,
     returns::{
-        CancelCustomerRefundApprovalRequest, CreateCustomerRefundRequest, CreatePaymentReversalRequest,
-        CreatePurchaseReturnOrderRequest, CreateReceiptReversalRequest, CreateSalesReturnCaseRequest,
-        CreateSupplierRefundRequest, CustomerRefundListParams, CustomerRefundView, PageView,
-        PaymentReversalView, PostCustomerRefundRequest, PostPaymentReversalRequest,
-        PostReceiptReversalRequest, PostSupplierRefundRequest, PurchaseReturnOrderListParams,
-        PurchaseReturnOrderView, ReceiptReversalView, ReturnsService, SalesReturnCaseListParams,
-        SalesReturnCaseView, SubmitCustomerRefundRequest, SupplierRefundView,
+        CancelCustomerRefundApprovalRequest, CancelSupplierRefundApprovalRequest,
+        CreateCustomerRefundRequest, CreatePaymentReversalRequest, CreatePurchaseReturnOrderRequest,
+        CreateReceiptReversalRequest, CreateSalesReturnCaseRequest, CreateSupplierRefundRequest,
+        CustomerRefundListParams, CustomerRefundView, PageView, PaymentReversalView,
+        PostCustomerRefundRequest, PostPaymentReversalRequest, PostReceiptReversalRequest,
+        PostSupplierRefundRequest, PurchaseReturnOrderListParams, PurchaseReturnOrderView,
+        ReceiptReversalView, ReturnsService, SalesReturnCaseListParams, SalesReturnCaseView,
+        SubmitCustomerRefundRequest, SubmitSupplierRefundRequest, SupplierRefundView,
     },
 };
 
@@ -357,6 +358,32 @@ pub async fn customer_refund_post(
 #[permission_macros::permission(
     group = "退货退款",
     group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "查询供应商退款详情",
+    resource = "supplier_refund",
+    action = "detail"
+)]
+/// 查询供应商退款详情。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 退款单 ID
+///
+/// # 返回
+/// 返回退款单视图。
+pub async fn supplier_refund_detail(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<SupplierRefundView> {
+    let view = ReturnsService::new(state.db())
+        .supplier_refund_detail(&id)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
     desc = "登记供应商退款草稿",
     resource = "supplier_refund",
     action = "create"
@@ -385,31 +412,90 @@ pub async fn supplier_refund_create(
 #[permission_macros::permission(
     group = "退货退款",
     group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
-    desc = "供应商退款过账",
+    desc = "提交供应商退款审批",
     resource = "supplier_refund",
-    action = "post"
+    action = "submit"
 )]
-/// 供应商退款过账（§8.3-3 事务不变量，应付侧镜像）。
+/// 提交供应商退款并启动统一审批。客户端不得选择定义或审批人。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 退款单 ID
-/// * `req` - 过账请求（占位）
+/// * `req` - 提交请求（版本与幂等键）
 ///
 /// # 返回
-/// 返回过账后退款单视图。
-pub async fn supplier_refund_post(
+/// 返回提交后的退款单视图。
+pub async fn supplier_refund_submit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<PostSupplierRefundRequest>,
+    Json(req): Json<SubmitSupplierRefundRequest>,
 ) -> Result<SupplierRefundView> {
     let view = ReturnsService::new(state.db())
-        .post_supplier_refund(&id, req, &actor)
+        .submit_supplier_refund(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "撤回供应商退款审批",
+    resource = "supplier_refund",
+    action = "cancel_approval"
+)]
+/// 撤回尚未最终通过的供应商退款审批。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 退款单 ID
+/// * `req` - 撤回请求（原因必填）
+///
+/// # 返回
+/// 返回撤回后的退款单视图。
+pub async fn supplier_refund_cancel_approval(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CancelSupplierRefundApprovalRequest>,
+) -> Result<SupplierRefundView> {
+    let view = ReturnsService::new(state.db())
+        .cancel_supplier_refund_approval(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "供应商退款过账",
+    resource = "supplier_refund",
+    action = "post"
+)]
+/// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
+///
+/// # 参数
+/// * `_state` - 应用状态
+/// * `_actor` - 已通过鉴权的审计操作人
+/// * `_id` - 退款单 ID
+/// * `_req` - 过账请求（客户端不得据此形成资金事实）
+///
+/// # 错误
+/// 始终返回冲突，防止 HTTP 旁路过账。
+pub async fn supplier_refund_post(
+    State(_state): State<AppState>,
+    Extension(_actor): Extension<AuditActor>,
+    Path(_id): Path<String>,
+    Json(_req): Json<PostSupplierRefundRequest>,
+) -> Result<SupplierRefundView> {
+    match ReturnsService::reject_supplier_refund_client_post() {
+        Err(error) => Err(error.into()),
+        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
+    }
 }
 
 #[permission_macros::permission(
@@ -530,7 +616,7 @@ pub async fn payment_reversal_post(
 
 #[cfg(test)]
 mod tests {
-    use services::returns::SubmitCustomerRefundRequest;
+    use services::returns::{SubmitCustomerRefundRequest, SubmitSupplierRefundRequest};
 
     /// 客户退款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
@@ -548,6 +634,29 @@ mod tests {
         assert!(!production.contains("PENDING_REVIEW"));
         assert!(
             serde_json::from_value::<SubmitCustomerRefundRequest>(serde_json::json!({
+                "expected_version": 1,
+                "idempotency_key": "k1",
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
+    }
+
+    /// 供应商退款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
+    #[test]
+    fn supplier_refund_http_uses_unified_ports() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("submit_supplier_refund"));
+        assert!(production.contains("cancel_supplier_refund_approval"));
+        assert!(production.contains("reject_supplier_refund_client_post"));
+        assert!(production.contains("supplier_refund_detail"));
+        assert!(!production.contains(".post_supplier_refund("));
+        assert!(!production.contains("PENDING_REVIEW"));
+        assert!(
+            serde_json::from_value::<SubmitSupplierRefundRequest>(serde_json::json!({
                 "expected_version": 1,
                 "idempotency_key": "k1",
                 "assignee": "forged"
