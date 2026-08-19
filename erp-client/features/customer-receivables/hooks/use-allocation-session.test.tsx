@@ -12,12 +12,14 @@ const mutationMocks = vi.hoisted(() => ({
     save: { mutateAsync: vi.fn(), isPending: false },
     post: { mutateAsync: vi.fn(), isPending: false },
     resolve: { mutateAsync: vi.fn(), isPending: false },
+    ensure: { mutateAsync: vi.fn(), isPending: false },
 }))
 
 vi.mock('@/features/customer-receivables/hooks/queries', () => ({
     useSaveAllocationDraftMutation: () => mutationMocks.save,
     usePostAllocationMutation: () => mutationMocks.post,
     useResolvePostUnknownMutation: () => mutationMocks.resolve,
+    useEnsureCustomerReceiptDraftMutation: () => mutationMocks.ensure,
 }))
 
 const target = (overrides: Partial<AllocationTarget> = {}): AllocationTarget => ({
@@ -104,8 +106,10 @@ describe('useAllocationSession', () => {
         expect(result.current.editVersion).toBe(1)
         expect(result.current.factAmountStr).toBe('100')
         expect(result.current.proposedUnallocated).toBe(100)
-        expect(result.current.issues).toEqual([])
-        expect(result.current.canSubmit).toBe(true)
+        expect(result.current.issues.some((i) => i.id === 'need-alloc')).toBe(
+            true,
+        )
+        expect(result.current.canSubmit).toBe(false)
         expect(result.current.locked).toBe(false)
         expect(result.current.existing).toBe(false)
         expect(result.current.isReceipt).toBe(true)
@@ -182,10 +186,19 @@ describe('useAllocationSession', () => {
 
         act(() => result.current.updateAmount(lineKey, '60'))
         expect(result.current.issues).toEqual([])
+        expect(result.current.canSubmit).toBe(true)
     })
 
     it('blocks submit for zero fact amount, invalid lease or posted session', () => {
-        expect(setup().result.current.canSubmit).toBe(true)
+        const ready = setup()
+        act(() => ready.result.current.addFromPool(target()))
+        act(() =>
+            ready.result.current.updateAmount(
+                ready.result.current.allocations[0].lineKey,
+                '10',
+            ),
+        )
+        expect(ready.result.current.canSubmit).toBe(true)
         expect(
             setup({ fact: { receivedAt: '', amount: '', bankReference: '' } })
                 .result.current.canSubmit,
@@ -265,7 +278,7 @@ describe('useAllocationSession', () => {
         expect(mutationMocks.post.mutateAsync.mock.calls[0][0]).toEqual({
             draftSessionId: 'alloc_cust_1',
             editVersion: 2,
-            idempotencyKey: expect.stringMatching(/^w11-post-alloc_cust_1-/),
+            idempotencyKey: expect.stringMatching(/^w11-submit-alloc_cust_1-/),
         })
         expect(result.current.postedLocally).toBe(true)
         expect(result.current.locked).toBe(true)

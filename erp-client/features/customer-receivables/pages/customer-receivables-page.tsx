@@ -33,7 +33,11 @@ import {
     VIEW_LABEL,
     type AllocationMode,
 } from "@/features/customer-receivables/types"
+import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { isCustomerReceiptWorkItem } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { getErrorMessage } from "@/lib/api/errors"
+import { mapWorkItemDto } from "@/features/work-items/types"
+import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { AllocationSessionScreen } from "./components/allocation-session-screen"
 import { CustomerReceivablesHeader } from "./components/customer-receivables-header"
 import { CustomerReceivablesMetrics } from "./components/customer-receivables-metrics"
@@ -45,6 +49,9 @@ import { useCustomerReceivablesPreview } from "./hooks/use-customer-receivables-
 import { useCustomerReceivablesUrlState } from "./hooks/use-customer-receivables-url-state"
 import { useReverseFlow } from "./hooks/use-reverse-flow"
 
+/**
+ * 客户往来工作面。客户回款嵌入通用审批区，发票不展示审批。
+ */
 export function CustomerReceivablesPage() {
     const router = useRouter()
 
@@ -72,11 +79,19 @@ export function CustomerReceivablesPage() {
         setActionError,
     })
 
+    const workItemQuery = useWorkItemDetailQuery(urlState.workItemId ?? "")
+    const focusedWorkItem = workItemQuery.data
+        ? mapWorkItemDto(workItemQuery.data)
+        : undefined
+    const workItemReceiptId = isCustomerReceiptWorkItem(focusedWorkItem)
+        ? focusedWorkItem?.businessObjectId
+        : undefined
+    const previewKind =
+        preview?.kind ?? (workItemReceiptId ? "receipt" : null)
+    const previewId = preview?.id ?? workItemReceiptId ?? null
+
     const listQuery = useCustomerAccountsListQuery(urlState.query)
-    const detailQuery = useCustomerAccountsDetailQuery(
-        preview?.kind ?? null,
-        preview?.id ?? null,
-    )
+    const detailQuery = useCustomerAccountsDetailQuery(previewKind, previewId)
     const sessionQuery = useAllocationSessionQuery(urlState.sessionId ?? null)
     const createSession = useCreateAllocationSessionMutation()
 
@@ -323,7 +338,7 @@ export function CustomerReceivablesPage() {
             )}
 
             <CustomerAccountDetailPreview
-                open={preview != null}
+                open={preview != null || Boolean(workItemReceiptId)}
                 data={detailQuery.data}
                 isPending={detailQuery.isPending}
                 isError={detailQuery.isError}
@@ -331,6 +346,29 @@ export function CustomerReceivablesPage() {
                 onRetry={() => void detailQuery.refetch()}
                 onClose={closePreview}
                 onStartSession={startSession}
+                workItemId={focusedWorkItem?.workItemId}
+                expectedTaskVersion={focusedWorkItem?.taskVersion}
+                workItemAllowedActions={focusedWorkItem?.allowedActions}
+                onDecisionApplied={(view: ApprovalCommandView) => {
+                    void detailQuery.refetch()
+                    void listQuery.refetch()
+                    setLastResult({
+                        status: "succeeded",
+                        title: "审批决定已提交",
+                        description: view.latestRejectionReason
+                            ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                            : "已按当前任务提交决定。",
+                        reference: workItemReceiptId,
+                        facts: view.currentAssigneeName
+                            ? [
+                                  {
+                                      label: "当前审批人",
+                                      value: view.currentAssigneeName,
+                                  },
+                              ]
+                            : undefined,
+                    })
+                }}
                 onRequestReverse={(request: ReverseRequest) => {
                     if (request.kind === "red_invoice") {
                         reverseFlow.setReverseAmount(request.amount ?? "")

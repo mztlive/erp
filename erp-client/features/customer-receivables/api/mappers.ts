@@ -12,6 +12,11 @@ import type {
     SalesInvoiceRow,
 } from "@/features/customer-receivables/types"
 import { DUE_LABEL } from "@/features/customer-receivables/types"
+import {
+    customerReceiptStatusLabel,
+    customerReceiptStatusTone,
+    mapCustomerReceiptApproval,
+} from "@/features/customer-receivables/lib/customer-receipt-approval"
 
 import type {
     BackendCustomerReceipt,
@@ -81,8 +86,16 @@ function statusMeta(status: ReceivableAccountRow["status"]): {
 }
 
 function mapReceiptStatus(s: string): ReceiptRow["status"] {
-    if (s === "reversed") return "reversed"
-    if (s === "posted") return "posted"
+    if (s === "reversed" || s === "REVERSED") return "reversed"
+    if (s === "posted" || s === "POSTED") return "posted"
+    if (
+        s === "IN_APPROVAL" ||
+        s === "in_approval" ||
+        s === "pending_review" ||
+        s === "PENDING_REVIEW"
+    ) {
+        return "in_approval"
+    }
     return "draft"
 }
 
@@ -197,23 +210,12 @@ export function projectReceipt(r: BackendCustomerReceipt): ReceiptRow {
     const status = mapReceiptStatus(r.status)
     const isPosted = status === "posted" || status === "reversed"
     const allowed: AllowedAction[] = ["VIEW_DETAIL"]
-    if (status === "posted") {
-        allowed.push("CONTINUE_ALLOCATE", "REVERSE_RECEIPT", "REFUND")
+    if (status === "draft") {
+        allowed.push("CONTINUE_ALLOCATE")
     }
-    const statusLabel =
-        r.status === "pending_review"
-            ? "待复核"
-            : status === "draft"
-              ? "草稿"
-              : status === "reversed"
-                ? "已冲正"
-                : "已确认"
-    const statusTone =
-        status === "reversed"
-            ? "destructive"
-            : status === "posted"
-              ? "success"
-              : "neutral"
+    if (status === "posted") {
+        allowed.push("REVERSE_RECEIPT", "REFUND")
+    }
     return {
         receiptId: r.id,
         receiptNo: r.receipt_no,
@@ -227,8 +229,8 @@ export function projectReceipt(r: BackendCustomerReceipt): ReceiptRow {
         allocatedTotal: r.allocated_total,
         unallocatedAmount: r.unallocated_amount,
         status,
-        statusLabel,
-        statusTone,
+        statusLabel: customerReceiptStatusLabel(r.status),
+        statusTone: customerReceiptStatusTone(r.status),
         baselineVersion: r.version,
         allocations: (r.allocations ?? []).map(projectReceiptAllocation),
         allowedActions: allowed,
@@ -236,6 +238,7 @@ export function projectReceipt(r: BackendCustomerReceipt): ReceiptRow {
         isPosted,
         canEdit: false,
         canDelete: false,
+        approval: mapCustomerReceiptApproval(r.approval),
     }
 }
 

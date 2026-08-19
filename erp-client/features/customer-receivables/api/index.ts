@@ -18,5 +18,9 @@ export {
     fetchAllocationSession,
     saveAllocationDraft,
 } from "./session"
-export { postAllocation, resolvePostUnknown } from "./post-allocation"
+export {
+    ensureCustomerReceiptDraft,
+    postAllocation,
+    resolvePostUnknown,
+} from "./post-allocation"
 export { reverseFact } from "./reverse-fact"

@@ -2,8 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     createAllocationSession,
+    ensureCustomerReceiptDraft,
     fetchAllocationSession,
     fetchCustomerAccountsDetail,
     fetchCustomerAccountsList,
@@ -12,6 +14,7 @@ import {
     reverseFact,
     saveAllocationDraft,
 } from "@/features/customer-receivables/api"
+import { CUSTOMER_RECEIPT_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import type { CustomerAccountsQuery } from "@/features/customer-receivables/types"
 
 const customerReceivableKeys = {
@@ -78,6 +81,33 @@ export function useSaveAllocationDraftMutation() {
     })
 }
 
+/**
+ * 提交确认前创建回款草稿，并刷新会话上的只读审批绑定。
+ */
+export function useEnsureCustomerReceiptDraftMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ensureCustomerReceiptDraft,
+        onSuccess: async (result) => {
+            if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: customerReceivableKeys.session(
+                        result.session.draftSessionId,
+                    ),
+                })
+                if (result.session.existingFactId) {
+                    await queryClient.invalidateQueries({
+                        queryKey: approvalKeys.document(
+                            CUSTOMER_RECEIPT_DOCUMENT_TYPE,
+                            result.session.existingFactId,
+                        ),
+                    })
+                }
+            }
+        },
+    })
+}
+
 export function usePostAllocationMutation() {
     const queryClient = useQueryClient()
     return useMutation({
@@ -87,6 +117,14 @@ export function usePostAllocationMutation() {
                 await queryClient.invalidateQueries({
                     queryKey: customerReceivableKeys.all,
                 })
+                if (result.mode === "receipt") {
+                    await queryClient.invalidateQueries({
+                        queryKey: approvalKeys.document(
+                            CUSTOMER_RECEIPT_DOCUMENT_TYPE,
+                            result.factId,
+                        ),
+                    })
+                }
             }
         },
     })

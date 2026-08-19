@@ -1,5 +1,7 @@
 /** W11 客户往来 · 客户端契约类型 */
 
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
+
 export type CustomerAccountsView =
     | "receivable"
     | "receipt"
@@ -117,7 +119,7 @@ export type ReceiptRow = Readonly<{
     bankReferenceMasked: string
     allocatedTotal: string
     unallocatedAmount: string
-    status: "draft" | "posted" | "reversed"
+    status: "draft" | "in_approval" | "posted" | "reversed"
     statusLabel: string
     statusTone: StatusTone
     baselineVersion: number
@@ -127,6 +129,7 @@ export type ReceiptRow = Readonly<{
     isPosted: boolean
     canEdit: false
     canDelete: false
+    approval?: DocumentApprovalView
 }>
 
 export type SalesInvoiceRow = Readonly<{
@@ -248,6 +251,10 @@ export type AllocationSessionView = Readonly<{
     /** 已有回款/发票（继续核销） */
     existingFactId?: string
     existingFactNo?: string
+    /** 已创建回款草稿的乐观锁版本。 */
+    existingFactVersion?: number
+    /** 回款创建后的只读审批绑定；发票不展示。 */
+    approval?: DocumentApprovalView
     /** 记录表单草稿 */
     fact: {
         receivedAt?: string
@@ -307,6 +314,8 @@ export type PostAllocationResult =
           operationId: string
           watermark: string
           returnTo?: string
+          approval?: DocumentApprovalView
+          subjectStatus?: string
       }
     | {
           status: "failed"

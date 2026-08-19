@@ -1,8 +1,13 @@
+"use client"
+
 import * as React from "react"
 
 import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
+import { customerReceiptApprovalPhase } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import type {
     ReceiptRow,
     ReceivableAccountRow,
@@ -82,15 +87,45 @@ export function ReceivableDetailBody({ row }: { row: ReceivableAccountRow }) {
     )
 }
 
-export function ReceiptDetailBody({ row }: { row: ReceiptRow }) {
+/**
+ * 客户回款详情。草稿展示绑定卡，运行中/终态嵌入通用审批区。
+ */
+export function ReceiptDetailBody({
+    row,
+    workItemId,
+    expectedTaskVersion,
+    workItemAllowedActions,
+    onDecisionApplied,
+}: {
+    row: ReceiptRow
+    workItemId?: string
+    expectedTaskVersion?: string
+    workItemAllowedActions?: readonly string[]
+    onDecisionApplied?: (view: ApprovalCommandView) => void
+}) {
+    const posted = row.status === "posted" || row.status === "reversed"
     return (
         <div className="space-y-5 overflow-auto p-6">
-            <Alert variant="info">
-                <AlertTitle>已确认记录只读</AlertTitle>
-                <AlertDescription>
-                    已确认记录不可编辑、不可删除；纠错仅能追加退款/冲正。
-                </AlertDescription>
-            </Alert>
+            {posted ? (
+                <Alert variant="info">
+                    <AlertTitle>已过账记录只读</AlertTitle>
+                    <AlertDescription>
+                        已过账记录不可编辑、不可删除；纠错仅能追加退款/冲正。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            <CustomerReceiptApprovalArea
+                phase={customerReceiptApprovalPhase(
+                    row.approval,
+                    row.status === "in_approval" ? "IN_APPROVAL" : row.status,
+                )}
+                approval={row.approval}
+                documentId={row.receiptId}
+                workItemId={workItemId}
+                expectedTaskVersion={expectedTaskVersion}
+                workItemAllowedActions={workItemAllowedActions}
+                onDecisionApplied={onDecisionApplied}
+            />
             <div className="grid grid-cols-2 gap-3">
                 <Fact label="回款单号" value={row.receiptNo} mono />
                 <Fact label="往来主体" value={row.counterpartyPartyName} />
