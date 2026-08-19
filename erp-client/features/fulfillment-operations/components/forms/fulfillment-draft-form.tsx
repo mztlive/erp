@@ -30,6 +30,7 @@ import { FulfillmentShipForm } from "./fulfillment-ship-form"
  * Delivery 为 NO_APPROVAL，仓发/直发只走业务表单，不接入审批区。
  * ElectronicDelivery 为 NO_APPROVAL，电子交付只走业务表单，不接入审批区。
  * ServiceFulfillment 为 NO_APPROVAL，服务履约只走业务表单，不接入审批区。
+ * CustomerAcceptance 为 NO_APPROVAL，本页不处理客户验收草稿，也不接入审批区。
  */
 export function FulfillmentDraftForm({
     operation,

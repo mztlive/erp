@@ -110,6 +110,8 @@ export type BackendServiceFulfillment = {
     version: number
 }
 
+// CustomerAcceptance 为 NO_APPROVAL：W09 不投影客户验收单据，只交接销售验收。
+
 export type BackendWarehouse = {
     id: string
     warehouse_code: string

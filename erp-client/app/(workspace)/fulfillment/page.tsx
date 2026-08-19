@@ -35,6 +35,8 @@ function FulfillmentFallback() {
  * 电子交付创建结果、详情、提交确认不展示绑定卡、决定、撤回或审批历史。
  * ServiceFulfillment 为 NO_APPROVAL：本页服务履约路径不显示审批流程选择或审批动作，
  * 服务履约创建结果、详情、提交确认不展示绑定卡、决定、撤回或审批历史。
+ * CustomerAcceptance 为 NO_APPROVAL：本页履约结果交接客户验收时不显示审批流程选择或审批动作，
+ * 创建结果、详情、提交确认不展示绑定卡、决定、撤回或审批历史。
  */
 export default function Page() {
     return (

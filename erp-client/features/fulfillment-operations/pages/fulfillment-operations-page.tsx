@@ -58,6 +58,8 @@ import {
  * 不展示绑定卡、决定、撤回或审批历史。
  * ServiceFulfillment 为 NO_APPROVAL，服务履约创建结果、详情、提交确认
  * 不展示绑定卡、决定、撤回或审批历史。
+ * CustomerAcceptance 为 NO_APPROVAL，履约结果交接客户验收时
+ * 创建结果、详情、提交确认不展示绑定卡、决定、撤回或审批历史。
  */
 export function FulfillmentOperationsPage() {
     const router = useRouter()

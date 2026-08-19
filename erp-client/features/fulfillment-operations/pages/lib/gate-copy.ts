@@ -51,6 +51,14 @@ export function paymentRegistrationHref(
     return `/finance/supplier-accounts?from=W09&purchaseOrderId=${purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(currentUrl)}`
 }
 
+/**
+ * 履约成功后跳到销售单客户验收。CustomerAcceptance 为 NO_APPROVAL，
+ * 只交接业务登记，不打开审批流程或决定入口。
+ *
+ * @param salesOrderId 销售单 ID。
+ * @param currentUrl 当前履约页 URL，用于返回。
+ * @returns 销售单验收分区路径。
+ */
 export function acceptanceHref(
     salesOrderId: string,
     currentUrl: string,

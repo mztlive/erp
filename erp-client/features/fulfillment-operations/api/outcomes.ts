@@ -88,6 +88,7 @@ export function formalFromDelivery(
         inventoryDelta: [],
         reservationDelta: [],
         remainingByLine: [],
+        // CustomerAcceptance 为 NO_APPROVAL：只交接销售验收，不投影审批区。
         acceptanceRequired: true,
         acceptanceNextStep: isWh
             ? "仓发记录已确认。物流签收不等于客户验收；请销售在客户验收登记。"
@@ -128,6 +129,7 @@ export function formalFromElectronic(
         inventoryDelta: [],
         reservationDelta: [],
         remainingByLine: [],
+        // CustomerAcceptance 为 NO_APPROVAL：只交接销售验收，不投影审批区。
         acceptanceRequired: !failed,
         acceptanceNextStep:
             "电子交付已确认，不影响自有库存。请销售在客户验收登记。",
@@ -165,6 +167,7 @@ export function formalFromService(
         inventoryDelta: [],
         reservationDelta: [],
         remainingByLine: [],
+        // CustomerAcceptance 为 NO_APPROVAL：只交接销售验收，不投影审批区。
         acceptanceRequired: !failed,
         acceptanceNextStep: "服务履约已确认。请销售在客户验收登记。",
         inventoryImpactSummary: "不影响自有库存。",
