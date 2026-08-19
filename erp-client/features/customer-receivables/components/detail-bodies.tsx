@@ -7,8 +7,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
+import { CustomerRefundApprovalArea } from "@/features/customer-receivables/components/customer-refund-approval-area"
 import { customerReceiptApprovalPhase } from "@/features/customer-receivables/lib/customer-receipt-approval"
+import { customerRefundApprovalPhase } from "@/features/customer-receivables/lib/customer-refund-approval"
 import type {
+    CustomerRefundRow,
     ReceiptRow,
     ReceivableAccountRow,
     SalesInvoiceRow,
@@ -207,6 +210,66 @@ export function ReceiptDetailBody({
                     </ul>
                 )}
             </section>
+        </div>
+    )
+}
+
+/**
+ * 客户退款详情。草稿展示绑定卡，运行中/终态嵌入通用审批区。
+ */
+export function CustomerRefundDetailBody({
+    row,
+    workItemId,
+    expectedTaskVersion,
+    workItemAllowedActions,
+    onDecisionApplied,
+}: {
+    row: CustomerRefundRow
+    workItemId?: string
+    expectedTaskVersion?: string
+    workItemAllowedActions?: readonly string[]
+    onDecisionApplied?: (view: ApprovalCommandView) => void
+}) {
+    const posted = row.status === "posted" || row.status === "reversed"
+    return (
+        <div className="space-y-5 overflow-auto p-6">
+            {posted ? (
+                <Alert variant="info">
+                    <AlertTitle>已过账记录只读</AlertTitle>
+                    <AlertDescription>
+                        已过账退款不可编辑、不可删除；纠错须追加新的反向记录。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            <CustomerRefundApprovalArea
+                phase={customerRefundApprovalPhase(
+                    row.approval,
+                    row.status === "in_approval" ? "IN_APPROVAL" : row.status,
+                )}
+                approval={row.approval}
+                documentId={row.refundId}
+                workItemId={workItemId}
+                expectedTaskVersion={expectedTaskVersion}
+                workItemAllowedActions={workItemAllowedActions}
+                onDecisionApplied={onDecisionApplied}
+            />
+            <div className="grid grid-cols-2 gap-3">
+                <Fact label="退款单号" value={row.refundNo} mono />
+                <Fact
+                    label="退款金额"
+                    value={<MoneyValue value={row.amount} taxBasis="gross" />}
+                />
+                <Fact
+                    label="退款时间"
+                    value={formatDateTime(
+                        row.occurredAt,
+                        "full",
+                        "passthrough",
+                    )}
+                    mono
+                />
+                <Fact label="原因说明" value={row.reasonText} />
+            </div>
         </div>
     )
 }

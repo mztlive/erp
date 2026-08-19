@@ -41,6 +41,9 @@ const APPROVAL_ZONE_TOKENS = [
     "ApprovalActionBar",
     "CustomerReceiptApprovalArea",
     "CustomerReceiptSubmitConfirmDialog",
+    "CustomerRefundApprovalArea",
+    "CustomerRefundSubmitConfirmDialog",
+    "CustomerRefundRequestDialog",
 ] as const
 
 function sourceMentionsApprovalZone(source: string): boolean {
@@ -57,6 +60,7 @@ describe("INVOICE_DOCUMENT_TYPE", () => {
         expect(INVOICE_OBJECT_TYPE).toBe("invoice")
         expect(INVOICE_APPROVAL_REQUIREMENT).toBe("NO_APPROVAL")
         expect(INVOICE_DOCUMENT_TYPE).not.toBe(CUSTOMER_RECEIPT_DOCUMENT_TYPE)
+        expect(INVOICE_DOCUMENT_TYPE).not.toBe("CustomerRefund")
         expect(INVOICE_DTO_HAS_NO_APPROVAL).toBe(true)
         expect(INVOICE_ROW_HAS_NO_APPROVAL).toBe(true)
     })

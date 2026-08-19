@@ -34,6 +34,7 @@ function CustomerAccountsFallback() {
  *
  * Invoice 为 NO_APPROVAL：本页不显示审批流程选择或审批动作，
  * 发票详情/预览/登记由客户往来工作面的无审批分支承接。
+ * CustomerRefund 为 PROCESS_REQUIRED：退款详情/预览/提交走通用审批区。
  */
 export default function Page() {
     return (

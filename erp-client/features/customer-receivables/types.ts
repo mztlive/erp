@@ -132,6 +132,25 @@ export type ReceiptRow = Readonly<{
     approval?: DocumentApprovalView
 }>
 
+/** CustomerRefund 为 PROCESS_REQUIRED：行投影携带只读审批区。 */
+export type CustomerRefundRow = Readonly<{
+    refundId: string
+    refundNo: string
+    customerId: string
+    originalReceiptId?: string
+    originalReceivableEntryId?: string
+    reasonText: string
+    amount: string
+    occurredAt: string
+    status: "draft" | "in_approval" | "posted" | "reversed"
+    statusLabel: string
+    statusTone: StatusTone
+    baselineVersion: number
+    allowedActions: readonly AllowedAction[]
+    actionBlockers: readonly ActionBlocker[]
+    approval?: DocumentApprovalView
+}>
+
 /** Invoice 为 NO_APPROVAL：行投影不得携带审批区。 */
 export type SalesInvoiceRow = Readonly<{
     invoiceId: string
@@ -208,13 +227,14 @@ export type CustomerAccountsListView = Readonly<{
     }
 }>
 
-type DetailKind = "receivable" | "receipt" | "invoice"
+type DetailKind = "receivable" | "receipt" | "invoice" | "refund"
 
 export type CustomerAccountsDetailView = Readonly<{
     kind: DetailKind
     receivable?: ReceivableAccountRow
     receipt?: ReceiptRow
     invoice?: SalesInvoiceRow
+    refund?: CustomerRefundRow
     queriedAt: string
 }>
 
@@ -352,6 +372,8 @@ export type ReverseFactResult =
           reverseFactNo: string
           operationId: string
           message: string
+          approval?: DocumentApprovalView
+          subjectStatus?: string
       }
     | {
           status: "failed"

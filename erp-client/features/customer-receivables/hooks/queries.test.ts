@@ -9,8 +9,10 @@ import {
     useCustomerAccountsListQuery,
     usePostAllocationMutation,
     useResolvePostUnknownMutation,
+    useEnsureCustomerRefundDraftMutation,
     useReverseFactMutation,
     useSaveAllocationDraftMutation,
+    useSubmitCustomerRefundMutation,
 } from '@/features/customer-receivables/hooks/queries'
 import type {
     AllocationSessionView,
@@ -33,6 +35,8 @@ vi.mock('@/features/customer-receivables/api', () => ({
     resolvePostUnknown: vi.fn(),
     reverseFact: vi.fn(),
     ensureCustomerReceiptDraft: vi.fn(),
+    ensureCustomerRefundDraft: vi.fn(),
+    submitCustomerRefund: vi.fn(),
 }))
 
 const mockedApi = vi.mocked(customerReceivablesApi)
@@ -166,6 +170,33 @@ describe('useCustomerAccountsDetailQuery', () => {
 
         await waitFor(() => expect(result.current.isSuccess).toBe(true))
         expect(result.current.data).toBeNull()
+    })
+
+    it('fetches a customer refund detail without touching invoice paths', async () => {
+        const detail = {
+            kind: 'refund',
+            queriedAt: '2026-01-01T00:00:00.000Z',
+        } as CustomerAccountsDetailView
+        mockedApi.fetchCustomerAccountsDetail.mockResolvedValue(detail)
+
+        const client = createFreshQueryClient()
+        const { result } = renderHookWithProviders(
+            () => useCustomerAccountsDetailQuery('refund', 'crf-1'),
+            { queryClient: client },
+        )
+
+        await waitFor(() => expect(result.current.data).toEqual(detail))
+        expect(mockedApi.fetchCustomerAccountsDetail).toHaveBeenCalledWith(
+            'refund',
+            'crf-1',
+        )
+        const queries = client.getQueryCache().getAll()
+        expect(queries[0].queryKey).toEqual([
+            'customer-receivables',
+            'detail',
+            'refund',
+            'crf-1',
+        ])
     })
 })
 
@@ -535,5 +566,99 @@ describe('useReverseFactMutation', () => {
             idempotencyKey: 'k2',
         })
         expect(invalidateSpy).not.toHaveBeenCalled()
+    })
+})
+
+describe('useEnsureCustomerRefundDraftMutation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('invalidates refund detail and approval keys on a succeeded draft', async () => {
+        mockedApi.ensureCustomerRefundDraft.mockResolvedValue({
+            status: 'succeeded',
+            refund: {
+                refundId: 'crf-1',
+                refundNo: 'TK-1',
+                customerId: 'c1',
+                reasonText: '退差额',
+                amount: '10.00',
+                occurredAt: '',
+                status: 'draft',
+                statusLabel: '草稿',
+                statusTone: 'neutral',
+                baselineVersion: 1,
+                allowedActions: ['VIEW_DETAIL'],
+                actionBlockers: [],
+            },
+        })
+
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => useEnsureCustomerRefundDraftMutation(),
+            { queryClient: client },
+        )
+
+        await result.current.mutateAsync({
+            sourceFactId: 'cr-1',
+            reason: '退差额',
+            idempotencyKey: 'k-crf',
+        })
+
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'CustomerRefund', 'crf-1'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['customer-receivables', 'detail', 'refund', 'crf-1'],
+        })
+    })
+})
+
+describe('useSubmitCustomerRefundMutation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('invalidates receivables and approval keys after submit', async () => {
+        mockedApi.submitCustomerRefund.mockResolvedValue({
+            status: 'succeeded',
+            refund: {
+                refundId: 'crf-2',
+                refundNo: 'TK-2',
+                customerId: 'c1',
+                reasonText: '退差额',
+                amount: '10.00',
+                occurredAt: '',
+                status: 'in_approval',
+                statusLabel: '审批中',
+                statusTone: 'warning',
+                baselineVersion: 2,
+                allowedActions: ['VIEW_DETAIL'],
+                actionBlockers: [],
+            },
+        })
+
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => useSubmitCustomerRefundMutation(),
+            { queryClient: client },
+        )
+
+        await result.current.mutateAsync({
+            refundId: 'crf-2',
+            expectedVersion: 1,
+            idempotencyKey: 'k-crf-2',
+        })
+
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['customer-receivables'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'CustomerRefund', 'crf-2'],
+        })
     })
 })

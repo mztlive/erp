@@ -7,9 +7,20 @@ import type {
     CustomerAccountsListView,
     CustomerAccountsQuery,
 } from "@/features/customer-receivables/types"
-import { filterSummary, projectInvoice, projectReceipt, projectReceivable } from "./mappers"
+import {
+    filterSummary,
+    projectCustomerRefund,
+    projectInvoice,
+    projectReceipt,
+    projectReceivable,
+} from "./mappers"
 import { loadReceipts, loadReceivables, loadSalesInvoices } from "./loaders"
-import type { BackendCustomerReceipt, BackendInvoice, BackendReceivableAccount } from "./dto"
+import type {
+    BackendCustomerReceipt,
+    BackendCustomerRefund,
+    BackendInvoice,
+    BackendReceivableAccount,
+} from "./dto"
 
 function emptyView(
     query: CustomerAccountsQuery,
@@ -190,7 +201,7 @@ export async function fetchCustomerAccountsList(
 }
 
 export async function fetchCustomerAccountsDetail(
-    kind: "receivable" | "receipt" | "invoice",
+    kind: "receivable" | "receipt" | "invoice" | "refund",
     id: string,
 ): Promise<CustomerAccountsDetailView | null> {
     if (kind === "receivable") {
@@ -215,6 +226,20 @@ export async function fetchCustomerAccountsDetail(
             return {
                 kind,
                 receipt: projectReceipt(seed),
+                queriedAt: new Date().toISOString(),
+            }
+        } catch {
+            return null
+        }
+    }
+    if (kind === "refund") {
+        try {
+            const seed = await apiGet<BackendCustomerRefund>(
+                `/admin/customer-refunds/${encodeURIComponent(id)}`,
+            )
+            return {
+                kind,
+                refund: projectCustomerRefund(seed),
                 queriedAt: new Date().toISOString(),
             }
         } catch {

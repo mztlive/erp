@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
+    CustomerRefundDetailBody,
     InvoiceDetailBody,
     ReceiptDetailBody,
     ReceivableDetailBody,
 } from "@/features/customer-receivables/components/detail-bodies"
+import { isUnsubmittedCustomerRefundStatus } from "@/features/customer-receivables/lib/customer-refund-approval"
 import type {
     AllocationMode,
     CustomerAccountsDetailView,
@@ -42,6 +44,7 @@ type CustomerAccountDetailPreviewProps = Readonly<{
         target?: AllocationTarget,
     ) => void | Promise<void>
     onRequestReverse: (request: ReverseRequest) => void
+    onRequestRefundSubmit?: () => void
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -49,7 +52,7 @@ type CustomerAccountDetailPreviewProps = Readonly<{
 }>
 
 /**
- * 客户往来详情抽屉。回款嵌入通用审批区；决定与恢复只读服务端白名单。
+ * 客户往来详情抽屉。回款与客户退款嵌入通用审批区；决定与恢复只读服务端白名单。
  * 发票分支只渲染 InvoiceDetailBody，不展示审批流程选择或审批动作。
  */
 export function CustomerAccountDetailPreview({
@@ -62,6 +65,7 @@ export function CustomerAccountDetailPreview({
     onClose,
     onStartSession,
     onRequestReverse,
+    onRequestRefundSubmit,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -81,7 +85,9 @@ export function CustomerAccountDetailPreview({
                       ? data.receipt.receiptNo
                       : data?.invoice
                         ? data.invoice.invoiceNo
-                        : "往来详情"
+                        : data?.refund
+                          ? data.refund.refundNo
+                          : "往来详情"
             }
             identity={
                 data?.receivable ? (
@@ -90,6 +96,8 @@ export function CustomerAccountDetailPreview({
                     <span>{data.receipt.counterpartyPartyName}</span>
                 ) : data?.invoice ? (
                     <span>{data.invoice.counterpartyPartyName}</span>
+                ) : data?.refund ? (
+                    <span>{data.refund.refundNo}</span>
                 ) : null
             }
             summary={
@@ -114,6 +122,12 @@ export function CustomerAccountDetailPreview({
                         />
                         <Badge>{data.invoice.invoiceKindLabel}</Badge>
                     </div>
+                ) : data?.refund ? (
+                    <BusinessStatusBadge
+                        context="preview"
+                        label={data.refund.statusLabel}
+                        tone={data.refund.statusTone}
+                    />
                 ) : null
             }
             footer={
@@ -212,6 +226,19 @@ export function CustomerAccountDetailPreview({
                                 继续分配
                             </Button>
                         ) : null}
+                        {data.refund &&
+                        isUnsubmittedCustomerRefundStatus(data.refund.status) &&
+                        data.refund.approval?.allowedActions.includes(
+                            "SUBMIT",
+                        ) &&
+                        onRequestRefundSubmit ? (
+                            <Button
+                                type="button"
+                                onClick={onRequestRefundSubmit}
+                            >
+                                提交审批
+                            </Button>
+                        ) : null}
                         {data.invoice?.allowedActions.includes(
                             "ISSUE_RED_INVOICE",
                         ) ? (
@@ -258,6 +285,14 @@ export function CustomerAccountDetailPreview({
             ) : data?.receipt ? (
                 <ReceiptDetailBody
                     row={data.receipt}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={onDecisionApplied}
+                />
+            ) : data?.refund ? (
+                <CustomerRefundDetailBody
+                    row={data.refund}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}
