@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use database::{AccessControlExt, FulfillmentExt, NoTransaction, Transactional};
+use database::{AccessControlExt, Executor, FulfillmentExt, NoTransaction, Transactional};
+use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
 use entities::ids::{DeliveryId, DeliveryLineId};
 use id_generator::next_id;
@@ -8,10 +10,16 @@ use mongodb::bson::doc;
 use mongodb::Database;
 use validator::Validate;
 
+use crate::approval::binding::{
+    bind_published_definition_on_document_create, binding_decision, BindPublishedDefinitionCommand,
+    BindingDecision,
+};
+use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
 use crate::audit::AuditActor;
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
-use entities::document_registry::DocumentType;
+use crate::iam::SharedRbacService;
 
 use super::dto::SortDir;
 use super::{
@@ -116,8 +124,9 @@ impl FulfillmentService {
 
     /// 创建发货单（草稿，跨集合：表头 + 行 + 审计）。
     ///
-    /// 仓发/直发的表头与行归属由实体按发货类型校验；预占与采购分配的存在性
-    /// 在过账时校验。
+    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。发货为
+    /// `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，
+    /// 不创建审批任务。仓发/直发的表头与行归属由实体按发货类型校验。
     ///
     /// # 参数
     /// * `req` - 创建请求（表头 + 行）
@@ -152,26 +161,7 @@ impl FulfillmentService {
             },
         )?;
         let lines = build_delivery_lines(&id, delivery.delivery_type, &req.lines)?;
-        let audit = actor
-            .clone()
-            .resource_log("delivery.create", "delivery", id.to_string())?;
-        let document = new_registered_document(&id, DocumentType::Delivery, delivery.delivery_no.clone())?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let delivery_for_tx = delivery.clone();
-        let lines_for_tx = lines.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.fulfillment()
-                        .create_delivery_with_lines(&delivery_for_tx, &lines_for_tx, session)
-                        .await?;
-                    persist_registered_document(&db, &document, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
+        persist_created_delivery(&self.db, &self.rbac, delivery.clone(), lines, actor.clone()).await?;
         Ok(delivery.into())
     }
 
@@ -336,6 +326,193 @@ impl From<DeliveryLine> for DeliveryLineView {
     }
 }
 
+/// 发货创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
+///
+/// # 返回
+/// 返回 `SkipNoApproval`。
+///
+/// # 错误
+/// 政策缺失或误登记为必须审批时返回部署不变量错误。
+fn delivery_create_binding_decision() -> Result<BindingDecision> {
+    let policy = policy_of(DocumentType::Delivery)?;
+    match &policy {
+        DocumentApprovalPolicy::NoApproval(no_approval) => {
+            if no_approval.document_type != DocumentType::Delivery {
+                return Err(Error::Internal("发货政策类型不匹配".to_string()));
+            }
+            Ok(binding_decision(policy.requirement()))
+        }
+        DocumentApprovalPolicy::ProcessRequired(_) => Err(Error::Internal(
+            "发货必须是 NO_APPROVAL，不得绑定流程".to_string(),
+        )),
+    }
+}
+
+/// 确认发货创建路径不得查询发布定义。
+///
+/// # 错误
+/// 绑定决定不是跳过时返回错误。
+fn ensure_delivery_skips_approval_binding() -> Result<BindingDecision> {
+    let decision = delivery_create_binding_decision()?;
+    if decision != BindingDecision::SkipNoApproval {
+        return Err(Error::Internal("发货创建必须跳过审批绑定".to_string()));
+    }
+    Ok(decision)
+}
+
+/// 发货不得注册空审批适配器。
+///
+/// # 错误
+/// 适配器登记存在时返回部署不变量错误。
+fn ensure_delivery_has_no_adapter() -> Result<()> {
+    if adapter_spec_of(DocumentType::Delivery).is_ok() {
+        return Err(Error::Internal("发货不得注册审批适配器".to_string()));
+    }
+    Ok(())
+}
+
+/// 发货所属销售单作为绑定上下文组织，不得用空串补位。
+///
+/// # 参数
+/// * `delivery` - 待登记发货单
+///
+/// # 返回
+/// 返回非空销售单标识。
+///
+/// # 错误
+/// 销售单为空时返回校验错误。
+fn delivery_binding_organization_id(delivery: &Delivery) -> Result<String> {
+    let org = delivery.sales_order_id.to_string();
+    if org.trim().is_empty() {
+        return Err(Error::ValidationError(
+            "发货单缺少销售单，无法构造绑定上下文".to_string(),
+        ));
+    }
+    Ok(org)
+}
+
+/// 构造发货创建绑定命令。客户端不得提交定义 ID。
+///
+/// # 参数
+/// * `delivery` - 待登记发货单
+/// * `creator_id` - 创建人
+///
+/// # 错误
+/// 销售单为空时返回校验错误。
+fn delivery_bind_command(delivery: &Delivery, creator_id: &str) -> Result<BindPublishedDefinitionCommand> {
+    Ok(BindPublishedDefinitionCommand {
+        document_type: DocumentType::Delivery,
+        business_object_id: delivery.base.id.clone(),
+        business_object_version: delivery.base.version,
+        context: BindingRevalidationContext {
+            organization_id: delivery_binding_organization_id(delivery)?,
+            creator_id: creator_id.to_string(),
+        },
+    })
+}
+
+/// 将绑定端口返回值落实为发货注册行：空绑定保持未绑定。
+///
+/// # 参数
+/// * `document` - 发货注册行
+/// * `binding` - 统一绑定端口返回值
+///
+/// # 返回
+/// 固定返回 `None`。
+///
+/// # 错误
+/// 端口返回绑定或注册行已预置绑定时返回错误。
+fn apply_delivery_create_binding(
+    document: &mut BusinessDocument,
+    binding: Option<ApprovalDefinitionBinding>,
+) -> Result<Option<ApprovalDefinitionBinding>> {
+    if binding.is_some() {
+        return Err(Error::Internal(
+            "发货为 NO_APPROVAL，不得写入审批绑定".to_string(),
+        ));
+    }
+    if document.approval_binding.is_some() {
+        return Err(Error::Internal("发货注册行不得预置审批绑定".to_string()));
+    }
+    if document.document_type != DocumentType::Delivery {
+        return Err(Error::Internal("发货创建只能注册 Delivery 单据".to_string()));
+    }
+    Ok(None)
+}
+
+/// 在调用方事务内登记发货单据并证明空绑定。
+///
+/// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。
+///
+/// # 错误
+/// 政策非无审批、端口返回绑定或写入失败时返回错误。
+async fn persist_unbound_delivery_document(
+    db: &Database,
+    rbac: &SharedRbacService,
+    mut document: BusinessDocument,
+    bind_command: &BindPublishedDefinitionCommand,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let _ = ensure_delivery_skips_approval_binding()?;
+    ensure_delivery_has_no_adapter()?;
+    let binding =
+        bind_published_definition_on_document_create(db, rbac, bind_command, actor, executor).await?;
+    apply_delivery_create_binding(&mut document, binding)?;
+    persist_registered_document(db, &document, executor).await
+}
+
+/// 为已构造发货登记 `BusinessDocument` 并调用统一绑定端口。
+///
+/// # 错误
+/// 绑定端口或注册写入失败时返回错误。
+async fn register_created_delivery_document(
+    db: &Database,
+    rbac: &SharedRbacService,
+    delivery: &Delivery,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let bind_command = delivery_bind_command(delivery, actor.id())?;
+    let document = new_registered_document(
+        &delivery.base.id,
+        DocumentType::Delivery,
+        delivery.delivery_no.clone(),
+    )?;
+    persist_unbound_delivery_document(db, rbac, document, &bind_command, actor, executor).await
+}
+
+/// 在创建事务内写入发货草稿并登记无绑定单据。
+///
+/// # 错误
+/// 绑定、注册或发货单写入失败时返回错误，调用方必须视作整体回滚。
+async fn persist_created_delivery(
+    db: &Database,
+    rbac: &SharedRbacService,
+    delivery: Delivery,
+    lines: Vec<DeliveryLine>,
+    actor: AuditActor,
+) -> Result<()> {
+    let audit = actor
+        .clone()
+        .resource_log("delivery.create", "delivery", delivery.base.id.clone())?;
+    let db = db.clone();
+    let rbac = rbac.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move {
+                register_created_delivery_document(&db, &rbac, &delivery, &actor, session).await?;
+                db.fulfillment()
+                    .create_delivery_with_lines(&delivery, &lines, session)
+                    .await?;
+                db.audit_logs().create(&audit, session).await?;
+                Ok::<(), crate::errors::Error>(())
+            })
+        })
+        .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::build_delivery_lines;
@@ -370,5 +547,118 @@ mod tests {
             }],
         );
         assert!(wrong.is_err(), "仓发不得携带直发分配");
+    }
+}
+
+#[cfg(test)]
+mod delivery_no_approval_tests {
+    use super::{
+        apply_delivery_create_binding, delivery_bind_command, delivery_create_binding_decision,
+        ensure_delivery_has_no_adapter, ensure_delivery_skips_approval_binding, policy_of, BindingDecision,
+        Delivery, DeliveryData, DeliveryType, DocumentApprovalPolicy, DocumentType,
+    };
+    use crate::approval::binding::binding_from_published;
+    use crate::document_registry::new_registered_document;
+    use bpm::ids::ApprovalProcessDefinitionId;
+    use bpm::ProcessKind;
+    use entities::common::time::Instant;
+    use entities::ids::{DeliveryId, SalesOrderId, WarehouseId};
+
+    fn draft_delivery() -> Delivery {
+        Delivery::new(
+            DeliveryId::new("dv-1"),
+            DeliveryData {
+                delivery_no: "DV-1".into(),
+                delivery_type: DeliveryType::WarehouseShip,
+                sales_order_id: SalesOrderId::new("so-1"),
+                purchase_order_id: None,
+                warehouse_id: Some(WarehouseId::new("wh-1")),
+                carrier: None,
+                tracking_no: None,
+                address_snapshot_encrypted: None,
+                address_snapshot_fingerprint: None,
+            },
+        )
+        .expect("草稿必须可构造")
+    }
+
+    /// 政策仅含 document_type、approval_requirement、process_kind，不得注册空 Adapter。
+    #[test]
+    fn delivery_policy_is_no_approval_identity_only() {
+        let policy = policy_of(DocumentType::Delivery).expect("发货政策必须存在");
+        let DocumentApprovalPolicy::NoApproval(no_approval) = &policy else {
+            panic!("发货必须是 NO_APPROVAL");
+        };
+        assert_eq!(no_approval.document_type, DocumentType::Delivery);
+        assert_eq!(no_approval.process_kind, ProcessKind::Delivery);
+        assert_eq!(
+            delivery_create_binding_decision().expect("绑定决定"),
+            BindingDecision::SkipNoApproval
+        );
+        assert_eq!(
+            ensure_delivery_skips_approval_binding().expect("必须跳过"),
+            BindingDecision::SkipNoApproval
+        );
+        ensure_delivery_has_no_adapter().expect("不得注册空适配器");
+    }
+
+    /// 创建必须注册 BusinessDocument，绑定端口返回空，禁止写入绑定。
+    #[test]
+    fn create_registers_document_and_returns_empty_binding() {
+        let delivery = draft_delivery();
+        let command = delivery_bind_command(&delivery, "admin-1").expect("绑定命令");
+        assert_eq!(command.document_type, DocumentType::Delivery);
+        assert_eq!(command.business_object_id, delivery.base.id);
+        assert_eq!(command.context.organization_id, "so-1");
+
+        let mut document = new_registered_document(
+            &delivery.base.id,
+            DocumentType::Delivery,
+            delivery.delivery_no.clone(),
+        )
+        .expect("可注册");
+        assert!(document.approval_binding.is_none());
+        let empty = apply_delivery_create_binding(&mut document, None).expect("空绑定");
+        assert!(empty.is_none());
+        assert!(document.approval_binding.is_none());
+
+        let forged = binding_from_published(
+            ApprovalProcessDefinitionId::new("def-1"),
+            1,
+            Instant::from_unix_secs(10),
+        )
+        .expect("测试绑定");
+        assert!(apply_delivery_create_binding(&mut document, Some(forged)).is_err());
+    }
+
+    /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。
+    #[test]
+    fn create_does_not_query_definition_or_start_instance() {
+        let production = include_str!("delivery.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("persist_created_delivery"));
+        assert!(production.contains("register_created_delivery_document"));
+        assert!(production.contains("persist_unbound_delivery_document"));
+        assert!(production.contains("bind_published_definition_on_document_create"));
+        assert!(production.contains("DocumentType::Delivery"));
+        assert!(production.contains("new_registered_document"));
+        assert!(production.contains("ensure_delivery_skips_approval_binding"));
+        assert!(production.contains("ensure_delivery_has_no_adapter"));
+        assert!(!production.contains("pub async fn submit_delivery"));
+        assert!(!production.contains("start_delivery_approval"));
+        assert!(!production.contains("DeliveryAdapter"));
+        assert!(!production.contains("load_published_graph"));
+        let create = production
+            .split("pub async fn create_delivery")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn update_delivery").next())
+            .expect("create_delivery 生产片段");
+        assert!(create.contains("persist_created_delivery"));
+        assert!(!create.contains("prepare_start"));
+        assert!(!create.contains("attach_published_binding"));
+        assert!(!create.contains("WorkItem"));
+        assert!(!create.contains("start_approval"));
     }
 }
