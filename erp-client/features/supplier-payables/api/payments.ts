@@ -10,6 +10,7 @@ import {
     sessions,
     submitIdempotency,
 } from "@/features/supplier-payables/api/shared"
+import { ensurePaymentReversalDraft } from "@/features/supplier-payables/api/reversals"
 import {
     buildSupplierPaymentSubmitRequest,
     mapSupplierPaymentApproval,
@@ -247,39 +248,36 @@ export async function submitPayment(
     }
 }
 
+/**
+ * 登记付款冲正草稿。过账只由最终通过动作内部消费，不得调用 `/post`。
+ *
+ * 页面主路径走创建草稿 + 提交确认；本函数只创建绑定，不启动审批。
+ *
+ * @param input 冲正草稿创建所需字段。
+ */
 export async function reversePayment(
     input: ReversePaymentInput,
 ): Promise<FormalSubmitResult> {
     const cached = submitIdempotency.get(input.idempotencyKey)
     if (cached) return cached
     try {
-        const payment = await apiGet<BackendSupplierPayment>(
-            `/admin/supplier-payments/${encodeURIComponent(input.paymentId)}`,
-        )
-        const nowSecs = Math.floor(Date.now() / 1000)
-        const created = await apiPost<{ id: string; reversal_no: string }>(
-            "/admin/payment-reversals",
-            {
-                reversal_no: `PCZ-${input.idempotencyKey.slice(-8)}`,
-                original_supplier_payment_id: input.paymentId,
-                reason_text: input.reason,
-                amount: payment.amount,
-                handled_by: "finance_handler",
-                reviewed_by: "finance_reviewer",
-                occurred_at: nowSecs,
-            },
-        )
-        const posted = await apiPost<{ id: string; reversal_no: string }>(
-            `/admin/payment-reversals/${encodeURIComponent(created.id)}/post`,
-            {},
-        )
+        const ensured = await ensurePaymentReversalDraft({
+            sourcePaymentId: input.paymentId,
+            reason: input.reason,
+            idempotencyKey: input.idempotencyKey,
+        })
+        if (ensured.status !== "succeeded") {
+            return failedPayment(ensured.code, ensured.message)
+        }
         const result: FormalSubmitResult = {
             status: "succeeded",
-            title: "付款冲正已完成",
-            description: "已追加付款冲正记录，原付款保留。",
-            reference: posted.reversal_no,
+            title: "付款冲正草稿已创建",
+            description: "已登记付款冲正草稿并绑定审批流程，请确认后提交。",
+            reference: ensured.reversal.reversalNo,
             operationId: input.idempotencyKey,
-            documentNo: posted.reversal_no,
+            documentNo: ensured.reversal.reversalNo,
+            approval: ensured.reversal.approval,
+            subjectStatus: ensured.reversal.status,
         }
         submitIdempotency.set(input.idempotencyKey, result)
         return result

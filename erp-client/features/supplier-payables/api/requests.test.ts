@@ -456,10 +456,31 @@ describe('reversePayment', () => {
         vi.clearAllMocks()
     })
 
-    it('creates and posts a reversal and returns success', async () => {
+    it('creates a reversal draft with binding and never posts', async () => {
         mockedHttp.apiGet.mockResolvedValueOnce(supplierPayment())
-        mockedHttp.apiPost.mockResolvedValueOnce({ id: 'r1', reversal_no: 'PCZ-1' })
-        mockedHttp.apiPost.mockResolvedValueOnce({ id: 'r1', reversal_no: 'PCZ-1' })
+        mockedHttp.apiPost.mockResolvedValueOnce({
+            id: 'r1',
+            reversal_no: 'PCZ-1',
+            status: 'draft',
+            original_supplier_payment_id: 'pay-1',
+            reason_text: '录错',
+            amount: '100.00',
+            handled_by: 'finance_handler',
+            reviewed_by: 'finance_reviewer',
+            occurred_at: 1_700_000_000,
+            version: 1,
+            created_at: 1_700_000_000,
+            approval: {
+                requirement: 'PROCESS_REQUIRED',
+                definition: {
+                    id: 'def-pr-1',
+                    name: '付款冲正审批',
+                    version: 1,
+                    nodes: [{ key: 'n1', name: '冲正复核', assignee_name: '张三' }],
+                },
+                allowed_actions: ['SUBMIT'],
+            },
+        })
 
         const result = await reversePayment({
             paymentId: 'pay-1',
@@ -469,6 +490,7 @@ describe('reversePayment', () => {
 
         expect(result.status).toBe('succeeded')
         expect(result.documentNo).toBe('PCZ-1')
+        expect(result.approval?.definition?.name).toBe('付款冲正审批')
         expect(mockedHttp.apiPost).toHaveBeenNthCalledWith(
             1,
             '/admin/payment-reversals',
@@ -477,6 +499,11 @@ describe('reversePayment', () => {
                 reason_text: '录错',
             }),
         )
+        expect(
+            mockedHttp.apiPost.mock.calls.some(
+                ([path]) => typeof path === 'string' && path.endsWith('/post'),
+            ),
+        ).toBe(false)
     })
 })
 

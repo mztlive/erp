@@ -4,10 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
+    ensurePaymentReversalDraft,
     ensureSupplierPaymentDraft,
     ensureSupplierRefundDraft,
     fetchAllocationSession,
     fetchPayableDetail,
+    fetchPaymentReversal,
     fetchSupplierAccounts,
     fetchSupplierPayment,
     fetchSupplierRefund,
@@ -17,8 +19,10 @@ import {
     saveAllocationDraft,
     submitInvoice,
     submitPayment,
+    submitPaymentReversal,
     submitSupplierRefund,
 } from "@/features/supplier-payables/api/requests"
+import { PAYMENT_REVERSAL_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import { SUPPLIER_PAYMENT_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { SUPPLIER_REFUND_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import type {
@@ -39,6 +43,8 @@ const supplierPayablesKeys = {
         [...supplierPayablesKeys.all, "payment", paymentId] as const,
     refund: (refundId: string) =>
         [...supplierPayablesKeys.all, "refund", refundId] as const,
+    reversal: (reversalId: string) =>
+        [...supplierPayablesKeys.all, "reversal", reversalId] as const,
     session: (params: {
         track: AllocationTrack
         supplierId: string
@@ -87,6 +93,19 @@ export function useSupplierRefundQuery(refundId: string | null) {
         queryKey: supplierPayablesKeys.refund(refundId ?? ""),
         queryFn: () => fetchSupplierRefund(refundId!),
         enabled: Boolean(refundId),
+    })
+}
+
+/**
+ * 读取付款冲正详情，含只读审批绑定。
+ *
+ * @param reversalId 冲正主键；空值不发请求。
+ */
+export function usePaymentReversalQuery(reversalId: string | null) {
+    return useQuery({
+        queryKey: supplierPayablesKeys.reversal(reversalId ?? ""),
+        queryFn: () => fetchPaymentReversal(reversalId!),
+        enabled: Boolean(reversalId),
     })
 }
 
@@ -249,6 +268,54 @@ export function useSubmitSupplierRefundMutation() {
                     queryKey: approvalKeys.document(
                         SUPPLIER_REFUND_DOCUMENT_TYPE,
                         result.refund.refundId,
+                    ),
+                })
+            }
+        },
+    })
+}
+
+/**
+ * 提交确认前创建付款冲正草稿，并刷新只读审批绑定。
+ */
+export function useEnsurePaymentReversalDraftMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ensurePaymentReversalDraft,
+        onSuccess: async (result) => {
+            if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: approvalKeys.document(
+                        PAYMENT_REVERSAL_DOCUMENT_TYPE,
+                        result.reversal.reversalId,
+                    ),
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: supplierPayablesKeys.reversal(
+                        result.reversal.reversalId,
+                    ),
+                })
+            }
+        },
+    })
+}
+
+/**
+ * 提交付款冲正审批。成功后刷新冲正详情与审批单据缓存。
+ */
+export function useSubmitPaymentReversalMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: submitPaymentReversal,
+        onSuccess: async (result) => {
+            if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: supplierPayablesKeys.all,
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: approvalKeys.document(
+                        PAYMENT_REVERSAL_DOCUMENT_TYPE,
+                        result.reversal.reversalId,
                     ),
                 })
             }

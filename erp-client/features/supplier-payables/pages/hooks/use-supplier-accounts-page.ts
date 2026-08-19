@@ -83,6 +83,9 @@ export function useSupplierAccountsPage() {
     const [previewRefundId, setPreviewRefundId] = React.useState<string | null>(
         previewKind === "refund" ? (detailId ?? null) : null,
     )
+    const [previewReversalId, setPreviewReversalId] = React.useState<
+        string | null
+    >(previewKind === "reversal" ? (detailId ?? null) : null)
     const [session, setSession] = React.useState<SessionState | null>(null)
     const [pickSupplierOpen, setPickSupplierOpen] =
         React.useState<null | AllocationTrack>(null)
@@ -308,6 +311,7 @@ export function useSupplierAccountsPage() {
     function openPreview(payableAccountId: string) {
         setPreviewPaymentId(null)
         setPreviewRefundId(null)
+        setPreviewReversalId(null)
         setPreviewPayableId(payableAccountId)
         patchUrl(
             { detailId: payableAccountId, previewKind: null },
@@ -323,6 +327,7 @@ export function useSupplierAccountsPage() {
     function openPaymentPreview(paymentId: string) {
         setPreviewPayableId(null)
         setPreviewRefundId(null)
+        setPreviewReversalId(null)
         setPreviewPaymentId(paymentId)
         patchUrl(
             { detailId: paymentId, previewKind: "payment" },
@@ -338,9 +343,26 @@ export function useSupplierAccountsPage() {
     function openRefundPreview(refundId: string) {
         setPreviewPayableId(null)
         setPreviewPaymentId(null)
+        setPreviewReversalId(null)
         setPreviewRefundId(refundId)
         patchUrl(
             { detailId: refundId, previewKind: "refund" },
+            { replace: true },
+        )
+    }
+
+    /**
+     * 打开付款冲正详情，嵌入通用审批区。
+     *
+     * @param reversalId 冲正主键。
+     */
+    function openReversalPreview(reversalId: string) {
+        setPreviewPayableId(null)
+        setPreviewPaymentId(null)
+        setPreviewRefundId(null)
+        setPreviewReversalId(reversalId)
+        patchUrl(
+            { detailId: reversalId, previewKind: "reversal" },
             { replace: true },
         )
     }
@@ -349,6 +371,7 @@ export function useSupplierAccountsPage() {
         setPreviewPayableId(null)
         setPreviewPaymentId(null)
         setPreviewRefundId(null)
+        setPreviewReversalId(null)
         patchUrl({ detailId: null, previewKind: null }, { replace: true })
     }
 
@@ -382,10 +405,12 @@ export function useSupplierAccountsPage() {
         previewPayableId,
         previewPaymentId,
         previewRefundId,
+        previewReversalId,
         workItemId,
         openPreview,
         openPaymentPreview,
         openRefundPreview,
+        openReversalPreview,
         closePreview,
         session,
         openSession,

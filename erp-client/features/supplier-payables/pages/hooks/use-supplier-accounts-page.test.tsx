@@ -336,9 +336,25 @@ describe("useSupplierAccountsPage", () => {
         expect(view.result.current.previewRefundId).toBe("srf-1")
         expect(view.result.current.previewPaymentId).toBeNull()
         expect(view.result.current.previewPayableId).toBeNull()
+        expect(view.result.current.previewReversalId).toBeNull()
         const href = lastReplaceHref(router)
         expect(href?.get("detailId")).toBe("srf-1")
         expect(href?.get("previewKind")).toBe("refund")
+    })
+
+    it("openReversalPreview writes reversal previewKind and clears other previews", () => {
+        const { view, router } = renderPage("previewKind=refund&detailId=srf-1")
+
+        act(() => {
+            view.result.current.openReversalPreview("pr-1")
+        })
+        expect(view.result.current.previewReversalId).toBe("pr-1")
+        expect(view.result.current.previewRefundId).toBeNull()
+        expect(view.result.current.previewPaymentId).toBeNull()
+        expect(view.result.current.previewPayableId).toBeNull()
+        const href = lastReplaceHref(router)
+        expect(href?.get("detailId")).toBe("pr-1")
+        expect(href?.get("previewKind")).toBe("reversal")
     })
 
     it("openSession/closeSession write and clear session URL params", () => {
