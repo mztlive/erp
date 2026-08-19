@@ -70,10 +70,10 @@ pub(crate) fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkIt
 /// 无。
 pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
-        WorkItemType::ProcurementConfirmation => {
+        WorkItemType::ImportBusinessConfirmation => {
             "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。"
         }
-        WorkItemType::LowMarginManagerConfirmation => {
+        WorkItemType::ImportBusinessConfirmation => {
             "进入销售单后，确认是否按原条件承接；通过后仍需采购再次确认供货。"
         }
         WorkItemType::PurchaseOrderReview => {
@@ -83,8 +83,6 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::SalesChangeFinanceReview => "进入销售单后，核对本次变更对金额的影响并提交结论。",
         WorkItemType::CardFundsReview => "进入票款复核页后，核对准期初回款与开票事实。",
         WorkItemType::CardFundsDeltaReview => "进入票款复核页后，核对差额并提交复核结论。",
-        WorkItemType::CardSalesManagerApproval => "进入销售单后，完成卡券销售领导审批。",
-        WorkItemType::CardSalesOperationApproval => "进入销售单后，完成卡券运营审批。",
         WorkItemType::OwnershipMigrationSalesConfirmation => "进入客户页后，确认本次归属迁移。",
         WorkItemType::OwnershipMigrationFinanceConfirmation => "进入对应页面后，确认归属迁移的财务影响。",
         WorkItemType::InventoryAdjustmentReview => "进入库存页后，核对本次调整并提交复核结论。",
@@ -128,7 +126,7 @@ pub(crate) fn sales_order_object_label(order_no: &str) -> String {
 /// # 错误
 /// 无。
 pub(crate) fn procurement_impact_summary(line_count: Option<usize>, gross_amount: Option<&Amount>) -> String {
-    let mut summary = default_impact_summary(WorkItemType::ProcurementConfirmation).to_string();
+    let mut summary = default_impact_summary(WorkItemType::ImportBusinessConfirmation).to_string();
     let mut scale = Vec::new();
     if let Some(count) = line_count.filter(|count| *count > 0) {
         scale.push(format!("{count} 行"));
@@ -225,15 +223,11 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
 
 fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
-        WorkItemType::ProcurementConfirmation => "销售已提交，需要采购确认能否供货",
-        WorkItemType::LowMarginManagerConfirmation => "需要上级确认是否按原条件承接",
         WorkItemType::PurchaseOrderReview => "采购已提交，需要核对成本、进项税和付款条件",
         WorkItemType::SalesChangeImpactReview => "销售变更待核对履约影响",
         WorkItemType::SalesChangeFinanceReview => "销售变更待核对财务影响",
         WorkItemType::CardFundsReview => "卡券票款待复核",
         WorkItemType::CardFundsDeltaReview => "票款差额待复核",
-        WorkItemType::CardSalesManagerApproval => "卡券销售待领导审批",
-        WorkItemType::CardSalesOperationApproval => "卡券销售待运营审批",
         WorkItemType::OwnershipMigrationSalesConfirmation => "客户归属迁移待销售确认",
         WorkItemType::OwnershipMigrationFinanceConfirmation => "客户归属迁移待财务确认",
         WorkItemType::InventoryAdjustmentReview => "库存调整待复核",
@@ -248,17 +242,13 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
 
 fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
-        WorkItemType::ProcurementConfirmation => "不确认则销售单不能生效",
-        WorkItemType::LowMarginManagerConfirmation => "不确认则销售单不能按原条件继续",
         WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",
         WorkItemType::SalesChangeImpactReview => "不复核则销售变更不能继续履约",
         WorkItemType::SalesChangeFinanceReview => "不复核则销售变更金额不能入账",
         WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview => {
             "不复核则票款与开票事实不能确认"
         }
-        WorkItemType::CardSalesManagerApproval | WorkItemType::CardSalesOperationApproval => {
-            "不审批则卡券销售不能生效"
-        }
+        WorkItemType::DocumentApproval | WorkItemType::DocumentApproval => "不审批则卡券销售不能生效",
         WorkItemType::OwnershipMigrationSalesConfirmation
         | WorkItemType::OwnershipMigrationFinanceConfirmation => "不确认则客户归属不能完成迁移",
         WorkItemType::InventoryAdjustmentReview => "不复核则库存调整不能入账",
@@ -346,14 +336,14 @@ mod tests {
         assert_eq!(
             reason_label(
                 Some("procurement_confirmation_dispatched"),
-                WorkItemType::ProcurementConfirmation
+                WorkItemType::ImportBusinessConfirmation
             ),
             "销售已提交，需要采购确认能否供货"
         );
         assert_eq!(
             reason_label(
                 Some("LOW_MARGIN_APPROVED_PROCUREMENT_CONFIRMATION"),
-                WorkItemType::ProcurementConfirmation
+                WorkItemType::ImportBusinessConfirmation
             ),
             "低毛利已获上级通过，需要采购重新确认供货"
         );
@@ -379,7 +369,7 @@ mod tests {
         assert_eq!(
             usable_impact_summary(
                 Some("采购二次确认：销售提交 1"),
-                WorkItemType::ProcurementConfirmation
+                WorkItemType::ImportBusinessConfirmation
             ),
             "不确认则销售单不能生效"
         );
@@ -434,7 +424,7 @@ mod tests {
 
     #[test]
     fn next_action_hint_tells_user_what_to_do() {
-        assert!(next_action_hint(WorkItemType::ProcurementConfirmation).contains("逐行确认可供数量"));
+        assert!(next_action_hint(WorkItemType::ImportBusinessConfirmation).contains("逐行确认可供数量"));
         assert!(next_action_hint(WorkItemType::PurchaseOrderReview).contains("核对供应商、含税成本、进项税"));
         assert!(!next_action_hint(WorkItemType::PurchaseOrderReview).contains("打开业务对象"));
     }

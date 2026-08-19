@@ -20,9 +20,6 @@ use super::policy::{
 };
 use super::process_kind::process_kind_of;
 
-/// 未完成目标 rollout 的必须审批类型失败码。
-pub const APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER: &str = "APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER";
-
 /// 适配器读取范围：按单据责任组织重验 DataScope 与对象读取权。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdapterReadScope {
@@ -178,36 +175,24 @@ pub fn document_type_from_subject_kind(kind: &str) -> Result<DocumentType> {
         .ok_or_else(|| Error::ValidationError(format!("未登记单据类型: {kind}")))
 }
 
-/// 目标运行时接线后，除试点外的必须审批类型不得进入新路径。
+/// 全部固定单据类型均已切入目标运行时。
 ///
 /// # 错误
-/// 未 cut-over 的 `PROCESS_REQUIRED` 返回 `APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER`。
+/// 政策缺失时返回部署不变量错误。
 pub fn ensure_runtime_cut_over(document_type: DocumentType) -> Result<()> {
     match policy_of(document_type)? {
-        DocumentApprovalPolicy::NoApproval(_) => Ok(()),
-        DocumentApprovalPolicy::ProcessRequired(_) if document_type == DocumentType::StockAdjustment => {
-            Ok(())
-        }
-        DocumentApprovalPolicy::ProcessRequired(_) => Err(document_type_not_cut_over()),
+        DocumentApprovalPolicy::NoApproval(_) | DocumentApprovalPolicy::ProcessRequired(_) => Ok(()),
     }
 }
 
-/// 返回未 cut-over 的稳定冲突。
-///
-/// # 返回
-/// 返回 `APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER`。
-pub fn document_type_not_cut_over() -> Error {
-    Error::ConflictError(APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER.to_string())
-}
-
-/// 按政策动作进入目标运行时。未 cut-over 类型不得回退旧运行时。
+/// 按政策动作进入目标运行时。
 ///
 /// # 参数
 /// * `document_type` - 固定单据类型
 /// * `action` - 合同签署的强类型领域动作
 ///
 /// # 错误
-/// 未接入类型返回 `APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER`；试点动作尚未接线时失败关闭。
+/// 动作不属于该类型或领域端口尚未绑定时失败关闭。
 pub fn execute_policy_domain_action(document_type: DocumentType, action: ApprovalDomainAction) -> Result<()> {
     ensure_runtime_cut_over(document_type)?;
     let spec = adapter_spec_of(document_type)?;
@@ -545,23 +530,19 @@ mod tests {
         assert_eq!(voucher.subject_kind(), "voucher_sales_order");
     }
 
-    /// 未 cut-over 的必须审批类型失败关闭，不得回退旧运行时。
+    /// 全部固定类型均进入目标运行时，未知种类失败关闭。
     #[test]
-    fn uncut_process_required_types_fail_closed() {
+    fn all_fixed_types_enter_target_runtime() {
         assert!(ensure_runtime_cut_over(DocumentType::StockAdjustment).is_ok());
-        let error = ensure_runtime_cut_over(DocumentType::SalesOrder).unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            format!("数据冲突: {APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER}")
-        );
+        assert!(ensure_runtime_cut_over(DocumentType::SalesOrder).is_ok());
         assert!(ensure_runtime_cut_over(DocumentType::Delivery).is_ok());
         assert!(document_type_from_subject_kind("unknown").is_err());
-        let uncut = execute_policy_domain_action(
+        let sales = execute_policy_domain_action(
             DocumentType::SalesOrder,
             ApprovalDomainAction::SalesOrderStartApprovalSubmission,
         )
         .unwrap_err();
-        assert!(uncut.to_string().contains(APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER));
+        assert!(matches!(sales, Error::BusinessLogicError(_)));
         let pilot = execute_policy_domain_action(
             DocumentType::StockAdjustment,
             ApprovalDomainAction::StockAdjustmentSubmit,

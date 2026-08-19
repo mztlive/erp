@@ -4,7 +4,6 @@
 
 mod access_control;
 mod account_core;
-mod approval;
 pub mod approval_integration;
 mod audit_log;
 mod base;
@@ -46,7 +45,6 @@ mod supplier_settlement;
 mod warehouse;
 mod work_item;
 
-pub use approval::{ApprovalInstanceFilter, ApprovalRepository};
 pub use audit_log::AuditLogFilter;
 pub use base::{PageResult, Pagination, QueryFilter, Repository};
 pub use catalog::SkuRow;

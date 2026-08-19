@@ -4,7 +4,6 @@
 //! 并通过把 trait 加进 supertrait 列表与本文件里的聚合 trait 生效，聚合 trait 本身不再改。
 
 mod access_control;
-mod approval;
 mod approval_integration;
 mod bpm;
 mod bulk_job;
@@ -42,7 +41,6 @@ mod warehouse;
 mod work_item;
 
 pub use access_control::AccessControlExt;
-pub use approval::ApprovalExt;
 pub use approval_integration::ApprovalIntegrationExt;
 pub use bpm::BpmExt;
 pub use bulk_job::BulkJobExt;
@@ -85,7 +83,6 @@ pub use work_item::WorkItemExt;
 /// 签名保持不变。
 pub trait DatabaseExt:
     AccessControlExt
-    + ApprovalExt
     + ApprovalIntegrationExt
     + BpmExt
     + BulkJobExt
@@ -126,7 +123,6 @@ pub trait DatabaseExt:
 
 impl<
         T: AccessControlExt
-            + ApprovalExt
             + ApprovalIntegrationExt
             + BpmExt
             + BulkJobExt

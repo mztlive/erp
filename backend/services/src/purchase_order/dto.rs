@@ -17,7 +17,7 @@ use entities::purchase_order::{
     FulfillmentResponsibility, ProgressStatus, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
     PurchaseType,
 };
-use entities::work_item::{AssignmentMode, WorkItemStatus, WorkItemType};
+use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -317,7 +317,7 @@ pub struct PurchaseReviewWorkItemView {
     /// 待办生命周期状态。
     pub status: WorkItemStatus,
     /// 责任分派模式。
-    pub assignment_mode: AssignmentMode,
+    pub assignment_source_unused: AssignmentSource,
     /// 责任角色。
     pub owner_role: String,
     /// 责任组织。

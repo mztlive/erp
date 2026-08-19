@@ -5,7 +5,7 @@ use entities::mall_sync::{
     ReapplyOperationStatus,
 };
 use entities::source_registry::{MallSyncStage, RelationRole};
-use entities::work_item::{AssignmentMode, WorkItemStatus, WorkItemType};
+use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -97,7 +97,7 @@ pub struct MappingTaskWorkItemView {
     pub business_object_id: String,
     pub subject_version: String,
     pub status: WorkItemStatus,
-    pub assignment_mode: AssignmentMode,
+    pub assignment_source_unused: AssignmentSource,
     pub owner_user_id: Option<String>,
     /// 当前 actor 的通用责任动作白名单。
     pub allowed_actions: Vec<String>,

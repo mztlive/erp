@@ -1790,11 +1790,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/sales-orders/{id}/procurement-rejection-resolution",
-                description: "处置采购驳回",
+                path: "/admin/sales-orders/{id}/cancel-approval",
+                description: "撤回销售单审批",
                 permission: {
                     resource: "sales_order",
-                    action: "resolve_procurement_rejection",
+                    action: "cancel_approval",
                 },
             },
             {
@@ -1813,96 +1813,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         name: "销售复核",
         description: "销售审批与采购二次确认（W05/W07）管理",
         permissions: [
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/sales-order-reviews",
-                description: "查询销售审批记录列表",
-                permission: {
-                    resource: "sales_order_review",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/sales-order-reviews/decisions",
-                description: "提交卡券销售审批决定",
-                permission: {
-                    resource: "sales_order_review",
-                    action: "decide",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/sales-order-reviews/low-margin-decisions",
-                description: "完成低毛利上级确认",
-                permission: {
-                    resource: "sales_order_review",
-                    action: "low_margin_decide",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/sales-order-reviews/cancellations",
-                description: "撤回本人提交的卡券销售审批",
-                permission: {
-                    resource: "sales_order",
-                    action: "cancel_approval",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/procurement-confirmations",
-                description: "查询采购确认队列",
-                permission: {
-                    resource: "procurement_confirmation",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/procurement-confirmations/{id}",
-                description: "查询采购确认详情",
-                permission: {
-                    resource: "procurement_confirmation",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/procurement-confirmations/{id}/recommendation",
-                description: "计算采购推荐方案",
-                permission: {
-                    resource: "procurement_confirmation",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "PUT",
-                path: "/admin/procurement-confirmations/{id}/lines",
-                description: "保存采购确认分行",
-                permission: {
-                    resource: "procurement_confirmation",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/procurement-confirmations/{id}/decisions",
-                description: "完成采购确认",
-                permission: {
-                    resource: "procurement_confirmation",
-                    action: "complete",
-                },
-            },
             {
                 module: "admin",
                 method: "GET",
@@ -1946,51 +1856,21 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/sales-change-orders/{id}/impact-confirm",
-                description: "通过变更履约影响确认",
-                permission: {
-                    resource: "sales_change_order",
-                    action: "approve",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/sales-change-orders/{id}/impact-reject",
-                description: "驳回变更履约影响确认",
-                permission: {
-                    resource: "sales_change_order",
-                    action: "reject",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/sales-change-orders/{id}/finance-confirm",
-                description: "通过变更财务复核",
-                permission: {
-                    resource: "sales_change_order",
-                    action: "approve",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/sales-change-orders/{id}/finance-reject",
-                description: "驳回变更财务复核",
-                permission: {
-                    resource: "sales_change_order",
-                    action: "reject",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
                 path: "/admin/sales-change-orders/{id}/void",
                 description: "作废销售变更单",
                 permission: {
                     resource: "sales_change_order",
                     action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/cancel-approval",
+                description: "撤回销售变更审批",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "submit",
                 },
             },
         ],
@@ -2043,10 +1923,20 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/purchase-orders/{id}/submit",
-                description: "提交采购财务审核",
+                description: "提交采购单审批",
                 permission: {
                     resource: "purchase_order",
                     action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/cancel-approval",
+                description: "撤回采购单审批",
+                permission: {
+                    resource: "purchase_order",
+                    action: "cancel_approval",
                 },
             },
             {
@@ -2103,10 +1993,20 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/purchase-change-orders/{id}/submit",
-                description: "提交采购变更目标内容",
+                description: "提交采购变更审批",
                 permission: {
                     resource: "purchase_change_order",
                     action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/cancel-approval",
+                description: "撤回采购变更审批",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "cancel_approval",
                 },
             },
             {
@@ -2530,6 +2430,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/customer-receipts/{id}/submit",
+                description: "提交客户回款审批",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/{id}/cancel-approval",
+                description: "撤回客户回款审批",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "cancel_approval",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/customer-receipts/{id}/post",
                 description: "客户回款过账并核销",
                 permission: {
@@ -2651,6 +2571,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "supplier_payment",
                     action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-payments/{id}/submit",
+                description: "提交供应商付款审批",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-payments/{id}/cancel-approval",
+                description: "撤回供应商付款审批",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "cancel_approval",
                 },
             },
             {
@@ -2828,6 +2768,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/customer-refunds/{id}/submit",
+                description: "提交客户退款审批",
+                permission: {
+                    resource: "customer_refund",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-refunds/{id}/cancel-approval",
+                description: "撤回客户退款审批",
+                permission: {
+                    resource: "customer_refund",
+                    action: "cancel_approval",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/customer-refunds/{id}/post",
                 description: "客户退款过账",
                 permission: {
@@ -2843,6 +2803,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "supplier_refund",
                     action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-refunds/{id}",
+                description: "查询供应商退款详情",
+                permission: {
+                    resource: "supplier_refund",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refunds/{id}/submit",
+                description: "提交供应商退款审批",
+                permission: {
+                    resource: "supplier_refund",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refunds/{id}/cancel-approval",
+                description: "撤回供应商退款审批",
+                permission: {
+                    resource: "supplier_refund",
+                    action: "cancel_approval",
                 },
             },
             {
@@ -2867,6 +2857,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/receipt-reversals/{id}",
+                description: "查询回款冲正详情",
+                permission: {
+                    resource: "receipt_reversal",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receipt-reversals/{id}/submit",
+                description: "提交回款冲正审批",
+                permission: {
+                    resource: "receipt_reversal",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receipt-reversals/{id}/cancel-approval",
+                description: "撤回回款冲正审批",
+                permission: {
+                    resource: "receipt_reversal",
+                    action: "cancel_approval",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/receipt-reversals/{id}/post",
                 description: "回款冲正过账",
@@ -2883,6 +2903,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "payment_reversal",
                     action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/payment-reversals/{id}",
+                description: "查询付款冲正详情",
+                permission: {
+                    resource: "payment_reversal",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payment-reversals/{id}/submit",
+                description: "提交付款冲正审批",
+                permission: {
+                    resource: "payment_reversal",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payment-reversals/{id}/cancel-approval",
+                description: "撤回付款冲正审批",
+                permission: {
+                    resource: "payment_reversal",
+                    action: "cancel_approval",
                 },
             },
             {

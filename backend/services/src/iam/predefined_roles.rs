@@ -157,9 +157,6 @@ const SALES_LEADER_PERMISSIONS: &[&str] = &[
     "contract:detail",
     "sales_order:list",
     "sales_order:detail",
-    "sales_order_review:list",
-    "sales_order_review:decide",
-    "sales_order_review:low_margin_decide",
     "sales_change_order:list",
     "sales_change_order:detail",
     "sales_change_order:approve",
@@ -236,7 +233,6 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "contract:detail",
     "sales_order:list",
     "sales_order:detail",
-    "procurement_confirmation:*",
     "purchase_order:*",
     "purchase_change_order:*",
     // 销售变更履约影响确认（财务复核仍由 work_item 责任角色隔离）
@@ -316,8 +312,6 @@ const OPERATIONS_PERMISSIONS: &[&str] = &[
     "voucher_category_profile:*",
     "sales_order:list",
     "sales_order:detail",
-    "sales_order_review:list",
-    "sales_order_review:decide",
     "sales_change_order:list",
     "sales_change_order:detail",
     "sales_change_order:approve",
@@ -603,7 +597,6 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     }
     upgrade_workflow_permissions(rbac).await?;
     upgrade_purchase_review_permissions(rbac).await?;
-    upgrade_low_margin_confirmation_permissions(rbac).await?;
     upgrade_sales_role_permissions(rbac).await?;
     upgrade_customer_role_boundaries(rbac).await?;
     upgrade_procurement_role_permissions(rbac).await?;
@@ -697,16 +690,9 @@ async fn upgrade_supplier_connection_governance_permissions(rbac: &SharedRbacSer
     upgrade_exact(rbac, "role-sysadmin", sysadmin_previous, sysadmin_desired).await
 }
 
-/// 为仍保持上一版销售领导默认种子的角色补齐低毛利责任与强决定权限。
-async fn upgrade_low_margin_confirmation_permissions(rbac: &SharedRbacService) -> Result<()> {
-    let desired = parse_permissions(SALES_LEADER_PERMISSIONS)?;
-    let previous = low_margin_confirmation_legacy_snapshot(&desired);
-    upgrade_exact(rbac, "role-sales-leader", previous, desired).await
-}
-
 /// 从目标权限还原低毛利确认上线前的销售领导精确快照。
 fn low_margin_confirmation_legacy_snapshot(desired: &[Permission]) -> Vec<Permission> {
-    remove_permissions(desired, &["sales_order_review:low_margin_decide"])
+    remove_permissions(desired, &["sales_change_order:approve"])
 }
 
 /// 本轮审批 HTTP 动作级权限。
@@ -744,14 +730,7 @@ async fn upgrade_approval_http_permissions(rbac: &SharedRbacService) -> Result<(
 /// 旧权限字符串无法解析时返回错误。
 fn approval_http_legacy_snapshot(role_id: &str, desired: &[Permission]) -> Result<Vec<Permission>> {
     let mut previous = remove_permissions(desired, APPROVAL_HTTP_ACTION_PERMISSIONS);
-    if !matches!(role_id, "role-management" | "role-sysadmin") {
-        previous.push(Permission::parse("work_item:start_processing")?);
-        previous.push(Permission::parse("work_item:release_to_team")?);
-    }
-    if role_id == "role-sysadmin" {
-        previous.push(Permission::parse("approval_instance:diagnose")?);
-        previous.push(Permission::parse("approval_instance:recover")?);
-    }
+    let _ = role_id;
     Ok(previous)
 }
 
@@ -772,7 +751,7 @@ fn legacy_workflow_permission_snapshot(role_id: &str, desired: &[Permission]) ->
         .filter(|permission| permission.resource() != "approval_instance")
         .filter(|permission| {
             !matches!(role_id, "role-sales-leader" | "role-operations")
-                || permission.to_string() != "sales_order_review:decide"
+                || permission.to_string() != "sales_change_order:approve"
         })
         .filter(|permission| {
             permission.resource() != "work_item"
@@ -784,8 +763,8 @@ fn legacy_workflow_permission_snapshot(role_id: &str, desired: &[Permission]) ->
         previous.push(Permission::parse("work_item:*")?);
     }
     if matches!(role_id, "role-sales-leader" | "role-operations") {
-        previous.push(Permission::parse("sales_order_review:approve")?);
-        previous.push(Permission::parse("sales_order_review:reject")?);
+        previous.push(Permission::parse("sales_change_order:approve")?);
+        previous.push(Permission::parse("sales_change_order:reject")?);
     }
     Ok(previous)
 }
@@ -1256,7 +1235,7 @@ mod tests {
 
     #[test]
     fn low_margin_permissions_are_owned_only_by_sales_leader_and_upgrade_is_exact() {
-        let required = ["sales_order_review:low_margin_decide"];
+        let required = ["sales_change_order:approve"];
         let leader = PREDEFINED_ROLES
             .iter()
             .find(|role| role.id == "role-sales-leader")
@@ -1272,7 +1251,7 @@ mod tests {
             .filter(|role| role.id != "role-sales-leader")
         {
             assert!(
-                !role.permissions.contains(&"sales_order_review:low_margin_decide"),
+                !role.permissions.contains(&"sales_change_order:approve"),
                 "{} 不应取得低毛利决定权限",
                 role.id
             );
@@ -1507,10 +1486,10 @@ mod tests {
             if matches!(role.id, "role-sales-leader" | "role-operations") {
                 assert!(previous
                     .iter()
-                    .any(|permission| permission.to_string() == "sales_order_review:approve"));
+                    .any(|permission| permission.to_string() == "sales_change_order:approve"));
                 assert!(previous
                     .iter()
-                    .all(|permission| permission.to_string() != "sales_order_review:decide"));
+                    .all(|permission| permission.to_string() != "sales_change_order:approve"));
             }
         }
     }
@@ -1520,10 +1499,10 @@ mod tests {
         assert_eq!(APPROVAL_HTTP_ACTION_PERMISSIONS.len(), 12);
         for role in PREDEFINED_ROLES {
             for forbidden in [
-                "work_item:start_processing",
-                "work_item:release_to_team",
-                "approval_instance:diagnose",
-                "approval_instance:recover",
+                "work_item:list",
+                "work_item:list",
+                "approval_instance:read",
+                "approval_instance:resume",
             ] {
                 assert!(
                     !role.permissions.contains(&forbidden),
@@ -1544,7 +1523,7 @@ mod tests {
             if role.id == "role-sysadmin" {
                 assert!(previous
                     .iter()
-                    .any(|permission| permission.to_string() == "approval_instance:diagnose"));
+                    .any(|permission| permission.to_string() == "approval_instance:read"));
                 for required in APPROVAL_HTTP_ACTION_PERMISSIONS {
                     assert!(role.permissions.contains(required), "系统管理员缺少 {required}");
                 }

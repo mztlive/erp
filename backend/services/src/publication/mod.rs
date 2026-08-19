@@ -35,9 +35,7 @@ use entities::publication::{
     SystemSafetyPauseOperation, SystemSafetyPauseOperationData,
 };
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus, SupplierOfferingRevision};
-use entities::work_item::{
-    AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
-};
+use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use id_generator::next_id;
 use mongodb::bson::doc;
 use mongodb::Database;
@@ -1122,11 +1120,9 @@ impl PublicationService {
                 WorkItemId::new(next_id()),
                 WorkItemData {
                     work_item_type: WorkItemType::BusinessException,
-                    approval_step_instance_id: None,
                     business_object_type: business_object_type.to_string(),
                     business_object_id: trigger.source_object_id.trim().to_string(),
                     subject_version: trigger.source_version.trim().to_string(),
-                    assignment_mode: AssignmentMode::Pool,
                     owner_role: SUPPLIER_EXCEPTION_OWNER_ROLE.to_string(),
                     owner_organization_id: DEFAULT_OWNER_ORGANIZATION.to_string(),
                     owner_user_id: None,

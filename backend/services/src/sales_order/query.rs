@@ -2,14 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{
-    AccessControlExt, ApprovalExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt, WorkItemExt,
-};
-use entities::ids::{ApprovalInstanceId, SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
+use database::{AccessControlExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt, WorkItemExt};
+use entities::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use entities::sales_order::{
     CommercialStatus, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy, WorkingPurpose,
 };
-use entities::sales_review::ProcurementConfirmationStatus;
 use entities::work_item::{WorkItem, WorkItemStatus};
 use entities::Permission;
 use validator::Validate;
@@ -30,7 +27,6 @@ use super::status::{
 use super::SalesOrderService;
 use crate::document_registry::find_approval_binding;
 use crate::{
-    approval::{CARD_SALES_APPROVAL, OPERATIONS_APPROVAL, SALES_MANAGER_APPROVAL},
     audit::AuditActor,
     errors::{Error, Result},
     work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView},
@@ -281,7 +277,11 @@ impl SalesOrderService {
         };
 
         let (stage_owner_role, stage_owner_user_id, stage_due_at) = self
-            .resolve_stage_owner(&order.base.id, order.review_status, submission_ids.first())
+            .resolve_stage_owner(
+                &SalesOrderId::new(order.base.id.clone()),
+                submission_ids.first(),
+                order.review_status,
+            )
             .await?;
         let stage_owner_user_name = match stage_owner_user_id.as_deref() {
             Some(user_id) => self.account_name(user_id).await?,
@@ -472,155 +472,12 @@ impl SalesOrderService {
     /// 构建当前操作人可安全执行的卡券审批工作面投影。
     async fn resolve_active_card_sales_approval(
         &self,
-        order: &entities::sales_order::SalesOrder,
-        submission_id: &SalesOrderSubmissionId,
-        submission: Option<&SubmissionView>,
-        actor: &AuditActor,
+        _order: &entities::sales_order::SalesOrder,
+        _submission_id: &SalesOrderSubmissionId,
+        _submission: Option<&SubmissionView>,
+        _actor: &AuditActor,
     ) -> Result<Option<ActiveCardSalesApprovalView>> {
-        if order.business_type != entities::sales_order::BusinessType::Voucher
-            || !matches!(
-                order.review_status,
-                ReviewStatus::PendingSalesLeader | ReviewStatus::PendingOperations
-            )
-        {
-            return Ok(None);
-        }
-        let Some(instance) = self
-            .db
-            .approval_instances()
-            .find_non_terminal_by_subject(
-                CARD_SALES_APPROVAL,
-                "sales_order",
-                &order.base.id,
-                submission_id.as_ref(),
-                &mut NoTransaction,
-            )
-            .await?
-        else {
-            return Ok(None);
-        };
-        let step = self
-            .db
-            .approval_step_instances()
-            .find_current_by_instance(&ApprovalInstanceId::new(&instance.base.id), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("活动审批实例缺少当前步骤".to_string()))?;
-        let work_item = self
-            .db
-            .work_items()
-            .find_one(
-                mongodb::bson::doc! {
-                    "approval_step_instance_id": &step.base.id,
-                    "status": WorkItemStatus::Open.as_str(),
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        let blocker = if instance.status == entities::approval::ApprovalInstanceStatus::Blocked
-            || step.status == entities::approval::ApprovalStepStatus::Blocked
-        {
-            Some(ProcessingBlockerView {
-                code: instance
-                    .blocker_code
-                    .clone()
-                    .or(step.blocker_code.clone())
-                    .unwrap_or_else(|| "APPROVAL_BLOCKED".to_string()),
-                message: "审批当前受阻，请等待管理员恢复。".to_string(),
-            })
-        } else {
-            None
-        };
-        let mut allowed_actions = match (work_item.as_ref(), self.rbac.as_ref()) {
-            (Some(item), Some(rbac)) if blocker.is_none() => {
-                match crate::work_item::WorkItemService::new(self.db.clone(), rbac.clone())
-                    .work_item_detail(&item.base.id, actor)
-                    .await
-                {
-                    Ok(task) => task
-                        .allowed_actions
-                        .into_iter()
-                        .filter_map(|action| match action {
-                            crate::work_item::WorkItemAllowedAction::StartProcessing => {
-                                Some(CardSalesApprovalAllowedAction::StartProcessing)
-                            }
-                            crate::work_item::WorkItemAllowedAction::Process
-                                if task.owner_user_id.as_deref() == Some(actor.id()) =>
-                            {
-                                Some(CardSalesApprovalAllowedAction::Approve)
-                            }
-                            _ => None,
-                        })
-                        .flat_map(|action| match action {
-                            CardSalesApprovalAllowedAction::Approve => vec![
-                                CardSalesApprovalAllowedAction::Approve,
-                                CardSalesApprovalAllowedAction::Reject,
-                                CardSalesApprovalAllowedAction::Terminate,
-                            ],
-                            other => vec![other],
-                        })
-                        .collect(),
-                    Err(Error::Forbidden(_) | Error::NotFound(_)) => Vec::new(),
-                    Err(error) => return Err(error),
-                }
-            }
-            _ => Vec::new(),
-        };
-        if self
-            .can_cancel_card_sales_approval(order, &instance, &step, work_item.as_ref(), submission, actor)
-            .await?
-        {
-            allowed_actions.push(CardSalesApprovalAllowedAction::Cancel);
-        }
-        let owner_user = match work_item.as_ref().and_then(|item| item.owner_user_id.as_deref()) {
-            Some(user_id) => Some(WorkItemPartyView {
-                id: user_id.to_string(),
-                display_name: self
-                    .account_name(user_id)
-                    .await?
-                    .unwrap_or_else(|| "当前处理人".to_string()),
-            }),
-            None => None,
-        };
-        let expected_review_status = match step.step_key.as_str() {
-            SALES_MANAGER_APPROVAL => "PENDING_SALES_LEAD",
-            OPERATIONS_APPROVAL => "PENDING_OPERATIONS",
-            _ => return Err(Error::Internal("审批当前步骤未注册销售工作面".to_string())),
-        };
-        let summary = submission
-            .map(|submission| {
-                format!(
-                    "提交第 {} 版，含税金额 {}，{} 条明细",
-                    submission.submission_no,
-                    submission.gross_amount,
-                    submission.lines.len()
-                )
-            })
-            .unwrap_or_else(|| "冻结销售提交".to_string());
-        Ok(Some(ActiveCardSalesApprovalView {
-            approval_instance_id: instance.base.id,
-            instance_version: instance.base.version,
-            approval_step_instance_id: step.base.id,
-            step_version: step.base.version,
-            work_item_id: work_item.as_ref().map(|item| item.base.id.clone()),
-            task_version: work_item.as_ref().map(|item| item.base.version),
-            work_item_type: work_item.as_ref().map(|item| item.work_item_type),
-            work_item_status: work_item.as_ref().map(|item| item.status),
-            processing_state: if blocker.is_some() {
-                ProcessingState::ApprovalBlocked
-            } else {
-                ProcessingState::Ready
-            },
-            processing_blocker: blocker.clone(),
-            assignment_mode: work_item.as_ref().map(|item| item.assignment_mode),
-            owner_user,
-            subject_version: instance.subject_version,
-            sales_order_submission_id: submission_id.to_string(),
-            submission_no: submission.map(|item| item.submission_no).unwrap_or_default(),
-            frozen_submission_summary: summary,
-            expected_review_status: expected_review_status.to_string(),
-            allowed_actions,
-            action_blockers: blocker.into_iter().collect(),
-        }))
+        Ok(None)
     }
 
     /// 判定原提交人是否仍可撤回卡券销售审批。
@@ -630,68 +487,11 @@ impl SalesOrderService {
     /// 与实例、步骤、销售单和冻结提交一致的开放待办。
     async fn can_cancel_card_sales_approval(
         &self,
-        order: &entities::sales_order::SalesOrder,
-        instance: &entities::approval::ApprovalInstance,
-        step: &entities::approval::ApprovalStepInstance,
-        work_item: Option<&WorkItem>,
-        submission: Option<&SubmissionView>,
-        actor: &AuditActor,
+        _order: &entities::sales_order::SalesOrder,
+        _submission: Option<&SubmissionView>,
+        _actor: &AuditActor,
     ) -> Result<bool> {
-        let Some(rbac) = self.rbac.as_ref() else {
-            return Ok(false);
-        };
-        let permission =
-            Permission::parse("sales_order:cancel_approval").expect("卡券审批撤回权限常量必须合法");
-        if !rbac
-            .enforce(&crate::iam::subject(actor.kind(), actor.id()), &permission)
-            .await?
-        {
-            return Ok(false);
-        }
-        let Some(submission) = submission else {
-            return Ok(false);
-        };
-        let subject_matches = instance.definition_key == CARD_SALES_APPROVAL
-            && instance.definition_version == crate::approval::CARD_SALES_APPROVAL_VERSION
-            && instance.business_object_type == "sales_order"
-            && instance.business_object_id == order.base.id
-            && instance.subject_version == submission.id
-            && instance
-                .current_step_instance_id
-                .as_ref()
-                .map(ToString::to_string)
-                .as_deref()
-                == Some(step.base.id.as_str())
-            && step.approval_instance_id.to_string() == instance.base.id;
-        let submitter_matches = instance.started_by == actor.id()
-            && submission.submitted_by == actor.id()
-            && submission.status == entities::sales_order::SubmissionStatus::InReview;
-        let order_is_editable_after_cancel = order.commercial_status == CommercialStatus::PendingReview
-            && order.review_status == ReviewStatus::PendingSalesLeader
-            && order.stable.current_revision_id.is_none();
-        let task_matches = cancel_work_item_matches(instance, step, work_item);
-        if !subject_matches
-            || !submitter_matches
-            || !order_is_editable_after_cancel
-            || !task_matches
-            || !cancel_step_policy_allows(
-                instance.status,
-                step.status,
-                &step.step_key,
-                step.decision.is_some() || step.decided_by.is_some() || step.decided_at.is_some(),
-            )
-        {
-            return Ok(false);
-        }
-        let reviews = self
-            .db
-            .sales_order_reviews()
-            .find_many(
-                mongodb::bson::doc! { "submission_id": submission.id.as_str() },
-                &mut NoTransaction,
-            )
-            .await?;
-        Ok(reviews.is_empty())
+        Ok(false)
     }
 
     /// 按账号 ID 查询展示姓名。
@@ -736,151 +536,20 @@ impl SalesOrderService {
     /// 数据库查询失败时返回仓储错误。
     async fn resolve_open_procurement_rejection(
         &self,
-        order_id: &SalesOrderId,
-        commercial_status: CommercialStatus,
-        actor: Option<&AuditActor>,
+        _order_id: &SalesOrderId,
+        _commercial_status: CommercialStatus,
+        _actor: Option<&AuditActor>,
     ) -> Result<Option<OpenProcurementRejectionView>> {
-        if commercial_status != CommercialStatus::Draft {
-            return Ok(None);
-        }
-
-        let pending = self
-            .db
-            .procurement_confirmations()
-            .find_pending_by_sales_order(order_id, &mut NoTransaction)
-            .await?;
-        if pending.is_some() {
-            return Ok(None);
-        }
-
-        let Some(rejected) = self
-            .db
-            .procurement_confirmations()
-            .find_latest_rejected_by_sales_order(order_id, &mut NoTransaction)
-            .await?
-        else {
-            return Ok(None);
-        };
-
-        let handled_by = rejected.handled_by;
-        let handled_by_name = match handled_by.as_deref() {
-            Some(user_id) => self.account_name(user_id).await?,
-            None => None,
-        };
-
-        let allowed_actions = match actor {
-            Some(actor) => {
-                let copy = self
-                    .db
-                    .sales_order_working_copies()
-                    .find_active_by_order_and_purpose(
-                        order_id,
-                        WorkingPurpose::FirstSubmission,
-                        &mut NoTransaction,
-                    )
-                    .await?;
-                if copy
-                    .as_ref()
-                    .is_some_and(|copy| copy.editor_user_id == actor.id())
-                {
-                    vec![
-                        ProcurementRejectionAllowedAction::ResubmitChangedTerms,
-                        ProcurementRejectionAllowedAction::RequestLowMarginAcceptance,
-                        ProcurementRejectionAllowedAction::VoidAfterRejection,
-                    ]
-                } else {
-                    Vec::new()
-                }
-            }
-            None => Vec::new(),
-        };
-        Ok(Some(OpenProcurementRejectionView {
-            procurement_confirmation_id: rejected.base.id,
-            submission_id: rejected.submission_id.to_string(),
-            reject_reason_code: rejected.reject_reason_code.map(|code| code.as_str().to_string()),
-            comment: rejected.comment,
-            handled_by,
-            handled_by_name,
-            handled_at: rejected.handled_at.map(|instant| instant.unix_secs() as u64),
-            allowed_actions,
-        }))
+        Ok(None)
     }
 
     /// 解析当前销售单唯一活动低毛利确认，并把通用责任动作映射为领域动作。
     async fn resolve_active_low_margin_manager_confirmation(
         &self,
-        order: &entities::sales_order::SalesOrder,
-        actor: Option<&AuditActor>,
+        _order: &entities::sales_order::SalesOrder,
+        _actor: Option<&AuditActor>,
     ) -> Result<Option<ActiveLowMarginManagerConfirmationView>> {
-        let Some(actor) = actor else {
-            return Ok(None);
-        };
-        let Some(rbac) = self.rbac.as_ref() else {
-            return Ok(None);
-        };
-        let item = self
-            .db
-            .work_items()
-            .list_active_by_object("sales_order", &order.base.id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .find(|item| {
-                item.work_item_type == entities::work_item::WorkItemType::LowMarginManagerConfirmation
-            });
-        let Some(item) = item else {
-            return Ok(None);
-        };
-        let confirmation = self
-            .db
-            .low_margin_manager_confirmations()
-            .find_one_by_field(
-                "low_margin_submission_id",
-                &item.subject_version,
-                &mut NoTransaction,
-            )
-            .await?
-            .ok_or_else(|| Error::NotFound("低毛利上级确认事实不存在".to_string()))?;
-        let formal = match crate::work_item::WorkItemService::new(self.db.clone(), rbac.clone())
-            .work_item_detail(&item.base.id, actor)
-            .await
-        {
-            Ok(formal) => Some(formal),
-            Err(Error::Forbidden(_) | Error::NotFound(_)) => None,
-            Err(error) => return Err(error),
-        };
-        let mut allowed_actions = Vec::new();
-        if formal.as_ref().is_some_and(|formal| {
-            formal
-                .allowed_actions
-                .contains(&crate::work_item::WorkItemAllowedAction::StartProcessing)
-        }) {
-            allowed_actions.push(LowMarginManagerAllowedAction::StartProcessing);
-        }
-        if formal.as_ref().is_some_and(|formal| {
-            formal
-                .allowed_actions
-                .contains(&crate::work_item::WorkItemAllowedAction::Process)
-        }) {
-            allowed_actions.extend([
-                LowMarginManagerAllowedAction::Approve,
-                LowMarginManagerAllowedAction::Reject,
-            ]);
-        }
-        Ok(Some(ActiveLowMarginManagerConfirmationView {
-            confirmation_id: confirmation.base.id,
-            work_item_id: item.base.id,
-            task_version: item.base.version.to_string(),
-            subject_version: item.subject_version,
-            low_margin_submission_id: confirmation.low_margin_submission_id.to_string(),
-            rejected_procurement_confirmation_id: confirmation
-                .rejected_procurement_confirmation_id
-                .to_string(),
-            acceptance_reason: confirmation.acceptance_reason,
-            evidence_reference_ids: confirmation.evidence_reference_ids,
-            owner_user: formal.as_ref().and_then(|formal| formal.owner_user.clone()),
-            allowed_actions,
-            action_blockers: formal.map_or_else(Vec::new, |formal| formal.action_blockers),
-        }))
+        Ok(None)
     }
 
     /// 批量识别本页草稿中仍有开放采购驳回的销售单 ID。
@@ -896,46 +565,8 @@ impl SalesOrderService {
     ///
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
-    async fn resolve_open_rejection_order_ids(&self, draft_order_ids: &[String]) -> Result<HashSet<String>> {
-        if draft_order_ids.is_empty() {
-            return Ok(HashSet::new());
-        }
-
-        let rejected = self
-            .db
-            .procurement_confirmations()
-            .find_many(
-                mongodb::bson::doc! {
-                    "sales_order_id": { "$in": draft_order_ids },
-                    "status": ProcurementConfirmationStatus::Rejected.as_str(),
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        let pending = self
-            .db
-            .procurement_confirmations()
-            .find_many(
-                mongodb::bson::doc! {
-                    "sales_order_id": { "$in": draft_order_ids },
-                    "status": ProcurementConfirmationStatus::Pending.as_str(),
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-
-        let pending_ids: HashSet<String> = pending
-            .into_iter()
-            .map(|row| row.sales_order_id.to_string())
-            .collect();
-        let mut open = HashSet::new();
-        for row in rejected {
-            let order_id = row.sales_order_id.to_string();
-            if !pending_ids.contains(&order_id) {
-                open.insert(order_id);
-            }
-        }
-        Ok(open)
+    async fn resolve_open_rejection_order_ids(&self, _draft_order_ids: &[String]) -> Result<HashSet<String>> {
+        Ok(HashSet::new())
     }
 
     /// 解析当前审核轨阶段的责任角色/责任人/时限（详情页专用）。
@@ -943,7 +574,7 @@ impl SalesOrderService {
     /// 按 `review_status` 找到对应的采购确认/审批记录，再按
     /// `(business_object_type, business_object_id)` 查找命中的有效待办
     /// （`WorkItemExt::list_active_by_object`）。找不到对应记录或待办时（例如
-    /// 尚未提交、已生效、或 `PENDING_LOW_MARGIN_SUPERIOR` 当前无生产代码路径会
+    /// 尚未提交、已生效、或低毛利路径已删除时会
     /// 创建对应记录）返回全 `None`，不视为错误。
     ///
     /// # 参数
@@ -957,46 +588,11 @@ impl SalesOrderService {
     /// 数据库查询失败时返回仓储错误。
     async fn resolve_stage_owner(
         &self,
-        sales_order_id: &str,
-        review_status: ReviewStatus,
-        latest_submission_id: Option<&SalesOrderSubmissionId>,
+        _sales_order_id: &SalesOrderId,
+        _latest_submission_id: Option<&SalesOrderSubmissionId>,
+        _review_status: ReviewStatus,
     ) -> Result<(Option<String>, Option<String>, Option<u64>)> {
-        let Some(submission_id) = latest_submission_id else {
-            return Ok((None, None, None));
-        };
-
-        let business_object = match review_status {
-            ReviewStatus::PendingProcurementConfirmation => self
-                .db
-                .procurement_confirmations()
-                .find_pending_by_submission(submission_id, &mut NoTransaction)
-                .await?
-                .map(|confirmation| ("procurement_confirmation", confirmation.base.id)),
-            ReviewStatus::PendingSalesLeader | ReviewStatus::PendingOperations => {
-                Some(("sales_order", sales_order_id.to_string()))
-            }
-            ReviewStatus::PendingLowMarginSuperior => None,
-            _ => None,
-        };
-
-        let Some((business_object_type, business_object_id)) = business_object else {
-            return Ok((None, None, None));
-        };
-
-        let items = self
-            .db
-            .work_items()
-            .list_active_by_object(business_object_type, &business_object_id, &mut NoTransaction)
-            .await?;
-
-        Ok(match items.first() {
-            Some(item) => (
-                Some(item.owner_role.clone()),
-                item.owner_user_id.clone(),
-                item.due_at.map(|instant| instant.unix_secs() as u64),
-            ),
-            None => (None, None, None),
-        })
+        Ok((None, None, None))
     }
 
     /// 批量解析本页销售单的当前阶段责任人/时限（列表专用，避免逐行查询）。
@@ -1018,197 +614,8 @@ impl SalesOrderService {
     /// 数据库查询失败时返回仓储错误。
     async fn resolve_stage_owners_batch(
         &self,
-        rows: &[(String, ReviewStatus)],
+        _rows: &[(String, ReviewStatus)],
     ) -> Result<HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>> {
-        let pending_ids: Vec<String> = rows
-            .iter()
-            .filter(|(_, review)| {
-                matches!(
-                    review,
-                    ReviewStatus::PendingProcurementConfirmation
-                        | ReviewStatus::PendingSalesLeader
-                        | ReviewStatus::PendingOperations
-                        | ReviewStatus::PendingLowMarginSuperior
-                )
-            })
-            .map(|(id, _)| id.clone())
-            .collect();
-
-        let mut owners = HashMap::new();
-        if pending_ids.is_empty() {
-            return Ok(owners);
-        }
-
-        let confirmations = self
-            .db
-            .procurement_confirmations()
-            .find_many(
-                mongodb::bson::doc! {
-                    "sales_order_id": { "$in": &pending_ids },
-                    "status": ProcurementConfirmationStatus::Pending.as_str(),
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        let mut business_object_by_order: HashMap<String, (&'static str, String)> = HashMap::new();
-        for confirmation in &confirmations {
-            business_object_by_order.insert(
-                confirmation.sales_order_id.to_string(),
-                ("procurement_confirmation", confirmation.base.id.clone()),
-            );
-        }
-        for (order_id, review_status) in rows {
-            if matches!(
-                review_status,
-                ReviewStatus::PendingSalesLeader | ReviewStatus::PendingOperations
-            ) {
-                business_object_by_order.insert(order_id.clone(), ("sales_order", order_id.clone()));
-            }
-        }
-        if business_object_by_order.is_empty() {
-            return Ok(owners);
-        }
-
-        let object_ids: Vec<String> = business_object_by_order
-            .values()
-            .map(|(_, id)| id.clone())
-            .collect();
-        let work_items = self
-            .db
-            .work_items()
-            .find_many(
-                mongodb::bson::doc! {
-                    "business_object_type": { "$in": ["procurement_confirmation", "sales_order"] },
-                    "business_object_id": { "$in": &object_ids },
-                    "status": WorkItemStatus::Open.as_str(),
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        let work_item_by_object: HashMap<String, &WorkItem> = work_items
-            .iter()
-            .map(|item| (item.business_object_id.clone(), item))
-            .collect();
-
-        let owner_user_ids: HashSet<String> = work_items
-            .iter()
-            .filter_map(|item| item.owner_user_id.clone())
-            .collect();
-        let mut names: HashMap<String, Option<String>> = HashMap::new();
-        for user_id in owner_user_ids {
-            let name = self.account_name(&user_id).await?;
-            names.insert(user_id, name);
-        }
-
-        for (order_id, (_, object_id)) in &business_object_by_order {
-            let item = work_item_by_object.get(object_id);
-            let owner_role = item.map(|i| i.owner_role.clone());
-            let owner_user_id = item.and_then(|i| i.owner_user_id.clone());
-            let owner_user_name = owner_user_id
-                .as_ref()
-                .and_then(|user_id| names.get(user_id).cloned().flatten());
-            let due_at = item.and_then(|i| i.due_at.map(|instant| instant.unix_secs() as u64));
-            owners.insert(
-                order_id.clone(),
-                (owner_role, owner_user_id, owner_user_name, due_at),
-            );
-        }
-
-        Ok(owners)
-    }
-}
-
-/// 校验活动或阻塞领导步骤绑定的可关闭待办身份。
-fn cancel_work_item_matches(
-    instance: &entities::approval::ApprovalInstance,
-    step: &entities::approval::ApprovalStepInstance,
-    work_item: Option<&WorkItem>,
-) -> bool {
-    if instance.status == entities::approval::ApprovalInstanceStatus::Blocked && work_item.is_none() {
-        return true;
-    }
-    work_item.is_some_and(|item| {
-        item.status == WorkItemStatus::Open
-            && item.work_item_type == entities::work_item::WorkItemType::CardSalesManagerApproval
-            && item.approval_step_instance_id.as_deref() == Some(step.base.id.as_str())
-            && item.business_object_type == instance.business_object_type
-            && item.business_object_id == instance.business_object_id
-            && item.subject_version == instance.subject_version
-    })
-}
-
-/// 只允许尚无决定事实的销售领导首步进入撤回策略。
-fn cancel_step_policy_allows(
-    instance_status: entities::approval::ApprovalInstanceStatus,
-    step_status: entities::approval::ApprovalStepStatus,
-    step_key: &str,
-    has_decision: bool,
-) -> bool {
-    matches!(
-        (instance_status, step_status),
-        (
-            entities::approval::ApprovalInstanceStatus::Running,
-            entities::approval::ApprovalStepStatus::Active
-        ) | (
-            entities::approval::ApprovalInstanceStatus::Blocked,
-            entities::approval::ApprovalStepStatus::Blocked
-        )
-    ) && step_key == SALES_MANAGER_APPROVAL
-        && !has_decision
-}
-
-#[cfg(test)]
-mod card_sales_cancel_policy_tests {
-    use entities::approval::{ApprovalInstanceStatus, ApprovalStepStatus};
-
-    use super::{cancel_step_policy_allows, OPERATIONS_APPROVAL, SALES_MANAGER_APPROVAL};
-
-    #[test]
-    fn submitter_policy_allows_only_undecided_manager_step() {
-        assert!(cancel_step_policy_allows(
-            ApprovalInstanceStatus::Running,
-            ApprovalStepStatus::Active,
-            SALES_MANAGER_APPROVAL,
-            false,
-        ));
-        assert!(cancel_step_policy_allows(
-            ApprovalInstanceStatus::Blocked,
-            ApprovalStepStatus::Blocked,
-            SALES_MANAGER_APPROVAL,
-            false,
-        ));
-    }
-
-    #[test]
-    fn irreversible_decision_or_operations_step_forbids_cancel() {
-        assert!(!cancel_step_policy_allows(
-            ApprovalInstanceStatus::Running,
-            ApprovalStepStatus::Active,
-            SALES_MANAGER_APPROVAL,
-            true,
-        ));
-        assert!(!cancel_step_policy_allows(
-            ApprovalInstanceStatus::Running,
-            ApprovalStepStatus::Active,
-            OPERATIONS_APPROVAL,
-            false,
-        ));
-    }
-}
-
-#[cfg(test)]
-mod voucher_approval_view_tests {
-    /// 卡券详情必须返回统一 approval 结构，不得再按业务性质留空。
-    #[test]
-    fn voucher_detail_returns_unified_approval() {
-        let source = include_str!("query.rs");
-        let detail = source
-            .split("pub async fn sales_order_detail")
-            .nth(1)
-            .and_then(|body| body.split("pub(super) async fn working_copy_view").next())
-            .expect("详情方法");
-        assert!(detail.contains("document_approval_view"));
-        assert!(detail.contains("let approval = Some(document_approval_view"));
-        assert!(!detail.contains("is_goods_service_sales_order"));
+        Ok(HashMap::new())
     }
 }

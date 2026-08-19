@@ -31,7 +31,6 @@ mod dto;
 mod formalize;
 mod mapper;
 mod pricing;
-mod procurement_rejection;
 mod query;
 mod start_approval;
 mod status;
@@ -45,9 +44,6 @@ pub use self::dto::{
     SalesOrderDraftRequest, SalesOrderLineView, SalesOrderListParams, SalesOrderStageSummary, SalesOrderView,
     SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
     VoidSalesOrderRequest, WorkingCopyView,
-};
-pub use self::procurement_rejection::{
-    ProcurementRejectionBusinessResult, ResolveProcurementRejectionCommand, ResolveProcurementRejectionResult,
 };
 
 /// 销售单服务。

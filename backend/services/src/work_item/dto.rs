@@ -1,8 +1,6 @@
 //! D03 人工任务责任队列的 HTTP 共用 DTO。
 
-use entities::work_item::{
-    AssignmentMode, AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
-};
+use entities::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -14,10 +12,8 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
-const WORK_ITEM_TYPES: [WorkItemType; 16] = [
+const WORK_ITEM_TYPES: [WorkItemType; 14] = [
     WorkItemType::DocumentApproval,
-    WorkItemType::ProcurementConfirmation,
-    WorkItemType::LowMarginManagerConfirmation,
     WorkItemType::PurchaseOrderReview,
     WorkItemType::SalesChangeImpactReview,
     WorkItemType::SalesChangeFinanceReview,
@@ -297,10 +293,6 @@ pub enum WorkItemAllowedAction {
     View,
     /// 进入固定强类型处理器。
     Process,
-    /// 从责任池建立本人责任。
-    StartProcessing,
-    /// 退回责任池。
-    ReleaseToTeam,
     /// 受控转交。
     Reassign,
     /// 受控关闭无效任务。
@@ -355,11 +347,9 @@ pub struct WorkItemView {
     pub destination_workspace_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_context: Option<WorkItemRouteContext>,
-    pub approval_step_instance_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_node_execution_id: Option<String>,
     pub status: WorkItemStatus,
-    pub assignment_mode: AssignmentMode,
     pub assignment_source: AssignmentSource,
     pub owner_role: String,
     pub owner_role_label: String,
@@ -534,10 +524,8 @@ impl WorkItemView {
             handler_key: route.handler_key.to_string(),
             destination_workspace_id: route.destination_workspace_id.to_string(),
             route_context: route.route_context,
-            approval_step_instance_id: fields.approval_step_instance_id,
             approval_node_execution_id: fields.approval_node_execution_id,
             status: fields.status,
-            assignment_mode: fields.assignment_mode,
             assignment_source: fields.assignment_source,
             owner_role_label: role_label(&fields.owner_role),
             owner_role: fields.owner_role,
@@ -616,26 +604,6 @@ impl WorkItemView {
     }
 }
 
-/// 开始处理请求。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct StartProcessingRequest {
-    #[validate(length(min = 1, max = 20, message = "任务版本格式非法"))]
-    pub expected_task_version: String,
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
-    pub idempotency_key: String,
-}
-
-/// 退回团队请求。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct ReleaseToTeamRequest {
-    #[validate(length(min = 1, max = 20, message = "任务版本格式非法"))]
-    pub expected_task_version: String,
-    #[validate(length(min = 1, max = 150, message = "原因长度必须在1-150之间"))]
-    pub reason: String,
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
-    pub idempotency_key: String,
-}
-
 /// 转交任务请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ReassignWorkItemRequest {
@@ -669,7 +637,6 @@ pub struct CloseWorkItemRequest {
 pub(crate) struct WorkItemFields {
     pub id: String,
     pub work_item_type: WorkItemType,
-    pub approval_step_instance_id: Option<String>,
     pub approval_node_execution_id: Option<String>,
     pub business_object_type: String,
     pub business_object_id: String,
@@ -678,7 +645,6 @@ pub(crate) struct WorkItemFields {
     pub counterparty_label: Option<String>,
     pub subject_version: String,
     pub status: WorkItemStatus,
-    pub assignment_mode: AssignmentMode,
     pub owner_role: String,
     pub owner_organization_id: String,
     pub owner_user_id: Option<String>,
@@ -707,7 +673,6 @@ impl From<WorkItem> for WorkItemFields {
         Self {
             id: item.base.id,
             work_item_type: item.work_item_type,
-            approval_step_instance_id: item.approval_step_instance_id,
             approval_node_execution_id: item
                 .approval_node_execution_id
                 .as_ref()
@@ -719,7 +684,6 @@ impl From<WorkItem> for WorkItemFields {
             counterparty_label: None,
             subject_version: item.subject_version,
             status: item.status,
-            assignment_mode: item.assignment_mode,
             owner_role: item.owner_role,
             owner_organization_id: item.owner_organization_id,
             owner_user_id: item.owner_user_id,
@@ -750,7 +714,6 @@ impl From<database::WorkItemRow> for WorkItemFields {
         Self {
             id: item.id,
             work_item_type: item.work_item_type,
-            approval_step_instance_id: item.approval_step_instance_id,
             approval_node_execution_id: item.approval_node_execution_id,
             business_object_type: item.business_object_type,
             business_object_id: item.business_object_id,
@@ -759,7 +722,6 @@ impl From<database::WorkItemRow> for WorkItemFields {
             counterparty_label: None,
             subject_version: item.subject_version,
             status: item.status,
-            assignment_mode: item.assignment_mode,
             owner_role: item.owner_role,
             owner_organization_id: item.owner_organization_id,
             owner_user_id: item.owner_user_id,
@@ -809,15 +771,11 @@ fn handler_route(
         (WorkItemType::IntegrationResultUnknown, "reconciliation_difference") => {
             ("integration_unknown", "W29")
         }
-        (WorkItemType::ProcurementConfirmation, _) => ("procurement_confirmation", "W07"),
-        (WorkItemType::LowMarginManagerConfirmation, _) => ("low_margin_manager", "W05"),
         (WorkItemType::PurchaseOrderReview, _) => ("po_review", "W08"),
         (WorkItemType::SalesChangeImpactReview, _) => ("sales_change_impact_review", "W05"),
         (WorkItemType::SalesChangeFinanceReview, _) => ("sales_change_finance_review", "W05"),
         (WorkItemType::CardFundsReview, _) => ("card_funds", "W13"),
         (WorkItemType::CardFundsDeltaReview, _) => ("card_funds_delta", "W13"),
-        (WorkItemType::CardSalesManagerApproval, _) => ("card_sales_manager_approval", "W05"),
-        (WorkItemType::CardSalesOperationApproval, _) => ("card_sales_operations_approval", "W05"),
         (WorkItemType::OwnershipMigrationSalesConfirmation, _) => ("ownership_sales", "W03"),
         (WorkItemType::OwnershipMigrationFinanceConfirmation, _) => ("ownership_finance", "W17"),
         (WorkItemType::InventoryAdjustmentReview, _) => ("inventory_adj", "W10"),
@@ -863,11 +821,9 @@ fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Opt
 
 fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
     match work_item_type {
-        WorkItemType::DocumentApproval
-        | WorkItemType::CardSalesManagerApproval
-        | WorkItemType::CardSalesOperationApproval
-        | WorkItemType::LowMarginManagerConfirmation
-        | WorkItemType::OwnershipMigrationSalesConfirmation => WorkItemFamily::Approval,
+        WorkItemType::DocumentApproval | WorkItemType::OwnershipMigrationSalesConfirmation => {
+            WorkItemFamily::Approval
+        }
         WorkItemType::CardFundsReview
         | WorkItemType::CardFundsDeltaReview
         | WorkItemType::PurchaseOrderReview
@@ -875,9 +831,9 @@ fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
         | WorkItemType::OwnershipMigrationFinanceConfirmation
         | WorkItemType::FinanceCorrectionReview
         | WorkItemType::SupplierSettlementReview => WorkItemFamily::Finance,
-        WorkItemType::ProcurementConfirmation
-        | WorkItemType::SalesChangeImpactReview
-        | WorkItemType::InventoryAdjustmentReview => WorkItemFamily::Fulfillment,
+        WorkItemType::SalesChangeImpactReview | WorkItemType::InventoryAdjustmentReview => {
+            WorkItemFamily::Fulfillment
+        }
         WorkItemType::ImportBusinessConfirmation
         | WorkItemType::IntegrationResultUnknown
         | WorkItemType::BusinessException => WorkItemFamily::Exception,
@@ -1142,8 +1098,6 @@ mod tests {
             family_of(WorkItemType::DocumentApproval),
             WorkItemFamily::Approval
         );
-        assert!(!WORK_ITEM_TYPES.contains(&WorkItemType::CardSalesManagerApproval));
-        assert!(!WORK_ITEM_TYPES.contains(&WorkItemType::CardSalesOperationApproval));
         assert!(WORK_ITEM_TYPES.contains(&WorkItemType::DocumentApproval));
     }
 }

@@ -124,19 +124,15 @@ mod tests {
 
     fn dummy_view(owner_id: Option<&str>) -> crate::work_item::WorkItemView {
         use crate::work_item::dto::{ProcessingState, WorkItemView};
-        use entities::work_item::{
-            AssignmentMode, AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType,
-        };
+        use entities::work_item::{AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType};
         WorkItemView {
             id: "wi".to_string(),
-            work_item_type: WorkItemType::ProcurementConfirmation,
-            handler_key: "procurement_confirmation".to_string(),
-            destination_workspace_id: "W07".to_string(),
+            work_item_type: WorkItemType::ImportBusinessConfirmation,
+            handler_key: "import_business_confirmation".to_string(),
+            destination_workspace_id: "W01".to_string(),
             route_context: None,
-            approval_step_instance_id: None,
             approval_node_execution_id: None,
             status: WorkItemStatus::Open,
-            assignment_mode: AssignmentMode::Direct,
             assignment_source: AssignmentSource::SystemRule,
             owner_role: "role-procurement".to_string(),
             owner_role_label: "采购".to_string(),

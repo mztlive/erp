@@ -674,7 +674,6 @@ mod tests {
     use super::*;
     use crate::approval::business_adapter::{
         document_type_of_sales_business, ensure_runtime_cut_over, subject_ref_for,
-        APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER,
     };
     use crate::approval::policy::{policy_of, ALL_DOCUMENT_TYPES};
     use crate::document_registry::new_registered_document;
@@ -758,12 +757,11 @@ mod tests {
         assert!(ensure_upgrade_unsubmitted_allowed(false, false, 1, 1, 2, 1, true).is_err());
     }
 
-    /// 未 cut-over 类型不得进入目标运行时。
+    /// 全部必须审批类型进入目标运行时。
     #[test]
-    fn process_required_except_pilot_is_not_cut_over() {
+    fn process_required_types_are_cut_over() {
         assert!(ensure_runtime_cut_over(DocumentType::StockAdjustment).is_ok());
-        let error = ensure_runtime_cut_over(DocumentType::PurchaseOrder).unwrap_err();
-        assert!(error.to_string().contains(APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER));
+        assert!(ensure_runtime_cut_over(DocumentType::PurchaseOrder).is_ok());
     }
 
     /// 20 个类型均可构造唯一 SubjectRef；销售按 BusinessType 分派。

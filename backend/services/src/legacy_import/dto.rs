@@ -13,7 +13,7 @@ use entities::legacy_import::{
     ConfirmationDecision, ConfirmationStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchStatus,
     LegacyImportConfirmation, MappingStatus, ParseStatus,
 };
-use entities::work_item::{AssignmentMode, WorkItemStatus, WorkItemType};
+use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -510,7 +510,7 @@ pub struct ImportBusinessConfirmationWorkItemView {
     /// 任务生命周期状态。
     pub status: WorkItemStatus,
     /// 固定分派模式。
-    pub assignment_mode: AssignmentMode,
+    pub assignment_source_unused: AssignmentSource,
     /// 固定责任角色。
     pub owner_role: String,
     /// 固定责任组织。

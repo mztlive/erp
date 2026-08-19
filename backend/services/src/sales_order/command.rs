@@ -1267,7 +1267,7 @@ mod goods_service_cutover_tests {
         assert!(submit.contains("prepare_start"));
         assert!(submit.contains("start_approval_submission"));
         assert!(!submit.contains("ProcurementConfirmation::new"));
-        assert!(!submit.contains("WorkItemType::ProcurementConfirmation"));
+        assert!(!submit.contains("WorkItemType::ImportBusinessConfirmation"));
         assert!(!submit.contains("create_procurement_confirmation"));
         assert!(!submit.contains("CARD_SALES_APPROVAL"));
         assert!(!submit.contains("InternalApprovalRuntime"));

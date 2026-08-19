@@ -19,11 +19,7 @@
 //! - `document_participant` → `DocumentParticipantId`
 //! - `workflow_action` → `WorkflowActionId`
 //!
-//! D03 `work_item`（准备期旧审批 ID，仅供未切换调用方编译）：
-//! - `approval_definition` → `ApprovalDefinitionId`
-//! - `approval_step_definition` → `ApprovalStepDefinitionId`
-//! - `approval_instance` → `ApprovalInstanceId`
-//! - `approval_step_instance` → `ApprovalStepInstanceId`
+//! D03 `work_item`（流程 ID 只在 `bpm`；此处仅保留 ERP 集成 ID）：
 //! - `work_item` → `WorkItemId`
 //! - `approval_subject_snapshot` → `ApprovalSubjectSnapshotId`
 //! - `approval_notification_outbox` → `ApprovalNotificationOutboxId`
@@ -246,10 +242,6 @@ id_type!(DocumentParticipantId);
 id_type!(WorkflowActionId);
 
 // D03 work_item
-id_type!(ApprovalDefinitionId);
-id_type!(ApprovalStepDefinitionId);
-id_type!(ApprovalInstanceId);
-id_type!(ApprovalStepInstanceId);
 id_type!(WorkItemId);
 id_type!(ApprovalSubjectSnapshotId);
 id_type!(ApprovalNotificationOutboxId);
@@ -329,14 +321,11 @@ id_type!(SalesOrderGoodsServiceLineRevisionId);
 id_type!(SalesOrderVoucherLineRevisionId);
 
 // D14 sales_review
-id_type!(SalesOrderReviewId);
-id_type!(LowMarginManagerConfirmationId);
 id_type!(ProcurementConfirmationId);
 id_type!(ProcurementConfirmationLineId);
 id_type!(SalesChangeOrderId);
 id_type!(SalesChangeSubmissionId);
 id_type!(SalesChangeSubmissionLineId);
-id_type!(SalesChangeReviewId);
 
 // D15 purchase_order
 id_type!(PurchaseOrderId);
@@ -562,11 +551,7 @@ mod tests {
         );
         assert_ne!(
             std::any::type_name::<ApprovalSubjectSnapshotId>(),
-            std::any::type_name::<ApprovalInstanceId>()
-        );
-        assert_ne!(
-            std::any::type_name::<ApprovalNotificationOutboxId>(),
-            std::any::type_name::<ApprovalInstanceId>()
+            std::any::type_name::<WorkItemId>()
         );
     }
 }

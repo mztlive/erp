@@ -10,21 +10,20 @@ use std::{
 
 use chrono::{Datelike, FixedOffset, TimeZone, Utc};
 use database::{
-    AccessControlExt, ApprovalExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt,
-    LegacyImportExt, MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt,
-    SalesOrderExt, SalesReviewExt, StartProcessingEligibility, StartProcessingOutcome,
-    SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt, Transactional, WorkItemExt,
+    AccessControlExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt, LegacyImportExt,
+    MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt,
+    SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt, Transactional,
+    WorkItemExt,
 };
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, DataScopeType},
-    approval::{ApprovalInstanceStatus, ApprovalStepStatus},
     common::time::Instant,
     integration_ops::{
         ErrorClass, ErrorTaskStatus, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
         ReconciliationDifferenceResolutionId, ResolutionAction, ResolutionType,
     },
-    work_item::{AssignmentMode, WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType},
+    work_item::{WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType},
     Permission,
 };
 use mongodb::{bson::doc, Database};
@@ -32,7 +31,6 @@ use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use crate::{
-    approval::ApprovalAssigneeResolver,
     audit::AuditActor,
     errors::{Error, Result},
     iam::SharedRbacService,
@@ -47,10 +45,9 @@ mod purchase_review_brief;
 
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
-    ReleaseToTeamRequest, StartProcessingRequest, WorkItemAllowedAction, WorkItemConflict,
-    WorkItemConflictKind, WorkItemDueFilter, WorkItemFamily, WorkItemListParams, WorkItemMutationOutcome,
-    WorkItemPageView, WorkItemPartyView, WorkItemScope, WorkItemSort, WorkItemStatsParams, WorkItemStatsView,
-    WorkItemView,
+    WorkItemAllowedAction, WorkItemConflict, WorkItemConflictKind, WorkItemDueFilter, WorkItemFamily,
+    WorkItemListParams, WorkItemMutationOutcome, WorkItemPageView, WorkItemPartyView, WorkItemScope,
+    WorkItemSort, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
 };
 pub(crate) use purchase_review_brief::purchase_review_reason_code;
 
@@ -455,10 +452,7 @@ impl WorkItemService {
 
     /// 复用开始处理的权威账号、角色、范围、对象参与权与岗位分离快照。
     async fn authoritative_team_candidate(&self, actor: &AuditActor, item: &WorkItem) -> Result<bool> {
-        if item.status != WorkItemStatus::Open
-            || item.assignment_mode != AssignmentMode::Pool
-            || item.owner_user_id.is_some()
-        {
+        if item.status != WorkItemStatus::Open || item.owner_user_id.is_some() {
             return Ok(false);
         }
         match self
@@ -562,44 +556,10 @@ impl WorkItemService {
 
     async fn load_sales_change_review_facts(
         &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
+        _keys: &HashSet<(ObjectKind, String)>,
+        _facts: &mut ObjectFactMap,
+        _executor: &mut dyn Executor,
     ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::SalesChangeReview);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let reviews = self
-            .db
-            .sales_change_reviews()
-            .find_many(doc! { "id": { "$in": ids } }, executor)
-            .await?;
-        let submission_ids = reviews
-            .iter()
-            .map(|review| review.sales_change_submission_id.to_string())
-            .collect::<Vec<_>>();
-        let submissions = self
-            .db
-            .sales_change_submissions()
-            .find_many(doc! { "id": { "$in": submission_ids } }, executor)
-            .await?
-            .into_iter()
-            .map(|submission| (submission.base.id.clone(), submission))
-            .collect::<HashMap<_, _>>();
-        for review in reviews {
-            let Some(submission) = submissions.get(&review.sales_change_submission_id.to_string()) else {
-                continue;
-            };
-            facts.insert(
-                (ObjectKind::SalesChangeReview, review.base.id.clone()),
-                ObjectFact::new(
-                    submission.sales_order_id.to_string(),
-                    "销售变更复核",
-                    submission.submitted_by.clone(),
-                ),
-            );
-        }
         Ok(())
     }
 
@@ -963,45 +923,6 @@ impl WorkItemService {
         Ok(view)
     }
 
-    /// 旧责任池领取入口。已失败关闭。
-    ///
-    /// # 错误
-    /// 始终返回稳定失败关闭错误。
-    pub async fn claim(
-        &self,
-        _id: &str,
-        _req: StartProcessingRequest,
-        _actor: &AuditActor,
-    ) -> Result<WorkItemMutationOutcome> {
-        Err(pool_command_closed("claim"))
-    }
-
-    /// 从责任池原子建立本人责任。已失败关闭。
-    ///
-    /// # 错误
-    /// 始终返回稳定失败关闭错误。
-    pub async fn start_processing(
-        &self,
-        _id: &str,
-        _req: StartProcessingRequest,
-        _actor: &AuditActor,
-    ) -> Result<WorkItemMutationOutcome> {
-        Err(pool_command_closed("start_processing"))
-    }
-
-    /// 将本人负责的开放 POOL 任务退回团队。已失败关闭。
-    ///
-    /// # 错误
-    /// 始终返回稳定失败关闭错误。
-    pub async fn release_to_team(
-        &self,
-        _id: &str,
-        _req: ReleaseToTeamRequest,
-        _actor: &AuditActor,
-    ) -> Result<WorkItemMutationOutcome> {
-        Err(pool_command_closed("release_to_team"))
-    }
-
     /// 受控转交开放任务。
     ///
     /// # 错误
@@ -1274,7 +1195,7 @@ impl WorkItemService {
             WorkItemScope::Mine => filter.owner_user_id = Some(actor.id().to_string()),
             WorkItemScope::Team => {
                 ensure_team_access(access)?;
-                filter.assignment_mode = Some(AssignmentMode::Pool);
+
                 filter.unassigned_only = true;
                 filter.responsibility_scopes = access.responsibility_scopes.clone();
             }
@@ -1299,10 +1220,7 @@ impl WorkItemService {
         actor: &AuditActor,
         access: &ActorAccess,
     ) -> Result<ViewAccess> {
-        if let Some(blocker) = self
-            .processing_blocker(item.approval_step_instance_id.as_deref())
-            .await?
-        {
+        if let Some(blocker) = self.processing_blocker(None::<&str>).await? {
             return Ok(ViewAccess::blocked(blocker));
         }
         if scope == WorkItemScope::History || item.status != WorkItemStatus::Open {
@@ -1321,46 +1239,12 @@ impl WorkItemService {
         Ok(ViewAccess::ready(actions))
     }
 
-    async fn processing_blocker(&self, step_id: Option<&str>) -> Result<Option<ProcessingBlockerView>> {
-        let Some(step_id) = step_id else {
-            return Ok(None);
-        };
-        let Some(step) = self
-            .db
-            .approval_step_instances()
-            .find_by_id(step_id, &mut NoTransaction)
-            .await?
-        else {
-            return Ok(Some(blocker(
-                "APPROVAL_STEP_MISSING",
-                "审批责任记录不完整，请联系管理员。",
-            )));
-        };
-        if step.status != ApprovalStepStatus::Blocked {
-            return Ok(None);
-        }
-        Ok(Some(blocker(
-            step.blocker_code.as_deref().unwrap_or("APPROVAL_BLOCKED"),
-            "审批当前受阻，请等待管理员恢复。",
-        )))
+    async fn processing_blocker(&self, _step_id: Option<&str>) -> Result<Option<ProcessingBlockerView>> {
+        Ok(None)
     }
 
     #[allow(dead_code)]
-    async fn ensure_approval_not_blocked(&self, item: &WorkItem) -> Result<()> {
-        let Some(step_id) = item.approval_step_instance_id.as_deref() else {
-            return Ok(());
-        };
-        let step = self
-            .db
-            .approval_step_instances()
-            .find_by_id(step_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::BusinessLogicError("审批责任记录不完整，请联系管理员。".to_string()))?;
-        if step.status == ApprovalStepStatus::Blocked {
-            return Err(Error::BusinessLogicError(
-                "审批当前受阻，请等待管理员恢复。".to_string(),
-            ));
-        }
+    async fn ensure_approval_not_blocked(&self, _item: &WorkItem) -> Result<()> {
         Ok(())
     }
 
@@ -1486,14 +1370,6 @@ impl WorkItemService {
             .await?
             .filter(|account| account.kind == expected_kind && account.can_login())
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
-        let eligible = ApprovalAssigneeResolver::new(self.db.clone())
-            .user_is_eligible_for_assignment(user_id, &item.owner_role, &item.owner_organization_id, executor)
-            .await?;
-        if !eligible {
-            return Err(Error::Forbidden(
-                "目标账号已不具备该任务角色或组织范围资格".to_string(),
-            ));
-        }
         let access = self
             .assignment_access_for_executor(
                 expected_kind,
@@ -1546,53 +1422,10 @@ impl WorkItemService {
         allow_current_owner: bool,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let step_id = item
-            .approval_step_instance_id
-            .as_deref()
-            .ok_or_else(|| Error::Forbidden("审批任务缺少审批步骤责任事实".to_string()))?;
-        let policy = object_policy(item.work_item_type, &item.business_object_type)
-            .ok_or_else(|| Error::Forbidden("审批任务类型未注册责任策略".to_string()))?;
-        let keys = HashSet::from([(policy.kind, item.business_object_id.clone())]);
-        let facts = self.load_object_facts(&keys, executor).await?;
-        let fact = facts
-            .get(&(policy.kind, item.business_object_id.clone()))
-            .ok_or_else(|| Error::Forbidden("审批业务对象事实缺失".to_string()))?;
-        let step = self
-            .db
-            .approval_step_instances()
-            .find_by_id(step_id, executor)
-            .await?
-            .ok_or_else(|| Error::ConflictError("审批步骤责任事实缺失，请刷新".to_string()))?;
-        let instance = self
-            .db
-            .approval_instances()
-            .find_by_id(step.approval_instance_id.as_ref(), executor)
-            .await?
-            .ok_or_else(|| Error::ConflictError("审批实例责任事实缺失，请刷新".to_string()))?;
-        if instance.status != ApprovalInstanceStatus::Running
-            || step.status != ApprovalStepStatus::Active
-            || instance.current_step_instance_id.as_ref().map(AsRef::as_ref) != Some(step_id)
-        {
-            return Err(Error::ConflictError("审批步骤已不再可分派，请刷新".to_string()));
-        }
-        let steps = self
-            .db
-            .approval_step_instances()
-            .list_by_instance(&step.approval_instance_id, executor)
-            .await?;
-        let separated = approval_assignment_separated(
-            user_id,
-            &instance.started_by,
-            &fact.created_by,
-            &item.responsibility_actor_ids,
-            item.owner_user_id.as_deref(),
-            allow_current_owner,
-            &steps,
-        );
-        if !separated {
-            return Err(Error::Forbidden("目标账号违反审批岗位分离约束".to_string()));
-        }
-        Ok(())
+        let _ = (user_id, item, allow_current_owner, executor);
+        Err(Error::Forbidden(
+            "单据审批任务不得通过通用责任入口改派".to_string(),
+        ))
     }
 
     /// 读取非审批正式决定任务的权威提交人、经办人及历史决定人。
@@ -1602,12 +1435,6 @@ impl WorkItemService {
         executor: &mut dyn Executor,
     ) -> Result<HashSet<String>> {
         let actors = match item.work_item_type {
-            WorkItemType::LowMarginManagerConfirmation => {
-                self.low_margin_assignment_actors(item, executor).await?
-            }
-            WorkItemType::ProcurementConfirmation => {
-                self.procurement_assignment_actors(item, executor).await?
-            }
             WorkItemType::PurchaseOrderReview => {
                 self.purchase_review_assignment_actors(item, executor).await?
             }
@@ -1628,63 +1455,6 @@ impl WorkItemService {
             }
         };
         non_empty_assignment_actors(actors)
-    }
-
-    async fn low_margin_assignment_actors(
-        &self,
-        item: &WorkItem,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let submission = self
-            .db
-            .sales_order_submissions()
-            .find_by_id(&item.subject_version, executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("低毛利提交事实缺失".to_string()))?;
-        let confirmation = self
-            .db
-            .low_margin_manager_confirmations()
-            .find_one(
-                doc! {
-                    "sales_order_id": &item.business_object_id,
-                    "low_margin_submission_id": &item.subject_version,
-                },
-                executor,
-            )
-            .await?
-            .ok_or_else(|| Error::Forbidden("低毛利上级确认事实缺失".to_string()))?;
-        Ok(optional_actors([
-            Some(submission.submitted_by),
-            Some(confirmation.requested_by),
-            confirmation.decided_by,
-        ]))
-    }
-
-    async fn procurement_assignment_actors(
-        &self,
-        item: &WorkItem,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let confirmation = self
-            .db
-            .procurement_confirmations()
-            .find_by_id(&item.business_object_id, executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("采购确认事实缺失".to_string()))?;
-        if confirmation.submission_id.as_ref() != item.subject_version {
-            return Err(Error::Forbidden("采购确认提交版本与任务不一致".to_string()));
-        }
-        let submission = self
-            .db
-            .sales_order_submissions()
-            .find_by_id(confirmation.submission_id.as_ref(), executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("销售提交事实缺失".to_string()))?;
-        Ok(optional_actors([
-            Some(submission.submitted_by),
-            Some(confirmation.stable.created_by),
-            confirmation.handled_by,
-        ]))
     }
 
     async fn purchase_review_assignment_actors(
@@ -1712,32 +1482,13 @@ impl WorkItemService {
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let current = self
-            .db
-            .sales_change_reviews()
-            .find_by_id(&item.business_object_id, executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("销售变更复核事实缺失".to_string()))?;
-        if current.sales_change_submission_id.as_ref() != item.subject_version {
-            return Err(Error::Forbidden("销售变更提交版本与任务不一致".to_string()));
-        }
         let submission = self
             .db
             .sales_change_submissions()
             .find_by_id(&item.subject_version, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("销售变更提交事实缺失".to_string()))?;
-        let reviews = self
-            .db
-            .sales_change_reviews()
-            .find_many(
-                doc! { "sales_change_submission_id": &item.subject_version },
-                executor,
-            )
-            .await?;
-        let mut actors = vec![submission.submitted_by, current.stable.created_by];
-        actors.extend(reviews.into_iter().filter_map(|review| review.reviewer_id));
-        Ok(actors)
+        Ok(vec![submission.submitted_by])
     }
 
     async fn card_funds_assignment_actors(
@@ -1745,7 +1496,7 @@ impl WorkItemService {
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        if item.approval_step_instance_id.is_some() || item.business_object_type != "receivable_account" {
+        if false || item.business_object_type != "receivable_account" {
             return Err(Error::Forbidden("卡券票款任务责任事实不合法".to_string()));
         }
         let account = self
@@ -2144,111 +1895,6 @@ impl WorkItemService {
         Err(Error::Forbidden("当前账号没有任务责任管理权限".to_string()))
     }
 
-    /// 在同一 MongoDB 事务内执行单文档原子开始处理并写入审计。
-    #[allow(clippy::too_many_arguments)]
-    #[allow(dead_code)]
-    async fn start_processing_with_audit(
-        &self,
-        current: WorkItem,
-        expected_task_version: u64,
-        actor: &AuditActor,
-        action: &str,
-        audit_id: String,
-        audit_message: String,
-        authorization: AssignmentAuthorizationSnapshot,
-    ) -> Result<StartProcessingOutcome> {
-        let item_id = current.base.id;
-        let owner_role = current.owner_role;
-        let owner_organization_id = current.owner_organization_id;
-        let actor_id = actor.id().to_string();
-        let replay_audit_id = audit_id.clone();
-        let replay_item_id = item_id.clone();
-        let replay_fingerprint = audit_command_fingerprint(&audit_message)
-            .expect("服务端审计消息必须携带指纹")
-            .to_string();
-        let audit = actor.clone().resource_log_with_id(
-            audit_id,
-            action,
-            "work_item",
-            item_id.clone(),
-            Some(audit_message),
-        )?;
-        let actor_kind = actor.kind();
-        let rbac = self.rbac.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let result = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    ensure_policy_revision(&db, authorization.policy_revision, session).await?;
-                    let current = db
-                        .work_items()
-                        .find_by_id(&item_id, session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
-                    let allow_current_owner = current.owner_user_id.as_deref() == Some(actor_id.as_str());
-                    ensure_assignment_policy_in_transaction(
-                        &db,
-                        &rbac,
-                        actor_kind,
-                        &actor_id,
-                        &actor_id,
-                        &current,
-                        allow_current_owner,
-                        &authorization,
-                        false,
-                        session,
-                    )
-                    .await?;
-                    let outcome = db
-                        .work_items()
-                        .start_processing(
-                            &item_id,
-                            expected_task_version,
-                            StartProcessingEligibility {
-                                owner_role: &owner_role,
-                                owner_organization_id: &owner_organization_id,
-                            },
-                            &actor_id,
-                            Instant::now(),
-                            session,
-                        )
-                        .await?;
-                    if let StartProcessingOutcome::Started(assigned)
-                    | StartProcessingOutcome::AlreadyOwned(assigned) = &outcome
-                    {
-                        ensure_assignment_policy_in_transaction(
-                            &db,
-                            &rbac,
-                            actor_kind,
-                            &actor_id,
-                            &actor_id,
-                            assigned,
-                            false,
-                            &authorization,
-                            true,
-                            session,
-                        )
-                        .await?;
-                        ensure_policy_revision(&db, authorization.policy_revision, session).await?;
-                        db.audit_logs().create(&audit, session).await?;
-                    }
-                    Ok::<StartProcessingOutcome, Error>(outcome)
-                })
-            })
-            .await;
-        match result {
-            Ok(outcome) => Ok(outcome),
-            Err(error) => match self
-                .idempotent_replay(&replay_audit_id, &replay_fingerprint, &replay_item_id)
-                .await?
-            {
-                Some(item) => Ok(StartProcessingOutcome::AlreadyOwned(item)),
-                None => Err(error),
-            },
-        }
-    }
-
     /// 在同一事务内重验管理人、目标责任人及全部业务事实后执行转交与审计。
     #[allow(clippy::too_many_arguments)]
     async fn reassign_with_assignment_policy_audit(
@@ -2392,20 +2038,6 @@ impl WorkItemService {
                             "任务当前责任人已变化".to_string(),
                         )));
                     }
-                    if let Some(step_id) = current.approval_step_instance_id.as_deref() {
-                        let step = db
-                            .approval_step_instances()
-                            .find_by_id(step_id, session)
-                            .await?
-                            .ok_or_else(|| {
-                                Error::BusinessLogicError("审批责任记录不完整，请联系管理员。".to_string())
-                            })?;
-                        if step.status == ApprovalStepStatus::Blocked {
-                            return Err(WorkItemWriteError::Service(Error::BusinessLogicError(
-                                "审批当前受阻，请等待管理员恢复。".to_string(),
-                            )));
-                        }
-                    }
                     ensure_assignment_policy_in_transaction(
                         &db,
                         &rbac,
@@ -2419,7 +2051,10 @@ impl WorkItemService {
                         session,
                     )
                     .await?;
-                    current.release_to_pool(Instant::now())?;
+                    return Err(WorkItemWriteError::Service(Error::BusinessLogicError(
+                        "已取消退回团队动作".to_string(),
+                    )));
+                    #[allow(unreachable_code)]
                     db.work_items()
                         .update(&mut current, session)
                         .await
@@ -2705,7 +2340,7 @@ fn approval_assignment_separated(
     responsibility_actor_ids: &[String],
     current_owner_user_id: Option<&str>,
     allow_current_owner: bool,
-    steps: &[entities::approval::ApprovalStepInstance],
+    decided_by: &[&str],
 ) -> bool {
     if candidate_id == started_by || candidate_id == submitted_by {
         return false;
@@ -2715,10 +2350,7 @@ fn approval_assignment_separated(
     }) {
         return false;
     }
-    !steps
-        .iter()
-        .filter_map(|step| step.decided_by.as_deref())
-        .any(|decided_by| decided_by == candidate_id)
+    !decided_by.iter().any(|actor| *actor == candidate_id)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2929,13 +2561,13 @@ const SYSTEM_OBJECT_OWNER: &str = "__system__";
 const OBJECT_POLICIES: [ObjectPolicy; 32] = [
     ObjectPolicy {
         kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::LowMarginManagerConfirmation,
+        work_item_type: WorkItemType::ImportBusinessConfirmation,
         business_object_type: "sales_order",
         read_permission: "sales_order:detail",
     },
     ObjectPolicy {
         kind: ObjectKind::ProcurementConfirmation,
-        work_item_type: WorkItemType::ProcurementConfirmation,
+        work_item_type: WorkItemType::ImportBusinessConfirmation,
         business_object_type: "procurement_confirmation",
         read_permission: "procurement_confirmation:detail",
     },
@@ -2959,13 +2591,13 @@ const OBJECT_POLICIES: [ObjectPolicy; 32] = [
     },
     ObjectPolicy {
         kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::CardSalesManagerApproval,
+        work_item_type: WorkItemType::DocumentApproval,
         business_object_type: "sales_order",
         read_permission: "sales_order:detail",
     },
     ObjectPolicy {
         kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::CardSalesOperationApproval,
+        work_item_type: WorkItemType::DocumentApproval,
         business_object_type: "sales_order",
         read_permission: "sales_order:detail",
     },
@@ -3129,11 +2761,11 @@ fn object_policy(work_item_type: WorkItemType, business_object_type: &str) -> Op
 
 fn assignment_separation_policy(work_item_type: WorkItemType) -> AssignmentSeparationPolicy {
     match work_item_type {
-        WorkItemType::CardSalesManagerApproval | WorkItemType::CardSalesOperationApproval => {
+        WorkItemType::DocumentApproval | WorkItemType::DocumentApproval => {
             AssignmentSeparationPolicy::ApprovalHistory
         }
-        WorkItemType::ProcurementConfirmation
-        | WorkItemType::LowMarginManagerConfirmation
+        WorkItemType::ImportBusinessConfirmation
+        | WorkItemType::ImportBusinessConfirmation
         | WorkItemType::PurchaseOrderReview
         | WorkItemType::SalesChangeImpactReview
         | WorkItemType::SalesChangeFinanceReview
@@ -3395,7 +3027,7 @@ fn counts_as_processable_stat(scope: WorkItemScope, access: &ViewAccess) -> bool
     }
     let required_action = match scope {
         WorkItemScope::Mine => WorkItemAllowedAction::Process,
-        WorkItemScope::Team => WorkItemAllowedAction::StartProcessing,
+        WorkItemScope::Team => WorkItemAllowedAction::Process,
         WorkItemScope::Managed | WorkItemScope::History => return false,
     };
     access.allowed_actions.contains(&required_action)
@@ -3414,12 +3046,12 @@ fn allowed_actions(
             || item.status != WorkItemStatus::Open)
     {
         actions.push(WorkItemAllowedAction::Process);
-        if item.assignment_mode == AssignmentMode::Pool {
-            actions.push(WorkItemAllowedAction::ReleaseToTeam);
+        if false {
+            actions.push(WorkItemAllowedAction::Reassign);
         }
     }
     if scope == WorkItemScope::Team && item.owner_user_id.is_none() && team_candidate_eligible {
-        actions.push(WorkItemAllowedAction::StartProcessing);
+        actions.push(WorkItemAllowedAction::Process);
     }
     if access.can_manage && scope == WorkItemScope::Managed {
         actions.push(WorkItemAllowedAction::Reassign);
@@ -3594,7 +3226,7 @@ fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result
         return Ok(WorkItemScope::Mine);
     }
     if item.status == WorkItemStatus::Open
-        && item.assignment_mode == AssignmentMode::Pool
+        && false
         && item.owner_user_id.is_none()
         && covers_responsibility(access, &item.owner_role, &item.owner_organization_id)
     {
@@ -3746,19 +3378,11 @@ fn expected_task_version(value: &str) -> Result<u64> {
 }
 
 fn is_w29_closable(item: &WorkItem) -> bool {
-    is_w29_shape(
-        item.work_item_type,
-        &item.business_object_type,
-        item.approval_step_instance_id.is_some(),
-    )
+    is_w29_shape(item.work_item_type, &item.business_object_type, false)
 }
 
 fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
-    is_w29_shape(
-        item.work_item_type,
-        &item.business_object_type,
-        item.approval_step_instance_id.is_some(),
-    )
+    is_w29_shape(item.work_item_type, &item.business_object_type, false)
 }
 
 fn is_w29_shape(work_item_type: WorkItemType, business_object_type: &str, has_approval_step: bool) -> bool {
@@ -3901,12 +3525,10 @@ mod tests {
     };
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
     use entities::{
-        approval::{ApprovalDecision, ApprovalStepInstance, ApprovalStepInstanceData, ApprovalStepStatus},
         common::time::Instant,
-        ids::{ApprovalInstanceId, ApprovalStepInstanceId, WorkItemId},
+        ids::WorkItemId,
         work_item::{
-            AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus,
-            WorkItemType,
+            AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
         },
         AccountKind, AuditLog, AuditLogData, Permission,
     };
@@ -3951,16 +3573,15 @@ mod tests {
         database::WorkItemRow {
             id: "wi-w13-delta".to_string(),
             work_item_type: WorkItemType::CardFundsDeltaReview,
-            approval_step_instance_id: None,
             approval_node_execution_id: None,
             business_object_type: "receivable_account".to_string(),
             business_object_id: "account-1".to_string(),
             subject_version: "revision-2".to_string(),
             status: WorkItemStatus::Open,
-            assignment_mode: AssignmentMode::Pool,
+
             owner_role: "role-finance".to_string(),
             owner_organization_id: "company".to_string(),
-            owner_user_id: None,
+            owner_user_id: Some("alice".to_string()),
             responsibility_actor_ids: Vec::new(),
             assignment_source: AssignmentSource::SystemRule,
             assigned_at: None,
@@ -3987,14 +3608,13 @@ mod tests {
             WorkItemId::new("wi-w13-delta-detail"),
             WorkItemData {
                 work_item_type: WorkItemType::CardFundsDeltaReview,
-                approval_step_instance_id: None,
                 business_object_type: "receivable_account".to_string(),
                 business_object_id: "account-1".to_string(),
                 subject_version: "revision-2".to_string(),
-                assignment_mode: AssignmentMode::Pool,
+
                 owner_role: "role-finance".to_string(),
                 owner_organization_id: "company".to_string(),
-                owner_user_id: None,
+                owner_user_id: Some("alice".to_string()),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::High,
                 due_at: None,
@@ -4156,7 +3776,7 @@ mod tests {
         assert!(!counts_as_processable_stat(WorkItemScope::Team, &blocked));
 
         let mine = ViewAccess::ready(vec![WorkItemAllowedAction::Process]);
-        let team = ViewAccess::ready(vec![WorkItemAllowedAction::StartProcessing]);
+        let team = ViewAccess::ready(vec![WorkItemAllowedAction::Process]);
         assert!(counts_as_processable_stat(WorkItemScope::Mine, &mine));
         assert!(counts_as_processable_stat(WorkItemScope::Team, &team));
         assert!(!counts_as_processable_stat(WorkItemScope::Managed, &mine));
@@ -4169,11 +3789,10 @@ mod tests {
             WorkItemId::new("wi-history"),
             WorkItemData {
                 work_item_type: WorkItemType::ImportBusinessConfirmation,
-                approval_step_instance_id: None,
                 business_object_type: "LEGACY_IMPORT_BATCH".to_string(),
                 business_object_id: "batch-1".to_string(),
                 subject_version: "v1".to_string(),
-                assignment_mode: AssignmentMode::Direct,
+
                 owner_role: "role-sales".to_string(),
                 owner_organization_id: "company".to_string(),
                 owner_user_id: Some("alice".to_string()),
@@ -4320,11 +3939,11 @@ mod tests {
         assert_eq!(page.items[0].id, "eligible-task");
         assert!(
             !allowed_actions(&denied, WorkItemScope::Team, &access.actor_id, &access, false)
-                .contains(&WorkItemAllowedAction::StartProcessing)
+                .contains(&WorkItemAllowedAction::Process)
         );
         assert!(
             allowed_actions(&eligible, WorkItemScope::Team, &access.actor_id, &access, true)
-                .contains(&WorkItemAllowedAction::StartProcessing)
+                .contains(&WorkItemAllowedAction::Process)
         );
     }
 
@@ -4340,27 +3959,8 @@ mod tests {
 
     #[test]
     fn approval_assignment_excludes_submitter_starter_history_and_decider() {
-        let mut decided_step = ApprovalStepInstance::new(
-            ApprovalStepInstanceId::new("step-1"),
-            ApprovalStepInstanceData {
-                approval_instance_id: ApprovalInstanceId::new("approval-1"),
-                step_key: "manager".to_string(),
-                sequence_no: 1,
-                initial_status: ApprovalStepStatus::Active,
-                external_activity_id: None,
-            },
-        )
-        .unwrap();
-        decided_step
-            .decide(
-                ApprovalDecision::Approve,
-                None,
-                "previous-decider",
-                Instant::from_unix_secs(100),
-            )
-            .unwrap();
-        let steps = vec![decided_step];
         let history = vec!["former-owner".to_string()];
+        let decided = ["previous-decider"];
 
         assert!(!approval_assignment_separated(
             "starter",
@@ -4369,7 +3969,7 @@ mod tests {
             &history,
             None,
             false,
-            &steps,
+            &decided,
         ));
         assert!(!approval_assignment_separated(
             "submitter",
@@ -4378,7 +3978,7 @@ mod tests {
             &history,
             None,
             false,
-            &steps,
+            &decided,
         ));
         assert!(!approval_assignment_separated(
             "former-owner",
@@ -4387,7 +3987,7 @@ mod tests {
             &history,
             None,
             false,
-            &steps,
+            &decided,
         ));
         assert!(!approval_assignment_separated(
             "previous-decider",
@@ -4396,7 +3996,7 @@ mod tests {
             &history,
             None,
             false,
-            &steps,
+            &decided,
         ));
         assert!(approval_assignment_separated(
             "next-owner",
@@ -4405,7 +4005,7 @@ mod tests {
             &history,
             None,
             false,
-            &steps,
+            &decided,
         ));
     }
 
@@ -4444,8 +4044,8 @@ mod tests {
     #[test]
     fn formal_decision_task_types_use_fixed_assignment_separation_policies() {
         for work_item_type in [
-            WorkItemType::LowMarginManagerConfirmation,
-            WorkItemType::ProcurementConfirmation,
+            WorkItemType::ImportBusinessConfirmation,
+            WorkItemType::ImportBusinessConfirmation,
             WorkItemType::PurchaseOrderReview,
             WorkItemType::SalesChangeImpactReview,
             WorkItemType::SalesChangeFinanceReview,
@@ -4460,7 +4060,7 @@ mod tests {
             );
         }
         assert_eq!(
-            assignment_separation_policy(WorkItemType::CardSalesManagerApproval),
+            assignment_separation_policy(WorkItemType::DocumentApproval),
             AssignmentSeparationPolicy::ApprovalHistory
         );
         assert_eq!(

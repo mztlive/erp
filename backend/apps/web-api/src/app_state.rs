@@ -2,7 +2,6 @@ use config::{Config, SafeConfig};
 use mongodb::Database;
 use services::approval::definition::ApprovalDefinitionService;
 use services::approval::execution::ApprovalRuntimeService;
-use services::approval::{ApprovalDomainActionPort, ApprovalRuntimePort, InternalApprovalRuntime};
 use services::iam::SharedRbacService;
 use services::party::SensitiveDataCodec;
 use services::ApprovalNotificationOutboxPort;
@@ -140,23 +139,6 @@ impl AppState {
     /// 返回 services 层端口；HTTP 不得直连审批仓储。
     pub fn approval_outbox_port(&self) -> Arc<ApprovalNotificationOutboxPort> {
         Arc::clone(&self.approval_outbox)
-    }
-
-    /// 返回旧卡券销售路径仍在使用的 INTERNAL 运行时端口。
-    ///
-    /// 目标单据类型必须走 [`Self::approval_runtime_service`]，不得回退本方法。
-    /// 本入口由 P0-D 在全类型切换后删除。
-    ///
-    /// # 参数
-    /// * `action_port` - 旧运行时领域动作端口
-    ///
-    /// # 返回
-    /// 返回仅供未删除旧调用方使用的 INTERNAL 实现。
-    pub fn approval_runtime(
-        &self,
-        action_port: Arc<dyn ApprovalDomainActionPort>,
-    ) -> Arc<dyn ApprovalRuntimePort> {
-        Arc::new(InternalApprovalRuntime::new(self.db(), action_port))
     }
 
     /// 启动审批通知 outbox worker。

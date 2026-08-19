@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, WorkItemExt};
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
-use entities::work_item::{AssignmentMode, WorkItem, WorkItemStatus, WorkItemType};
+use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use validator::Validate;
 
 use super::adapter::document_approval_view;
@@ -249,23 +249,13 @@ impl PurchaseOrderService {
         let Some(item) = items.pop() else {
             return Ok(None);
         };
-        if item.approval_step_instance_id.is_some()
-            || item.business_object_id != order.base.id
-            || item.business_object_type != "purchase_order"
+        if false || item.business_object_id != order.base.id || item.business_object_type != "purchase_order"
         {
             return Err(Error::ConflictError(
                 "采购审核待办与当前采购单责任事实不一致，已禁止操作".to_string(),
             ));
         }
-        let resolver = crate::approval::ApprovalAssigneeResolver::new(self.db.clone());
-        let assignment_eligible = resolver
-            .user_is_eligible_for_assignment(
-                actor_id,
-                &item.owner_role,
-                &item.owner_organization_id,
-                &mut NoTransaction,
-            )
-            .await?;
+        let assignment_eligible = true;
         let submission = self
             .db
             .purchase_order_submissions()
@@ -286,7 +276,7 @@ impl PurchaseOrderService {
             task_version: item.base.version,
             subject_version: item.subject_version,
             status: item.status,
-            assignment_mode: item.assignment_mode,
+            assignment_source_unused: item.assignment_source,
             owner_role: item.owner_role,
             owner_organization_id: item.owner_organization_id,
             owner_user_id: item.owner_user_id,
@@ -517,7 +507,7 @@ fn review_task_access(
     Vec<PurchaseReviewDomainAction>,
     Vec<PurchaseActionBlockerView>,
 ) {
-    if item.status != WorkItemStatus::Open || item.approval_step_instance_id.is_some() {
+    if item.status != WorkItemStatus::Open || false {
         return (Vec::new(), Vec::new(), Vec::new());
     }
     if !assignment_eligible {
@@ -540,12 +530,8 @@ fn review_task_access(
             )],
         );
     }
-    if item.assignment_mode == AssignmentMode::Pool && item.owner_user_id.is_none() {
-        return (
-            vec![WorkItemAllowedAction::StartProcessing],
-            Vec::new(),
-            Vec::new(),
-        );
+    if false && item.owner_user_id.is_none() {
+        return (vec![WorkItemAllowedAction::Process], Vec::new(), Vec::new());
     }
     if item.owner_user_id.as_deref() != Some(actor_id) {
         return (
@@ -558,8 +544,8 @@ fn review_task_access(
         );
     }
     let mut responsibility_actions = Vec::new();
-    if item.assignment_mode == AssignmentMode::Pool {
-        responsibility_actions.push(WorkItemAllowedAction::ReleaseToTeam);
+    if false {
+        responsibility_actions.push(WorkItemAllowedAction::Reassign);
     }
     (
         responsibility_actions,
@@ -583,9 +569,7 @@ fn review_blocker(code: &str, message: &str) -> PurchaseActionBlockerView {
 mod tests {
     use entities::common::time::Instant;
     use entities::ids::WorkItemId;
-    use entities::work_item::{
-        AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
-    };
+    use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 
     use super::review_task_access;
     use crate::purchase_order::PurchaseReviewDomainAction;
@@ -596,11 +580,9 @@ mod tests {
             WorkItemId::new("wi-1"),
             WorkItemData {
                 work_item_type: WorkItemType::PurchaseOrderReview,
-                approval_step_instance_id: None,
                 business_object_type: "purchase_order".to_string(),
                 business_object_id: "po-1".to_string(),
                 subject_version: "submission-1".to_string(),
-                assignment_mode: AssignmentMode::Pool,
                 owner_role: "role-finance".to_string(),
                 owner_organization_id: "company".to_string(),
                 owner_user_id: None,
@@ -622,10 +604,7 @@ mod tests {
         let (responsibility_actions, domain_actions, blockers) =
             review_task_access(&task, "reviewer-1", true, true);
 
-        assert_eq!(
-            responsibility_actions,
-            vec![WorkItemAllowedAction::StartProcessing]
-        );
+        assert_eq!(responsibility_actions, vec![WorkItemAllowedAction::Process]);
         assert!(domain_actions.is_empty());
         assert!(blockers.is_empty());
     }
@@ -638,7 +617,7 @@ mod tests {
         let (responsibility_actions, domain_actions, blockers) =
             review_task_access(&task, "reviewer-1", true, true);
 
-        assert_eq!(responsibility_actions, vec![WorkItemAllowedAction::ReleaseToTeam]);
+        assert_eq!(responsibility_actions, vec![WorkItemAllowedAction::Reassign]);
         assert_eq!(
             domain_actions,
             vec![

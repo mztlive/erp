@@ -797,7 +797,7 @@ pub struct ActiveCardSalesApprovalView {
     /// 权限安全的阻塞摘要。
     pub processing_blocker: Option<ProcessingBlockerView>,
     /// 当前责任模式。
-    pub assignment_mode: Option<entities::work_item::AssignmentMode>,
+    pub assignment_source_unused: Option<entities::work_item::AssignmentSource>,
     /// 当前个人责任人安全摘要。
     pub owner_user: Option<WorkItemPartyView>,
     /// 冻结业务版本。

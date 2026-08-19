@@ -4,9 +4,7 @@ use std::num::NonZeroU32;
 
 use bpm::ApprovalNodeExecutionId;
 use entities::common::time::Instant;
-use entities::work_item::{
-    AssignmentMode, AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
-};
+use entities::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
 use mongodb::bson::{doc, to_document, Bson, Document};
 use mongodb::options::FindOptions;
@@ -24,8 +22,6 @@ pub struct WorkItemRow {
     pub id: String,
     /// 固定任务类型。
     pub work_item_type: WorkItemType,
-    /// 审批步骤实例；独立任务为空。
-    pub approval_step_instance_id: Option<String>,
     /// 类型化审批节点执行；审批任务存在，独立任务为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_node_execution_id: Option<String>,
@@ -37,8 +33,6 @@ pub struct WorkItemRow {
     pub subject_version: String,
     /// 生命周期状态。
     pub status: WorkItemStatus,
-    /// 责任分派模式。
-    pub assignment_mode: AssignmentMode,
     /// 责任角色。
     pub owner_role: String,
     /// 责任组织。
@@ -90,8 +84,6 @@ pub struct WorkItemFilter {
     pub work_item_types: Vec<WorkItemType>,
     /// 允许的状态集合；为空时不筛选。
     pub statuses: Vec<WorkItemStatus>,
-    /// 分派模式；为空时不筛选。
-    pub assignment_mode: Option<AssignmentMode>,
     /// 允许的责任角色集合；为空时不筛选。
     pub owner_roles: Vec<String>,
     /// 允许的责任组织集合；为空时不筛选。
@@ -148,9 +140,6 @@ impl QueryFilter for WorkItemFilter {
         );
         insert_string_filter(&mut filter, "owner_role", &self.owner_roles);
         insert_string_filter(&mut filter, "owner_organization_id", &self.owner_organization_ids);
-        if let Some(assignment_mode) = self.assignment_mode {
-            filter.insert("assignment_mode", assignment_mode.as_str());
-        }
         if self.unassigned_only {
             filter.insert("owner_user_id", Bson::Null);
         } else if let Some(owner_user_id) = &self.owner_user_id {
@@ -456,7 +445,7 @@ impl<'a> Repository<'a, WorkItem> {
     ///
     /// MongoDB 内固定施加 `status=OPEN` 与 `owner_user_id`；排序为
     /// `due_at asc, id asc`，覆盖审批与非审批同一口径。不按
-    /// `assignment_mode` 或执行状态推断责任。
+    /// 执行状态推断责任。
     ///
     /// # 参数
     /// * `filter` - 已计算的责任人、可选单据类型、游标与页大小
@@ -575,7 +564,6 @@ fn start_processing_filter(
         "id": id,
         "version": expected_version,
         "status": WorkItemStatus::Open.as_str(),
-        "assignment_mode": AssignmentMode::Pool.as_str(),
         "owner_role": owner_role,
         "owner_organization_id": owner_organization_id,
         "owner_user_id": Bson::Null,
@@ -595,7 +583,7 @@ fn start_processing_pipeline(actor_id: &str, at: Instant) -> Vec<Document> {
                     { "$concatArrays": ["$responsibility_actor_ids", [actor_id]] },
                 ]
             },
-            "assignment_source": AssignmentSource::SelfStart.as_str(),
+            "assignment_source": AssignmentSource::SystemRule.as_str(),
             "assigned_at": { "$ifNull": ["$assigned_at", timestamp] },
             "started_at": { "$ifNull": ["$started_at", timestamp] },
             "current_assignment_at": timestamp,
@@ -614,7 +602,7 @@ fn classify_start_processing_miss(
     let Some(item) = current else {
         return StartProcessingOutcome::NotStartable(None);
     };
-    if item.status != WorkItemStatus::Open || item.assignment_mode != AssignmentMode::Pool {
+    if item.status != WorkItemStatus::Open {
         return StartProcessingOutcome::NotStartable(Some(item));
     }
     if item.owner_user_id.as_deref() == Some(actor_id) {
@@ -872,13 +860,11 @@ fn work_item_projection() -> Document {
     doc! {
         "id": 1,
         "work_item_type": 1,
-        "approval_step_instance_id": 1,
         "approval_node_execution_id": 1,
         "business_object_type": 1,
         "business_object_id": 1,
         "subject_version": 1,
         "status": 1,
-        "assignment_mode": 1,
         "owner_role": 1,
         "owner_organization_id": 1,
         "owner_user_id": 1,
@@ -921,8 +907,7 @@ mod tests {
     use entities::common::time::Instant;
     use entities::ids::WorkItemId;
     use entities::work_item::{
-        AssignmentMode, AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus,
-        WorkItemType,
+        AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
     };
 
     fn pool_item() -> WorkItem {
@@ -930,11 +915,9 @@ mod tests {
             WorkItemId::new("wi-1"),
             WorkItemData {
                 work_item_type: WorkItemType::ImportBusinessConfirmation,
-                approval_step_instance_id: None,
                 business_object_type: "LEGACY_IMPORT_BATCH".to_string(),
                 business_object_id: "batch-1".to_string(),
                 subject_version: "v1".to_string(),
-                assignment_mode: AssignmentMode::Pool,
                 owner_role: "sales".to_string(),
                 owner_organization_id: "org-1".to_string(),
                 owner_user_id: None,
@@ -957,7 +940,6 @@ mod tests {
                 WorkItemType::ImportBusinessConfirmation,
                 WorkItemType::BusinessException,
             ],
-            assignment_mode: Some(AssignmentMode::Pool),
             owner_roles: vec!["sales".to_string(), "operations".to_string()],
             owner_organization_ids: vec!["org-1".to_string()],
             unassigned_only: true,
@@ -970,7 +952,6 @@ mod tests {
         }
         .to_doc();
         assert_eq!(team.get_str("status").unwrap(), "OPEN");
-        assert_eq!(team.get_str("assignment_mode").unwrap(), "POOL");
         assert_eq!(team.get("owner_user_id"), Some(&Bson::Null));
         assert_eq!(
             team.get_document("owner_role").unwrap(),
@@ -1126,7 +1107,6 @@ mod tests {
 
         assert_eq!(filter.get_i64("version").unwrap(), 7);
         assert_eq!(filter.get_str("status").unwrap(), "OPEN");
-        assert_eq!(filter.get_str("assignment_mode").unwrap(), "POOL");
         assert_eq!(filter.get_str("owner_role").unwrap(), "sales");
         assert_eq!(filter.get_str("owner_organization_id").unwrap(), "org-1");
         assert_eq!(filter.get("owner_user_id"), Some(&Bson::Null));
@@ -1263,7 +1243,6 @@ mod tests {
         assert_eq!(document.get_str("status").unwrap(), "OPEN");
         assert_eq!(document.get_str("owner_user_id").unwrap(), "alice");
         assert!(!document.contains_key("work_item_type"));
-        assert!(!document.contains_key("assignment_mode"));
         assert!(!document.contains_key("business_object_type"));
         assert!(!document.contains_key("$or"));
         assert_eq!(mine_workbench_sort_doc(), doc! { "due_at": 1, "id": 1 });
@@ -1354,17 +1333,14 @@ mod tests {
     fn work_item_projection_includes_approval_node_execution_id() {
         let projection = work_item_projection();
         assert_eq!(projection.get_i32("approval_node_execution_id").unwrap(), 1);
-        assert_eq!(projection.get_i32("approval_step_instance_id").unwrap(), 1);
         let row = WorkItemRow {
             id: "wi-1".to_string(),
             work_item_type: WorkItemType::CardFundsDeltaReview,
-            approval_step_instance_id: None,
             approval_node_execution_id: Some("exec-1".to_string()),
             business_object_type: "receivable_account".to_string(),
             business_object_id: "account-1".to_string(),
             subject_version: "v1".to_string(),
             status: WorkItemStatus::Open,
-            assignment_mode: AssignmentMode::Direct,
             owner_role: "role-finance".to_string(),
             owner_organization_id: "org-1".to_string(),
             owner_user_id: Some("user-1".to_string()),
@@ -1391,12 +1367,10 @@ mod tests {
         let decoded: WorkItemRow = mongodb::bson::from_document(doc! {
             "id": "wi-2",
             "work_item_type": "CARD_FUNDS_DELTA_REVIEW",
-            "approval_step_instance_id": Bson::Null,
             "business_object_type": "receivable_account",
             "business_object_id": "account-1",
             "subject_version": "v1",
             "status": "OPEN",
-            "assignment_mode": "DIRECT",
             "owner_role": "role-finance",
             "owner_organization_id": "org-1",
             "owner_user_id": "user-1",
