@@ -10,9 +10,11 @@ import {
     usePostAllocationMutation,
     useResolvePostUnknownMutation,
     useEnsureCustomerRefundDraftMutation,
+    useEnsureReceiptReversalDraftMutation,
     useReverseFactMutation,
     useSaveAllocationDraftMutation,
     useSubmitCustomerRefundMutation,
+    useSubmitReceiptReversalMutation,
 } from '@/features/customer-receivables/hooks/queries'
 import type {
     AllocationSessionView,
@@ -36,7 +38,9 @@ vi.mock('@/features/customer-receivables/api', () => ({
     reverseFact: vi.fn(),
     ensureCustomerReceiptDraft: vi.fn(),
     ensureCustomerRefundDraft: vi.fn(),
+    ensureReceiptReversalDraft: vi.fn(),
     submitCustomerRefund: vi.fn(),
+    submitReceiptReversal: vi.fn(),
 }))
 
 const mockedApi = vi.mocked(customerReceivablesApi)
@@ -196,6 +200,33 @@ describe('useCustomerAccountsDetailQuery', () => {
             'detail',
             'refund',
             'crf-1',
+        ])
+    })
+
+    it('fetches a receipt reversal detail without treating it as refund', async () => {
+        const detail = {
+            kind: 'reversal',
+            queriedAt: '2026-01-01T00:00:00.000Z',
+        } as CustomerAccountsDetailView
+        mockedApi.fetchCustomerAccountsDetail.mockResolvedValue(detail)
+
+        const client = createFreshQueryClient()
+        const { result } = renderHookWithProviders(
+            () => useCustomerAccountsDetailQuery('reversal', 'rr-1'),
+            { queryClient: client },
+        )
+
+        await waitFor(() => expect(result.current.data).toEqual(detail))
+        expect(mockedApi.fetchCustomerAccountsDetail).toHaveBeenCalledWith(
+            'reversal',
+            'rr-1',
+        )
+        const queries = client.getQueryCache().getAll()
+        expect(queries[0].queryKey).toEqual([
+            'customer-receivables',
+            'detail',
+            'reversal',
+            'rr-1',
         ])
     })
 })
@@ -659,6 +690,100 @@ describe('useSubmitCustomerRefundMutation', () => {
         })
         expect(invalidateSpy).toHaveBeenCalledWith({
             queryKey: ['approval', 'document', 'CustomerRefund', 'crf-2'],
+        })
+    })
+})
+
+describe('useEnsureReceiptReversalDraftMutation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('invalidates reversal detail and approval keys on a succeeded draft', async () => {
+        mockedApi.ensureReceiptReversalDraft.mockResolvedValue({
+            status: 'succeeded',
+            reversal: {
+                reversalId: 'rr-1',
+                reversalNo: 'CZ-1',
+                originalReceiptId: 'cr-1',
+                reasonText: '录入错误',
+                amount: '10.00',
+                occurredAt: '',
+                status: 'draft',
+                statusLabel: '草稿',
+                statusTone: 'neutral',
+                baselineVersion: 1,
+                allowedActions: ['VIEW_DETAIL'],
+                actionBlockers: [],
+            },
+        })
+
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => useEnsureReceiptReversalDraftMutation(),
+            { queryClient: client },
+        )
+
+        await result.current.mutateAsync({
+            sourceFactId: 'cr-1',
+            reason: '录入错误',
+            idempotencyKey: 'k-rr',
+        })
+
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'ReceiptReversal', 'rr-1'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['customer-receivables', 'detail', 'reversal', 'rr-1'],
+        })
+    })
+})
+
+describe('useSubmitReceiptReversalMutation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('invalidates receivables and approval keys after submit', async () => {
+        mockedApi.submitReceiptReversal.mockResolvedValue({
+            status: 'succeeded',
+            reversal: {
+                reversalId: 'rr-2',
+                reversalNo: 'CZ-2',
+                originalReceiptId: 'cr-1',
+                reasonText: '录入错误',
+                amount: '10.00',
+                occurredAt: '',
+                status: 'in_approval',
+                statusLabel: '审批中',
+                statusTone: 'warning',
+                baselineVersion: 2,
+                allowedActions: ['VIEW_DETAIL'],
+                actionBlockers: [],
+            },
+        })
+
+        const client = createFreshQueryClient()
+        const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+        const { result } = renderHookWithProviders(
+            () => useSubmitReceiptReversalMutation(),
+            { queryClient: client },
+        )
+
+        await result.current.mutateAsync({
+            reversalId: 'rr-2',
+            expectedVersion: 1,
+            idempotencyKey: 'k-rr-2',
+        })
+
+        await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['customer-receivables'],
+        })
+        expect(invalidateSpy).toHaveBeenCalledWith({
+            queryKey: ['approval', 'document', 'ReceiptReversal', 'rr-2'],
         })
     })
 })

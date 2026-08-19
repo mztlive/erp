@@ -102,6 +102,23 @@ export type BackendCustomerRefund = {
     approval?: DocumentApprovalViewDto | null
 }
 
+/** ReceiptReversal 为 PROCESS_REQUIRED：创建/详情 DTO 必须携带只读审批绑定。 */
+export type BackendReceiptReversal = {
+    id: string
+    reversal_no: string
+    status: string
+    original_customer_receipt_id: string
+    reason_code?: string | null
+    reason_text: string
+    amount: string
+    handled_by: string
+    reviewed_by: string
+    occurred_at: number
+    version: number
+    created_at: number
+    approval?: DocumentApprovalViewDto | null
+}
+
 /** Invoice 为 NO_APPROVAL：创建/详情 DTO 不得携带审批绑定。 */
 export type BackendInvoice = {
     id: string

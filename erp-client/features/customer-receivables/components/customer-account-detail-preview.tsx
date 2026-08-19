@@ -8,9 +8,11 @@ import {
     CustomerRefundDetailBody,
     InvoiceDetailBody,
     ReceiptDetailBody,
+    ReceiptReversalDetailBody,
     ReceivableDetailBody,
 } from "@/features/customer-receivables/components/detail-bodies"
 import { isUnsubmittedCustomerRefundStatus } from "@/features/customer-receivables/lib/customer-refund-approval"
+import { isUnsubmittedReceiptReversalStatus } from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import type {
     AllocationMode,
     CustomerAccountsDetailView,
@@ -45,6 +47,7 @@ type CustomerAccountDetailPreviewProps = Readonly<{
     ) => void | Promise<void>
     onRequestReverse: (request: ReverseRequest) => void
     onRequestRefundSubmit?: () => void
+    onRequestReversalSubmit?: () => void
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -52,7 +55,7 @@ type CustomerAccountDetailPreviewProps = Readonly<{
 }>
 
 /**
- * 客户往来详情抽屉。回款与客户退款嵌入通用审批区；决定与恢复只读服务端白名单。
+ * 客户往来详情抽屉。回款、客户退款与回款冲正嵌入通用审批区；决定与恢复只读服务端白名单。
  * 发票分支只渲染 InvoiceDetailBody，不展示审批流程选择或审批动作。
  */
 export function CustomerAccountDetailPreview({
@@ -66,6 +69,7 @@ export function CustomerAccountDetailPreview({
     onStartSession,
     onRequestReverse,
     onRequestRefundSubmit,
+    onRequestReversalSubmit,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -87,7 +91,9 @@ export function CustomerAccountDetailPreview({
                         ? data.invoice.invoiceNo
                         : data?.refund
                           ? data.refund.refundNo
-                          : "往来详情"
+                          : data?.reversal
+                            ? data.reversal.reversalNo
+                            : "往来详情"
             }
             identity={
                 data?.receivable ? (
@@ -98,6 +104,8 @@ export function CustomerAccountDetailPreview({
                     <span>{data.invoice.counterpartyPartyName}</span>
                 ) : data?.refund ? (
                     <span>{data.refund.refundNo}</span>
+                ) : data?.reversal ? (
+                    <span>{data.reversal.reversalNo}</span>
                 ) : null
             }
             summary={
@@ -127,6 +135,12 @@ export function CustomerAccountDetailPreview({
                         context="preview"
                         label={data.refund.statusLabel}
                         tone={data.refund.statusTone}
+                    />
+                ) : data?.reversal ? (
+                    <BusinessStatusBadge
+                        context="preview"
+                        label={data.reversal.statusLabel}
+                        tone={data.reversal.statusTone}
                     />
                 ) : null
             }
@@ -239,6 +253,21 @@ export function CustomerAccountDetailPreview({
                                 提交审批
                             </Button>
                         ) : null}
+                        {data.reversal &&
+                        isUnsubmittedReceiptReversalStatus(
+                            data.reversal.status,
+                        ) &&
+                        data.reversal.approval?.allowedActions.includes(
+                            "SUBMIT",
+                        ) &&
+                        onRequestReversalSubmit ? (
+                            <Button
+                                type="button"
+                                onClick={onRequestReversalSubmit}
+                            >
+                                提交审批
+                            </Button>
+                        ) : null}
                         {data.invoice?.allowedActions.includes(
                             "ISSUE_RED_INVOICE",
                         ) ? (
@@ -293,6 +322,14 @@ export function CustomerAccountDetailPreview({
             ) : data?.refund ? (
                 <CustomerRefundDetailBody
                     row={data.refund}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={onDecisionApplied}
+                />
+            ) : data?.reversal ? (
+                <ReceiptReversalDetailBody
+                    row={data.reversal}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}

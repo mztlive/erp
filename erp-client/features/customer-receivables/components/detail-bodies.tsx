@@ -8,10 +8,13 @@ import { Badge } from "@/components/ui/badge"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
 import { CustomerRefundApprovalArea } from "@/features/customer-receivables/components/customer-refund-approval-area"
+import { ReceiptReversalApprovalArea } from "@/features/customer-receivables/components/receipt-reversal-approval-area"
 import { customerReceiptApprovalPhase } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { customerRefundApprovalPhase } from "@/features/customer-receivables/lib/customer-refund-approval"
+import { receiptReversalApprovalPhase } from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import type {
     CustomerRefundRow,
+    ReceiptReversalRow,
     ReceiptRow,
     ReceivableAccountRow,
     SalesInvoiceRow,
@@ -261,6 +264,66 @@ export function CustomerRefundDetailBody({
                 />
                 <Fact
                     label="退款时间"
+                    value={formatDateTime(
+                        row.occurredAt,
+                        "full",
+                        "passthrough",
+                    )}
+                    mono
+                />
+                <Fact label="原因说明" value={row.reasonText} />
+            </div>
+        </div>
+    )
+}
+
+/**
+ * 回款冲正详情。草稿展示绑定卡，运行中/终态嵌入通用审批区。
+ */
+export function ReceiptReversalDetailBody({
+    row,
+    workItemId,
+    expectedTaskVersion,
+    workItemAllowedActions,
+    onDecisionApplied,
+}: {
+    row: ReceiptReversalRow
+    workItemId?: string
+    expectedTaskVersion?: string
+    workItemAllowedActions?: readonly string[]
+    onDecisionApplied?: (view: ApprovalCommandView) => void
+}) {
+    const posted = row.status === "posted" || row.status === "reversed"
+    return (
+        <div className="space-y-5 overflow-auto p-6">
+            {posted ? (
+                <Alert variant="info">
+                    <AlertTitle>已过账记录只读</AlertTitle>
+                    <AlertDescription>
+                        已过账冲正不可编辑、不可删除；纠错须追加新的反向记录。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            <ReceiptReversalApprovalArea
+                phase={receiptReversalApprovalPhase(
+                    row.approval,
+                    row.status === "in_approval" ? "IN_APPROVAL" : row.status,
+                )}
+                approval={row.approval}
+                documentId={row.reversalId}
+                workItemId={workItemId}
+                expectedTaskVersion={expectedTaskVersion}
+                workItemAllowedActions={workItemAllowedActions}
+                onDecisionApplied={onDecisionApplied}
+            />
+            <div className="grid grid-cols-2 gap-3">
+                <Fact label="冲正单号" value={row.reversalNo} mono />
+                <Fact
+                    label="冲正金额"
+                    value={<MoneyValue value={row.amount} taxBasis="gross" />}
+                />
+                <Fact
+                    label="冲正时间"
                     value={formatDateTime(
                         row.occurredAt,
                         "full",

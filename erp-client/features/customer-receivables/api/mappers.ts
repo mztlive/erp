@@ -7,6 +7,7 @@ import type {
     AllowedAction,
     CustomerAccountsQuery,
     CustomerRefundRow,
+    ReceiptReversalRow,
     ReceiptRow,
     ReceivableAccountRow,
     ReceivableEntry,
@@ -24,6 +25,11 @@ import {
     mapCustomerRefundApproval,
 } from "@/features/customer-receivables/lib/customer-refund-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
+import {
+    mapReceiptReversalApproval,
+    receiptReversalStatusLabel,
+    receiptReversalStatusTone,
+} from "@/features/customer-receivables/lib/receipt-reversal-approval"
 
 import type {
     BackendCustomerReceipt,
@@ -31,6 +37,7 @@ import type {
     BackendInvoice,
     BackendInvoiceAllocation,
     BackendReceiptAllocation,
+    BackendReceiptReversal,
     BackendReceivableAccount,
     BackendReceivableEntry,
 } from "./dto"
@@ -290,6 +297,46 @@ export function projectCustomerRefund(
         allowedActions: ["VIEW_DETAIL"],
         actionBlockers: [],
         approval: mapCustomerRefundApproval(refund.approval),
+    }
+}
+
+function mapReversalStatus(s: string): ReceiptReversalRow["status"] {
+    if (s === "reversed" || s === "REVERSED") return "reversed"
+    if (s === "posted" || s === "POSTED") return "posted"
+    if (
+        s === "IN_APPROVAL" ||
+        s === "in_approval" ||
+        s === "pending_review" ||
+        s === "PENDING_REVIEW"
+    ) {
+        return "in_approval"
+    }
+    return "draft"
+}
+
+/**
+ * 把回款冲正详情投影为预览行。ReceiptReversal 为 PROCESS_REQUIRED，只读映射审批绑定。
+ *
+ * @param reversal 冲正 HTTP 载荷。
+ */
+export function projectReceiptReversal(
+    reversal: BackendReceiptReversal,
+): ReceiptReversalRow {
+    const status = mapReversalStatus(reversal.status)
+    return {
+        reversalId: reversal.id,
+        reversalNo: reversal.reversal_no,
+        originalReceiptId: reversal.original_customer_receipt_id,
+        reasonText: reversal.reason_text,
+        amount: reversal.amount,
+        occurredAt: instantToIso(reversal.occurred_at),
+        status,
+        statusLabel: receiptReversalStatusLabel(reversal.status),
+        statusTone: receiptReversalStatusTone(reversal.status),
+        baselineVersion: reversal.version,
+        allowedActions: ["VIEW_DETAIL"],
+        actionBlockers: [],
+        approval: mapReceiptReversalApproval(reversal.approval),
     }
 }
 

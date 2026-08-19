@@ -111,6 +111,17 @@ describe('useCustomerReceivablesUrlState', () => {
         expect(result.current.previewId).toBe('crf-1')
     })
 
+    it('parses reversal previewKind without treating it as refund or invoice', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=receipt&previewKind=reversal&previewId=rr-1',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        const { result } = renderHook(() => useCustomerReceivablesUrlState())
+        expect(result.current.previewKind).toBe('reversal')
+        expect(result.current.previewId).toBe('rr-1')
+    })
+
     it('keeps invoice previewKind on the no-approval path', () => {
         mockedSearchParams.mockReturnValue(
             new URLSearchParams(
