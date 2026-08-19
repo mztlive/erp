@@ -700,7 +700,10 @@ impl CustomerReceiptListParams {
 // ---------------------------------------------------------------------------
 
 /// 发票登记请求（W11 登记草稿销项发票；登记过账与分配走 `post`）。
+///
+/// 客户端不得提交定义 ID 或审批人；未知字段失败关闭。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreateInvoiceRequest {
     /// 发票方向（销项 `Sales` / 进项 `Purchase`；D19 进项登记复用本域 DTO）。
     pub invoice_direction: InvoiceDirection,
@@ -1118,11 +1121,16 @@ pub struct CompleteCardFundsReviewResult {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_sort, CardFundsReviewConclusion, CardFundsReviewResult, CardFundsReviewType,
-        CompleteCardFundsReviewCommand, CustomerReceiptListParams, InvoiceListParams,
-        ReceivableAccountListParams, SortDir,
+        CardFundsReviewConclusion, CardFundsReviewResult, CardFundsReviewType,
+        CompleteCardFundsReviewCommand, CreateInvoiceRequest, CustomerReceiptListParams, InvoiceListParams,
+        InvoiceView, ReceivableAccountListParams, SortDir, normalize_sort,
     };
-    use entities::receivable::{CustomerReceiptStatus, InvoiceDirection, ReceivableAccountStatus};
+    use entities::common::time::BusinessDate;
+    use entities::money::Amount;
+    use entities::receivable::{
+        CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceivableAccountStatus,
+    };
+    use std::str::FromStr;
     use validator::Validate;
 
     #[test]
@@ -1207,6 +1215,62 @@ mod tests {
         let query = invoice.normalized().unwrap();
         assert_eq!(query.invoice_direction, Some(InvoiceDirection::Sales));
         assert_eq!(query.paging.page_size, 99);
+    }
+
+    /// 发票创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
+    #[test]
+    fn invoice_create_and_view_have_no_approval_surface() {
+        let valid = serde_json::json!({
+            "invoice_direction": "sales",
+            "invoice_kind": "blue",
+            "party_id": "p-1",
+            "invoice_no": "001",
+            "invoice_date": "2026-08-06",
+            "gross_amount": "100.00",
+            "net_amount": "88.50",
+            "tax_amount": "11.50"
+        });
+        assert!(serde_json::from_value::<CreateInvoiceRequest>(valid).is_ok());
+        let forged = serde_json::json!({
+            "invoice_direction": "sales",
+            "invoice_kind": "blue",
+            "party_id": "p-1",
+            "invoice_no": "001",
+            "invoice_date": "2026-08-06",
+            "gross_amount": "100.00",
+            "net_amount": "88.50",
+            "tax_amount": "11.50",
+            "definition_id": "forged",
+            "assignee": "forged"
+        });
+        assert!(serde_json::from_value::<CreateInvoiceRequest>(forged).is_err());
+
+        let view = InvoiceView {
+            id: "inv-1".into(),
+            invoice_direction: InvoiceDirection::Sales,
+            invoice_kind: InvoiceKind::Blue,
+            party_id: "p-1".into(),
+            invoice_code: None,
+            invoice_no: "001".into(),
+            invoice_date: BusinessDate::from_ymd(2026, 8, 6).expect("日期合法"),
+            gross_amount: Amount::from_str("100").expect("金额合法"),
+            net_amount: Amount::from_str("88.50").expect("金额合法"),
+            tax_amount: Amount::from_str("11.50").expect("金额合法"),
+            rounding_adjustment_amount: Amount::from_str("0").expect("金额合法"),
+            rounding_reason: None,
+            original_invoice_id: None,
+            status: InvoiceStatus::Draft,
+            version: 1,
+            created_at: 1,
+            allocated_total: Amount::from_str("0").expect("金额合法"),
+            unallocated_amount: Amount::from_str("100").expect("金额合法"),
+            allocations: Vec::new(),
+        };
+        let value = serde_json::to_value(&view).expect("视图可序列化");
+        let object = value.as_object().expect("视图为对象");
+        assert!(!object.contains_key("approval"));
+        assert!(!object.contains_key("definition_id"));
+        assert!(!object.contains_key("assignee"));
     }
 
     #[test]

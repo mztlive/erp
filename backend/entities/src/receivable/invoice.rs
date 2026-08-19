@@ -1,4 +1,7 @@
 //! `invoice` 发票（销项/进项统一表，数据模型 §6.8、§6.9）。
+//!
+//! 合同 §4.3 签署为 `NO_APPROVAL`：实体只保留业务状态，不得新增审批绑定字段
+//! 或审批状态机。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -585,15 +588,17 @@ mod tests {
 
         invoice.mark_registered("admin-2").unwrap();
         assert!(invoice.is_registered());
-        assert!(invoice
-            .update(
-                InvoiceUpdate {
-                    invoice_date: Some(BusinessDate::from_ymd(2026, 8, 7).unwrap()),
-                    ..Default::default()
-                },
-                "admin-3",
-            )
-            .is_err());
+        assert!(
+            invoice
+                .update(
+                    InvoiceUpdate {
+                        invoice_date: Some(BusinessDate::from_ymd(2026, 8, 7).unwrap()),
+                        ..Default::default()
+                    },
+                    "admin-3",
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -624,6 +629,31 @@ mod tests {
         let invoice = Invoice::new(InvoiceId::new("inv-1"), data(), "admin-1").unwrap();
         let back: Invoice = bson::from_document(bson::to_document(&invoice).unwrap()).unwrap();
         assert_eq!(back, invoice);
+    }
+
+    /// 发票无审批约束：不得出现绑定字段或审批状态机。
+    #[test]
+    fn invoice_has_no_approval_binding_or_state_machine() {
+        let invoice = Invoice::new(InvoiceId::new("inv-1"), data(), "admin-1").unwrap();
+        let value = serde_json::to_value(&invoice).unwrap();
+        let object = value.as_object().expect("发票序列化为对象");
+        assert!(!object.contains_key("approval_binding"));
+        assert!(!object.contains_key("approval_subject_version"));
+        assert!(!object.contains_key("pending_allocations"));
+        assert_eq!(invoice.stable.status(), InvoiceStatus::Draft);
+        assert_eq!(InvoiceStatus::Draft.as_str(), "draft");
+        assert_eq!(InvoiceStatus::Registered.as_str(), "registered");
+        assert_eq!(InvoiceStatus::RedInvoiced.as_str(), "red_invoiced");
+
+        let production = include_str!("invoice.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("IN_APPROVAL"));
+        assert!(!production.contains("fn start_approval"));
+        assert!(!production.contains("approval_subject_version"));
+        assert!(!production.contains("ApprovalDefinitionBinding"));
+        assert!(!production.contains("PENDING_REVIEW"));
     }
 
     #[test]

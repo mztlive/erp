@@ -9,8 +9,9 @@
 //!   §6.8 字典未含 FactBase 全部语义字段（fact_no/occurred_at/recorded_at/
 //!   recorded_by/source_type/source_reference/reason_code/reason_text），因此不组合
 //!   FactBase，仅用 `BaseModel` 持久化元数据；
-//! - 状态机 §7.5 / 合同 §4.4.2 覆盖回款（DRAFT→IN_APPROVAL→POSTED→REVERSED）；发票与账户
-//!   状态是固定枚举，数据模型第 7 章未定义其状态机，不发明（§13.3）。
+//! - 状态机 §7.5 / 合同 §4.4.2 覆盖回款（DRAFT→IN_APPROVAL→POSTED→REVERSED）；发票签署为
+//!   `NO_APPROVAL`，不得新增审批绑定字段或审批状态机；发票与账户状态是固定枚举，数据模型
+//!   第 7 章未定义其状态机，不发明（§13.3）。
 
 pub mod customer_receipt;
 pub mod invoice;
