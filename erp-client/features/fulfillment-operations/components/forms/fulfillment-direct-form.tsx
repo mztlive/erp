@@ -10,6 +10,15 @@ import type {
     FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 
+/**
+ * 供应商直发表单。Delivery 为 NO_APPROVAL，只收集承运方、物流单号与发货数量，
+ * 不嵌入绑定卡、决定弹窗、撤回或改派入口。
+ *
+ * @param operation 直发工作单。
+ * @param draft 直发草稿。
+ * @param onChange 草稿变更回调。
+ * @param disabled 只读或提交中禁用。
+ */
 export function FulfillmentDirectForm({
     operation,
     draft,

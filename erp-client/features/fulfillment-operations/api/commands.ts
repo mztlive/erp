@@ -15,6 +15,7 @@ import {
     nowIso,
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
+import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import type {
     BackendDelivery,
@@ -28,6 +29,7 @@ import { formalFromDelivery, formalFromReceipt } from "./outcomes"
 
 /**
  * 保存履约草稿。PurchaseReceipt 为 NO_APPROVAL，入库保存不绑定、不启动审批。
+ * Delivery 为 NO_APPROVAL，仓发/直发保存不绑定、不启动审批。
  *
  * @param input 保存命令。
  * @returns 新的单据版本。
@@ -51,15 +53,17 @@ export async function saveFulfillmentOperation(
         return { editVersion: updated.version }
     }
     if (draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT") {
-        const updated = await apiPut<BackendDelivery>(
-            `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
-            {
-                version: input.expectedDocumentVersion,
-                expected_source_version: input.expectedSourceVersion,
-                idempotency_key: input.idempotencyKey,
-                carrier: draft.carrier || undefined,
-                tracking_no: draft.trackingNo || undefined,
-            },
+        const updated = stripDeliveryApprovalField(
+            await apiPut<BackendDelivery>(
+                `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
+                {
+                    version: input.expectedDocumentVersion,
+                    expected_source_version: input.expectedSourceVersion,
+                    idempotency_key: input.idempotencyKey,
+                    carrier: draft.carrier || undefined,
+                    tracking_no: draft.trackingNo || undefined,
+                },
+            ),
         )
         return { editVersion: updated.version }
     }
@@ -68,9 +72,10 @@ export async function saveFulfillmentOperation(
 
 /**
  * 确认正式单据。PurchaseReceipt 为 NO_APPROVAL，入库确认直接过账，不提交审批。
+ * Delivery 为 NO_APPROVAL，仓发/直发确认直接过账，不提交审批。
  *
  * @param input 确认命令。
- * @returns 成功/失败/待确认结果；入库成功结果不含审批区。
+ * @returns 成功/失败/待确认结果；入库与仓发成功结果不含审批区。
  */
 export async function postFulfillmentOperation(
     input: PostFulfillmentOperationCommand,
@@ -154,7 +159,8 @@ export async function postFulfillmentOperation(
                 const detail = await apiGet<BackendDeliveryDetail>(
                     `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
                 )
-                delivery = detail.delivery
+                // Delivery 为 NO_APPROVAL，确认前丢弃误带的审批绑定。
+                delivery = stripDeliveryApprovalField(detail.delivery)
             } catch (error) {
                 if (!(isApiError(error) && error.status === 404)) throw error
             }
@@ -167,23 +173,27 @@ export async function postFulfillmentOperation(
                 }
             }
 
-            const updated = await apiPut<BackendDelivery>(
-                `/admin/deliveries/${encodeURIComponent(delivery.id)}`,
-                {
-                    version: input.expectedDocumentVersion,
-                    expected_source_version: input.expectedSourceVersion,
-                    idempotency_key: input.idempotencyKey,
-                    carrier: draft.carrier || undefined,
-                    tracking_no: draft.trackingNo || undefined,
-                },
+            const updated = stripDeliveryApprovalField(
+                await apiPut<BackendDelivery>(
+                    `/admin/deliveries/${encodeURIComponent(delivery.id)}`,
+                    {
+                        version: input.expectedDocumentVersion,
+                        expected_source_version: input.expectedSourceVersion,
+                        idempotency_key: input.idempotencyKey,
+                        carrier: draft.carrier || undefined,
+                        tracking_no: draft.trackingNo || undefined,
+                    },
+                ),
             )
-            const posted = await apiPost<BackendDelivery>(
-                `/admin/deliveries/${encodeURIComponent(delivery.id)}/post`,
-                {
-                    version: updated.version,
-                    expected_source_version: input.expectedSourceVersion,
-                    idempotency_key: input.idempotencyKey,
-                },
+            const posted = stripDeliveryApprovalField(
+                await apiPost<BackendDelivery>(
+                    `/admin/deliveries/${encodeURIComponent(delivery.id)}/post`,
+                    {
+                        version: updated.version,
+                        expected_source_version: input.expectedSourceVersion,
+                        idempotency_key: input.idempotencyKey,
+                    },
+                ),
             )
             return {
                 status: "succeeded",
@@ -306,6 +316,7 @@ export async function postFulfillmentOperation(
 
 /**
  * 复核暂未确认的处理结果。PurchaseReceipt 为 NO_APPROVAL，已入库事实不含审批绑定。
+ * Delivery 为 NO_APPROVAL，已发货事实不含审批绑定。
  *
  * @param input 复核命令。
  * @returns 已过账则返回正式结果，否则保持未知。
@@ -356,23 +367,21 @@ export async function resolveUnknownFulfillmentResult(
                 const d = await apiGet<BackendDeliveryDetail>(
                     `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
                 )
-                if (
-                    d.delivery.status === "SHIPPED" ||
-                    d.delivery.status === "SIGNED"
-                ) {
+                const delivery = stripDeliveryApprovalField(d.delivery)
+                if (delivery.status === "SHIPPED" || delivery.status === "SIGNED") {
                     return {
                         status: "succeeded",
                         outcome: {
                             kind: "POSTED",
                             operationId: input.operationId,
                             factType: "DELIVERY",
-                            factId: d.delivery.id,
-                            factNo: d.delivery.delivery_no,
-                            formalStatus: d.delivery.status,
+                            factId: delivery.id,
+                            factNo: delivery.delivery_no,
+                            formalStatus: delivery.status,
                             occurredAt:
-                                secsToIso(d.delivery.shipped_at) || nowIso(),
+                                secsToIso(delivery.shipped_at) || nowIso(),
                             operationType:
-                                d.delivery.delivery_type === "SUPPLIER_DIRECT"
+                                delivery.delivery_type === "SUPPLIER_DIRECT"
                                     ? "SUPPLIER_DIRECT"
                                     : "WAREHOUSE_SHIP",
                             inventoryDelta: [],
@@ -381,9 +390,9 @@ export async function resolveUnknownFulfillmentResult(
                             acceptanceRequired: true,
                             acceptanceNextStep: "",
                             inventoryImpactSummary: "",
-                            reference: d.delivery.delivery_no,
-                            salesOrderId: d.delivery.sales_order_id,
-                            salesOrderNo: d.delivery.sales_order_id,
+                            reference: delivery.delivery_no,
+                            salesOrderId: delivery.sales_order_id,
+                            salesOrderNo: delivery.sales_order_id,
                         },
                     }
                 }
