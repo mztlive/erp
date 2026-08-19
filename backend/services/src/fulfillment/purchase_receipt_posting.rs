@@ -585,4 +585,28 @@ mod tests {
             "全部收满视为已完成"
         );
     }
+
+    /// 过账路径不得启动审批、不得创建任务、不得选择定义。
+    #[test]
+    fn post_does_not_start_approval_or_create_tasks() {
+        let production = include_str!("purchase_receipt_posting.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("pub async fn post_purchase_receipt"));
+        assert!(!production.contains("start_approval"));
+        assert!(!production.contains("prepare_start"));
+        assert!(!production.contains("WorkItem"));
+        assert!(!production.contains("definition_id"));
+        assert!(!production.contains("PurchaseReceiptAdapter"));
+        assert!(!production.contains("bind_published_definition_on_document_create"));
+        let post = production
+            .split("pub async fn post_purchase_receipt")
+            .nth(1)
+            .and_then(|rest| rest.split("#[cfg(test)]").next())
+            .expect("post_purchase_receipt 生产片段");
+        assert!(post.contains("mark_posted"));
+        assert!(!post.contains("submit_"));
+        assert!(!post.contains("start_approval"));
+    }
 }

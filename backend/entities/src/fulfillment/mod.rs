@@ -11,7 +11,8 @@
 //! - 履约地址等敏感值按 §4.5.5/P1 §2.1 建模为加密值 + 带密钥 HMAC 查询指纹
 //!   两个字段，自定义 `Debug` 不泄漏明文（实现见 [`fingerprint`]）；
 //! - 状态机按 §7.5：单据 `DRAFT → POSTED → REVERSED`（交付为 `SHIPPED/SIGNED`、
-//!   电子与服务为 `CONFIRMED`），`REVERSED` 为不可逆终态。
+//!   电子与服务为 `CONFIRMED`），`REVERSED` 为不可逆终态；
+//! - `PurchaseReceipt` 签署为 `NO_APPROVAL`，不得新增审批绑定字段或审批状态机。
 
 pub mod acceptance_fulfillment_allocation;
 pub mod customer_acceptance;

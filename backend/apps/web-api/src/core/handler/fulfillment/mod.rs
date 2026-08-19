@@ -607,3 +607,61 @@ pub async fn customer_acceptance_eligible(
 
     Ok(ApiResponse::ok_with_data(view))
 }
+
+#[cfg(test)]
+mod tests {
+    use services::fulfillment::CreatePurchaseReceiptRequest;
+
+    /// 采购收货 HTTP 只暴露创建/过账，不得提交审批或选择定义。
+    #[test]
+    fn purchase_receipt_http_proves_no_approval() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("create_purchase_receipt"));
+        assert!(production.contains("purchase_receipt_create"));
+        assert!(production.contains("purchase_receipt_detail"));
+        assert!(production.contains("purchase_receipt_post"));
+        assert!(!production.contains("submit_purchase_receipt"));
+        assert!(!production.contains("purchase_receipt_submit"));
+        assert!(!production.contains("cancel_purchase_receipt"));
+        assert!(!production.contains("purchase_receipt_cancel"));
+        assert!(!production.contains("start_purchase_receipt"));
+        assert!(!production.contains("PurchaseReceiptAdapter"));
+        let create = production
+            .split("pub async fn purchase_receipt_create")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn purchase_receipt_update").next())
+            .expect("purchase_receipt_create 生产片段");
+        assert!(create.contains("create_purchase_receipt"));
+        assert!(!create.contains("submit_"));
+        assert!(!create.contains("start_approval"));
+        assert!(!create.contains("definition_id"));
+        let post = production
+            .split("pub async fn purchase_receipt_post")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn delivery_list").next())
+            .expect("purchase_receipt_post 生产片段");
+        assert!(post.contains("post_purchase_receipt"));
+        assert!(!post.contains("start_approval"));
+        assert!(!post.contains("WorkItem"));
+        assert!(!post.contains("definition_id"));
+        assert!(
+            serde_json::from_value::<CreatePurchaseReceiptRequest>(serde_json::json!({
+                "receipt_no": "PR-1",
+                "purchase_order_id": "po-1",
+                "warehouse_id": "wh-1",
+                "lines": [{
+                    "purchase_order_revision_line_id": "porl-1",
+                    "received_quantity": "10",
+                    "qualified_quantity": "10",
+                    "rejected_quantity": "0"
+                }],
+                "definition_id": "forged",
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
+    }
+}

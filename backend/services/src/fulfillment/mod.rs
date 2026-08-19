@@ -1,6 +1,8 @@
 //! 域 D16 `fulfillment` 服务编排（页面：W06 客户验收、W09 收货与发货/交付与代发）。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
+//! - 采购收货创建必须在同一事务注册 `BusinessDocument` 并调用统一绑定端口；
+//!   `NO_APPROVAL` 返回空绑定，不查询发布定义、不启动实例、不建任务；
 //! - 单集合无跨步骤原子性要求的 CRUD 传入 `&mut NoTransaction`；
 //! - 表头+行创建、状态迁移+审计、过账（§8.2 第 1/2/5 条跨集合原子性）使用
 //!   `database::Transactional::with_transaction`。
@@ -17,6 +19,8 @@
 //! `Draft → Posted` 状态机三重防护，重复过账返回 409，不产生第二条正式事实。
 
 use mongodb::Database;
+
+use crate::iam::{self, SharedRbacService};
 
 mod acceptance_eligibility;
 mod customer_acceptance;
@@ -51,6 +55,7 @@ pub use self::dto::{
 pub struct FulfillmentService {
     db: Database,
     fingerprint_key: Vec<u8>,
+    rbac: SharedRbacService,
 }
 
 impl FulfillmentService {
@@ -63,6 +68,11 @@ impl FulfillmentService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database, fingerprint_key: Vec<u8>) -> Self {
-        Self { db, fingerprint_key }
+        let rbac = iam::shared_rbac_service(db.clone());
+        Self {
+            db,
+            fingerprint_key,
+            rbac,
+        }
     }
 }
