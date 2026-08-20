@@ -491,7 +491,7 @@ erDiagram
 - `(approval_process_definition_id, from_node_key, event)` 唯一；
 - 节点和连线只允许随 `DRAFT` 定义整组替换；发布或退役后结构不可修改；
 - 服务端必须根据连续节点顺序生成连线：通过进入下一节点或 `APPROVED`，驳回回到入口节点；客户端不得提交连线；
-- `SalesOrder` 发布时必须恰好存在一个 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION`；其他类型不得使用该用途；
+- `SalesOrder` 发布时不再要求 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION`；其他类型不得使用该用途；
 - 不得保存运行种类、外部流程 ID、角色池、候选人、解析脚本、业务动作字符串或任意回调 URL。
 
 #### `business_document` 审批绑定

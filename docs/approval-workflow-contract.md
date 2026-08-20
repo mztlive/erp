@@ -230,7 +230,7 @@ bpm          -> entity-core + entity-macros + 外部基础库
 
 1. `SalesOrder` 与 `VoucherSalesOrder` 的允许提交状态均为 `DRAFT` / `NOT_SUBMITTED`。销售提交必须直接启动审批实例、冻结 `subject_version`、把 `ReviewStatus` 置为 `IN_APPROVAL` 并创建第一节点的 `DocumentApproval` 任务；
 2. 不得设置提交准入阶段。`ReviewStatus` 的提交后继只能是 `IN_APPROVAL`；不得新增「准入已通过」字段、准入状态或第二条启动路径；
-3. `SalesOrder` 的已发布定义必须恰好包含一个 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION` 的普通单人节点。该用途只用于 ERP 发布完整性校验和页面说明；BPM 推进、决定 DTO 和业务副作用不得按该用途分支；
+3. `SalesOrder` 已发布定义不再要求 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION`。流程管理员按普通节点配置销售单审批链；空白草稿可预置一个名为「采购确认」的普通节点，允许删除。BPM 推进、决定 DTO 和业务副作用不得按用途分支；
 4. `subject_snapshot.submitted_by` 固定记该销售单的提交销售；
 5. 12 个 `PROCESS_REQUIRED` 类型的 `on_approval_start` 一律由该类型自身的提交命令调用，不存在由其它环节代为启动的类型。
 
@@ -255,13 +255,13 @@ bpm          -> entity-core + entity-macros + 外部基础库
 
 **采购确认节点**
 
-1. `SalesOrder` 定义必须恰好包含一个 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION` 的节点。流程管理员可以配置节点名称、顺序和审批人，但不得删除、复制或改为其它用途；
+1. `SalesOrder` 定义不再强制包含 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION`。流程管理员按普通节点增删、排序、改名称和指定审批人；是否设置采购相关节点由管理员决定；
 2. 该节点的决定只有通过和驳回，请求体只允许第 14.3 节的五个字段。驳回按第 11 章处理：不改变销售单和 `subject_version`，实例轮次加一并回到入口节点；
 3. 原双向环 `PENDING_PROCUREMENT_CONFIRMATION ↔ PENDING_LOW_MARGIN_SUPERIOR` 随低毛利环节删除而消失，因此第 3.2 节「不交付条件分支和除驳回回入口以外的环路」的约束不再被违反，该环节成为合法审批节点；
 4. **选源事实后移到采购单**：原采购二次确认承载的「选择供应商供给、最新成本、供货数量、预计交期、履约方式」不再属于销售单审批，一律在销售单生效后创建采购单时录入（`erp-phase-1.md` §7.4）。因此审批决定不需要携带任何业务字段，第 14.3 节的决定请求合同保持不变；
 5. 必须删除：`ProcurementConfirmation`、`ProcurementConfirmationLine` 实体及其集合、`ProcurementConfirmationStatus`、`ProcurementRejectReasonCode`、`WorkItemType::ProcurementConfirmation` 及其全部 Repository、Service、Handler、路由、索引、前端类型与文案。驳回原因统一使用审批驳回原因文本，不保留独立的采购驳回原因代码枚举；
 6. 固定业务口径：销售单生效前不存在已选定的供应商成本，因此生效前的毛利只能是估算值，口径见第 4.4.6 节。
-7. `services::approval` 只在定义发布时按 `DocumentType` 校验必备用途；运行时不得因该用途改变 BPM 路由、决定字段、驳回规则或领域动作。
+7. `services::approval` 发布时不再要求销售单采购确认用途；其它类型仍不得带用途。运行时不得因用途改变 BPM 路由、决定字段、驳回规则或领域动作。
 
 **低毛利上级确认**
 
@@ -394,7 +394,7 @@ line_count             行数
 2. 不得保存角色池、候选人集合、任意表达式或处理人解析脚本。
 3. 同一人员是否允许出现在多个节点，由对应 `DocumentType` 的岗位分离政策决定。
 4. 定义中的指定人员不自动获得单据读取权限；发布、绑定、启动和决定时仍必须执行权限及 DataScope 校验。
-5. `SalesOrder` 发布时必须恰好存在一个 `SALES_ORDER_PROCUREMENT_CONFIRMATION`；其他 `DocumentType` 不得使用该用途。用途完整性由 `services::approval` 的穷尽政策校验，BPM 图规则不得包含 ERP 用途常量。
+5. `SalesOrder` 发布不再要求 `SALES_ORDER_PROCUREMENT_CONFIRMATION`；其他 `DocumentType` 仍不得使用该用途。已有草稿或已发布版本上的遗留用途不阻断发布，保存时清除。BPM 图规则不得包含 ERP 用途常量。
 
 ### 5.3 连线定义
 
@@ -436,7 +436,7 @@ N3 --REJECT--> N1
 
 1. 只有具备该 `DocumentType` 流程管理权限的管理员可以创建和编辑草稿。
 2. 同一 `document_type` 同时最多保留一个活动草稿；需要并行草稿时必须先修订本合同。
-3. 草稿允许增删节点、调整顺序、修改节点名称和指定审批人。`SalesOrder` 空白草稿在第一次保存节点前可为零节点；第一次整组保存由服务端把顺序第一的节点赋予 `SALES_ORDER_PROCUREMENT_CONFIRMATION`，之后该节点不得删除或复制，只能修改名称、顺序和指定审批人；
+3. 草稿允许增删节点、调整顺序、修改节点名称和指定审批人。`SalesOrder` 空白草稿在第一次保存节点前可为零节点；页面可预置一个名为「采购确认」的普通节点，允许删除。服务端不再给任何节点盖章用途，也不再阻止删除原采购确认节点；
 4. 普通制单人、审批人和单据查看人不得修改流程草稿。
 5. 草稿修改必须携带 `expected_definition_lock_version`。
 

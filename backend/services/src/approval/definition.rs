@@ -37,8 +37,7 @@ use super::definition_dto::{
 use super::policy::{
     ensure_actions_registered, policy_of, require_process_required, validate_required_purposes,
     ApprovalRequirement, ApproverEligibilityPolicy, DocumentApprovalPolicy, ProcessRequiredApprovalPolicy,
-    SeparationOfDutiesPolicy, ALL_DOCUMENT_TYPES, SALES_ORDER_PROCUREMENT_CONFIRMATION,
-    STATIC_APPROVE_PERMISSION,
+    SeparationOfDutiesPolicy, ALL_DOCUMENT_TYPES, STATIC_APPROVE_PERMISSION,
 };
 use super::process_kind::{document_type_of, process_kind_of};
 
@@ -985,7 +984,17 @@ async fn copy_published_draft(
     finish_graph(policy.process_kind, version, name, actor, nodes)
 }
 
-/// 复制节点并生成新主键与不可预测 `node_key`。
+/// 复制节点并生成新主键与不可预测 `node_key`，不复制历史用途。
+///
+/// # 参数
+/// * `source` - 被复制的已发布节点
+/// * `definition_id` - 新草稿定义 ID
+///
+/// # 返回
+/// 返回新草稿节点。
+///
+/// # 错误
+/// 节点构造失败时返回错误。
 fn copy_nodes(
     source: &[ApprovalNodeDefinition],
     definition_id: String,
@@ -1000,7 +1009,7 @@ fn copy_nodes(
                 process_definition_id: process_id.clone(),
                 node_key: next_id(),
                 node_name: node.node_name.clone(),
-                node_purpose: node.node_purpose.clone(),
+                node_purpose: None,
                 display_order: node.display_order,
                 assignee_participant_id: node.assignee_participant_id.clone(),
                 assignee_label_snapshot: node.assignee_label_snapshot.clone(),
@@ -1214,10 +1223,21 @@ async fn replace_graph(
     })
 }
 
-/// 规划替换后的节点：校验请求、保持或生成 `node_key`、分配用途。
+/// 规划替换后的节点：校验请求、保持或生成 `node_key`，并清除节点用途。
+///
+/// # 参数
+/// * `graph` - 当前草稿图
+/// * `policy` - 单据类型政策，节点规划不再按用途分支
+/// * `requests` - 整组替换节点请求
+///
+/// # 返回
+/// 返回按显示顺序规划后的节点。
+///
+/// # 错误
+/// 数量、顺序、名称、节点身份不合法时返回校验错误。
 fn plan_nodes(
     graph: &DefinitionGraph,
-    policy: &ProcessRequiredApprovalPolicy,
+    _policy: &ProcessRequiredApprovalPolicy,
     requests: &[DefinitionNodeRequest],
 ) -> Result<Vec<ApprovalNodeDefinition>> {
     ensure_node_count(requests.len())?;
@@ -1232,7 +1252,7 @@ fn plan_nodes(
             request,
         )?);
     }
-    assign_purposes(policy, &graph.nodes, planned)
+    Ok(clear_node_purposes(planned))
 }
 
 /// 规划单个节点。
@@ -1286,49 +1306,21 @@ fn resolve_node_identity(
     ))
 }
 
-/// 按政策分配或保持节点用途。
-fn assign_purposes(
-    policy: &ProcessRequiredApprovalPolicy,
-    previous: &[ApprovalNodeDefinition],
-    mut nodes: Vec<ApprovalNodeDefinition>,
-) -> Result<Vec<ApprovalNodeDefinition>> {
-    if policy.document_type != DocumentType::SalesOrder {
-        for node in &mut nodes {
-            node.node_purpose = None;
-        }
-        return Ok(nodes);
+/// 保存与复制时清除节点用途。销售单不再盖章或强制保留采购确认用途。
+///
+/// # 参数
+/// * `nodes` - 规划或复制后的节点
+///
+/// # 返回
+/// 返回已清除用途的节点列表。
+///
+/// # 错误
+/// 无。
+fn clear_node_purposes(mut nodes: Vec<ApprovalNodeDefinition>) -> Vec<ApprovalNodeDefinition> {
+    for node in &mut nodes {
+        node.node_purpose = None;
     }
-    if let Some(required) = previous
-        .iter()
-        .find(|node| node.node_purpose.as_deref() == Some(SALES_ORDER_PROCUREMENT_CONFIRMATION))
-    {
-        return keep_sales_order_purpose(&mut nodes, &required.base.id);
-    }
-    let first = nodes
-        .iter_mut()
-        .find(|node| node.display_order == 1)
-        .ok_or_else(|| Error::ValidationError("销售单首次保存必须包含顺序第一节点".to_string()))?;
-    first.node_purpose = Some(SALES_ORDER_PROCUREMENT_CONFIRMATION.to_string());
-    Ok(nodes)
-}
-
-/// 后续替换必须保留既有采购确认节点 ID 与用途。
-fn keep_sales_order_purpose(
-    nodes: &mut [ApprovalNodeDefinition],
-    required_id: &str,
-) -> Result<Vec<ApprovalNodeDefinition>> {
-    let Some(target) = nodes.iter_mut().find(|node| node.base.id == required_id) else {
-        return Err(Error::ValidationError(
-            "销售单必须保留既有采购确认用途节点".to_string(),
-        ));
-    };
-    target.node_purpose = Some(SALES_ORDER_PROCUREMENT_CONFIRMATION.to_string());
-    for node in nodes.iter_mut() {
-        if node.base.id != required_id {
-            node.node_purpose = None;
-        }
-    }
-    Ok(nodes.to_vec())
+    nodes
 }
 
 /// 批量读取审批人并校验账号、静态权限与可静态判断的岗位分离。
@@ -2218,6 +2210,7 @@ fn definition_not_found() -> Error {
 
 #[cfg(test)]
 mod tests {
+    use super::super::policy::SALES_ORDER_PROCUREMENT_CONFIRMATION;
     use super::*;
     use bpm::graph::LinearTransitionDraft;
     use bpm::ids::ApprovalProcessDefinitionId;
@@ -2415,9 +2408,9 @@ mod tests {
         assert!(matches!(foreign, Error::ValidationError(message) if message.contains("跨定义")));
     }
 
-    /// 销售单首次保存赋予唯一采购确认用途，其它类型为零。
+    /// 销售单首次保存不再盖章采购确认用途，其它类型同样为零。
     #[test]
-    fn sales_order_purpose_is_unique_and_other_types_have_none() {
+    fn sales_order_does_not_stamp_procurement_purpose() {
         let empty = DefinitionGraph {
             definition: draft_definition(ProcessKind::SalesOrder, "pending"),
             nodes: Vec::new(),
@@ -2443,10 +2436,7 @@ mod tests {
             ],
         )
         .unwrap();
-        assert_eq!(
-            first[0].node_purpose.as_deref(),
-            Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)
-        );
+        assert!(first[0].node_purpose.is_none());
         assert!(first[1].node_purpose.is_none());
         let kept = plan_nodes(
             &DefinitionGraph {
@@ -2472,10 +2462,7 @@ mod tests {
         )
         .unwrap();
         let purpose_node = kept.iter().find(|node| node.base.id == first[0].base.id).unwrap();
-        assert_eq!(
-            purpose_node.node_purpose.as_deref(),
-            Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)
-        );
+        assert!(purpose_node.node_purpose.is_none());
         let stock = require_process_required(DocumentType::StockAdjustment).unwrap();
         let other = plan_nodes(
             &DefinitionGraph {
@@ -2657,14 +2644,15 @@ mod tests {
                     Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
                 ],
             ),
-            validate_required_purposes(&sales, &[Some("WRONG_PURPOSE")]),
         ] {
-            assert!(purposes.is_err());
-            assert!(!matches!(
-                decide_publish_write(Ok(()), purposes, Ok(()), Ok(())),
-                Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
-            ));
+            assert!(purposes.is_ok());
         }
+        let unknown = validate_required_purposes(&sales, &[Some("WRONG_PURPOSE")]);
+        assert!(unknown.is_err());
+        assert!(!matches!(
+            decide_publish_write(Ok(()), unknown, Ok(()), Ok(())),
+            Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
+        ));
         assert!(matches!(
             decide_publish_write(Ok(()), Ok(()), Ok(()), Ok(())),
             Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
@@ -3000,7 +2988,7 @@ mod tests {
         assert!(replay.contains("map_model_error"));
     }
 
-    /// replace/plan_nodes 边界：0/21、空名、顺序、重复 ID、删除采购确认。
+    /// replace/plan_nodes 边界：0/21、空名、顺序、重复 ID、允许删除原采购确认节点。
     #[test]
     fn plan_nodes_rejects_invalid_replacements() {
         let stock = require_process_required(DocumentType::StockAdjustment).unwrap();
@@ -3056,11 +3044,10 @@ mod tests {
             &sales,
             &[request(Some(&first[1].base.id), "财务", 1, "u2")],
         )
-        .unwrap_err();
-        assert!(matches!(
-            dropped,
-            Error::ValidationError(message) if message.contains("采购确认")
-        ));
+        .unwrap();
+        assert_eq!(dropped.len(), 1);
+        assert_eq!(dropped[0].node_name, "财务");
+        assert!(dropped[0].node_purpose.is_none());
     }
 
     /// EMPTY 零节点草稿允许持续到第一次 replace；copy 生成新主键与不可预测 node_key。
@@ -3073,11 +3060,10 @@ mod tests {
         assert!(draft.transitions.is_empty());
         assert_ne!(draft.definition.base.id, "def-1");
         assert!(plan_nodes(&draft, &sales, &[]).is_err());
-        assert_eq!(
+        assert!(
             plan_nodes(&draft, &sales, &[request(None, "采购确认", 1, "u1")]).unwrap()[0]
                 .node_purpose
-                .as_deref(),
-            Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)
+                .is_none()
         );
 
         let source = vec![
@@ -3099,10 +3085,7 @@ mod tests {
         assert_ne!(copied[0].node_key, source[0].node_key);
         assert_ne!(copied[1].node_key, source[1].node_key);
         assert_ne!(copied[0].node_key, again[0].node_key);
-        assert_eq!(
-            copied[0].node_purpose.as_deref(),
-            Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)
-        );
+        assert!(copied[0].node_purpose.is_none());
         assert_eq!(copied[0].assignee_participant_id.as_str(), "buyer");
         assert_eq!(copied[1].assignee_participant_id.as_str(), "cfo");
         assert!(copied[1].node_purpose.is_none());

@@ -53,7 +53,7 @@ display_order
 assignee_user_id
 ```
 
-新增节点的 `node_key` 必须由服务端生成。编辑已有节点时，`node_id` 只用于定位本草稿内节点，其 `node_key` 保持不变；来自其他定义、已删除节点或客户端提交的任意 `node_key` 必须拒绝。服务端固定 `node_type=USER_APPROVAL`，并读取审批人显示名。`node_purpose` 也只能由服务端按政策生成和保持：`SalesOrder` 空白草稿第一次整组保存时，服务端把顺序第一节点赋予唯一 `SALES_ORDER_PROCUREMENT_CONFIRMATION`；之后每次替换都必须保留该既有节点 ID 及用途，客户端不得删除、复制或改写；其他类型不得包含用途。请求必须使用 `deny_unknown_fields`，不得接受 `node_key`、`node_type`、`node_purpose`、`assignment_mode`、角色、候选池、resolver、handler、action、任意 transition 或终点。
+新增节点的 `node_key` 必须由服务端生成。编辑已有节点时，`node_id` 只用于定位本草稿内节点，其 `node_key` 保持不变；来自其他定义、已删除节点或客户端提交的任意 `node_key` 必须拒绝。服务端固定 `node_type=USER_APPROVAL`，并读取审批人显示名。`node_purpose` 由服务端在保存时清除，不得由客户端写入：`SalesOrder` 不再盖章或强制保留采购确认用途；其他类型不得包含用途。请求必须使用 `deny_unknown_fields`，不得接受 `node_key`、`node_type`、`node_purpose`、`assignment_mode`、角色、候选池、resolver、handler、action、任意 transition 或终点。
 
 ### 3.2 查询视图
 
@@ -174,7 +174,7 @@ Ni REJECT -> entry_node
 - [ ] 陈旧锁版本返回冲突且无部分节点替换。
 - [ ] 客户端提交连线、角色池或处理器字段会被拒绝。
 - [ ] 新节点 key 仅由服务端生成；已有节点不能借编辑请求更换 key 或跨定义引用。
-- [ ] `SalesOrder` 发布定义恰好包含一个采购确认用途节点，其他类型不能使用该用途；客户端不能提交或改写用途。
+- [ ] `SalesOrder` 发布定义不强制采购确认用途节点，其他类型不能使用该用途；客户端不能提交或改写用途。
 - [ ] 生成器对 1、2、20 节点产生唯一确定结果。
 - [ ] 对 `DocumentType` 的政策注册和 `ProcessKind` 映射均为穷尽 match，任何新增类型都会触发编译失败或完整性测试失败。
 - [ ] Service 中不存在 BPM 图算法、状态枚举或流程模型第二定义源。

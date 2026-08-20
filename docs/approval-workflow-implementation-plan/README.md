@@ -54,7 +54,7 @@ DOC-A 必须先于 P0 合并。DOC-A 合并前，P0-A 不得开始。下列合�
 1. 全部固定 `DocumentType` 为 **20** 个，其中 **12** 个 `PROCESS_REQUIRED`、**8** 个 `NO_APPROVAL`；
 2. `SalesOrder` 已按 `BusinessType` 拆为两个独立 `DocumentType`：`SalesOrder`（`GoodsService`）与新增 `VoucherSalesOrder`（`Voucher`）。创建时必须以穷尽 `match` 分派，不得在同一类型内暗中选择流程；
 3. 9 个类型必须新增 `approval_subject_version: u32` 作为 `subject_version` 权威来源，不得复用 `BaseModel.version`；`PurchaseOrder` 不得使用最终通过后才生成的 `purchase_revision.revision_no`；
-4. 不存在团队业务任务。`SalesOrder` 定义必须恰好包含一个采购确认用途节点，卡券运营是普通审批节点，低毛利上级确认整体删除；12 个类型的审批启动点一律是该类型自身的提交命令（合同 §4.4.1、§4.4.3、§5.2）；
+4. 不存在团队业务任务。`SalesOrder` 定义不再强制采购确认用途节点，卡券运营是普通审批节点，低毛利上级确认整体删除；12 个类型的审批启动点一律是该类型自身的提交命令（合同 §4.4.1、§4.4.3、§5.2）；
 5. `ReviewStatus` 为**三值**（`NOT_SUBMITTED`、`IN_APPROVAL`、`APPROVED`）；12 个类型均删除审批导致的业务 `REJECTED`，受控撤回和受阻取消统一回到可修正草稿，`PurchaseReviewStatus` 必须删除（合同 §4.4.2 第 1、5 条）；
 6. 全系统只有一种责任模型：任何 `OPEN` 任务都有非空 `owner_user_id`。`AssignmentMode` 枚举与 `assignment_mode` 字段、`claim`/`start_processing`/`release_to_team`、`AssignmentSource::SelfStart`/`AdminRelease` 全部删除（合同 §1 第 7 条、§13.2）；
 7. 待办队列与个人工作台合并为唯一 `/workspace` 页面，布局为列表 + 详情主从（合同 §16.4）。

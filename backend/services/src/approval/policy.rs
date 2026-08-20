@@ -10,7 +10,7 @@ use crate::errors::{Error, Result};
 
 use super::process_kind::process_kind_of;
 
-/// `SalesOrder` 发布时必须恰好存在的采购确认用途键。
+/// 历史销售单草稿可能仍带有的采购确认用途键。发布不再要求，保存时清除。
 pub const SALES_ORDER_PROCUREMENT_CONFIRMATION: &str = "SALES_ORDER_PROCUREMENT_CONFIRMATION";
 
 /// 定义期校验指定审批人的静态审批权限。
@@ -40,8 +40,6 @@ pub const ALL_DOCUMENT_TYPES: [DocumentType; 20] = [
     DocumentType::PurchaseReturnOrder,
 ];
 
-const SALES_ORDER_PURPOSES: &[ApprovalNodePurpose] =
-    &[ApprovalNodePurpose::SalesOrderProcurementConfirmation];
 const NO_PURPOSES: &[ApprovalNodePurpose] = &[];
 
 const SALES_PURCHASE_SNAPSHOT: &[ApprovalSubjectSnapshotField] = &[
@@ -82,10 +80,10 @@ pub enum ApprovalRequirement {
     ProcessRequired,
 }
 
-/// 发布时必须满足的 ERP 节点用途。
+/// 发布时必须满足的 ERP 节点用途。当前政策均不要求用途。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApprovalNodePurpose {
-    /// `SalesOrder` 唯一采购确认节点。
+    /// 历史 `SalesOrder` 采购确认用途，仅用于识别遗留数据。
     SalesOrderProcurementConfirmation,
 }
 
@@ -322,7 +320,7 @@ pub struct ProcessRequiredApprovalPolicy {
     pub approver_eligibility_policy: ApproverEligibilityPolicy,
     /// 岗位分离策略。
     pub separation_of_duties_policy: SeparationOfDutiesPolicy,
-    /// 发布时必须恰好满足的用途集合。
+    /// 发布时必须恰好满足的用途集合。销售单与其它必须审批类型均为空。
     pub required_node_purposes: &'static [ApprovalNodePurpose],
     /// 提交版本权威来源。
     pub subject_version_source: ApprovalSubjectVersionSource,
@@ -398,7 +396,7 @@ pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> 
     match document_type {
         DocumentType::SalesOrder => process_required(
             document_type,
-            SALES_ORDER_PURPOSES,
+            NO_PURPOSES,
             ApprovalSubjectVersionSource::SalesOrderSubmissionNo,
             SALES_PURCHASE_SNAPSHOT,
             ApprovalDomainAction::SalesOrderStartApprovalSubmission,
@@ -530,8 +528,15 @@ pub fn ensure_actions_registered(policy: &ProcessRequiredApprovalPolicy) -> Resu
 
 /// 按政策校验节点用途完整性。
 ///
+/// # 参数
+/// * `policy` - 必须审批政策
+/// * `node_purposes` - 当前定义各节点用途
+///
+/// # 返回
+/// 校验通过时返回 `()`。
+///
 /// # 错误
-/// `SalesOrder` 不是恰好一个采购确认用途，或其他类型出现用途时返回错误。
+/// 非销售单出现任何用途，或销售单出现未知用途时返回错误。销售单允许没有用途，也允许遗留采购确认用途。
 pub fn validate_required_purposes(
     policy: &ProcessRequiredApprovalPolicy,
     node_purposes: &[Option<&str>],
@@ -541,10 +546,10 @@ pub fn validate_required_purposes(
         .filter_map(|purpose| *purpose)
         .collect::<Vec<_>>();
     match policy.required_node_purposes {
-        [ApprovalNodePurpose::SalesOrderProcurementConfirmation] => {
-            ensure_single_sales_order_purpose(&actual)
-        }
         [] => {
+            if policy.document_type == DocumentType::SalesOrder {
+                return ensure_sales_order_purposes_optional(&actual);
+            }
             if actual.is_empty() {
                 return Ok(());
             }
@@ -696,17 +701,24 @@ fn ensure_real_action(action: ApprovalDomainAction) -> Result<()> {
     }
 }
 
-/// 校验销售单恰好一个采购确认用途。
+/// 销售单不再强制采购确认用途；仅拒绝未知用途字符串。
+///
+/// # 参数
+/// * `actual` - 节点上已出现的用途值
+///
+/// # 返回
+/// 全为空或均为遗留采购确认用途时返回 `()`。
 ///
 /// # 错误
-/// 用途数量或取值不正确时返回错误。
-fn ensure_single_sales_order_purpose(actual: &[&str]) -> Result<()> {
-    if actual.len() == 1 && actual[0] == SALES_ORDER_PROCUREMENT_CONFIRMATION {
+/// 出现其它用途字符串时返回校验错误。
+fn ensure_sales_order_purposes_optional(actual: &[&str]) -> Result<()> {
+    if actual
+        .iter()
+        .all(|purpose| *purpose == ApprovalNodePurpose::SalesOrderProcurementConfirmation.as_str())
+    {
         return Ok(());
     }
-    Err(Error::ValidationError(
-        "销售单必须恰好包含一个采购确认用途节点".to_string(),
-    ))
+    Err(Error::ValidationError("销售单不得包含未知节点用途".to_string()))
 }
 
 #[cfg(test)]
@@ -752,11 +764,11 @@ mod tests {
         }
     }
 
-    /// 销售单政策含唯一采购确认用途、提交版本与三类真实动作。
+    /// 销售单政策不含强制用途、提交版本与三类真实动作。
     #[test]
     fn sales_order_policy_matches_contract_matrix() {
         let policy = require_process_required(DocumentType::SalesOrder).expect("销售单必须审批");
-        assert_eq!(policy.required_node_purposes, SALES_ORDER_PURPOSES);
+        assert_eq!(policy.required_node_purposes, NO_PURPOSES);
         assert_eq!(
             policy.subject_version_source,
             ApprovalSubjectVersionSource::SalesOrderSubmissionNo
@@ -823,7 +835,7 @@ mod tests {
     fn expected_process_required(document_type: DocumentType) -> Option<ExpectedRequiredPolicy> {
         match document_type {
             DocumentType::SalesOrder => Some(ExpectedRequiredPolicy {
-                purposes: SALES_ORDER_PURPOSES,
+                purposes: NO_PURPOSES,
                 version: ApprovalSubjectVersionSource::SalesOrderSubmissionNo,
                 snapshot: SALES_PURCHASE_SNAPSHOT,
                 owner_role: "sales_order_approver",
@@ -999,34 +1011,30 @@ mod tests {
         assert!(require_process_required(document_type).is_err());
     }
 
-    /// 非销售单不得带采购确认用途。
+    /// 销售单不强制采购确认用途；其它必须审批类型不得带用途。
     #[test]
-    fn only_sales_order_requires_procurement_purpose() {
+    fn sales_order_does_not_require_procurement_purpose() {
         for document_type in ALL_DOCUMENT_TYPES {
             let policy = policy_of(document_type).expect("政策必须存在");
             let purposes = match &policy {
                 DocumentApprovalPolicy::ProcessRequired(policy) => policy.required_node_purposes,
                 DocumentApprovalPolicy::NoApproval(_) => continue,
             };
-            if document_type == DocumentType::SalesOrder {
-                assert_eq!(purposes, SALES_ORDER_PURPOSES);
-            } else {
-                assert!(purposes.is_empty());
-            }
+            assert!(purposes.is_empty());
         }
         let sales = require_process_required(DocumentType::SalesOrder).expect("销售单");
+        validate_required_purposes(&sales, &[]).expect("销售单无用途应通过");
+        validate_required_purposes(&sales, &[None, None]).expect("销售单空用途应通过");
         validate_required_purposes(&sales, &[Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)])
-            .expect("销售单单用途应通过");
-        assert!(validate_required_purposes(&sales, &[]).is_err());
-        assert!(validate_required_purposes(&sales, &[None, None]).is_err());
-        assert!(validate_required_purposes(
+            .expect("销售单遗留采购确认用途应通过");
+        validate_required_purposes(
             &sales,
             &[
                 Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
                 Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
             ],
         )
-        .is_err());
+        .expect("销售单多个遗留采购确认用途应通过");
         assert!(validate_required_purposes(&sales, &[Some("WRONG_PURPOSE")]).is_err());
         assert!(validate_required_purposes(
             &require_process_required(DocumentType::StockAdjustment).expect("库存调整"),

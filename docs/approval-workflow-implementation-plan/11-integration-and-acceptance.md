@@ -189,7 +189,7 @@ npm run openapi:lint
 6. 新索引定义与开发重置脚本的创建清单完全一致；
 7. 每个 `DocumentType` 通过穷尽映射得到唯一稳定 `ProcessKind`，Repository 只按 `ProcessKind` 查询定义；
 8. BPM 图生成和验证对相同输入产生确定结果，Service 中不存在第二套实现；
-9. `SalesOrder` 发布定义必须恰有一个 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION`，其它类型不得包含该 purpose；客户端不能写入、删除或复制该 purpose，BPM 运行时不得按 purpose 分支。
+9. `SalesOrder` 发布定义不强制 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION`，其它类型不得包含该 purpose；客户端不能写入 purpose，BPM 运行时不得按 purpose 分支。
 
 ### 8.2 运行与并发
 
