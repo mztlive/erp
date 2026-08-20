@@ -51,30 +51,27 @@ export function SellableItemsListPage() {
         >
             <BusinessTableFrame
                 title="可售商品池列表"
-                description={
-                    state.sellableTableDescription ??
-                    masterDataCopy.sellableListDescription(state.rows.length)
-                }
                 toolbar={
                     <SellableListToolbar
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
-                        rowCount={state.rows.length}
                         hasActiveFilters={hasActiveFilters}
                         clearAllFilters={filters.clearAllFilters}
-                        sellableFilterPanelOpen={filters.sellableFilterPanelOpen}
+                        sellableFilterPanelOpen={
+                            filters.sellableFilterPanelOpen
+                        }
                         setSellableFilterPanelOpen={
                             filters.setSellableFilterPanelOpen
                         }
-                        hasStructuredSellableFilters={
-                            filters.hasStructuredSellableFilters
+                        hasAdvancedSellableFilters={
+                            filters.hasAdvancedSellableFilters
                         }
                         applySellableFilters={filters.applySellableFilters}
+                        applyProductKind={filters.applyProductKind}
                         supplyRegionDraft={filters.supplyRegionDraft}
                         setSupplyRegionDraft={filters.setSupplyRegionDraft}
                         productKindDraft={filters.productKindDraft}
-                        setProductKindDraft={filters.setProductKindDraft}
                         productCategoryIdDraft={filters.productCategoryIdDraft}
                         setProductCategoryIdDraft={
                             filters.setProductCategoryIdDraft
@@ -121,7 +118,9 @@ export function SellableItemsListPage() {
                             listLoadFailed ? (
                                 <BusinessFailureState
                                     error={state.listQuery.error}
-                                    onRetry={() => void state.listQuery.refetch()}
+                                    onRetry={() =>
+                                        void state.listQuery.refetch()
+                                    }
                                 />
                             ) : undefined
                         }
@@ -149,7 +148,9 @@ export function SellableItemsListPage() {
                                                 variant="secondary"
                                                 size="sm"
                                                 className="rounded-lg shadow-none"
-                                                onClick={filters.clearAllFilters}
+                                                onClick={
+                                                    filters.clearAllFilters
+                                                }
                                             >
                                                 清除筛选
                                             </Button>

@@ -58,6 +58,7 @@ export function ListPageFrame({
         <PageScaffold density="compact">
             <PageHeader
                 title={title}
+                description={hint}
                 breadcrumbs={[
                     { id: "md", label: "基础资料", href: "/master-data" },
                     { id: "resource", label: currentLabel, current: true },
@@ -72,9 +73,6 @@ export function ListPageFrame({
                 }
                 actions={<PageActions actions={actions} />}
             />
-            {hint ? (
-                <p className="text-sm text-muted-foreground">{hint}</p>
-            ) : null}
             {banner}
             {alerts}
             {exportMeta ? (

@@ -7,7 +7,10 @@ import {
     useSearchDraft,
 } from "@/features/master-data/hooks/use-list-url"
 import { productSalesPriceRangeError } from "@/features/master-data/lib/list-filters"
-import { PRODUCT_KIND_VALUES, type ProductKind } from "@/features/master-data/types"
+import {
+    PRODUCT_KIND_VALUES,
+    type ProductKind,
+} from "@/features/master-data/types"
 
 /** 公司商品池：搜索 + 类型 / 分类 / 品牌 / 供应商 / 区域 / 售价。 */
 export function useSellableListFilters(
@@ -38,8 +41,7 @@ export function useSellableListFilters(
         searchParams.get("productSalesPriceMin")?.trim() || undefined
     const productSalesPriceMax =
         searchParams.get("productSalesPriceMax")?.trim() || undefined
-    const hasStructuredSellableFilters = Boolean(
-        productKind ||
+    const hasAdvancedSellableFilters = Boolean(
         productCategoryId ||
         productBrandId ||
         productSupplierId ||
@@ -47,9 +49,12 @@ export function useSellableListFilters(
         productSalesPriceMin ||
         productSalesPriceMax,
     )
+    const hasStructuredSellableFilters = Boolean(
+        productKind || hasAdvancedSellableFilters,
+    )
 
     const [sellableFilterPanelOpen, setSellableFilterPanelOpen] =
-        React.useState(hasStructuredSellableFilters)
+        React.useState(false)
     const [productKindDraft, setProductKindDraft] = React.useState<
         ProductKind | "all"
     >(productKind ?? "all")
@@ -79,6 +84,18 @@ export function useSellableListFilters(
         patchUrl({ q: next || null, page: null })
         resetPagination()
     }, [patchUrl, q, resetPagination, searchDraft])
+
+    const applyProductKind = React.useCallback(
+        (nextKind: ProductKind | "all") => {
+            setProductKindDraft(nextKind)
+            patchUrl({
+                productKind: nextKind === "all" ? null : nextKind,
+                page: null,
+            })
+            resetPagination()
+        },
+        [patchUrl, resetPagination],
+    )
 
     const applySellableFilters = React.useCallback(() => {
         const minimum = productSalesPriceMinDraft.trim()
@@ -147,9 +164,7 @@ export function useSellableListFilters(
         setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
         setSupplyRegionDraft(supplyRegion ?? "")
         setProductSalesPriceError(null)
-        setSellableFilterPanelOpen(hasStructuredSellableFilters)
     }, [
-        hasStructuredSellableFilters,
         productBrandId,
         productCategoryId,
         productKind,
@@ -168,6 +183,7 @@ export function useSellableListFilters(
         supplyRegion,
         productSalesPriceMin,
         productSalesPriceMax,
+        hasAdvancedSellableFilters,
         hasStructuredSellableFilters,
         searchDraft,
         setSearchDraft,
@@ -193,6 +209,7 @@ export function useSellableListFilters(
         setPagination,
         changePagination,
         commitSearch,
+        applyProductKind,
         applySellableFilters,
         clearAllFilters,
     }

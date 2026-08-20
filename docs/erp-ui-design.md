@@ -144,7 +144,7 @@ return (
 | --- | --- |
 | `surfacePanelClassName` | 列表卡、任务卡、对象身份卡、正文 Tabs 外壳：`rounded-lg border border-border bg-card shadow-sm` |
 | `surfaceInsetClassName` | 卡内轻提示：仅 `bg-muted/40`，**无描边** |
-| `BusinessTableFrame` | 已内置 surfacePanel；勿再外包一层 border 卡 |
+| `BusinessTableFrame` | 工具条贴画布；表格独立圆角描边；分页在表外。勿再外包 Card |
 | `DocumentHeader` | 已内置身份浮卡；M4 不要再叠 `border-b` 裸头 |
 | `MetricStrip` | 各指标独立轻卡（非拼缝网格） |
 

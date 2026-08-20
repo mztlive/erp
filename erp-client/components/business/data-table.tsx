@@ -593,10 +593,10 @@ function DataTable<TData>({
             data-slot="data-table"
             data-layout={layout}
             className={cn(
-                // inset：外层统一内边距，子区间用 space-y。
-                // flush：表格全宽贴边（border-y），工具栏/分页各自对齐卡片内边距。
-                layout === "inset" && "space-y-3 p-table-frame-inset",
-                layout === "flush" && "space-y-0",
+                // inset：外层统一内边距。
+                // flush：表格独立圆角描边，分页在表外。
+                layout === "inset" && "flex flex-col gap-3 p-table-frame-inset",
+                layout === "flush" && "flex flex-col gap-4",
                 className,
             )}
             aria-busy={loading}
@@ -608,7 +608,6 @@ function DataTable<TData>({
                 <div
                     className={cn(
                         "flex flex-wrap items-center justify-between gap-2",
-                        layout === "flush" && "px-(--card-spacing) py-2",
                     )}
                 >
                     <div className="min-w-0 flex-1">
@@ -620,15 +619,7 @@ function DataTable<TData>({
 
             <div
                 ref={tableSurfaceRef}
-                className={cn(
-                    "overflow-x-auto bg-card",
-                    layout === "inset"
-                        ? "rounded-lg border"
-                        : // flush 恒套在 BusinessTableFrame 内：顶部分隔已由卡片的
-                          // Separator 承担，这里只补一条与之同权重的底部软分隔线，
-                          // 避免顶部出现两条边框叠加导致的"筛选区/表格衔接处偏重"。
-                          "border-b border-grid",
-                )}
+                className="overflow-hidden rounded-lg border bg-card"
             >
                 {loading && data.length > 0 && showRefreshingBanner ? (
                     <div
@@ -932,34 +923,6 @@ function DataTable<TData>({
                                     })}
                                 </TableRow>
                             ))
-                        )}
-
-                        {Array.from(
-                            {
-                                length:
-                                    !showErrorState && rows.length > 0
-                                        ? Math.max(0, 8 - rows.length)
-                                        : 0,
-                            },
-                            (_, index) => (
-                                <TableRow
-                                    key={`filler-${index}`}
-                                    aria-hidden
-                                    className="pointer-events-none hover:bg-transparent"
-                                >
-                                    {Array.from(
-                                        {
-                                            length: Math.max(
-                                                visibleColumnCount,
-                                                1,
-                                            ),
-                                        },
-                                        (__, cellIndex) => (
-                                            <TableCell key={cellIndex} />
-                                        ),
-                                    )}
-                                </TableRow>
-                            ),
                         )}
 
                         {!showErrorState && !loading && rows.length === 0 ? (

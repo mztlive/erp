@@ -5,14 +5,6 @@ import type { LucideIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardAction,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-} from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -24,7 +16,6 @@ import {
     SheetTitle,
 } from "@/components/ui/sheet"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
-import { surfacePanelClassName } from "@/components/business/page"
 import { cn } from "@/lib/utils"
 
 type DivProps = React.ComponentPropsWithoutRef<"div">
@@ -91,7 +82,7 @@ function ListToolbar({
                         {search ? (
                             <div
                                 data-slot="list-toolbar-search"
-                                className="min-w-0 flex-1 sm:max-w-sm"
+                                className="min-w-0 w-full sm:w-[18rem]"
                             >
                                 {search}
                             </div>
@@ -309,10 +300,9 @@ function StatusMatrix({ items, className, ...props }: StatusMatrixProps) {
 }
 
 type BusinessTableHeadingLevel = "h1" | "h2" | "h3"
-type CardProps = React.ComponentProps<typeof Card>
 
 interface BusinessTableFrameProps extends Omit<
-    CardProps,
+    React.ComponentProps<"section">,
     "children" | "title"
 > {
     readonly title: React.ReactNode
@@ -327,9 +317,8 @@ interface BusinessTableFrameProps extends Omit<
 }
 
 /**
- * 列表页表格框架。
- *
- * 只组合标题、说明、工具条、选择范围、表格和页脚，不读取数据或管理分页。
+ * 列表工作面：工具条贴画布，表格单独圆角描边，分页在表外。
+ * 页头标题由 PageHeader 承担，这里的 title 仅作辅助标题。
  */
 function BusinessTableFrame({
     title,
@@ -344,62 +333,26 @@ function BusinessTableFrame({
     ...props
 }: BusinessTableFrameProps) {
     const Heading = headingLevel
-    const hasControls = Boolean(toolbar || selectionBar)
 
     return (
-        <Card
+        <section
             data-business-component="table-frame"
-            className={cn(
-                // 账本列表：6px 圆角 + 轻阴影，覆盖 Card 默认大圆角。
-                // 高度跟内容走，避免 2 行数据把分页甩到视口底、中间留白。
-                "gap-0 py-0",
-                surfacePanelClassName,
-                className,
-            )}
+            className={cn("flex min-w-0 flex-col gap-4", className)}
             {...props}
         >
-            <CardHeader className="items-center gap-x-3 rounded-t-lg py-2.5 has-data-[slot=card-description]:grid-rows-none">
-                <div className="flex min-w-0 items-baseline gap-x-2 gap-y-0.5">
-                    <Heading className="font-heading shrink-0 text-sm font-medium text-foreground">
-                        {title}
-                    </Heading>
-                    {description ? (
-                        <CardDescription className="min-w-0 truncate">
-                            {description}
-                        </CardDescription>
-                    ) : null}
-                </div>
-                <CardAction className="flex items-center gap-2">
+            <Heading className="sr-only">{title}</Heading>
+            {description ? <p className="sr-only">{description}</p> : null}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">{toolbar}</div>
+                <div className="flex shrink-0 items-center gap-2">
                     {headerActions}
                     <div data-slot="table-frame-view-options" />
-                </CardAction>
-            </CardHeader>
-
-            <Separator className="bg-border" />
-
-            {hasControls ? (
-                <>
-                    <CardContent className="space-y-2 py-2">
-                        {toolbar}
-                        {selectionBar}
-                    </CardContent>
-                    <Separator className="bg-border" />
-                </>
-            ) : null}
-
-            <CardContent className="min-w-0 px-0">
-                <div data-slot="business-table-frame-table">{table}</div>
-            </CardContent>
-
-            {footer ? (
-                <>
-                    <Separator className="bg-border" />
-                    <CardFooter className="justify-between gap-3 rounded-b-lg py-3">
-                        {footer}
-                    </CardFooter>
-                </>
-            ) : null}
-        </Card>
+                </div>
+            </div>
+            {selectionBar}
+            <div data-slot="business-table-frame-table">{table}</div>
+            {footer}
+        </section>
     )
 }
 

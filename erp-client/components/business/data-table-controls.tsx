@@ -7,7 +7,7 @@ import {
     ChevronsRightIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    Columns3Icon,
+    Settings2Icon,
     PanelLeftIcon,
     PanelRightIcon,
     PinOffIcon,
@@ -51,8 +51,8 @@ function DataTableViewOptions<TData>({
                     />
                 }
             >
-                <Columns3Icon data-icon="inline-start" aria-hidden="true" />
-                列设置
+                <Settings2Icon data-icon="inline-start" aria-hidden="true" />
+                视图
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto min-w-72">
                 <div className="space-y-3">
@@ -238,43 +238,39 @@ function DataTablePagination<TData>({
         <div
             data-slot="data-table-pagination"
             className={cn(
-                // 移动端两行；桌面单行：左侧条数，右侧每页/页码/翻页成组，组间距统一。
                 "flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between",
-                // flush 贴在全宽表格下：对齐 BusinessTableFrame / CardFooter 的卡片内边距。
-                layout === "flush" && "px-(--card-spacing) py-3",
+                layout === "inset" && "px-(--card-spacing)",
             )}
         >
-            <div className="min-w-0 text-muted-foreground">
-                <span className="num">
-                    共 {rowCount.toLocaleString("zh-CN")} 条
-                </span>
+            <label className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                <OptionCombobox
+                    size="sm"
+                    value={String(pageSize)}
+                    onValueChange={(next) => {
+                        if (next == null) return
+                        table.setPageSize(Number(next))
+                    }}
+                    options={pageSizeOptions.map((size) => ({
+                        value: String(size),
+                        label: String(size),
+                    }))}
+                    allowClear={false}
+                    aria-label="每页记录数"
+                    className="w-[5.5rem]"
+                />
+                条 / 页
                 {selectedCount > 0 ? (
                     <span className="num">
-                        ，已选择 {selectedCount.toLocaleString("zh-CN")} 条
+                        · 已选择 {selectedCount.toLocaleString("zh-CN")} 条
                     </span>
-                ) : null}
-            </div>
+                ) : (
+                    <span className="num">
+                        · 共 {rowCount.toLocaleString("zh-CN")} 条
+                    </span>
+                )}
+            </label>
 
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:justify-end">
-                <label className="flex shrink-0 items-center gap-2 text-muted-foreground">
-                    每页
-                    <OptionCombobox
-                        size="sm"
-                        value={String(pageSize)}
-                        onValueChange={(next) => {
-                            if (next == null) return
-                            table.setPageSize(Number(next))
-                        }}
-                        options={pageSizeOptions.map((size) => ({
-                            value: String(size),
-                            label: String(size),
-                        }))}
-                        allowClear={false}
-                        aria-label="每页记录数"
-                        className="w-[5.5rem]"
-                    />
-                </label>
-
                 <span className="num shrink-0 text-muted-foreground">
                     第 {pageCount === 0 ? 0 : pageIndex + 1} / {pageCount} 页
                 </span>
@@ -331,4 +327,3 @@ function DataTablePagination<TData>({
 }
 
 export { DataTablePagination, DataTableViewOptions }
-
