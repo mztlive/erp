@@ -5,14 +5,14 @@
 - `web-api`：Rust HTTP API，容器端口 `10001`。
 
 MongoDB 不在 Compose 中；配置中的 MongoDB 地址必须能从容器网络访问。
-该 MongoDB 必须是副本集或支持事务的分片集群；Web API 和超级管理员初始化命令都会在
-启动时执行 `hello` 能力校验，standalone 会直接失败。
+该 MongoDB 必须是副本集或支持事务的分片集群；Web API 启动时会执行 `hello`
+能力校验，standalone 会直接失败。
 首次启用唯一索引前必须按 `docs/mongodb-indexes.md` 查重；索引冲突会阻止
 Web API 启动。
 
 ## 文件职责
 
-- `Dockerfile`：构建后端镜像，包含 `web-api` 和 `init_super_admin`。
+- `Dockerfile`：构建后端镜像，只包含 `web-api`。
 - `docker-compose.yml`：本地构建和容器联调。
 - `docker-compose.production.yml`：生产部署，只接受 digest 固定的镜像。
 - `Jenkinsfile`：选择 Git ref、构建推送镜像、归档发布清单并 SSH

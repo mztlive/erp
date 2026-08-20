@@ -4920,7 +4920,6 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "clap",
  "config",
  "database",
  "entities",

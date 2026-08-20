@@ -103,7 +103,7 @@ Redis、消息广播或变更流。revision 查询失败时授权请求直接失
 
 推荐权限定义见 `services/src/iam/predefined_roles.rs`，对齐第一期部门职责与 W01 角色入口。
 
-系统超级管理员只能通过 `init_super_admin` 命令创建或修复。该命令按包含软删除记录的全局
+系统超级管理员只能通过 `AdminService::initialize_super_admin` 创建或修复。该方法按包含软删除记录的全局
 账号查找已有身份，并在同一事务中写入传入的名称和新 Argon2 密码、恢复账号、设置启用状态
 并绑定 root；因此也可用于 root 凭证轮换。已绑定系统角色的账号不能通过普通账号更新、
 删除或恢复入口操作。

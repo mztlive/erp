@@ -230,4 +230,4 @@ approval_instance:upgrade_binding
 - [ ] 通用 WorkItem 写接口对审批任务全部失败关闭。
 - [ ] `APPROVAL_POLICY_NOT_REGISTERED` 作为 500 和 readiness 错误测试，不得出现在 4xx 目录。
 - [ ] 模块单元测试覆盖 DTO 和错误转换；试点 2xx、403、404、409、422、500 及幂等回读由 P6-PILOT 覆盖，全量类型由 P6-FINAL 补齐。
-- [ ] `cargo test -p web-api --lib` 通过；权限生成文件无手工修改。
+- [ ] `cargo test -p web-api` 通过；权限生成文件无手工修改。

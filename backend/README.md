@@ -54,16 +54,7 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 
 ## Run Locally
 1. Prerequisites: Rust toolchain (edition 2021, rustfmt/clippy), MongoDB instance.
-2. Initialize or repair the super admin. Re-running this command restores the account and rotates
-   its name/password to the supplied values:
-   ```bash
-   cargo run -p web-api --bin init_super_admin -- \
-     --config-path ./config.toml \
-     --account admin \
-     --password 'ChangeMe123!' \
-     --name 'System Admin'
-   ```
-3. Start the API:
+2. Start the API:
    ```bash
    RUST_LOG=info cargo run -p web-api -- --config-path ./config.toml
    # LOG_FORMAT=json to emit JSON tracing

@@ -1,12 +1,22 @@
+//! web-api 进程入口。
+//!
+//! 本 crate 只保留一个二进制目标。原先库目标上的 `dead_code` 豁免一并移到这里：
+//! 若干 Handler / AppState 字段尚未被启动路径读取，但属于已接线的 HTTP 面。
+
+#![allow(dead_code)]
+
+mod app_state;
+mod core;
+
+use app_state::AppState;
 use config::{Config, S3Config, SafeConfig};
-use std::net::SocketAddr;
-use storage::{S3Storage, S3StorageConfig};
-use tracing::{info, warn};
-use web_api::app_state::AppState;
-use web_api::core::{
+use core::{
     routes,
     tracing::{init_tracing, TracingConfig},
 };
+use std::net::SocketAddr;
+use storage::{S3Storage, S3StorageConfig};
+use tracing::{info, warn};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

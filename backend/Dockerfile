@@ -52,10 +52,8 @@ COPY services ./services
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --locked --release \
-        -p web-api --bin web-api --bin init_super_admin \
-    && install -D /app/target/release/web-api /tmp/bin/web-api \
-    && install -D /app/target/release/init_super_admin /tmp/bin/init_super_admin
+    cargo build --locked --release -p web-api --bin web-api \
+    && install -D /app/target/release/web-api /tmp/bin/web-api
 
 FROM ${DEBIAN_IMAGE} AS runtime
 WORKDIR /app
@@ -79,7 +77,6 @@ RUN set -eux; \
     chown -R rs-project-template:rs-project-template /app
 
 COPY --from=builder /tmp/bin/web-api /usr/local/bin/web-api
-COPY --from=builder /tmp/bin/init_super_admin /usr/local/bin/init_super_admin
 
 USER rs-project-template
 
