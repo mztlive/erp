@@ -47,10 +47,9 @@ usage() {
   4. 执行后校验：
        backend/scripts/reset-dev-business-data.sh \
          --verify --expect-summary <集合摘要>
-  5. 远程开发库执行还必须显式追加 --allow-remote，且：
-       - database.db_name 含 dev/test/stage/sandbox/local 边界标记；
-       - ERP_RESET_ALLOWED_REMOTE_HOSTS 精确列出 URI 中全部主机
-         （逗号分隔，禁止通配符）。
+  5. 远程开发库执行还必须显式追加 --allow-remote，且
+     ERP_RESET_ALLOWED_REMOTE_HOSTS 精确列出 URI 中全部主机
+     （逗号分隔，禁止通配符）。
   6. preview / execute / verify 必须使用同一目标与同一集合摘要；
      摘要由 database.db_name 与 mongosh 脚本内容计算，不一致则失败关闭。
   7. 本工具不得调用 dropDatabase()，只 drop 固定集合或按固定过滤删除。
@@ -241,9 +240,6 @@ if [[ "${EXECUTE}" -eq 1 ]]; then
         die "目标不是 loopback MongoDB；远程开发库执行必须显式提供 --allow-remote"
     fi
     if [[ "${IS_REMOTE}" -eq 1 ]]; then
-        if ! [[ "${DB_NAME}" =~ (^|[._-])(dev|development|test|testing|stage|staging|sandbox|local)([._-]|$) ]]; then
-            die "远程目标库名缺少开发环境标记；拒绝执行"
-        fi
         [[ -n "${ERP_RESET_ALLOWED_REMOTE_HOSTS:-}" ]] ||
             die "远程执行必须通过 ERP_RESET_ALLOWED_REMOTE_HOSTS 提供精确主机白名单"
         if ! ERP_RESET_MONGO_URI="${MONGO_URI}" \

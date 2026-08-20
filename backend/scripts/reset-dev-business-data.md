@@ -28,8 +28,7 @@ preview、execute 与 verify 必须使用同一目标主机、数据库名和集
 5. 已提供与配置完全一致的 `--confirm-db <db_name>`；
 6. 已提供与预览输出完全一致的 `--expect-summary <集合摘要>`；
 7. 非 loopback MongoDB 已额外提供 `--allow-remote`。
-8. 远程库名含 `dev`/`test`/`stage`/`sandbox`/`local` 的独立边界标记；
-9. 远程 URI 中每个主机都已在 `ERP_RESET_ALLOWED_REMOTE_HOSTS` 精确白名单中，不得使用通配符。
+8. 远程 URI 中每个主机都已在 `ERP_RESET_ALLOWED_REMOTE_HOSTS` 精确白名单中，不得使用通配符。
 
 缺少任一执行参数，或集合摘要与当前目标/脚本不一致时，工具不得进入写分支。
 `--execute` 与 `--verify` 不得同时使用。
@@ -256,7 +255,7 @@ backend/scripts/reset-dev-business-data.sh \
 export ERP_RESET_ALLOWED_REMOTE_HOSTS='mongo-dev-1.example.internal,mongo-dev-2.example.internal'
 ```
 
-`--allow-remote` 只解除拓扑保护，不构成生产环境授权。脚本还必须验证开发库命名和全部远程主机精确白名单。
+`--allow-remote` 只解除拓扑保护，不构成生产环境授权。脚本还必须验证全部远程主机精确白名单。
 
 ### 5.4 执行后校验
 

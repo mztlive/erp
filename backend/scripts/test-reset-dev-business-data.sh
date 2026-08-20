@@ -258,24 +258,6 @@ if grep -Eq 'sentinel-user|sentinel-password|mongodb://' "${remote_execute_outpu
     fail "远程执行摘要泄露 MongoDB 连接信息"
 fi
 
-unsafe_remote_config="${TEST_DIR}/unsafe-remote.toml"
-cat >"${unsafe_remote_config}" <<'EOF'
-[database]
-uri = "mongodb://sentinel-user:sentinel-password@mongo.example.invalid:27017/admin"
-db_name = "erp"
-EOF
-unsafe_remote_output="${TEST_DIR}/unsafe-remote.txt"
-if PATH="${TEST_DIR}/bin:${PATH}" \
-    ERP_RESET_ALLOWED_REMOTE_HOSTS="mongo.example.invalid" \
-    "${RESET_SCRIPT}" \
-    --config "${unsafe_remote_config}" \
-    --execute \
-    --confirm-db erp \
-    --allow-remote >"${unsafe_remote_output}" 2>&1; then
-    fail "无开发命名标记的远程数据库仍允许执行"
-fi
-grep -q "开发环境标记" "${unsafe_remote_output}" || fail "远程库命名门禁未给出受控错误"
-
 if grep -En '(echo|printf)[^#\n]*MONGO_URI' "${RESET_SCRIPT}" >/dev/null; then
     fail "入口脚本存在直接输出 MONGO_URI 的静态风险"
 fi
