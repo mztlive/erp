@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "apps/cli",
     "apps/web-api",
     "crates/bpm",
     "crates/entity-macros",     # 过程宏项目

@@ -19,8 +19,8 @@ use crate::iam::{self, AuthorizedAccountManagement, AuthorizedRoleGrant, SharedR
 ///
 /// 提供管理员账号的创建、更新、删除及角色分配相关业务逻辑。
 pub struct AdminService {
-    db: Database,
-    rbac: SharedRbacService,
+    pub(super) db: Database,
+    pub(super) rbac: SharedRbacService,
 }
 
 /// 超级管理员初始化结果。

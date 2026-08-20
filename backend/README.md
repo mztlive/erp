@@ -4,12 +4,14 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 
 ## What’s Included
 - **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload to S3-compatible object storage.
+- **Ops CLI (`apps/cli`)**: Initialize the super admin or reset an existing admin password without depending on `web-api`.
 - **Mongo repositories (`database/`)**: Generic `Repository<T>` with soft-delete, paging, and transaction helpers, plus typed accessors via `DatabaseExt`.
 - **Domain/services (`entities/`, `services/`)**: Domain entities and application services for ERP operator accounts, audit logs, and RBAC.
 - **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), S3-compatible object storage (`storage`), and proc macros for entities and permissions.
 
 ## Project Layout
 - `apps/web-api/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`core/handler/{admin,auth,upload.rs}`).
+- `apps/cli/` – Operator CLI for `init-admin` and `reset-password`.
 - `services/` – Business orchestration grouped by active domains such as accounts, auditing, and IAM.
 - `entities/` – Active domain entities, value objects, and validation helpers.
 - `database/` – Generic MongoDB repositories, typed `DatabaseExt` accessors, entity-specific queries, indexes, and transaction support.
@@ -58,6 +60,11 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
    ```bash
    RUST_LOG=info cargo run -p web-api -- --config-path ./config.toml
    # LOG_FORMAT=json to emit JSON tracing
+   ```
+3. Initialize or rotate the super admin (password from `--password`, `ERP_ADMIN_PASSWORD`, or a prompt):
+   ```bash
+   cargo run -p cli -- init-admin --account admin --name "System Admin"
+   cargo run -p cli -- reset-password --account admin
    ```
 
 ## Development Checklist

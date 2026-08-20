@@ -6,12 +6,13 @@
 - `entities` 是 ERP 业务实体及 BPM 集成引用（单据绑定、业务对象快照、WorkItem、通知 outbox）。目标审批流程模型不得放在 `entities/src/approval`。
 - `services::approval` 是政策、授权、事务和业务副作用适配层；BPM 状态计算必须留在 `bpm`，不得下沉到 Service。
 - `database` 是 BPM 模型与 ERP 业务/集成模型的 MongoDB 适配层；禁止把 MongoDB 类型或 `Executor` 反向引入 `bpm`。
-- 依赖只允许单向：`apps/web-api` → `services` → `{database,entities,bpm}`，以及 `database` → `{entities,bpm}`、`entities` → `bpm`。禁止 `bpm` 反向依赖任何 ERP crate。
+- 依赖只允许单向：`apps/web-api` / `apps/cli` → `services` → `{database,entities,bpm}`，以及 `database` → `{entities,bpm}`、`entities` → `bpm`。禁止 `bpm` 反向依赖任何 ERP crate。`apps/cli` 禁止依赖 `web-api`。
 - 权限体系：Handler 使用 `#[permission_macros::permission(...)]` 标注，`apps/web-api/build.rs` 会解析路由并生成前端权限定义。
 - 配置统一走 `config::SafeConfig`（CLI 参数 + 可选 Nacos 热更新），Web API 日志/Tracing 位于 `apps/web-api/src/core/tracing`。
 
 ## 项目结构与归属
 - `apps/web-api`：Axum HTTP API。Handlers 位于 `src/core/handler/{auth,admin}` 及 `handler/upload.rs`；路由注册在 `src/core/routes/{public,admin,account}.rs`；统一返回 `ApiResponse`。管理员路由固定走 JWT + RBAC 中间件。
+- `apps/cli`：运维命令行。提供 `init-admin`（创建或修复超级管理员）和 `reset-password`（只改已有管理员密码）。只依赖 `services` / `database` / `config`，禁止依赖 `web-api`。
 - `services`：领域服务编排层，按域分目录（如 `iam`、`consumer`、`audit`）。`services::approval` 只做政策/授权/事务/副作用适配，不得实现流程状态机。新增领域需提供 `dto.rs`；如果只有一个 service 文件，代码直接写在 `mod.rs` 中；如果有多个 service 文件，再创建独立 `service.rs` 文件。业务规则优先放在实体/值对象中。
 - `entities`：ERP 业务实体、值对象及 BPM 集成引用（如 `account_core`、`consumer`、`role`、`rbac`、`auth`、`approval_integration`）。目标审批领域模型不在本 crate。
 - `database`：MongoDB 仓储层与 `DatabaseExt` 访问器（如 `account_core`、`role`、`consumer`），同时承担 BPM 模型与 ERP 集成模型的持久化适配。
@@ -102,6 +103,7 @@
 ## 构建、运行与工具
 - 初始化配置：`cp config.toml.example config.toml`，填写 `app`、`database` 与 `s3`。
 - API：`cargo run -p web-api -- --config-path ./config.toml`（支持 `RUST_LOG=info|debug`、`LOG_FORMAT=json`）。
+- CLI：`cargo run -p cli -- init-admin --account admin --name "System Admin"`；`cargo run -p cli -- reset-password --account admin`。密码优先 `--password`，其次环境变量 `ERP_ADMIN_PASSWORD`，否则交互输入。
 - Workspace：`cargo build --workspace`、`cargo test --workspace`。
 - 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
 - Docker：`./manage.sh start|status|logs` 封装 `docker compose`；仅按 `docker-compose.yml` 只读挂载 `config.toml`，文件对象写入 S3。

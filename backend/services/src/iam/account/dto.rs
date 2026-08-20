@@ -41,11 +41,7 @@ impl InitializeSuperAdminParams {
         } = self;
         let account =
             LoginAccount::new(account).map_err(|_| Error::ValidationError("超级管理员账号不合法".into()))?;
-        if !(6..=32).contains(&password.chars().count()) {
-            return Err(Error::ValidationError(
-                "超级管理员密码长度必须在6-32个字符之间".into(),
-            ));
-        }
+        ensure_admin_password_length(&password, "超级管理员")?;
 
         let name = name.trim().to_string();
         if name.is_empty() {
@@ -54,6 +50,51 @@ impl InitializeSuperAdminParams {
 
         Ok((account, password, name))
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResetAdminPasswordParams {
+    pub account: String,
+    pub password: String,
+}
+
+impl ResetAdminPasswordParams {
+    /// 校验并规范化管理员密码重置参数。
+    ///
+    /// 账号按登录账号规则去除首尾空白，密码保持原值。
+    ///
+    /// # 返回值
+    /// 返回规范化后的登录账号与明文密码。
+    ///
+    /// # 错误
+    /// 当账号不合法或密码长度不在 6-32 个字符内时返回校验错误。
+    pub(super) fn into_validated_parts(self) -> Result<(LoginAccount, String)> {
+        let account =
+            LoginAccount::new(self.account).map_err(|_| Error::ValidationError("管理员账号不合法".into()))?;
+        ensure_admin_password_length(&self.password, "管理员")?;
+        Ok((account, self.password))
+    }
+}
+
+/// 校验管理员密码长度。
+///
+/// # 参数
+/// * `password` - 待校验明文密码
+/// * `label` - 错误提示中的主体名称
+///
+/// # 返回值
+/// 长度合法时返回 `Ok(())`。
+///
+/// # 错误
+/// 密码字符数不在 6-32 时返回校验错误。
+fn ensure_admin_password_length(password: &str, label: &str) -> Result<()> {
+    if (6..=32).contains(&password.chars().count()) {
+        return Ok(());
+    }
+
+    Err(Error::ValidationError(format!(
+        "{label}密码长度必须在6-32个字符之间"
+    )))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -111,7 +152,8 @@ mod tests {
     use validator::Validate;
 
     use super::{
-        AdminItem, CreateAdminParams, InitializeSuperAdminParams, UpdateAdminParams, UpdateAdminRoleParams,
+        AdminItem, CreateAdminParams, InitializeSuperAdminParams, ResetAdminPasswordParams,
+        UpdateAdminParams, UpdateAdminRoleParams,
     };
 
     #[test]
@@ -178,6 +220,32 @@ mod tests {
                 account: "root".to_string(),
                 password: "password".to_string(),
                 name: " ".to_string(),
+            },
+        ] {
+            assert!(params.into_validated_parts().is_err());
+        }
+    }
+
+    #[test]
+    fn reset_admin_password_params_preserve_password_and_reject_invalid_values() {
+        let (account, password) = ResetAdminPasswordParams {
+            account: " admin01 ".to_string(),
+            password: " secret ".to_string(),
+        }
+        .into_validated_parts()
+        .unwrap();
+
+        assert_eq!(account.as_str(), "admin01");
+        assert_eq!(password, " secret ");
+
+        for params in [
+            ResetAdminPasswordParams {
+                account: " ".to_string(),
+                password: "password".to_string(),
+            },
+            ResetAdminPasswordParams {
+                account: "admin01".to_string(),
+                password: String::new(),
             },
         ] {
             assert!(params.into_validated_parts().is_err());

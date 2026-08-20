@@ -13,6 +13,7 @@
 | `database` | BPM 与集成模型的 MongoDB 适配层 | `bpm`、`entities`、`mongodb` | `services`、`apps/web-api` |
 | `services` | ERP 应用编排、政策、授权、事务、业务副作用 | `bpm`、`entities`、`database`、`config` | `apps/web-api` |
 | `apps/web-api` | HTTP 协议适配 | `services` | `bpm`、`database` 的审批 Repository |
+| `apps/cli` | 运维命令行：初始化超级管理员、重置管理员密码 | `services`、`database`、`config` | `web-api`、`bpm`、`axum` |
 
 `bpm` 对 ERP 业务层保持零反向依赖。任何 `entities`、`database`、`services`、`apps/web-api`、`mongodb` 引用均为阻断，由 `backend/scripts/check-bpm-boundaries.sh` 失败关闭地验证。
 

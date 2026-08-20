@@ -105,7 +105,9 @@ Redis、消息广播或变更流。revision 查询失败时授权请求直接失
 
 系统超级管理员只能通过 `AdminService::initialize_super_admin` 创建或修复。该方法按包含软删除记录的全局
 账号查找已有身份，并在同一事务中写入传入的名称和新 Argon2 密码、恢复账号、设置启用状态
-并绑定 root；因此也可用于 root 凭证轮换。已绑定系统角色的账号不能通过普通账号更新、
+并绑定 root；因此也可用于 root 凭证轮换。运维入口是 `apps/cli` 的 `init-admin`，不经过
+`web-api`。只改已有管理员密码、不改角色时使用 `AdminService::reset_admin_password`
+（CLI `reset-password`）。已绑定系统角色的账号不能通过普通账号更新、
 删除或恢复入口操作。
 
 普通角色创建、更新、删除和账号管理会使用同一个稳定 Enforcer 快照比较权限范围：

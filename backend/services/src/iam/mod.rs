@@ -9,7 +9,8 @@ mod rbac;
 
 pub use account::{
     AccountProfile, AccountProfileService, AdminItem, AdminService, CreateAdminParams,
-    InitializeSuperAdminParams, InitializeSuperAdminResult, UpdateAdminParams, UpdateAdminRoleParams,
+    InitializeSuperAdminParams, InitializeSuperAdminResult, ResetAdminPasswordParams,
+    ResetAdminPasswordResult, UpdateAdminParams, UpdateAdminRoleParams,
 };
 pub use dto::{CreateRoleParams, RoleItem, UpdateRoleParams};
 pub use predefined_roles::ensure_predefined_roles;

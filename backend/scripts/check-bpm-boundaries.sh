@@ -74,6 +74,22 @@ if grep -E -q 'bpm[[:space:]]*=' "${BACKEND_DIR}/apps/web-api/Cargo.toml"; then
     fail "apps/web-api 不得直接依赖 bpm"
 fi
 
+require_file "${BACKEND_DIR}/apps/cli/Cargo.toml"
+if ! grep -E -q '^[[:space:]]*"apps/cli"' "${BACKEND_DIR}/Cargo.toml"; then
+    fail "workspace members 未登记 apps/cli"
+fi
+if grep -E -q 'web-api[[:space:]]*=' "${BACKEND_DIR}/apps/cli/Cargo.toml"; then
+    fail "apps/cli 不得依赖 web-api"
+fi
+if grep -E -q 'bpm[[:space:]]*=' "${BACKEND_DIR}/apps/cli/Cargo.toml"; then
+    fail "apps/cli 不得直接依赖 bpm"
+fi
+CLI_TREE="$(cargo tree -p cli --edges normal --manifest-path "${BACKEND_DIR}/Cargo.toml")"
+if printf '%s\n' "${CLI_TREE}" | grep -E -w 'web-api' >/dev/null; then
+    fail "cli 依赖图包含 web-api"
+    printf '%s\n' "${CLI_TREE}" | grep -E -w 'web-api' >&2 || true
+fi
+
 echo "检查 bpm 依赖图…"
 if grep -E -q '^(entities|database|services|web-api|config|mongodb|axum|id-generator|permission-macros)[[:space:]]*=' \
     "${BACKEND_DIR}/crates/bpm/Cargo.toml"; then
