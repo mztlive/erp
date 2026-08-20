@@ -216,7 +216,7 @@ export function CustomerDetailPage({
                 >
                     <TabsList
                         variant="line"
-                        className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 backdrop-blur supports-backdrop-filter:bg-card/80"
+                        className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b border-grid bg-card/95 px-3 backdrop-blur supports-backdrop-filter:bg-card/80"
                     >
                         {SECTION_NAV.map((item) => (
                             <TabsTrigger

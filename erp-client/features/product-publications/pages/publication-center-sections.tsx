@@ -287,7 +287,7 @@ export function PublicationCenterContentSections({
                         .map((r) => (
                             <li
                                 key={r.revisionId}
-                                className="flex flex-wrap justify-between gap-2 border-b border-border/30 py-2"
+                                className="flex flex-wrap justify-between gap-2 border-b border-grid py-2"
                             >
                                 <span>
                                     r{r.revisionNo} · {r.createdBy} ·{" "}
@@ -303,7 +303,7 @@ export function PublicationCenterContentSections({
 
             <aside className="min-w-0 space-y-3 xl:sticky xl:top-14 xl:self-start">
                 <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30 pb-2">
+                    <CardHeader className="border-b border-grid pb-2">
                         <CardTitle className="text-sm">选中修订</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-1 text-sm">
@@ -332,7 +332,7 @@ export function PublicationCenterContentSections({
                     </CardContent>
                 </Card>
                 <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30 pb-2">
+                    <CardHeader className="border-b border-grid pb-2">
                         <CardTitle className="text-sm">版本对照</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">

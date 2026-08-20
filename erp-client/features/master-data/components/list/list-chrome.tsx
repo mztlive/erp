@@ -18,7 +18,7 @@ function ResourceNav({
         <nav
             ref={navRef}
             aria-label={masterDataCopy.resourceNavAria}
-            className="flex flex-wrap gap-2 border-b border-border/30 pb-3"
+            className="flex flex-wrap gap-2 border-b border-grid pb-3"
         >
             {MASTER_DATA_RESOURCES.map((item) => {
                 const selected = item.key === resource

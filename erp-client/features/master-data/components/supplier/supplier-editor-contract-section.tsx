@@ -99,7 +99,7 @@ export function SupplierEditorContractSection({
                                 </FieldShell>
                             </div>
                         </div>
-                        <div className="border-border/60 lg:border-l lg:pl-5">
+                        <div className="border-grid lg:border-l lg:pl-5">
                             <MediaListField
                                 label={masterDataCopy.fContractFile}
                                 hint={masterDataCopy.supplierQualificationHint}
@@ -163,7 +163,7 @@ export function SupplierEditorContractSection({
                                 />
                             </FieldShell>
                         </div>
-                        <div className="border-border/60 lg:border-l lg:pl-5">
+                        <div className="border-grid lg:border-l lg:pl-5">
                             <MediaListField
                                 label={masterDataCopy.fAuthorizationFile}
                                 hint={masterDataCopy.supplierQualificationHint}
@@ -190,7 +190,7 @@ export function SupplierEditorContractSection({
                     description="按证照类型分别归档，缺少的材料可后续补充。"
                 >
                     <div className="grid gap-4 lg:grid-cols-3">
-                        <div className="rounded-md border border-border/60 bg-background p-4">
+                        <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
                                 label={masterDataCopy.fQualification}
                                 hint={masterDataCopy.supplierQualificationHint}
@@ -207,7 +207,7 @@ export function SupplierEditorContractSection({
                                 accept={QUALIFICATION_ACCEPT}
                             />
                         </div>
-                        <div className="rounded-md border border-border/60 bg-background p-4">
+                        <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
                                 label={masterDataCopy.fFoodLicense}
                                 hint={masterDataCopy.supplierQualificationHint}
@@ -224,7 +224,7 @@ export function SupplierEditorContractSection({
                                 accept={QUALIFICATION_ACCEPT}
                             />
                         </div>
-                        <div className="rounded-md border border-border/60 bg-background p-4">
+                        <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
                                 label={masterDataCopy.fLegalPersonIdCard}
                                 hint={masterDataCopy.supplierQualificationHint}

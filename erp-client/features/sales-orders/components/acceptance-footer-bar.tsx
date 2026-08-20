@@ -28,7 +28,7 @@ export function AcceptanceFooterBar({
     onSaveDraft: () => void
 }) {
     return (
-        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-border/30 bg-card/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-card/80">
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-grid bg-card/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-card/80">
             <p className="text-sm text-muted-foreground">
                 {salesOrderNo} · 已选 {selectedCount} 个来源 · 结果{" "}
                 {OVERALL_RESULT_LABEL[overallPreview]}

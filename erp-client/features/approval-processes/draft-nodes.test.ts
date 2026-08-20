@@ -6,40 +6,40 @@ import {
     seedDraftNodes,
 } from "./draft-nodes"
 import { salesOrderEmptyDraft, salesOrderSavedDraft } from "./fixtures"
-import { SALES_ORDER_PROCUREMENT_PURPOSE } from "./types"
-import { buildReplaceNodesRequest } from "./write-payload"
 import { createDraftSchema } from "./schema"
+import { buildReplaceNodesRequest } from "./write-payload"
 
 describe("draft nodes", () => {
-    it("seeds an unsaved procurement slot for SalesOrder empty drafts", () => {
+    it("seeds a deletable default node for SalesOrder empty drafts", () => {
         const nodes = seedDraftNodes(
             "sales_order",
             salesOrderEmptyDraft().nodes,
         )
         expect(nodes).toHaveLength(1)
-        expect(nodes[0]?.unsaved_purpose_slot).toBe(true)
-        expect(nodes[0]?.node_purpose).toBe(SALES_ORDER_PROCUREMENT_PURPOSE)
+        expect(nodes[0]?.node_name).toBe("采购确认")
+        expect(nodes[0]?.unsaved_purpose_slot).toBe(false)
+        expect(nodes[0]?.node_purpose).toBeNull()
         expect(nodes[0]?.node_id).toBeNull()
-        expect(canMutateNodeStructure(nodes[0]!)).toBe(false)
+        expect(canMutateNodeStructure(nodes[0]!)).toBe(true)
     })
 
-    it("does not seed procurement purpose for other document types", () => {
+    it("does not seed a default node for other document types", () => {
         const nodes = seedDraftNodes("stock_adjustment", [])
         expect(nodes).toEqual([])
         const voucher = seedDraftNodes("voucher_sales_order", [])
         expect(voucher).toEqual([])
     })
 
-    it("locks the saved procurement purpose node from delete or copy", () => {
+    it("allows deleting a previously locked sales order node", () => {
         const nodes = seedDraftNodes(
             "sales_order",
             salesOrderSavedDraft().nodes,
         )
-        expect(canMutateNodeStructure(nodes[0]!)).toBe(false)
+        expect(canMutateNodeStructure(nodes[0]!)).toBe(true)
         expect(canMutateNodeStructure(nodes[1]!)).toBe(true)
     })
 
-    it("forces the unsaved procurement slot to order 1 on first save", () => {
+    it("keeps the editor order when saving sales order nodes", () => {
         const nodes = [
             {
                 client_id: "a",
@@ -56,14 +56,15 @@ describe("draft nodes", () => {
                 node_name: "采购确认",
                 assignee_user_id: "u1",
                 assignee_name: "张三",
-                node_purpose: SALES_ORDER_PROCUREMENT_PURPOSE,
-                unsaved_purpose_slot: true,
+                node_purpose: null,
+                unsaved_purpose_slot: false,
             },
         ]
         const ordered = orderNodesForSave("sales_order", nodes)
         const request = buildReplaceNodesRequest("1", ordered)
-        expect(request.nodes[0]?.node_name).toBe("采购确认")
+        expect(request.nodes[0]?.node_name).toBe("销售复核")
         expect(request.nodes[0]?.display_order).toBe(1)
+        expect(request.nodes[1]?.node_name).toBe("采购确认")
         expect(JSON.stringify(request)).not.toContain("node_purpose")
         expect(request.nodes[0]).not.toHaveProperty("node_id")
     })

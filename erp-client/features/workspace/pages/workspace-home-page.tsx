@@ -235,10 +235,10 @@ export function WorkspaceHomePage() {
 
             <div className="hidden min-h-[32rem] gap-4 lg:grid lg:grid-cols-[minmax(18rem,38%)_minmax(0,62%)]">
                 <section
-                    className="overflow-hidden rounded-lg border border-border/60"
+                    className="overflow-hidden rounded-lg border border-border"
                     aria-labelledby="workspace-task-main-title"
                 >
-                    <header className="border-b border-border/30 px-3 py-2">
+                    <header className="border-b border-grid px-3 py-2">
                         <h2
                             id="workspace-task-main-title"
                             className="text-sm font-medium"
@@ -271,14 +271,14 @@ export function WorkspaceHomePage() {
                         />
                     )}
                 </section>
-                <div className="rounded-lg border border-border/60 p-4">
+                <div className="rounded-lg border border-border p-4">
                     {detail}
                 </div>
             </div>
 
             <div className="lg:hidden">
-                <section className="overflow-hidden rounded-lg border border-border/60">
-                    <header className="border-b border-border/30 px-3 py-2">
+                <section className="overflow-hidden rounded-lg border border-border">
+                    <header className="border-b border-grid px-3 py-2">
                         <h2 className="text-sm font-medium">{filterLabel}</h2>
                     </header>
                     <WorkspaceTaskList

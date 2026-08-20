@@ -315,7 +315,7 @@ export function SalesOrderDetailPage({
             <div
                 className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
             >
-                <div className="border-b border-border/30 px-3 py-2 md:px-4">
+                <div className="border-b border-grid px-3 py-2 md:px-4">
                     <LifecycleRail order={order} />
                 </div>
 

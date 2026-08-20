@@ -15,7 +15,7 @@ function Separator({
             orientation={orientation}
             className={cn(
                 // 分割线用次级描边（grid / colorBorderSecondary），避免与控件边框同重
-                "shrink-0 bg-border/40 data-horizontal:h-px data-horizontal:w-full data-vertical:w-px data-vertical:self-stretch",
+                "shrink-0 bg-grid data-horizontal:h-px data-horizontal:w-full data-vertical:w-px data-vertical:self-stretch",
                 className,
             )}
             {...props}

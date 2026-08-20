@@ -55,7 +55,7 @@ export function SalesOrderPaperDialog({
                                 type="button"
                                 variant="secondary"
                                 size="icon-sm"
-                                className="absolute top-3 right-3 z-10 rounded-full border border-border/60 bg-card/95 shadow-md backdrop-blur-sm print:hidden"
+                                className="absolute top-3 right-3 z-10 rounded-full border border-border bg-card/95 shadow-md backdrop-blur-sm print:hidden"
                             />
                         }
                     >

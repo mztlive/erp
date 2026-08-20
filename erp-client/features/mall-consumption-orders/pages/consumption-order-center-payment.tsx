@@ -69,7 +69,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                     商品 × 支付来源分摊矩阵（仅卡券 / 微信）
                 </caption>
                 <thead>
-                    <tr className="border-b border-border/30 text-left">
+                    <tr className="border-b border-grid text-left">
                         <th className="sticky left-0 bg-card p-2 font-medium">
                             商品明细
                         </th>
@@ -92,7 +92,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                         return (
                             <tr
                                 key={item.mallOrderItemId}
-                                className="border-b border-border/70"
+                                className="border-b border-grid"
                             >
                                 <th
                                     scope="row"
@@ -148,7 +148,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                     })}
                 </tbody>
                 <tfoot>
-                    <tr className="border-t border-border/30 font-medium">
+                    <tr className="border-t border-grid font-medium">
                         <th
                             scope="row"
                             className="sticky left-0 bg-card p-2 text-left"

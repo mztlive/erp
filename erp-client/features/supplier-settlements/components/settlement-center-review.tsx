@@ -24,7 +24,7 @@ function SettlementCenterReview({
             size="sm"
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
-            <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
+            <CardHeader className="rounded-t-lg border-b border-grid py-3">
                 <CardTitle className="text-base">复核记录</CardTitle>
                 <CardDescription>
                     提交 / 驳回 / 确认追加式记录；岗位分离由系统校验

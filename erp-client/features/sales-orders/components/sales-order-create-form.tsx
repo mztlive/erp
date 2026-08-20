@@ -274,7 +274,7 @@ export function SalesOrderCreateForm({
                             "min-w-0 overflow-hidden",
                         )}
                     >
-                        <section className="border-b border-border/30 p-4 md:p-5 lg:p-6">
+                        <section className="border-b border-grid p-4 md:p-5 lg:p-6">
                             <div className="mb-4">
                                 <h2 className="font-heading text-sm font-semibold">
                                     单据头

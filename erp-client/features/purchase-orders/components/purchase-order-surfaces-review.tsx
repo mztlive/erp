@@ -56,7 +56,7 @@ export function ReviewSurface({
 }) {
     return (
         <Card className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>财务审核视图</CardTitle>
                 <CardDescription>
                     以下为采购提交的只读回显，不可修改

@@ -12,13 +12,9 @@ import {
 import { formatDateTime } from "@/lib/datetime"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
 import { PolicyBanner } from "@/features/access-audit/components/policy-banner"
-import { parseView } from "@/features/access-audit/lib/url-state"
-import { ACCESS_VIEW_LABEL } from "@/features/access-audit/types"
-import type { AccessView } from "@/features/access-audit/types"
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
 import { AccessChangeDialog } from "@/features/access-audit/pages/components/access-change-dialog"
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
@@ -72,7 +68,6 @@ export function AccessAuditPage() {
         return (
             <PageScaffold density="compact">
                 <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
-                <div className="h-9 animate-pulse rounded-lg bg-muted" />
                 <div className="h-10 animate-pulse rounded-lg bg-muted" />
                 <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
             </PageScaffold>
@@ -173,7 +168,9 @@ export function AccessAuditPage() {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <DataFreshness
                             label={
-                                page.isAudit ? "审计更新时间" : "权限配置更新时间"
+                                page.isAudit
+                                    ? "审计更新时间"
+                                    : "权限配置更新时间"
                             }
                             state={
                                 page.pageQuery.isFetching ? "syncing" : "fresh"
@@ -236,40 +233,6 @@ export function AccessAuditPage() {
                 }
             />
 
-            <nav aria-label="权限与审计二级导航">
-                <Tabs
-                    value={view}
-                    onValueChange={(v) => page.switchView(parseView(v))}
-                >
-                    <TabsList
-                        variant="line"
-                        className="h-auto w-full flex-wrap justify-start"
-                    >
-                        {(
-                            [
-                                "roles",
-                                "users",
-                                "scopes",
-                                "audit",
-                            ] as AccessView[]
-                        ).map((v) => (
-                            <TabsTrigger key={v} value={v}>
-                                {ACCESS_VIEW_LABEL[v]}
-                                <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
-                                    {v === "roles"
-                                        ? data.metrics.roleCount
-                                        : v === "users"
-                                          ? data.metrics.userCount
-                                          : v === "scopes"
-                                            ? data.metrics.scopeCount
-                                            : data.metrics.auditEventCount}
-                                </span>
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                </Tabs>
-            </nav>
-
             <PolicyBanner policies={data.governancePolicies} view={view} />
 
             {page.actionError ? (
@@ -331,6 +294,7 @@ export function AccessAuditPage() {
                 auditColumns={page.auditColumns}
                 onClearFilters={page.clearFilters}
                 toolbar={listToolbar}
+                onViewChange={page.switchView}
             />
             <AccessPreviewSheets
                 explainSubject={page.explainSubject}

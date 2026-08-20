@@ -33,7 +33,7 @@ function ProductSpecDraftsEditor({
         <fieldset
             id="product-section-sku"
             className={cn(
-                "scroll-mt-[var(--product-section-scroll-margin)] space-y-4 border-b border-border/70 p-5 last:border-b-0",
+                "scroll-mt-[var(--product-section-scroll-margin)] space-y-4 border-b border-grid p-5 last:border-b-0",
             )}
             disabled={!canRevise}
         >

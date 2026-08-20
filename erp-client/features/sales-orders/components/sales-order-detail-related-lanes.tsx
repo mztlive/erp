@@ -125,5 +125,5 @@ export function RelatedLanes({
             />,
         )
     }
-    return <ul className="divide-y divide-border/30">{items}</ul>
+    return <ul className="divide-y divide-grid">{items}</ul>
 }

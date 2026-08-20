@@ -69,7 +69,7 @@ export function SalesOrderCreateTotalBar({
         <>
             {headerIssues.length > 0 ? (
                 <ValidationSummary
-                    className="border-t border-border/30 px-4 pt-4 md:px-5 lg:px-6"
+                    className="border-t border-grid px-4 pt-4 md:px-5 lg:px-6"
                     issues={headerIssues}
                     title={`单据头共 ${headerIssues.length} 项待处理`}
                 />
@@ -89,7 +89,7 @@ export function SalesOrderCreateTotalBar({
                               : "提交后内容锁定并进入审批；任一层驳回后将从第一节点开始下一轮。"
                     return (
                         <StickyTotalBar
-                            className="rounded-none border-0 border-t border-border/30 px-4 py-4 shadow-none md:px-5 md:py-4"
+                            className="rounded-none border-0 border-t border-grid px-4 py-4 shadow-none md:px-5 md:py-4"
                             items={[
                                 {
                                     id: "gross",

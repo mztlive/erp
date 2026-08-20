@@ -24,7 +24,7 @@ export function WarningsPanel({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="rounded-t-lg border-b border-border/30">
+            <CardHeader className="rounded-t-lg border-b border-grid">
                 <CardTitle>需要关注的预警</CardTitle>
                 <CardDescription>只显示需要你关注的异常</CardDescription>
             </CardHeader>

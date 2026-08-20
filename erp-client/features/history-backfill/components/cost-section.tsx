@@ -27,7 +27,7 @@ export function CostSection({
             <div className="grid gap-3 md:grid-cols-3">
                 {job.costBasis.map((row) => (
                     <Card key={row.basis} className={surfacePanelClassName}>
-                        <CardHeader className="border-b border-border/30 pb-2">
+                        <CardHeader className="border-b border-grid pb-2">
                             <CardTitle className="text-base">
                                 {COST_BASIS_LABEL[row.basis]}
                             </CardTitle>

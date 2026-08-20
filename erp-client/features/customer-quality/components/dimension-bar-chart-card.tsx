@@ -74,7 +74,7 @@ export function DimensionBarChartCard({
 
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>{dimension?.title ?? titleFallback}</CardTitle>
                 <CardDescription>
                     {description(dimension?.ruleVersion)}
@@ -170,7 +170,7 @@ export function DimensionBarChartCard({
                                                 className={
                                                     selected
                                                         ? "bg-accent/60"
-                                                        : "border-b border-border/60"
+                                                        : "border-b border-grid"
                                                 }
                                             >
                                                 <td className="py-1.5 pr-3">

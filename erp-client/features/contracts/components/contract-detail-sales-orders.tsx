@@ -34,7 +34,7 @@ export function ContractDetailSalesOrders({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>关联销售单</CardTitle>
                 <CardDescription>
                     追溯每张销售单使用的合同版本；金额仅作单据摘要。

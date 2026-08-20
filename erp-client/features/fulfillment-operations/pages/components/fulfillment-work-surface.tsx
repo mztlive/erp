@@ -139,7 +139,7 @@ export function FulfillmentWorkSurface({
             </button>
 
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                             <CardTitle
@@ -266,7 +266,7 @@ export function FulfillmentWorkSurface({
                     ) : null}
 
                     {canExecute ? (
-                        <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-border/30 bg-card/95 py-3 backdrop-blur">
+                        <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
                             <Button
                                 type="button"
                                 variant="ghost"
@@ -312,7 +312,7 @@ export function FulfillmentWorkSurface({
                         </div>
                     ) : (
                         /* 只读角色：与其摆一排点不动的按钮，不如说清楚谁在处理 */
-                        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-border/30 bg-card/95 py-3 backdrop-blur">
+                        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
                             <p className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <EyeIcon
                                     className="size-4 shrink-0"

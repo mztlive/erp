@@ -184,7 +184,7 @@ export function ConfirmSection({
                             size="sm"
                             className={`${surfacePanelClassName} ${confirmation.focused ? "ring-2 ring-primary/40" : ""}`}
                         >
-                            <CardHeader className="border-b border-border/30">
+                            <CardHeader className="border-b border-grid">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <CardTitle className="text-base">
                                         {

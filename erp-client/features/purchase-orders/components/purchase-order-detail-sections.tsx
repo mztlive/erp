@@ -73,7 +73,7 @@ export function PurchaseOrderDetailSections({
     return (
         <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
             <nav
-                className="flex flex-wrap gap-1 border-b border-border/30 px-3 py-1.5"
+                className="flex flex-wrap gap-1 border-b border-grid px-3 py-1.5"
                 aria-label="详情子区"
             >
                 {navItems.map((item) => (

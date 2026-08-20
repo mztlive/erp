@@ -35,7 +35,7 @@ export function PeriodBasisPanel({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>统计期间与归属口径</CardTitle>
                 <CardDescription>
                     查询与导出仅按此处明确的期间与归属口径执行。

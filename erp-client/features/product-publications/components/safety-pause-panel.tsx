@@ -144,7 +144,7 @@ export function SafetyPausePanel({
                                 {affected.map((ap) => (
                                     <li
                                         key={ap.publicationId}
-                                        className="rounded-md border border-border/60 bg-background/40 px-2 py-1.5 text-xs"
+                                        className="rounded-md border border-border bg-background/40 px-2 py-1.5 text-xs"
                                     >
                                         {
                                             affectedPublicationLabels![

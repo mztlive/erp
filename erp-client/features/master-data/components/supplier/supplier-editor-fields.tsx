@@ -225,7 +225,7 @@ export function SectionPanel({
 }) {
     return (
         <section className="space-y-5">
-            <div className="space-y-1 border-b border-border/60 pb-3">
+            <div className="space-y-1 border-b border-grid pb-3">
                 <h2 className="text-base font-semibold tracking-tight">
                     {title}
                 </h2>
@@ -251,7 +251,7 @@ export function CredentialGroup({
 }) {
     return (
         <section className={cn(surfaceInsetClassName, "overflow-hidden")}>
-            <div className="border-b border-border/60 px-4 py-3">
+            <div className="border-b border-grid px-4 py-3">
                 <h3 className="text-sm font-semibold text-foreground">
                     {title}
                 </h3>

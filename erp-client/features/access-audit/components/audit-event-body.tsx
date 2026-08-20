@@ -1,9 +1,12 @@
 "use client"
 
+import { BusinessEmptyState, BusinessStatusBadge } from "@/components/business"
 import {
-    BusinessEmptyState,
-    BusinessStatusBadge,
-} from "@/components/business"
+    DescriptionDetails,
+    DescriptionItem,
+    DescriptionList,
+    DescriptionTerm,
+} from "@/components/ui/description-list"
 import { Separator } from "@/components/ui/separator"
 import { useAuditEventQuery } from "@/features/access-audit/hooks/queries"
 import { formatDateTime } from "@/lib/datetime"
@@ -26,78 +29,76 @@ function AuditEventBody({ query }: AuditEventBodyProps) {
         )
     }
     return (
-        <div className="flex flex-col gap-3 text-sm">
-            <dl className="grid gap-2 sm:grid-cols-2">
-                <div>
-                    <dt className="text-xs text-muted-foreground">
-                        审计事件号
-                    </dt>
-                    <dd className="font-mono">
+        <div className="flex flex-col gap-4 text-sm">
+            <DescriptionList columns="two" aria-label="审计事件身份">
+                <DescriptionItem>
+                    <DescriptionTerm>审计事件号</DescriptionTerm>
+                    <DescriptionDetails className="font-mono">
                         {query.data.auditEventId}
-                    </dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">
-                        发生时间
-                    </dt>
-                    <dd className="num">
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>发生时间</DescriptionTerm>
+                    <DescriptionDetails className="num">
                         {formatDateTime(query.data.recordedAt, "full")}
-                    </dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">操作者</dt>
-                    <dd>
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>操作者</DescriptionTerm>
+                    <DescriptionDetails>
                         {query.data.actorLabel}（{query.data.actorId}）
-                    </dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">
-                        责任角色
-                    </dt>
-                    <dd>{query.data.actorRole}</dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">动作</dt>
-                    <dd>{query.data.actionLabel}</dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">结果</dt>
-                    <dd>
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>责任角色</DescriptionTerm>
+                    <DescriptionDetails>
+                        {query.data.actorRole}
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>动作</DescriptionTerm>
+                    <DescriptionDetails>
+                        {query.data.actionLabel}
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>结果</DescriptionTerm>
+                    <DescriptionDetails>
                         <BusinessStatusBadge
                             label={query.data.resultLabel}
                             tone={query.data.resultTone}
                         />
-                    </dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">对象</dt>
-                    <dd>{query.data.objectLabel}</dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">
-                        请求追踪号
-                    </dt>
-                    <dd className="font-mono text-xs">
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>对象</DescriptionTerm>
+                    <DescriptionDetails>
+                        {query.data.objectLabel}
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>请求追踪号</DescriptionTerm>
+                    <DescriptionDetails className="font-mono text-xs">
                         {query.data.traceId}
                         <div className="text-muted-foreground">
                             req {query.data.requestId}
                         </div>
-                    </dd>
-                </div>
-            </dl>
+                    </DescriptionDetails>
+                </DescriptionItem>
+            </DescriptionList>
             <Separator />
-            <div>
-                <h3 className="text-sm font-semibold">变更字段</h3>
-                <p className="mt-1 text-muted-foreground">
+            <div className="flex flex-col gap-1.5">
+                <h3 className="text-sm font-medium">变更字段</h3>
+                <p className="text-muted-foreground">
                     {query.data.changedFieldDisplay !== "—"
                         ? query.data.changedFieldDisplay
                         : "无字段变更记录"}
                 </p>
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     敏感字段不返回完整旧值或新值；安全摘要默认仅作引用。
                 </p>
                 {query.data.safeDigest ? (
-                    <p className="mt-1 font-mono text-xs">
+                    <p className="font-mono text-xs">
                         安全摘要 {query.data.safeDigest}
                     </p>
                 ) : null}

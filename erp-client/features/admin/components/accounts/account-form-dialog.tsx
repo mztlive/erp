@@ -15,8 +15,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldError, FieldLabel } from "@/components/ui/field"
-import { Label } from "@/components/ui/label"
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { RoleOptionsPanel } from "@/features/admin/components/accounts/role-options-panel"
 import { useAdminMutations } from "@/features/admin/hooks/queries"
 
@@ -137,91 +142,98 @@ export function AccountFormDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <form
-                    className="flex flex-col gap-3"
+                    className="flex flex-col gap-4"
                     onSubmit={(e) => {
                         e.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    {isEdit ? (
-                        <div className="space-y-1.5">
-                            <Label>账号</Label>
-                            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-                                {account?.account}
-                            </div>
-                        </div>
-                    ) : (
+                    <FieldGroup className="gap-4">
+                        {isEdit ? (
+                            <Field data-disabled>
+                                <FieldLabel>账号</FieldLabel>
+                                <Input
+                                    value={account?.account ?? ""}
+                                    disabled
+                                    readOnly
+                                />
+                            </Field>
+                        ) : (
+                            <form.AppField
+                                name="account"
+                                children={(field) => (
+                                    <field.TextField
+                                        label="账号"
+                                        placeholder="登录账号，3-32 个字符"
+                                        autoComplete="off"
+                                    />
+                                )}
+                            />
+                        )}
                         <form.AppField
-                            name="account"
+                            name="name"
                             children={(field) => (
                                 <field.TextField
-                                    label="账号"
-                                    placeholder="登录账号，3-32 个字符"
-                                    autoComplete="off"
+                                    label="姓名"
+                                    placeholder="管理员姓名"
                                 />
                             )}
                         />
-                    )}
-                    <form.AppField
-                        name="name"
-                        children={(field) => (
-                            <field.TextField
-                                label="姓名"
-                                placeholder="管理员姓名"
-                            />
-                        )}
-                    />
-                    <form.AppField
-                        name="password"
-                        children={(field) => (
-                            <field.TextField
-                                label={isEdit ? "新密码" : "密码"}
-                                type="password"
-                                placeholder={
-                                    isEdit ? "留空则不修改" : "6-32 个字符"
-                                }
-                                autoComplete="new-password"
-                            />
-                        )}
-                    />
-                    <form.AppField
-                        name="role_ids"
-                        mode="array"
-                        children={(field) => {
-                            const selected = field.state.value ?? []
-                            const isInvalid =
-                                field.state.meta.isTouched &&
-                                !field.state.meta.isValid
-                            const errors = toFieldErrors(
-                                field.state.meta.errors,
-                            )
-                            return (
-                                <Field data-invalid={isInvalid || undefined}>
-                                    <FieldLabel>角色</FieldLabel>
-                                    <RoleOptionsPanel
-                                        options={roleOptions}
-                                        selected={selected}
-                                        invalid={isInvalid}
-                                        onToggle={(id, checked) => {
-                                            const next = checked
-                                                ? [...selected, id]
-                                                : selected.filter(
-                                                      (value) => value !== id,
-                                                  )
-                                            field.handleChange(next)
-                                            form.validateField(
-                                                "role_ids",
-                                                "change",
-                                            )
-                                        }}
-                                    />
-                                    {isInvalid ? (
-                                        <FieldError errors={errors} />
-                                    ) : null}
-                                </Field>
-                            )
-                        }}
-                    />
+                        <form.AppField
+                            name="password"
+                            children={(field) => (
+                                <field.TextField
+                                    label={isEdit ? "新密码" : "密码"}
+                                    type="password"
+                                    placeholder={
+                                        isEdit ? "留空则不修改" : "6-32 个字符"
+                                    }
+                                    autoComplete="new-password"
+                                />
+                            )}
+                        />
+                        <form.AppField
+                            name="role_ids"
+                            mode="array"
+                            children={(field) => {
+                                const selected = field.state.value ?? []
+                                const isInvalid =
+                                    field.state.meta.isTouched &&
+                                    !field.state.meta.isValid
+                                const errors = toFieldErrors(
+                                    field.state.meta.errors,
+                                )
+                                return (
+                                    <Field
+                                        data-invalid={isInvalid || undefined}
+                                    >
+                                        <FieldLabel>角色</FieldLabel>
+                                        <RoleOptionsPanel
+                                            options={roleOptions}
+                                            selected={selected}
+                                            invalid={isInvalid}
+                                            onToggle={(id, checked) => {
+                                                const next = checked
+                                                    ? [...selected, id]
+                                                    : selected.filter(
+                                                          (value) =>
+                                                              value !== id,
+                                                      )
+                                                field.handleChange(next)
+                                                form.validateField(
+                                                    "role_ids",
+                                                    "change",
+                                                )
+                                            }}
+                                        />
+                                        {isInvalid ? (
+                                            <FieldError errors={errors} />
+                                        ) : null}
+                                    </Field>
+                                )
+                            }}
+                        />
+                    </FieldGroup>
                     {submitError ? (
                         <Alert variant="destructive" role="alert">
                             <AlertTitle>提交失败</AlertTitle>

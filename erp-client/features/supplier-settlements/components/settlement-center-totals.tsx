@@ -22,7 +22,7 @@ function SettlementCenterTotals({
     const st = detail.statement
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
+            <CardHeader className="rounded-t-lg border-b border-grid py-3">
                 <CardTitle className="text-base">金额摘要</CardTitle>
                 <CardDescription>
                     订单、运费、服务费、退款与 ERP

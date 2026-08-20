@@ -33,7 +33,7 @@ export function MallSyncHistoryView({
             ) : null}
             {(data?.history ?? []).map((h) => (
                 <Card key={h.id} size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle className="text-base">{h.title}</CardTitle>
                         <CardDescription>
                             {formatDateTime(h.recordedAt, "default")}

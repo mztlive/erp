@@ -50,7 +50,7 @@ export function MallSyncSnapshotsView({
             />
             {data?.selectedSnapshot ? (
                 <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle className="font-mono text-base">
                             {data.selectedSnapshot.externalOrderNo}
                         </CardTitle>
@@ -78,7 +78,7 @@ export function MallSyncSnapshotsView({
                             {data.selectedSnapshot.whitelistFields.map((f) => (
                                 <div
                                     key={f.field}
-                                    className="flex justify-between gap-2 border-b border-dashed border-border/60 py-1"
+                                    className="flex justify-between gap-2 border-b border-dashed border-grid py-1"
                                 >
                                     <dt className="text-muted-foreground">
                                         {f.label}

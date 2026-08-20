@@ -266,7 +266,7 @@ export function ConsumptionOrderCenterPage({
                 >
                     <TabsList
                         variant="line"
-                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
+                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-grid bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
                     >
                         {OBJECT_CENTER_SECTIONS.map((s) => (
                             <TabsTrigger

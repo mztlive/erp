@@ -60,7 +60,7 @@ export function MappingTaskPanel({
     return (
         <div className="space-y-3">
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="space-y-2 border-b border-border/30">
+                <CardHeader className="space-y-2 border-b border-grid">
                     <div className="flex flex-wrap items-center gap-2">
                         <CardTitle className="text-base">
                             {mappingTask.mappingTypeLabel}

@@ -63,7 +63,7 @@ export function SalesOrderDetailTabs({
         >
             <TabsList
                 variant="line"
-                className="sticky top-0 z-10 h-11 w-full justify-start gap-1 overflow-visible rounded-none border-b border-border/30 bg-card/95 px-3 group-data-horizontal/tabs:h-11 backdrop-blur supports-backdrop-filter:bg-card/80"
+                className="sticky top-0 z-10 h-11 w-full justify-start gap-1 overflow-visible rounded-none border-b border-grid bg-card/95 px-3 group-data-horizontal/tabs:h-11 backdrop-blur supports-backdrop-filter:bg-card/80"
             >
                 {visibleNav.map((item) => {
                     const todoOnFulfillment =

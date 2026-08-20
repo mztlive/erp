@@ -41,7 +41,7 @@ export function MallSyncReconciliationView({
                 <>
                     <div className="space-y-3">
                         <Card size="sm" className={surfacePanelClassName}>
-                            <CardHeader className="border-b border-border/30">
+                            <CardHeader className="border-b border-grid">
                                 <CardTitle>
                                     {data.reconciliation.jobNo}
                                 </CardTitle>
@@ -72,7 +72,7 @@ export function MallSyncReconciliationView({
                     </div>
                     {data.selectedDifference ? (
                         <Card size="sm" className={surfacePanelClassName}>
-                            <CardHeader className="border-b border-border/30">
+                            <CardHeader className="border-b border-grid">
                                 <CardTitle className="font-mono text-base">
                                     {data.selectedDifference.externalOrderNo}
                                 </CardTitle>

@@ -14,7 +14,7 @@ export function SalesOrderCreateLineItemsSection({
     return (
         <section
             id="sales-line-items-section"
-            className="border-b border-border/30 p-4 md:p-5 lg:p-6"
+            className="border-b border-grid p-4 md:p-5 lg:p-6"
         >
             <div className="mb-4 flex items-center justify-between gap-2">
                 <h2 className="font-heading text-sm font-semibold">销售明细</h2>

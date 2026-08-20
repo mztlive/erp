@@ -55,7 +55,7 @@ export function ReportSection({
     return (
         <div className="space-y-4">
             <Card className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                             <CardTitle>审计报告</CardTitle>

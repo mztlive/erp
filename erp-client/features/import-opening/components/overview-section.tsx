@@ -34,7 +34,7 @@ export function OverviewSection({
     return (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>试算摘要</CardTitle>
                     <CardDescription>
                         试算统计由系统统一计算，与问题明细可能因筛选存在差异。
@@ -78,7 +78,7 @@ export function OverviewSection({
             </Card>
 
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>期初口径</CardTitle>
                     <CardDescription>
                         提示按本批对象固定生成，不可修改。

@@ -33,7 +33,7 @@ function RelatedList({
 }) {
     return (
         <Card size="sm" className="shadow-none ring-1 ring-foreground/[0.04]">
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle className="text-sm">{title}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">

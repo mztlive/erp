@@ -65,7 +65,7 @@ export function CardFundsAllocationEditor({
             {allocationMode ? (
                 <div className="space-y-3">
                     <Card size="sm" className={surfacePanelClassName}>
-                        <CardHeader className="border-b border-border/30 py-3">
+                        <CardHeader className="border-b border-grid py-3">
                             <CardTitle className="text-base">
                                 {allocationMode === "receipt"
                                     ? "登记历史回款"

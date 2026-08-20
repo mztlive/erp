@@ -19,7 +19,7 @@ export function WorkspaceTaskList({
 }) {
     return (
         <ul
-            className="divide-y divide-border/60 overflow-auto"
+            className="divide-y divide-grid overflow-auto"
             aria-label="待办列表"
         >
             {items.map((item) => {

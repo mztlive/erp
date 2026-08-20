@@ -77,7 +77,7 @@ function ProductSkuSection({
             />
             <fieldset
                 className={cn(
-                    "min-w-0 max-w-full space-y-4 overflow-hidden border-b border-border/70 p-5 last:border-b-0",
+                    "min-w-0 max-w-full space-y-4 overflow-hidden border-b border-grid p-5 last:border-b-0",
                 )}
             >
                 <legend className="sr-only">SKU</legend>

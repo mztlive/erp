@@ -29,7 +29,7 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
     return (
         <div className="grid gap-4 lg:grid-cols-2">
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>合规输入包</CardTitle>
                     <CardDescription>
                         仅展示白名单包元数据；不展示原始存储键、签名 URL
@@ -95,7 +95,7 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
             </Card>
 
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>结果与诊断资产保留</CardTitle>
                     <CardDescription>
                         成功审计长期 · 失败诊断 30 天 · 导出 7

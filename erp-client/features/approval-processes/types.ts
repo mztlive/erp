@@ -102,7 +102,7 @@ export const DRAFT_SOURCES = ["EMPTY", "CURRENT_PUBLISHED"] as const
 
 export type DraftSource = (typeof DRAFT_SOURCES)[number]
 
-/** 销售单采购确认用途（只读展示，不得写入请求）。 */
+/** 历史销售单采购确认用途。页面不再锁定，请求不得写入该字段。 */
 export const SALES_ORDER_PROCUREMENT_PURPOSE =
     "SALES_ORDER_PROCUREMENT_CONFIRMATION"
 

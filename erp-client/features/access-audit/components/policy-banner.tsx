@@ -2,7 +2,8 @@
 
 import { ChevronDownIcon, ShieldAlertIcon } from "lucide-react"
 
-import { surfacePanelClassName } from "@/components/business"
+import { surfaceInsetClassName } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import {
     Collapsible,
@@ -35,48 +36,41 @@ function PolicyBanner({
         field.state === "MISSING" ||
         audit.state === "MISSING"
 
-    const summaryItems: { key: string; label: string; missing: boolean }[] = []
-    if (view === "users" || view === "roles") {
-        summaryItems.push({
+    const summaryItems: { key: string; label: string; missing: boolean }[] = [
+        {
             key: "time",
             label: `角色时间 · ${policyStatusLabel(time.state)}`,
             missing: time.state === "MISSING",
-        })
-    }
-    if (view === "fields" || view === "roles") {
-        summaryItems.push({
+        },
+        {
             key: "field",
             label: `字段粒度 · ${policyStatusLabel(field.state)}`,
             missing: field.state === "MISSING",
-        })
-    }
-    if (view === "audit" || view === "roles" || view === "users") {
-        summaryItems.push({
+        },
+        {
             key: "audit",
             label: `审计导出 · ${policyStatusLabel(audit.state)}`,
             missing: audit.state === "MISSING",
-        })
-    }
+        },
+    ]
 
     return (
         <Collapsible
             data-slot="policy-banner"
-            className={surfacePanelClassName}
+            className={cn(surfaceInsetClassName, "overflow-hidden")}
         >
-            <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40">
+            <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted/40">
                 <ShieldAlertIcon
                     className={
                         hasMissing
-                            ? "size-4 shrink-0 text-warning"
-                            : "size-4 shrink-0 text-muted-foreground"
+                            ? "size-3.5 shrink-0 text-warning"
+                            : "size-3.5 shrink-0 text-muted-foreground"
                     }
                     aria-hidden="true"
                 />
+                <span className="font-medium text-foreground">治理策略</span>
                 <span className="min-w-0 flex-1">
-                    <span className="font-medium text-foreground">
-                        治理策略
-                    </span>
-                    <span className="ml-2 inline-flex flex-wrap items-center gap-1.5 align-middle">
+                    <span className="inline-flex flex-wrap items-center gap-1.5 align-middle">
                         {summaryItems.map((item) => (
                             <Badge
                                 key={item.key}
@@ -93,10 +87,10 @@ function PolicyBanner({
                 </span>
                 <ChevronDownIcon
                     aria-hidden="true"
-                    className="size-4 shrink-0 text-muted-foreground transition-transform group-aria-expanded:rotate-180"
+                    className="size-3.5 shrink-0 text-muted-foreground transition-transform group-aria-expanded:rotate-180"
                 />
             </CollapsibleTrigger>
-            <CollapsibleContent className="border-t border-border/30 px-3 py-2 text-xs text-muted-foreground">
+            <CollapsibleContent className="border-t border-grid px-3 py-2 text-xs text-muted-foreground">
                 <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
                     {(view === "users" || view === "roles") && (
                         <p>

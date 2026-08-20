@@ -72,11 +72,7 @@ export function ApprovalProcessesPage() {
 
     const replaceState = (next: CatalogUrlState) => {
         const query = buildCatalogSearchParams(next)
-        router.replace(
-            query
-                ? `/system/approval-processes?${query}`
-                : "/system/approval-processes",
-        )
+        router.replace(`/system/approval-processes${query}`)
     }
 
     const permissions = profileQuery.data?.permissions

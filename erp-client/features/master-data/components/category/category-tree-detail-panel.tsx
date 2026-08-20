@@ -39,7 +39,7 @@ export function CategoryTreeDetailPanel({
             className={cn(surfacePanelClassName, "flex min-h-0 flex-col")}
             aria-label="分类详情"
         >
-            <div className="border-b border-border/30 px-3 py-2">
+            <div className="border-b border-grid px-3 py-2">
                 <h2 className="text-sm font-semibold">分类详情</h2>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
@@ -132,7 +132,7 @@ export function CategoryTreeDetailPanel({
                                 </dd>
                             </div>
                         </dl>
-                        <div className="flex flex-wrap gap-2 border-t border-border/30 pt-3">
+                        <div className="flex flex-wrap gap-2 border-t border-grid pt-3">
                             <Button
                                 type="button"
                                 size="sm"

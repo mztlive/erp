@@ -35,7 +35,7 @@ export function SalesOrdersListFilterPanel(props: {
     return (
         <div
             id="sales-order-filter-panel"
-            className="flex w-full flex-col gap-4 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
+            className="flex w-full flex-col gap-4 rounded-lg border border-border bg-muted/30 px-3 py-3"
             aria-label="销售单筛选条件"
         >
             <FixedOptionRadioFilter

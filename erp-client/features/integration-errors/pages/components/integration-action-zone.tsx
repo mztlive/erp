@@ -61,7 +61,7 @@ export function IntegrationActionZone({
         responsibilityStatus !== "assigned_to_me" || formalPending
     return (
         <Card size="sm" className={surfacePanelClassName} ref={actionZoneRef}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>处理动作</CardTitle>
                 <CardDescription>
                     仅展示可操作范围；阻断原因见下方说明

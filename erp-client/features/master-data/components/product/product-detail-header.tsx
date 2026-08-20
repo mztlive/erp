@@ -164,7 +164,7 @@ function ProductDetailHeader({
             </div>
 
             {!isCreate && data?.productConstraints ? (
-                <div className="border-t border-border/60 bg-muted/40 px-4 py-2.5 text-xs">
+                <div className="border-t border-grid bg-muted/40 px-4 py-2.5 text-xs">
                     <p>
                         基础单位{" "}
                         <span className="num">
@@ -186,7 +186,7 @@ function ProductDetailHeader({
                 </div>
             ) : null}
 
-            <div className="border-t border-border/60 p-2 sm:px-3 sm:pb-3">
+            <div className="border-t border-grid p-2 sm:px-3 sm:pb-3">
                 <nav
                     aria-label="商品编辑分区"
                     className={cn(

@@ -3,7 +3,11 @@
 import { SearchIcon } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
-import { InputGroupInput } from "@/components/ui/input-group"
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
+} from "@/components/ui/input-group"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { usePermissionPanel } from "@/features/admin/hooks/use-permission-panel"
@@ -46,24 +50,22 @@ export function PermissionOptionsPanel({
     } = usePermissionPanel(selected)
 
     return (
-        <div className={cn("space-y-2", className)}>
-            <div className="flex items-center justify-between gap-2">
-                <div className="relative flex-1">
-                    <SearchIcon
-                        aria-hidden="true"
-                        className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                    />
+        <div className={cn("flex flex-col gap-3", className)}>
+            <div className="flex items-center gap-2">
+                <InputGroup className="min-w-0 flex-1">
+                    <InputGroupAddon>
+                        <SearchIcon aria-hidden="true" />
+                    </InputGroupAddon>
                     <InputGroupInput
                         type="search"
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}
                         placeholder="搜索权限名称、路径或编码"
                         aria-label="搜索权限"
-                        className="h-8 pl-8 text-sm"
                     />
-                </div>
+                </InputGroup>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                    已选 {selected.length} 项
+                    已选 <span className="num">{selected.length}</span> 项
                 </span>
             </div>
 
@@ -73,19 +75,19 @@ export function PermissionOptionsPanel({
                     if (next === "business" || next === "system") setTab(next)
                 }}
             >
-                <TabsList className="h-8">
-                    <TabsTrigger value="business" className="text-xs">
+                <TabsList variant="line" className="w-full justify-start">
+                    <TabsTrigger value="business" className="flex-none">
                         {PERMISSION_PANEL_TAB_LABEL.business}
                         {selectedCountByTab.business > 0 ? (
-                            <span className="num ml-1 text-muted-foreground">
+                            <span className="num text-muted-foreground">
                                 {selectedCountByTab.business}
                             </span>
                         ) : null}
                     </TabsTrigger>
-                    <TabsTrigger value="system" className="text-xs">
+                    <TabsTrigger value="system" className="flex-none">
                         {PERMISSION_PANEL_TAB_LABEL.system}
                         {selectedCountByTab.system > 0 ? (
-                            <span className="num ml-1 text-muted-foreground">
+                            <span className="num text-muted-foreground">
                                 {selectedCountByTab.system}
                             </span>
                         ) : null}
@@ -93,12 +95,11 @@ export function PermissionOptionsPanel({
                 </TabsList>
             </Tabs>
 
-            {/* 权限组下划线 Tab（横向滚动） */}
             {visibleGroups.length > 0 ? (
                 <div
                     role="tablist"
                     aria-label="权限分组"
-                    className="flex gap-1 overflow-x-auto border-b pb-0"
+                    className="flex gap-1 overflow-x-auto border-b border-grid"
                 >
                     {visibleGroups.map((group) => {
                         const fullCodes = (
@@ -120,15 +121,15 @@ export function PermissionOptionsPanel({
                                 aria-selected={isActive}
                                 onClick={() => setActiveGroup(group.name)}
                                 className={cn(
-                                    "relative shrink-0 whitespace-nowrap px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-foreground after:opacity-0 after:transition-opacity",
+                                    "relative shrink-0 whitespace-nowrap px-2 py-1.5 text-sm font-medium text-foreground/60 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                    "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-foreground after:opacity-0 after:transition-opacity",
                                     isActive &&
                                         "text-foreground after:opacity-100",
                                 )}
                             >
                                 {group.name}
                                 {selectedInGroup > 0 ? (
-                                    <span className="num ml-1">
+                                    <span className="num ml-1 text-muted-foreground">
                                         {selectedInGroup}
                                     </span>
                                 ) : null}
@@ -139,8 +140,8 @@ export function PermissionOptionsPanel({
             ) : null}
 
             {currentGroup ? (
-                <div className="rounded-lg border">
-                    <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2">
+                <div className="overflow-hidden rounded-lg border border-border">
+                    <div className="flex items-center justify-between gap-2 border-b border-grid bg-muted/40 px-3 py-2">
                         <div className="min-w-0">
                             <div className="text-sm font-medium">
                                 {currentGroup.name}
@@ -188,13 +189,13 @@ export function PermissionOptionsPanel({
                             全选
                         </label>
                     </div>
-                    <div className="divide-y">
+                    <div className="divide-y divide-grid">
                         {currentGroup.items.map((item) => {
                             const checked = selected.includes(item.code)
                             return (
                                 <label
                                     key={item.code}
-                                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+                                    className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-muted/40"
                                 >
                                     <Checkbox
                                         checked={checked}
@@ -219,7 +220,7 @@ export function PermissionOptionsPanel({
                                     <span className="min-w-0 flex-1 truncate">
                                         {item.description}
                                     </span>
-                                    <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+                                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
                                         {item.method} {item.path}
                                     </span>
                                 </label>
@@ -228,7 +229,7 @@ export function PermissionOptionsPanel({
                     </div>
                 </div>
             ) : (
-                <p className="rounded-lg border px-3 py-4 text-center text-xs text-muted-foreground">
+                <p className="rounded-lg border border-border px-3 py-4 text-center text-xs text-muted-foreground">
                     无匹配权限
                 </p>
             )}

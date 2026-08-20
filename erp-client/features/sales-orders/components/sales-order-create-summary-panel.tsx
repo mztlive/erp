@@ -77,7 +77,7 @@ export function SalesOrderCreateSummaryPanel({
                                     {values.lineItems.length} 行
                                 </dd>
                             </div>
-                            <div className="border-t border-border/30 pt-3">
+                            <div className="border-t border-grid pt-3">
                                 <div className="flex justify-between gap-2">
                                     <dt className="text-muted-foreground">
                                         含税预估

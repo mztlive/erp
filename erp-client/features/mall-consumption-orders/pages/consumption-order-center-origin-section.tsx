@@ -33,7 +33,7 @@ export function OriginSection({ view }: { view: MallConsumptionOrderView }) {
                         key={s.paymentSourceId}
                         className="rounded-lg border-0 bg-muted/40 shadow-none ring-0"
                     >
-                        <CardHeader className="border-b border-border/30 pb-2">
+                        <CardHeader className="border-b border-grid pb-2">
                             <CardTitle className="text-base">
                                 {s.sourceType === "CARD"
                                     ? "卡券来源"

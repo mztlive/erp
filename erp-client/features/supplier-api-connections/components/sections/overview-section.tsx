@@ -25,7 +25,7 @@ export function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
                 size="sm"
                 className={cn(surfaceInsetClassName, "shadow-none ring-0")}
             >
-                <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+                <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                     <CardTitle className="text-base">业务身份</CardTitle>
                     <CardDescription>采购主责供应商与业务影响</CardDescription>
                 </CardHeader>
@@ -60,7 +60,7 @@ export function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
                 size="sm"
                 className={cn(surfaceInsetClassName, "shadow-none ring-0")}
             >
-                <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+                <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                     <CardTitle className="text-base">技术就绪</CardTitle>
                     <CardDescription>地址/密钥引用与适配器</CardDescription>
                 </CardHeader>
@@ -117,7 +117,7 @@ export function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
                     "shadow-none ring-0 lg:col-span-2",
                 )}
             >
-                <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+                <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                     <CardTitle className="text-base">能力与健康摘要</CardTitle>
                     <CardDescription>
                         连接级能力声明不等于每个商品可用 ·{" "}

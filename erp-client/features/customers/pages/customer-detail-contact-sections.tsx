@@ -53,7 +53,7 @@ export function CustomerDetailContactSections({
                             size="sm"
                             className="shadow-none ring-1 ring-foreground/[0.04]"
                         >
-                            <CardHeader className="border-b border-border/30">
+                            <CardHeader className="border-b border-grid">
                                 <CardTitle className="text-sm">
                                     有效联系人
                                 </CardTitle>
@@ -135,7 +135,7 @@ export function CustomerDetailContactSections({
                             size="sm"
                             className="shadow-none ring-1 ring-foreground/[0.04]"
                         >
-                            <CardHeader className="border-b border-border/30">
+                            <CardHeader className="border-b border-grid">
                                 <CardTitle className="text-sm">
                                     地址
                                 </CardTitle>

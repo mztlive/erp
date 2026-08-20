@@ -205,7 +205,7 @@ export function ContractDetailHeader({
 
             <nav
                 aria-label="对象分区"
-                className="flex flex-wrap gap-2 border-b border-border/30 pb-2"
+                className="flex flex-wrap gap-2 border-b border-grid pb-2"
             >
                 {navItems.map((item) => {
                     const active = activeSection === item.id

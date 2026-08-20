@@ -159,7 +159,7 @@ export function ProductListToolbar({
                 secondary={
                     productFilterPanelOpen ? (
                         <div
-                            className="flex w-full flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
+                            className="flex w-full flex-col gap-3 rounded-lg border border-border bg-muted/30 px-3 py-3"
                             aria-label="商品筛选条件"
                         >
                             <FixedOptionRadioFilter

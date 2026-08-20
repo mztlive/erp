@@ -18,7 +18,7 @@ export function EvidenceNavPanel({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30 py-3">
+            <CardHeader className="border-b border-grid py-3">
                 <CardTitle className="text-base">证据与导航</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 pt-4 text-sm">

@@ -55,7 +55,7 @@ function SkuRow({
     return (
         <tr
             key={`${sku.skuNo}-${index}`}
-            className="border-b border-border/70 align-top last:border-b-0"
+            className="border-b border-grid align-top last:border-b-0"
         >
             {activeSpecs.length > 0 ? (
                 activeSpecs.map((spec, specIndex) => (

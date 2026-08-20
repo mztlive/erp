@@ -35,7 +35,7 @@ export function MallSyncOverviewView({
     return (
         <div className="grid gap-4 lg:grid-cols-2">
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>运行摘要</CardTitle>
                     <CardDescription>
                         同步进度仅证明来源数据已捕获，不证明映射或应收已成功。
@@ -90,7 +90,7 @@ export function MallSyncOverviewView({
                 </CardContent>
             </Card>
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>最近同步任务</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">

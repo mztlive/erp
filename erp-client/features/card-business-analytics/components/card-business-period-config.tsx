@@ -35,7 +35,7 @@ export function CardBusinessPeriodConfig({
 }: CardBusinessPeriodConfigProps) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>显式期间与日期口径</CardTitle>
                 <CardDescription>
                     选择完整的期间与日期口径后才会发起查询；该选择将作用于全部指标与图表。

@@ -52,7 +52,7 @@ export function ContributionChart({
 
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>经营贡献与覆盖率</CardTitle>
                 <CardDescription>
                     利润金额不含税；覆盖率同屏辅助。全量口径，与指标一致，不随明细筛选变化。
@@ -160,7 +160,7 @@ export function ContributionChart({
                                     {contributionChartData.map((r) => (
                                         <tr
                                             key={r.period}
-                                            className="border-b border-border/60"
+                                            className="border-b border-grid"
                                         >
                                             <th
                                                 scope="row"

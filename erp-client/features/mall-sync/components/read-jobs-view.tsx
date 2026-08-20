@@ -63,7 +63,7 @@ export function MallSyncJobsView({
             />
             {selectedJob ? (
                 <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle className="text-base">
                             {selectedJob.jobNo}
                         </CardTitle>

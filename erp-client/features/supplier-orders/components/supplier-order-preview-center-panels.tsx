@@ -200,7 +200,7 @@ export function WorkItemCard({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+            <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                 <CardTitle className="text-sm">
                     {WORK_ITEM_TYPE_LABEL[workItem.workItemType]}
                 </CardTitle>

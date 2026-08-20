@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import { catalogFixture } from "./fixtures"
 import {
+    buildCatalogSearchParams,
+    buildDetailSearchParams,
     hasUnknownCatalogParams,
     hasUnknownDetailParams,
     matchesCatalogFilters,
@@ -33,6 +35,25 @@ describe("url state", () => {
         ).toBe(false)
         expect(
             hasUnknownDetailParams(new URLSearchParams("view=draft&hack=1")),
+        ).toBe(true)
+    })
+
+    it("builds query strings with a single leading question mark", () => {
+        expect(buildDetailSearchParams({ view: "draft" })).toBe("?view=draft")
+        expect(buildDetailSearchParams({ view: "current" })).toBe("")
+        expect(buildDetailSearchParams({ view: "history", version: "2" })).toBe(
+            "?view=history&version=2",
+        )
+        expect(
+            buildCatalogSearchParams({
+                policy: "ALL",
+                status: "ALL",
+                q: "",
+                page: 1,
+            }),
+        ).toBe("")
+        expect(
+            hasUnknownDetailParams(new URLSearchParams("??view=draft")),
         ).toBe(true)
     })
 

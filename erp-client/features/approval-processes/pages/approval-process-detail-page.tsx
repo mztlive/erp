@@ -5,12 +5,17 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
     PageHeader,
     PageScaffold,
+    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
+import { cn } from "@/lib/utils"
 
 import { CreateDraftDialog } from "../components/create-draft-dialog"
 import { DefinitionEditor } from "../components/definition-editor"
@@ -18,7 +23,15 @@ import { PublishDialog } from "../components/publish-dialog"
 import { RetireDialog } from "../components/retire-dialog"
 import { VersionHistory } from "../components/version-history"
 import { definitionErrorMessage } from "../errors"
-import { configurationStatusLabel, documentTypeLabel } from "../labels"
+import {
+    approvalRequirementLabel,
+    configurationStatusLabel,
+    configurationStatusTone,
+    definitionStatusLabel,
+    definitionStatusTone,
+    documentTypeLabel,
+    versionLabel,
+} from "../labels"
 import { isDocumentType } from "../parse"
 import { canPerformCatalogAction, canReadCatalog } from "../permissions"
 import {
@@ -107,12 +120,21 @@ export function ApprovalProcessDetailPage({
 
     const replaceView = (view: typeof urlState.view, version?: string) => {
         const query = buildDetailSearchParams({ view, version })
-        router.replace(
-            query
-                ? `/system/approval-processes/${rawDocumentType}?${query}`
-                : `/system/approval-processes/${rawDocumentType}`,
-        )
+        router.replace(`/system/approval-processes/${rawDocumentType}${query}`)
     }
+
+    const typeTitle = documentType
+        ? documentTypeLabel(documentType, catalogItem?.document_type_label)
+        : "审批流程配置"
+    const catalogBreadcrumbs = [
+        { id: "system", label: "系统", href: "/system/approval-processes" },
+        {
+            id: "catalog",
+            label: "审批流程配置",
+            href: "/system/approval-processes",
+        },
+        { id: "type", label: typeTitle, current: true as const },
+    ]
 
     if (!documentType) {
         return (
@@ -185,11 +207,9 @@ export function ApprovalProcessDetailPage({
         return (
             <PageScaffold>
                 <PageHeader
-                    title={documentTypeLabel(
-                        documentType,
-                        catalogItem.document_type_label,
-                    )}
+                    title={typeTitle}
                     description="无需审批 / 不适用"
+                    breadcrumbs={catalogBreadcrumbs}
                     actions={
                         <Button
                             type="button"
@@ -219,160 +239,239 @@ export function ApprovalProcessDetailPage({
         canPerformCatalogAction("RETIRE", catalogItem, permissions)
     const missing =
         catalogItem?.configuration_status === "MISSING_CONFIGURATION"
+    const showEditor =
+        Boolean(detailQuery.data) &&
+        (urlState.view !== "history" || Boolean(historyTarget)) &&
+        !(urlState.view === "draft" && !draft)
 
     return (
         <PageScaffold density="compact">
             <PageHeader
-                title={documentTypeLabel(
-                    documentType,
-                    catalogItem?.document_type_label,
-                )}
-                description={
-                    catalogItem
-                        ? configurationStatusLabel(
-                              catalogItem.configuration_status,
-                              catalogItem.approval_requirement,
-                          )
-                        : "审批流程"
-                }
+                variant="object-chrome"
+                breadcrumbs={catalogBreadcrumbs}
                 actions={
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            render={<Link href="/system/approval-processes" />}
-                        >
-                            返回目录
-                        </Button>
-                        <Button
-                            type="button"
-                            variant={
-                                urlState.view === "current"
-                                    ? "default"
-                                    : "outline"
-                            }
-                            onClick={() => replaceView("current")}
-                        >
-                            当前版本
-                        </Button>
-                        <Button
-                            type="button"
-                            variant={
-                                urlState.view === "draft"
-                                    ? "default"
-                                    : "outline"
-                            }
-                            onClick={() => replaceView("draft")}
-                        >
-                            草稿
-                        </Button>
-                        <Button
-                            type="button"
-                            variant={
-                                urlState.view === "history"
-                                    ? "default"
-                                    : "outline"
-                            }
-                            onClick={() => replaceView("history")}
-                        >
-                            历史版本
-                        </Button>
-                        {canCreate ? (
-                            <Button
-                                type="button"
-                                onClick={() => setCreateOpen(true)}
-                            >
-                                新建草稿
-                            </Button>
-                        ) : null}
-                        {canPublish && draft && urlState.view === "draft" ? (
-                            <Button
-                                type="button"
-                                onClick={() => setPublishOpen(true)}
-                            >
-                                发布
-                            </Button>
-                        ) : null}
-                        {canRetire && published ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setRetireOpen(true)}
-                            >
-                                退役
-                            </Button>
-                        ) : null}
-                    </div>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        render={<Link href="/system/approval-processes" />}
+                    >
+                        返回目录
+                    </Button>
                 }
             />
 
-            {missing && !draft ? (
-                <BusinessFailureState
-                    kind="business"
-                    title="配置缺失"
-                    description="该单据类型必须审批，但还没有可绑定的已发布流程。创建新单据会被阻断。"
-                    action={
-                        canCreate ? (
-                            <Button
-                                type="button"
-                                onClick={() => setCreateOpen(true)}
-                            >
-                                新建草稿
-                            </Button>
-                        ) : null
-                    }
-                />
-            ) : null}
-
-            {urlState.view === "draft" && !draft ? (
-                <p className="text-sm text-muted-foreground">
-                    当前没有草稿。
-                    {canCreate
-                        ? "请先创建草稿后再编辑。"
-                        : "你没有创建草稿的权限。"}
-                </p>
-            ) : null}
-
-            {urlState.view === "history" ? (
-                <VersionHistory
-                    versions={versionsQuery.data ?? []}
-                    selectedVersion={urlState.version}
-                    onSelect={(item) =>
-                        replaceView("history", item.definition_version)
-                    }
-                />
-            ) : null}
-
-            {detailQuery.isError ? (
-                <BusinessFailureState
-                    kind="system"
-                    title="审批流程加载失败"
-                    description={definitionErrorMessage(detailQuery.error)}
-                    action={
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="text-xl font-semibold tracking-tight">
+                            {typeTitle}
+                        </h1>
+                        {catalogItem ? (
+                            <StatusBadge
+                                tone={configurationStatusTone(
+                                    catalogItem.configuration_status,
+                                    catalogItem.approval_requirement,
+                                )}
+                                label={configurationStatusLabel(
+                                    catalogItem.configuration_status,
+                                    catalogItem.approval_requirement,
+                                )}
+                            />
+                        ) : null}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        {catalogItem
+                            ? approvalRequirementLabel(
+                                  catalogItem.approval_requirement,
+                              )
+                            : "审批流程"}
+                        {" · "}
+                        已发布{" "}
+                        {published
+                            ? versionLabel(published.definition_version)
+                            : "—"}
+                        {" · "}
+                        草稿{" "}
+                        {draft ? versionLabel(draft.definition_version) : "—"}
+                    </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {canCreate ? (
                         <Button
                             type="button"
-                            onClick={() => void detailQuery.refetch()}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCreateOpen(true)}
                         >
-                            重试
+                            新建草稿
                         </Button>
-                    }
-                />
-            ) : null}
+                    ) : null}
+                    {canPublish && draft && urlState.view === "draft" ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => setPublishOpen(true)}
+                        >
+                            发布
+                        </Button>
+                    ) : null}
+                    {canRetire && published ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setRetireOpen(true)}
+                        >
+                            退役
+                        </Button>
+                    ) : null}
+                </div>
+            </div>
 
-            {detailQuery.data &&
-            (urlState.view !== "history" || historyTarget) &&
-            !(urlState.view === "draft" && !draft) ? (
-                <DefinitionEditor
-                    detail={detailQuery.data}
-                    lockVersion={
-                        lockVersion || detailQuery.data.definition_lock_version
-                    }
-                    onLockVersionChange={(next) => {
-                        setLockVersion(next)
-                        void detailQuery.refetch()
+            <div
+                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            >
+                <Tabs
+                    value={urlState.view}
+                    onValueChange={(next) => {
+                        if (
+                            next === "current" ||
+                            next === "draft" ||
+                            next === "history"
+                        ) {
+                            replaceView(next)
+                        }
                     }}
-                />
-            ) : null}
+                >
+                    <TabsList
+                        variant="line"
+                        className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b border-grid bg-card px-3 py-1.5"
+                    >
+                        <TabsTrigger value="current" className="flex-none">
+                            当前版本
+                        </TabsTrigger>
+                        <TabsTrigger value="draft" className="flex-none">
+                            草稿
+                        </TabsTrigger>
+                        <TabsTrigger value="history" className="flex-none">
+                            历史版本
+                        </TabsTrigger>
+                        {detailQuery.data ? (
+                            <div className="ml-auto flex items-center gap-2 py-0.5">
+                                <StatusBadge
+                                    tone={definitionStatusTone(
+                                        detailQuery.data.status,
+                                    )}
+                                    label={definitionStatusLabel(
+                                        detailQuery.data.status,
+                                    )}
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                    {versionLabel(
+                                        detailQuery.data.definition_version,
+                                    )}
+                                </span>
+                            </div>
+                        ) : null}
+                    </TabsList>
+                </Tabs>
+
+                {missing && !draft ? (
+                    <div className="p-4">
+                        <BusinessFailureState
+                            kind="business"
+                            title="配置缺失"
+                            description="该单据类型必须审批，但还没有可绑定的已发布流程。创建新单据会被阻断。"
+                            action={
+                                canCreate ? (
+                                    <Button
+                                        type="button"
+                                        onClick={() => setCreateOpen(true)}
+                                    >
+                                        新建草稿
+                                    </Button>
+                                ) : null
+                            }
+                        />
+                    </div>
+                ) : null}
+
+                {urlState.view === "draft" && !draft ? (
+                    <BusinessEmptyState
+                        kind="no-data"
+                        title="当前没有草稿"
+                        description={
+                            canCreate
+                                ? "请先创建草稿后再编辑。"
+                                : "你没有创建草稿的权限。"
+                        }
+                        className="rounded-none border-0 bg-transparent p-6 shadow-none ring-0"
+                        action={
+                            canCreate ? (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="rounded-lg shadow-none"
+                                    onClick={() => setCreateOpen(true)}
+                                >
+                                    新建草稿
+                                </Button>
+                            ) : null
+                        }
+                    />
+                ) : null}
+
+                {urlState.view === "history" ? (
+                    <div
+                        className={
+                            showEditor ? "border-b border-grid" : undefined
+                        }
+                    >
+                        <VersionHistory
+                            versions={versionsQuery.data ?? []}
+                            selectedVersion={urlState.version}
+                            onSelect={(item) =>
+                                replaceView("history", item.definition_version)
+                            }
+                        />
+                    </div>
+                ) : null}
+
+                {detailQuery.isError ? (
+                    <div className="p-4">
+                        <BusinessFailureState
+                            kind="system"
+                            title="审批流程加载失败"
+                            description={definitionErrorMessage(
+                                detailQuery.error,
+                            )}
+                            action={
+                                <Button
+                                    type="button"
+                                    onClick={() => void detailQuery.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    </div>
+                ) : null}
+
+                {showEditor && detailQuery.data ? (
+                    <DefinitionEditor
+                        detail={detailQuery.data}
+                        lockVersion={
+                            lockVersion ||
+                            detailQuery.data.definition_lock_version
+                        }
+                        onLockVersionChange={(next) => {
+                            setLockVersion(next)
+                            void detailQuery.refetch()
+                        }}
+                    />
+                ) : null}
+            </div>
 
             {catalogItem ? (
                 <CreateDraftDialog

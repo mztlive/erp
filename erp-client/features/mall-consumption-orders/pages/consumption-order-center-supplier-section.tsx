@@ -62,7 +62,7 @@ export function SupplierSection({ view }: { view: MallConsumptionOrderView }) {
                             key={so.supplierFulfillmentOrderId}
                             className="rounded-lg border-0 bg-muted/40 shadow-none ring-0"
                         >
-                            <CardHeader className="border-b border-border/30 pb-2">
+                            <CardHeader className="border-b border-grid pb-2">
                                 <CardTitle className="text-base">
                                     <span className="num">
                                         {so.fulfillmentOrderNo}

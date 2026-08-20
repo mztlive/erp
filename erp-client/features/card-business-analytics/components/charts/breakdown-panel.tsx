@@ -19,7 +19,7 @@ export interface BreakdownPanelProps {
 export function BreakdownPanel({ breakdowns }: BreakdownPanelProps) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>类目 / 客户构成</CardTitle>
                 <CardDescription>
                     排名不越过数据范围。全量口径，不随明细筛选变化。

@@ -31,7 +31,7 @@ export function AftersalesSection({
         >
             <div className="grid gap-3 md:grid-cols-3">
                 <Card className="rounded-lg border-0 bg-muted/40 shadow-none ring-0">
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle className="text-base">商城退款</CardTitle>
                         <CardDescription>冲减消费</CardDescription>
                     </CardHeader>
@@ -45,7 +45,7 @@ export function AftersalesSection({
                     </CardContent>
                 </Card>
                 <Card className="rounded-lg border-0 bg-muted/40 shadow-none ring-0">
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle className="text-base">
                             卡券余额恢复
                         </CardTitle>
@@ -61,7 +61,7 @@ export function AftersalesSection({
                     </CardContent>
                 </Card>
                 <Card className="rounded-lg border-0 bg-muted/40 shadow-none ring-0">
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle className="text-base">供应商退款</CardTitle>
                         <CardDescription>成本/应付/现金分列</CardDescription>
                     </CardHeader>

@@ -45,7 +45,7 @@ export function SecuritySection({
                     size="sm"
                     className={cn(surfaceInsetClassName, "shadow-none ring-0")}
                 >
-                    <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+                    <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                         <CardTitle className="text-base">
                             地址配置引用
                         </CardTitle>
@@ -74,7 +74,7 @@ export function SecuritySection({
                     size="sm"
                     className={cn(surfaceInsetClassName, "shadow-none ring-0")}
                 >
-                    <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+                    <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                         <CardTitle className="text-base">
                             密钥配置引用
                         </CardTitle>

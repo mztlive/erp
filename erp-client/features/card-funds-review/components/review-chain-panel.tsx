@@ -16,7 +16,7 @@ import type { CardFundsReviewItemView } from "@/features/card-funds-review/types
 export function ReviewChainPanel({ task }: { task: CardFundsReviewItemView }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30 py-3">
+            <CardHeader className="border-b border-grid py-3">
                 <CardTitle className="text-base">复核记录（只读）</CardTitle>
                 <CardDescription>
                     历史复核记录只读，不可修改或删除；本次将形成复核号{" "}

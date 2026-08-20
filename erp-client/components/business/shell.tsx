@@ -115,7 +115,7 @@ function GlobalTopbar({
                 <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
                     {leading}
                     {search ? (
-                        <InputGroup className="w-[min(100%,16rem)] border-border/40 bg-card/80 shadow-xs sm:w-64 md:w-72">
+                        <InputGroup className="w-[min(100%,16rem)] border-border bg-card/80 shadow-xs sm:w-64 md:w-72">
                             <InputGroupAddon>
                                 <SearchIcon aria-hidden="true" />
                             </InputGroupAddon>
@@ -157,7 +157,7 @@ function GlobalTopbar({
                                 key={actionKey}
                                 variant={variant}
                                 size="sm"
-                                className="border-border/40 bg-card/80 shadow-xs"
+                                className="border-border bg-card/80 shadow-xs"
                                 {...buttonProps}
                             >
                                 {Icon ? (

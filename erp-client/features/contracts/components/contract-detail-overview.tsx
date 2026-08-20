@@ -31,7 +31,7 @@ export function ContractDetailOverview({
     return (
         <div className="grid gap-4 lg:grid-cols-2">
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>概览</CardTitle>
                     <CardDescription>
                         展示合同身份、客户、状态、版本与有效期；不含合同级金额。
@@ -102,7 +102,7 @@ export function ContractDetailOverview({
             </Card>
 
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>关联销售摘要</CardTitle>
                     <CardDescription>
                         金额仅为各销售单摘要，不汇总为合同金额。更新于{" "}

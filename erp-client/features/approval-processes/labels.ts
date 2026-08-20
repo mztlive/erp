@@ -1,3 +1,4 @@
+import type { StatusTone } from "@/components/ui/status-badge"
 import { versionText } from "@/lib/ui-text"
 
 import type {
@@ -115,6 +116,33 @@ export const configurationStatusLabel = (
         return "无需审批 / 不适用"
     }
     return CONFIGURATION_STATUS_LABEL[status]
+}
+
+/**
+ * 返回配置状态徽章色相。配置缺失必须是阻断色，不得用中性色淡化。
+ */
+export const configurationStatusTone = (
+    status: ConfigurationStatus,
+    requirement: ApprovalRequirement,
+): StatusTone => {
+    if (
+        requirement === "PROCESS_REQUIRED" &&
+        status === "MISSING_CONFIGURATION"
+    ) {
+        return "destructive"
+    }
+    if (status === "PUBLISHED") return "success"
+    if (status === "DRAFT") return "warning"
+    return "neutral"
+}
+
+/**
+ * 返回定义状态徽章色相。
+ */
+export const definitionStatusTone = (status: DefinitionStatus): StatusTone => {
+    if (status === "PUBLISHED") return "success"
+    if (status === "DRAFT") return "warning"
+    return "void"
 }
 
 /**

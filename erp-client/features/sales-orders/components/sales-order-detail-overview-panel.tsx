@@ -57,7 +57,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                 </thead>
                 <tbody>
                     {order.lineItems.map((line) => (
-                        <tr key={line.id} className="border-t border-border/30">
+                        <tr key={line.id} className="border-t border-grid">
                             <td className="px-3 py-1.5">
                                 <div>{line.name}</div>
                                 {line.sku ? (

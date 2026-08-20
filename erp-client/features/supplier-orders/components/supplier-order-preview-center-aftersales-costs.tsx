@@ -55,7 +55,7 @@ export function AftersalesSection({
                                 "shadow-none ring-0",
                             )}
                         >
-                            <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+                            <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                                 <CardTitle className="text-sm">
                                     {as.requestNo}{" "}
                                     <span className="num font-normal text-muted-foreground">

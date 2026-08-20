@@ -29,7 +29,7 @@ export function CardFundsRecords({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30 py-3">
+            <CardHeader className="border-b border-grid py-3">
                 <CardTitle className="text-base">回款与发票明细</CardTitle>
                 <CardDescription>
                     仅展示客户往来业务记录；登记为新增分配，不覆盖已有金额

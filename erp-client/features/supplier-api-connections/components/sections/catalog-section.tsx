@@ -40,7 +40,7 @@ export function CatalogSection({
                 size="sm"
                 className={cn(surfaceInsetClassName, "shadow-none ring-0")}
             >
-                <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+                <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                     <CardTitle className="text-base">目录同步进度</CardTitle>
                     <CardDescription>
                         与连接状态分开展示 ·{" "}

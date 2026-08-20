@@ -79,7 +79,7 @@ export function CostSection({
                                 key={entry.consumptionEntryId}
                                 className="rounded-lg border-0 bg-muted/40 shadow-none ring-0"
                             >
-                                <CardHeader className="border-b border-border/30 pb-2">
+                                <CardHeader className="border-b border-grid pb-2">
                                     <CardTitle className="text-base">
                                         {entry.direction === "REVERSAL"
                                             ? "冲减"

@@ -14,6 +14,10 @@
      colorText ≈ #141414 · colorTextSecondary ≈ #595959
    导航选中态用 blue-1（#e6f4ff）pill，与 antd Menu 选中项一致。
 
+   画布略深于 antd colorBgLayout（#eef0f3 vs #f5f5f5），白卡才能浮起。
+   不要再压深画布去「制造分离」——稀疏列表会留下大块空画布，和侧栏连成深灰墙。
+   线条两档：grid 行线 / 卡内发丝（#f0f0f0）；border 结构描边（#d9d9d9）。
+
    尺寸令牌来自 docs/erp-interaction-spec.md 第 2.1 节，勿随意改动。
    ========================================================================== */
 
@@ -165,7 +169,8 @@
 
     /* colorBgLayout / colorText / colorBgContainer
      背景比卡片明显深一档（≈4.5% 亮度差），白卡片才能在灰画布上真正"浮"起来；
-     旧值 0.9849 与卡片的 1.0 只差 1.5%，肉眼几乎分辨不出画布与卡片的边界。 */
+     旧值 0.9849 与卡片的 1.0 只差 1.5%，肉眼几乎分辨不出画布与卡片的边界。
+     不要再压到 0.928（#e6e7ea）：画布和侧栏会连成深灰墙。 */
     --background: oklch(0.955 0.004 264.5); /* #eef0f3 */
     --foreground: oklch(0.1913 0 0); /* #141414 ≈ rgba(0,0,0,0.88) */
     --card: oklch(1 0 0); /* #ffffff colorBgContainer */
@@ -219,7 +224,7 @@
     --neutral-soft-foreground: oklch(0.464 0 0); /* #595959 */
     --neutral-border: oklch(0.8853 0 0); /* #d9d9d9 */
 
-    --border: oklch(0.8853 0 0); /* #d9d9d9 colorBorder */
+    --border: oklch(0.8853 0 0); /* #d9d9d9 colorBorder · 结构描边 */
     --overlay: oklch(0 0 0 / 45%); /* antd mask */
     /* 表单控件静止态边框：比通用 --border 再浅一档，配合纯白背景（--surface-control）
      不会显得过重；hover/focus 时仍靠 border-foreground/25 与 ring 变深提示 */
@@ -236,6 +241,7 @@
     --row-hover: oklch(0.9702 0 0); /* #f5f5f5 */
     --row-selected: oklch(0.96 0.021 241.3); /* #e6f4ff */
     --row-striped: oklch(0.9851 0 0);
+    /* 行线与卡内发丝：浅于 --border，避免和卡片轮廓同重 */
     --grid: oklch(0.9551 0 0); /* #f0f0f0 colorBorderSecondary */
 
     /* 图表：antd 预设蓝/橙/青/金/紫 */

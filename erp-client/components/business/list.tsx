@@ -112,7 +112,7 @@ function ListToolbar({
                         {hasQueryTools ? (
                             <Separator
                                 orientation="vertical"
-                                className="hidden bg-border/30 lg:block"
+                                className="hidden bg-border lg:block"
                             />
                         ) : null}
                         <div
@@ -350,8 +350,9 @@ function BusinessTableFrame({
         <Card
             data-business-component="table-frame"
             className={cn(
-                // 账本列表：6px 圆角 + 轻阴影，覆盖 Card 默认大圆角
-                "gap-0 py-0",
+                // 账本列表：6px 圆角 + 轻阴影，覆盖 Card 默认大圆角。
+                // grow：作为 PageScaffold 的主表面时吃掉剩余高度，少数据也不留灰空地。
+                "grow gap-0 py-0",
                 surfacePanelClassName,
                 className,
             )}
@@ -369,7 +370,7 @@ function BusinessTableFrame({
                 ) : null}
             </CardHeader>
 
-            <Separator className="bg-border/30" />
+            <Separator className="bg-border" />
 
             {hasControls ? (
                 <>
@@ -377,17 +378,22 @@ function BusinessTableFrame({
                         {toolbar}
                         {selectionBar}
                     </CardContent>
-                    <Separator className="bg-border/30" />
+                    <Separator className="bg-border" />
                 </>
             ) : null}
 
-            <CardContent className="min-w-0 px-0">
-                <div data-slot="business-table-frame-table">{table}</div>
+            <CardContent className="flex min-h-0 min-w-0 grow flex-col px-0">
+                <div
+                    data-slot="business-table-frame-table"
+                    className="flex min-h-0 min-w-0 grow flex-col"
+                >
+                    {table}
+                </div>
             </CardContent>
 
             {footer ? (
                 <>
-                    <Separator className="bg-border/30" />
+                    <Separator className="bg-border" />
                     <CardFooter className="justify-between gap-3 rounded-b-lg py-3">
                         {footer}
                     </CardFooter>

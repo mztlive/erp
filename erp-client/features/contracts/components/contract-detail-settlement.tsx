@@ -20,7 +20,7 @@ export function ContractDetailSettlement({
 
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>结算与开票</CardTitle>
                 <CardDescription>
                     当前合同修订的结构化记录；销售单关联时锁定该版本。

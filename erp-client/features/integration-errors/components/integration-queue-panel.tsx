@@ -27,7 +27,7 @@ export function IntegrationQueuePanel({
 }: IntegrationQueuePanelProps) {
     return (
         <Card size="sm" className={cn("min-h-[28rem]", surfacePanelClassName)}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>任务 / 差异队列</CardTitle>
                 <CardDescription>
                     共 {items.length} 项 · 安全故障与结果未知优先

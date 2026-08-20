@@ -101,7 +101,7 @@ export const detailFixture = (
 })
 
 /**
- * 销售单空白草稿：无服务端节点，编辑器应补采购确认槽位。
+ * 销售单空白草稿：无服务端节点，编辑器预置可删除的默认节点。
  */
 export const salesOrderEmptyDraft = (): DefinitionDetailView =>
     detailFixture({
@@ -113,7 +113,7 @@ export const salesOrderEmptyDraft = (): DefinitionDetailView =>
     })
 
 /**
- * 销售单已保存草稿：包含不可删除的采购确认用途节点。
+ * 销售单已保存草稿：可含历史采购确认用途，节点均可删除。
  */
 export const salesOrderSavedDraft = (): DefinitionDetailView =>
     detailFixture({

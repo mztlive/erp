@@ -1,6 +1,8 @@
 "use client"
 
+import { BusinessEmptyState } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -10,7 +12,11 @@ import {
     TableRow,
 } from "@/components/ui/table"
 
-import { definitionStatusLabel, versionLabel } from "../labels"
+import {
+    definitionStatusLabel,
+    definitionStatusTone,
+    versionLabel,
+} from "../labels"
 import type { DefinitionVersionItem } from "../types"
 
 /**
@@ -27,12 +33,14 @@ export function VersionHistory({
 }) {
     if (versions.length === 0) {
         return (
-            <p
-                className="text-sm text-muted-foreground"
-                data-testid="version-history-empty"
-            >
-                还没有历史版本。
-            </p>
+            <div data-testid="version-history-empty">
+                <BusinessEmptyState
+                    kind="no-data"
+                    title="还没有历史版本"
+                    description="发布后才会留下可查阅的历史版本。"
+                    className="rounded-none border-0 bg-transparent p-6 shadow-none ring-0"
+                />
+            </div>
         )
     }
 
@@ -47,32 +55,37 @@ export function VersionHistory({
                 </TableRow>
             </TableHeader>
             <TableBody>
-                {versions.map((item) => (
-                    <TableRow
-                        key={item.definition_id}
-                        data-selected={
-                            item.definition_version === selectedVersion
-                        }
-                    >
-                        <TableCell>
-                            {versionLabel(item.definition_version)}
-                        </TableCell>
-                        <TableCell>
-                            {definitionStatusLabel(item.status)}
-                        </TableCell>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell className="text-right">
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => onSelect(item)}
-                            >
-                                查看
-                            </Button>
-                        </TableCell>
-                    </TableRow>
-                ))}
+                {versions.map((item) => {
+                    const selected = item.definition_version === selectedVersion
+                    return (
+                        <TableRow
+                            key={item.definition_id}
+                            data-selected={selected}
+                            className={selected ? "bg-accent/50" : undefined}
+                        >
+                            <TableCell>
+                                {versionLabel(item.definition_version)}
+                            </TableCell>
+                            <TableCell>
+                                <StatusBadge
+                                    tone={definitionStatusTone(item.status)}
+                                    label={definitionStatusLabel(item.status)}
+                                />
+                            </TableCell>
+                            <TableCell>{item.name}</TableCell>
+                            <TableCell className="text-right">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={selected ? "secondary" : "outline"}
+                                    onClick={() => onSelect(item)}
+                                >
+                                    查看
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    )
+                })}
             </TableBody>
         </Table>
     )

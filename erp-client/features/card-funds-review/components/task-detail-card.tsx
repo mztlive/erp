@@ -69,7 +69,7 @@ export function TaskDetailCard({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <div className="flex flex-wrap items-center gap-2">
                     <CardTitle>
                         <h2

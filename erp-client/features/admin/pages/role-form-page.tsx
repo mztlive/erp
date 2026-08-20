@@ -16,14 +16,11 @@ import { getErrorMessage } from "@/lib/api/errors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
-import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from "@/components/ui/field"
 import { PermissionOptionsPanel } from "@/features/admin/components/roles/permission-panel"
 import { useRoleMutations, useRolesQuery } from "@/features/admin/hooks/queries"
 
@@ -224,22 +221,24 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
                 }
             />
 
-            <Card className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
-                    <CardTitle>角色配置</CardTitle>
-                    <CardDescription>
+            <div className={`${surfacePanelClassName} min-w-0 overflow-hidden`}>
+                <div className="flex flex-col gap-1 border-b border-grid px-4 py-3">
+                    <h2 className="font-heading text-base font-medium">
+                        角色配置
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
                         角色名称为 2-32
                         个字符；系统内置角色不可修改或删除。权限按模块分组勾选，可搜索过滤。
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <form
-                        className="flex flex-col gap-4"
-                        onSubmit={(e) => {
-                            e.preventDefault()
-                            void form.handleSubmit()
-                        }}
-                    >
+                    </p>
+                </div>
+                <form
+                    className="flex flex-col gap-4 p-4 md:p-5"
+                    onSubmit={(e) => {
+                        e.preventDefault()
+                        void form.handleSubmit()
+                    }}
+                >
+                    <FieldGroup className="gap-4">
                         <form.AppField
                             name="name"
                             children={(field) => (
@@ -286,32 +285,30 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
                                 )
                             }}
                         />
-                        {submitError ? (
-                            <Alert variant="destructive" role="alert">
-                                <AlertTitle>提交失败</AlertTitle>
-                                <AlertDescription>
-                                    {submitError}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                        <CardFooter className="flex justify-end gap-2 border-t border-border/30 px-0 pb-0 pt-4">
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                disabled={pending}
-                                onClick={() => router.push(ROLES_LIST_HREF)}
-                            >
-                                取消
-                            </Button>
-                            <form.AppForm>
-                                <form.SubmitButton
-                                    label={isEdit ? "保存" : "创建"}
-                                />
-                            </form.AppForm>
-                        </CardFooter>
-                    </form>
-                </CardContent>
-            </Card>
+                    </FieldGroup>
+                    {submitError ? (
+                        <Alert variant="destructive" role="alert">
+                            <AlertTitle>提交失败</AlertTitle>
+                            <AlertDescription>{submitError}</AlertDescription>
+                        </Alert>
+                    ) : null}
+                    <div className="flex justify-end gap-2 border-t border-grid pt-4">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={pending}
+                            onClick={() => router.push(ROLES_LIST_HREF)}
+                        >
+                            取消
+                        </Button>
+                        <form.AppForm>
+                            <form.SubmitButton
+                                label={isEdit ? "保存" : "创建"}
+                            />
+                        </form.AppForm>
+                    </div>
+                </form>
+            </div>
         </PageScaffold>
     )
 }

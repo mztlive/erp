@@ -54,7 +54,7 @@ export function ConsumptionTrendChart({
 
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>消费与余额趋势</CardTitle>
                 <CardDescription>
                     销售 / 消费 / 退款 / 余额（含税，万元展示）。全量口径，不随明细筛选变化。
@@ -129,7 +129,7 @@ export function ConsumptionTrendChart({
                             {consumptionChartData.map((r) => (
                                 <tr
                                     key={r.period}
-                                    className="border-b border-border/60"
+                                    className="border-b border-grid"
                                 >
                                     <th
                                         scope="row"

@@ -39,7 +39,7 @@ export function CustomerQualityCoveragePanels({
                     className={surfacePanelClassName}
                     data-slot="card-funds-coverage-notice"
                 >
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle>卡券票款复核进度</CardTitle>
                         <CardDescription>
                             与受影响应收指标同屏；未复核不得假装可靠。

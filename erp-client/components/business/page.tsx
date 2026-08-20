@@ -385,7 +385,7 @@ function MetricItem({
             data-density={density}
             data-detail-mode={detailMode}
             className={cn(
-                "min-w-0 rounded-lg border border-border/70 bg-card",
+                "min-w-0 rounded-lg border border-border bg-card",
                 compact ? "p-1.5 sm:p-2" : "p-2 sm:p-2.5",
                 className,
             )}
@@ -464,7 +464,7 @@ function MetricFilterItem({
                 aria-pressed={active}
                 data-density={density}
                 className={cn(
-                    "h-full w-full rounded-lg border border-border/70 bg-card text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "h-full w-full rounded-lg border border-border bg-card text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     compact ? "p-1.5 sm:p-2" : "p-2 sm:p-2.5",
                     active &&
                         "border-primary/30 bg-accent text-accent-foreground shadow-none",
@@ -624,7 +624,9 @@ function PageScaffold({
             data-slot="page-scaffold"
             data-density={density}
             className={cn(
-                "mx-auto flex w-full max-w-shell flex-col",
+                // flex-1：内容短时撑满壳层，避免稀疏列表下面露出大块空画布。
+                // 不设 min-h-0，长页仍按内容增高，由壳层 overflow-auto 滚动。
+                "mx-auto flex w-full max-w-shell flex-1 flex-col",
                 density === "compact"
                     ? "gap-3 p-3 md:px-5 md:py-4"
                     : "gap-3 p-4 md:gap-4 md:px-6 md:py-5",
@@ -637,7 +639,7 @@ function PageScaffold({
 
 /** 主工作面浮起表面：靠浅阴影浮起，避免重描边。 */
 const surfacePanelClassName =
-    "rounded-lg border border-border/70 bg-card shadow-sm"
+    "rounded-lg border border-border bg-card shadow-sm"
 
 /** 主卡内轻提示/工具条：无描边，仅浅底区分。 */
 const surfaceInsetClassName = "rounded-md bg-muted/40"

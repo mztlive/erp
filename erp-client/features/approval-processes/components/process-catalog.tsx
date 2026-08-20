@@ -16,6 +16,7 @@ import {
 import {
     approvalRequirementLabel,
     configurationStatusLabel,
+    configurationStatusTone,
     documentTypeLabel,
     versionLabel,
 } from "../labels"
@@ -98,7 +99,10 @@ export function ProcessCatalog({
                                         item.configuration_status,
                                         item.approval_requirement,
                                     )}
-                                    tone={blocked ? "destructive" : "neutral"}
+                                    tone={configurationStatusTone(
+                                        item.configuration_status,
+                                        item.approval_requirement,
+                                    )}
                                 />
                             </TableCell>
                             <TableCell>

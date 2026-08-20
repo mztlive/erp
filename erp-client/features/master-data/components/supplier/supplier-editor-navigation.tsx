@@ -54,7 +54,7 @@ export function SupplierSectionTabs({
             <TabsList
                 variant="line"
                 aria-label="供应商编辑分区"
-                className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-0 overflow-x-auto rounded-none border-b border-border/60 bg-card/95 px-4 py-0 backdrop-blur supports-backdrop-filter:bg-card/85"
+                className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-0 overflow-x-auto rounded-none border-b border-grid bg-card/95 px-4 py-0 backdrop-blur supports-backdrop-filter:bg-card/85"
             >
                 {SUPPLIER_SECTIONS.filter(
                     (section) => !isCreate || section.id !== "history",

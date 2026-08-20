@@ -40,7 +40,7 @@ export function PublicationCenterVersionSummary({
 
     return (
         <Card className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30 pb-2">
+            <CardHeader className="border-b border-grid pb-2">
                 <CardTitle className="text-base">发布身份与版本</CardTitle>
                 <CardDescription>
                     展示商城实际生效版本与最新提交版本，避免误判。

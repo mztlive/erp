@@ -45,7 +45,7 @@ export function ExecutionHistory({
                                 {round.items.map((item) => (
                                     <li
                                         key={item.executionId}
-                                        className="rounded-md border border-border/60 px-3 py-2 text-sm"
+                                        className="rounded-md border border-border px-3 py-2 text-sm"
                                     >
                                         <p>
                                             {item.nodeName} ·{" "}

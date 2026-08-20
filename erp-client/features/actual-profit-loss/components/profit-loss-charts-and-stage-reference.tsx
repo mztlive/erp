@@ -82,7 +82,7 @@ export function ProfitLossChartsAndStageReference({
         <>
             <div className="grid min-w-0 gap-4 xl:grid-cols-[3fr_2fr]">
                 <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle>
                             盈亏趋势（{PROFIT_LOSS_SCOPE_LABEL} · 万元）
                         </CardTitle>
@@ -170,7 +170,7 @@ export function ProfitLossChartsAndStageReference({
                                             {data.trend.map((t) => (
                                                 <tr
                                                     key={t.period}
-                                                    className="border-b border-border/60"
+                                                    className="border-b border-grid"
                                                 >
                                                     <td className="py-1 pr-2">
                                                         {t.period}
@@ -217,7 +217,7 @@ export function ProfitLossChartsAndStageReference({
                 </Card>
 
                 <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
+                    <CardHeader className="border-b border-grid">
                         <CardTitle>
                             成本构成（{PROFIT_LOSS_SCOPE_LABEL}）
                         </CardTitle>
@@ -273,7 +273,7 @@ export function ProfitLossChartsAndStageReference({
                                         .map((c) => (
                                             <li
                                                 key={c.costType}
-                                                className="flex justify-between gap-2 border-b border-border/50 py-1"
+                                                className="flex justify-between gap-2 border-b border-grid py-1"
                                             >
                                                 <span>{c.label}</span>
                                                 <span className="num">
@@ -303,7 +303,7 @@ export function ProfitLossChartsAndStageReference({
 
             {/* EXPECTED / CONFIRMED 对照区 */}
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>预计/已确认成本参考</CardTitle>
                     <CardDescription>
                         仅执行期对照，不参与实际经营盈亏或实际利润率；与实际成本使用不同文案样式。

@@ -52,7 +52,7 @@ export function DifferencesWorkspace({
                 size="sm"
                 className={cn(surfaceInsetClassName, "shadow-none ring-0")}
             >
-                <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
+                <CardHeader className="rounded-t-lg border-b border-grid py-3">
                     <CardTitle className="text-base">差异列表</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-1 p-2">
@@ -98,7 +98,7 @@ export function DifferencesWorkspace({
                             "shadow-none ring-0",
                         )}
                     >
-                        <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
+                        <CardHeader className="rounded-t-lg border-b border-grid py-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
                                     <CardTitle className="text-base">

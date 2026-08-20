@@ -25,7 +25,7 @@ function SettlementCenterItems({
             size="sm"
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
-            <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
+            <CardHeader className="rounded-t-lg border-b border-grid py-3">
                 <CardTitle className="text-base">结算明细</CardTitle>
                 <CardDescription>
                     冻结数据 + 不可变完成/取消/退款记录 · 金额只读，不可修改
@@ -53,7 +53,7 @@ function SettlementCenterItems({
                         {items.map((it) => (
                             <tr
                                 key={it.itemId}
-                                className="border-b border-border/60"
+                                className="border-b border-grid"
                             >
                                 <td className="px-2 py-2">
                                     <Link

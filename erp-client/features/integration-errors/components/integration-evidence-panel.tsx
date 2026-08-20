@@ -19,7 +19,7 @@ export function IntegrationEvidencePanel({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>证据与尝试（历史保留）</CardTitle>
                 <CardDescription>
                     消息、尝试与处理记录只保留，不提供覆盖控件

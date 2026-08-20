@@ -50,7 +50,7 @@ export function CostBasisChart({ coverage }: CostBasisChartProps) {
 
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>成本口径构成</CardTitle>
                 <CardDescription>
                     实际成本 / 标准成本 /
@@ -112,7 +112,7 @@ export function CostBasisChart({ coverage }: CostBasisChartProps) {
                             {basisChartData.map((r) => (
                                 <tr
                                     key={r.basis}
-                                    className="border-b border-border/60"
+                                    className="border-b border-grid"
                                 >
                                     <th
                                         scope="row"

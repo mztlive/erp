@@ -22,7 +22,7 @@ function SettlementCenterAudit({
             size="sm"
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
-            <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
+            <CardHeader className="rounded-t-lg border-b border-grid py-3">
                 <CardTitle className="text-base">审计</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 pt-4">

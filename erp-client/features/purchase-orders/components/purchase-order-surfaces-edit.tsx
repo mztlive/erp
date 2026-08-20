@@ -70,7 +70,7 @@ export function EditSurface({
 }) {
     return (
         <Card className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>
                     {order.identity.reviewStatus === "REJECTED"
                         ? "被驳回待修改"

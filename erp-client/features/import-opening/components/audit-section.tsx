@@ -19,7 +19,7 @@ import { versionText } from "@/lib/ui-text"
 export function AuditSection({ batch }: { batch: ImportBatchView }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>可追溯谱系</CardTitle>
                 <CardDescription>
                     来源身份、规则版本、manifest、成功结果与映射谱系可审计；详细事件在权限与审计中。

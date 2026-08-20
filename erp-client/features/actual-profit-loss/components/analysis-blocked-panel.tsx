@@ -49,7 +49,7 @@ export function AnalysisBlockedPanel({
             </Alert>
 
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>公式与边界（查询阻断中）</CardTitle>
                     <CardDescription>选定口径后加载数据。</CardDescription>
                 </CardHeader>

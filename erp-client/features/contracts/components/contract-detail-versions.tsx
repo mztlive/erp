@@ -29,7 +29,7 @@ export function ContractDetailVersions({
     return (
         <div className="grid gap-4 lg:grid-cols-2">
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <div className="flex flex-wrap items-center gap-2">
                         <HistoryIcon
                             className="size-4 text-muted-foreground"
@@ -106,7 +106,7 @@ export function ContractDetailVersions({
             </Card>
 
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>审计时间线</CardTitle>
                     <CardDescription>
                         PDF 上传、版本归档、终止与下载等处理动作。

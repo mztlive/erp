@@ -61,7 +61,7 @@ export function DecisionPanel({
             size="sm"
             className={cn(surfacePanelClassName, "sticky bottom-2 z-10")}
         >
-            <CardHeader className="border-b border-border/30 py-3">
+            <CardHeader className="border-b border-grid py-3">
                 <CardTitle className="text-base">结论区</CardTitle>
                 <CardDescription>
                     提交时将核对账户、历史复核记录与数据版本。快捷键：j/k

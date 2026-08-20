@@ -1,13 +1,25 @@
-import { render, screen } from "@testing-library/react"
+import {
+    cleanup,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+} from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { detailFixture, salesOrderEmptyDraft } from "../fixtures"
+import {
+    detailFixture,
+    salesOrderEmptyDraft,
+    salesOrderSavedDraft,
+} from "../fixtures"
 import { DefinitionEditor } from "./definition-editor"
+
+const mutateAsync = vi.fn()
 
 vi.mock("./node-list-editor", () => ({
     NodeListEditor: ({
@@ -30,7 +42,7 @@ vi.mock("./node-list-editor", () => ({
 
 vi.mock("../queries", () => ({
     useReplaceDefinitionNodesMutation: () => ({
-        mutateAsync: vi.fn(),
+        mutateAsync,
         isPending: false,
     }),
 }))
@@ -57,6 +69,14 @@ const renderEditor = (
 }
 
 describe("definition editor", () => {
+    afterEach(() => {
+        cleanup()
+    })
+
+    beforeEach(() => {
+        mutateAsync.mockReset()
+    })
+
     it("keeps published and retired versions read only", () => {
         renderEditor(detailFixture({ status: "PUBLISHED" }))
         expect(screen.getByText("此版本只读")).toBeTruthy()
@@ -67,10 +87,29 @@ describe("definition editor", () => {
         ).toBe("true")
     })
 
-    it("shows the unsaved procurement slot for SalesOrder empty drafts", () => {
+    it("shows a default procurement-named node for SalesOrder empty drafts", () => {
         renderEditor(salesOrderEmptyDraft())
         expect(screen.getByText("采购确认")).toBeTruthy()
         expect(screen.getByText("保存草稿")).toBeTruthy()
+    })
+
+    it("shows success feedback after saving a draft", async () => {
+        mutateAsync.mockResolvedValueOnce(salesOrderSavedDraft())
+        renderEditor(salesOrderSavedDraft())
+        fireEvent.click(screen.getByRole("button", { name: "保存草稿" }))
+        await waitFor(() => {
+            expect(screen.getByRole("status").textContent).toContain("已保存")
+        })
+        expect(mutateAsync).toHaveBeenCalled()
+    })
+
+    it("shows failure feedback when saving a draft fails", async () => {
+        mutateAsync.mockRejectedValueOnce(new Error("网络中断"))
+        renderEditor(salesOrderSavedDraft())
+        fireEvent.click(screen.getByRole("button", { name: "保存草稿" }))
+        await waitFor(() => {
+            expect(screen.getByRole("status").textContent).toContain("保存失败")
+        })
     })
 
     it("is a client component and does not fetch in a server module", () => {

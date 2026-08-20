@@ -164,7 +164,7 @@ export function CategoryTreePage() {
                     )}
                     aria-label={masterDataCopy.categoryTreeTitle}
                 >
-                    <div className="flex items-center justify-between border-b border-border/30 px-3 py-2">
+                    <div className="flex items-center justify-between border-b border-grid px-3 py-2">
                         <h2 className="text-sm font-semibold">
                             {masterDataCopy.categoryTreeTitle}
                         </h2>

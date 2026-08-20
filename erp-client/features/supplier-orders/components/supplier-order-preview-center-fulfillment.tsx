@@ -98,7 +98,7 @@ export function FulfillmentSection({
                     "shadow-none ring-0",
                 )}
             >
-                <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
+                <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                     <CardTitle className="text-sm">收货信息</CardTitle>
                     <CardDescription className="text-xs">
                         默认打码；仅履约所需角色可短时揭示，揭示写入审计。

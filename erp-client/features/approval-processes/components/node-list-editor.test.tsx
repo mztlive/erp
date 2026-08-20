@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import { seedDraftNodes } from "../draft-nodes"
 import { salesOrderSavedDraft } from "../fixtures"
-import { SALES_ORDER_PROCUREMENT_PURPOSE } from "../types"
 import { NodeListEditor } from "./node-list-editor"
 import type { EditorNode } from "../types"
 
@@ -97,15 +96,16 @@ describe("node list editor", () => {
         ])
     })
 
-    it("does not allow deleting the sales order procurement node", () => {
+    it("allows deleting the sales order default procurement node", () => {
         const nodes = seedDraftNodes(
             "sales_order",
             salesOrderSavedDraft().nodes,
         )
-        renderEditor(nodes, vi.fn(), "sales_order")
-        const firstNode = screen.getByTestId("approval-node-0")
-        expect(firstNode.getAttribute("data-locked")).toBe("true")
-        expect(nodes[0]?.node_purpose).toBe(SALES_ORDER_PROCUREMENT_PURPOSE)
-        expect(screen.getAllByText("采购确认").length).toBeGreaterThan(0)
+        const onChange = renderEditor(nodes, vi.fn(), "sales_order")
+        expect(screen.getAllByDisplayValue("采购确认").length).toBeGreaterThan(
+            0,
+        )
+        fireEvent.click(screen.getAllByText("删除")[0]!)
+        expect(onChange).toHaveBeenLastCalledWith([nodes[1]])
     })
 })

@@ -21,7 +21,7 @@ export function RecentPanel({
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="rounded-t-lg border-b border-border/30">
+            <CardHeader className="rounded-t-lg border-b border-grid">
                 <CardTitle>最近打开</CardTitle>
                 <CardDescription>快速回到上次处理的任务。</CardDescription>
             </CardHeader>

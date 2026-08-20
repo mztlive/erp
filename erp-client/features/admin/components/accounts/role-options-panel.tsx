@@ -3,7 +3,11 @@
 import { SearchIcon } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
-import { InputGroupInput } from "@/components/ui/input-group"
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
+} from "@/components/ui/input-group"
 import {
     useRoleFilter,
     type RoleOption,
@@ -24,24 +28,22 @@ export function RoleOptionsPanel({
     const { keyword, setKeyword, filtered } = useRoleFilter(options)
 
     return (
-        <div className="space-y-2">
-            <div className="relative">
-                <SearchIcon
-                    aria-hidden="true"
-                    className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                />
+        <div className="flex flex-col gap-2">
+            <InputGroup>
+                <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                </InputGroupAddon>
                 <InputGroupInput
                     type="search"
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
                     placeholder="搜索角色"
                     aria-label="搜索角色"
-                    className="h-8 pl-8 text-sm"
                 />
-            </div>
+            </InputGroup>
             <div
                 data-invalid={invalid || undefined}
-                className="max-h-44 space-y-0.5 overflow-y-auto rounded-lg border p-1.5 data-[invalid]:border-destructive"
+                className="flex max-h-44 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border p-1.5 data-[invalid]:border-destructive"
             >
                 {filtered.length === 0 ? (
                     <p className="px-2 py-3 text-center text-xs text-muted-foreground">
@@ -53,7 +55,7 @@ export function RoleOptionsPanel({
                         return (
                             <label
                                 key={role.id}
-                                className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-accent"
+                                className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1.5 text-sm hover:bg-muted/40"
                             >
                                 <Checkbox
                                     checked={checked}

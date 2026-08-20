@@ -21,7 +21,7 @@ export function ProductionGateCard({ batch }: { batch: ImportBatchView }) {
     )
     return (
         <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-border/30">
+            <CardHeader className="border-b border-grid">
                 <CardTitle>提交前检查</CardTitle>
                 <CardDescription>
                     验证环境校验与业务确认是生产应用前置条件；系统管理员不能代替确认。

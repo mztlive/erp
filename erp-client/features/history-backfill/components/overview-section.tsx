@@ -15,7 +15,7 @@ export function OverviewSection({ job }: { job: HistoryBackfillJobCore }) {
     return (
         <div className="grid gap-4 lg:grid-cols-2">
             <Card className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>任务身份与范围</CardTitle>
                     <CardDescription>
                         范围起点固定等于必须覆盖起点
@@ -49,7 +49,7 @@ export function OverviewSection({ job }: { job: HistoryBackfillJobCore }) {
                 </CardContent>
             </Card>
             <Card className={surfacePanelClassName}>
-                <CardHeader className="border-b border-border/30">
+                <CardHeader className="border-b border-grid">
                     <CardTitle>结果记录</CardTitle>
                     <CardDescription>
                         统计由系统统一计算；明细可按页浏览。

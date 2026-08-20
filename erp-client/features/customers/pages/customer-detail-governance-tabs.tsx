@@ -179,7 +179,7 @@ export function CustomerDetailAuditTab({
                             size="sm"
                             className="shadow-none ring-1 ring-foreground/[0.04]"
                         >
-                            <CardHeader className="border-b border-border/30">
+                            <CardHeader className="border-b border-grid">
                                 <CardTitle className="text-sm">
                                     当前责任关系
                                 </CardTitle>
@@ -247,7 +247,7 @@ export function CustomerDetailAuditTab({
                             size="sm"
                             className="shadow-none ring-1 ring-foreground/[0.04]"
                         >
-                            <CardHeader className="border-b border-border/30">
+                            <CardHeader className="border-b border-grid">
                                 <CardTitle className="text-sm">
                                     修订时间线
                                 </CardTitle>

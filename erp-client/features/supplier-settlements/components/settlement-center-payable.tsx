@@ -26,7 +26,7 @@ function SettlementCenterPayable({
             size="sm"
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
-            <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
+            <CardHeader className="rounded-t-lg border-b border-grid py-3">
                 <CardTitle className="text-base">应付与票款</CardTitle>
                 <CardDescription>
                     确认后形成唯一应付；付款/进项发票/核销进入供应商往来，不在本页复制

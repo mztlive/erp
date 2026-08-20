@@ -40,7 +40,7 @@ export function WorkspaceAccountMenu() {
                 render={
                     <button
                         type="button"
-                        className="flex h-9 items-center gap-1.5 rounded-2xl border border-border/40 bg-card/80 py-0 pr-2 pl-1 shadow-xs outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                        className="flex h-9 items-center gap-1.5 rounded-2xl border border-border bg-card/80 py-0 pr-2 pl-1 shadow-xs outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
                         aria-label="账号菜单"
                     />
                 }

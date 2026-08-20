@@ -42,7 +42,7 @@ function AccessPreviewSheets({
                 title="有效权限解释"
                 description="此处展示的权限结果为系统统一计算，可能与页面其它位置显示略有差异。"
             >
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                     <EffectiveAccessBody query={effectiveQuery} />
                 </div>
             </QuickPreviewSheet>
@@ -60,7 +60,7 @@ function AccessPreviewSheets({
                 title="审计事件详情"
                 description="追加式事件只读；不展示敏感旧值/新值或密钥。"
             >
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                     <AuditEventBody query={eventQuery} />
                 </div>
             </QuickPreviewSheet>
