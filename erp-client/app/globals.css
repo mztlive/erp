@@ -5,18 +5,15 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ==========================================================================
-   ERP 商务主题 — Ant Design 色板 + 浮动画布布局
+   ERP 商务主题 — shadcn Neutral 表面 + 语义状态色
    --------------------------------------------------------------------------
-   布局：整页画布 + 透明侧栏 + 白卡片浮起（侧栏无独立底色）。
-   色彩对齐 Ant Design 5 默认 Design Token：
-     colorPrimary #1677ff · colorSuccess #52c41a · colorWarning #faad14
-     colorError #ff4d4f · colorBgLayout #f5f5f5 · colorBorder #d9d9d9
-     colorText ≈ #141414 · colorTextSecondary ≈ #595959
-   导航选中态用 blue-1（#e6f4ff）pill，与 antd Menu 选中项一致。
+   布局：白画布 + 浅灰侧栏 + 发丝边框卡片（不再用灰底托白卡）。
+   表面对齐 shadcn/ui default Neutral：
+     background 纯白 · sidebar 极浅灰 · primary 近黑 · accent 浅灰
+   单据状态色仍用独立色相（成功绿 / 警告金 / 信息蓝 / 危险红），不灰度化。
 
-   画布略深于 antd colorBgLayout（#eef0f3 vs #f5f5f5），白卡才能浮起。
-   不要再压深画布去「制造分离」——稀疏列表会留下大块空画布，和侧栏连成深灰墙。
-   线条两档：grid 行线 / 卡内发丝（#f0f0f0）；border 结构描边（#d9d9d9）。
+   不要把画布压成浅灰去「制造卡片浮起」——稀疏列表会和侧栏连成灰墙。
+   层级靠 border / grid 发丝线，不靠重阴影和大块底色差。
 
    尺寸令牌来自 docs/erp-interaction-spec.md 第 2.1 节，勿随意改动。
    ========================================================================== */
@@ -136,9 +133,9 @@
     --text-tiny: 0.6875rem; /* 11px */
 
     /* 圆角 —— 单一旋钮，整体压在 2~8px，保持单据系统的严谨感
-     三档语义：lg/xl = 6px 基线（控件与嵌套项，对齐 antd borderRadius）
+     三档语义：lg/xl = 6px 基线（控件与嵌套项）
                2xl = 7px（按钮/输入框/徽章等交互控件，比基线略圆）
-               3xl/4xl = 8px 封顶（弹层、卡片、对话框等大浮层，对齐 antd borderRadiusLG） */
+               3xl/4xl = 8px 封顶（弹层、卡片、对话框等大浮层） */
     --radius-sm: calc(var(--radius) * 0.5);
     --radius-md: calc(var(--radius) * 0.75);
     --radius-lg: var(--radius);
@@ -147,7 +144,7 @@
     --radius-3xl: calc(var(--radius) + 0.125rem);
     --radius-4xl: calc(var(--radius) + 0.125rem);
 
-    /* 阴影 —— 对齐 antd boxShadow 中性黑透明度 */
+    /* 阴影 —— 中性黑低透明度；卡片用 xs/sm，弹层才用 md/lg */
     --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
     --shadow-sm:
         0 1px 2px 0 rgb(0 0 0 / 0.03), 0 1px 6px -1px rgb(0 0 0 / 0.02),
@@ -161,127 +158,111 @@
 }
 
 /* --------------------------------------------------------------------------
-   浅色模式：Ant Design 5 默认 token（colorBgLayout + 透明侧栏）
+   浅色模式：shadcn Neutral 表面（白画布 + 近黑主色）
    -------------------------------------------------------------------------- */
 :root {
-    /* antd borderRadius = 6 */
+    /* 6px 基线，保持单据系统的严谨感 */
     --radius: 0.375rem;
 
-    /* colorBgLayout / colorText / colorBgContainer
-     背景比卡片明显深一档（≈4.5% 亮度差），白卡片才能在灰画布上真正"浮"起来；
-     旧值 0.9849 与卡片的 1.0 只差 1.5%，肉眼几乎分辨不出画布与卡片的边界。
-     不要再压到 0.928（#e6e7ea）：画布和侧栏会连成深灰墙。 */
-    --background: oklch(0.955 0.004 264.5); /* #eef0f3 */
-    --foreground: oklch(0.1913 0 0); /* #141414 ≈ rgba(0,0,0,0.88) */
-    --card: oklch(1 0 0); /* #ffffff colorBgContainer */
-    --card-foreground: oklch(0.1913 0 0);
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.1913 0 0);
+    --popover-foreground: oklch(0.145 0 0);
 
-    /* colorPrimary #1677ff */
-    --primary: oklch(0.5987 0.2194 259); /* #1677ff */
-    --primary-foreground: oklch(1 0 0);
-    --secondary: oklch(0.9702 0 0); /* #f5f5f5 */
-    --secondary-foreground: oklch(0.1913 0 0);
-    --muted: oklch(0.9702 0 0);
-    --muted-foreground: oklch(0.464 0 0); /* #595959 ≈ colorTextSecondary */
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    /* 略深于 shadcn 默认 0.556，保证高密度次要文案可读 */
+    --muted-foreground: oklch(0.45 0 0);
 
-    /* controlItemBgActive / Menu item selected：blue-1 */
-    --accent: oklch(0.96 0.021 241.3); /* #e6f4ff */
-    --accent-foreground: oklch(
-        0.5044 0.2095 261
-    ); /* #0958d9 colorPrimaryActive */
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
 
-    /* colorError #ff4d4f · red-1 soft */
+    /* 状态色：仅用于徽章 / Alert / 进度，不当页面主色 */
     --destructive: oklch(0.6732 0.2143 24.5); /* #ff4d4f */
     --destructive-foreground: oklch(1 0 0);
     --destructive-soft: oklch(0.9708 0.0143 28); /* #fff2f0 */
     --destructive-soft-foreground: oklch(0.5434 0.2132 25.9); /* #cf1322 */
     --destructive-border: oklch(0.885 0.06 24);
 
-    /* colorSuccess #52c41a · green-1 soft */
-    --success: oklch(0.6154 0.1912 139.4); /* #389e0d，实心白字更稳 */
+    --success: oklch(0.6154 0.1912 139.4); /* #389e0d */
     --success-foreground: oklch(1 0 0);
     --success-soft: oklch(0.9884 0.0254 128.7); /* #f6ffed */
-    --success-soft-foreground: oklch(0.6154 0.1912 139.4); /* #389e0d */
+    --success-soft-foreground: oklch(0.6154 0.1912 139.4);
     --success-border: oklch(0.88 0.08 138);
 
-    /* colorWarning #faad14 · gold-1 soft；实心用偏深以保证白字可读 */
     --warning: oklch(0.689 0.148 70.1); /* #d48806 */
     --warning-foreground: oklch(1 0 0);
     --warning-soft: oklch(0.9856 0.0278 98.1); /* #fffbe6 */
     --warning-soft-foreground: oklch(0.689 0.148 70.1);
     --warning-border: oklch(0.9 0.08 85);
 
-    /* colorInfo = colorPrimary */
     --info: oklch(0.5987 0.2194 259); /* #1677ff */
     --info-foreground: oklch(1 0 0);
     --info-soft: oklch(0.96 0.021 241.3); /* #e6f4ff */
     --info-soft-foreground: oklch(0.5044 0.2095 261); /* #0958d9 */
     --info-border: oklch(0.8897 0.0586 243); /* #bae0ff */
 
-    --neutral-soft: oklch(0.9851 0 0); /* #fafafa */
-    --neutral-soft-foreground: oklch(0.464 0 0); /* #595959 */
-    --neutral-border: oklch(0.8853 0 0); /* #d9d9d9 */
+    --neutral-soft: oklch(0.985 0 0);
+    --neutral-soft-foreground: oklch(0.45 0 0);
+    --neutral-border: oklch(0.922 0 0);
 
-    --border: oklch(0.8853 0 0); /* #d9d9d9 colorBorder · 结构描边 */
-    --overlay: oklch(0 0 0 / 45%); /* antd mask */
-    /* 表单控件静止态边框：比通用 --border 再浅一档，配合纯白背景（--surface-control）
-     不会显得过重；hover/focus 时仍靠 border-foreground/25 与 ring 变深提示 */
-    --input: oklch(0.93 0 0); /* #e8e8e8 */
-    --ring: oklch(0.6726 0.176 255.3); /* #4096ff primary-hover */
+    --border: oklch(0.922 0 0);
+    --overlay: oklch(0 0 0 / 45%);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
 
-    --surface-sunken: oklch(0.9851 0 0); /* #fafafa */
+    --surface-sunken: oklch(0.985 0 0);
     /* 表单控件静止态背景：与 card 同色，靠 border 提示可编辑，避免和 --muted
-     disabled 态（#f5f5f5）灰度太接近而被误读成"已禁用" */
-    --surface-control: oklch(1 0 0); /* = card #ffffff */
-    /* 表头比数据行（白底）明显深一档，才能一眼分清"表头带"与正文；
-     旧值 0.9851 与卡片/数据行的 1.0 只差 1.5%，和过去的画布/卡片问题同源。 */
-    --table-header: oklch(0.965 0 0);
-    --row-hover: oklch(0.9702 0 0); /* #f5f5f5 */
-    --row-selected: oklch(0.96 0.021 241.3); /* #e6f4ff */
-    --row-striped: oklch(0.9851 0 0);
-    /* 行线与卡内发丝：浅于 --border，避免和卡片轮廓同重 */
-    --grid: oklch(0.9551 0 0); /* #f0f0f0 colorBorderSecondary */
+     disabled 态灰度太接近而被误读成「已禁用」 */
+    --surface-control: oklch(1 0 0);
+    --table-header: oklch(0.97 0 0);
+    --row-hover: oklch(0.97 0 0);
+    --row-selected: oklch(0.945 0 0);
+    --row-striped: oklch(0.985 0 0);
+    /* 行线浅于 --border，避免和卡片轮廓同重 */
+    --grid: oklch(0.94 0 0);
 
-    /* 图表：antd 预设蓝/橙/青/金/紫 */
-    --chart-1: oklch(0.5987 0.2194 259); /* #1677ff */
-    --chart-2: oklch(0.7444 0.1724 58.5); /* #fa8c16 */
-    --chart-3: oklch(0.7381 0.1238 194.8); /* #13c2c2 */
-    --chart-4: oklch(0.8016 0.1651 76); /* #faad14 */
-    --chart-5: oklch(0.4942 0.2284 295.6); /* #722ed1 */
+    --chart-1: oklch(0.5987 0.2194 259);
+    --chart-2: oklch(0.7444 0.1724 58.5);
+    --chart-3: oklch(0.7381 0.1238 194.8);
+    --chart-4: oklch(0.8016 0.1651 76);
+    --chart-5: oklch(0.4942 0.2284 295.6);
 
-    /* 侧栏与画布同色，靠一条实边界与内容区分隔；选中项 = antd Menu itemSelectedBg */
-    --sidebar: var(--background);
-    --sidebar-foreground: oklch(0.464 0 0); /* #595959 */
-    --sidebar-primary: oklch(0.5987 0.2194 259); /* #1677ff */
-    --sidebar-primary-foreground: oklch(1 0 0);
-    --sidebar-accent: oklch(0.96 0.021 241.3); /* #e6f4ff */
-    --sidebar-accent-foreground: oklch(0.5044 0.2095 261); /* #0958d9 */
-    --sidebar-border: oklch(0.85 0 0);
-    --sidebar-ring: oklch(0.5987 0.2194 259);
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.4 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.145 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
 }
 
 /* --------------------------------------------------------------------------
-   深色模式：贴近 antd darkAlgorithm 观感
+   深色模式：对齐 shadcn Neutral dark，状态色保持色相
    -------------------------------------------------------------------------- */
 .dark {
-    --background: oklch(0.1913 0 0); /* #141414 */
-    --foreground: oklch(0.93 0 0);
-    --card: oklch(0.244 0 0); /* #1f1f1f */
-    --card-foreground: oklch(0.93 0 0);
-    --popover: oklch(0.244 0 0);
-    --popover-foreground: oklch(0.93 0 0);
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
 
-    --primary: oklch(0.5987 0.2194 259); /* 保持品牌蓝 */
-    --primary-foreground: oklch(1 0 0);
-    --secondary: oklch(0.28 0 0);
-    --secondary-foreground: oklch(0.93 0 0);
-    --muted: oklch(0.28 0 0);
-    --muted-foreground: oklch(0.7 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
 
-    --accent: oklch(0.32 0.06 259);
-    --accent-foreground: oklch(0.82 0.1 250);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
 
     --destructive: oklch(0.6732 0.2143 24.5);
     --destructive-foreground: oklch(1 0 0);
@@ -307,21 +288,21 @@
     --info-soft-foreground: oklch(0.85 0.1 250);
     --info-border: oklch(0.42 0.08 259);
 
-    --neutral-soft: oklch(0.28 0 0);
+    --neutral-soft: oklch(0.269 0 0);
     --neutral-soft-foreground: oklch(0.8 0 0);
-    --neutral-border: oklch(0.38 0 0);
+    --neutral-border: oklch(1 0 0 / 12%);
 
-    --border: oklch(1 0 0 / 12%);
+    --border: oklch(1 0 0 / 10%);
     --overlay: oklch(0 0 0 / 65%);
-    --input: oklch(1 0 0 / 10%);
-    --ring: oklch(0.6726 0.176 255.3);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
 
-    --surface-sunken: oklch(0.21 0 0);
-    --surface-control: oklch(0.244 0 0); /* = card #1f1f1f */
-    --table-header: oklch(0.26 0 0);
-    --row-hover: oklch(0.28 0 0);
-    --row-selected: oklch(0.32 0.06 259);
-    --row-striped: oklch(0.23 0 0);
+    --surface-sunken: oklch(0.18 0 0);
+    --surface-control: oklch(0.205 0 0);
+    --table-header: oklch(0.22 0 0);
+    --row-hover: oklch(0.269 0 0);
+    --row-selected: oklch(0.3 0 0);
+    --row-striped: oklch(0.18 0 0);
     --grid: oklch(1 0 0 / 8%);
 
     --chart-1: oklch(0.6726 0.176 255.3);
@@ -330,14 +311,14 @@
     --chart-4: oklch(0.8016 0.1651 76);
     --chart-5: oklch(0.6 0.2 295);
 
-    --sidebar: oklch(0.16 0 0); /* 比 --background 深一档，作为背后的凹陷面板 */
-    --sidebar-foreground: oklch(0.75 0 0);
-    --sidebar-primary: oklch(0.5987 0.2194 259);
-    --sidebar-primary-foreground: oklch(1 0 0);
-    --sidebar-accent: oklch(0.32 0.06 259);
-    --sidebar-accent-foreground: oklch(0.85 0.08 250);
-    --sidebar-border: oklch(1 0 0 / 8%);
-    --sidebar-ring: oklch(0.6726 0.176 255.3);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.8 0 0);
+    --sidebar-primary: oklch(0.922 0 0);
+    --sidebar-primary-foreground: oklch(0.205 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
 }
 
 /* 金额、数量、税率、日期用等宽数字，便于纵向核对（交互规范 §19）。 */

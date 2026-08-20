@@ -19,8 +19,8 @@
 
 | 目标 | 含义 |
 | --- | --- |
-| **现代** | 清晰层级、克制装饰、Ant Design 默认色板；状态靠文字 + 图标 + 色相同时表达 |
-| **美观** | 浅灰画布 + 透明侧栏 + 白卡片浮起；金额/数量等宽对齐；表格与单据有「账本感」但不压抑 |
+| **现代** | 清晰层级、克制装饰、shadcn Neutral 黑白表面；状态靠文字 + 图标 + 色相同时表达 |
+| **美观** | 白画布 + 浅灰侧栏 + 发丝边框卡片；金额/数量等宽对齐；表格与单据有「账本感」但不压抑 |
 | **高效率** | 键盘可达、批量连续处理、少跳转、默认落到「待我处理」而非空列表 |
 | **不割裂** | 一次完整业务在同一工作面内完成；关联对象以内嵌区/侧栏/任务页签呈现，不强迫用户记忆路径 |
 
@@ -66,15 +66,15 @@
 
 | 角色 | Token / 观感 | 用法 |
 | --- | --- | --- |
-| 画布 | `--background` `#f9fafc` | 整页底层；侧栏与内容共享 |
-| 内容面 | `--card` `#ffffff`（`colorBgContainer`） | 浮起卡片、列表主体、对话框 |
-| 主色 | `--primary` `#1677ff`（antd `colorPrimary`） | **唯一**页面级主动作 |
-| 轻强调 | `--accent` `#e6f4ff`（blue-1） | 菜单选中、行选中、hover |
-| 导航 | `--sidebar` **透明** | 无独立底色；选中项 = antd Menu 浅蓝 pill |
-| 成功/警告/信息/危险 | `#389e0d` / `#d48806` / `#1677ff` / `#ff4d4f` 及 soft 槽 | 状态徽章、Alert、进度 |
-| 表格 | `table-header` / `row-hover` / `row-selected` / `grid` | 高密度账表 |
+| 画布 | `--background` 纯白 | 整页底层 |
+| 内容面 | `--card` 纯白 | 列表主体、对话框；靠发丝 `border` 分层，不靠灰底托卡 |
+| 主色 | `--primary` 近黑 | **唯一**页面级主动作（按钮、Logo） |
+| 轻强调 | `--accent` 浅灰 | 菜单选中、行悬停 |
+| 导航 | `--sidebar` 极浅灰 | 比画布深一档；选中项 = 浅灰底 + 近黑字 |
+| 成功/警告/信息/危险 | `#389e0d` / `#d48806` / `#1677ff` / `#ff4d4f` 及 soft 槽 | 状态徽章、Alert、进度；**不当页面主色** |
+| 表格 | `table-header` / `row-hover` / `row-selected` / `grid` | 高密度账表；选中行为中性灰，不用蓝色 |
 
-深色模式：贴近 antd `darkAlgorithm`（`#141414` 底 + 容器灰 + 同系主色）。
+深色模式：对齐 shadcn Neutral dark（近黑底 + 浅色主按钮 + 同系状态色）。
 
 ### 2.2 尺寸密度
 
@@ -88,7 +88,7 @@
 | `preview` | 400px（`25rem`） | 右侧**轻量**预览 Sheet：筛选、轻摘要、少量字段 |
 | `detail` | 768px（`48rem`，且 ≤92vw） | 右侧**半屏详情**抽屉：列表内读完主事实（方案 A） |
 | `shell` | 1440px | 基准工作宽度（内容区可更宽，分析页可全宽） |
-| 圆角 | `--radius` 6px 基线 | 对齐 antd `borderRadius: 6` |
+| 圆角 | `--radius` 6px 基线 | 保持单据系统的严谨感 |
 
 Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`QuickPreviewSheet` 同步暴露 `size`。
 
@@ -101,14 +101,14 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
 ### 2.4 视觉气质（验收用语）
 
 - **像专业账本，不像营销后台**：少插画、少渐变、少大卡片堆叠。  
-- **一层纸、一条线**：主内容一张白卡压在浅灰画布上；分隔用 `border` / `grid`，少重阴影。  
+- **一层纸、一条线**：白画布与白卡同色，靠 `border` / `grid` 发丝线分层，少重阴影。  
 - **内容区表面收敛**：页头贴画布；主工作面 1～2 张浮起表面（`surfacePanelClassName`，约 6px 圆角）；禁止页内叠多层 `rounded-2xl` 便签式线框。  
 - **一个主动作**：顶栏或单据头只有一个实心 primary；其余 ghost / outline / secondary。  
 - **状态一眼可读**：主状态 + 多轨进度（履约 / 回款 / 开票）并排，不挤成一颗色点。
 
 ### 2.5 浮动画布内容区固定模式（Floating Canvas Content）
 
-壳层已是「浅灰画布 + 透明侧栏 + 白卡浮起」。业务页必须遵守下列固定模式，**禁止**各 feature 自造 padding / 重描边 / 多层 `rounded-2xl` 便签。
+壳层已是「白画布 + 浅灰侧栏 + 发丝边框卡片」。业务页必须遵守下列固定模式，**禁止**各 feature 自造 padding / 重描边 / 多层 `rounded-2xl` 便签。
 
 样板页（已落地）：`/workspace`、`/sales/orders`、`/sales/orders/[id]`。`/procurement/confirm` 已废止。
 
@@ -142,7 +142,7 @@ return (
 
 | Token / 类 | 用法 |
 | --- | --- |
-| `surfacePanelClassName` | 列表卡、任务卡、对象身份卡、正文 Tabs 外壳：`rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]` |
+| `surfacePanelClassName` | 列表卡、任务卡、对象身份卡、正文 Tabs 外壳：`rounded-lg border border-border bg-card shadow-sm` |
 | `surfaceInsetClassName` | 卡内轻提示：仅 `bg-muted/40`，**无描边** |
 | `BusinessTableFrame` | 已内置 surfacePanel；勿再外包一层 border 卡 |
 | `DocumentHeader` | 已内置身份浮卡；M4 不要再叠 `border-b` 裸头 |
@@ -154,7 +154,7 @@ return (
 
 | 元素 | 规则 |
 | --- | --- |
-| 浮卡外轮廓 | 优先 shadow + 极轻 ring，不用 `border-border` 实线 |
+| 浮卡外轮廓 | 发丝 `border-border` + 轻 `shadow-sm`；画布与卡片同为白底，靠线条分层 |
 | 分割线 `Separator` | 全局已为 `bg-border/40`；表内可再 `/30` |
 | 卡头底边 | `border-b border-border/30` |
 | 表行 | 数据行用 `border-grid`；表头 `border-border/30` |

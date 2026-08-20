@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from "lucide-react"
 import {
     flexRender,
@@ -563,21 +564,47 @@ function DataTable<TData>({
         if (target) rowRefs.current.get(target.id)?.focus()
     }
 
+    const [frameViewOptionsSlot, setFrameViewOptionsSlot] =
+        React.useState<Element | null>(null)
+    React.useLayoutEffect(() => {
+        if (layout !== "flush" || renderToolbar || !showColumnVisibility) {
+            setFrameViewOptionsSlot(null)
+            return
+        }
+        const frame = tableSurfaceRef.current?.closest(
+            "[data-business-component=table-frame]",
+        )
+        setFrameViewOptionsSlot(
+            frame?.querySelector("[data-slot=table-frame-view-options]") ??
+                null,
+        )
+    }, [layout, renderToolbar, showColumnVisibility])
+
+    const hostViewOptionsInFrame = Boolean(frameViewOptionsSlot)
+    const showToolbarRow =
+        Boolean(renderToolbar) ||
+        (showColumnVisibility && !hostViewOptionsInFrame)
+    const viewOptions = showColumnVisibility ? (
+        <DataTableViewOptions table={table} />
+    ) : null
+
     return (
         <section
             data-slot="data-table"
             data-layout={layout}
             className={cn(
                 // inset：外层统一内边距，子区间用 space-y。
-                // flush：表格全宽贴边（border-y），工具栏/分页各自对齐卡片内边距；
-                // 作为列方向 grow 子项，分页钉在卡底，中间表体吃剩余高度。
+                // flush：表格全宽贴边（border-y），工具栏/分页各自对齐卡片内边距。
                 layout === "inset" && "space-y-3 p-table-frame-inset",
-                layout === "flush" && "flex min-h-0 grow flex-col space-y-0",
+                layout === "flush" && "space-y-0",
                 className,
             )}
             aria-busy={loading}
         >
-            {renderToolbar || showColumnVisibility ? (
+            {hostViewOptionsInFrame && viewOptions && frameViewOptionsSlot
+                ? createPortal(viewOptions, frameViewOptionsSlot)
+                : null}
+            {showToolbarRow ? (
                 <div
                     className={cn(
                         "flex flex-wrap items-center justify-between gap-2",
@@ -587,9 +614,7 @@ function DataTable<TData>({
                     <div className="min-w-0 flex-1">
                         {renderToolbar?.(table)}
                     </div>
-                    {showColumnVisibility ? (
-                        <DataTableViewOptions table={table} />
-                    ) : null}
+                    {!hostViewOptionsInFrame ? viewOptions : null}
                 </div>
             ) : null}
 
@@ -602,7 +627,7 @@ function DataTable<TData>({
                         : // flush 恒套在 BusinessTableFrame 内：顶部分隔已由卡片的
                           // Separator 承担，这里只补一条与之同权重的底部软分隔线，
                           // 避免顶部出现两条边框叠加导致的"筛选区/表格衔接处偏重"。
-                          "min-h-0 grow border-b border-grid",
+                          "border-b border-grid",
                 )}
             >
                 {loading && data.length > 0 && showRefreshingBanner ? (
@@ -907,6 +932,34 @@ function DataTable<TData>({
                                     })}
                                 </TableRow>
                             ))
+                        )}
+
+                        {Array.from(
+                            {
+                                length:
+                                    !showErrorState && rows.length > 0
+                                        ? Math.max(0, 8 - rows.length)
+                                        : 0,
+                            },
+                            (_, index) => (
+                                <TableRow
+                                    key={`filler-${index}`}
+                                    aria-hidden
+                                    className="pointer-events-none hover:bg-transparent"
+                                >
+                                    {Array.from(
+                                        {
+                                            length: Math.max(
+                                                visibleColumnCount,
+                                                1,
+                                            ),
+                                        },
+                                        (__, cellIndex) => (
+                                            <TableCell key={cellIndex} />
+                                        ),
+                                    )}
+                                </TableRow>
+                            ),
                         )}
 
                         {!showErrorState && !loading && rows.length === 0 ? (

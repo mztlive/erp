@@ -47,7 +47,7 @@ export function ListPageFrame({
             <PageScaffold density="compact">
                 <PageHeader title={title} />
                 <div
-                    className="min-h-40 grow animate-pulse rounded-lg bg-muted"
+                    className="h-40 animate-pulse rounded-lg bg-muted"
                     aria-busy
                 />
             </PageScaffold>

@@ -241,7 +241,7 @@ function DataTablePagination<TData>({
                 // 移动端两行；桌面单行：左侧条数，右侧每页/页码/翻页成组，组间距统一。
                 "flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between",
                 // flush 贴在全宽表格下：对齐 BusinessTableFrame / CardFooter 的卡片内边距。
-                layout === "flush" && "mt-auto shrink-0 px-(--card-spacing) py-3",
+                layout === "flush" && "px-(--card-spacing) py-3",
             )}
         >
             <div className="min-w-0 text-muted-foreground">

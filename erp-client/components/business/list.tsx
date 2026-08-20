@@ -351,30 +351,35 @@ function BusinessTableFrame({
             data-business-component="table-frame"
             className={cn(
                 // 账本列表：6px 圆角 + 轻阴影，覆盖 Card 默认大圆角。
-                // grow：作为 PageScaffold 的主表面时吃掉剩余高度，少数据也不留灰空地。
-                "grow gap-0 py-0",
+                // 高度跟内容走，避免 2 行数据把分页甩到视口底、中间留白。
+                "gap-0 py-0",
                 surfacePanelClassName,
                 className,
             )}
             {...props}
         >
-            <CardHeader className="gap-1 rounded-t-lg py-3">
-                <Heading className="font-heading text-base font-medium text-foreground">
-                    {title}
-                </Heading>
-                {description ? (
-                    <CardDescription>{description}</CardDescription>
-                ) : null}
-                {headerActions ? (
-                    <CardAction>{headerActions}</CardAction>
-                ) : null}
+            <CardHeader className="items-center gap-x-3 rounded-t-lg py-2.5 has-data-[slot=card-description]:grid-rows-none">
+                <div className="flex min-w-0 items-baseline gap-x-2 gap-y-0.5">
+                    <Heading className="font-heading shrink-0 text-sm font-medium text-foreground">
+                        {title}
+                    </Heading>
+                    {description ? (
+                        <CardDescription className="min-w-0 truncate">
+                            {description}
+                        </CardDescription>
+                    ) : null}
+                </div>
+                <CardAction className="flex items-center gap-2">
+                    {headerActions}
+                    <div data-slot="table-frame-view-options" />
+                </CardAction>
             </CardHeader>
 
             <Separator className="bg-border" />
 
             {hasControls ? (
                 <>
-                    <CardContent className="space-y-2 py-2.5">
+                    <CardContent className="space-y-2 py-2">
                         {toolbar}
                         {selectionBar}
                     </CardContent>
@@ -382,13 +387,8 @@ function BusinessTableFrame({
                 </>
             ) : null}
 
-            <CardContent className="flex min-h-0 min-w-0 grow flex-col px-0">
-                <div
-                    data-slot="business-table-frame-table"
-                    className="flex min-h-0 min-w-0 grow flex-col"
-                >
-                    {table}
-                </div>
+            <CardContent className="min-w-0 px-0">
+                <div data-slot="business-table-frame-table">{table}</div>
             </CardContent>
 
             {footer ? (
