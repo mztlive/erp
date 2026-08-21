@@ -171,6 +171,7 @@ export function SellableItemsListPage() {
                         onSortingChange={setSorting}
                         manualSorting={false}
                         manualPagination={false}
+                        loading={state.listQuery.isFetching}
                         layout="flush"
                         density="compact"
                         defaultColumnPinning={{

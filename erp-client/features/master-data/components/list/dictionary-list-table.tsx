@@ -18,6 +18,7 @@ export function DictionaryListTable({
     columns,
     pagination,
     onPaginationChange,
+    loading = false,
     listLoadFailed,
     error,
     onRetry,
@@ -34,6 +35,7 @@ export function DictionaryListTable({
     columns: ColumnDef<MasterDataListItem>[]
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
+    loading?: boolean
     listLoadFailed: boolean
     error: unknown
     onRetry: () => void
@@ -53,6 +55,7 @@ export function DictionaryListTable({
             rowCount={rows.length}
             pagination={pagination}
             onPaginationChange={onPaginationChange}
+            loading={loading}
             layout="flush"
             density="compact"
             defaultColumnPinning={{

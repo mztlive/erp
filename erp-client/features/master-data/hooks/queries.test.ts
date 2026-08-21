@@ -163,6 +163,40 @@ describe('useMasterDataListQuery', () => {
         await waitFor(() => expect(result.current.isError).toBe(true))
         expect(result.current.error).toBeInstanceOf(Error)
     })
+
+    it('keeps the previous list while a new filter query is in flight', async () => {
+        const first = { ...listResult(), totalCount: 3 }
+        const second = { ...listResult(), totalCount: 1 }
+        let resolveNext: ((value: MasterDataListResult) => void) | undefined
+        mockedApi.fetchMasterDataList
+            .mockResolvedValueOnce(first)
+            .mockImplementationOnce(
+                () =>
+                    new Promise<MasterDataListResult>((resolve) => {
+                        resolveNext = resolve
+                    }),
+            )
+
+        const query = { current: { ...listQuery } }
+        const { result, rerender } = renderHookWithProviders(() =>
+            useMasterDataListQuery(query.current),
+        )
+
+        await waitFor(() => expect(result.current.data).toEqual(first))
+
+        query.current = { ...listQuery, q: '笔' }
+        rerender()
+
+        await waitFor(() => expect(result.current.isFetching).toBe(true))
+        expect(result.current.isPending).toBe(false)
+        expect(result.current.isPlaceholderData).toBe(true)
+        expect(result.current.data).toEqual(first)
+
+        resolveNext?.(second)
+        await waitFor(() => expect(result.current.data).toEqual(second))
+        expect(result.current.isPlaceholderData).toBe(false)
+        expect(result.current.isPending).toBe(false)
+    })
 })
 
 describe('useProductListSkusQuery', () => {

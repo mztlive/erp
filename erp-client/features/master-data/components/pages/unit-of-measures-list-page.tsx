@@ -117,6 +117,7 @@ export function UnitOfMeasuresListPage() {
                         columns={columns}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
+                        loading={state.listQuery.isFetching}
                         listLoadFailed={listLoadFailed}
                         error={state.listQuery.error}
                         onRetry={() => void state.listQuery.refetch()}

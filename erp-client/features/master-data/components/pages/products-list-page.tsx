@@ -179,6 +179,7 @@ export function ProductsListPage() {
                         rowCount={state.rows.length}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
+                        loading={state.listQuery.isFetching}
                         layout="flush"
                         density="compact"
                         defaultColumnPinning={{

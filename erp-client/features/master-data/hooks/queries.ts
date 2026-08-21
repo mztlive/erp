@@ -1,6 +1,11 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+    keepPreviousData,
+    useMutation,
+    useQuery,
+    useQueryClient,
+} from "@tanstack/react-query"
 
 import {
     createMasterDataObject,
@@ -35,6 +40,8 @@ export function useMasterDataListQuery(query: MasterDataListQuery) {
     return useQuery({
         queryKey: masterDataKeys.list(query),
         queryFn: () => fetchMasterDataList(query),
+        // 筛选进 queryKey：换条件时保留上一页，避免 isPending 把整页卸成骨架
+        placeholderData: keepPreviousData,
     })
 }
 
