@@ -4,8 +4,10 @@ import * as React from "react"
 import { Building2Icon } from "lucide-react"
 
 import { ErpAppShell } from "@/components/business"
-import { WorkspaceSidebarNav } from "@/components/layout/workspace-sidebar-nav"
-import { WorkspaceTopbar } from "@/components/layout/workspace-topbar"
+import {
+    WorkspaceSidebarAccount,
+    WorkspaceSidebarNav,
+} from "@/components/layout/workspace-sidebar-nav"
 
 function WorkspaceSidebarHeader() {
     return (
@@ -34,7 +36,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             showSidebarRail={false}
             sidebarHeader={<WorkspaceSidebarHeader />}
             sidebarContent={<WorkspaceSidebarNav />}
-            topbar={<WorkspaceTopbar />}
+            sidebarFooter={<WorkspaceSidebarAccount />}
         >
             {children}
         </ErpAppShell>
