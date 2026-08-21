@@ -115,9 +115,9 @@ export function WorkspaceSidebarNav() {
     return (
         <>
             {navGroups.map((group, index) => (
-                <SidebarGroup key={group.label} className="px-1 py-0.5">
+                <SidebarGroup key={group.label} className="gap-1 px-1 py-1">
                     <SidebarGroupLabel
-                        className={index > 0 ? "mt-1" : undefined}
+                        className={index > 0 ? "mt-2" : undefined}
                     >
                         {group.label}
                     </SidebarGroupLabel>
