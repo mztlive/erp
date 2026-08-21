@@ -416,16 +416,13 @@ function MoneyValue({
             data-tax-basis={taxBasis}
             data-unavailable={isUnavailable || undefined}
             className={cn(
-                "inline-flex min-w-0 flex-wrap items-baseline gap-2",
+                "inline-flex min-w-0 flex-wrap items-baseline gap-2 font-medium",
                 className,
             )}
             {...props}
         >
             <span
-                className={cn(
-                    "num font-medium",
-                    isUnavailable ? "text-muted-foreground" : "text-foreground",
-                )}
+                className={cn("num", isUnavailable && "text-muted-foreground")}
             >
                 {isUnavailable ? "—" : formatDecimal(value, 2, "cny")}
             </span>

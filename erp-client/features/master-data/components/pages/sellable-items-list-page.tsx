@@ -40,28 +40,22 @@ export function SellableItemsListPage() {
 
     return (
         <ListPageFrame
-            title={masterDataCopy.pageTitle("公司商品池")}
+            title="公司商品池"
             currentLabel="公司商品池"
             hint={masterDataCopy.sellableItemsHint}
             headerDensity="default"
             metadata={
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
                     <span className="inline-flex items-center gap-1">
-                        <EyeIcon className="size-3.5" aria-hidden="true" />
+                        <EyeIcon aria-hidden="true" />
                         只读查询
                     </span>
                     <span className="inline-flex items-center gap-1">
-                        <CircleDollarSignIcon
-                            className="size-3.5"
-                            aria-hidden="true"
-                        />
+                        <CircleDollarSignIcon aria-hidden="true" />
                         销售可见口径
                     </span>
                     <span className="inline-flex items-center gap-1">
-                        <ShieldCheckIcon
-                            className="size-3.5"
-                            aria-hidden="true"
-                        />
+                        <ShieldCheckIcon aria-hidden="true" />
                         采购成本受保护
                     </span>
                 </div>
@@ -98,7 +92,6 @@ export function SellableItemsListPage() {
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
-                        rowCount={state.rows.length}
                         hasActiveFilters={hasActiveFilters}
                         clearAllFilters={filters.clearAllFilters}
                         appliedChips={state.appliedChips}
@@ -173,7 +166,7 @@ export function SellableItemsListPage() {
                         manualPagination={false}
                         loading={state.listQuery.isFetching}
                         layout="flush"
-                        density="compact"
+                        density="comfortable"
                         defaultColumnPinning={{
                             left: ["name"],
                             right: [],

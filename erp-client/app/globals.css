@@ -7,15 +7,15 @@
 /* ==========================================================================
    ERP 商务主题 — shadcn Neutral 表面 + 语义状态色
    --------------------------------------------------------------------------
-   布局：白画布 + 浅灰侧栏 + 发丝边框卡片（不再用灰底托白卡）。
-   表面对齐 shadcn/ui default Neutral：
-     background 纯白 · sidebar 极浅灰 · primary 近黑 · accent 浅灰
+   布局：极浅灰画布 + 白侧栏 + 白卡片浮起；顶栏与主工作面用 --card。
+   表面对齐 shadcn/ui Neutral：
+     background 极浅灰 · sidebar / card 纯白 · primary 近黑 · accent 浅灰
+   侧栏选中：浅灰底 + 近黑字 + 左侧竖标；悬停比选中更淡一档。
    单据状态色仍用独立色相（成功绿 / 警告金 / 信息蓝 / 危险红），不灰度化。
 
-   不要把画布压成浅灰去「制造卡片浮起」——稀疏列表会和侧栏连成灰墙。
-   层级靠 border / grid 发丝线，不靠重阴影和大块底色差。
+   层级靠表面色差（灰底托白卡）和 border / grid 发丝线，不靠重阴影。
 
-   尺寸令牌来自 docs/erp-interaction-spec.md 第 2.1 节，勿随意改动。
+   尺寸令牌来自 docs/erp-ui-design.md 第 2.1 / 2.2 节。
    ========================================================================== */
 
 @theme inline {
@@ -97,18 +97,29 @@
     --color-row-striped: var(--row-striped);
     --color-grid: var(--grid);
 
-    /* 应用壳尺寸 —— 对应 erp-interaction-spec 2.1 */
+    /* 应用壳尺寸 —— 对应 erp-ui-design 2.2 */
     --spacing-topbar: 3rem; /* 顶部全局栏 48px */
+    --spacing-control-xs: 1.5rem; /* 24px 极小控件 */
+    --spacing-control-sm: 2rem; /* 32px 紧凑控件 / 输入框内图标按钮 */
+    --spacing-control: 2.25rem; /* 36px 默认控件 / 输入框 */
+    --spacing-control-lg: 2.5rem; /* 40px 强调控件 */
+    --spacing-page-inline: 1.5rem; /* 24px 内容区内边距 */
+    --spacing-page-inline-lg: 2rem; /* 32px 桌面内容区内边距 */
+    --spacing-page-block: 1.25rem; /* 20px 内容区纵向边距 */
+    --spacing-page-block-lg: 1.5rem; /* 24px 桌面内容区纵向边距 */
+    --spacing-toolbar-inset: 0.75rem; /* 12px 筛选条内边距 */
+    --spacing-search-min: 16rem; /* 搜索框在工具栏中的最小宽度 */
     --spacing-row: 2.25rem; /* 标准列表行高 36px */
-    --spacing-row-comfortable: 2.75rem; /* 舒适密度行高 44px */
-    --spacing-table-cell-inline: 0.75rem; /* 表格单元格横向留白 */
+    --spacing-row-comfortable: 3.5rem; /* 舒适密度 / 双行单元格 56px */
+    --spacing-table-cell-inline: 1rem; /* 表格单元格横向留白 */
     --spacing-table-cell-block: 0.25rem; /* 高密度单元格纵向留白 */
-    --spacing-table-cell-block-comfortable: 0.5rem; /* 多行单元格纵向留白 */
+    --spacing-table-cell-block-comfortable: 0.75rem; /* 多行单元格纵向留白 */
     --spacing-table-frame-inset: 1.25rem; /* 内嵌表格与业务卡片边缘距离 */
     --spacing-table-resize-target: 0.75rem; /* 列宽拖拽命中区 */
     --spacing-table-column-default: 10rem;
     --spacing-table-column-default-min: 8rem;
     --spacing-table-column-selection: 2.5rem;
+    --spacing-table-column-preview: 3rem; /* 行预览指示列 */
     --spacing-table-column-reference: 20rem;
     --spacing-table-column-reference-min: 16rem;
     --spacing-table-column-status: 8rem;
@@ -132,10 +143,7 @@
     --text-2xs: 0.625rem; /* 10px */
     --text-tiny: 0.6875rem; /* 11px */
 
-    /* 圆角 —— 单一旋钮，整体压在 2~8px，保持单据系统的严谨感
-     三档语义：lg/xl = 6px 基线（控件与嵌套项）
-               2xl = 7px（按钮/输入框/徽章等交互控件，比基线略圆）
-               3xl/4xl = 8px 封顶（弹层、卡片、对话框等大浮层） */
+    /* 圆角 —— 单一旋钮；卡片 12px，控件略圆于基线，大浮层封顶 14px */
     --radius-sm: calc(var(--radius) * 0.5);
     --radius-md: calc(var(--radius) * 0.75);
     --radius-lg: var(--radius);
@@ -161,10 +169,10 @@
    浅色模式：shadcn Neutral 表面（白画布 + 近黑主色）
    -------------------------------------------------------------------------- */
 :root {
-    /* 6px 基线，保持单据系统的严谨感 */
-    --radius: 0.375rem;
+    /* 12px 基线，对齐灰底白卡工作面 */
+    --radius: 0.75rem;
 
-    --background: oklch(1 0 0);
+    --background: oklch(0.985 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
@@ -234,11 +242,11 @@
     --chart-4: oklch(0.8016 0.1651 76);
     --chart-5: oklch(0.4942 0.2284 295.6);
 
-    --sidebar: oklch(0.985 0 0);
+    --sidebar: oklch(1 0 0);
     --sidebar-foreground: oklch(0.4 0 0);
     --sidebar-primary: oklch(0.205 0 0);
     --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent: oklch(0.955 0 0);
     --sidebar-accent-foreground: oklch(0.145 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);

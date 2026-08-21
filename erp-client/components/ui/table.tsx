@@ -60,7 +60,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
         <tr
             data-slot="table-row"
             className={cn(
-                "group/row border-b border-grid transition-colors hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected",
+                "group/row border-b border-grid transition-colors hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected [[data-placeholder]_&]:hover:bg-transparent [[data-placeholder]_&]:has-aria-expanded:bg-transparent",
                 className,
             )}
             {...props}
@@ -86,7 +86,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
         <td
             data-slot="table-cell"
             className={cn(
-                "h-(--table-row-height) px-(--table-cell-inline) py-(--table-cell-block) align-middle whitespace-nowrap",
+                "min-h-(--table-row-height) px-(--table-cell-inline) py-(--table-cell-block) align-middle whitespace-nowrap",
                 className,
             )}
             {...props}

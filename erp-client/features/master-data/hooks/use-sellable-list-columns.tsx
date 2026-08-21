@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { TriangleAlertIcon } from "lucide-react"
+import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef, SortingFn } from "@tanstack/react-table"
 
 import { MoneyValue } from "@/components/business"
@@ -36,7 +36,7 @@ function SupplyRegions({ regions }: { regions: readonly string[] }) {
             title={regions.join("、")}
         >
             {shown.map((region) => (
-                <Badge key={region} variant="outline">
+                <Badge key={region} variant="secondary">
                     {region}
                 </Badge>
             ))}
@@ -61,12 +61,9 @@ export function useSellableListColumns() {
                         <div className="min-w-0">
                             <div className="truncate text-sm font-medium">
                                 {row.original.name}
-                                {sellable ? (
-                                    <span className="text-muted-foreground">
-                                        {" "}
-                                        · {sellable.specificationLabel}
-                                    </span>
-                                ) : null}
+                                {sellable
+                                    ? ` · ${sellable.specificationLabel}`
+                                    : null}
                             </div>
                             <div className="truncate text-xs text-muted-foreground">
                                 SKU 编号：
@@ -131,7 +128,12 @@ export function useSellableListColumns() {
                             </span>
                         )
                     }
-                    return <MoneyValue value={marketPrice} />
+                    return (
+                        <MoneyValue
+                            className="font-normal text-muted-foreground"
+                            value={marketPrice}
+                        />
+                    )
                 },
             },
             {
@@ -152,8 +154,6 @@ export function useSellableListColumns() {
                 meta: {
                     label: "供应保障",
                     width: "status",
-                    align: "end",
-                    numeric: true,
                 },
                 cell: ({ row }) => {
                     const count = row.original.sellableItem?.supplierCount ?? 0
@@ -166,7 +166,12 @@ export function useSellableListColumns() {
                                     data-icon="inline-start"
                                     aria-hidden="true"
                                 />
-                            ) : null}
+                            ) : (
+                                <CircleCheckIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                            )}
                             {atRisk ? (
                                 "单一供应商"
                             ) : (

@@ -99,8 +99,8 @@ function GlobalTopbar({
         <header
             data-slot="global-topbar"
             className={cn(
-                // IDURAR：顶栏操作全部右对齐，无实心底/分割线；仅移动端显示菜单按钮
-                "flex h-topbar shrink-0 items-center gap-3 bg-transparent px-4 pt-2 md:px-6",
+                // 白顶栏浮在灰画布上，操作右对齐；仅移动端显示菜单按钮
+                "flex h-topbar shrink-0 items-center gap-3 border-b border-border bg-card px-page-inline md:px-page-inline-lg py-8",
                 className,
             )}
             {...props}
@@ -115,7 +115,7 @@ function GlobalTopbar({
                 <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
                     {leading}
                     {search ? (
-                        <InputGroup className="w-[min(100%,16rem)] border-border bg-card/80 shadow-xs sm:w-64 md:w-72">
+                        <InputGroup className="w-[min(100%,16rem)] border-border bg-card shadow-xs sm:w-64 md:w-72">
                             <InputGroupAddon>
                                 <SearchIcon aria-hidden="true" />
                             </InputGroupAddon>
@@ -156,8 +156,7 @@ function GlobalTopbar({
                             <Button
                                 key={actionKey}
                                 variant={variant}
-                                size="sm"
-                                className="border-border bg-card/80 shadow-xs"
+                                className="border-border bg-card shadow-xs"
                                 {...buttonProps}
                             >
                                 {Icon ? (

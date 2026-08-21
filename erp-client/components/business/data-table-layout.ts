@@ -32,7 +32,7 @@ export function alignmentClass(alignment: DataTableAlignment = "start") {
 
 export function columnRuntimeWidth(
     enableColumnResizing: boolean,
-    role: "selection" | undefined,
+    role: "selection" | "preview" | undefined,
     runtimeWidth: number | undefined,
 ) {
     return enableColumnResizing && !role ? runtimeWidth : undefined
@@ -53,15 +53,18 @@ export function pinningClass(
     if (!pinned) return undefined
     return area === "header"
         ? "sticky z-10 bg-table-header"
-        : "sticky z-10 bg-card group-hover/row:bg-row-hover group-data-[state=selected]/row:bg-row-selected"
+        : "sticky z-10 bg-card group-hover/row:bg-row-hover group-data-[state=selected]/row:bg-row-selected [[data-placeholder]_&]:group-hover/row:bg-card"
 }
 
 export function columnWidthClass(
     width: DataTableColumnWidth = "default",
-    role?: "selection",
+    role?: "selection" | "preview",
 ) {
     if (role === "selection") {
         return "w-table-column-selection min-w-table-column-selection max-w-table-column-selection"
+    }
+    if (role === "preview") {
+        return "w-table-column-preview min-w-table-column-preview max-w-table-column-preview [&_svg]:size-4"
     }
     return dataTableColumnWidthClasses[width]
 }

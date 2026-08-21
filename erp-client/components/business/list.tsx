@@ -61,10 +61,10 @@ function ListToolbar({
             data-slot="list-toolbar"
             className={cn(
                 "flex flex-col gap-2",
-                // 筛选区控件统一 32px：与 Button 默认高和固定枚举 chip 对齐。
-                // Input / InputGroup / Combobox 默认 h-9(36px)，在筛选条里显得比按钮大一圈。
-                // 下拉面板走 portal，不在本子树内，不受影响。
-                "[&_[data-slot=input-group]]:h-8 [&_input[data-slot=input]]:h-8",
+                // 主行控件统一吃 --spacing-control，避免搜索框/分段/按钮各撑各的高度
+                "[&_[data-slot=list-toolbar-query-tools]]:items-center",
+                "[&_[data-slot=input-group]]:h-control [&_[data-slot=input-group]]:min-h-0",
+                "[&_[data-slot=list-toolbar-filters]>[data-slot=button]]:h-control",
                 className,
             )}
             {...props}
@@ -76,7 +76,7 @@ function ListToolbar({
                 {hasQueryTools ? (
                     <div
                         data-slot="list-toolbar-query-tools"
-                        className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+                        className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center"
                     >
                         {savedView ? (
                             <div
@@ -89,7 +89,7 @@ function ListToolbar({
                         {search ? (
                             <div
                                 data-slot="list-toolbar-search"
-                                className="min-w-0 w-full sm:w-[18rem]"
+                                className="min-w-0 w-full flex-1 sm:min-w-search-min"
                             >
                                 {search}
                             </div>
@@ -97,7 +97,7 @@ function ListToolbar({
                         {filters ? (
                             <div
                                 data-slot="list-toolbar-filters"
-                                className="flex flex-wrap items-center gap-2"
+                                className="flex shrink-0 flex-wrap items-center gap-2"
                             >
                                 {filters}
                             </div>
@@ -369,13 +369,20 @@ function BusinessTableFrame({
                 </>
             ) : (
                 <>
-                    <div className="min-w-0">{toolbar}</div>
+                    {toolbar ? (
+                        <div
+                            data-slot="table-frame-toolbar"
+                            className="rounded-lg border bg-card p-toolbar-inset shadow-xs"
+                        >
+                            {toolbar}
+                        </div>
+                    ) : null}
                     {selectionBar}
                     <div
                         data-slot="business-table-frame-result"
                         className="overflow-hidden rounded-lg border bg-card shadow-xs"
                     >
-                        <div className="flex min-h-14 flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-h-row-comfortable flex-col gap-2 border-b px-table-cell-inline py-toolbar-inset sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                                 <Heading className="text-sm font-semibold text-foreground">
                                     {title}

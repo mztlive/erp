@@ -20,7 +20,6 @@ function renderToolbar(open: boolean) {
             searchInputRef={{ current: null }}
             searchDraft=""
             setSearchDraft={noop}
-            rowCount={6}
             hasActiveFilters={false}
             clearAllFilters={noop}
             appliedChips={[]}
@@ -59,12 +58,12 @@ function renderToolbar(open: boolean) {
 }
 
 describe("SellableListToolbar", () => {
-    it("shows only the embedded submit while more filters are closed", () => {
+    it("does not show an inline search submit while more filters are closed", () => {
         renderToolbar(false)
 
         expect(
-            screen.getByRole("button", { name: "应用搜索与筛选" }),
-        ).toBeDefined()
+            screen.queryByRole("button", { name: "应用搜索与筛选" }),
+        ).toBeNull()
         expect(
             screen.queryByRole("button", { name: "应用全部筛选" }),
         ).toBeNull()

@@ -7,7 +7,7 @@ import {
     ChevronsRightIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    Settings2Icon,
+    Columns3Icon,
     PanelLeftIcon,
     PanelRightIcon,
     PinOffIcon,
@@ -45,13 +45,13 @@ function DataTableViewOptions<TData>({
                 render={
                     <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         className="max-sm:hidden"
                     />
                 }
             >
-                <Settings2Icon data-icon="inline-start" aria-hidden="true" />
-                视图
+                <Columns3Icon data-icon="inline-start" aria-hidden="true" />
+                列设置
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto min-w-72">
                 <div className="space-y-3">

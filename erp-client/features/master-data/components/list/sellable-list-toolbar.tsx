@@ -12,10 +12,8 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ButtonGroup } from "@/components/ui/button-group"
 import { Input } from "@/components/ui/input"
 import { ListSearchField } from "@/features/master-data/components/list/list-search-field"
-import { ListToolbarCount } from "@/features/master-data/components/list/list-toolbar-actions"
 import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import type {
     SellableFilterKey,
@@ -49,7 +47,6 @@ export function SellableListToolbar({
     searchInputRef,
     searchDraft,
     setSearchDraft,
-    rowCount,
     hasActiveFilters,
     clearAllFilters,
     appliedChips,
@@ -83,7 +80,6 @@ export function SellableListToolbar({
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
-    rowCount: number
     hasActiveFilters: boolean
     clearAllFilters: () => void
     appliedChips: readonly SellableAppliedChip[]
@@ -126,7 +122,6 @@ export function SellableListToolbar({
             }}
         >
             <ListToolbar
-                className="rounded-lg border bg-card p-3 shadow-xs [&_[data-slot=list-toolbar-search]]:sm:w-[28rem] [&_[data-slot=list-toolbar-search]]:xl:w-[34rem]"
                 search={
                     <ListSearchField
                         searchInputRef={searchInputRef}
@@ -135,15 +130,14 @@ export function SellableListToolbar({
                         placeholder={masterDataSearchPlaceholder(
                             "sellable-items",
                         )}
-                        showSubmit={!sellableFilterPanelOpen}
-                        submitLabel="应用搜索与筛选"
                     />
                 }
                 filters={
                     <>
-                        <ButtonGroup
+                        <div
+                            role="group"
                             aria-label="供应快捷筛选"
-                            className="max-w-full overflow-x-auto rounded-lg border bg-muted/40 p-0.5"
+                            className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
                         >
                             {SUPPLY_PRESET_OPTIONS.map((option) => {
                                 const active = supplyPreset === option.value
@@ -152,7 +146,11 @@ export function SellableListToolbar({
                                         key={option.value}
                                         type="button"
                                         variant={active ? "secondary" : "ghost"}
-                                        className="rounded-md px-2.5 shadow-none"
+                                        className={
+                                            active
+                                                ? "bg-card shadow-xs"
+                                                : "shadow-none"
+                                        }
                                         aria-pressed={active}
                                         onClick={() =>
                                             applySupplyPreset(option.value)
@@ -165,7 +163,7 @@ export function SellableListToolbar({
                                     </Button>
                                 )
                             })}
-                        </ButtonGroup>
+                        </div>
                         <Button
                             type="button"
                             variant="outline"
@@ -421,14 +419,6 @@ export function SellableListToolbar({
                             ) : null}
                         </div>
                     ) : undefined
-                }
-                actions={
-                    <ListToolbarCount
-                        label="公司商品池"
-                        rowCount={rowCount}
-                        hasActiveFilters={false}
-                        onClear={clearAllFilters}
-                    />
                 }
             />
         </form>

@@ -45,7 +45,7 @@ export function ListPageFrame({
 }) {
     if (loading) {
         return (
-            <PageScaffold density="compact">
+            <PageScaffold density={headerDensity}>
                 <PageHeader title={title} density={headerDensity} />
                 <div
                     className="h-40 animate-pulse rounded-lg bg-muted"
@@ -56,7 +56,7 @@ export function ListPageFrame({
     }
 
     return (
-        <PageScaffold density="compact">
+        <PageScaffold density={headerDensity}>
             <PageHeader
                 title={title}
                 description={hint}
@@ -66,7 +66,12 @@ export function ListPageFrame({
                     { id: "md", label: "基础资料", href: "/master-data" },
                     { id: "resource", label: currentLabel, current: true },
                 ]}
-                actions={<PageActions actions={actions} />}
+                actions={
+                    <PageActions
+                        actions={actions}
+                        size={headerDensity === "default" ? "default" : "sm"}
+                    />
+                }
             />
             {banner}
             {alerts}

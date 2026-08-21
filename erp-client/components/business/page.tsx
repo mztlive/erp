@@ -84,10 +84,9 @@ export type PageHeaderProps = Omit<
     title?: React.ReactNode
     description?: React.ReactNode
     /**
-     * 面包屑路径。一级工作面/列表（`variant="page"` 且深度小于 3）不会渲染：
-     * 侧栏与页面 title 已表达位置，避免「销售 › 销售单」式重复导航。
-     * 对象中心（`object-chrome`）始终渲染；page 变体仅在深度 ≥ 3 时渲染
-     *（如「销售 › 销售单 › 新建」）。
+     * 面包屑路径。object-chrome 始终渲染。
+     * page + default 密度：深度 ≥ 2 即渲染（落地页用路径替代「领域 · 页面」双写标题）。
+     * page + compact：仅深度 ≥ 3 渲染，避免高频作业页与侧栏/h1 重复。
      */
     breadcrumbs?: readonly PageBreadcrumbItem[]
     breadcrumbLabel?: string
@@ -108,15 +107,17 @@ export type PageHeaderProps = Omit<
 }
 
 /**
- * 一级工作面常见传 `[领域, 当前页]`（深度 2），与侧栏/h1 重复，不展示。
- * object-chrome 任意深度都展示；page 仅在深度 ≥ 3（真正下级路径）时展示。
+ * object-chrome 任意深度都展示。
+ * default 密度落地页展示领域 › 当前页；compact 作业页仍要求深度 ≥ 3。
  */
 function shouldRenderBreadcrumbs(
     breadcrumbs: readonly PageBreadcrumbItem[],
     objectChrome: boolean,
+    density: PageHeaderDensity,
 ): boolean {
     if (breadcrumbs.length === 0) return false
     if (objectChrome) return true
+    if (density === "default") return breadcrumbs.length >= 2
     return breadcrumbs.length >= 3
 }
 
@@ -135,7 +136,11 @@ function PageHeader({
 }: PageHeaderProps) {
     const objectChrome = variant === "object-chrome"
     const compact = objectChrome || density === "compact"
-    const showBreadcrumbs = shouldRenderBreadcrumbs(breadcrumbs, objectChrome)
+    const showBreadcrumbs = shouldRenderBreadcrumbs(
+        breadcrumbs,
+        objectChrome,
+        density,
+    )
     const showTitleBlock =
         !objectChrome &&
         (title != null ||
@@ -166,7 +171,7 @@ function PageHeader({
                         {showBreadcrumbs ? (
                             <Breadcrumb
                                 aria-label={breadcrumbLabel}
-                                className={compact ? "text-xs" : undefined}
+                                className="text-xs"
                             >
                                 <BreadcrumbList
                                     className={
@@ -245,7 +250,7 @@ function PageHeader({
                             </p>
                         ) : null}
                         {!compact && metadata ? (
-                            <div className="mt-2 text-sm text-muted-foreground">
+                            <div className="mt-2 text-xs text-muted-foreground [&_svg:not([class*='size-'])]:size-3.5">
                                 {metadata}
                             </div>
                         ) : null}
@@ -629,7 +634,7 @@ function PageScaffold({
                 "mx-auto flex w-full max-w-shell flex-1 flex-col",
                 density === "compact"
                     ? "gap-3 p-3 md:px-5 md:py-4"
-                    : "gap-3 p-4 md:gap-4 md:px-6 md:py-5",
+                    : "gap-4 p-page-block px-page-inline md:px-page-inline-lg md:py-page-block-lg",
                 // 页头到工作面的距离必须明显大于内容块之间的距离，
                 // 否则页头说明会和工具栏黏成一团，读不出层级。
                 "[&>[data-slot=page-header]]:mb-2 md:[&>[data-slot=page-header]]:mb-3",
@@ -642,7 +647,7 @@ function PageScaffold({
 
 /** 主工作面浮起表面：靠浅阴影浮起，避免重描边。 */
 const surfacePanelClassName =
-    "rounded-lg border border-border bg-card shadow-sm"
+    "rounded-lg border border-border bg-card shadow-xs"
 
 /** 主卡内轻提示/工具条：无描边，仅浅底区分。 */
 const surfaceInsetClassName = "rounded-md bg-muted/40"

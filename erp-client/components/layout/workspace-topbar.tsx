@@ -115,7 +115,7 @@ export function WorkspaceTopbar() {
         : []
 
     return (
-        <div className="relative">
+        <div className="relative bg-card">
             <GlobalTopbar
                 showSidebarTrigger
                 search={{

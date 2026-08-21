@@ -2,7 +2,12 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from "lucide-react"
+import {
+    ArrowDownIcon,
+    ArrowUpDownIcon,
+    ArrowUpIcon,
+    ChevronRightIcon,
+} from "lucide-react"
 import {
     flexRender,
     getCoreRowModel,
@@ -118,7 +123,7 @@ declare module "@tanstack/react-table" {
         /** 只声明业务语义宽度；实际尺寸来自主题 token。 */
         width?: DataTableColumnWidth
         /** 系统列使用固定的语义布局，不开放业务列尺寸配置。 */
-        role?: "selection"
+        role?: "selection" | "preview"
     }
 }
 
@@ -311,10 +316,47 @@ function DataTable<TData>({
         [rowLabel],
     )
 
-    const resolvedColumns = React.useMemo(
-        () => (enableRowSelection ? [selectionColumn, ...columns] : columns),
-        [columns, enableRowSelection, selectionColumn],
+    const previewColumn = React.useMemo<ColumnDef<TData, unknown>>(
+        () => ({
+            id: "__preview",
+            header: () => <span className="sr-only">打开预览</span>,
+            cell: () => (
+                <ChevronRightIcon
+                    aria-hidden="true"
+                    className="text-muted-foreground"
+                />
+            ),
+            enableHiding: false,
+            enableResizing: false,
+            enableSorting: false,
+            meta: {
+                label: "预览",
+                align: "end",
+                role: "preview",
+            },
+        }),
+        [],
     )
+
+    const resolvedColumns = React.useMemo(() => {
+        const withSelection = enableRowSelection
+            ? [selectionColumn, ...columns]
+            : columns
+        return onRowPreview ? [...withSelection, previewColumn] : withSelection
+    }, [
+        columns,
+        enableRowSelection,
+        onRowPreview,
+        previewColumn,
+        selectionColumn,
+    ])
+
+    const resolvedColumnPinning = React.useMemo(() => {
+        if (!onRowPreview) return columnPinning
+        const right = columnPinning.right ?? []
+        if (right.includes("__preview")) return columnPinning
+        return { ...columnPinning, right: [...right, "__preview"] }
+    }, [columnPinning, onRowPreview])
 
     // TanStack Table 返回不稳定函数引用；React Compiler 只需跳过这个 hook。
     // eslint-disable-next-line react-hooks/incompatible-library
@@ -329,7 +371,7 @@ function DataTable<TData>({
             rowSelection,
             columnVisibility,
             columnOrder,
-            columnPinning,
+            columnPinning: resolvedColumnPinning,
             columnSizing,
             columnSizingInfo,
             columnFilters,
@@ -635,6 +677,11 @@ function DataTable<TData>({
                 <Table
                     data-density={density}
                     data-striped={striped ? "true" : undefined}
+                    data-placeholder={
+                        showErrorState || (!loading && rows.length === 0)
+                            ? ""
+                            : undefined
+                    }
                 >
                     <TableCaption className="sr-only">{caption}</TableCaption>
                     <TableHeader>
@@ -825,7 +872,7 @@ function DataTable<TData>({
                                     tabIndex={interactive ? 0 : undefined}
                                     className={
                                         interactive
-                                            ? "cursor-default"
+                                            ? "cursor-pointer"
                                             : undefined
                                     }
                                     onClick={(event) => {

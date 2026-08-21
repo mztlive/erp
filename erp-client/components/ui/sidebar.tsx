@@ -184,7 +184,7 @@ function Sidebar({
                     data-sidebar="sidebar"
                     data-slot="sidebar"
                     data-mobile="true"
-                    className="w-(--sidebar-width) bg-background p-0 text-sidebar-foreground [&>button]:hidden"
+                    className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
                     style={
                         {
                             "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -209,7 +209,7 @@ function Sidebar({
             <div
                 data-slot="sidebar"
                 className={cn(
-                    "sticky top-0 hidden h-svh w-(--sidebar-width) shrink-0 flex-col bg-transparent px-2 pt-3 pb-2 text-sidebar-foreground md:flex",
+                    "sticky top-0 hidden h-svh w-(--sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-2 pt-3 pb-2 text-sidebar-foreground md:flex",
                     className,
                 )}
                 {...props}
@@ -421,7 +421,7 @@ function SidebarGroupLabel({
         props: mergeProps<"div">(
             {
                 className: cn(
-                    "flex h-6 shrink-0 items-center rounded-md px-3 text-[11px] font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-3 [&>svg]:size-4 [&>svg]:shrink-0",
+                    "flex h-control-xs shrink-0 items-center rounded-md px-3 text-tiny font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-3 [&>svg]:size-4 [&>svg]:shrink-0",
                     className,
                 ),
             },
@@ -497,18 +497,18 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 
 const sidebarMenuButtonVariants = cva(
     // 选中态 = 浅底 + 左侧竖标；圆角对齐 --radius，重量让给内容区数据
-    "peer/menu-button group/menu-button relative flex w-full items-center gap-2 overflow-hidden rounded-lg px-3 py-2 text-left text-sm whitespace-nowrap ring-sidebar-ring outline-hidden transition-[width,height,padding,background-color,color] duration-200 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 has-[>svg:first-child]:pl-2.5 has-[>svg:last-child]:pr-2.5 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground data-active:before:absolute data-active:before:top-1.5 data-active:before:bottom-1.5 data-active:before:left-0 data-active:before:w-0.5 data-active:before:rounded-full data-active:before:bg-sidebar-accent-foreground data-active:before:content-[''] [&_svg]:size-3.5 [&_svg]:shrink-0 [&>span:last-child]:truncate",
+    "peer/menu-button group/menu-button relative flex w-full items-center gap-2 overflow-hidden rounded-lg px-3 py-2 text-left text-sm whitespace-nowrap text-sidebar-foreground ring-sidebar-ring outline-hidden transition-[width,height,padding,background-color,color] duration-200 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground focus-visible:ring-3 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 has-[>svg:first-child]:pl-2.5 has-[>svg:last-child]:pr-2.5 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-accent/70 data-open:hover:text-sidebar-accent-foreground data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground data-active:before:absolute data-active:before:top-1.5 data-active:before:bottom-1.5 data-active:before:left-0 data-active:before:w-0.5 data-active:before:rounded-full data-active:before:bg-sidebar-primary data-active:before:content-[''] [&_svg]:size-3.5 [&_svg]:shrink-0 [&>span:last-child]:truncate",
     {
         variants: {
             variant: {
                 default:
-                    "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    "hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
                 outline:
-                    "bg-transparent shadow-none ring-1 ring-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:ring-sidebar-accent",
+                    "bg-transparent shadow-none ring-1 ring-border hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground hover:ring-sidebar-accent",
             },
             size: {
-                default: "h-8 text-sm",
-                sm: "h-8 text-xs",
+                default: "h-control text-sm",
+                sm: "h-control-sm text-xs",
                 lg: "h-12 px-3 text-sm group-data-[collapsible=icon]:p-0!",
             },
         },

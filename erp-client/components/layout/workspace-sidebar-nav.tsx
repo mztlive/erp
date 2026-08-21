@@ -116,16 +116,11 @@ export function WorkspaceSidebarNav() {
         <>
             {navGroups.map((group, index) => (
                 <SidebarGroup key={group.label} className="px-1 py-0.5">
-                    {/* 透明侧栏不靠分割线区分分组，仅用组标签与间距 */}
-                    {index > 0 ? (
-                        <SidebarGroupLabel className="mt-1">
-                            {group.label}
-                        </SidebarGroupLabel>
-                    ) : (
-                        <SidebarGroupLabel className="sr-only">
-                            {group.label}
-                        </SidebarGroupLabel>
-                    )}
+                    <SidebarGroupLabel
+                        className={index > 0 ? "mt-1" : undefined}
+                    >
+                        {group.label}
+                    </SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu className="gap-0.5">
                             {group.items.map((item) => {
@@ -154,7 +149,7 @@ export function WorkspaceSidebarNav() {
                                             {badgeCount && badgeCount > 0 ? (
                                                 <Badge
                                                     variant="secondary"
-                                                    className="ml-auto border-0 bg-background/70 group-data-[collapsible=icon]:hidden"
+                                                    className="ml-auto border-0 bg-card group-data-[collapsible=icon]:hidden"
                                                 >
                                                     {badgeCount}
                                                 </Badge>
