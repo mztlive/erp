@@ -619,6 +619,7 @@ function DataTable<TData>({
 
             <div
                 ref={tableSurfaceRef}
+                data-slot="data-table-surface"
                 className="overflow-hidden rounded-lg border bg-card"
             >
                 {loading && data.length > 0 && showRefreshingBanner ? (
@@ -810,6 +811,7 @@ function DataTable<TData>({
                             rows.map((row, rowIndex) => (
                                 <TableRow
                                     key={row.id}
+                                    data-row-id={row.id}
                                     ref={(node) => {
                                         if (node)
                                             rowRefs.current.set(row.id, node)

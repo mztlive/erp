@@ -2,6 +2,8 @@ export type DataTableAlignment = "start" | "center" | "end"
 
 export type DataTableColumnWidth =
     | "default"
+    /** 吸收整行剩余宽度的身份列；一张表最多一列使用，避免所有列被平均拉伸。 */
+    | "flex"
     | "reference"
     | "status"
     | "amount"
@@ -13,6 +15,7 @@ export type DataTableLayout = "inset" | "flush"
 
 const dataTableColumnWidthClasses: Record<DataTableColumnWidth, string> = {
     default: "w-table-column-default min-w-table-column-default-min",
+    flex: "w-full min-w-table-column-reference-min",
     reference: "w-table-column-reference min-w-table-column-reference-min",
     status: "w-table-column-status min-w-table-column-status-min",
     amount: "w-table-column-amount min-w-table-column-amount-min",
@@ -35,9 +38,7 @@ export function columnRuntimeWidth(
     return enableColumnResizing && !role ? runtimeWidth : undefined
 }
 
-export function sortableHeaderClass(
-    alignment: DataTableAlignment = "start",
-) {
+export function sortableHeaderClass(alignment: DataTableAlignment = "start") {
     if (alignment === "end") {
         return "flex-row-reverse justify-start text-right"
     }

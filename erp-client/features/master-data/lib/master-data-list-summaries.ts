@@ -51,6 +51,7 @@ export function buildSellableFilterSnapshotLabel(input: {
     selectedCategoryLabel?: string
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
+    supplyPresetLabel?: string
 }): string {
     return [
         `分类=${resourceLabel("sellable-items")}`,
@@ -67,6 +68,9 @@ export function buildSellableFilterSnapshotLabel(input: {
             ? [`供应商=${input.selectedSupplierLabel}`]
             : []),
         ...(input.supplyRegion ? [`可供区域=${input.supplyRegion}`] : []),
+        ...(input.supplyPresetLabel
+            ? [`快捷视图=${input.supplyPresetLabel}`]
+            : []),
         ...(input.productSalesPriceMin || input.productSalesPriceMax
             ? [
                   `销售价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
@@ -165,6 +169,7 @@ export function buildSellableTableDescription(input: {
     selectedCategoryLabel?: string
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
+    supplyPresetLabel?: string
     rowCount: number
 }): string {
     const active: string[] = []
@@ -182,6 +187,9 @@ export function buildSellableTableDescription(input: {
         active.push(`供应商 ${input.selectedSupplierLabel}`)
     }
     if (input.supplyRegion) active.push(`区域 ${input.supplyRegion}`)
+    if (input.supplyPresetLabel) {
+        active.push(`快捷视图 ${input.supplyPresetLabel}`)
+    }
     if (input.productSalesPriceMin || input.productSalesPriceMax) {
         active.push(
             `销售价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
@@ -190,7 +198,7 @@ export function buildSellableTableDescription(input: {
     if (active.length === 0) {
         return masterDataCopy.sellableListDescription(input.rowCount)
     }
-    return `共 ${input.rowCount} 条 · 当前筛选：${active.join(" · ")}`
+    return `当前筛选：${active.join(" · ")} · 点击任一行查看价格、可供区域和供应保障。`
 }
 
 /** 通用列表表头说明：有筛选时写人读摘要，否则默认操作说明（§2.2）。 */

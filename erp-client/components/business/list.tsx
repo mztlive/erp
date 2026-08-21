@@ -59,7 +59,14 @@ function ListToolbar({
             role="toolbar"
             aria-label={ariaLabel}
             data-slot="list-toolbar"
-            className={cn("flex flex-col gap-2", className)}
+            className={cn(
+                "flex flex-col gap-2",
+                // 筛选区控件统一 32px：与 Button 默认高和固定枚举 chip 对齐。
+                // Input / InputGroup / Combobox 默认 h-9(36px)，在筛选条里显得比按钮大一圈。
+                // 下拉面板走 portal，不在本子树内，不受影响。
+                "[&_[data-slot=input-group]]:h-8 [&_input[data-slot=input]]:h-8",
+                className,
+            )}
             {...props}
         >
             <div
@@ -308,6 +315,8 @@ interface BusinessTableFrameProps extends Omit<
     readonly title: React.ReactNode
     readonly description?: React.ReactNode
     readonly headingLevel?: BusinessTableHeadingLevel
+    /** 显示表格自己的结果标题栏；默认继续只向读屏器提供辅助标题。 */
+    readonly showHeader?: boolean
     /** 导出、新建等与整张表相关的标题区动作。 */
     readonly headerActions?: React.ReactNode
     readonly toolbar?: React.ReactNode
@@ -324,6 +333,7 @@ function BusinessTableFrame({
     title,
     description,
     headingLevel = "h2",
+    showHeader = false,
     headerActions,
     toolbar,
     selectionBar,
@@ -340,17 +350,56 @@ function BusinessTableFrame({
             className={cn("flex min-w-0 flex-col gap-4", className)}
             {...props}
         >
-            <Heading className="sr-only">{title}</Heading>
-            {description ? <p className="sr-only">{description}</p> : null}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">{toolbar}</div>
-                <div className="flex shrink-0 items-center gap-2">
-                    {headerActions}
-                    <div data-slot="table-frame-view-options" />
-                </div>
-            </div>
-            {selectionBar}
-            <div data-slot="business-table-frame-table">{table}</div>
+            {!showHeader ? (
+                <>
+                    <Heading className="sr-only">{title}</Heading>
+                    {description ? (
+                        <p className="sr-only">{description}</p>
+                    ) : null}
+                    {/* items-start：筛选面板展开后表级动作仍留在首行，不被垂直居中拽到面板中间 */}
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">{toolbar}</div>
+                        <div className="flex shrink-0 items-center gap-2">
+                            {headerActions}
+                            <div data-slot="table-frame-view-options" />
+                        </div>
+                    </div>
+                    {selectionBar}
+                    <div data-slot="business-table-frame-table">{table}</div>
+                </>
+            ) : (
+                <>
+                    <div className="min-w-0">{toolbar}</div>
+                    {selectionBar}
+                    <div
+                        data-slot="business-table-frame-result"
+                        className="overflow-hidden rounded-lg border bg-card shadow-xs"
+                    >
+                        <div className="flex min-h-14 flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                                <Heading className="text-sm font-semibold text-foreground">
+                                    {title}
+                                </Heading>
+                                {description ? (
+                                    <p className="mt-0.5 text-xs text-muted-foreground">
+                                        {description}
+                                    </p>
+                                ) : null}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                                {headerActions}
+                                <div data-slot="table-frame-view-options" />
+                            </div>
+                        </div>
+                        <div
+                            data-slot="business-table-frame-table"
+                            className="[&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0"
+                        >
+                            {table}
+                        </div>
+                    </div>
+                </>
+            )}
             {footer}
         </section>
     )

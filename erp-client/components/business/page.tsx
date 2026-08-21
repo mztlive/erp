@@ -630,6 +630,9 @@ function PageScaffold({
                 density === "compact"
                     ? "gap-3 p-3 md:px-5 md:py-4"
                     : "gap-3 p-4 md:gap-4 md:px-6 md:py-5",
+                // 页头到工作面的距离必须明显大于内容块之间的距离，
+                // 否则页头说明会和工具栏黏成一团，读不出层级。
+                "[&>[data-slot=page-header]]:mb-2 md:[&>[data-slot=page-header]]:mb-3",
                 className,
             )}
             {...props}

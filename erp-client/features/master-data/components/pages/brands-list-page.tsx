@@ -48,7 +48,6 @@ export function BrandsListPage() {
             currentLabel="品牌"
             hint={masterDataCopy.brandListHint}
             exportMeta={state.exportMeta}
-            queriedAt={state.listQuery.data?.queriedAt}
             actions={[
                 {
                     actionKey: "export",

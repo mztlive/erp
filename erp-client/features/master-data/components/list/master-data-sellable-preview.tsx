@@ -1,10 +1,6 @@
 "use client"
 
-import {
-    MapPinIcon,
-    PackageIcon,
-    UsersIcon,
-} from "lucide-react"
+import { MapPinIcon, PackageIcon, UsersIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"

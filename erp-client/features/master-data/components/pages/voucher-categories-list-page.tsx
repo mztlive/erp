@@ -38,7 +38,6 @@ export function VoucherCategoriesListPage() {
             title={masterDataCopy.pageTitle("卡券类目")}
             currentLabel="卡券类目"
             exportMeta={state.exportMeta}
-            queriedAt={state.listQuery.data?.queriedAt}
             actions={[
                 {
                     actionKey: "export",

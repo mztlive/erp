@@ -4,7 +4,6 @@ import * as React from "react"
 
 import {
     BackgroundJobProgress,
-    DataFreshness,
     PageActions,
     PageHeader,
     PageScaffold,
@@ -17,10 +16,11 @@ export function ListPageFrame({
     title,
     currentLabel,
     hint,
+    metadata,
+    headerDensity = "compact",
     banner,
     alerts,
     exportMeta,
-    queriedAt,
     actions,
     metrics,
     resultsLabel,
@@ -31,10 +31,11 @@ export function ListPageFrame({
     title: string
     currentLabel: string
     hint?: React.ReactNode
+    metadata?: React.ReactNode
+    headerDensity?: "default" | "compact"
     banner?: React.ReactNode
     alerts?: React.ReactNode
     exportMeta?: ListExportMeta | null
-    queriedAt?: string
     actions: readonly PageAction[]
     metrics?: React.ReactNode
     resultsLabel: string
@@ -45,7 +46,7 @@ export function ListPageFrame({
     if (loading) {
         return (
             <PageScaffold density="compact">
-                <PageHeader title={title} />
+                <PageHeader title={title} density={headerDensity} />
                 <div
                     className="h-40 animate-pulse rounded-lg bg-muted"
                     aria-busy
@@ -59,18 +60,12 @@ export function ListPageFrame({
             <PageHeader
                 title={title}
                 description={hint}
+                metadata={metadata}
+                density={headerDensity}
                 breadcrumbs={[
                     { id: "md", label: "基础资料", href: "/master-data" },
                     { id: "resource", label: currentLabel, current: true },
                 ]}
-                metadata={
-                    <DataFreshness
-                        updatedAt="刚刚"
-                        dateTime={queriedAt ?? ""}
-                        state="fresh"
-                        label="基础资料列表"
-                    />
-                }
                 actions={<PageActions actions={actions} />}
             />
             {banner}

@@ -15,7 +15,7 @@ export const WAREHOUSE_WRITE_MESSAGE =
 export function resourceLabel(resource: MasterDataResource): string {
     const found = (
         [
-            ["sellable-items", "可售商品池"],
+            ["sellable-items", "公司商品池"],
             ["products", "商品列表"],
             ["categories", "商品分类"],
             ["brands", "品牌"],

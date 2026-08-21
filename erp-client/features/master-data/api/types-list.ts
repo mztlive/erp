@@ -97,6 +97,8 @@ export type MasterDataListQuery = Readonly<{
     productSupplierId?: string
     /** 公司商品池：可供区域精确匹配。 */
     supplyRegion?: string
+    /** 公司商品池：列表派生视图；不改变服务端销售资格口径。 */
+    sellableSupplyPreset?: SellableSupplyPreset
     productListingStatus?: ProductListingFilter
     productSupplyCoverage?: ProductSkuCoverageFilter
     productSalesPriceMin?: string
@@ -105,6 +107,8 @@ export type MasterDataListQuery = Readonly<{
     supplierQualificationTypes?: readonly string[]
     supplierQualificationHealth?: SupplierQualificationHealth
 }>
+
+export type SellableSupplyPreset = "single-supplier" | "nationwide"
 
 export type MasterDataListResult = Readonly<{
     resource: MasterDataResource

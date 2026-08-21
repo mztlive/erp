@@ -44,7 +44,6 @@ export function UnitOfMeasuresListPage() {
             currentLabel="计量单位"
             hint={masterDataCopy.unitListHint}
             exportMeta={state.exportMeta}
-            queriedAt={state.listQuery.data?.queriedAt}
             actions={[
                 {
                     actionKey: "export",

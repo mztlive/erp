@@ -78,7 +78,6 @@ export function WarehousesListPage() {
                 />
             }
             exportMeta={state.exportMeta}
-            queriedAt={state.listQuery.data?.queriedAt}
             actions={[
                 {
                     actionKey: "export",

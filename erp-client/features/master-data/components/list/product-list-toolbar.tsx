@@ -14,7 +14,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ListSearchField } from "@/features/master-data/components/list/list-search-field"
 import { ListToolbarCount } from "@/features/master-data/components/list/list-toolbar-actions"
-import { masterDataCopy, masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
+import {
+    masterDataCopy,
+    masterDataSearchPlaceholder,
+} from "@/features/master-data/lib/copy"
 import {
     LIFECYCLE_RADIO_FILTER_OPTIONS,
     PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS,
@@ -119,7 +122,7 @@ export function ProductListToolbar({
                 filters={
                     <>
                         {!productFilterPanelOpen ? (
-                            <Button type="submit" size="sm">
+                            <Button type="submit">
                                 <SearchIcon
                                     data-icon="inline-start"
                                     aria-hidden="true"
@@ -130,7 +133,7 @@ export function ProductListToolbar({
                         <Button
                             type="button"
                             variant="outline"
-                            size="sm"
+
                             aria-expanded={productFilterPanelOpen}
                             onClick={() =>
                                 setProductFilterPanelOpen((open) => !open)
@@ -209,7 +212,9 @@ export function ProductListToolbar({
                                             productCategoryIdDraft ?? undefined
                                         }
                                         onValueChange={(id) =>
-                                            setProductCategoryIdDraft(id ?? null)
+                                            setProductCategoryIdDraft(
+                                                id ?? null,
+                                            )
                                         }
                                         loading={
                                             productFilterOptionsQuery.isPending
@@ -245,7 +250,9 @@ export function ProductListToolbar({
                                         className="w-full"
                                         value={productSupplierIdDraft}
                                         aria-label="供应商"
-                                        onValueChange={setProductSupplierIdDraft}
+                                        onValueChange={
+                                            setProductSupplierIdDraft
+                                        }
                                         options={
                                             productFilterOptionsQuery.data
                                                 ?.suppliers ?? []
@@ -314,7 +321,7 @@ export function ProductListToolbar({
                                 </div>
                             </div>
                             <div className="flex justify-end">
-                                <Button type="submit" size="sm">
+                                <Button type="submit">
                                     <SearchIcon
                                         data-icon="inline-start"
                                         aria-hidden="true"

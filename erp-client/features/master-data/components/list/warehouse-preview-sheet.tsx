@@ -76,7 +76,11 @@ export function WarehousePreviewSheet({
             footer={
                 previewRow ? (
                     <>
-                        <Button type="button" variant="outline" onClick={onClose}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onClose}
+                        >
                             关闭
                         </Button>
                         <DisabledActionHint

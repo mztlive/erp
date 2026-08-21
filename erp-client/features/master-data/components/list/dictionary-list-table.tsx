@@ -61,10 +61,7 @@ export function DictionaryListTable({
             }}
             errorState={
                 listLoadFailed ? (
-                    <BusinessFailureState
-                        error={error}
-                        onRetry={onRetry}
-                    />
+                    <BusinessFailureState error={error} onRetry={onRetry} />
                 ) : undefined
             }
             emptyState={
@@ -89,7 +86,9 @@ export function DictionaryListTable({
                                 >
                                     清除筛选
                                 </Button>
-                            ) : emptyAction
+                            ) : (
+                                emptyAction
+                            )
                         }
                     />
                 ) : undefined

@@ -8,6 +8,7 @@
  */
 
 import { computeMetrics } from "@/features/master-data/lib/data"
+import { filterBySellableSupplyPreset } from "@/features/master-data/lib/sellable-supply-preset"
 import type {
     MasterDataCenterView,
     MasterDataListItem,
@@ -109,6 +110,9 @@ export async function fetchMasterDataList(
             if (key === "expiring") return r.metricTags.includes("expiring")
             return true
         })
+    }
+    if (query.resource === "sellable-items" && query.sellableSupplyPreset) {
+        rows = filterBySellableSupplyPreset(rows, query.sellableSupplyPreset)
     }
 
     return wrapListResult(query.resource, rows)

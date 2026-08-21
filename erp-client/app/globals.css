@@ -220,7 +220,8 @@
     /* 表单控件静止态背景：与 card 同色，靠 border 提示可编辑，避免和 --muted
      disabled 态灰度太接近而被误读成「已禁用」 */
     --surface-control: oklch(1 0 0);
-    --table-header: oklch(0.97 0 0);
+    /* 表头必须比行悬停更深一档，否则表头压不住内容、hover 也看不出来 */
+    --table-header: oklch(0.955 0 0);
     --row-hover: oklch(0.97 0 0);
     --row-selected: oklch(0.945 0 0);
     --row-striped: oklch(0.985 0 0);

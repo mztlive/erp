@@ -65,7 +65,6 @@ export function ProductsListPage() {
                 ) : null
             }
             exportMeta={state.exportMeta}
-            queriedAt={state.listQuery.data?.queriedAt}
             actions={[
                 {
                     actionKey: "export",

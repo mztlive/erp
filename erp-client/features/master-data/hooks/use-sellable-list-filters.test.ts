@@ -50,7 +50,7 @@ describe("useSellableListFilters", () => {
     it("parses sellable filters from the url", () => {
         currentSearchParams = new URLSearchParams(
             "q=pen&productKind=VOUCHER&productCategoryId=c1&productBrandId=b1" +
-                "&productSupplierId=s1&supplyRegion=全国&productSalesPriceMin=5&productSalesPriceMax=50",
+                "&productSupplierId=s1&supplyRegion=全国&supplyPreset=nationwide&productSalesPriceMin=5&productSalesPriceMax=50",
         )
         const { result } = renderFilters()
 
@@ -60,32 +60,83 @@ describe("useSellableListFilters", () => {
         expect(result.current.productBrandId).toBe("b1")
         expect(result.current.productSupplierId).toBe("s1")
         expect(result.current.supplyRegion).toBe("全国")
+        expect(result.current.supplyPreset).toBe("nationwide")
         expect(result.current.productSalesPriceMin).toBe("5")
         expect(result.current.productSalesPriceMax).toBe("50")
         expect(result.current.hasStructuredSellableFilters).toBe(true)
         expect(result.current.hasAdvancedSellableFilters).toBe(true)
-        expect(result.current.sellableFilterPanelOpen).toBe(false)
+        // 深链带结构化条件时面板必须自动展开，条件要可见可改
+        expect(result.current.sellableFilterPanelOpen).toBe(true)
     })
 
-    it("keeps the advanced panel closed when only product kind is in the url", () => {
+    it("opens the more-filter panel when product kind is in a deep link", () => {
         currentSearchParams = new URLSearchParams("productKind=PHYSICAL")
         const { result } = renderFilters()
 
         expect(result.current.hasStructuredSellableFilters).toBe(true)
         expect(result.current.hasAdvancedSellableFilters).toBe(false)
-        expect(result.current.sellableFilterPanelOpen).toBe(false)
+        expect(result.current.sellableFilterPanelOpen).toBe(true)
     })
 
-    it("applies product kind immediately without other drafts", () => {
+    it("keeps product kind in the draft until filters are submitted", () => {
         const { result } = renderFilters()
 
-        act(() => result.current.applyProductKind("PHYSICAL"))
+        act(() => result.current.setProductKindDraft("PHYSICAL"))
+        act(() => result.current.setSellableFilterPanelOpen(true))
+
+        expect(result.current.productKindDraft).toBe("PHYSICAL")
+        expect(navMocks.replace).not.toHaveBeenCalled()
+
+        act(() => result.current.applySellableFilters())
 
         expect(navMocks.replace).toHaveBeenCalledWith(
             "/master-data/sellable-items?productKind=PHYSICAL",
             { scroll: false },
         )
-        expect(result.current.productKindDraft).toBe("PHYSICAL")
+        expect(result.current.sellableFilterPanelOpen).toBe(false)
+    })
+
+    it("applies a supply shortcut without changing the other filters", () => {
+        currentSearchParams = new URLSearchParams("q=pen&productBrandId=b1")
+        const { result } = renderFilters()
+
+        act(() => result.current.applySupplyPreset("single-supplier"))
+
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/master-data/sellable-items?q=pen&productBrandId=b1&supplyPreset=single-supplier",
+            { scroll: false },
+        )
+    })
+
+    it("removes a single applied condition without touching the others", () => {
+        currentSearchParams = new URLSearchParams(
+            "q=pen&productBrandId=b1&supplyRegion=全国",
+        )
+        const { result } = renderFilters()
+
+        act(() => result.current.removeFilter("productBrandId"))
+
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/master-data/sellable-items?q=pen&supplyRegion=%E5%85%A8%E5%9B%BD",
+            { scroll: false },
+        )
+        expect(result.current.productBrandIdDraft).toBeNull()
+    })
+
+    it("removes both sales price bounds as one condition", () => {
+        currentSearchParams = new URLSearchParams(
+            "productSalesPriceMin=5&productSalesPriceMax=50",
+        )
+        const { result } = renderFilters()
+
+        act(() => result.current.removeFilter("salesPrice"))
+
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/master-data/sellable-items",
+            { scroll: false },
+        )
+        expect(result.current.productSalesPriceMinDraft).toBe("")
+        expect(result.current.productSalesPriceMaxDraft).toBe("")
     })
 
     it("commits a changed search draft to the url", () => {
@@ -132,7 +183,7 @@ describe("useSellableListFilters", () => {
 
     it("clears every filter including eligibilityAsOf", () => {
         currentSearchParams = new URLSearchParams(
-            "q=x&productKind=PHYSICAL&eligibilityAsOf=2026-01-01",
+            "q=x&productKind=PHYSICAL&eligibilityAsOf=2026-01-01&supplyPreset=nationwide",
         )
         const { result } = renderFilters()
 
@@ -144,5 +195,21 @@ describe("useSellableListFilters", () => {
         )
         expect(result.current.searchDraft).toBe("")
         expect(result.current.supplyRegionDraft).toBe("")
+    })
+
+    it("resets only more-filter conditions and preserves search and shortcut", () => {
+        currentSearchParams = new URLSearchParams(
+            "q=x&productKind=PHYSICAL&productBrandId=b1&supplyPreset=nationwide",
+        )
+        const { result } = renderFilters()
+
+        act(() => result.current.resetMoreFilters())
+
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/master-data/sellable-items?q=x&supplyPreset=nationwide",
+            { scroll: false },
+        )
+        expect(result.current.productKindDraft).toBe("all")
+        expect(result.current.productBrandIdDraft).toBeNull()
     })
 })

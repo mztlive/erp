@@ -86,7 +86,7 @@ export function SupplierListToolbar({
                 filters={
                     <>
                         {!supplierFilterPanelOpen ? (
-                            <Button type="submit" size="sm">
+                            <Button type="submit">
                                 <SearchIcon
                                     data-icon="inline-start"
                                     aria-hidden="true"
@@ -97,7 +97,7 @@ export function SupplierListToolbar({
                         <Button
                             type="button"
                             variant="outline"
-                            size="sm"
+
                             aria-expanded={supplierFilterPanelOpen}
                             onClick={() =>
                                 setSupplierFilterPanelOpen((open) => !open)
@@ -162,7 +162,7 @@ export function SupplierListToolbar({
                                 aria-label="资质类型，可多选"
                             />
                             <div className="flex justify-end">
-                                <Button type="submit" size="sm">
+                                <Button type="submit">
                                     <SearchIcon
                                         data-icon="inline-start"
                                         aria-hidden="true"

@@ -1,10 +1,11 @@
 # ERP 筛选区域统一设计与实现规范
 
-> **状态**：统一标准（2026-08-12）
+> **状态**：统一标准（2026-08-21，公司商品池页面基准）
 >
-> **基准页面**：`/master-data/products`「商品与 SKU」
+> **基准页面**：`/master-data/products`「商品与 SKU」、`/master-data/sellable-items`「公司商品池」
 >
-> **基准实现**：`erp-client/features/master-data/master-data-list-toolbar.tsx` 的商品分支
+> **基准实现**：`erp-client/features/master-data/components/list/sellable-list-toolbar.tsx`、
+> `erp-client/features/master-data/components/pages/sellable-items-list-page.tsx`
 >
 > **适用范围**：`erp-client` 新增或重构的列表页、队列页、树形列表、卡片列表及分析页明细区
 >
@@ -16,37 +17,40 @@
 
 ## 1. 统一结论
 
-所有新页面默认采用「商品与 SKU」页面已经落地的模式：
+所有新页面默认采用「公司商品池」已经落地的模式：
 
 **显式提交 + 可折叠结构化筛选面板 + URL 作为已生效状态唯一事实源。**
 
 ### 1.1 标准交互
 
 - 关键词和结构化条件先编辑本地草稿，不在每次输入或选择时请求。
-- 用户点击「搜索」或在表单内按 Enter 后，一次性应用全部草稿条件。
-- 有结构化筛选的页面，主行提供「高级筛选」按钮。
-- 面板收起时，「搜索」按钮紧邻关键词输入框。
-- 面板展开时，主行的「搜索」按钮隐藏，同一个提交动作移动到面板底部右侧。
-- 已生效的结构化条件存在时，刷新、分享链接或浏览器前进/后退后，面板自动展开，并显示「已启用」。
-- 「清除筛选」同时清理草稿、URL、校验错误和分页，并收起面板。
+- 用户点击提交动作或在表单内按 Enter 后，一次性应用关键词与全部「更多筛选」草稿。
+- 主行提供业务快捷筛选和「更多筛选」按钮；快捷筛选直接写入 Applied URL 状态。
+- 面板收起时，关键词输入框尾部只显示一个无文字的提交箭头；其无障碍名称固定为「应用搜索与筛选」。
+- 面板展开时，输入框尾部箭头隐藏；面板底部只保留一个主按钮「应用全部筛选」。
+- 提交成功后面板收起；校验失败时面板保持展开并聚焦或关联错误字段。
+- 已生效条件以 chip 显示；「更多筛选」内存在已生效条件时显示「已启用」。
+- 初次通过带结构化条件的深链进入时展开面板。后续提交不得因 URL 回填再次强制展开。
+- 「清空全部」同时清理草稿、URL、校验错误和分页，并收起面板；「重置更多条件」只清除结构化条件，保留关键词和快捷筛选。
 
 ### 1.2 标准结构
 
 ```text
-结果工作面
-└─ BusinessTableFrame / surfacePanelClassName
-   ├─ 标题与说明
-   ├─ 筛选 form
-   │  └─ ListToolbar
-   │     ├─ primary
-   │     │  ├─ search：关键词输入框
-   │     │  ├─ filters：搜索按钮 + 高级筛选开关
-   │     │  └─ actions：结果数 + 清除筛选
-   │     └─ secondary
-   │        ├─ 来源锁定 FilterChip（如有，收起时仍可见）
-   │        └─ 可折叠筛选面板（展开时）
-   ├─ SelectionScopeBar（如有批量选择）
-   └─ 表格 / 列表 / 空态
+PageHeader：标题、说明、只读/口径提示、页级动作
+BusinessTableFrame
+├─ 筛选 form
+│  └─ ListToolbar（独立轻卡片）
+│     ├─ primary
+│     │  ├─ search：关键词 + 收起态内嵌提交箭头
+│     │  ├─ filters：快捷筛选 +「更多筛选」
+│     │  └─ actions：当前结果数
+│     └─ secondary
+│        ├─ 已生效 FilterChip +「清空全部」
+│        └─ 可折叠筛选面板 + 单一主提交
+└─ 结果卡片
+   ├─ 可见标题、结果数、操作说明、列设置
+   ├─ DataTable / 空态
+   └─ 分页
 ```
 
 ### 1.3 不再作为新页面默认方案
@@ -127,25 +131,53 @@
 
 主行只放四类内容：
 
-1. 关键词输入框。
-2. 收起态的「搜索」按钮。
-3. 「高级筛选」开关。
-4. 结果数与「清除筛选」。
+1. 关键词输入框及其收起态内嵌提交箭头。
+2. 最多 3 个可直接判断的业务快捷筛选。
+3. 「更多筛选」开关。
+4. 当前结果数。
 
 ```text
-[ 搜索图标 | 关键词输入框 ] [搜索] [筛选图标 高级筛选 已启用 ˅]   [共 N 条] [清除筛选]
+[ 搜索图标 | 关键词输入框 | → ] [全部 N | 单一供应商 N | 全国可供 N] [更多筛选 已启用 ˅]   [公司商品池 · N 条]
 ```
 
 使用组件：
 
 - 外层：`ListToolbar`
-- 搜索：`InputGroup` + `InputGroupAddon` + `InputGroupInput`
-- 搜索按钮：`Button size="sm"`
-- 高级筛选：`Button variant="outline" size="sm"`
+- 搜索：`ListSearchField`；内部使用 `InputGroup`、`InputGroupAddon`、`InputGroupInput`、`InputGroupButton`
+- 搜索提交：`InputGroupButton type="submit" variant="default"`；只在面板收起时渲染
+- 快捷筛选：`ButtonGroup` + 受控 `Button aria-pressed`
+- 更多筛选：`Button variant="outline"`
 - 状态提示：`Badge variant="info"`，文案固定为「已启用」
 - 展开图标：`ChevronDownIcon`，展开时 `rotate-180`
 - 计数：`text-xs text-muted-foreground`
-- 清除：`Button variant="ghost" size="sm"`
+- 全部清除：位于 chip 行的 `Button variant="ghost"`，文案「清空全部」
+- 表级动作（视图 / 列设置）：`Button variant="outline"`，由 `BusinessTableFrame` 承载，
+  **始终留在主行**，不随面板展开被垂直居中拽进面板
+
+#### 3.1.1 控件高度：筛选区一律 32px
+
+筛选区里的每一个可见控件都必须是 **32px（`h-8`）**：搜索框、提交按钮、面板开关、
+计数旁的清除、固定枚举 chip、面板内的 Combobox / Input / 日期控件、表级动作按钮。
+
+| 控件 | 达成方式 |
+| --- | --- |
+| `Button` | 用**默认档**（`h-8`）。**不要传 `size="sm"`**——该档现在是 `h-7`（28px） |
+| `FixedOptionRadioFilter` / `FixedOptionCheckboxFilter` | 组件已内置 `h-8` |
+| `Input` / `InputGroup` / `OptionCombobox` / `CategoryCombobox` | 默认是 `h-9`（36px）；`ListToolbar` 已在自身子树内统一压到 `h-8`，业务页不必逐个传尺寸 |
+
+三条硬性要求：
+
+- **不得在筛选区出现第二种控件高度。** 36px 输入框配 28px 按钮，是「这一页看着乱」
+  最常见的单一原因。
+- **不要为了对齐去改 `components/ui` 的默认尺寸。** 表单场景的 36px 输入框是对的，
+  筛选区的收敛由 `ListToolbar` 的作用域规则负责。
+- 下拉面板经 portal 渲染在 `ListToolbar` 子树之外，不受该规则影响，也不需要受影响。
+
+**迁移状态（2026-08-21）**：输入类控件的收敛由 `ListToolbar` 承担，28 个使用它的页面
+已全部生效。按钮档位需要逐页去掉 `size="sm"`，目前只有基础资料的 4 条工具条
+（商品、供应商、字典、公司商品池）和 `DataTableViewOptions` 完成；其余约 20 个筛选条
+仍是 28px 按钮。这些文件里 `size="sm"` 与表格行内动作按钮混用，不能整体替换，
+需要逐处确认后再改。**新页面直接按本节写，不要参照尚未迁移的页面。**
 
 `ListToolbar` 已定义主行响应式结构，业务页不得复制它内部的 flex 布局：
 
@@ -174,30 +206,41 @@
         placeholder="编号、名称……"
         aria-label="搜索……"
     />
+    {!panelOpen ? (
+        <InputGroupAddon align="inline-end">
+            <InputGroupButton
+                type="submit"
+                variant="default"
+                size="icon-xs"
+                aria-label="应用搜索与筛选"
+            >
+                <ArrowRightIcon aria-hidden="true" />
+            </InputGroupButton>
+        </InputGroupAddon>
+    ) : null}
 </InputGroup>
 ```
 
 规则：
 
 - URL 参数统一使用 `q`。
-- 搜索框只承载输入，不把提交按钮嵌入 `InputGroup` 内。
+- 收起态只允许在搜索框尾部嵌入这一个提交箭头；不得再在输入框外并列第二个「搜索」按钮。
 - 占位文案必须说明可搜索的业务字段，不写泛化的「请输入关键词」。
 - 列表页提供 `/` 聚焦快捷键；Dialog 或 Sheet 打开时不得聚焦背景搜索框。
-- 搜索属于整个筛选表单，Enter 与点击「搜索」行为完全一致。
+- 搜索属于整个筛选表单，Enter 与当前可见提交按钮的行为完全一致。
 
-### 3.3 高级筛选按钮
+### 3.3 更多筛选按钮
 
 ```tsx
 <Button
     type="button"
     variant="outline"
-    size="sm"
     aria-expanded={panelOpen}
     aria-controls={panelId}
     onClick={() => setPanelOpen((open) => !open)}
 >
     <FilterIcon data-icon="inline-start" aria-hidden="true" />
-    高级筛选
+    更多筛选
     {hasAppliedStructuredFilters ? (
         <Badge variant="info">已启用</Badge>
     ) : null}
@@ -213,21 +256,25 @@
 
 ### 3.4 展开面板
 
-面板使用商品与 SKU 页的固定样式：
+面板使用公司商品池页的固定样式：
 
 ```tsx
 <div
     id={panelId}
-    className="flex w-full flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
+    className="flex w-full flex-col gap-3 border-t pt-3"
     aria-label="筛选条件"
 >
     {/* 固定枚举行 */}
     {/* 网格字段 */}
     {/* 校验错误 */}
-    <div className="flex justify-end">
-        <Button type="submit" size="sm">
+    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-muted-foreground">
+            将同时应用上方关键词和以下筛选条件；结果也用于导出。
+        </p>
+        <Button type="button" variant="ghost">重置更多条件</Button>
+        <Button type="submit">
             <SearchIcon data-icon="inline-start" aria-hidden="true" />
-            搜索
+            应用全部筛选
         </Button>
     </div>
 </div>
@@ -235,36 +282,28 @@
 
 视觉要求：
 
-- 面板是主工作面内部的轻层级，不使用额外 Card、阴影或厚重标题栏。
-- 圆角固定 `rounded-lg`。
-- 边框固定 `border border-border/60`。
-- 背景固定 `bg-muted/30`。
-- 内边距固定 `px-3 py-3`，字段组间距固定 `gap-3`。
-- 面板标题通常由高级筛选按钮和各字段标签共同表达，不再增加「筛选条件」大标题。
-- 提交动作固定在最后一行右侧。
+- 面板是筛选轻卡片内部的第 2 层，不再嵌套 Card、阴影或另一圈圆角边框。
+- 与主行通过 `border-t pt-3` 分隔，字段组间距固定 `gap-3`。
+- 面板标题通常由「更多筛选」按钮和各字段标签共同表达，不再增加「筛选条件」大标题。
+- 最后一行左侧必须解释提交范围，右侧依次为「重置更多条件」和唯一主按钮「应用全部筛选」。
 
-### 3.5 搜索按钮位置
+### 3.5 提交按钮位置
 
-搜索按钮在同一个 `<form>` 中按面板状态切换位置：
+提交按钮在同一个 `<form>` 中按面板状态切换位置：
 
 | 状态 | 位置 |
 | --- | --- |
-| 面板收起 | 主行，紧邻关键词输入框 |
-| 面板展开 | 面板最后一行右侧 |
+| 面板收起 | 关键词输入框尾部的图标按钮；无障碍名称「应用搜索与筛选」 |
+| 面板展开 | 面板最后一行右侧；有文字主按钮「应用全部筛选」 |
 
 ```tsx
-filters={
-    <>
-        {!panelOpen ? <SubmitSearchButton /> : null}
-        <AdvancedFilterToggle />
-    </>
-}
+filters={<MoreFilterToggle />}
 secondary={panelOpen ? <FilterPanel /> : undefined}
 ```
 
 禁止：
 
-- 展开后主行和面板底部同时出现两个搜索按钮。
+- 展开后搜索框尾部和面板底部同时出现两个提交按钮。
 - 搜索输入框属于一个 form，筛选面板属于另一个 form。
 - 在 form 内嵌套 form。
 - 两个按钮调用不同的应用逻辑。
@@ -276,25 +315,16 @@ secondary={panelOpen ? <FilterPanel /> : undefined}
 ```tsx
 <>
     <span className="text-xs text-muted-foreground" aria-live="polite">
-        共 {rowCount} 条
+        公司商品池 · {rowCount} 条
     </span>
-    {hasAppliedFilters ? (
-        <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-        >
-            清除筛选
-        </Button>
-    ) : null}
 </>
 ```
 
 - 结果数显示当前已生效筛选对应的结果，不显示草稿预估。
-- 只有存在已生效筛选时才显示「清除筛选」。
-- 空态中也必须提供同一个 `clearFilters` 动作。
-- 不得出现「重置」「清空」「恢复默认」等平行文案。
+- 已生效条件统一进入独立 chip 行，关键词和快捷筛选也不例外。
+- chip 行文案固定为「已筛选」；末尾动作固定为「清空全部」。
+- 空态使用同一个 `clearAllFilters`，但空态按钮可写「清除筛选」。
+- 「重置更多条件」只允许出现在展开面板底部，且不得清除关键词或快捷筛选。
 
 ---
 
@@ -419,7 +449,7 @@ secondary={panelOpen ? <FilterPanel /> : undefined}
 - 面板收起时仍保持可见。
 - 展示业务编号或名称，不展示内部 ID。
 - chip 的关闭按钮只移除该条件。
-- 「清除筛选」会一并清除全部来源锁定条件。
+- 「清空全部」会一并清除全部来源锁定条件。
 
 当 chip 和展开面板同时存在时：
 
@@ -490,6 +520,7 @@ const applyFilters = React.useCallback(() => {
         maxPrice: draft.maxPrice.trim() || null,
         page: null,
     })
+    setPanelOpen(false)
 }, [draft, patchUrl])
 ```
 
@@ -512,35 +543,37 @@ const applyFilters = React.useCallback(() => {
 - 刷新页面。
 - 浏览器前进或后退。
 - 从外部深链进入。
-- 点击指标快速筛选。
-- 点击「清除筛选」。
+- 点击快捷筛选。
+- 点击「清空全部」。
 
 ```tsx
 React.useEffect(() => {
     setDraft(toFilterDraft(applied))
     setFilterError(null)
-    setPanelOpen(hasStructuredFilters(applied))
 }, [applied])
 ```
 
+面板展开态不得在回填 effect 中无条件重置。否则用户刚点击「应用全部筛选」收起面板后，URL 更新会立即把面板重新打开。
+
 `applied` 必须由稳定的 URL 参数值通过 `useMemo` 派生，或使用稳定的序列化签名作为 effect 依赖；不要在每次 render 创建新对象后直接作为依赖，否则会造成重复回填。
 
-若关键词输入框正处于编辑状态，页面可以做焦点保护，避免其它 URL 条件变化覆盖尚未提交的关键词；但 `clearFilters` 必须直接清空关键词草稿，不能依赖 effect 猜测。
+若关键词输入框正处于编辑状态，页面可以做焦点保护，避免其它 URL 条件变化覆盖尚未提交的关键词；但 `clearAllFilters` 必须直接清空关键词草稿，不能依赖 effect 猜测。
 
 ### 5.5 面板展开态
 
 - 初始值由 URL 中是否存在结构化条件决定。
 - 用户可以手动展开或收起，展开态本身不写 URL。
-- URL 中存在结构化条件时，外部导航后自动展开。
 - 用户手动收起已生效面板时，「已启用」仍显示。
 - 展开或收起不得提交草稿。
+- 校验通过并成功写 URL 后必须收起；校验失败保持展开。
+- 首次深链进入带结构化条件时展开；已挂载页面的 URL 回填只同步 Draft，不得抢夺用户当前展开态。
 
-### 5.6 清除筛选
+### 5.6 清除与局部重置
 
 标准清除函数必须完成全部动作：
 
 ```tsx
-const clearFilters = React.useCallback(() => {
+const clearAllFilters = React.useCallback(() => {
     setDraft(DEFAULT_FILTER_DRAFT)
     setFilterError(null)
     setPanelOpen(false)
@@ -556,13 +589,15 @@ const clearFilters = React.useCallback(() => {
 }, [patchUrl])
 ```
 
-清除范围：
+全部清除范围：
 
 | 清除 | 保留 |
 | --- | --- |
 | `q`、全部结构化筛选、来源锁定参数、分页 | 排序、视图、scope、分析期间/口径、返回路径等导航上下文 |
 
-页面必须集中声明筛选参数清单，`hasAppliedFilters`、`applyFilters`、`clearFilters`、查询参数和导出参数应使用同一清单，避免漏清或隐形状态。
+公司商品池的 `resetMoreFilters` 必须同时清除商品类型、分类、品牌、供应商、可供区域和销售价区间的 Draft 与 Applied URL；必须保留 `q` 和 `supplyPreset`，保持面板展开，并回第 1 页。
+
+页面必须集中声明筛选参数清单，`hasAppliedFilters`、`applyFilters`、`clearAllFilters`、查询参数和导出参数应使用同一清单，避免漏清或隐形状态。
 
 ---
 
@@ -593,7 +628,7 @@ const VIEW_PARAM_KEYS = ["view", "scope", "sort"] as const
 const NAVIGATION_PARAM_KEYS = ["from", "returnTo", "sessionId"] as const
 ```
 
-「清除筛选」只能清 `FILTER_PARAM_KEYS` 和分页，不得用遍历全部 search params 的方式误删视图或导航上下文。
+「清空全部」只能清 `FILTER_PARAM_KEYS` 和分页，不得用遍历全部 search params 的方式误删视图或导航上下文。
 
 ### 6.3 TanStack Query
 
@@ -617,7 +652,7 @@ const listQuery = useDomainListQuery({
 
 ## 7. 指标条与快速筛选
 
-`MetricStrip` 位于筛选表单之外。指标有两种且只能选一种语义：
+`MetricStrip` 位于筛选表单之外。主行快捷筛选位于 `ListToolbar.filters`。两者都只能表达明确、可回退的 Applied 条件。
 
 | 类型 | 组件 | 行为 |
 | --- | --- | --- |
@@ -632,14 +667,98 @@ const listQuery = useDomainListQuery({
 - 如果额外保留 `metricKey` 仅用于高亮，它不得作为查询条件。
 - 必须提供「全部」或其它可回退入口。
 - 指标与面板条件冲突时，应重置同一维度的旧值，不能制造用户无法理解的空结果。
+- 快捷筛选必须显示每个选项在当前服务端结果集内的数量；切换选项时这些数量不得随当前选中项一起归零。
+- 公司商品池固定使用 `supplyPreset=single-supplier|nationwide`；该参数只派生显示视图，不改变服务端销售资格规则。
+- `单一供应商` 固定解释为 `supplierCount === 1`；`全国可供` 固定解释为 `supplyRegions` 包含「全国」。
+- 导出必须消费同一个 `supplyPreset`，保证导出范围与表格一致。
 
 禁止把只会滚动、跳转或改变视觉高亮的指标伪装成筛选项。
 
 ---
 
-## 8. 完整实现模板
+## 8. 公司商品池完整实现合同
 
-以下模板是新列表页的推荐起点。字段可以替换，结构和行为不得自行改写。
+本节是 `/master-data/sellable-items` 的页面级权威合同，也是后续同类页面的视觉与交互样板。实现者必须先满足本节，再复用第 8.2 节的通用状态代码。
+
+### 8.1 页面构成与固定文案
+
+| 区域 | 必须实现 | 禁止 |
+| --- | --- | --- |
+| 页头 | 标题「基础资料 · 公司商品池」；资格说明；「只读查询 / 销售可见口径 / 采购成本受保护」；动作「导出当前结果」 | 新建、编辑、采购成本、内部 API 或修订术语上屏 |
+| 筛选卡 | 搜索框、`全部 / 单一供应商 / 全国可供` 快捷筛选、「更多筛选」、结果数 | 输入框外再放独立「搜索」按钮 |
+| 已筛选行 | 所有 Applied 条件均显示 chip，包含 `q` 与 `supplyPreset`；末尾「清空全部」 | 隐形查询参数、只清输入框不清 URL |
+| 更多筛选 | 商品类型、分类、品牌、供应商、可供区域、销售价；底部范围说明、「重置更多条件」、「应用全部筛选」 | 第二个主提交、嵌套 Card、输入即请求 |
+| 结果标题 | 「可售商品」、当前条数、行点击说明、列设置 | 使用读屏器专用标题代替可见结果标题 |
+| 表格 | 商品名称·规格、SPU 编号、销售价（含税）、市场参考价、可供区域、供应保障 | 操作列、采购成本列、商品池独立 ID/版本 |
+
+页面结构固定如下：
+
+```text
+PageHeader
+├─ 标题 + 资格说明 + 三项口径提示
+└─ 导出当前结果
+
+ListToolbar 筛选卡
+├─ 收起态：[搜索 | →] [全部 N | 单一供应商 N | 全国可供 N] [更多筛选]
+├─ 已生效：已筛选 [chip…] [清空全部]
+└─ 展开态：结构化字段
+   └─ 范围说明 [重置更多条件] [应用全部筛选]
+
+BusinessTableFrame 结果卡
+├─ 可售商品 N 条 + 操作说明 + 列设置
+├─ DataTable
+└─ 分页
+```
+
+交互合同：
+
+1. 收起态提交箭头与展开态「应用全部筛选」必须是同一 `<form>`、同一 `applySellableFilters`。
+2. 点击「更多筛选」只改变 UI 展开态；不得请求、不得写 URL。
+3. 「应用全部筛选」先校验销售价区间，再一次性写 `q` 与全部结构化参数；成功后收起面板，失败时保持展开。
+4. Enter 在搜索框或面板输入控件内提交同一批条件；Combobox 自身选项键盘操作按组件契约处理。
+5. 快捷筛选直接写 `supplyPreset` 并回第 1 页；不得覆盖尚未提交的关键词或更多筛选草稿。
+6. 任一 chip 只移除自己的 Applied 条件；销售价上下界作为一个 chip 一起移除。
+7. 单击行或聚焦行后按 Enter 均打开 `QuickPreviewSheet size="preview"`；完整商品资料只从预览底部进入。
+8. 表格不设固定最小高度。少量结果时卡片随内容收缩，空白留在页面画布，不在表格卡片内制造大块假工作区。
+
+供应保障显示合同：
+
+| 条件 | 显示 | 语义 |
+| --- | --- | --- |
+| `supplierCount === 1` | warning 徽标「单一供应商」+ 警示图标 | 存在断供后无替换来源的风险 |
+| `supplierCount > 1` | success 徽标「N 家可供」 | 当前存在多个有效来源 |
+| 可供区域 1–2 项 | 每项一个 outline badge | 便于快速扫描 |
+| 可供区域超过 2 项 | 前 2 项 + neutral badge「+N」；完整内容写入 `title` | 不撑高行 |
+
+响应式合同：
+
+- `lg` 及以上：搜索、快捷筛选和「更多筛选」同一主行；结果数右对齐。
+- `sm` 至 `lg`：主行允许换行；搜索占首行可用宽度，快捷筛选保持成组。
+- 小于 `sm`：搜索独占一行；快捷筛选横向可滚动；更多筛选字段单列；底部两个动作同组可换行。
+- 表格保持横向滚动，不删除身份列、销售价或供应保障；身份列固定在左侧。
+
+样式边界：
+
+- 页面样式优先使用现有 token、`ListToolbar` 和组件局部 class；不得为单页向 `globals.css` 增加选择器。
+- 只有跨页面的语义 token 或共享组件默认行为需要统一时才修改 `globals.css`；修改后必须验证其它列表页。
+- `--table-header` 是表头语义 token；禁止在页面内写独立灰色值。
+- `DataTable` 默认不得有 `min-h-*`；需要固定作业高度的队列页面必须通过显式可选 prop 自行声明。
+
+权威代码映射：
+
+| 合同 | 文件 |
+| --- | --- |
+| 页面组合、页头提示、结果卡 | `erp-client/features/master-data/components/pages/sellable-items-list-page.tsx` |
+| 筛选结构与固定文案 | `erp-client/features/master-data/components/list/sellable-list-toolbar.tsx` |
+| Applied / Draft / UI 状态 | `erp-client/features/master-data/hooks/use-sellable-list-filters.ts` |
+| 快捷筛选计数、chip、导出快照 | `erp-client/features/master-data/hooks/use-sellable-list-state.ts` |
+| 快捷筛选派生规则 | `erp-client/features/master-data/lib/sellable-supply-preset.ts` |
+| 表格列与供应保障表达 | `erp-client/features/master-data/hooks/use-sellable-list-columns.tsx` |
+| 结果卡与表格表面 | `erp-client/components/business/list.tsx`、`erp-client/components/business/data-table.tsx` |
+
+### 8.2 通用状态实现模板
+
+以下模板用于其它同类列表的 URL、Draft 与提交状态。公司商品池的结构与文案必须直接以第 8.1 节和权威代码映射为准，不得用模板中的占位文案覆盖。
 
 ```tsx
 function DomainListFilterToolbar() {
@@ -689,9 +808,10 @@ function DomainListFilterToolbar() {
             maxAmount: draft.maxAmount.trim() || null,
             page: null,
         })
+        setPanelOpen(false)
     }, [draft, patchUrl])
 
-    const clearFilters = React.useCallback(() => {
+    const clearAllFilters = React.useCallback(() => {
         setDraft(DEFAULT_DRAFT)
         setError(null)
         setPanelOpen(false)
@@ -708,7 +828,6 @@ function DomainListFilterToolbar() {
     React.useEffect(() => {
         setDraft(toDraft(applied))
         setError(null)
-        setPanelOpen(hasStructuredDomainFilters(applied))
     }, [applied])
 
     return (
@@ -736,52 +855,52 @@ function DomainListFilterToolbar() {
                             placeholder="编号、名称"
                             aria-label="搜索记录"
                         />
+                        {!panelOpen ? (
+                            <InputGroupAddon align="inline-end">
+                                <InputGroupButton
+                                    type="submit"
+                                    variant="default"
+                                    size="icon-xs"
+                                    aria-label="应用搜索与筛选"
+                                >
+                                    <ArrowRightIcon aria-hidden="true" />
+                                </InputGroupButton>
+                            </InputGroupAddon>
+                        ) : null}
                     </InputGroup>
                 }
                 filters={
-                    <>
-                        {!panelOpen ? (
-                            <Button type="submit" size="sm">
-                                <SearchIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                搜索
-                            </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        aria-expanded={panelOpen}
+                        aria-controls={panelId}
+                        onClick={() => setPanelOpen((open) => !open)}
+                    >
+                        <FilterIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        更多筛选
+                        {hasStructuredDomainFilters(applied) ? (
+                            <Badge variant="info">已启用</Badge>
                         ) : null}
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            aria-expanded={panelOpen}
-                            aria-controls={panelId}
-                            onClick={() => setPanelOpen((open) => !open)}
-                        >
-                            <FilterIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            高级筛选
-                            {hasStructuredDomainFilters(applied) ? (
-                                <Badge variant="info">已启用</Badge>
-                            ) : null}
-                            <ChevronDownIcon
-                                data-icon="inline-end"
-                                aria-hidden="true"
-                                className={
-                                    panelOpen
-                                        ? "rotate-180 transition-transform"
-                                        : "transition-transform"
-                                }
-                            />
-                        </Button>
-                    </>
+                        <ChevronDownIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                            className={
+                                panelOpen
+                                    ? "rotate-180 transition-transform"
+                                    : "transition-transform"
+                            }
+                        />
+                    </Button>
                 }
                 secondary={
                     panelOpen ? (
                         <div
                             id={panelId}
-                            className="flex w-full flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
+                            className="flex w-full flex-col gap-3 border-t pt-3"
                             aria-label="列表筛选条件"
                         >
                             <FixedOptionRadioFilter
@@ -809,13 +928,16 @@ function DomainListFilterToolbar() {
                                 </span>
                             ) : null}
 
-                            <div className="flex justify-end">
-                                <Button type="submit" size="sm">
+                            <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-xs text-muted-foreground">
+                                    将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                </p>
+                                <Button type="submit">
                                     <SearchIcon
                                         data-icon="inline-start"
                                         aria-hidden="true"
                                     />
-                                    搜索
+                                    应用全部筛选
                                 </Button>
                             </div>
                         </div>
@@ -829,16 +951,7 @@ function DomainListFilterToolbar() {
                         >
                             共 {rowCount} 条
                         </span>
-                        {hasAppliedDomainFilters(applied) ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={clearFilters}
-                            >
-                                清除筛选
-                            </Button>
-                        ) : null}
+                        {/* Applied 条件 chip 与 clearAllFilters 放在 secondary 的独立行。 */}
                     </>
                 }
             />
@@ -860,15 +973,16 @@ function DomainListFilterToolbar() {
 - 默认：纵向排列。
 - `sm`：搜索与按钮可横排并自动换行。
 - `lg`：查询工具与 actions 分置左右。
-- 搜索容器：`min-w-0 flex-1 sm:max-w-sm`。
+- 搜索容器：默认整行；`sm` 起由页面在共享插槽上声明业务需要的宽度，公司商品池为 `28rem`，`xl` 为 `34rem`。
 - 筛选按钮组：允许 `flex-wrap`。
+- 快捷筛选保持为一个 `ButtonGroup`；空间不足时组内横向滚动，不拆散为三处按钮。
 
 ### 9.2 面板
 
 - 固定枚举行在小屏上下排列，`sm` 起使用标签列 + 选项列。
 - 网格字段：默认 1 列，`sm` 2 列，`lg` 4 列。
 - 区间输入内部保持同一行；空间不足时输入自身收缩，不让面板横向溢出。
-- 提交按钮始终位于面板末尾右侧。
+- 提交按钮始终位于面板末尾右侧；小屏可与「重置更多条件」换行但不得分离出面板。
 
 ### 9.3 禁止
 
@@ -883,8 +997,9 @@ function DomainListFilterToolbar() {
 
 - 整个筛选区域使用一个语义 `<form>`。
 - Enter 提交当前全部草稿。
-- 高级筛选按钮必须是 `type="button"`。
-- 高级筛选按钮提供 `aria-expanded` 和 `aria-controls`。
+- 「更多筛选」按钮必须是 `type="button"`。
+- 「更多筛选」按钮提供 `aria-expanded` 和 `aria-controls`。
+- 搜索框尾部图标提交按钮必须有可读 `aria-label`，不能只向读屏器暴露「按钮」。
 - 面板提供可识别的 `aria-label`。
 - 输入框、Combobox、日期和区间端点都有可读标签。
 - 计数使用 `aria-live="polite"`，避免打断式播报。
@@ -919,7 +1034,7 @@ function DomainListFilterToolbar() {
 
 ### 11.3 加载态
 
-- 提交后可以禁用搜索按钮或显示加载状态，避免重复提交。
+- 提交后可以禁用当前可见的提交按钮或显示加载状态，避免重复提交。
 - 筛选草稿在请求期间不得被清空。
 - 远程 Combobox 的加载状态由组件的 `loading` 表达。
 
@@ -930,12 +1045,12 @@ function DomainListFilterToolbar() {
 以下实现一律不通过评审：
 
 1. `ListToolbar` 放在 `BusinessTableFrame` 外。
-2. 搜索输入框内嵌搜索按钮，另一侧又出现独立搜索按钮。
+2. 搜索输入框已内嵌提交箭头，另一侧又出现独立提交按钮。
 3. 展开面板后主行和面板底部同时保留提交按钮。
 4. 搜索和每个结构化筛选分别提交，产生多次 URL 更新和请求。
 5. Draft 直接进入 query key，用户每改一项就请求。
 6. `hasActiveFilters` 漏掉某些接口实际消费的参数。
-7. 清除筛选只清关键词，或误删排序、视图、期间和返回路径。
+7. 「清空全部」只清关键词，或误删排序、视图、期间和返回路径。
 8. URL 中写入 `all`、空字符串或默认页码。
 9. 查询消费了没有控件、没有 chip、也无法清除的隐形参数。
 10. 6 个以上选项仍横向铺成固定单选或复选按钮。
@@ -944,6 +1059,8 @@ function DomainListFilterToolbar() {
 13. 指标条和筛选面板分别维护同一维度的两套状态。
 14. 用户尚未点击搜索，导出却读取了未提交草稿。
 15. 为移动端创建不写 URL 的第二套筛选逻辑。
+16. 筛选区里出现两种以上控件高度（36px 输入框配 28px 按钮是最常见的一种）。
+17. 表级动作（视图 / 列设置）随筛选面板展开被垂直居中，落进面板中间。
 
 ---
 
@@ -953,8 +1070,8 @@ function DomainListFilterToolbar() {
 2. **定义解析器**：从 URL 解析 Applied 状态，非法值回默认。
 3. **定义 Draft 类型与默认值**：所有字段受控。
 4. **定义 `hasStructuredFilters` 和 `hasAppliedFilters`**。
-5. **实现单一 `applyFilters`**：全量校验、一次 patch、分页归一。
-6. **实现单一 `clearFilters`**：草稿、错误、面板、URL 同时重置。
+5. **实现单一 `applyFilters`**：全量校验、一次 patch、分页归一、成功后收起面板。
+6. **实现单一 `clearAllFilters`**：草稿、错误、面板、URL 同时重置。
 7. **用 `BusinessTableFrame.toolbar` 或结果 surface 承载 form**。
 8. **用 `ListToolbar` 组合主行与 secondary**。
 9. **按字段类型选择固定枚举行或网格字段**。
@@ -971,7 +1088,7 @@ function DomainListFilterToolbar() {
 - [ ] 筛选区位于被过滤结果的同一主表面。
 - [ ] 表格页使用 `BusinessTableFrame.toolbar`。
 - [ ] 页面只存在一个筛选 form。
-- [ ] 主行只包含搜索、提交、面板开关、计数和清除。
+- [ ] 主行只包含搜索、快捷筛选、面板开关和计数。
 - [ ] 结构化字段全部位于折叠面板。
 - [ ] 面板使用统一类名和响应式网格。
 
@@ -979,17 +1096,18 @@ function DomainListFilterToolbar() {
 
 - [ ] URL 是 Applied 状态唯一事实源。
 - [ ] Draft 变化不会请求。
-- [ ] Enter 和两个位置的「搜索」走同一提交函数。
+- [ ] Enter、收起态提交箭头和展开态「应用全部筛选」走同一提交函数。
 - [ ] 提交一次性更新全部筛选并回第 1 页。
 - [ ] 默认值从 URL 省略。
 - [ ] 浏览器前进、后退和刷新可恢复筛选。
-- [ ] 有结构化条件的深链会自动展开面板。
+- [ ] 有结构化条件的初始深链会展开面板；提交成功后 URL 回填不会再次强制展开。
 - [ ] 每个查询参数都有控件或可移除 chip。
 
 ### 14.3 清除与结果
 
 - [ ] `hasAppliedFilters` 覆盖全部筛选参数。
-- [ ] 清除同时重置 Draft、错误、面板、URL 和分页。
+- [ ] 「清空全部」同时重置 Draft、错误、面板、URL 和分页。
+- [ ] 「重置更多条件」清除结构化条件，但保留关键词和快捷筛选。
 - [ ] 清除保留排序、视图、期间与导航上下文。
 - [ ] 工具栏计数、表头摘要、导出和空态读取 Applied 状态。
 - [ ] 筛选无结果时工具栏仍存在，空态可清除筛选。
@@ -997,10 +1115,14 @@ function DomainListFilterToolbar() {
 ### 14.4 样式与可访问性
 
 - [ ] 使用 `ListToolbar`，没有平行手写工具条。
+- [ ] 筛选区所有控件同高（32px）：输入框、按钮、枚举 chip、表级动作。
+- [ ] 面板展开后，搜索框尾部提交箭头隐藏，页面只剩「应用全部筛选」一个主提交。
+- [ ] 表级动作位于可见结果标题栏，没有被拽到筛选面板中间。
 - [ ] 固定枚举使用共享 Radio / Checkbox 筛选组件。
 - [ ] 动态选项使用 Combobox，字段标签清晰。
 - [ ] 小屏无横向溢出，没有第二套筛选状态。
-- [ ] 高级筛选按钮有 `aria-expanded` / `aria-controls`。
+- [ ] 「更多筛选」按钮有 `aria-expanded` / `aria-controls`。
+- [ ] 内嵌提交箭头有「应用搜索与筛选」无障碍名称。
 - [ ] 错误提示与字段正确关联。
 - [ ] `/` 可聚焦搜索，弹层打开时不会误触发。
 
@@ -1010,9 +1132,13 @@ function DomainListFilterToolbar() {
 
 | 目的 | 文件 |
 | --- | --- |
-| 商品与 SKU 筛选区结构 | `erp-client/features/master-data/master-data-list-toolbar.tsx` |
-| URL、Draft、提交、清除与回填 | `erp-client/features/master-data/master-data-page.tsx` |
+| 公司商品池完整页面组合 | `erp-client/features/master-data/components/pages/sellable-items-list-page.tsx` |
+| 搜索、快捷筛选、chip 与更多筛选 | `erp-client/features/master-data/components/list/sellable-list-toolbar.tsx` |
+| URL、Draft、提交、清除与回填 | `erp-client/features/master-data/hooks/use-sellable-list-filters.ts` |
+| 快捷筛选计数与导出一致性 | `erp-client/features/master-data/hooks/use-sellable-list-state.ts` |
+| 表格列与供应保障表达 | `erp-client/features/master-data/hooks/use-sellable-list-columns.tsx` |
 | `ListToolbar` 与 `BusinessTableFrame` | `erp-client/components/business/list.tsx` |
+| 筛选区 32px 收敛规则 | `erp-client/components/business/list.tsx`（`ListToolbar` 根类名） |
 | 固定单选筛选 | `erp-client/components/business/fixed-option-radio-filter.tsx` |
 | 固定多选筛选 | `erp-client/components/business/fixed-option-checkbox-filter.tsx` |
 | 可搜索单选 | `erp-client/components/business/option-combobox.tsx` |
@@ -1026,3 +1152,29 @@ function DomainListFilterToolbar() {
 - 新页面以本文为准。
 - 重构页面应向本文收敛。
 - 共享组件行为以 `components/business` 当前契约为准；若确需扩展，优先增加兼容的可选 prop，不为单页复制组件。
+
+---
+
+## 16. LLM 执行入口
+
+后续需要让 LLM 继续制作同一视觉语言的查询列表页时，**第一份且必须提供的文档就是本文：`docs/ui-filter-design.md`**。
+
+执行输入必须至少包含：
+
+```text
+请严格执行 docs/ui-filter-design.md，使用其中“公司商品池完整实现合同”作为页面基准。
+先读取该文档列出的权威代码映射；用户可见文案同时遵守 docs/ui-glossary.md；
+若页面属于具体工作面，再读取对应 docs/ui-workspaces/w*.md。
+不得自行新增第二套筛选交互、页面私有色板或独立全局 CSS。
+```
+
+LLM 必须按以下顺序执行：
+
+1. 识别页面业务对象、只读/可写边界和禁止展示字段。
+2. 复用 `PageHeader`、`ListToolbar`、`BusinessTableFrame`、`DataTable`，不得先手写平行组件。
+3. 先实现收起态、展开态、Applied chip、快捷筛选和结果卡五个视觉状态。
+4. 再接 URL、TanStack Query、导出和空态，确保它们消费同一 Applied 状态。
+5. 补单元测试，至少覆盖单一主提交、URL 回填、局部重置、全部清除、快捷筛选和导出一致性。
+6. 在 1440、1024、768、375 宽度下做浏览器截图与交互验收；记录因登录、权限或数据阻塞而未验证的边界。
+
+公司商品池的业务资格、价格和敏感字段边界仍以 `docs/ui-workspaces/w14-basic-data.md` 为准；本文负责页面结构、视觉、交互与实现门禁。两者冲突时，业务边界不得被视觉规范覆盖。

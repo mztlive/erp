@@ -70,7 +70,7 @@ export function DictionaryListToolbar({
                 filters={
                     <>
                         {!filterPanelOpen ? (
-                            <Button type="submit" size="sm">
+                            <Button type="submit">
                                 <SearchIcon
                                     data-icon="inline-start"
                                     aria-hidden="true"
@@ -81,7 +81,7 @@ export function DictionaryListToolbar({
                         <Button
                             type="button"
                             variant="outline"
-                            size="sm"
+
                             aria-expanded={filterPanelOpen}
                             onClick={() => setFilterPanelOpen((open) => !open)}
                         >
@@ -126,7 +126,7 @@ export function DictionaryListToolbar({
                                 aria-label={masterDataCopy.filterVersionAria}
                             />
                             <div className="flex justify-end">
-                                <Button type="submit" size="sm">
+                                <Button type="submit">
                                     <SearchIcon
                                         data-icon="inline-start"
                                         aria-hidden="true"

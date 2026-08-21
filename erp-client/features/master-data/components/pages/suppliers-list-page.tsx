@@ -44,7 +44,6 @@ export function SuppliersListPage() {
             title={masterDataCopy.pageTitle("供应商与资质")}
             currentLabel="供应商与资质"
             exportMeta={state.exportMeta}
-            queriedAt={state.listQuery.data?.queriedAt}
             actions={[
                 {
                     actionKey: "export",

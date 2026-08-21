@@ -1,6 +1,13 @@
 "use client"
 
-import { DownloadIcon } from "lucide-react"
+import * as React from "react"
+import {
+    CircleDollarSignIcon,
+    DownloadIcon,
+    EyeIcon,
+    ShieldCheckIcon,
+} from "lucide-react"
+import type { SortingState } from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
@@ -23,21 +30,47 @@ export function SellableItemsListPage() {
     const state = useSellableListState(searchInputRef)
     const { filters } = state
     const columns = useSellableListColumns()
+    // 排序是视图状态而非筛选：全量结果已在客户端，本地排序不重新请求，也不参与「清除筛选」
+    const [sorting, setSorting] = React.useState<SortingState>([])
     const hasActiveFilters =
-        filters.q.trim() !== "" || filters.hasStructuredSellableFilters
+        filters.q.trim() !== "" ||
+        filters.hasStructuredSellableFilters ||
+        filters.supplyPreset != null
     const listLoadFailed = state.listQuery.isError || !state.listQuery.data
 
     return (
         <ListPageFrame
-            title={masterDataCopy.pageTitle("可售商品池")}
-            currentLabel="可售商品池"
+            title={masterDataCopy.pageTitle("公司商品池")}
+            currentLabel="公司商品池"
             hint={masterDataCopy.sellableItemsHint}
+            headerDensity="default"
+            metadata={
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                    <span className="inline-flex items-center gap-1">
+                        <EyeIcon className="size-3.5" aria-hidden="true" />
+                        只读查询
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                        <CircleDollarSignIcon
+                            className="size-3.5"
+                            aria-hidden="true"
+                        />
+                        销售可见口径
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                        <ShieldCheckIcon
+                            className="size-3.5"
+                            aria-hidden="true"
+                        />
+                        采购成本受保护
+                    </span>
+                </div>
+            }
             exportMeta={state.exportMeta}
-            queriedAt={state.listQuery.data?.queriedAt}
             actions={[
                 {
                     actionKey: "export",
-                    label: masterDataCopy.actionExport,
+                    label: "导出当前结果",
                     icon: DownloadIcon,
                     variant: "outline",
                     mobileVisibility: "hide",
@@ -45,33 +78,49 @@ export function SellableItemsListPage() {
                     onClick: state.onExport,
                 },
             ]}
-            resultsLabel={`可售商品池 · ${state.rows.length} 条结果`}
+            resultsLabel={`公司商品池 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
         >
             <BusinessTableFrame
-                title="可售商品池列表"
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        可售商品
+                        <span className="font-normal text-muted-foreground">
+                            {state.rows.length} 条
+                        </span>
+                    </span>
+                }
+                description={state.sellableTableDescription}
                 toolbar={
                     <SellableListToolbar
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
+                        rowCount={state.rows.length}
                         hasActiveFilters={hasActiveFilters}
                         clearAllFilters={filters.clearAllFilters}
+                        appliedChips={state.appliedChips}
+                        removeFilter={filters.removeFilter}
+                        supplyPreset={filters.supplyPreset ?? "all"}
+                        supplyPresetCounts={state.supplyPresetCounts}
+                        applySupplyPreset={filters.applySupplyPreset}
                         sellableFilterPanelOpen={
                             filters.sellableFilterPanelOpen
                         }
                         setSellableFilterPanelOpen={
                             filters.setSellableFilterPanelOpen
                         }
-                        hasAdvancedSellableFilters={
-                            filters.hasAdvancedSellableFilters
+                        hasStructuredSellableFilters={
+                            filters.hasStructuredSellableFilters
                         }
                         applySellableFilters={filters.applySellableFilters}
-                        applyProductKind={filters.applyProductKind}
+                        resetMoreFilters={filters.resetMoreFilters}
                         supplyRegionDraft={filters.supplyRegionDraft}
                         setSupplyRegionDraft={filters.setSupplyRegionDraft}
                         productKindDraft={filters.productKindDraft}
+                        setProductKindDraft={filters.setProductKindDraft}
                         productCategoryIdDraft={filters.productCategoryIdDraft}
                         setProductCategoryIdDraft={
                             filters.setProductCategoryIdDraft
@@ -105,15 +154,29 @@ export function SellableItemsListPage() {
                 }
                 table={
                     <DataTable
-                        data={state.pageRows}
+                        // 全量结果交给表格：排序必须作用于整份结果，不能只排当前页
+                        data={state.rows}
                         columns={columns}
                         getRowId={(row) => row.stableId}
+                        // 行的可读名称用业务名，不要回退成「第 N 行」
+                        rowLabel={(row) =>
+                            row.sellableItem
+                                ? `${row.name} · ${row.sellableItem.specificationLabel}`
+                                : row.name
+                        }
                         rowCount={state.rows.length}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
+                        sorting={sorting}
+                        onSortingChange={setSorting}
+                        manualSorting={false}
+                        manualPagination={false}
                         layout="flush"
                         density="compact"
-                        defaultColumnPinning={{ left: ["name"], right: [] }}
+                        defaultColumnPinning={{
+                            left: ["name"],
+                            right: [],
+                        }}
                         errorState={
                             listLoadFailed ? (
                                 <BusinessFailureState
@@ -134,12 +197,12 @@ export function SellableItemsListPage() {
                                     title={
                                         hasActiveFilters
                                             ? "当前筛选无结果"
-                                            : "还没有可售商品池资料"
+                                            : "还没有可销售的 SKU"
                                     }
                                     description={
                                         hasActiveFilters
                                             ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "当前资格日期下没有可销售的公司 SKU。请确认商品已上架、资料有效且存在有效供给。"
+                                            : "商品需要已上架、资料有效且存在有效供给，才会出现在这里。"
                                     }
                                     action={
                                         hasActiveFilters ? (
@@ -160,10 +223,6 @@ export function SellableItemsListPage() {
                             ) : undefined
                         }
                         onRowPreview={(row) => {
-                            lastFocusedRowId.current = row.stableId
-                            state.setPreviewId(row.stableId)
-                        }}
-                        onRowOpen={(row) => {
                             lastFocusedRowId.current = row.stableId
                             state.setPreviewId(row.stableId)
                         }}

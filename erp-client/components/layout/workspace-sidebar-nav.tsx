@@ -115,10 +115,10 @@ export function WorkspaceSidebarNav() {
     return (
         <>
             {navGroups.map((group, index) => (
-                <SidebarGroup key={group.label} className="px-1">
+                <SidebarGroup key={group.label} className="px-1 py-0.5">
                     {/* 透明侧栏不靠分割线区分分组，仅用组标签与间距 */}
                     {index > 0 ? (
-                        <SidebarGroupLabel className="mt-2">
+                        <SidebarGroupLabel className="mt-1">
                             {group.label}
                         </SidebarGroupLabel>
                     ) : (
@@ -127,7 +127,7 @@ export function WorkspaceSidebarNav() {
                         </SidebarGroupLabel>
                     )}
                     <SidebarGroupContent>
-                        <SidebarMenu className="gap-1">
+                        <SidebarMenu className="gap-0.5">
                             {group.items.map((item) => {
                                 const Icon = item.icon
                                 const isActive = isNavItemActive(

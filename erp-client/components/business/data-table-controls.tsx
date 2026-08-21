@@ -46,7 +46,6 @@ function DataTableViewOptions<TData>({
                     <Button
                         type="button"
                         variant="outline"
-                        size="sm"
                         className="max-sm:hidden"
                     />
                 }
@@ -270,58 +269,65 @@ function DataTablePagination<TData>({
                 )}
             </label>
 
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:justify-end">
-                <span className="num shrink-0 text-muted-foreground">
-                    第 {pageCount === 0 ? 0 : pageIndex + 1} / {pageCount} 页
+            {pageCount <= 1 ? (
+                <span className="shrink-0 text-muted-foreground">
+                    已全部显示
                 </span>
+            ) : (
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:justify-end">
+                    <span className="num shrink-0 text-muted-foreground">
+                        第 {pageCount === 0 ? 0 : pageIndex + 1} / {pageCount}{" "}
+                        页
+                    </span>
 
-                <div
-                    role="group"
-                    aria-label="翻页"
-                    className="flex items-center gap-1"
-                >
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => table.firstPage()}
-                        disabled={!table.getCanPreviousPage()}
-                        aria-label="第一页"
+                    <div
+                        role="group"
+                        aria-label="翻页"
+                        className="flex items-center gap-1"
                     >
-                        <ChevronsLeftIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                        aria-label="上一页"
-                    >
-                        <ChevronLeftIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                        aria-label="下一页"
-                    >
-                        <ChevronRightIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => table.lastPage()}
-                        disabled={!table.getCanNextPage()}
-                        aria-label="最后一页"
-                    >
-                        <ChevronsRightIcon aria-hidden="true" />
-                    </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            onClick={() => table.firstPage()}
+                            disabled={!table.getCanPreviousPage()}
+                            aria-label="第一页"
+                        >
+                            <ChevronsLeftIcon aria-hidden="true" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            onClick={() => table.previousPage()}
+                            disabled={!table.getCanPreviousPage()}
+                            aria-label="上一页"
+                        >
+                            <ChevronLeftIcon aria-hidden="true" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            onClick={() => table.nextPage()}
+                            disabled={!table.getCanNextPage()}
+                            aria-label="下一页"
+                        >
+                            <ChevronRightIcon aria-hidden="true" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            onClick={() => table.lastPage()}
+                            disabled={!table.getCanNextPage()}
+                            aria-label="最后一页"
+                        >
+                            <ChevronsRightIcon aria-hidden="true" />
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     )
 }

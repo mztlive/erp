@@ -608,7 +608,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W14",
                     href: "/master-data/sellable-items",
-                    label: "可售商品池",
+                    label: "公司商品池",
                     icon: BoxesIcon,
                 },
                 {

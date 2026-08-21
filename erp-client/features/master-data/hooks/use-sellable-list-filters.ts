@@ -10,7 +10,21 @@ import { productSalesPriceRangeError } from "@/features/master-data/lib/list-fil
 import {
     PRODUCT_KIND_VALUES,
     type ProductKind,
+    type SellableSupplyPreset,
 } from "@/features/master-data/types"
+
+export type SellableSupplyPresetSelection = SellableSupplyPreset | "all"
+
+/** 可被单独移除的已生效条件。 */
+export type SellableFilterKey =
+    | "q"
+    | "productKind"
+    | "productCategoryId"
+    | "productBrandId"
+    | "productSupplierId"
+    | "supplyRegion"
+    | "supplyPreset"
+    | "salesPrice"
 
 /** 公司商品池：搜索 + 类型 / 分类 / 品牌 / 供应商 / 区域 / 售价。 */
 export function useSellableListFilters(
@@ -37,6 +51,9 @@ export function useSellableListFilters(
     const productSupplierId =
         searchParams.get("productSupplierId")?.trim() || undefined
     const supplyRegion = searchParams.get("supplyRegion")?.trim() || undefined
+    const supplyPreset = (["single-supplier", "nationwide"] as const).find(
+        (value) => value === searchParams.get("supplyPreset"),
+    )
     const productSalesPriceMin =
         searchParams.get("productSalesPriceMin")?.trim() || undefined
     const productSalesPriceMax =
@@ -54,7 +71,7 @@ export function useSellableListFilters(
     )
 
     const [sellableFilterPanelOpen, setSellableFilterPanelOpen] =
-        React.useState(false)
+        React.useState(hasStructuredSellableFilters)
     const [productKindDraft, setProductKindDraft] = React.useState<
         ProductKind | "all"
     >(productKind ?? "all")
@@ -85,18 +102,6 @@ export function useSellableListFilters(
         resetPagination()
     }, [patchUrl, q, resetPagination, searchDraft])
 
-    const applyProductKind = React.useCallback(
-        (nextKind: ProductKind | "all") => {
-            setProductKindDraft(nextKind)
-            patchUrl({
-                productKind: nextKind === "all" ? null : nextKind,
-                page: null,
-            })
-            resetPagination()
-        },
-        [patchUrl, resetPagination],
-    )
-
     const applySellableFilters = React.useCallback(() => {
         const minimum = productSalesPriceMinDraft.trim()
         const maximum = productSalesPriceMaxDraft.trim()
@@ -116,6 +121,7 @@ export function useSellableListFilters(
             page: null,
         })
         resetPagination()
+        setSellableFilterPanelOpen(false)
     }, [
         patchUrl,
         productBrandIdDraft,
@@ -128,6 +134,70 @@ export function useSellableListFilters(
         searchDraft,
         supplyRegionDraft,
     ])
+
+    /** 快捷视图直接应用；它不改动关键词或「更多筛选」草稿。 */
+    const applySupplyPreset = React.useCallback(
+        (next: SellableSupplyPresetSelection) => {
+            patchUrl({
+                supplyPreset: next === "all" ? null : next,
+                page: null,
+            })
+            resetPagination()
+        },
+        [patchUrl, resetPagination],
+    )
+
+    /** 移除单个已生效条件；销售价按区间整体移除。 */
+    const removeFilter = React.useCallback(
+        (key: SellableFilterKey) => {
+            if (key === "q") setSearchDraft("")
+            if (key === "productKind") setProductKindDraft("all")
+            if (key === "productCategoryId") setProductCategoryIdDraft(null)
+            if (key === "productBrandId") setProductBrandIdDraft(null)
+            if (key === "productSupplierId") setProductSupplierIdDraft(null)
+            if (key === "supplyRegion") setSupplyRegionDraft("")
+            if (key === "salesPrice") {
+                setProductSalesPriceMinDraft("")
+                setProductSalesPriceMaxDraft("")
+                setProductSalesPriceError(null)
+            }
+            patchUrl(
+                key === "salesPrice"
+                    ? {
+                          productSalesPriceMin: null,
+                          productSalesPriceMax: null,
+                          page: null,
+                      }
+                    : { [key]: null, page: null },
+            )
+            resetPagination()
+        },
+        [patchUrl, resetPagination, setSearchDraft],
+    )
+
+    /** 仅清除「更多筛选」；保留关键词和快捷视图，并立即刷新结果。 */
+    const resetMoreFilters = React.useCallback(() => {
+        setProductKindDraft("all")
+        setProductCategoryIdDraft(null)
+        setProductBrandIdDraft(null)
+        setProductSupplierIdDraft(null)
+        setProductSalesPriceMinDraft("")
+        setProductSalesPriceMaxDraft("")
+        setSupplyRegionDraft("")
+        setProductSalesPriceError(null)
+        patchUrl({
+            productKind: null,
+            eligibilityAsOf: null,
+            productCategoryId: null,
+            productBrandId: null,
+            productSupplierId: null,
+            supplyRegion: null,
+            productSalesPriceMin: null,
+            productSalesPriceMax: null,
+            page: null,
+        })
+        resetPagination()
+    }, [patchUrl, resetPagination])
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -150,6 +220,7 @@ export function useSellableListFilters(
             supplyRegion: null,
             productSalesPriceMin: null,
             productSalesPriceMax: null,
+            supplyPreset: null,
             page: null,
         })
         resetPagination()
@@ -176,6 +247,7 @@ export function useSellableListFilters(
 
     return {
         q,
+        supplyPreset,
         productKind,
         productCategoryId,
         productBrandId,
@@ -209,8 +281,10 @@ export function useSellableListFilters(
         setPagination,
         changePagination,
         commitSearch,
-        applyProductKind,
         applySellableFilters,
+        applySupplyPreset,
+        removeFilter,
+        resetMoreFilters,
         clearAllFilters,
     }
 }

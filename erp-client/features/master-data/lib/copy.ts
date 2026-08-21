@@ -83,8 +83,8 @@ export const masterDataCopy = {
         `共 ${count} 条 · 筛选按商品归属、状态与 SKU 条件分组 · 回车打开详情`,
     supplierListDescription: (count: number) =>
         `共 ${count} 条 · 可按启用状态、资质状态与能力条件筛选 · 按 / 搜索 · 回车打开详情`,
-    sellableListDescription: (count: number) =>
-        `共 ${count} 条 · 可按类型、分类、品牌、供应商、区域与销售价筛选 · 按 / 搜索`,
+    sellableListDescription: (_count: number) =>
+        "点击任一行查看价格、可供区域和供应保障。",
     searchAria: "搜索基础资料",
     sellableItemsHint:
         "公司商品池只显示已上架、资料有效且当前有供给关系的 SKU；销售价来自公司商品主档，采购成本不会在这里展示。",

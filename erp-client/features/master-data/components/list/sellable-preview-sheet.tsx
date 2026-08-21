@@ -63,7 +63,11 @@ export function SellablePreviewSheet({
             footer={
                 previewRow?.sellableItem ? (
                     <>
-                        <Button type="button" variant="outline" onClick={onClose}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onClose}
+                        >
                             关闭
                         </Button>
                         <Button
