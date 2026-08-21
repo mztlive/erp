@@ -35,7 +35,6 @@ export type ExecutionProjectionUrlState = {
     hasActiveFilters: boolean
     replaceParams: (patch: Record<string, string | null | undefined>) => void
     setPageState: (next: PaginationState) => void
-    clearFilters: () => void
 }
 
 /**
@@ -97,6 +96,7 @@ export function useExecutionProjectionUrlState(): ExecutionProjectionUrlState {
         [pathname, router, searchParams],
     )
 
+    // 已生效筛选（含指标快捷筛选）任一存在即视为有筛选
     const hasActiveFilters = Boolean(
         q ||
         mallId !== "all" ||
@@ -106,20 +106,6 @@ export function useExecutionProjectionUrlState(): ExecutionProjectionUrlState {
         reconciliation !== "all" ||
         metric !== "all",
     )
-
-    // P4：清搜索词 + 全部筛选参数 + 分页回 1（保留视图/排序/导航上下文参数）
-    const clearFilters = React.useCallback(() => {
-        replaceParams({
-            q: null,
-            mall: null,
-            deliveryStatus: null,
-            source: null,
-            latency: null,
-            reconciliation: null,
-            metric: null,
-            page: null,
-        })
-    }, [replaceParams])
 
     return {
         q,
@@ -136,6 +122,5 @@ export function useExecutionProjectionUrlState(): ExecutionProjectionUrlState {
         hasActiveFilters,
         replaceParams,
         setPageState,
-        clearFilters,
     }
 }

@@ -1,39 +1,31 @@
 "use client"
 
-import { SearchIcon, ShieldAlertIcon } from "lucide-react"
+import * as React from "react"
+import { ShieldAlertIcon } from "lucide-react"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
     BusinessTableFrame,
     DataFreshness,
     DataTable,
-    ListToolbar,
     MetricItem,
     MetricStrip,
-    OptionCombobox,
     PageHeader,
     PageScaffold,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { BatchListToolbar } from "@/features/import-opening/components/batch-list-toolbar"
 import { useImportBatchListQuery } from "@/features/import-opening/hooks/queries"
 import { useBatchListColumns } from "@/features/import-opening/hooks/use-batch-list-columns"
+import { useBatchListFilters } from "@/features/import-opening/hooks/use-batch-list-filters"
 import { useBatchPagination } from "@/features/import-opening/hooks/use-batch-pagination"
-import { useBatchSearch } from "@/features/import-opening/hooks/use-batch-search"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
-import type {
-    ImportBatchStatus,
-    ImportEnvironment,
-    ImportObjectCode,
-} from "@/features/import-opening/types"
+import type { ImportEnvironment } from "@/features/import-opening/types"
 import {
     BATCH_STATUS_LABEL,
     ENVIRONMENT_LABEL,
@@ -48,14 +40,11 @@ export function BatchListView({
     urlState: ImportOpeningUrlState
     patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
 }) {
-    const { qDraft, setQDraft, searchInputRef } = useBatchSearch({
-        q: urlState.q,
-        patchUrl,
-    })
+    const filters = useBatchListFilters({ urlState, patchUrl })
     const listQuery = useImportBatchListQuery({
         environment: urlState.environment,
-        status: urlState.status,
-        objectType: urlState.objectType ?? "all",
+        status: filters.appliedStatus,
+        objectType: filters.appliedObjectType ?? "all",
         q: urlState.q,
         page: urlState.page,
         pageSize: 20,
@@ -69,19 +58,34 @@ export function BatchListView({
     const data = listQuery.data
     const { pagination, setPagination } = useBatchPagination(urlState.page)
 
-    const hasListFilters = Boolean(
-        urlState.q || urlState.status || urlState.objectType,
-    )
+    /** 表头说明：有筛选时写人读摘要，否则默认操作说明（§2.1）。 */
+    const tableDescription = React.useMemo(() => {
+        if (listQuery.isError) {
+            return "列表加载失败，可调整筛选后重试"
+        }
+        const active: string[] = []
+        if (urlState.q?.trim()) active.push(`搜索「${urlState.q.trim()}」`)
+        if (filters.appliedObjectType) {
+            active.push(
+                `对象 ${OBJECT_CODE_LABEL[filters.appliedObjectType]}`,
+            )
+        }
+        if (filters.appliedStatus) {
+            active.push(`状态 ${BATCH_STATUS_LABEL[filters.appliedStatus]}`)
+        }
+        if (active.length === 0) {
+            return `${ENVIRONMENT_LABEL[urlState.environment]} · 展示全部批次，点击批次号查看详情。`
+        }
+        return `${ENVIRONMENT_LABEL[urlState.environment]} · 当前筛选：${active.join(" · ")}`
+    }, [
+        filters.appliedObjectType,
+        filters.appliedStatus,
+        listQuery.isError,
+        urlState.environment,
+        urlState.q,
+    ])
 
-    const clearListFilters = () => {
-        setQDraft("")
-        patchUrl({
-            q: undefined,
-            status: undefined,
-            objectType: undefined,
-            page: 1,
-        })
-    }
+    const listLoadFailed = listQuery.isError || !listQuery.data
 
     return (
         <PageScaffold>
@@ -161,158 +165,117 @@ export function BatchListView({
             </Alert>
 
             <BusinessTableFrame
-                title="导入批次"
-                description={
-                    listQuery.isError
-                        ? "列表加载失败，可调整筛选后重试"
-                        : `${ENVIRONMENT_LABEL[urlState.environment]} · 共 ${data?.totalCount ?? 0} 批`
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        导入批次
+                        <span
+                            aria-live="polite"
+                            className="font-normal text-muted-foreground"
+                        >
+                            {(data?.totalCount ?? 0).toLocaleString("zh-CN")}{" "}
+                            批
+                        </span>
+                    </span>
                 }
+                description={tableDescription}
                 toolbar={
-                    <ListToolbar
-                        search={
-                            <form
-                                className="flex gap-1"
-                                onSubmit={(e) => {
-                                    e.preventDefault()
-                                    patchUrl({
-                                        q: qDraft.trim() || undefined,
-                                        page: 1,
-                                    })
-                                }}
-                            >
-                                <InputGroup>
-                                    <InputGroupAddon>
-                                        <SearchIcon aria-hidden="true" />
-                                    </InputGroupAddon>
-                                    <InputGroupInput
-                                        ref={searchInputRef}
-                                        value={qDraft}
-                                        onChange={(e) =>
-                                            setQDraft(e.target.value)
-                                        }
-                                        placeholder="批次号（精确/前缀匹配）"
-                                        aria-label="搜索批次"
-                                    />
-                                </InputGroup>
-                            </form>
+                    <BatchListToolbar
+                        searchInputRef={filters.searchInputRef}
+                        searchDraft={filters.qDraft}
+                        setSearchDraft={filters.setQDraft}
+                        hasActiveFilters={filters.hasAppliedBatchFilters}
+                        clearAllFilters={filters.clearAllBatchFilters}
+                        appliedChips={filters.appliedChips}
+                        removeFilter={filters.removeBatchFilter}
+                        batchFilterPanelOpen={filters.batchFilterPanelOpen}
+                        setBatchFilterPanelOpen={
+                            filters.setBatchFilterPanelOpen
                         }
-                        filters={
-                            <>
-                                <OptionCombobox
-                                    value={urlState.objectType ?? "all"}
-                                    onValueChange={(v) => {
-                                        if (v == null) return
-                                        patchUrl({
-                                            objectType:
-                                                v === "all"
-                                                    ? undefined
-                                                    : (v as ImportObjectCode),
-                                            page: 1,
-                                        })
-                                    }}
-                                    options={[
-                                        { value: "all", label: "全部对象" },
-                                        ...(
-                                            Object.keys(
-                                                OBJECT_CODE_LABEL,
-                                            ) as ImportObjectCode[]
-                                        ).map((code) => ({
-                                            value: code,
-                                            label: OBJECT_CODE_LABEL[code],
-                                        })),
-                                    ]}
-                                    inputClassName="w-[10rem]"
-                                    size="sm"
-                                    placeholder="对象：全部"
-                                    aria-label="对象集合"
-                                    allowClear={false}
-                                />
-                                <OptionCombobox
-                                    value={urlState.status ?? "all"}
-                                    onValueChange={(v) => {
-                                        if (v == null) return
-                                        patchUrl({
-                                            status: v === "all" ? undefined : v,
-                                            page: 1,
-                                        })
-                                    }}
-                                    options={[
-                                        { value: "all", label: "全部状态" },
-                                        ...(
-                                            Object.keys(
-                                                BATCH_STATUS_LABEL,
-                                            ) as ImportBatchStatus[]
-                                        ).map((s) => ({
-                                            value: s,
-                                            label: BATCH_STATUS_LABEL[s],
-                                        })),
-                                    ]}
-                                    inputClassName="w-[11rem]"
-                                    size="sm"
-                                    placeholder="状态：全部"
-                                    aria-label="批次状态"
-                                    allowClear={false}
-                                />
-                            </>
+                        hasStructuredBatchFilters={
+                            filters.hasStructuredBatchFilters
                         }
-                        actions={
-                            <>
-                                <span
-                                    className="text-xs text-muted-foreground"
-                                    aria-live="polite"
-                                >
-                                    共{" "}
-                                    {(data?.totalCount ?? 0).toLocaleString(
-                                        "zh-CN",
-                                    )}{" "}
-                                    批
-                                </span>
-                                {hasListFilters ? (
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={clearListFilters}
-                                    >
-                                        清除筛选
-                                    </Button>
-                                ) : null}
-                            </>
-                        }
+                        applyBatchFilters={filters.applyBatchFilters}
+                        resetMoreFilters={filters.resetMoreBatchFilters}
+                        objectTypeDraft={filters.objectTypeDraft}
+                        setObjectTypeDraft={filters.setObjectTypeDraft}
+                        statusDraft={filters.statusDraft}
+                        setStatusDraft={filters.setStatusDraft}
                     />
                 }
                 table={
-                    listQuery.isError ? (
-                        <BusinessFailureState
-                            title="批次列表加载失败"
-                            error={listQuery.error}
-                            className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-                            action={
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    onClick={() => void listQuery.refetch()}
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
-                    ) : (
-                        <DataTable
-                            data={[...(data?.rows ?? [])]}
-                            columns={columns}
-                            getRowId={(row) => row.batchId}
-                            rowCount={data?.totalCount ?? 0}
-                            pagination={pagination}
-                            onPaginationChange={(next) => {
-                                setPagination(next)
-                                patchUrl({ page: next.pageIndex + 1 })
-                            }}
-                            layout="flush"
-                            loading={listQuery.isPending}
-                        />
-                    )
+                    <DataTable
+                        data={[...(data?.rows ?? [])]}
+                        columns={columns}
+                        getRowId={(row) => row.batchId}
+                        rowCount={data?.totalCount ?? 0}
+                        pagination={pagination}
+                        onPaginationChange={(next) => {
+                            setPagination(next)
+                            patchUrl({ page: next.pageIndex + 1 })
+                        }}
+                        layout="flush"
+                        loading={listQuery.isPending}
+                        errorState={
+                            listQuery.isError ? (
+                                <BusinessFailureState
+                                    title="批次列表加载失败"
+                                    error={listQuery.error}
+                                    className="rounded-lg border-0 bg-transparent shadow-none ring-0"
+                                    action={
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="rounded-lg shadow-none"
+                                            onClick={() =>
+                                                void listQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
+                                    }
+                                />
+                            ) : undefined
+                        }
+                        emptyState={
+                            !listLoadFailed &&
+                            (data?.rows.length ?? 0) === 0 ? (
+                                <BusinessEmptyState
+                                    kind={
+                                        filters.hasAppliedBatchFilters
+                                            ? "filter"
+                                            : "no-data"
+                                    }
+                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    title={
+                                        filters.hasAppliedBatchFilters
+                                            ? "当前筛选无结果"
+                                            : "还没有导入批次"
+                                    }
+                                    description={
+                                        filters.hasAppliedBatchFilters
+                                            ? "没有批次符合当前筛选条件，可清除筛选后重试。"
+                                            : "当前环境还没有导入批次。"
+                                    }
+                                    action={
+                                        filters.hasAppliedBatchFilters ? (
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                size="sm"
+                                                className="rounded-lg shadow-none"
+                                                onClick={
+                                                    filters.clearAllBatchFilters
+                                                }
+                                            >
+                                                清除筛选
+                                            </Button>
+                                        ) : undefined
+                                    }
+                                />
+                            ) : undefined
+                        }
+                    />
                 }
             />
         </PageScaffold>

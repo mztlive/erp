@@ -2,23 +2,28 @@
 
 import * as React from "react"
 
-import type { LedgerPatchUrl } from "./use-inventory-ledger-url-state"
-
 export interface LedgerSearchInput {
     qParam: string
-    patchUrl: LedgerPatchUrl
 }
 
-export function useLedgerSearch({ qParam, patchUrl }: LedgerSearchInput) {
-    const [searchInput, setSearchInput] = React.useState(qParam)
+/**
+ * 库存台账搜索草稿（docs/ui-filter-design.md §5）：输入只改本地 Draft，
+ * 不写 URL、不触发请求；提交由 useLedgerFilters 的统一 applyFilters 完成。
+ * URL 回填只同步 Draft（输入框聚焦时保护尚未提交的关键词），
+ * 「/」聚焦搜索时忽略输入控件与打开的 Dialog / Sheet。
+ */
+export function useLedgerSearch({ qParam }: LedgerSearchInput) {
+    const [searchDraft, setSearchDraft] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
-    // URL q 变化时同步输入框
+    // URL q 变化时同步输入框；clearAllFilters 直接清空草稿，不依赖此 effect
     React.useEffect(() => {
-        setSearchInput(qParam)
+        if (document.activeElement !== searchInputRef.current) {
+            setSearchDraft(qParam)
+        }
     }, [qParam])
 
-    // `/` 聚焦列表搜索（输入框内输入时忽略）
+    // `/` 聚焦列表搜索（输入框内输入、Dialog/Sheet 打开时忽略）
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             if (
@@ -26,8 +31,9 @@ export function useLedgerSearch({ qParam, patchUrl }: LedgerSearchInput) {
                 event.metaKey ||
                 event.ctrlKey ||
                 event.altKey
-            )
+            ) {
                 return
+            }
             const target = event.target as HTMLElement | null
             const tag = target?.tagName
             if (
@@ -38,6 +44,13 @@ export function useLedgerSearch({ qParam, patchUrl }: LedgerSearchInput) {
             ) {
                 return
             }
+            if (
+                document.querySelector(
+                    '[role="dialog"], [data-slot="sheet"]',
+                )
+            ) {
+                return
+            }
             event.preventDefault()
             searchInputRef.current?.focus()
         }
@@ -45,15 +58,5 @@ export function useLedgerSearch({ qParam, patchUrl }: LedgerSearchInput) {
         return () => window.removeEventListener("keydown", onKey)
     }, [])
 
-    // 输入防抖 → URL
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchInput === qParam) return
-            patchUrl({ q: searchInput.trim() || null }, { replace: true })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 使用当前 URL 快照
-    }, [searchInput])
-
-    return { searchInput, setSearchInput, searchInputRef }
+    return { searchDraft, setSearchDraft, searchInputRef }
 }

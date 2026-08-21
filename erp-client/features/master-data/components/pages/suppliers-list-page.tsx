@@ -78,18 +78,28 @@ export function SuppliersListPage() {
             loading={state.listQuery.isPending}
         >
             <BusinessTableFrame
-                title="供应商与资质列表"
-                description={masterDataCopy.supplierListDescription(
-                    state.rows.length,
-                )}
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        供应商与资质列表
+                        <span
+                            className="font-normal text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            {state.rows.length} 条
+                        </span>
+                    </span>
+                }
+                description={state.listTableDescription}
                 toolbar={
                     <SupplierListToolbar
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
-                        rowCount={state.rows.length}
                         hasActiveFilters={hasActiveFilters}
                         clearAllFilters={filters.clearAllFilters}
+                        appliedChips={state.appliedChips}
+                        removeFilter={filters.removeFilter}
                         supplierFilterPanelOpen={
                             filters.supplierFilterPanelOpen
                         }
@@ -100,6 +110,7 @@ export function SuppliersListPage() {
                             filters.hasStructuredSupplierFilters
                         }
                         applySupplierFilters={filters.applySupplierFilters}
+                        resetMoreFilters={filters.resetMoreFilters}
                         lifecycleStatusDraft={filters.lifecycleStatusDraft}
                         setLifecycleStatusDraft={
                             filters.setLifecycleStatusDraft

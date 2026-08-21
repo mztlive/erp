@@ -143,7 +143,7 @@ describe("useLifecycleListFilters", () => {
         expect(params.has("metricKey")).toBe(false)
     })
 
-    it("applies the draft filters into the URL", () => {
+    it("applies the draft filters into the URL and closes the panel", () => {
         const { result } = renderHook(() =>
             useLifecycleListFilters(searchInputRef),
         )
@@ -151,6 +151,7 @@ describe("useLifecycleListFilters", () => {
             result.current.setSearchDraft("仓库")
             result.current.setLifecycleStatusDraft("enabled")
             result.current.setRevisionTimingDraft("future")
+            result.current.setFilterPanelOpen(true)
         })
         act(() => {
             result.current.applyListFilters()
@@ -162,6 +163,61 @@ describe("useLifecycleListFilters", () => {
         expect(params.get("metricKey")).toBe("enabled")
         expect(params.get("revisionTiming")).toBe("future")
         expect(params.has("page")).toBe(false)
+        expect(result.current.filterPanelOpen).toBe(false)
+    })
+
+    it("builds applied chips for every active filter", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=仓库A&lifecycleStatus=enabled&revisionTiming=future",
+        )
+        const { result } = renderHook(() =>
+            useLifecycleListFilters(searchInputRef),
+        )
+        expect(result.current.appliedChips).toEqual([
+            { key: "q", label: "搜索：仓库A" },
+            { key: "lifecycleStatus", label: "启停：当前启用" },
+            { key: "revisionTiming", label: "版本：待生效" },
+        ])
+    })
+
+    it("removes a single applied chip without touching the others", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=abc&lifecycleStatus=enabled&metricKey=enabled&revisionTiming=future",
+        )
+        const { result } = renderHook(() =>
+            useLifecycleListFilters(searchInputRef),
+        )
+        act(() => {
+            result.current.removeFilter("lifecycleStatus")
+        })
+
+        const params = lastReplaceParams()
+        expect(params.has("lifecycleStatus")).toBe(false)
+        expect(params.has("metricKey")).toBe(false)
+        expect(params.get("q")).toBe("abc")
+        expect(params.get("revisionTiming")).toBe("future")
+        expect(result.current.lifecycleStatusDraft).toBe("all")
+        expect(params.has("page")).toBe(false)
+    })
+
+    it("resets only the structured revision condition and keeps the quick lifecycle filter", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=abc&lifecycleStatus=enabled&metricKey=enabled&revisionTiming=future",
+        )
+        const { result } = renderHook(() =>
+            useLifecycleListFilters(searchInputRef),
+        )
+        act(() => {
+            result.current.resetMoreFilters()
+        })
+
+        const params = lastReplaceParams()
+        expect(params.has("revisionTiming")).toBe(false)
+        expect(params.get("q")).toBe("abc")
+        expect(params.get("lifecycleStatus")).toBe("enabled")
+        expect(params.get("metricKey")).toBe("enabled")
+        expect(result.current.revisionTimingDraft).toBe("all")
+        expect(result.current.filterPanelOpen).toBe(true)
     })
 
     it("clears every filter on clearAllFilters", () => {
@@ -183,7 +239,7 @@ describe("useLifecycleListFilters", () => {
         expect(result.current.filterPanelOpen).toBe(false)
     })
 
-    it("syncs drafts and the panel from URL changes", () => {
+    it("syncs drafts from URL changes without forcing the panel open again", () => {
         const { result, rerender } = renderHook(() =>
             useLifecycleListFilters(searchInputRef),
         )
@@ -197,6 +253,15 @@ describe("useLifecycleListFilters", () => {
         expect(result.current.lifecycleStatus).toBe("disabled")
         expect(result.current.lifecycleStatusDraft).toBe("disabled")
         expect(result.current.revisionTimingDraft).toBe("current")
+        // 已挂载页面的 URL 回填只同步 Draft，不得抢夺用户当前展开态（§5.5）
+        expect(result.current.filterPanelOpen).toBe(false)
+    })
+
+    it("opens the panel initially when a deep link carries structured filters", () => {
+        navMocks.searchParams = new URLSearchParams("revisionTiming=future")
+        const { result } = renderHook(() =>
+            useLifecycleListFilters(searchInputRef),
+        )
         expect(result.current.filterPanelOpen).toBe(true)
     })
 })

@@ -10,61 +10,39 @@ import {
     useEffectiveAccessQuery,
 } from "@/features/access-audit/hooks/queries"
 import { useAccessColumns } from "@/features/access-audit/hooks/use-access-columns"
+import type {
+    AccountFormState,
+    DeletingAccountState,
+    DeletingRoleState,
+} from "@/features/access-audit/hooks/access-columns-input"
 import { useAccessChangeFlow } from "@/features/access-audit/pages/hooks/use-access-change-flow"
 import {
     useAccessDetailPanels,
     type ExplainSubject,
 } from "@/features/access-audit/pages/hooks/use-access-detail-panels"
-import {
-    useAccessListControls,
-    type DebouncedAuditFilters,
-} from "@/features/access-audit/pages/hooks/use-access-list-controls"
+import { useAccessListFilters } from "@/features/access-audit/pages/hooks/use-access-list-filters"
 import { useAccessUrlState } from "@/features/access-audit/pages/hooks/use-access-url-state"
+import type { AccessAppliedChip } from "@/features/access-audit/components/access-list-toolbar"
+import {
+    actionFilterLabel,
+    resultFilterLabel,
+    riskFilterLabel,
+    statusFilterLabel,
+} from "@/features/access-audit/lib/filter-options"
 import { buildAccessListQuery } from "@/features/access-audit/pages/lib/build-list-query"
-import type { AccountDraft } from "@/features/admin/account-form-dialog"
 import { useAssignableRolesQuery } from "@/features/admin/queries"
 import type { AccessView } from "@/features/access-audit/types"
 
 export type { ExplainSubject }
 
-export type AccountFormState = {
-    mode: "create" | "edit"
-    account: AccountDraft | null
-}
-
-export type DeletingAccountState = {
-    id: string
-    account: string
-}
-
-export type DeletingRoleState = {
-    id: string
-    name: string
-}
-
-export type { DebouncedAuditFilters }
-
 function useAccessAuditPage() {
     const {
         router,
-        pathname,
         searchParams,
         view,
-        qParam,
-        status,
-        org,
-        risk,
         subjectTypeParam,
         subjectIdParam,
         eventIdParam,
-        fromParam,
-        toParam,
-        actorId,
-        action,
-        objectType,
-        objectId,
-        resultFilter,
-        traceId,
         rejectedWorkItemId,
         patchUrl,
     } = useAccessUrlState()
@@ -79,29 +57,35 @@ function useAccessAuditPage() {
         pageSize: 20,
     })
 
-    /** 筛选变更统一回到第一页：避免第二页起筛选变窄后「共 N 条」与空态并存。 */
+    /** 筛选写 URL 统一出口：replace + scroll:false，并回到第一页。 */
     const patchFilterUrl = (
         patch: Record<string, string | null | undefined>,
     ) => {
-        patchUrl({ ...patch, page: null }, { replace: true })
+        patchUrl(patch, { replace: true, scroll: false })
         setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
     }
 
-    const {
-        searchInput,
-        searchInputRef,
-        setSearchInput,
-        debouncedFilters,
-        setDebouncedFilters,
-    } = useAccessListControls({
-        qParam,
-        patchUrl,
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const filters = useAccessListFilters({
+        view,
         patchFilterUrl,
-        resetPaginationToFirstPage: () =>
-            setPagination((p) =>
-                p.pageIndex === 0 ? p : { ...p, pageIndex: 0 },
-            ),
+        searchInputRef,
     })
+    const {
+        applied,
+        draft,
+        updateDraft,
+        searchDraft,
+        setSearchDraft,
+        panelOpen,
+        setPanelOpen,
+        hasStructuredFilters,
+        applyFilters,
+        resetMoreFilters,
+        clearAllFilters,
+        removeFilter,
+        filterError,
+    } = filters
 
     const [lastResult, setLastResult] = React.useState<ResultState>(null)
     const [actionError, setActionError] = React.useState<string | null>(null)
@@ -152,6 +136,14 @@ function useAccessAuditPage() {
             ) {
                 return
             }
+            // 弹层（Dialog / Sheet）打开时不聚焦背景搜索框
+            if (
+                document.querySelector(
+                    '[role="dialog"], [data-slot="sheet"]',
+                )
+            ) {
+                return
+            }
             event.preventDefault()
             searchInputRef.current?.focus()
         }
@@ -164,37 +156,26 @@ function useAccessAuditPage() {
         () =>
             buildAccessListQuery({
                 view,
-                q: qParam,
-                status,
-                org,
-                risk,
+                q: applied.q,
+                status: applied.status,
+                org: applied.org,
+                risk: applied.risk,
                 subjectType: subjectTypeParam,
                 subjectId: subjectIdParam,
-                from: fromParam,
-                to: toParam,
-                actorId,
-                action,
-                objectType,
-                objectId,
-                result: resultFilter,
-                traceId,
+                from: applied.from,
+                to: applied.to,
+                actorId: applied.actorId,
+                action: applied.action,
+                objectType: applied.objectType,
+                objectId: applied.objectId,
+                result: applied.result,
+                traceId: applied.traceId,
             }),
         [
             view,
-            qParam,
-            status,
-            org,
-            risk,
+            applied,
             subjectTypeParam,
             subjectIdParam,
-            fromParam,
-            toParam,
-            actorId,
-            action,
-            objectType,
-            objectId,
-            resultFilter,
-            traceId,
         ],
     )
 
@@ -216,27 +197,7 @@ function useAccessAuditPage() {
     })
     const startChange = changeFlow.startChange
 
-    const clearFilters = React.useCallback(() => {
-        patchUrl({
-            q: null,
-            status: null,
-            org: null,
-            risk: null,
-            actorId: null,
-            action: null,
-            objectType: null,
-            objectId: null,
-            result: null,
-            traceId: null,
-            from: null,
-            to: null,
-            page: null,
-        })
-        setSearchInput("")
-        setDebouncedFilters({})
-        setPagination((p) => ({ ...p, pageIndex: 0 }))
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams, pathname, view])
+    const clearFilters = clearAllFilters
 
     const exportBlocked =
         !data?.allowedActions.includes("EXPORT_AUDIT") &&
@@ -299,20 +260,136 @@ function useAccessAuditPage() {
         })
     }
 
-    const advancedAuditActive = Boolean(
-        actorId || traceId || objectType || objectId,
-    )
     const isAudit = view === "audit"
+    const isScopes = view === "scopes"
     const hasActiveFilters = isAudit
         ? Boolean(
-              qParam ||
-                  action ||
-                  resultFilter ||
-                  fromParam ||
-                  toParam ||
-                  advancedAuditActive,
+              applied.q ||
+                  applied.from ||
+                  applied.to ||
+                  applied.action ||
+                  applied.result ||
+                  applied.actorId ||
+                  applied.traceId ||
+                  applied.objectType ||
+                  applied.objectId,
           )
-        : Boolean(qParam || status || risk || org)
+        : Boolean(
+              applied.q ||
+                  applied.org ||
+                  applied.status ||
+                  applied.risk ||
+                  // 数据范围视图的来源锁定主体也是查询消费参数
+                  (isScopes && Boolean(subjectTypeParam || subjectIdParam)),
+          )
+
+    // 组织维度选项：取自当前列表的角色/用户组织标签；选中值不在选项时并入，保证可回退
+    const orgOptions = React.useMemo(() => {
+        const seen = new Set<string>()
+        const options: { value: string; label: string }[] = []
+        for (const row of [...(data?.roles ?? []), ...(data?.users ?? [])]) {
+            const label = row.organizationLabel
+            if (!label || seen.has(label)) continue
+            seen.add(label)
+            options.push({ value: label, label })
+        }
+        if (applied.org && !seen.has(applied.org)) {
+            options.unshift({ value: applied.org, label: applied.org })
+        }
+        return options
+    }, [applied.org, data])
+
+    const subjectLabel = React.useMemo(() => {
+        if (!subjectIdParam) return ""
+        if (subjectTypeParam === "USER" || view === "users") {
+            return (
+                data?.users.find((user) => user.id === subjectIdParam)
+                    ?.displayName ?? subjectIdParam
+            )
+        }
+        return (
+            data?.roles.find((role) => role.id === subjectIdParam)?.name ??
+            subjectIdParam
+        )
+    }, [data, subjectIdParam, subjectTypeParam, view])
+
+    /** 已生效条件全部显性化为可移除 chip（含来源锁定主体）。 */
+    const appliedChips = React.useMemo<readonly AccessAppliedChip[]>(() => {
+        const chips: AccessAppliedChip[] = []
+        const trimmedQ = applied.q.trim()
+        if (trimmedQ) chips.push({ key: "q", label: `搜索：${trimmedQ}` })
+        if (isScopes && subjectTypeParam && subjectIdParam) {
+            chips.push({
+                key: "subject",
+                label: `范围主体：${subjectLabel}`,
+            })
+        }
+        if (applied.org) {
+            const label =
+                orgOptions.find((option) => option.value === applied.org)
+                    ?.label ?? applied.org
+            chips.push({ key: "org", label: `组织：${label}` })
+        }
+        if (applied.status) {
+            chips.push({
+                key: "status",
+                label: `状态：${statusFilterLabel(applied.status)}`,
+            })
+        }
+        if (applied.risk) {
+            chips.push({
+                key: "risk",
+                label: `风险：${riskFilterLabel(applied.risk)}`,
+            })
+        }
+        if (applied.from || applied.to) {
+            chips.push({
+                key: "time",
+                label: `时间：${applied.from ?? "不限"} 至 ${applied.to ?? "不限"}`,
+            })
+        }
+        if (applied.action) {
+            chips.push({
+                key: "action",
+                label: `动作：${actionFilterLabel(applied.action)}`,
+            })
+        }
+        if (applied.result) {
+            chips.push({
+                key: "result",
+                label: `结果：${resultFilterLabel(applied.result)}`,
+            })
+        }
+        if (applied.actorId) {
+            chips.push({ key: "actorId", label: `操作者：${applied.actorId}` })
+        }
+        if (applied.traceId) {
+            chips.push({
+                key: "traceId",
+                label: `请求追踪号：${applied.traceId}`,
+            })
+        }
+        if (applied.objectType) {
+            chips.push({
+                key: "objectType",
+                label: `对象类型：${applied.objectType}`,
+            })
+        }
+        if (applied.objectId) {
+            chips.push({
+                key: "objectId",
+                label: `对象编号：${applied.objectId}`,
+            })
+        }
+        return chips
+    }, [
+        applied,
+        isScopes,
+        orgOptions,
+        subjectIdParam,
+        subjectLabel,
+        subjectTypeParam,
+    ])
 
     const handleExport = () => {
         if (exportBlocked) {
@@ -336,19 +413,22 @@ function useAccessAuditPage() {
         view,
         isAudit,
         rejectedWorkItemId,
-        qParam,
-        status,
-        org,
-        risk,
-        fromParam,
-        toParam,
-        action,
-        resultFilter,
-        actorId,
-        traceId,
-        objectType,
-        objectId,
-        advancedAuditActive,
+        // 筛选状态（Applied / Draft / UI）
+        applied,
+        draft,
+        updateDraft,
+        searchDraft,
+        setSearchDraft,
+        searchInputRef,
+        panelOpen,
+        setPanelOpen,
+        hasStructuredFilters,
+        applyFilters,
+        resetMoreFilters,
+        removeFilter,
+        filterError,
+        appliedChips,
+        orgOptions,
         // 查询
         pageQuery,
         data,
@@ -357,14 +437,8 @@ function useAccessAuditPage() {
         assignableRolesQuery,
         // 列表状态
         pagination,
-        searchInput,
-        searchInputRef,
-        setSearchInput,
-        debouncedFilters,
-        setDebouncedFilters,
         hasActiveFilters,
         patchUrl,
-        patchFilterUrl,
         clearFilters,
         handlePaginationChange,
         switchView,

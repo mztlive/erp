@@ -16,6 +16,14 @@ import {
 } from "@/features/master-data/lib/list-filters"
 import type { SupplierQualificationHealth } from "@/features/master-data/types"
 
+/** 可被单独移除的已生效条件。 */
+export type SupplierFilterKey =
+    | "q"
+    | "lifecycleStatus"
+    | "supplierQualificationHealth"
+    | "supplierCapabilityCodes"
+    | "supplierQualificationTypes"
+
 /** 供应商列表：搜索 + 启停 + 资质状态 / 类型 + 供应能力。 */
 export function useSupplierListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
@@ -113,6 +121,7 @@ export function useSupplierListFilters(
             page: null,
         })
         resetPagination()
+        setSupplierFilterPanelOpen(false)
     }, [
         lifecycleStatusDraft,
         patchUrl,
@@ -122,6 +131,47 @@ export function useSupplierListFilters(
         supplierQualificationHealthDraft,
         supplierQualificationTypesDraft,
     ])
+
+    /** 移除单个已生效条件；启停同时移除指标高亮参数。 */
+    const removeFilter = React.useCallback(
+        (key: SupplierFilterKey) => {
+            if (key === "q") setSearchDraft("")
+            if (key === "lifecycleStatus") setLifecycleStatusDraft("all")
+            if (key === "supplierQualificationHealth") {
+                setSupplierQualificationHealthDraft("all")
+            }
+            if (key === "supplierCapabilityCodes") {
+                setSupplierCapabilityCodesDraft([])
+            }
+            if (key === "supplierQualificationTypes") {
+                setSupplierQualificationTypesDraft([])
+            }
+            patchUrl(
+                key === "lifecycleStatus"
+                    ? { lifecycleStatus: null, metricKey: null, page: null }
+                    : { [key]: null, page: null },
+            )
+            resetPagination()
+        },
+        [patchUrl, resetPagination, setSearchDraft],
+    )
+
+    /** 仅清除「更多筛选」；保留关键词，并保持面板展开。 */
+    const resetMoreFilters = React.useCallback(() => {
+        setLifecycleStatusDraft("all")
+        setSupplierCapabilityCodesDraft([])
+        setSupplierQualificationTypesDraft([])
+        setSupplierQualificationHealthDraft("all")
+        patchUrl({
+            lifecycleStatus: null,
+            metricKey: null,
+            supplierCapabilityCodes: null,
+            supplierQualificationTypes: null,
+            supplierQualificationHealth: null,
+            page: null,
+        })
+        resetPagination()
+    }, [patchUrl, resetPagination])
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -149,9 +199,7 @@ export function useSupplierListFilters(
         setSupplierQualificationHealthDraft(
             supplierQualificationHealth ?? "all",
         )
-        setSupplierFilterPanelOpen(hasStructuredSupplierFilters)
     }, [
-        hasStructuredSupplierFilters,
         lifecycleStatus,
         supplierCapabilityCodes,
         supplierQualificationHealth,
@@ -183,6 +231,8 @@ export function useSupplierListFilters(
         changePagination,
         commitSearch,
         applySupplierFilters,
+        removeFilter,
+        resetMoreFilters,
         clearAllFilters,
     }
 }

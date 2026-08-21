@@ -164,18 +164,4 @@ describe("useExecutionProjectionUrlState", () => {
             { scroll: false },
         )
     })
-
-    it("clearFilters 只清筛选与分页，保留对象上下文参数", () => {
-        setParams(
-            "q=x&mall=m1&deliveryStatus=FAILED&source=ERP_SALES_REVISION&latency=normal&reconciliation=MATCHED&metric=acked&page=4&projectionId=p1&revision=r1",
-        )
-        const { result } = renderHook(() => useExecutionProjectionUrlState())
-        act(() => {
-            result.current.clearFilters()
-        })
-        expect(mockReplace).toHaveBeenCalledWith(
-            "/commerce/execution-projections?projectionId=p1&revision=r1",
-            { scroll: false },
-        )
-    })
 })

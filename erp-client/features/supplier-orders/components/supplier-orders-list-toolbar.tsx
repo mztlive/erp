@@ -1,12 +1,19 @@
 "use client"
 
-import { SearchIcon } from "lucide-react"
+import * as React from "react"
+import {
+    ChevronDownIcon,
+    FilterIcon,
+    SearchIcon,
+} from "lucide-react"
 
 import {
+    FilterChip,
     ListToolbar,
     MultiOptionCombobox,
     OptionCombobox,
 } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import {
@@ -17,9 +24,9 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import type {
-    SupplierOrdersUrlState,
-    SupplierOrdersUrlUpdater,
-} from "@/features/supplier-orders/lib/url-state"
+    SupplierOrdersAppliedChip,
+    SupplierOrdersFilterKey,
+} from "@/features/supplier-orders/hooks/use-supplier-orders-filters"
 import type {
     CancelStatus,
     ListView,
@@ -36,61 +43,92 @@ import {
     VIEW_LABEL,
 } from "@/features/supplier-orders/types"
 
+type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+
 export type SupplierOrdersListToolbarProps = {
-    url: SupplierOrdersUrlState
-    total: number
-    hasActiveFilters: boolean
-    updateUrl: SupplierOrdersUrlUpdater
-    clearFilters: () => void
+    searchInputRef: React.RefObject<HTMLInputElement | null>
+    view: ListView
+    onViewChange: (view: ListView) => void
     searchDraft: string
     onSearchDraftChange: (value: string) => void
-    onSearchCommit: () => void
-    onSearchBlur: () => void
+    panelOpen: boolean
+    setPanelOpen: SetState<boolean>
+    hasStructuredFilters: boolean
+    appliedChips: readonly SupplierOrdersAppliedChip[]
+    onRemoveFilter: (key: SupplierOrdersFilterKey) => void
+    onApplyFilters: () => void
+    onClearAllFilters: () => void
+    onResetMoreFilters: () => void
+    filterError: string | null
+    setFilterError: SetState<string | null>
+    supplierIdDraft: string | null
+    setSupplierIdDraft: SetState<string | null>
+    fulfillmentStatusesDraft: readonly SupplierFulfillmentStatus[]
+    setFulfillmentStatusesDraft: SetState<SupplierFulfillmentStatus[]>
+    cancelStatusesDraft: readonly CancelStatus[]
+    setCancelStatusesDraft: SetState<CancelStatus[]>
+    refundStatusesDraft: readonly RefundStatus[]
+    setRefundStatusesDraft: SetState<RefundStatus[]>
+    paidFromDraft: string
+    setPaidFromDraft: SetState<string>
+    paidToDraft: string
+    setPaidToDraft: SetState<string>
 }
 
+/**
+ * 供应商订单筛选工具栏（docs/ui-filter-design.md §8 公司商品池结构）：
+ * 整个筛选区是唯一语义 <form>；收起态搜索框尾部提交箭头与展开态面板
+ * 「应用全部筛选」走同一个 onApplyFilters。
+ */
 export function SupplierOrdersListToolbar({
-    url,
-    total,
-    hasActiveFilters,
-    updateUrl,
-    clearFilters,
+    searchInputRef,
+    view,
+    onViewChange,
     searchDraft,
     onSearchDraftChange,
-    onSearchCommit,
-    onSearchBlur,
+    panelOpen,
+    setPanelOpen,
+    hasStructuredFilters,
+    appliedChips,
+    onRemoveFilter,
+    onApplyFilters,
+    onClearAllFilters,
+    onResetMoreFilters,
+    filterError,
+    setFilterError,
+    supplierIdDraft,
+    setSupplierIdDraft,
+    fulfillmentStatusesDraft,
+    setFulfillmentStatusesDraft,
+    cancelStatusesDraft,
+    setCancelStatusesDraft,
+    refundStatusesDraft,
+    setRefundStatusesDraft,
+    paidFromDraft,
+    setPaidFromDraft,
+    paidToDraft,
+    setPaidToDraft,
 }: SupplierOrdersListToolbarProps) {
+    const panelId = React.useId()
+    const paidDateErrorId = React.useId()
+    const hasChips = appliedChips.length > 0
+
     return (
-        <ListToolbar
-            search={
-                <InputGroup className="w-full max-w-sm">
-                    <InputGroupAddon>
-                        <SearchIcon className="size-3.5" />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                        data-slot="sfo-list-search"
-                        value={searchDraft}
-                        onChange={(e) => onSearchDraftChange(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                onSearchCommit()
-                            }
-                        }}
-                        onBlur={onSearchBlur}
-                        placeholder="供应商订单号、商城订单、外部单号"
-                        aria-label="搜索供应商订单"
-                    />
-                </InputGroup>
-            }
-            filters={
-                <>
+        <form
+            onSubmit={(event) => {
+                event.preventDefault()
+                onApplyFilters()
+            }}
+        >
+            <ListToolbar
+                savedView={
                     <ToggleGroup
-                        value={[url.view]}
+                        value={[view]}
                         onValueChange={(values) => {
                             const next = values[0] as ListView | undefined
-                            if (next) updateUrl({ view: next, page: 1 })
+                            if (next) onViewChange(next)
                         }}
                         variant="outline"
-                        size="sm"
                         spacing={0}
                         aria-label="列表视图"
                     >
@@ -100,134 +138,271 @@ export function SupplierOrdersListToolbar({
                             </ToggleGroupItem>
                         ))}
                     </ToggleGroup>
-                    <SupplierSearchCombobox
-                        value={url.supplierId || undefined}
-                        onValueChange={(id) =>
-                            updateUrl({
-                                supplierId: id || undefined,
-                                page: 1,
-                            })
-                        }
-                        purpose="filter"
-                        aria-label="供应商"
-                        className="w-[12rem]"
-                        placeholder="全部供应商"
-                    />
-                    <MultiOptionCombobox
-                        value={url.fulfillmentStatuses ?? []}
-                        onValueChange={(values) =>
-                            updateUrl({
-                                fulfillmentStatuses:
-                                    values.length > 0
-                                        ? (values as SupplierFulfillmentStatus[])
-                                        : undefined,
-                                page: 1,
-                            })
-                        }
-                        options={FULFILLMENT_STATUSES.map((s) => ({
-                            value: s,
-                            label: FULFILLMENT_STATUS_LABEL[s],
-                        }))}
-                        aria-label="履约状态"
-                        className="w-[10rem]"
-                        size="sm"
-                        placeholder="履约·全部"
-                    />
-                </>
-            }
-            secondary={
-                <>
-                    <OptionCombobox
-                        value={url.cancelStatuses?.[0] ?? ""}
-                        onValueChange={(v) =>
-                            updateUrl({
-                                cancelStatuses: v
-                                    ? [v as CancelStatus]
-                                    : undefined,
-                                page: 1,
-                            })
-                        }
-                        options={[
-                            { value: "", label: "取消·全部" },
-                            ...CANCEL_STATUSES.map((s) => ({
-                                value: s,
-                                label: CANCEL_STATUS_LABEL[s],
-                            })),
-                        ]}
-                        aria-label="取消状态"
-                        className="w-[7.5rem]"
-                        size="sm"
-                        allowClear={false}
-                        placeholder="取消·全部"
-                    />
-                    <OptionCombobox
-                        value={url.refundStatuses?.[0] ?? ""}
-                        onValueChange={(v) =>
-                            updateUrl({
-                                refundStatuses: v
-                                    ? [v as RefundStatus]
-                                    : undefined,
-                                page: 1,
-                            })
-                        }
-                        options={[
-                            { value: "", label: "退款·全部" },
-                            ...REFUND_STATUSES.map((s) => ({
-                                value: s,
-                                label: REFUND_STATUS_LABEL[s],
-                            })),
-                        ]}
-                        aria-label="退款状态"
-                        className="w-[7.5rem]"
-                        size="sm"
-                        allowClear={false}
-                        placeholder="退款·全部"
-                    />
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        支付自
-                        <DatePicker
-                            className="w-[9.5rem]"
-                            value={url.paidFrom || undefined}
-                            onValueChange={(next) =>
-                                updateUrl({
-                                    paidFrom: next || undefined,
-                                    page: 1,
-                                })
+                }
+                search={
+                    <InputGroup className="w-full">
+                        <InputGroupAddon>
+                            <SearchIcon aria-hidden="true" />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            ref={searchInputRef}
+                            data-slot="sfo-list-search"
+                            value={searchDraft}
+                            onChange={(event) =>
+                                onSearchDraftChange(event.target.value)
+                            }
+                            placeholder="供应商订单号、商城订单、外部单号"
+                            aria-label="搜索供应商订单"
+                        />
+                        
+                    </InputGroup>
+                }
+                filters={
+                    <Button
+                        type="button"
+                        variant="outline"
+                        aria-expanded={panelOpen}
+                        aria-controls={panelId}
+                        onClick={() => setPanelOpen((open) => !open)}
+                    >
+                        <FilterIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        更多筛选
+                        {hasStructuredFilters ? (
+                            <Badge variant="info">已启用</Badge>
+                        ) : null}
+                        <ChevronDownIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                            className={
+                                panelOpen
+                                    ? "rotate-180 transition-transform"
+                                    : "transition-transform"
                             }
                         />
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        至
-                        <DatePicker
-                            className="w-[9.5rem]"
-                            value={url.paidTo || undefined}
-                            onValueChange={(next) =>
-                                updateUrl({
-                                    paidTo: next || undefined,
-                                    page: 1,
-                                })
-                            }
-                        />
-                    </span>
-                </>
-            }
-            actions={
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span aria-live="polite">
-                        共 {total.toLocaleString("zh-CN")} 条
-                    </span>
-                    {hasActiveFilters ? (
-                        <Button
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            onClick={clearFilters}
-                        >
-                            清除筛选
-                        </Button>
-                    ) : null}
-                </div>
-            }
-        />
+                    </Button>
+                }
+                secondary={
+                    hasChips || panelOpen ? (
+                        <div className="w-full space-y-3">
+                            {hasChips ? (
+                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                    <span className="text-xs text-muted-foreground">
+                                        已筛选
+                                    </span>
+                                    {appliedChips.map((chip) => (
+                                        <FilterChip
+                                            key={chip.key}
+                                            label={chip.label}
+                                            clearLabel={`移除${chip.label}`}
+                                            onClear={() =>
+                                                onRemoveFilter(chip.key)
+                                            }
+                                        />
+                                    ))}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={onClearAllFilters}
+                                    >
+                                        清空全部
+                                    </Button>
+                                </div>
+                            ) : null}
+                            {panelOpen ? (
+                                <div
+                                    id={panelId}
+                                    className="flex w-full flex-col gap-3 border-t pt-3"
+                                    aria-label="供应商订单更多筛选条件"
+                                >
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                            <span className="text-muted-foreground">
+                                                供应商
+                                            </span>
+                                            <SupplierSearchCombobox
+                                                className="w-full"
+                                                purpose="filter"
+                                                value={
+                                                    supplierIdDraft ?? undefined
+                                                }
+                                                onValueChange={(id) =>
+                                                    setSupplierIdDraft(id ?? null)
+                                                }
+                                                placeholder="全部供应商"
+                                            />
+                                        </div>
+                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                            <span className="text-muted-foreground">
+                                                履约状态
+                                            </span>
+                                            <MultiOptionCombobox
+                                                className="w-full"
+                                                value={fulfillmentStatusesDraft}
+                                                onValueChange={(values) =>
+                                                    setFulfillmentStatusesDraft(
+                                                        values as SupplierFulfillmentStatus[],
+                                                    )
+                                                }
+                                                options={FULFILLMENT_STATUSES.map(
+                                                    (s) => ({
+                                                        value: s,
+                                                        label: FULFILLMENT_STATUS_LABEL[s],
+                                                    }),
+                                                )}
+                                                aria-label="履约状态"
+                                                placeholder="全部履约状态"
+                                            />
+                                        </div>
+                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                            <span className="text-muted-foreground">
+                                                取消状态
+                                            </span>
+                                            <OptionCombobox
+                                                className="w-full"
+                                                value={
+                                                    cancelStatusesDraft[0] ?? ""
+                                                }
+                                                onValueChange={(value) =>
+                                                    setCancelStatusesDraft(
+                                                        value
+                                                            ? [
+                                                                  value as CancelStatus,
+                                                              ]
+                                                            : [],
+                                                    )
+                                                }
+                                                options={CANCEL_STATUSES.map(
+                                                    (s) => ({
+                                                        value: s,
+                                                        label: CANCEL_STATUS_LABEL[s],
+                                                    }),
+                                                )}
+                                                aria-label="取消状态"
+                                                placeholder="全部取消状态"
+                                            />
+                                        </div>
+                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                            <span className="text-muted-foreground">
+                                                退款状态
+                                            </span>
+                                            <OptionCombobox
+                                                className="w-full"
+                                                value={
+                                                    refundStatusesDraft[0] ?? ""
+                                                }
+                                                onValueChange={(value) =>
+                                                    setRefundStatusesDraft(
+                                                        value
+                                                            ? [
+                                                                  value as RefundStatus,
+                                                              ]
+                                                            : [],
+                                                    )
+                                                }
+                                                options={REFUND_STATUSES.map(
+                                                    (s) => ({
+                                                        value: s,
+                                                        label: REFUND_STATUS_LABEL[s],
+                                                    }),
+                                                )}
+                                                aria-label="退款状态"
+                                                placeholder="全部退款状态"
+                                            />
+                                        </div>
+                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm sm:col-span-2">
+                                            <span className="text-muted-foreground">
+                                                支付时间
+                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <DatePicker
+                                                    className="w-0 min-w-0 flex-1"
+                                                    value={
+                                                        paidFromDraft ||
+                                                        undefined
+                                                    }
+                                                    onValueChange={(next) => {
+                                                        setPaidFromDraft(
+                                                            next ?? "",
+                                                        )
+                                                        setFilterError(null)
+                                                    }}
+                                                    placeholder="开始日期"
+                                                    aria-invalid={Boolean(
+                                                        filterError,
+                                                    )}
+                                                    aria-describedby={
+                                                        filterError
+                                                            ? paidDateErrorId
+                                                            : undefined
+                                                    }
+                                                />
+                                                <span className="text-muted-foreground">
+                                                    至
+                                                </span>
+                                                <DatePicker
+                                                    className="w-0 min-w-0 flex-1"
+                                                    value={
+                                                        paidToDraft || undefined
+                                                    }
+                                                    onValueChange={(next) => {
+                                                        setPaidToDraft(
+                                                            next ?? "",
+                                                        )
+                                                        setFilterError(null)
+                                                    }}
+                                                    placeholder="结束日期"
+                                                    aria-invalid={Boolean(
+                                                        filterError,
+                                                    )}
+                                                    aria-describedby={
+                                                        filterError
+                                                            ? paidDateErrorId
+                                                            : undefined
+                                                    }
+                                                />
+                                            </div>
+                                            {filterError ? (
+                                                <span
+                                                    id={paidDateErrorId}
+                                                    className="text-xs text-destructive"
+                                                    role="alert"
+                                                >
+                                                    {filterError}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-muted-foreground">
+                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={onResetMoreFilters}
+                                            >
+                                                重置更多条件
+                                            </Button>
+                                            <Button type="submit">
+                                                <SearchIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                应用全部筛选
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : undefined
+                }
+            />
+        </form>
     )
 }

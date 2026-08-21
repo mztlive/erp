@@ -124,27 +124,76 @@ export function FulfillmentOperationsPage() {
         onToggleShortcuts: () => controller.setShortcutsOpen((v) => !v),
     })
 
-    if (controller.queueQuery.isPending) {
+    const context = controller.context
+    const activeTypeSlug = typeParamValue(operationTypes)
+
+    // 加载 / 失败时筛选区仍然常驻：错误态用 BusinessFailureState + refetch，
+    // 不卸载筛选工具栏（ui-filter-design §11）。
+    if (controller.queueQuery.isPending || controller.queueQuery.isError) {
+        const queryPending = controller.queueQuery.isPending
         return (
-            <FulfillmentPageStates
-                status="pending"
-                headerDescription={header.label}
-            />
-        )
-    }
-    if (controller.queueQuery.isError) {
-        return (
-            <FulfillmentPageStates
-                status="error"
-                headerDescription={header.label}
-                error={controller.queueQuery.error}
-                onRetry={() => void controller.queueQuery.refetch()}
-            />
+            <PageScaffold>
+                <PageHeader
+                    title={header.label}
+                    description={header.description}
+                    metadata={
+                        <div className="flex flex-wrap items-center gap-3">
+                            <DataFreshness
+                                updatedAt="刚刚"
+                                dateTime={context?.snapshotUpdatedAt}
+                                state="fresh"
+                                label={freshnessText.dataUpdatedAt}
+                            />
+                            <span
+                                className="text-xs text-muted-foreground"
+                                aria-live="polite"
+                            >
+                                {context?.filterSummary ?? "全部类型"} · 待处理{" "}
+                                {context?.total ?? 0}
+                            </span>
+                        </div>
+                    }
+                />
+
+                <SourceReturnBanner
+                    fromWorkspace={fromWorkspace}
+                    sourceReturnHref={sourceReturnHref(
+                        returnTo,
+                        fromWorkspace,
+                        controller.operation,
+                    )}
+                    operation={controller.operation}
+                />
+
+                <FulfillmentFilterBar
+                    activeTypeSlug={activeTypeSlug}
+                    visibleTypes={controller.visibleTypes}
+                    onTypeChange={controller.setTypeFilter}
+                    q={q}
+                    warehouseId={warehouseId}
+                    due={due}
+                    gate={gate}
+                    salesOrderId={salesOrderId}
+                    purchaseOrderId={purchaseOrderId}
+                    operations={controller.operations}
+                    autoNext={controller.autoNext}
+                    showAutoNext={controller.canExecute}
+                    onPatch={controller.handlePatch}
+                    onClearAllFilters={controller.clearAllFilters}
+                    onAutoNextChange={controller.setAutoNext}
+                />
+
+                <FulfillmentPageStates
+                    status={queryPending ? "pending" : "error"}
+                    standalone
+                    headerDescription={header.label}
+                    error={controller.queueQuery.error}
+                    onRetry={() => void controller.queueQuery.refetch()}
+                />
+            </PageScaffold>
         )
     }
 
-    const context = controller.context
-    const activeTypeSlug = typeParamValue(operationTypes)
     const status = responsibilityStatus(
         controller.operation,
         controller.canExecute,
@@ -196,9 +245,9 @@ export function FulfillmentOperationsPage() {
                 purchaseOrderId={purchaseOrderId}
                 operations={controller.operations}
                 autoNext={controller.autoNext}
-                total={context?.total ?? controller.operations.length}
                 showAutoNext={controller.canExecute}
                 onPatch={controller.handlePatch}
+                onClearAllFilters={controller.clearAllFilters}
                 onAutoNextChange={controller.setAutoNext}
             />
 

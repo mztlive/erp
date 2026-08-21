@@ -57,7 +57,7 @@ export function ConsumptionOrdersTable({
             <BusinessEmptyState
                 kind="filter"
                 title="请选择记录发生起止时间"
-                description="默认期间策略未配置：请选择完整的事实发生起止时间后再查询，不静默拉取全量记录。"
+                description="默认期间策略未配置：请在「更多筛选」中选择完整的事实发生起止时间后再查询，不静默拉取全量记录。"
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             />
         )

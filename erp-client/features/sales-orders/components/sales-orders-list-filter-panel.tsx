@@ -3,11 +3,14 @@
 import * as React from "react"
 import { SearchIcon } from "lucide-react"
 
-import { FixedOptionRadioFilter } from "@/components/business"
-import { OwnerCombobox } from "@/components/business"
+import {
+    FixedOptionRadioFilter,
+    OptionCombobox,
+    OwnerCombobox,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { DateRangePicker } from "@/components/ui/date-picker"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import {
     ContractSearchCombobox,
     CustomerSearchCombobox,
@@ -19,24 +22,32 @@ import {
     SALES_ORDER_FULFILLMENT_OPTIONS,
     SALES_ORDER_INVOICE_OPTIONS,
     SALES_ORDER_REVIEW_STATUS_OPTIONS,
+    type SalesOrderReviewStatusFilter,
 } from "@/features/sales-orders/lib/filter-orders"
 import type { SalesOrdersListFilterDraft } from "@/features/sales-orders/lib/sales-orders-list-filters"
 import { useOwnerOptionsQuery } from "@/hooks/use-options"
 
 export function SalesOrdersListFilterPanel(props: {
+    panelId: string
     draft: SalesOrdersListFilterDraft
     onDraftChange: React.Dispatch<
         React.SetStateAction<SalesOrdersListFilterDraft>
     >
+    onResetMoreFilters: () => void
 }) {
-    const { draft: filterDraft, onDraftChange: setFilterDraft } = props
+    const {
+        panelId,
+        draft: filterDraft,
+        onDraftChange: setFilterDraft,
+        onResetMoreFilters,
+    } = props
     const ownerOptionsQuery = useOwnerOptionsQuery()
 
     return (
         <div
-            id="sales-order-filter-panel"
-            className="flex w-full flex-col gap-4 rounded-lg border border-border bg-muted/30 px-3 py-3"
-            aria-label="销售单筛选条件"
+            id={panelId}
+            className="flex w-full flex-col gap-3 border-t pt-3"
+            aria-label="销售单更多筛选条件"
         >
             <FixedOptionRadioFilter
                 label="业务性质"
@@ -89,20 +100,6 @@ export function SalesOrdersListFilterPanel(props: {
                 options={[
                     { value: "all", label: "全部" },
                     ...SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
-                ]}
-            />
-            <FixedOptionRadioFilter
-                label="审核状态"
-                value={filterDraft.reviewStatus}
-                onValueChange={(reviewStatus) => {
-                    setFilterDraft((draft) => ({
-                        ...draft,
-                        reviewStatus,
-                    }))
-                }}
-                options={[
-                    { value: "all", label: "全部" },
-                    ...SALES_ORDER_REVIEW_STATUS_OPTIONS,
                 ]}
             />
             <FixedOptionRadioFilter
@@ -162,7 +159,7 @@ export function SalesOrdersListFilterPanel(props: {
                 ]}
             />
 
-            <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Field>
                     <FieldLabel>客户</FieldLabel>
                     <CustomerSearchCombobox
@@ -235,13 +232,50 @@ export function SalesOrdersListFilterPanel(props: {
                         placeholder="全部日期"
                     />
                 </Field>
-            </FieldGroup>
+                <Field>
+                    <FieldLabel>审核状态</FieldLabel>
+                    <OptionCombobox
+                        className="w-full"
+                        value={
+                            filterDraft.reviewStatus === "all"
+                                ? null
+                                : filterDraft.reviewStatus
+                        }
+                        aria-label="审核状态"
+                        onValueChange={(reviewStatus) => {
+                            setFilterDraft((draft) => ({
+                                ...draft,
+                                reviewStatus: (reviewStatus ??
+                                    "all") as SalesOrderReviewStatusFilter,
+                            }))
+                        }}
+                        options={SALES_ORDER_REVIEW_STATUS_OPTIONS}
+                        placeholder="全部审核状态"
+                        searchPlaceholder="搜索审核状态"
+                    />
+                </Field>
+            </div>
 
-            <div className="flex justify-end">
-                <Button type="submit" size="sm">
-                    <SearchIcon data-icon="inline-start" aria-hidden="true" />
-                    搜索
-                </Button>
+            <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                    将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                </p>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={onResetMoreFilters}
+                    >
+                        重置更多条件
+                    </Button>
+                    <Button type="submit">
+                        <SearchIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        应用全部筛选
+                    </Button>
+                </div>
             </div>
         </div>
     )

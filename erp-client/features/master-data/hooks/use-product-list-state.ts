@@ -6,6 +6,7 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useClientPagedRows } from "@/features/master-data/hooks/use-client-paged-rows"
 import { useProductListFilters } from "@/features/master-data/hooks/use-product-list-filters"
+import type { ProductFilterKey } from "@/features/master-data/hooks/use-product-list-filters"
 import {
     useMasterDataListQuery,
     useProductFilterOptionsQuery,
@@ -13,17 +14,31 @@ import {
     useProductListingMutation,
 } from "@/features/master-data/hooks/queries"
 import { useMasterDataListExport } from "@/features/master-data/hooks/use-master-data-list-export"
-import { buildProductFilterSnapshotLabel } from "@/features/master-data/lib/master-data-list-summaries"
+import {
+    buildProductFilterSnapshotLabel,
+    buildProductTableDescription,
+} from "@/features/master-data/lib/master-data-list-summaries"
 import { syncListMetrics } from "@/features/master-data/lib/master-data-list-summaries"
+import {
+    PRODUCT_COVERAGE_FILTER_OPTIONS,
+    PRODUCT_LISTING_FILTER_OPTIONS,
+} from "@/features/master-data/lib/list-filters"
+import { lifecycleFilterLabel, revisionTimingFilterLabel } from "@/features/master-data/lib/copy"
 import { resourceLabel } from "@/features/master-data/lib/data"
 import type {
     MasterDataListItem,
     ProductListSkuSummary,
 } from "@/features/master-data/types"
+import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/queries"
 import type { FixedSku } from "@/features/supplier-offerings/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
+
+export type ProductAppliedChip = Readonly<{
+    key: ProductFilterKey
+    label: string
+}>
 
 export function useProductListState(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
@@ -122,6 +137,124 @@ export function useProductListState(
                 (option) => option.value === filters.productSupplierId,
             )?.label ?? filters.productSupplierId,
         [filters.productSupplierId, productFilterOptionsQuery.data?.suppliers],
+    )
+    /** 所有已生效条件均可从 chip 单独撤销。 */
+    const appliedChips = React.useMemo<readonly ProductAppliedChip[]>(() => {
+        const chips: ProductAppliedChip[] = []
+        if (filters.q.trim()) {
+            chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
+        }
+        if (filters.productKind) {
+            chips.push({
+                key: "productKind",
+                label: `类型：${PRODUCT_KIND_LABELS[filters.productKind]}`,
+            })
+        }
+        if (filters.lifecycleStatus !== "all") {
+            chips.push({
+                key: "lifecycleStatus",
+                label: `启停：${lifecycleFilterLabel(filters.lifecycleStatus)}`,
+            })
+        }
+        if (filters.revisionTiming !== "all") {
+            chips.push({
+                key: "revisionTiming",
+                label: `版本：${revisionTimingFilterLabel(filters.revisionTiming)}`,
+            })
+        }
+        if (filters.productListingStatus) {
+            chips.push({
+                key: "productListingStatus",
+                label: `上架：${
+                    PRODUCT_LISTING_FILTER_OPTIONS.find(
+                        (option) =>
+                            option.value === filters.productListingStatus,
+                    )?.label ?? filters.productListingStatus
+                }`,
+            })
+        }
+        if (filters.productSupplyCoverage) {
+            chips.push({
+                key: "productSupplyCoverage",
+                label: `供给覆盖：${
+                    PRODUCT_COVERAGE_FILTER_OPTIONS.find(
+                        (option) =>
+                            option.value === filters.productSupplyCoverage,
+                    )?.label ?? filters.productSupplyCoverage
+                }`,
+            })
+        }
+        if (filters.productCategoryId) {
+            chips.push({
+                key: "productCategoryId",
+                label: `分类：${selectedCategoryLabel}`,
+            })
+        }
+        if (filters.productBrandId) {
+            chips.push({
+                key: "productBrandId",
+                label: `品牌：${selectedBrandLabel}`,
+            })
+        }
+        if (filters.productSupplierId) {
+            chips.push({
+                key: "productSupplierId",
+                label: `供应商：${selectedSupplierLabel}`,
+            })
+        }
+        if (filters.productSalesPriceMin || filters.productSalesPriceMax) {
+            const minimum = filters.productSalesPriceMin ?? "不限"
+            const maximum = filters.productSalesPriceMax ?? "不限"
+            chips.push({
+                key: "salesPrice",
+                label: `销售价：${minimum} 至 ${maximum}`,
+            })
+        }
+        return chips
+    }, [
+        filters.productBrandId,
+        filters.productCategoryId,
+        filters.productKind,
+        filters.lifecycleStatus,
+        filters.productListingStatus,
+        filters.productSalesPriceMax,
+        filters.productSalesPriceMin,
+        filters.productSupplierId,
+        filters.productSupplyCoverage,
+        filters.q,
+        filters.revisionTiming,
+        selectedBrandLabel,
+        selectedCategoryLabel,
+        selectedSupplierLabel,
+    ])
+    const listTableDescription = React.useMemo(
+        () =>
+            buildProductTableDescription({
+                q: filters.q,
+                lifecycleStatus: filters.lifecycleStatus,
+                revisionTiming: filters.revisionTiming,
+                productKind: filters.productKind,
+                productListingStatus: filters.productListingStatus,
+                productSupplyCoverage: filters.productSupplyCoverage,
+                productSalesPriceMin: filters.productSalesPriceMin,
+                productSalesPriceMax: filters.productSalesPriceMax,
+                selectedCategoryLabel,
+                selectedBrandLabel,
+                selectedSupplierLabel,
+            }),
+        [
+            filters.lifecycleStatus,
+            filters.productKind,
+            filters.productListingStatus,
+            filters.productSalesPriceMax,
+            filters.productSalesPriceMin,
+            filters.productSupplyCoverage,
+            filters.q,
+            filters.revisionTiming,
+            selectedBrandLabel,
+            selectedCategoryLabel,
+            selectedSupplierLabel,
+        ],
     )
     const syncedMetrics = React.useMemo(() => {
         const base = listQuery.data?.metrics ?? []
@@ -234,6 +367,8 @@ export function useProductListState(
         productSkusQuery,
         supplierOfferingsQuery,
         currentSupplySkuIds,
+        appliedChips,
+        listTableDescription,
         syncedMetrics,
         onExport,
         updateProductListing,

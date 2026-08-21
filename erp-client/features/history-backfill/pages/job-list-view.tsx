@@ -16,7 +16,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CreateBackfillSheet } from "@/features/history-backfill/components/create-backfill-sheet"
 import { HistoryBackfillResultBanner as FormalResultBanner } from "@/features/history-backfill/components/history-backfill-result-banner"
 import { JobTable } from "@/features/history-backfill/components/job-table"
-import { useJobListSearch } from "@/features/history-backfill/hooks/use-job-list-search"
 import {
     useHistoryBackfillCommandMutation,
     useHistoryBackfillListQuery,
@@ -38,12 +37,7 @@ function JobListView({
     urlState: HistoryBackfillUrlState
     patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
     onOpenJob: (id: string) => void
-    pathname: string
 }) {
-    const { qDraft, setQDraft, searchInputRef } = useJobListSearch(
-        urlState,
-        patchUrl,
-    )
     const [createOpen, setCreateOpen] = React.useState(false)
     const [scopeAlertDismissed, setScopeAlertDismissed] = React.useState(false)
     const [actionResult, setActionResult] =
@@ -63,26 +57,6 @@ function JobListView({
     })
 
     const data = listQuery.data
-
-    const hasListFilters = Boolean(
-        urlState.mallId ||
-        urlState.processingStatus ||
-        urlState.reportReviewStatus ||
-        urlState.basis ||
-        urlState.q,
-    )
-
-    const clearListFilters = () => {
-        setQDraft("")
-        patchUrl({
-            mallId: undefined,
-            processingStatus: undefined,
-            reportReviewStatus: undefined,
-            basis: undefined,
-            q: undefined,
-            page: 1,
-        })
-    }
 
     return (
         <PageScaffold>
@@ -193,12 +167,7 @@ function JobListView({
                 listQuery={listQuery}
                 urlState={urlState}
                 patchUrl={patchUrl}
-                qDraft={qDraft}
-                onQDraftChange={setQDraft}
-                searchInputRef={searchInputRef}
                 onOpenJob={onOpenJob}
-                hasListFilters={hasListFilters}
-                onClearFilters={clearListFilters}
             />
 
             <CreateBackfillSheet

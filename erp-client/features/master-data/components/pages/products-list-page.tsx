@@ -99,18 +99,28 @@ export function ProductsListPage() {
             loading={state.listQuery.isPending}
         >
             <BusinessTableFrame
-                title="商品列表"
-                description={masterDataCopy.productListDescription(
-                    state.rows.length,
-                )}
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        商品列表
+                        <span
+                            className="font-normal text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            {state.rows.length} 条
+                        </span>
+                    </span>
+                }
+                description={state.listTableDescription}
                 toolbar={
                     <ProductListToolbar
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
-                        rowCount={state.rows.length}
                         hasActiveFilters={hasActiveFilters}
                         clearAllFilters={filters.clearAllFilters}
+                        appliedChips={state.appliedChips}
+                        removeFilter={filters.removeFilter}
                         productFilterPanelOpen={filters.productFilterPanelOpen}
                         setProductFilterPanelOpen={
                             filters.setProductFilterPanelOpen
@@ -119,6 +129,7 @@ export function ProductsListPage() {
                             filters.hasStructuredProductFilters
                         }
                         applyProductFilters={filters.applyProductFilters}
+                        resetMoreFilters={filters.resetMoreFilters}
                         productKindDraft={filters.productKindDraft}
                         setProductKindDraft={filters.setProductKindDraft}
                         lifecycleStatusDraft={filters.lifecycleStatusDraft}

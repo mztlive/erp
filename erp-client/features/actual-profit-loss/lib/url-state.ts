@@ -35,6 +35,25 @@ export function parseDimension(raw: string | null): ProfitLossDimension {
     return "sales_order"
 }
 
+/**
+ * 逗号分隔多选参数（docs/ui-filter-design.md §6.1）：
+ * 解析为去重、排序后的值列表，空值与空白项丢弃。
+ */
+export function parseCsvValues(raw: string | null): string[] {
+    if (!raw) return []
+    const values = raw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    return [...new Set(values)].sort()
+}
+
+/** 多选参数序列化：去重、排序后的逗号分隔值；空列表返回空串（不写 URL）。 */
+export function serializeCsvValues(values: readonly string[]): string {
+    const cleaned = values.map((value) => value.trim()).filter(Boolean)
+    return [...new Set(cleaned)].sort().join(",")
+}
+
 export function parsePreset(raw: string | null): PeriodPreset {
     if (
         raw === "last-month" ||

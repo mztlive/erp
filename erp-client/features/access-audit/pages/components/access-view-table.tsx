@@ -2,7 +2,9 @@
 
 import type { ReactNode } from "react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import { DownloadIcon } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { DataTable, surfacePanelClassName } from "@/components/business"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -48,6 +50,11 @@ type AccessViewTableProps = {
     onClearFilters?: () => void
     toolbar?: ReactNode
     onViewChange: (view: AccessView) => void
+    /** 查询失败且无可用缓存时，替换表格内容的失败态（筛选区保持常驻）。 */
+    errorState?: ReactNode
+    exportBlocked?: boolean
+    exportBlocker?: { message: string }
+    onExport?: () => void
 }
 
 function AccessViewTable({
@@ -68,6 +75,10 @@ function AccessViewTable({
     onClearFilters,
     toolbar,
     onViewChange,
+    errorState,
+    exportBlocked,
+    exportBlocker,
+    onExport,
 }: AccessViewTableProps) {
     const pagedRows = rows.slice(
         pagination.pageIndex * pagination.pageSize,
@@ -100,8 +111,28 @@ function AccessViewTable({
                                 {ACCESS_VIEW_LABEL[item]}
                             </TabsTrigger>
                         ))}
-                        <span className="ml-auto py-0.5 text-xs text-muted-foreground">
-                            {description}
+                        <span className="ml-auto flex flex-wrap items-center gap-2 py-0.5">
+                            <span
+                                className="text-xs text-muted-foreground"
+                                aria-live="polite"
+                            >
+                                {description}
+                            </span>
+                            {onExport ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={exportBlocked}
+                                    title={exportBlocker?.message}
+                                    onClick={onExport}
+                                >
+                                    <DownloadIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    {isAudit ? "导出审计" : "导出配置"}
+                                </Button>
+                            ) : null}
                         </span>
                     </TabsList>
                 </Tabs>
@@ -113,7 +144,9 @@ function AccessViewTable({
                 </>
             ) : null}
             <div data-slot="business-table-frame-table">
-                {emptyReason && emptyReason !== "FIELD_MASKED" ? (
+                {errorState ? (
+                    errorState
+                ) : emptyReason && emptyReason !== "FIELD_MASKED" ? (
                     <EmptyByReason
                         reason={emptyReason}
                         onClearFilters={

@@ -14,7 +14,7 @@ export type UsePurchaseOrdersListKeyboardOptions = {
 
 /**
  * 列表键盘导航：j/k/↑/↓ 移动焦点行，Enter 打开详情，/ 聚焦搜索框。
- * 建单弹框打开时后台列表不响应 j/k/Enter，避免状态污染。
+ * / 聚焦忽略输入框、文本域、弹层（Dialog/Sheet）与建单弹框打开场景。
  */
 export function usePurchaseOrdersListKeyboard({
     pageRows,
@@ -26,21 +26,22 @@ export function usePurchaseOrdersListKeyboard({
     React.useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null
-            if (
-                target &&
+            const isTypingTarget =
+                target != null &&
                 (target.tagName === "INPUT" ||
                     target.tagName === "TEXTAREA" ||
                     target.tagName === "SELECT" ||
                     target.isContentEditable)
-            ) {
-                if (event.key === "/" && target.tagName !== "INPUT") {
-                    // allow
-                } else if (event.key !== "Escape") {
-                    return
-                }
-            }
 
             if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+                if (isTypingTarget || createOpen) return
+                if (
+                    document.querySelector(
+                        '[role="dialog"], [data-slot="sheet"]',
+                    )
+                ) {
+                    return
+                }
                 event.preventDefault()
                 document
                     .querySelector<HTMLInputElement>(
@@ -50,7 +51,7 @@ export function usePurchaseOrdersListKeyboard({
                 return
             }
 
-            if (createOpen) return
+            if (isTypingTarget || createOpen) return
 
             if (pageRows.length === 0) return
 

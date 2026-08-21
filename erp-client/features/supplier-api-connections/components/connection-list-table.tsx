@@ -2,14 +2,21 @@
 
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
-import { BusinessEmptyState, DataTable } from "@/components/business"
+import {
+    BusinessEmptyState,
+    BusinessFailureState,
+    DataTable,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type {
     ConnectionListItem,
     ConnectionListView,
 } from "@/features/supplier-api-connections/types"
 
-/** 连接列表表格区：空态（筛选/无数据）与数据表互斥切换。 */
+/**
+ * 连接列表表格区：空态、错误态与数据表互斥切换；筛选区常驻不卸载（§11）。
+ * 筛选无结果与系统尚无数据用同一清除/新建入口，空态动作共用工具栏的清除函数。
+ */
 export function ConnectionListTable({
     data,
     columns,
@@ -18,6 +25,11 @@ export function ConnectionListTable({
     onRowOpen,
     onClearFilters,
     onCreate,
+    loading,
+    isError,
+    error,
+    onRetry,
+    hasFilters,
 }: {
     data: ConnectionListView | undefined
     columns: ColumnDef<ConnectionListItem>[]
@@ -26,9 +38,17 @@ export function ConnectionListTable({
     onRowOpen: (connectionId: string) => void
     onClearFilters: () => void
     onCreate: () => void
+    loading: boolean
+    isError: boolean
+    error: unknown
+    onRetry: () => void
+    hasFilters: boolean
 }) {
     const empty = data?.emptyReason
-    if (empty === "FILTER_NO_RESULT") {
+    const filterEmpty =
+        empty === "FILTER_NO_RESULT" ||
+        (empty === "NO_CONNECTIONS" && hasFilters)
+    if (filterEmpty) {
         return (
             <BusinessEmptyState
                 kind="filter"
@@ -83,6 +103,16 @@ export function ConnectionListTable({
             pagination={pagination}
             onPaginationChange={onPaginationChange}
             onRowOpen={(row) => onRowOpen(row.connectionId)}
+            loading={loading}
+            errorState={
+                isError && !data ? (
+                    <BusinessFailureState
+                        title="连接列表加载失败"
+                        error={error}
+                        onRetry={onRetry}
+                    />
+                ) : undefined
+            }
         />
     )
 }

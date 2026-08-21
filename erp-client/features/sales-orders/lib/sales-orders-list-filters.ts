@@ -58,7 +58,11 @@ export function hasStructuredSalesOrdersFilters(
 export function salesOrdersListFiltersActive(
     url: SalesOrdersUrlState,
 ): boolean {
-    return Boolean(url.search) || hasStructuredSalesOrdersFilters(url)
+    return (
+        Boolean(url.search) ||
+        url.summary !== "all" ||
+        hasStructuredSalesOrdersFilters(url)
+    )
 }
 
 /** filterDraftFromUrl 所需的 URL 状态子集（无分页/排序等无关字段）。 */

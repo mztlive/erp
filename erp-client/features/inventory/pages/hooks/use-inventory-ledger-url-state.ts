@@ -17,7 +17,7 @@ import type {
 
 export type LedgerPatchUrl = (
     patch: Record<string, string | null | undefined>,
-    options?: { replace?: boolean },
+    options?: { replace?: boolean; scroll?: boolean },
 ) => void
 
 export interface InventoryLedgerUrlState {
@@ -84,18 +84,19 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
         [router, pathname, searchParams, view],
     )
 
-    const hasOccurredFromParam = searchParams.has("occurredFrom")
-    const hasOccurredToParam = searchParams.has("occurredTo")
+    const hasOccurredFromParam = Boolean(occurredFrom)
+    const hasOccurredToParam = Boolean(occurredTo)
+    // 视图无关的通用筛选 + 仅在对应视图生效的结构化条件（availability 仅余额视图、
+    // 流水类型与发生日期仅流水视图；其它视图下这些参数不被查询消费，不算已生效筛选）。
     const hasActiveFilters = Boolean(
-        qParam ||
+        qParam.trim() ||
         warehouseId ||
-        (availability !== "all" && view === "balance") ||
         skuId ||
         salesOrderLineId ||
         adjustmentIdParam ||
-        movementType.length > 0 ||
-        hasOccurredFromParam ||
-        hasOccurredToParam,
+        (view === "balance" && availability !== "all") ||
+        (view === "movement" && movementType.length > 0) ||
+        (view === "movement" && (hasOccurredFromParam || hasOccurredToParam)),
     )
 
     return {

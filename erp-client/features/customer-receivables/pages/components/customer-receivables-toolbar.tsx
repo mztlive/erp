@@ -1,9 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { RefreshCwIcon, SearchIcon } from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
-import { FilterChip, ListToolbar, OptionCombobox } from "@/components/business"
+import {
+    FilterChip,
+    FixedOptionRadioFilter,
+    ListToolbar,
+} from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     InputGroup,
@@ -14,275 +19,262 @@ import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receiv
 import {
     DUE_LABEL,
     type CustomerAccountsView,
+    type CustomerReceivablesFilterKey,
     type DueFilter,
+    type ReceivableReviewStatusFilter,
+    type ReceivableStatusFilter,
 } from "@/features/customer-receivables/types"
-import type { CustomerReceivablesPatchUrl } from "../hooks/use-customer-receivables-url-state"
+
+type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+
+export type ReceivableAppliedChip = Readonly<{
+    key: CustomerReceivablesFilterKey
+    label: string
+}>
+
+const DUE_RADIO_OPTIONS: ReadonlyArray<{
+    value: DueFilter
+    label: string
+}> = (["all", "not_due", "due_today", "overdue"] as const).map((value) => ({
+    value,
+    label: DUE_LABEL[value],
+}))
+
+const STATUS_RADIO_OPTIONS: ReadonlyArray<{
+    value: ReceivableStatusFilter
+    label: string
+}> = (
+    [
+        { value: "all", label: "全部状态" },
+        { value: "open", label: "未结" },
+        { value: "partial", label: "部分结清" },
+        { value: "settled", label: "已结清" },
+    ] as const
+).map((option) => ({ ...option }))
+
+const REVIEW_STATUS_RADIO_OPTIONS: ReadonlyArray<{
+    value: ReceivableReviewStatusFilter
+    label: string
+}> = (
+    [
+        { value: "all", label: "全部复核状态" },
+        { value: "pending_opening", label: "期初待复核" },
+        { value: "reviewed", label: "已复核" },
+        { value: "pending_sync_diff", label: "同步差额待复核" },
+    ] as const
+).map((option) => ({ ...option }))
 
 type CustomerReceivablesToolbarProps = {
     view: CustomerAccountsView
-    due: DueFilter | undefined
-    status: string | undefined
-    reviewStatus: string | undefined
-    counterpartyPartyId: string | undefined
-    customerId: string | undefined
-    lockedCustomerName: string | undefined
-    hasActiveFilters: boolean
-    total: number
-    searchInput: string
+    searchDraft: string
+    setSearchDraft: SetState<string>
     searchInputRef: React.RefObject<HTMLInputElement | null>
-    setSearchInput: React.Dispatch<React.SetStateAction<string>>
-    patchUrl: CustomerReceivablesPatchUrl
+    counterpartyPartyIdDraft: string | null
+    setCounterpartyPartyIdDraft: SetState<string | null>
+    dueDraft: DueFilter
+    setDueDraft: SetState<DueFilter>
+    statusDraft: ReceivableStatusFilter
+    setStatusDraft: SetState<ReceivableStatusFilter>
+    reviewStatusDraft: ReceivableReviewStatusFilter
+    setReviewStatusDraft: SetState<ReceivableReviewStatusFilter>
+    panelOpen: boolean
+    setPanelOpen: SetState<boolean>
+    hasStructuredFilters: boolean
+    hasActiveFilters: boolean
+    appliedChips: readonly ReceivableAppliedChip[]
+    removeFilter: (key: CustomerReceivablesFilterKey) => void
+    applyFilters: () => void
+    resetMoreFilters: () => void
     clearFilters: () => void
-    onRefresh: () => void
 }
 
 export function CustomerReceivablesToolbar({
     view,
-    due,
-    status,
-    reviewStatus,
-    counterpartyPartyId,
-    customerId,
-    lockedCustomerName,
-    hasActiveFilters,
-    total,
-    searchInput,
+    searchDraft,
+    setSearchDraft,
     searchInputRef,
-    setSearchInput,
-    patchUrl,
+    counterpartyPartyIdDraft,
+    setCounterpartyPartyIdDraft,
+    dueDraft,
+    setDueDraft,
+    statusDraft,
+    setStatusDraft,
+    reviewStatusDraft,
+    setReviewStatusDraft,
+    panelOpen,
+    setPanelOpen,
+    hasStructuredFilters,
+    hasActiveFilters,
+    appliedChips,
+    removeFilter,
+    applyFilters,
+    resetMoreFilters,
     clearFilters,
-    onRefresh,
 }: CustomerReceivablesToolbarProps) {
+    const panelId = React.useId()
+    const receivableView = view === "receivable"
+    const hasChips = hasActiveFilters && appliedChips.length > 0
+
     return (
-        <ListToolbar
-            search={
-                <InputGroup className="max-w-sm">
-                    <InputGroupAddon>
-                        <SearchIcon aria-hidden="true" />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                        ref={searchInputRef}
-                        placeholder="往来主体、销售单、回款单、发票号"
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                patchUrl(
-                                    {
-                                        q: searchInput.trim() || null,
-                                        page: null,
-                                    },
-                                    { replace: true },
-                                )
+        <form
+            onSubmit={(event) => {
+                event.preventDefault()
+                applyFilters()
+            }}
+        >
+            <ListToolbar
+                search={
+                    <InputGroup>
+                        <InputGroupAddon>
+                            <SearchIcon aria-hidden="true" />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            ref={searchInputRef}
+                            value={searchDraft}
+                            onChange={(event) =>
+                                setSearchDraft(event.target.value)
                             }
-                        }}
-                        aria-label="搜索客户往来"
-                    />
-                </InputGroup>
-            }
-            filters={
-                <>
-                    <label className="flex items-center gap-1.5 text-sm">
-                        <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
-                            往来主体
-                        </span>
-                        <ReceivableCounterpartySearchCombobox
-                            value={counterpartyPartyId || undefined}
-                            onValueChange={(id) => {
-                                patchUrl(
-                                    {
-                                        counterpartyId: id || null,
-                                        page: null,
-                                    },
-                                    { replace: true },
-                                )
-                            }}
-                            purpose="filter"
-                            className="w-56"
-                            aria-label="筛选往来主体"
-                            placeholder="全部主体"
+                            placeholder="往来主体、销售单、回款单、发票号"
+                            aria-label="搜索客户往来"
                         />
-                    </label>
-                    {view === "receivable" ? (
-                        <>
-                            <label className="flex items-center gap-1.5 text-sm">
-                                <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
-                                    到期
-                                </span>
-                                <OptionCombobox
-                                    value={due ?? "all"}
-                                    onValueChange={(v) => {
-                                        const next = v ?? "all"
-                                        patchUrl(
-                                            {
-                                                due:
-                                                    next === "all"
-                                                        ? null
-                                                        : next,
-                                                page: null,
-                                            },
-                                            {
-                                                replace: true,
-                                            },
-                                        )
-                                    }}
-                                    options={(
-                                        Object.keys(DUE_LABEL) as DueFilter[]
-                                    ).map((k) => ({
-                                        value: k,
-                                        label: DUE_LABEL[k],
-                                    }))}
-                                    className="w-32"
-                                    size="sm"
-                                    allowClear={false}
-                                    aria-label="筛选到期"
-                                    placeholder="到期"
-                                />
-                            </label>
-                            <label className="flex items-center gap-1.5 text-sm">
-                                <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
-                                    状态
-                                </span>
-                                <OptionCombobox
-                                    value={status ?? ""}
-                                    onValueChange={(v) => {
-                                        patchUrl(
-                                            {
-                                                status: v || null,
-                                                page: null,
-                                            },
-                                            {
-                                                replace: true,
-                                            },
-                                        )
-                                    }}
-                                    options={[
-                                        {
-                                            value: "",
-                                            label: "全部状态",
-                                        },
-                                        {
-                                            value: "open",
-                                            label: "未结",
-                                        },
-                                        {
-                                            value: "partial",
-                                            label: "部分结清",
-                                        },
-                                        {
-                                            value: "settled",
-                                            label: "已结清",
-                                        },
-                                    ]}
-                                    className="w-32"
-                                    size="sm"
-                                    allowClear={false}
-                                    aria-label="筛选状态"
-                                    placeholder="状态"
-                                />
-                            </label>
-                        </>
-                    ) : null}
-                </>
-            }
-            secondary={
-                customerId || view === "receivable" ? (
-                    <>
-                        {customerId ? (
-                            <FilterChip
-                                label={
-                                    lockedCustomerName
-                                        ? `经营客户 ${lockedCustomerName}`
-                                        : "经营客户锁定"
-                                }
-                                onClear={() =>
-                                    patchUrl(
-                                        {
-                                            customerId: null,
-                                        },
-                                        { replace: true },
-                                    )
-                                }
-                                clearLabel="清除客户筛选"
-                            />
-                        ) : null}
-                        {view === "receivable" ? (
-                            <label className="flex items-center gap-1.5 text-sm">
-                                <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
-                                    复核状态
-                                </span>
-                                <OptionCombobox
-                                    value={reviewStatus ?? ""}
-                                    onValueChange={(v) => {
-                                        patchUrl(
-                                            {
-                                                reviewStatus: v || null,
-                                                page: null,
-                                            },
-                                            {
-                                                replace: true,
-                                            },
-                                        )
-                                    }}
-                                    options={[
-                                        {
-                                            value: "",
-                                            label: "全部复核状态",
-                                        },
-                                        {
-                                            value: "pending_opening",
-                                            label: "期初待复核",
-                                        },
-                                        {
-                                            value: "reviewed",
-                                            label: "已复核",
-                                        },
-                                        {
-                                            value: "pending_sync_diff",
-                                            label: "同步差额待复核",
-                                        },
-                                    ]}
-                                    className="w-40"
-                                    size="sm"
-                                    allowClear={false}
-                                    aria-label="筛选复核状态"
-                                    placeholder="复核状态"
-                                />
-                            </label>
-                        ) : null}
-                    </>
-                ) : undefined
-            }
-            actions={
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span aria-live="polite">
-                        共 {total.toLocaleString("zh-CN")} 条
-                    </span>
-                    {hasActiveFilters ? (
-                        <Button
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            onClick={clearFilters}
-                        >
-                            清除筛选
-                        </Button>
-                    ) : null}
+                    </InputGroup>
+                }
+                filters={
                     <Button
                         type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={onRefresh}
+                        variant="outline"
+                        aria-expanded={panelOpen}
+                        aria-controls={panelId}
+                        onClick={() => setPanelOpen((open) => !open)}
                     >
-                        <RefreshCwIcon
+                        <FilterIcon
                             data-icon="inline-start"
                             aria-hidden="true"
                         />
-                        刷新
+                        更多筛选
+                        {hasStructuredFilters ? (
+                            <Badge variant="info">已启用</Badge>
+                        ) : null}
+                        <ChevronDownIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                            className={
+                                panelOpen
+                                    ? "rotate-180 transition-transform"
+                                    : "transition-transform"
+                            }
+                        />
                     </Button>
-                </div>
-            }
-        />
+                }
+                secondary={
+                    hasChips || panelOpen ? (
+                        <div className="w-full space-y-3">
+                            {hasChips ? (
+                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                    <span className="text-xs text-muted-foreground">
+                                        已筛选
+                                    </span>
+                                    {appliedChips.map((chip) => (
+                                        <FilterChip
+                                            key={chip.key}
+                                            label={chip.label}
+                                            clearLabel={`移除${chip.label}`}
+                                            onClear={() =>
+                                                removeFilter(chip.key)
+                                            }
+                                        />
+                                    ))}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={clearFilters}
+                                    >
+                                        清空全部
+                                    </Button>
+                                </div>
+                            ) : null}
+                            {panelOpen ? (
+                                <div
+                                    id={panelId}
+                                    className="flex w-full flex-col gap-3 border-t pt-3"
+                                    aria-label="客户往来更多筛选条件"
+                                >
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                            <span className="text-muted-foreground">
+                                                往来主体
+                                            </span>
+                                            <ReceivableCounterpartySearchCombobox
+                                                className="w-full"
+                                                value={
+                                                    counterpartyPartyIdDraft ??
+                                                    undefined
+                                                }
+                                                onValueChange={(id) =>
+                                                    setCounterpartyPartyIdDraft(
+                                                        id ?? null,
+                                                    )
+                                                }
+                                                purpose="filter"
+                                                aria-label="筛选往来主体"
+                                                placeholder="全部主体"
+                                            />
+                                        </div>
+                                    </div>
+                                    {receivableView ? (
+                                        <>
+                                            <FixedOptionRadioFilter
+                                                label="到期"
+                                                value={dueDraft}
+                                                onValueChange={setDueDraft}
+                                                options={DUE_RADIO_OPTIONS}
+                                            />
+                                            <FixedOptionRadioFilter
+                                                label="状态"
+                                                value={statusDraft}
+                                                onValueChange={setStatusDraft}
+                                                options={STATUS_RADIO_OPTIONS}
+                                            />
+                                            <FixedOptionRadioFilter
+                                                label="复核状态"
+                                                value={reviewStatusDraft}
+                                                onValueChange={
+                                                    setReviewStatusDraft
+                                                }
+                                                options={
+                                                    REVIEW_STATUS_RADIO_OPTIONS
+                                                }
+                                            />
+                                        </>
+                                    ) : null}
+                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-muted-foreground">
+                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={resetMoreFilters}
+                                            >
+                                                重置更多条件
+                                            </Button>
+                                            <Button type="submit">
+                                                <SearchIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                应用全部筛选
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : undefined
+                }
+            />
+        </form>
     )
 }

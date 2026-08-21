@@ -26,6 +26,8 @@ export type SupplierOrdersListTableProps = {
     onRetry: () => void
     hasActiveFilters: boolean
     onClearFilters: () => void
+    /** 结果卡可见说明：有筛选时为人读摘要，否则为默认操作说明。 */
+    description: string
     sorting: SortingState
     onSortingChange: (next: SortingState) => void
     pagination: PaginationState
@@ -43,6 +45,7 @@ export function SupplierOrdersListTable({
     onRetry,
     hasActiveFilters,
     onClearFilters,
+    description,
     sorting,
     onSortingChange,
     pagination,
@@ -51,8 +54,19 @@ export function SupplierOrdersListTable({
 }: SupplierOrdersListTableProps) {
     return (
         <BusinessTableFrame
-            title="供应商订单列表"
-            description="身份列与操作列固定；履约/取消/退款三种状态独立展示。"
+            showHeader
+            title={
+                <span className="inline-flex items-baseline gap-2">
+                    供应商订单
+                    <span
+                        className="font-normal text-muted-foreground"
+                        aria-live="polite"
+                    >
+                        {total.toLocaleString("zh-CN")} 条
+                    </span>
+                </span>
+            }
+            description={description}
             toolbar={toolbar}
             table={
                 <DataTable
@@ -81,23 +95,32 @@ export function SupplierOrdersListTable({
                     emptyState={
                         !loading && rows.length === 0 ? (
                             <BusinessEmptyState
-                                kind="filter"
+                                kind={
+                                    hasActiveFilters ? "filter" : "no-data"
+                                }
                                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                                title="当前范围没有供应商订单"
-                                description="调整视图、供应商或支付时间，或从商城消费订单钻取。"
+                                title={
+                                    hasActiveFilters
+                                        ? "当前筛选无结果"
+                                        : "当前范围没有供应商订单"
+                                }
+                                description={
+                                    hasActiveFilters
+                                        ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                        : "调整视图、供应商或支付时间，或从商城消费订单钻取。"
+                                }
                                 action={
-                                    <div className="flex flex-wrap gap-2">
-                                        {hasActiveFilters ? (
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="secondary"
-                                                className="rounded-lg shadow-none"
-                                                onClick={onClearFilters}
-                                            >
-                                                清除筛选
-                                            </Button>
-                                        ) : null}
+                                    hasActiveFilters ? (
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="secondary"
+                                            className="rounded-lg shadow-none"
+                                            onClick={onClearFilters}
+                                        >
+                                            清除筛选
+                                        </Button>
+                                    ) : (
                                         <Button
                                             type="button"
                                             size="sm"
@@ -109,7 +132,7 @@ export function SupplierOrdersListTable({
                                         >
                                             打开商城消费订单
                                         </Button>
-                                    </div>
+                                    )
                                 }
                             />
                         ) : undefined

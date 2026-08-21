@@ -77,12 +77,12 @@ export const masterDataCopy = {
     unknownResourceDesc: () =>
         "该分类不存在或链接已失效，请从上方分类重新进入。",
     pageTitle: (resourceLabel: string) => `基础资料 · ${resourceLabel}`,
-    listDescription: (count: number) =>
-        `共 ${count} 条 · 可按启用状态、版本状态筛选 · 按 / 搜索 · 回车打开详情`,
-    productListDescription: (count: number) =>
-        `共 ${count} 条 · 筛选按商品归属、状态与 SKU 条件分组 · 回车打开详情`,
-    supplierListDescription: (count: number) =>
-        `共 ${count} 条 · 可按启用状态、资质状态与能力条件筛选 · 按 / 搜索 · 回车打开详情`,
+    listDescription: () =>
+        "可按启用状态、版本状态筛选 · 按 / 搜索 · 回车打开详情",
+    productListDescription: () =>
+        "筛选按商品归属、状态与 SKU 条件分组 · 回车打开详情",
+    supplierListDescription: () =>
+        "可按启用状态、资质状态与能力条件筛选 · 按 / 搜索 · 回车打开详情",
     sellableListDescription: (_count: number) =>
         "点击任一行查看价格、可供区域和供应保障。",
     searchAria: "搜索基础资料",

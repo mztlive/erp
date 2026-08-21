@@ -20,6 +20,19 @@ import {
     type ProductSkuCoverageFilter,
 } from "@/features/master-data/types"
 
+/** 可被单独移除的已生效条件。 */
+export type ProductFilterKey =
+    | "q"
+    | "productKind"
+    | "lifecycleStatus"
+    | "revisionTiming"
+    | "productListingStatus"
+    | "productSupplyCoverage"
+    | "productCategoryId"
+    | "productBrandId"
+    | "productSupplierId"
+    | "salesPrice"
+
 /** 商品列表：搜索 + 类型 / 启停 / 版本 / 上架 / 供给 / 归属 / 售价。 */
 export function useProductListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
@@ -160,6 +173,7 @@ export function useProductListFilters(
             page: null,
         })
         resetPagination()
+        setProductFilterPanelOpen(false)
     }, [
         lifecycleStatusDraft,
         patchUrl,
@@ -175,6 +189,70 @@ export function useProductListFilters(
         revisionTimingDraft,
         searchDraft,
     ])
+
+    /** 移除单个已生效条件；销售价按区间整体移除。 */
+    const removeFilter = React.useCallback(
+        (key: ProductFilterKey) => {
+            if (key === "q") setSearchDraft("")
+            if (key === "productKind") setProductKindDraft("all")
+            if (key === "lifecycleStatus") setLifecycleStatusDraft("all")
+            if (key === "revisionTiming") setRevisionTimingDraft("all")
+            if (key === "productListingStatus") {
+                setProductListingStatusDraft("all")
+            }
+            if (key === "productSupplyCoverage") {
+                setProductSupplyCoverageDraft("all")
+            }
+            if (key === "productCategoryId") setProductCategoryIdDraft(null)
+            if (key === "productBrandId") setProductBrandIdDraft(null)
+            if (key === "productSupplierId") setProductSupplierIdDraft(null)
+            if (key === "salesPrice") {
+                setProductSalesPriceMinDraft("")
+                setProductSalesPriceMaxDraft("")
+                setProductSalesPriceError(null)
+            }
+            patchUrl(
+                key === "salesPrice"
+                    ? {
+                          productSalesPriceMin: null,
+                          productSalesPriceMax: null,
+                          page: null,
+                      }
+                    : key === "lifecycleStatus"
+                      ? { lifecycleStatus: null, metricKey: null, page: null }
+                      : { [key]: null, page: null },
+            )
+            resetPagination()
+        },
+        [patchUrl, resetPagination, setSearchDraft],
+    )
+
+    /** 仅清除「更多筛选」；保留关键词和快捷筛选（启停指标），并保持面板展开。 */
+    const resetMoreFilters = React.useCallback(() => {
+        setProductKindDraft("all")
+        setRevisionTimingDraft("all")
+        setProductListingStatusDraft("all")
+        setProductSupplyCoverageDraft("all")
+        setProductCategoryIdDraft(null)
+        setProductBrandIdDraft(null)
+        setProductSupplierIdDraft(null)
+        setProductSalesPriceMinDraft("")
+        setProductSalesPriceMaxDraft("")
+        setProductSalesPriceError(null)
+        patchUrl({
+            productKind: null,
+            revisionTiming: null,
+            productListingStatus: null,
+            productSupplyCoverage: null,
+            productCategoryId: null,
+            productBrandId: null,
+            productSupplierId: null,
+            productSalesPriceMin: null,
+            productSalesPriceMax: null,
+            page: null,
+        })
+        resetPagination()
+    }, [patchUrl, resetPagination])
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -220,9 +298,7 @@ export function useProductListFilters(
         setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
         setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
         setProductSalesPriceError(null)
-        setProductFilterPanelOpen(hasStructuredProductFilters)
     }, [
-        hasStructuredProductFilters,
         lifecycleStatus,
         productBrandId,
         productCategoryId,
@@ -281,6 +357,8 @@ export function useProductListFilters(
         changeLifecycle,
         commitSearch,
         applyProductFilters,
+        removeFilter,
+        resetMoreFilters,
         clearAllFilters,
     }
 }

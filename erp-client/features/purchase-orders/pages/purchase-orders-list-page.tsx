@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { DownloadIcon, PlusIcon } from "lucide-react"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
     BusinessTableFrame,
     DataFreshness,
@@ -19,7 +19,6 @@ import { usePurchaseOrdersListController } from "@/features/purchase-orders/hook
 import { buildPurchaseOrdersListColumns } from "@/features/purchase-orders/pages/purchase-orders-list-columns"
 import { PurchaseOrdersCreateDialog } from "@/features/purchase-orders/pages/purchase-orders-list-create-dialog"
 import { PurchaseOrdersListToolbar } from "@/features/purchase-orders/pages/purchase-orders-list-toolbar"
-import { PO_STATUS_FILTER_LABEL } from "@/features/purchase-orders/types"
 
 export function PurchaseOrdersListPage() {
     const ctrl = usePurchaseOrdersListController()
@@ -45,29 +44,12 @@ export function PurchaseOrdersListPage() {
         )
     }
 
-    if (ctrl.listQuery.isError) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader
-                    title="采购单"
-                    description="列表加载失败"
-                    actions={
-                        <Button
-                            type="button"
-                            onClick={() => void ctrl.listQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-                <BusinessFailureState
-                    title="列表加载失败"
-                    error={ctrl.listQuery.error}
-                    onRetry={() => void ctrl.listQuery.refetch()}
-                />
-            </PageScaffold>
-        )
-    }
+    const { filters } = ctrl
+    const listLoadFailed = ctrl.listQuery.isError
+    // 表头说明：有筛选时展示 Applied 摘要，无筛选时展示默认操作说明
+    const filterDescription = filters.hasActiveFilters
+        ? `当前筛选：${filters.appliedChips.map((chip) => chip.label).join(" · ")}`
+        : "搜索采购单号、供应商或来源销售单；键盘 j/k 移动行，Enter 打开详情，/ 聚焦搜索。"
 
     return (
         <PageScaffold density="compact">
@@ -137,23 +119,23 @@ export function PurchaseOrdersListPage() {
             ) : null}
 
             <BusinessTableFrame
-                title="采购单列表"
-                description={
-                    ctrl.statusFilter === "all"
-                        ? "搜索采购单号、供应商或来源销售单；键盘 j/k 移动行，Enter 打开详情，/ 聚焦搜索。"
-                        : `当前筛选：${PO_STATUS_FILTER_LABEL[ctrl.statusFilter]}`
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        采购单列表
+                        <span
+                            className="font-normal text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            {ctrl.total} 条
+                        </span>
+                    </span>
                 }
+                description={filterDescription}
                 toolbar={
                     <PurchaseOrdersListToolbar
-                        searchDraft={ctrl.searchDraft}
-                        onSearchDraftChange={ctrl.setSearchDraft}
-                        statusFilter={ctrl.statusFilter}
-                        onStatusFilterChange={(value) =>
-                            ctrl.pushUrl({ status: value, page: 1 })
-                        }
-                        total={ctrl.total}
-                        hasActiveFilters={ctrl.hasActiveFilters}
-                        onClearFilters={ctrl.clearFilters}
+                        searchInputRef={ctrl.searchInputRef}
+                        {...filters}
                     />
                 }
                 table={
@@ -188,53 +170,61 @@ export function PurchaseOrdersListPage() {
                             ctrl.openDetail(row.purchaseOrderId)
                         }
                         errorState={
-                            ctrl.listQuery.isError ? (
+                            listLoadFailed ? (
                                 <BusinessFailureState
-                                    kind="system"
-                                    title="列表加载失败"
-                                    description="未能加载采购单列表，请重试；若持续失败可稍后再来。"
+                                    error={ctrl.listQuery.error}
                                     onRetry={() =>
                                         void ctrl.listQuery.refetch()
                                     }
                                 />
                             ) : undefined
                         }
-                        emptyTitle={
-                            ctrl.hasActiveFilters
-                                ? "没有符合条件的采购单"
-                                : "暂无采购单"
-                        }
-                        emptyDescription={
-                            ctrl.hasActiveFilters
-                                ? "当前筛选没有匹配的采购单，可调整或清除筛选后重试。"
-                                : "还没有采购单。可从采购二次确认的创建依据新建。"
-                        }
-                        emptyAction={
-                            <div className="flex flex-wrap gap-2">
-                                {ctrl.hasActiveFilters ? (
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        className="rounded-lg shadow-none"
-                                        onClick={ctrl.clearFilters}
-                                    >
-                                        清除筛选
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        className="rounded-lg shadow-none"
-                                        render={
-                                            <Link href="/procurement/confirm" />
-                                        }
-                                    >
-                                        去采购二次确认
-                                    </Button>
-                                )}
-                            </div>
+                        emptyState={
+                            !listLoadFailed && ctrl.pageRows.length === 0 ? (
+                                <BusinessEmptyState
+                                    kind={
+                                        filters.hasActiveFilters
+                                            ? "filter"
+                                            : "no-data"
+                                    }
+                                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                                    title={
+                                        filters.hasActiveFilters
+                                            ? "当前筛选无结果"
+                                            : "暂无采购单"
+                                    }
+                                    description={
+                                        filters.hasActiveFilters
+                                            ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                            : "还没有采购单，可新建采购单。"
+                                    }
+                                    action={
+                                        filters.hasActiveFilters ? (
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                size="sm"
+                                                className="rounded-lg shadow-none"
+                                                onClick={
+                                                    filters.clearAllFilters
+                                                }
+                                            >
+                                                清除筛选
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                size="sm"
+                                                className="rounded-lg shadow-none"
+                                                onClick={ctrl.openCreateDialog}
+                                            >
+                                                新建采购单
+                                            </Button>
+                                        )
+                                    }
+                                />
+                            ) : undefined
                         }
                     />
                 }

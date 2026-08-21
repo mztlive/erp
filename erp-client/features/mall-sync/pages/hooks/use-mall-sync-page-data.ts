@@ -14,6 +14,7 @@ import type { PatchUrl } from "@/features/mall-sync/pages/hooks/use-mall-sync-ur
 export type UseMallSyncPageInput = {
     view: MallSyncViewName
     q: string
+    mappingType?: string
     jobId?: string
     snapshotId?: string
     mappingTaskId?: string
@@ -28,6 +29,7 @@ export function useMallSyncPageData(input: UseMallSyncPageInput) {
     const {
         view,
         q,
+        mappingType,
         jobId,
         snapshotId,
         mappingTaskId,
@@ -42,6 +44,7 @@ export function useMallSyncPageData(input: UseMallSyncPageInput) {
         () => ({
             view,
             q: q || undefined,
+            mappingType: mappingType || undefined,
             jobId,
             snapshotId,
             mappingTaskId,
@@ -53,6 +56,7 @@ export function useMallSyncPageData(input: UseMallSyncPageInput) {
         [
             view,
             q,
+            mappingType,
             jobId,
             snapshotId,
             mappingTaskId,
@@ -102,6 +106,18 @@ export function useMallSyncPageData(input: UseMallSyncPageInput) {
         pageIndex: 0,
         pageSize: 20,
     })
+
+    // 已生效筛选变化（提交 / 清除 / chip 移除 / 前进后退）回第 1 页；
+    // 视图与对象定位参数变化不重置分页
+    const appliedFilterSignature = React.useMemo(
+        () => `${q}\u0000${mappingType ?? ""}`,
+        [mappingType, q],
+    )
+    React.useEffect(() => {
+        setPagination((current) =>
+            current.pageIndex === 0 ? current : { ...current, pageIndex: 0 },
+        )
+    }, [appliedFilterSignature])
 
     const { diffColumns, jobColumns, mappingColumns, snapshotColumns } =
         useMallSyncColumns({ patchUrl, searchParams })

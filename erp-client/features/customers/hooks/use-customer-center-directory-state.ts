@@ -25,15 +25,25 @@ export type CustomerCenterDirectoryPatch = {
     page?: number
 }
 
+/** 可被单独移除的已生效筛选条件。 */
+export type CustomerFilterKey = "q" | "status"
+
+export type CustomerAppliedChip = Readonly<{
+    key: CustomerFilterKey
+    label: string
+}>
+
 /**
- * 客户中心目录的 URL 派生状态：范围/状态/关键词/排序/分页全部从 URL 读取，
- * 所有变更通过 router.replace 写回 URL（P6：分页从 URL 派生，筛选变更回第 1 页）。
+ * 客户中心目录的 URL 派生状态（docs/ui-filter-design.md §5）：
+ * Applied 以 URL 为唯一事实源；Draft（关键词/状态）与 UI 态（面板展开）只存本地，
+ * Draft 变化不触发请求。所有变更通过 router.replace(scroll: false) 写回 URL。
  */
 export function useCustomerCenterDirectoryState() {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
+    // ---- Applied：URL 唯一事实源；非法枚举值降级默认 ----
     const scope = parseCustomerScope(searchParams.get("scope"))
     const statusParam = searchParams.get("status")
     const status: DirectoryStatus =
@@ -46,11 +56,24 @@ export function useCustomerCenterDirectoryState() {
         searchParams.get("dir") === "asc" ? "asc" : "desc"
     const page = parsePage(searchParams.get("page"))
 
-    const [searchDraft, setSearchDraft] = React.useState(q)
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
+    // ---- Draft：本地受控，提交前不请求 ----
+    const [searchDraft, setSearchDraft] = React.useState(q)
+    const [statusDraft, setStatusDraft] =
+        React.useState<DirectoryStatus>(status)
+
+    // ---- UI 态 ----
+    // 有结构化条件（状态非默认「启用」）的初始深链展开面板
+    const [panelOpen, setPanelOpen] = React.useState(status !== "active")
+
+    // URL 回填只同步 Draft；不抢夺用户当前面板展开态
     React.useEffect(() => {
-        setSearchDraft(q)
-    }, [q])
+        if (document.activeElement !== searchInputRef.current) {
+            setSearchDraft(q)
+        }
+        setStatusDraft(status)
+    }, [q, status])
 
     const pushState = React.useCallback(
         (next: CustomerCenterDirectoryPatch) => {
@@ -63,10 +86,73 @@ export function useCustomerCenterDirectoryState() {
                     dir: next.dir ?? dir,
                     page: next.page ?? page,
                 }),
+                { scroll: false },
             )
         },
         [dir, page, pathname, q, router, scope, sort, status],
     )
+
+    /** 单一提交路径：收起态 Enter / 搜索框尾部箭头 / 展开态「应用全部筛选」都走这里。 */
+    const applyFilters = React.useCallback(() => {
+        pushState({ q: searchDraft.trim(), status: statusDraft, page: 1 })
+        setPanelOpen(false)
+    }, [pushState, searchDraft, statusDraft])
+
+    /** 快捷筛选（客户范围）直接写 Applied；不改动关键词或「更多筛选」草稿。 */
+    const applyScope = React.useCallback(
+        (next: CustomerScope) => {
+            pushState({ scope: next, page: 1 })
+        },
+        [pushState],
+    )
+
+    /** 移除单个已生效条件；状态移除后回到业务默认「启用」。 */
+    const removeFilter = React.useCallback(
+        (key: CustomerFilterKey) => {
+            if (key === "q") {
+                setSearchDraft("")
+                pushState({ q: "", page: 1 })
+            }
+            if (key === "status") {
+                setStatusDraft("active")
+                pushState({ status: "active", page: 1 })
+            }
+        },
+        [pushState],
+    )
+
+    /** 仅清除「更多筛选」；保留关键词和范围快捷筛选，面板保持展开。 */
+    const resetMoreFilters = React.useCallback(() => {
+        setStatusDraft("active")
+        pushState({ status: "active", page: 1 })
+    }, [pushState])
+
+    /** 同时重置 Draft、错误、面板、URL 筛选参数与分页；保留 scope/sort/dir。 */
+    const clearAllFilters = React.useCallback(() => {
+        setSearchDraft("")
+        setStatusDraft("active")
+        setPanelOpen(false)
+        pushState({ q: "", status: "active", page: 1 })
+    }, [pushState])
+
+    /** 所有已生效筛选均可从 chip 单独撤销。 */
+    const appliedChips = React.useMemo<readonly CustomerAppliedChip[]>(() => {
+        const chips: CustomerAppliedChip[] = []
+        const trimmedQ = q.trim()
+        if (trimmedQ) {
+            chips.push({ key: "q", label: `搜索：${trimmedQ}` })
+        }
+        if (status !== "active") {
+            chips.push({
+                key: "status",
+                label: status === "all" ? "状态：全部" : "状态：停用",
+            })
+        }
+        return chips
+    }, [q, status])
+
+    const hasStructuredFilters = status !== "active"
+    const hasActiveFilters = hasStructuredFilters || q.trim().length > 0
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
@@ -93,23 +179,6 @@ export function useCustomerCenterDirectoryState() {
         [pushState],
     )
 
-    /** P4：清 q/status/分页，保留 scope（视图）与 sort/dir（排序）。 */
-    const clearFilters = () => {
-        setSearchDraft("")
-        router.replace(
-            writeDirectoryUrl(pathname, {
-                scope,
-                status: "active",
-                q: "",
-                sort,
-                dir,
-                page: 1,
-            }),
-        )
-    }
-
-    const hasActiveFilters = status !== "active" || q.trim().length > 0
-
     return {
         scope,
         status,
@@ -119,12 +188,23 @@ export function useCustomerCenterDirectoryState() {
         page,
         searchDraft,
         setSearchDraft,
+        statusDraft,
+        setStatusDraft,
+        searchInputRef,
+        panelOpen,
+        setPanelOpen,
+        hasStructuredFilters,
+        hasActiveFilters,
+        appliedChips,
         pushState,
+        applyFilters,
+        applyScope,
+        removeFilter,
+        resetMoreFilters,
+        clearAllFilters,
         handlePaginationChange,
         sorting,
         handleSortingChange,
-        clearFilters,
-        hasActiveFilters,
     }
 }
 
@@ -168,6 +248,7 @@ export function useCustomerCenterScopeGuard(state: {
                     dir,
                     page: 1,
                 }),
+                { scroll: false },
             )
         }
     }, [
@@ -186,7 +267,7 @@ export function useCustomerCenterScopeGuard(state: {
     return { accountProfile, canCreate, canReadAll }
 }
 
-/** 在非输入控件焦点下按 “/” 聚焦客户搜索框。 */
+/** 在非输入控件焦点、且无 Dialog/Sheet 打开时按 “/” 聚焦客户搜索框。 */
 export function useCustomerCenterSearchShortcut() {
     React.useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -197,6 +278,13 @@ export function useCustomerCenterSearchShortcut() {
                     target.tagName === "TEXTAREA" ||
                     target.tagName === "SELECT" ||
                     target.isContentEditable)
+            ) {
+                return
+            }
+            if (
+                document.querySelector(
+                    '[role="dialog"], [data-slot="sheet"]',
+                )
             ) {
                 return
             }

@@ -3,9 +3,9 @@
 import {
     BusinessEmptyState,
     BusinessFailureState,
+    BusinessTableFrame,
     PageScaffold,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AllocationSession } from "@/features/supplier-payables/components/allocation-session"
 import { PaymentReversalRequestDialog } from "@/features/supplier-payables/components/payment-reversal-request-dialog"
@@ -48,7 +48,6 @@ export function SupplierAccountsPage() {
     const {
         view,
         supplierId,
-        sourceType,
         status,
         due,
         paymentGate,
@@ -59,6 +58,25 @@ export function SupplierAccountsPage() {
         searchInput,
         setSearchInput,
         searchInputRef,
+        panelOpen,
+        setPanelOpen,
+        hasStructuredFilters,
+        appliedChips,
+        applyFilters,
+        resetMoreFilters,
+        removeFilter,
+        supplierDraft,
+        setSupplierDraft,
+        sourceTypeDraft,
+        setSourceTypeDraft,
+        statusDraft,
+        setStatusDraft,
+        dueDraft,
+        setDueDraft,
+        paymentGateDraft,
+        setPaymentGateDraft,
+        trackDraft,
+        setTrackDraft,
         pagination,
         handlePaginationChange,
         sorting,
@@ -96,6 +114,36 @@ export function SupplierAccountsPage() {
         sortedPayables,
         openSettlements,
     } = useSupplierAccountsPage()
+
+    const filterToolbar = (
+        <SupplierAccountsToolbar
+            view={view}
+            searchInput={searchInput}
+            onSearchInputChange={setSearchInput}
+            searchInputRef={searchInputRef}
+            hasActiveFilters={hasActiveFilters}
+            hasStructuredFilters={hasStructuredFilters}
+            panelOpen={panelOpen}
+            setPanelOpen={setPanelOpen}
+            appliedChips={appliedChips}
+            applyFilters={applyFilters}
+            resetMoreFilters={resetMoreFilters}
+            clearAllFilters={clearFilters}
+            removeFilter={removeFilter}
+            supplierDraft={supplierDraft}
+            setSupplierDraft={setSupplierDraft}
+            sourceTypeDraft={sourceTypeDraft}
+            setSourceTypeDraft={setSourceTypeDraft}
+            statusDraft={statusDraft}
+            setStatusDraft={setStatusDraft}
+            dueDraft={dueDraft}
+            setDueDraft={setDueDraft}
+            paymentGateDraft={paymentGateDraft}
+            setPaymentGateDraft={setPaymentGateDraft}
+            trackDraft={trackDraft}
+            setTrackDraft={setTrackDraft}
+        />
+    )
 
     const workItemQuery = useWorkItemDetailQuery(workItemId ?? "")
     const focusedWorkItem = workItemQuery.data
@@ -180,20 +228,20 @@ export function SupplierAccountsPage() {
         )
     }
 
+    // 查询失败且无缓存：筛选区保持常驻，错误态替换表格内容，可重试
     if (listQuery.isError && !data) {
         return (
-            <PageScaffold>
-                <BusinessFailureState
-                    title="供应商往来加载失败"
-                    error={listQuery.error}
-                    action={
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => void listQuery.refetch()}
-                        >
-                            重试
-                        </Button>
+            <PageScaffold density="compact">
+                <BusinessTableFrame
+                    title="供应商往来"
+                    description="列表加载失败"
+                    toolbar={filterToolbar}
+                    table={
+                        <BusinessFailureState
+                            title="供应商往来加载失败"
+                            error={listQuery.error}
+                            onRetry={() => void listQuery.refetch()}
+                        />
                     }
                 />
             </PageScaffold>
@@ -324,21 +372,7 @@ export function SupplierAccountsPage() {
                 setReverseTarget={setReverseTarget}
                 setRedInvoiceNo={setRedInvoiceNo}
                 setRefundRequest={refundFlow.setRefundRequest}
-                toolbar={
-                    <SupplierAccountsToolbar
-                        view={view}
-                        trackFilter={trackFilter}
-                        supplierId={supplierId}
-                        sourceType={sourceType}
-                        status={status}
-                        searchInput={searchInput}
-                        onSearchInputChange={setSearchInput}
-                        searchInputRef={searchInputRef}
-                        hasActiveFilters={hasActiveFilters}
-                        onClearFilters={clearFilters}
-                        onFilter={patchUrl}
-                    />
-                }
+                toolbar={filterToolbar}
             />
 
             <SupplierAccountsPreview

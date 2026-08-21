@@ -1,21 +1,18 @@
 "use client"
 
 import { MetricFilterItem, MetricStrip } from "@/components/business"
-import type {
-    MallConsumptionOrderMetric,
-    MallConsumptionOrderMetricKey,
+import {
+    MALL_CONSUMPTION_METRIC_LABELS,
+    type MallConsumptionOrderMetric,
+    type MallConsumptionOrderMetricKey,
 } from "@/features/mall-consumption-orders/types"
 
 const METRIC_ITEMS: ReadonlyArray<{
     key: MallConsumptionOrderMetricKey
     label: string
-}> = [
-    { key: "paid", label: "支付成功" },
-    { key: "pending_attr", label: "待归集" },
-    { key: "fact_diff", label: "记录差异" },
-    { key: "auto_exception", label: "自动履约异常" },
-    { key: "cost_none", label: "成本未覆盖" },
-]
+}> = (
+    Object.keys(MALL_CONSUMPTION_METRIC_LABELS) as MallConsumptionOrderMetricKey[]
+).map((key) => ({ key, label: MALL_CONSUMPTION_METRIC_LABELS[key] }))
 
 type Props = {
     metrics: MallConsumptionOrderMetric[]

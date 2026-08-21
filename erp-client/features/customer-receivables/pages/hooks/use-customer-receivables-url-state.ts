@@ -8,7 +8,10 @@ import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import type {
     CustomerAccountsQuery,
     CustomerAccountsView,
+    CustomerReceivablesFilterKey,
     DueFilter,
+    ReceivableReviewStatusFilter,
+    ReceivableStatusFilter,
 } from "@/features/customer-receivables/types"
 import { parseDue, parseView } from "../lib/url-params"
 
@@ -23,8 +26,8 @@ export interface CustomerReceivablesUrlState {
     counterpartyPartyId: string | undefined
     customerId: string | undefined
     due: DueFilter | undefined
-    status: string | undefined
-    reviewStatus: string | undefined
+    status: Exclude<ReceivableStatusFilter, "all"> | undefined
+    reviewStatus: Exclude<ReceivableReviewStatusFilter, "all"> | undefined
     focusId: string | undefined
     salesOrderId: string | undefined
     receivableAccountId: string | undefined
@@ -43,13 +46,49 @@ export interface CustomerReceivablesUrlState {
     query: CustomerAccountsQuery
     pageFromUrl: number
     pagination: PaginationState
-    searchInput: string
-    setSearchInput: React.Dispatch<React.SetStateAction<string>>
+    searchDraft: string
+    setSearchDraft: React.Dispatch<React.SetStateAction<string>>
     searchInputRef: React.RefObject<HTMLInputElement | null>
+    counterpartyPartyIdDraft: string | null
+    setCounterpartyPartyIdDraft: React.Dispatch<React.SetStateAction<string | null>>
+    dueDraft: DueFilter
+    setDueDraft: React.Dispatch<React.SetStateAction<DueFilter>>
+    statusDraft: ReceivableStatusFilter
+    setStatusDraft: React.Dispatch<React.SetStateAction<ReceivableStatusFilter>>
+    reviewStatusDraft: ReceivableReviewStatusFilter
+    setReviewStatusDraft: React.Dispatch<
+        React.SetStateAction<ReceivableReviewStatusFilter>
+    >
+    panelOpen: boolean
+    setPanelOpen: React.Dispatch<React.SetStateAction<boolean>>
     hasActiveFilters: boolean
+    hasStructuredFilters: boolean
     patchUrl: CustomerReceivablesPatchUrl
+    applyFilters: () => void
+    removeFilter: (key: CustomerReceivablesFilterKey) => void
+    resetMoreFilters: () => void
     clearFilters: () => void
     handlePaginationChange: (next: PaginationState) => void
+}
+
+function parseReceivableStatus(
+    raw: string | null,
+): ReceivableStatusFilter {
+    if (raw === "open" || raw === "partial" || raw === "settled") return raw
+    return "all"
+}
+
+function parseReviewStatus(
+    raw: string | null,
+): ReceivableReviewStatusFilter {
+    if (
+        raw === "pending_opening" ||
+        raw === "reviewed" ||
+        raw === "pending_sync_diff"
+    ) {
+        return raw
+    }
+    return "all"
 }
 
 export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
@@ -62,8 +101,15 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
     const counterpartyPartyId = searchParams.get("counterpartyId") ?? undefined
     const customerId = searchParams.get("customerId") ?? undefined
     const due = parseDue(searchParams.get("due"))
-    const status = searchParams.get("status") ?? undefined
-    const reviewStatus = searchParams.get("reviewStatus") ?? undefined
+    const statusDraftFromUrl = parseReceivableStatus(searchParams.get("status"))
+    const status = statusDraftFromUrl === "all" ? undefined : statusDraftFromUrl
+    const reviewStatusDraftFromUrl = parseReviewStatus(
+        searchParams.get("reviewStatus"),
+    )
+    const reviewStatus =
+        reviewStatusDraftFromUrl === "all"
+            ? undefined
+            : reviewStatusDraftFromUrl
     const focusId = searchParams.get("focusId") ?? undefined
     const salesOrderId = searchParams.get("salesOrderId") ?? undefined
     const receivableAccountId =
@@ -86,8 +132,25 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
         searchParams.get("workItemId") ??
         undefined
 
-    const [searchInput, setSearchInput] = React.useState(qParam)
+    // Draft：本地受控，提交前不触发请求（docs/ui-filter-design.md §5）。
+    const [searchDraft, setSearchDraft] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const [counterpartyPartyIdDraft, setCounterpartyPartyIdDraft] =
+        React.useState<string | null>(counterpartyPartyId ?? null)
+    const [dueDraft, setDueDraft] = React.useState<DueFilter>(due ?? "all")
+    const [statusDraft, setStatusDraft] =
+        React.useState<ReceivableStatusFilter>(statusDraftFromUrl)
+    const [reviewStatusDraft, setReviewStatusDraft] =
+        React.useState<ReceivableReviewStatusFilter>(reviewStatusDraftFromUrl)
+
+    const hasStructuredFilters = Boolean(
+        counterpartyPartyId ||
+            (due && due !== "all") ||
+            status ||
+            reviewStatus,
+    )
+    // 有结构化条件的初始深链展开面板；后续 URL 回填不得抢夺展开态。
+    const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
 
     const query: CustomerAccountsQuery = React.useMemo(
         () => ({
@@ -136,23 +199,93 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
         patch: Record<string, string | null | undefined>,
         options?: { replace?: boolean },
     ) {
-        patchSearchParams({ router, pathname, searchParams, view }, patch, options)
+        // 筛选写入使用 replace + scroll:false，不膨胀历史、不跳动滚动位置。
+        patchSearchParams(
+            { router, pathname, searchParams, view },
+            patch,
+            options?.replace
+                ? { replace: true, scroll: false }
+                : options,
+        )
     }
 
     const hasActiveFilters = Boolean(
         qParam.trim() ||
             counterpartyPartyId ||
             customerId ||
-            due ||
+            (due && due !== "all") ||
             status ||
             reviewStatus ||
             salesOrderId ||
             receivableAccountId,
     )
 
-    /** P4：清全部筛选参数 + 分页回 1；保留 view/导航上下文。 */
+    /** 单一提交路径：收起态 Enter 与展开态「应用全部筛选」都走这里。 */
+    const applyFilters = React.useCallback(() => {
+        patchUrl(
+            {
+                q: searchDraft.trim() || null,
+                counterpartyId: counterpartyPartyIdDraft || null,
+                due: dueDraft === "all" ? null : dueDraft,
+                status: statusDraft === "all" ? null : statusDraft,
+                reviewStatus:
+                    reviewStatusDraft === "all" ? null : reviewStatusDraft,
+                page: null,
+            },
+            { replace: true },
+        )
+        setPanelOpen(false)
+    }, [
+        counterpartyPartyIdDraft,
+        dueDraft,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        patchUrl,
+        reviewStatusDraft,
+        searchDraft,
+        statusDraft,
+    ])
+
+    /** 移除单个已生效条件；来源锁定参数（customerId/salesOrderId…）同样可单独移除。 */
+    const removeFilter = React.useCallback(
+        (key: CustomerReceivablesFilterKey) => {
+            if (key === "q") setSearchDraft("")
+            if (key === "counterpartyId") setCounterpartyPartyIdDraft(null)
+            if (key === "due") setDueDraft("all")
+            if (key === "status") setStatusDraft("all")
+            if (key === "reviewStatus") setReviewStatusDraft("all")
+            patchUrl({ [key]: null, page: null }, { replace: true })
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [patchUrl],
+    )
+
+    /** 只清结构化条件；保留关键词和来源锁定，面板保持展开。 */
+    const resetMoreFilters = React.useCallback(() => {
+        setCounterpartyPartyIdDraft(null)
+        setDueDraft("all")
+        setStatusDraft("all")
+        setReviewStatusDraft("all")
+        patchUrl(
+            {
+                counterpartyId: null,
+                due: null,
+                status: null,
+                reviewStatus: null,
+                page: null,
+            },
+            { replace: true },
+        )
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [patchUrl])
+
+    /** 清全部筛选参数 + 分页回 1；保留 view 与导航上下文。 */
     const clearFilters = React.useCallback(() => {
-        setSearchInput("")
+        setSearchDraft("")
+        setCounterpartyPartyIdDraft(null)
+        setDueDraft("all")
+        setStatusDraft("all")
+        setReviewStatusDraft("all")
+        setPanelOpen(false)
         patchUrl(
             {
                 q: null,
@@ -187,22 +320,24 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
         [searchParams, pathname, view],
     )
 
+    // URL 回填：只同步 Draft，不重置面板展开态（§5.4 / §5.5）。
     React.useEffect(() => {
-        setSearchInput(qParam)
-    }, [qParam])
+        if (document.activeElement !== searchInputRef.current) {
+            setSearchDraft(qParam)
+        }
+        setCounterpartyPartyIdDraft(counterpartyPartyId ?? null)
+        setDueDraft(due ?? "all")
+        setStatusDraft(statusDraftFromUrl)
+        setReviewStatusDraft(reviewStatusDraftFromUrl)
+    }, [
+        counterpartyPartyId,
+        due,
+        qParam,
+        reviewStatusDraftFromUrl,
+        statusDraftFromUrl,
+    ])
 
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchInput === qParam) return
-            patchUrl(
-                { q: searchInput.trim() || null, page: null },
-                { replace: true },
-            )
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchInput])
-
+    // `/` 聚焦搜索；Dialog / Sheet 打开时不得聚焦背景搜索框（§3.2、§14.4）。
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             if (
@@ -219,6 +354,13 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
                 tag === "TEXTAREA" ||
                 tag === "SELECT" ||
                 target?.isContentEditable
+            ) {
+                return
+            }
+            if (
+                document.querySelector(
+                    '[role="dialog"], [data-slot="sheet"]',
+                )
             ) {
                 return
             }
@@ -249,11 +391,25 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
         query,
         pageFromUrl,
         pagination,
-        searchInput,
-        setSearchInput,
+        searchDraft,
+        setSearchDraft,
         searchInputRef,
+        counterpartyPartyIdDraft,
+        setCounterpartyPartyIdDraft,
+        dueDraft,
+        setDueDraft,
+        statusDraft,
+        setStatusDraft,
+        reviewStatusDraft,
+        setReviewStatusDraft,
+        panelOpen,
+        setPanelOpen,
         hasActiveFilters,
+        hasStructuredFilters,
         patchUrl,
+        applyFilters,
+        removeFilter,
+        resetMoreFilters,
         clearFilters,
         handlePaginationChange,
     }

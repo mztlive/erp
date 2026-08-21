@@ -58,6 +58,10 @@ export function useSalesOrdersListKeyboardNav(options: {
             }
 
             if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+                // Dialog/Sheet/Combobox 弹层打开时不聚焦背景搜索框
+                if (document.querySelector('[role="dialog"]:not([hidden])')) {
+                    return
+                }
                 event.preventDefault()
                 document
                     .querySelector<HTMLInputElement>(

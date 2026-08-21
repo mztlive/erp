@@ -2,34 +2,25 @@
 
 import * as React from "react"
 
-import type { SupplierOrdersUrlUpdater } from "@/features/supplier-orders/lib/url-state"
-
 /**
- * 列表页搜索草稿：
- * 输入框受控于本地草稿，Enter / 失焦差异时提交到 URL，
- * URL 变化（外部清除、筛选重置）时回写草稿。
+ * 列表页搜索草稿（docs/ui-filter-design.md §5）：
+ * 输入框受控于本地草稿，只有表单提交（applyFilters）会写 URL；
+ * URL 回填时若搜索框正处于编辑状态，则不覆盖尚未提交的内容。
  */
 export function useSupplierOrdersSearchDraft({
     q,
-    updateUrl,
+    searchInputRef,
 }: {
     q: string | undefined
-    updateUrl: SupplierOrdersUrlUpdater
+    searchInputRef: React.RefObject<HTMLInputElement | null>
 }) {
     const [searchDraft, setSearchDraft] = React.useState(q ?? "")
 
     React.useEffect(() => {
-        setSearchDraft(q ?? "")
-    }, [q])
+        if (document.activeElement !== searchInputRef.current) {
+            setSearchDraft(q ?? "")
+        }
+    }, [q, searchInputRef])
 
-    const commitSearch = React.useCallback(
-        (draft: string) => updateUrl({ q: draft || undefined, page: 1 }),
-        [updateUrl],
-    )
-
-    const commitOnBlur = React.useCallback(() => {
-        if ((q ?? "") !== searchDraft) commitSearch(searchDraft)
-    }, [q, searchDraft, commitSearch])
-
-    return { searchDraft, setSearchDraft, commitSearch, commitOnBlur }
+    return { searchDraft, setSearchDraft }
 }

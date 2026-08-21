@@ -218,7 +218,7 @@ describe("useInventoryLedgerUrlState", () => {
         expect(router.push).toHaveBeenCalledWith("/inventory?view=balance")
     })
 
-    it("hasActiveFilters covers filters, deep links and blank occurrence dates", () => {
+    it("hasActiveFilters covers filters and deep links per active view", () => {
         mockedSearchParams.mockReturnValue(params())
         const none = renderHook(() => useInventoryLedgerUrlState())
         expect(none.result.current.hasActiveFilters).toBe(false)
@@ -238,16 +238,34 @@ describe("useInventoryLedgerUrlState", () => {
         expect(allAvailability.result.current.hasActiveFilters).toBe(false)
         allAvailability.unmount()
 
+        // 流水类型仅在流水视图被查询消费
         mockedSearchParams.mockReturnValue(
-            params("view=balance&movementType=A"),
+            params("view=movement&movementType=A"),
         )
         const movement = renderHook(() => useInventoryLedgerUrlState())
         expect(movement.result.current.hasActiveFilters).toBe(true)
         movement.unmount()
 
-        mockedSearchParams.mockReturnValue(params("view=balance&occurredFrom="))
+        mockedSearchParams.mockReturnValue(
+            params("view=balance&movementType=A"),
+        )
+        const inertMovement = renderHook(() => useInventoryLedgerUrlState())
+        expect(inertMovement.result.current.hasActiveFilters).toBe(false)
+        inertMovement.unmount()
+
+        // 发生日期仅在流水视图、且非空时视为已生效
+        mockedSearchParams.mockReturnValue(
+            params("view=movement&occurredFrom=2026-08-01"),
+        )
+        const dates = renderHook(() => useInventoryLedgerUrlState())
+        expect(dates.result.current.hasActiveFilters).toBe(true)
+        dates.unmount()
+
+        mockedSearchParams.mockReturnValue(
+            params("view=balance&occurredFrom="),
+        )
         const blankDate = renderHook(() => useInventoryLedgerUrlState())
-        expect(blankDate.result.current.hasActiveFilters).toBe(true)
+        expect(blankDate.result.current.hasActiveFilters).toBe(false)
     })
 
     it("re-parses when the URL search params change", () => {

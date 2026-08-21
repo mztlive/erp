@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import {
@@ -9,8 +10,8 @@ import {
     usePurchaseOrderExportDataQuery,
     usePurchaseOrdersQuery,
 } from "@/features/purchase-orders/hooks/queries"
+import { usePurchaseOrdersListFilters } from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
 import { usePurchaseOrdersListKeyboard } from "@/features/purchase-orders/hooks/use-purchase-orders-list-keyboard"
-import { usePurchaseOrdersListUrl } from "@/features/purchase-orders/hooks/use-purchase-orders-list-url"
 import { buildPurchaseOrdersCsv } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
 
 export type PurchaseOrdersActionResult = {
@@ -21,12 +22,14 @@ export type PurchaseOrdersActionResult = {
 }
 
 /**
- * 采购单列表页控制器：URL 状态、查询接线、搜索防抖、键盘导航、
- * 建单弹框与导出/建单动作的全部状态逻辑。
+ * 采购单列表页控制器：URL 状态、查询接线、筛选状态模型（Applied/Draft/UI）、
+ * 键盘导航、建单弹框与导出/建单动作的状态逻辑。
  */
 export function usePurchaseOrdersListController() {
+    const router = useRouter()
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const filters = usePurchaseOrdersListFilters(searchInputRef)
     const {
-        router,
         url,
         pushUrl,
         listReturnHref,
@@ -38,7 +41,7 @@ export function usePurchaseOrdersListController() {
         statusFilter,
         metricKey,
         basisFromUrl,
-    } = usePurchaseOrdersListUrl()
+    } = filters
 
     const [createOpen, setCreateOpen] = React.useState(false)
 
@@ -55,7 +58,6 @@ export function usePurchaseOrdersListController() {
     )
     const total = listQuery.data?.total ?? 0
 
-    const [searchDraft, setSearchDraft] = React.useState(search)
     const [focusedIndex, setFocusedIndex] = React.useState(0)
     const [selectedBasisId, setSelectedBasisId] = React.useState<string>("")
     const [actionResult, setActionResult] =
@@ -76,26 +78,6 @@ export function usePurchaseOrdersListController() {
             sortBy && sortDir ? [{ id: sortBy, desc: sortDir === "desc" }] : [],
         [sortBy, sortDir],
     )
-
-    // P4：清除=清搜索/状态/指标筛选并回第 1 页，保留排序与视图参数；
-    // 空态与工具栏常驻清除共用同一函数（D19）。
-    const hasActiveFilters =
-        Boolean(url.q) || statusFilter !== "all" || effectiveMetric !== "all"
-    const clearFilters = React.useCallback(() => {
-        pushUrl({ q: undefined, status: "all", metric: "all", page: 1 })
-    }, [pushUrl])
-
-    React.useEffect(() => {
-        setSearchDraft(search)
-    }, [search])
-
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchDraft.trim() === (url.q ?? "")) return
-            pushUrl({ q: searchDraft.trim() || undefined, page: 1 })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-    }, [pushUrl, searchDraft, url.q])
 
     React.useEffect(() => {
         setFocusedIndex(0)
@@ -159,7 +141,7 @@ export function usePurchaseOrdersListController() {
 
     React.useEffect(() => {
         if (!basisFromUrl) return
-        // W07/W05 携带创建依据：打开建单 Dialog，不要求 work_item
+        // 已生效销售单携带创建依据：打开建单 Dialog，不要求 work_item
         setSelectedBasisId(basisFromUrl)
         setCreateOpen(true)
     }, [basisFromUrl])
@@ -203,6 +185,22 @@ export function usePurchaseOrdersListController() {
     }, [openBases])
 
     return {
+        searchInputRef,
+        filters: {
+            searchDraft: filters.searchDraft,
+            setSearchDraft: filters.setSearchDraft,
+            statusDraft: filters.statusDraft,
+            setStatusDraft: filters.setStatusDraft,
+            panelOpen: filters.panelOpen,
+            setPanelOpen: filters.setPanelOpen,
+            hasActiveFilters: filters.hasActiveFilters,
+            hasStructuredFilters: filters.hasStructuredFilters,
+            appliedChips: filters.appliedChips,
+            removeFilter: filters.removeFilter,
+            applyFilters: filters.applyFilters,
+            resetMoreFilters: filters.resetMoreFilters,
+            clearAllFilters: filters.clearAllFilters,
+        },
         // 查询与派生数据
         listQuery,
         exportQuery,
@@ -221,11 +219,7 @@ export function usePurchaseOrdersListController() {
         metricKey,
         effectiveMetric,
         basisFromUrl,
-        hasActiveFilters,
-        clearFilters,
         // 交互状态
-        searchDraft,
-        setSearchDraft,
         focusedIndex,
         setFocusedIndex,
         createOpen,

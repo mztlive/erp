@@ -9,7 +9,7 @@ import { buildReturnTo } from "../lib/links"
 
 export type CustomerQualityPatch = (
     patch: Record<string, string | null | undefined>,
-    options?: { replace?: boolean },
+    options?: { replace?: boolean; scroll?: boolean },
 ) => void
 
 export function useCustomerQualityNavigationState() {
@@ -29,13 +29,13 @@ export function useCustomerQualityNavigationState() {
 
     function patchUrl(
         patch: Record<string, string | null | undefined>,
-        options?: { replace?: boolean },
+        options?: { replace?: boolean; scroll?: boolean },
     ) {
-        // P1/P2/P6：筛选变更恒 replace；page 入 URL，任何筛选变更回第 1 页（删除 page 即省略）
+        // P1/P2/P6：筛选变更恒 replace 且不跳动（scroll:false）；page 入 URL，任何筛选变更回第 1 页
         patchSearchParams(
             { router, pathname, searchParams },
             { ...patch, page: null },
-            { replace: true, ...options },
+            { replace: true, scroll: false, ...options },
         )
         setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
     }

@@ -13,13 +13,22 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { MALLS } from "@/features/product-publications/api/publications"
+import {
+    PublicationListToolbar,
+    type PublicationAppliedChip,
+} from "@/features/product-publications/components/publication-list-toolbar"
 import { PublicationListTable } from "@/features/product-publications/components/publication-list-table"
-import { PublicationListToolbar } from "@/features/product-publications/components/publication-list-toolbar"
 import { PublicationMetricStrip } from "@/features/product-publications/components/publication-metric-strip"
 import { PublicationPreviewSheet } from "@/features/product-publications/components/publication-preview-sheet"
 import { usePublicationListQuery } from "@/features/product-publications/hooks/queries"
 import { usePublicationListColumns } from "@/features/product-publications/hooks/use-publication-list-columns"
 import { usePublicationListFilters } from "@/features/product-publications/hooks/use-publication-list-filters"
+import {
+    PUBLICATION_DELIVERY_STATUS_FILTER_LABELS,
+    PUBLICATION_METRIC_FILTER_LABELS,
+} from "@/features/product-publications/lib/publication-filter-labels"
+import { PUBLICATION_STATUS_LABEL } from "@/features/product-publications/types"
 import type { ProductPublicationListQuery } from "@/features/product-publications/types"
 
 export function ProductPublicationsListPage() {
@@ -69,6 +78,96 @@ export function ProductPublicationsListPage() {
             publicationStatus: undefined,
         })
     }
+
+    const resolvedSkuCode = data?.resolvedFilters.skuCode
+    const resolvedSupplierName = data?.resolvedFilters.supplierName
+
+    // 已生效条件全部显性为 chip：关键词、结构化条件、指标快捷与来源锁定
+    const appliedChips: PublicationAppliedChip[] = []
+    if (filters.qParam.trim()) {
+        appliedChips.push({
+            key: "q",
+            label: `搜索：${filters.qParam.trim()}`,
+        })
+    }
+    if (filters.mallId) {
+        const mallLabel = MALLS.find((mall) => mall.id === filters.mallId)?.name
+        appliedChips.push({
+            key: "mall",
+            label: `目标商城：${mallLabel ?? filters.mallId}`,
+        })
+    }
+    if (filters.publicationStatus !== "all") {
+        appliedChips.push({
+            key: "publicationStatus",
+            label: `发布状态：${PUBLICATION_STATUS_LABEL[filters.publicationStatus]}`,
+        })
+    }
+    if (filters.deliveryStatus !== "all") {
+        appliedChips.push({
+            key: "deliveryStatus",
+            label: `发送状态：${PUBLICATION_DELIVERY_STATUS_FILTER_LABELS[filters.deliveryStatus]}`,
+        })
+    }
+    if (filters.metric !== "all") {
+        appliedChips.push({
+            key: "metric",
+            label: `指标：${PUBLICATION_METRIC_FILTER_LABELS[filters.metric] ?? filters.metric}`,
+        })
+    }
+    if (filters.skuId) {
+        appliedChips.push({
+            key: "skuId",
+            label: `已按 SKU：${resolvedSkuCode ?? filters.skuId}`,
+        })
+    }
+    if (filters.supplierOfferingRevisionId) {
+        appliedChips.push({
+            key: "supplierOfferingRevisionId",
+            label: resolvedSupplierName
+                ? `已按固定供给：${resolvedSupplierName}`
+                : "已按固定供给",
+        })
+    }
+
+    // 表头说明：有筛选时展示人可读摘要，无筛选时展示默认操作说明
+    const summaryParts: string[] = []
+    if (filters.qParam.trim()) {
+        summaryParts.push(`搜索“${filters.qParam.trim()}”`)
+    }
+    if (filters.mallId) {
+        const mallLabel = MALLS.find((mall) => mall.id === filters.mallId)?.name
+        summaryParts.push(`目标商城：${mallLabel ?? filters.mallId}`)
+    }
+    if (filters.publicationStatus !== "all") {
+        summaryParts.push(
+            `发布状态：${PUBLICATION_STATUS_LABEL[filters.publicationStatus]}`,
+        )
+    }
+    if (filters.deliveryStatus !== "all") {
+        summaryParts.push(
+            `发送状态：${PUBLICATION_DELIVERY_STATUS_FILTER_LABELS[filters.deliveryStatus]}`,
+        )
+    }
+    if (filters.metric !== "all") {
+        summaryParts.push(
+            `指标：${PUBLICATION_METRIC_FILTER_LABELS[filters.metric] ?? filters.metric}`,
+        )
+    }
+    if (filters.skuId) {
+        summaryParts.push(`已按 SKU：${resolvedSkuCode ?? filters.skuId}`)
+    }
+    if (filters.supplierOfferingRevisionId) {
+        summaryParts.push(
+            resolvedSupplierName
+                ? `已按固定供给：${resolvedSupplierName}`
+                : "已按固定供给",
+        )
+    }
+    const tableDescription =
+        summaryParts.length > 0
+            ? summaryParts.join(" · ")
+            : "管理各 SKU 在目标商城的发布版本与发送确认状态。"
 
     return (
         <PageScaffold>
@@ -123,29 +222,44 @@ export function ProductPublicationsListPage() {
             />
 
             <BusinessTableFrame
-                title="发布列表"
-                description="管理各 SKU 在目标商城的发布版本与发送确认状态。"
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        发布列表
+                        <span
+                            aria-live="polite"
+                            className="font-normal text-muted-foreground"
+                        >
+                            {data?.total ?? 0} 条
+                        </span>
+                    </span>
+                }
+                description={tableDescription}
                 toolbar={
                     <PublicationListToolbar
-                        searchInput={filters.searchInput}
                         searchInputRef={filters.searchInputRef}
-                        onSearchInputChange={filters.setSearchInput}
-                        onSearchCommit={filters.commitSearch}
-                        mallId={filters.mallId}
-                        publicationStatus={filters.publicationStatus}
-                        deliveryStatus={filters.deliveryStatus}
-                        skuId={filters.skuId}
-                        supplierOfferingRevisionId={
-                            filters.supplierOfferingRevisionId
+                        searchDraft={filters.searchDraft}
+                        setSearchDraft={filters.setSearchDraft}
+                        appliedChips={appliedChips}
+                        removeFilter={filters.removeFilter}
+                        clearAllFilters={filters.clearAllFilters}
+                        panelOpen={filters.panelOpen}
+                        setPanelOpen={filters.setPanelOpen}
+                        hasStructuredFilters={filters.hasStructuredFilters}
+                        applyFilters={filters.applyFilters}
+                        resetMoreFilters={filters.resetMoreFilters}
+                        mallDraft={filters.mallDraft}
+                        setMallDraft={filters.setMallDraft}
+                        publicationStatusDraft={
+                            filters.publicationStatusDraft
                         }
-                        resolvedSkuCode={data?.resolvedFilters.skuCode}
-                        resolvedSupplierName={
-                            data?.resolvedFilters.supplierName
+                        setPublicationStatusDraft={
+                            filters.setPublicationStatusDraft
                         }
-                        filterSummary={data?.filterSummary}
-                        hasActiveFilters={filters.hasActiveFilters}
-                        onPatch={filters.replaceParams}
-                        onClearFilters={filters.clearFilters}
+                        deliveryStatusDraft={filters.deliveryStatusDraft}
+                        setDeliveryStatusDraft={
+                            filters.setDeliveryStatusDraft
+                        }
                     />
                 }
                 table={
@@ -157,7 +271,7 @@ export function ProductPublicationsListPage() {
                         items={items}
                         emptyReason={data?.emptyReason}
                         creationBlockerMessage={data?.creationBlocker.message}
-                        onClearFilters={filters.clearFilters}
+                        onClearFilters={filters.clearAllFilters}
                         columns={columns}
                         columnPinning={columnPinning}
                         pagination={pagination}

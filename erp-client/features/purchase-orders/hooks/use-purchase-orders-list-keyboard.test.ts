@@ -140,6 +140,37 @@ describe("usePurchaseOrdersListKeyboard", () => {
         expect(focus).toHaveBeenCalledTimes(1)
     })
 
+    it("文本域内 / 不聚焦搜索框", () => {
+        const search = document.createElement("input")
+        search.setAttribute("data-slot", "po-list-search")
+        const focus = vi.fn()
+        search.focus = focus
+        document.body.appendChild(search)
+
+        const textarea = document.createElement("textarea")
+        document.body.appendChild(textarea)
+
+        renderWithState(rows)
+        act(() => {
+            key("/", textarea)
+        })
+        expect(focus).not.toHaveBeenCalled()
+    })
+
+    it("建单弹框打开时 / 不聚焦搜索框", () => {
+        const search = document.createElement("input")
+        search.setAttribute("data-slot", "po-list-search")
+        const focus = vi.fn()
+        search.focus = focus
+        document.body.appendChild(search)
+
+        renderWithState(rows, true)
+        act(() => {
+            key("/")
+        })
+        expect(focus).not.toHaveBeenCalled()
+    })
+
     it("无搜索框时 / 不抛错", () => {
         renderWithState(rows)
         expect(() => {

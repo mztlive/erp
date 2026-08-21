@@ -10,7 +10,7 @@ export function HistoryBackfillPage({
     /** 来自 `/governance/history-backfill/:jobId` */
     routeJobId?: string
 }) {
-    const { urlState, jobId, pathname, patchUrl, backToList, openJob } =
+    const { urlState, jobId, patchUrl, backToList, openJob } =
         useHistoryBackfillUrlState(routeJobId)
 
     if (jobId) {
@@ -30,7 +30,6 @@ export function HistoryBackfillPage({
             urlState={urlState}
             patchUrl={patchUrl}
             onOpenJob={openJob}
-            pathname={pathname}
         />
     )
 }

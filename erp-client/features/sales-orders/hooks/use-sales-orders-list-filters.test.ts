@@ -174,6 +174,7 @@ describe("useSalesOrdersListFilters", () => {
         )
         expect(pushUrl).toHaveBeenCalledWith({
             search: undefined,
+            summary: "all",
             customerId: undefined,
             contractId: undefined,
             createdBy: undefined,
@@ -191,7 +192,7 @@ describe("useSalesOrdersListFilters", () => {
         })
     })
 
-    it("URL 变化时草稿重同步", () => {
+    it("URL 变化时草稿重同步但不强制展开面板", () => {
         const pushUrl = vi.fn()
         const { result, rerender } = renderHook(
             ({ url }: { url: ReturnType<typeof makeUrl> }) =>
@@ -203,7 +204,105 @@ describe("useSalesOrdersListFilters", () => {
 
         expect(result.current.searchDraft).toBe("SO-9")
         expect(result.current.filterDraft.nature).toBe("card_voucher")
+        // 回填只同步草稿，不得抢夺用户当前的面板展开态
+        expect(result.current.filterPanelOpen).toBe(false)
+    })
+
+    it("applyFilters 成功后收起面板", () => {
+        const pushUrl = vi.fn()
+        const url = makeUrl("nature=card_voucher")
+        const { result } = renderHook(() =>
+            useSalesOrdersListFilters(url, pushUrl),
+        )
+
         expect(result.current.filterPanelOpen).toBe(true)
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(result.current.filterPanelOpen).toBe(false)
+    })
+
+    it("resetMoreFilters 只清结构化条件，保留关键词与工作视图并保持面板展开", () => {
+        const pushUrl = vi.fn()
+        const url = makeUrl("q=SO&summary=mine&nature=card_voucher")
+        const { result } = renderHook(() =>
+            useSalesOrdersListFilters(url, pushUrl),
+        )
+
+        act(() => {
+            result.current.resetMoreFilters()
+        })
+
+        expect(result.current.filterPanelOpen).toBe(true)
+        expect(pushUrl).toHaveBeenCalledWith({
+            customerId: undefined,
+            contractId: undefined,
+            createdBy: undefined,
+            nature: "all",
+            origin: "all",
+            commercialStatus: "all",
+            reviewStatus: "all",
+            fulfillment: "all",
+            collection: "all",
+            invoice: "all",
+            closeStatus: "all",
+            createdFrom: undefined,
+            createdTo: undefined,
+            page: 1,
+        })
+    })
+
+    it("removeFilter 只移除单个已生效条件并回第 1 页", () => {
+        const pushUrl = vi.fn()
+        const url = makeUrl("q=SO&nature=card_voucher&commercialStatus=draft")
+        const { result } = renderHook(() =>
+            useSalesOrdersListFilters(url, pushUrl),
+        )
+
+        act(() => {
+            result.current.removeFilter("commercialStatus")
+        })
+        expect(pushUrl).toHaveBeenCalledWith({
+            commercialStatus: "all",
+            page: 1,
+        })
+
+        act(() => {
+            result.current.removeFilter("search")
+        })
+        expect(pushUrl).toHaveBeenCalledWith({ search: undefined, page: 1 })
+
+        act(() => {
+            result.current.removeFilter("summary")
+        })
+        expect(pushUrl).toHaveBeenCalledWith({ summary: "all", page: 1 })
+
+        act(() => {
+            result.current.removeFilter("createdDate")
+        })
+        expect(pushUrl).toHaveBeenCalledWith({
+            createdFrom: undefined,
+            createdTo: undefined,
+            page: 1,
+        })
+    })
+
+    it("移除客户条件时一并移除依赖客户的合同条件", () => {
+        const pushUrl = vi.fn()
+        const url = makeUrl("customerId=c-1&contractId=ct-1")
+        const { result } = renderHook(() =>
+            useSalesOrdersListFilters(url, pushUrl),
+        )
+
+        act(() => {
+            result.current.removeFilter("customerId")
+        })
+
+        expect(pushUrl).toHaveBeenCalledWith({
+            customerId: undefined,
+            contractId: undefined,
+            page: 1,
+        })
     })
 })
 
@@ -221,8 +320,11 @@ describe("lib/sales-orders-list-filters 纯函数", () => {
         )
     })
 
-    it("salesOrdersListFiltersActive 同时考虑关键词", () => {
+    it("salesOrdersListFiltersActive 同时考虑关键词与工作视图", () => {
         expect(salesOrdersListFiltersActive(makeUrl("q=SO"))).toBe(true)
+        expect(salesOrdersListFiltersActive(makeUrl("summary=mine"))).toBe(
+            true,
+        )
         expect(salesOrdersListFiltersActive(makeUrl())).toBe(false)
     })
 

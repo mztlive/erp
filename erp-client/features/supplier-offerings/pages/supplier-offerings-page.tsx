@@ -19,7 +19,10 @@ import { SupplierOfferingsPagination } from "@/features/supplier-offerings/compo
 import { SupplierOfferingsTable } from "@/features/supplier-offerings/components/supplier-offerings-table"
 import { SupplierOfferingsToolbar } from "@/features/supplier-offerings/components/supplier-offerings-toolbar"
 import { SupplyExceptionTaskPanel } from "@/features/supplier-offerings/components/supply-exception-task-panel"
-import { useSupplierOfferingsPageState } from "@/features/supplier-offerings/hooks/use-supplier-offerings-page-state"
+import {
+    buildSupplierOfferingAppliedChips,
+    useSupplierOfferingsPageState,
+} from "@/features/supplier-offerings/hooks/use-supplier-offerings-page-state"
 import {
     useSupplierOfferingsQuery,
     useSupplierSupplyExceptionWorkItemQuery,
@@ -61,6 +64,20 @@ export const SupplierOfferingsPage = () => {
     const totalPages = Math.max(
         1,
         Math.ceil((query.data?.total ?? 0) / PAGE_SIZE),
+    )
+    /** 全部已生效条件派生为可移除 chip；业务名称优先取自当前结果首行（§3.6）。 */
+    const appliedChips = React.useMemo(
+        () =>
+            buildSupplierOfferingAppliedChips(state.urlState, {
+                skuNoLabel: state.urlState.skuId
+                    ? items[0]?.sku_no ?? null
+                    : null,
+                supplierNameLabel: state.urlState.supplierId
+                    ? items[0]?.supplier_name ?? null
+                    : null,
+            }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [items, state.urlState],
     )
 
     return (
@@ -167,7 +184,18 @@ export const SupplierOfferingsPage = () => {
                     </MetricStrip>
 
                     <BusinessTableFrame
-                        title="供给关系列表"
+                        showHeader
+                        title={
+                            <span className="inline-flex items-baseline gap-2">
+                                供给关系列表
+                                <span
+                                    className="font-normal text-muted-foreground"
+                                    aria-live="polite"
+                                >
+                                    {query.data?.total ?? 0} 条
+                                </span>
+                            </span>
+                        }
                         description={
                             state.appliedFilterLabels.length > 0
                                 ? `筛选条件：${state.appliedFilterLabels.join("、")}`
@@ -185,9 +213,11 @@ export const SupplierOfferingsPage = () => {
                                 hasStructuredFilters={
                                     state.hasStructuredFilters
                                 }
-                                skuLocked={state.skuLocked}
-                                lockedSkuNo={items[0]?.sku_no}
-                                onRemoveSkuLock={state.clearSkuLock}
+                                appliedChips={appliedChips}
+                                removeFilter={state.removeFilter}
+                                onApplyFilters={state.applyFilters}
+                                onClearFilters={state.clearFilters}
+                                onResetMoreFilters={state.resetMoreFilters}
                                 statusDraft={state.statusDraft}
                                 onStatusDraftChange={state.setStatusDraft}
                                 sourceTypeDraft={state.sourceTypeDraft}
@@ -200,6 +230,7 @@ export const SupplierOfferingsPage = () => {
                                 onAvailabilityStatusDraftChange={
                                     state.setAvailabilityStatusDraft
                                 }
+                                skuLocked={state.skuLocked}
                                 skuIdDraft={state.skuIdDraft}
                                 onSkuIdDraftChange={state.setSkuIdDraft}
                                 skuNoDraft={state.skuNoDraft}
@@ -212,10 +243,6 @@ export const SupplierOfferingsPage = () => {
                                 onSupplierIdDraftChange={
                                     state.setSupplierIdDraft
                                 }
-                                total={query.data?.total ?? 0}
-                                hasFilters={state.hasFilters}
-                                onApplyFilters={state.applyFilters}
-                                onClearFilters={state.clearFilters}
                             />
                         }
                         table={

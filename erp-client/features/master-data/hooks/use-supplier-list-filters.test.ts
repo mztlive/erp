@@ -102,6 +102,7 @@ describe("useSupplierListFilters", () => {
             ])
             result.current.setSupplierQualificationHealthDraft("valid")
             result.current.changePagination({ pageIndex: 2, pageSize: 20 })
+            result.current.setSupplierFilterPanelOpen(true)
         })
         act(() => {
             result.current.applySupplierFilters()
@@ -118,6 +119,70 @@ describe("useSupplierListFilters", () => {
         expect(params.get("supplierQualificationHealth")).toBe("valid")
         expect(params.has("page")).toBe(false)
         expect(result.current.pagination.pageIndex).toBe(0)
+        expect(result.current.supplierFilterPanelOpen).toBe(false)
+    })
+
+    it("removes a single applied condition and clears the metric key with lifecycle", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=茶叶&lifecycleStatus=enabled&metricKey=enabled" +
+                "&supplierCapabilityCodes=physical&supplierQualificationTypes=certificate" +
+                "&supplierQualificationHealth=valid",
+        )
+        const searchInputRef = { current: null }
+        const { result } = renderHook(() =>
+            useSupplierListFilters(searchInputRef),
+        )
+        act(() => {
+            result.current.removeFilter("lifecycleStatus")
+        })
+
+        const params = queryOf(navMocks.replace.mock.calls[0]!)
+        expect(params.has("lifecycleStatus")).toBe(false)
+        expect(params.has("metricKey")).toBe(false)
+        expect(params.get("q")).toBe("茶叶")
+        expect(params.get("supplierCapabilityCodes")).toBe("physical")
+        expect(result.current.lifecycleStatusDraft).toBe("all")
+        expect(params.has("page")).toBe(false)
+    })
+
+    it("resetMoreFilters clears every structured condition but keeps the keyword", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=茶叶&lifecycleStatus=enabled&metricKey=enabled" +
+                "&supplierCapabilityCodes=physical&supplierQualificationTypes=certificate" +
+                "&supplierQualificationHealth=valid",
+        )
+        const searchInputRef = { current: null }
+        const { result } = renderHook(() =>
+            useSupplierListFilters(searchInputRef),
+        )
+        act(() => {
+            result.current.resetMoreFilters()
+        })
+
+        const params = queryOf(navMocks.replace.mock.calls[0]!)
+        expect(params.toString()).toBe("q=%E8%8C%B6%E5%8F%B6")
+        expect(result.current.lifecycleStatusDraft).toBe("all")
+        expect(result.current.supplierCapabilityCodesDraft).toEqual([])
+        expect(result.current.supplierQualificationTypesDraft).toEqual([])
+        expect(result.current.supplierQualificationHealthDraft).toBe("all")
+        expect(result.current.supplierFilterPanelOpen).toBe(true)
+    })
+
+    it("does not force the panel open when the URL gains structured filters after mount", () => {
+        const searchInputRef = { current: null }
+        const { result, rerender } = renderHook(() =>
+            useSupplierListFilters(searchInputRef),
+        )
+        expect(result.current.supplierFilterPanelOpen).toBe(false)
+
+        navMocks.searchParams = new URLSearchParams(
+            "lifecycleStatus=disabled&supplierQualificationHealth=valid",
+        )
+        rerender()
+
+        expect(result.current.lifecycleStatusDraft).toBe("disabled")
+        expect(result.current.supplierQualificationHealthDraft).toBe("valid")
+        expect(result.current.supplierFilterPanelOpen).toBe(false)
     })
 
     it("clearAllFilters resets drafts, closes the panel and clears the URL", () => {

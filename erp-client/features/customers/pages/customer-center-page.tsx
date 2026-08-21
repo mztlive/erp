@@ -63,6 +63,47 @@ export function CustomerCenterPage() {
         [page],
     )
 
+    // 查询失败只替换结果区，筛选区必须常驻（docs/ui-filter-design.md §11.2）。
+    const tableSlot = directoryQuery.isError ? (
+        <BusinessFailureState
+            title="客户目录加载失败"
+            error={directoryQuery.error}
+            onRetry={() => {
+                void directoryQuery.refetch()
+            }}
+        />
+    ) : directoryQuery.isPending && !data ? (
+        <div
+            className="h-40 animate-pulse rounded-lg bg-muted"
+            aria-busy="true"
+            aria-label="正在加载客户目录"
+        />
+    ) : data && !data.hasCustomerScope ? (
+        <BusinessEmptyState
+            kind="no-scope"
+            title="当前角色无客户范围"
+            description="当前权限与数据范围内没有客户；不代表系统尚无客户。"
+        />
+    ) : data ? (
+        <CustomerCenterDirectoryTable
+            items={items}
+            totalInScope={data.totalInScope}
+            columns={columns}
+            scope={scope}
+            status={status}
+            q={q}
+            canCreate={canCreate}
+            hasActiveFilters={directoryState.hasActiveFilters}
+            sorting={directoryState.sorting}
+            onSortingChange={directoryState.handleSortingChange}
+            pagination={pagination}
+            onPaginationChange={directoryState.handlePaginationChange}
+            onClearFilters={directoryState.clearAllFilters}
+            onCreate={() => setCreateOpen(true)}
+            onOpenRow={(row) => router.push(`/sales/customers/${row.id}`)}
+        />
+    ) : null
+
     return (
         <PageScaffold>
             <PageHeader
@@ -93,91 +134,57 @@ export function CustomerCenterPage() {
                 }
             />
 
-            {directoryQuery.isError ? (
-                <BusinessFailureState
-                    title="客户目录加载失败"
-                    error={directoryQuery.error}
-                    onRetry={() => {
-                        void directoryQuery.refetch()
-                    }}
-                />
-            ) : directoryQuery.isPending && !data ? (
-                <div
-                    className="h-40 animate-pulse rounded-lg bg-muted"
-                    aria-busy="true"
-                    aria-label="正在加载客户目录"
-                />
-            ) : data && !data.hasCustomerScope ? (
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="当前角色无客户范围"
-                    description="当前权限与数据范围内没有客户；不代表系统尚无客户。"
-                />
-            ) : data ? (
-                <BusinessTableFrame
-                    title="客户结果"
-                    description={describeCustomerDirectoryTable({
-                        scope,
-                        status,
-                        q,
-                        totalInScope: data.totalInScope,
-                        itemsLength: items.length,
-                    })}
-                    toolbar={
-                        <CustomerCenterDirectoryToolbar
-                            searchDraft={directoryState.searchDraft}
-                            onSearchDraftChange={directoryState.setSearchDraft}
-                            onSearch={(value) =>
-                                directoryState.pushState({
-                                    q: value,
-                                    page: 1,
-                                })
-                            }
-                            scope={scope}
-                            onScopeChange={(next) =>
-                                directoryState.pushState({
-                                    scope: next,
-                                    page: 1,
-                                })
-                            }
-                            status={status}
-                            onStatusChange={(next) =>
-                                directoryState.pushState({
-                                    status: next,
-                                    page: 1,
-                                })
-                            }
-                            canReadAll={canReadAll}
-                            total={data.totalInScope}
-                            hasActiveFilters={directoryState.hasActiveFilters}
-                            onClearFilters={directoryState.clearFilters}
-                        />
-                    }
-                    table={
-                        <CustomerCenterDirectoryTable
-                            items={items}
-                            totalInScope={data.totalInScope}
-                            columns={columns}
-                            scope={scope}
-                            status={status}
-                            q={q}
-                            canCreate={canCreate}
-                            hasActiveFilters={directoryState.hasActiveFilters}
-                            sorting={directoryState.sorting}
-                            onSortingChange={directoryState.handleSortingChange}
-                            pagination={pagination}
-                            onPaginationChange={
-                                directoryState.handlePaginationChange
-                            }
-                            onClearFilters={directoryState.clearFilters}
-                            onCreate={() => setCreateOpen(true)}
-                            onOpenRow={(row) =>
-                                router.push(`/sales/customers/${row.id}`)
-                            }
-                        />
-                    }
-                />
-            ) : null}
+            <BusinessTableFrame
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        客户结果
+                        {data ? (
+                            <span
+                                className="font-normal text-muted-foreground"
+                                aria-live="polite"
+                            >
+                                {data.totalInScope.toLocaleString("zh-CN")} 条
+                            </span>
+                        ) : null}
+                    </span>
+                }
+                description={
+                    data
+                        ? describeCustomerDirectoryTable({
+                              scope,
+                              status,
+                              q,
+                              totalInScope: data.totalInScope,
+                              itemsLength: items.length,
+                          })
+                        : undefined
+                }
+                toolbar={
+                    <CustomerCenterDirectoryToolbar
+                        searchInputRef={directoryState.searchInputRef}
+                        searchDraft={directoryState.searchDraft}
+                        setSearchDraft={directoryState.setSearchDraft}
+                        scope={scope}
+                        onScopeChange={directoryState.applyScope}
+                        statusDraft={directoryState.statusDraft}
+                        setStatusDraft={directoryState.setStatusDraft}
+                        canReadAll={canReadAll}
+                        hasActiveFilters={directoryState.hasActiveFilters}
+                        appliedChips={directoryState.appliedChips}
+                        removeFilter={directoryState.removeFilter}
+                        panelOpen={directoryState.panelOpen}
+                        setPanelOpen={directoryState.setPanelOpen}
+                        hasStructuredFilters={
+                            directoryState.hasStructuredFilters
+                        }
+                        applyFilters={directoryState.applyFilters}
+                        resetMoreFilters={directoryState.resetMoreFilters}
+                        clearAllFilters={directoryState.clearAllFilters}
+                    />
+                }
+                table={tableSlot}
+            />
 
             <CustomerCreateDialog
                 open={createOpen}

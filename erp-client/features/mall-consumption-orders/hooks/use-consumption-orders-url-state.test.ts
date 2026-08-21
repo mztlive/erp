@@ -184,6 +184,7 @@ describe('useConsumptionOrdersUrlState', () => {
 
         expect(router.replace).toHaveBeenCalledWith(
             '/commerce/consumption-orders?mall=m2&size=10&q=hello',
+            { scroll: false },
         )
         expect(result.current.pagination.pageIndex).toBe(0)
     })
@@ -202,6 +203,7 @@ describe('useConsumptionOrdersUrlState', () => {
 
         expect(router.replace).toHaveBeenCalledWith(
             '/commerce/consumption-orders',
+            { scroll: false },
         )
     })
 
@@ -219,6 +221,7 @@ describe('useConsumptionOrdersUrlState', () => {
 
         expect(router.replace).toHaveBeenCalledWith(
             '/commerce/consumption-orders?page=3&size=8&preview=mo-1',
+            { scroll: false },
         )
         expect(result.current.pagination.pageIndex).toBe(2)
     })
@@ -238,6 +241,7 @@ describe('useConsumptionOrdersUrlState', () => {
 
         expect(router.replace).toHaveBeenCalledWith(
             '/commerce/consumption-orders?q=a&page=3&size=20',
+            { scroll: false },
         )
         expect(result.current.pagination).toEqual({ pageIndex: 2, pageSize: 20 })
 
@@ -247,6 +251,7 @@ describe('useConsumptionOrdersUrlState', () => {
 
         expect(router.replace).toHaveBeenCalledWith(
             '/commerce/consumption-orders?q=a',
+            { scroll: false },
         )
     })
 
@@ -261,6 +266,7 @@ describe('useConsumptionOrdersUrlState', () => {
         })
         expect(router.replace).toHaveBeenCalledWith(
             '/commerce/consumption-orders?page=2&preview=mo-5',
+            { scroll: false },
         )
 
         mockedSearchParams.mockReturnValue(
@@ -271,27 +277,8 @@ describe('useConsumptionOrdersUrlState', () => {
         })
         expect(router.replace).toHaveBeenCalledWith(
             '/commerce/consumption-orders?page=2',
+            { scroll: false },
         )
-    })
-
-    it('clearFilters removes all filter params and resets the page', () => {
-        mockedSearchParams.mockReturnValue(
-            params(
-                'q=a&mall=m1&occurredFrom=2026-08-01&occurredTo=2026-08-02&factType=x&fulfillmentChain=LEGACY_MANUAL&attributionStatus=PENDING&supplierStatus=SHIPPED&paymentSource=CARD&costBasis=ACTUAL&dataSource=REALTIME&metric=paid&page=5&size=10',
-            ),
-        )
-        mockedPathname.mockReturnValue('/commerce/consumption-orders')
-        const router = setupRouter()
-        const { result } = renderHook(() => useConsumptionOrdersUrlState())
-
-        act(() => {
-            result.current.clearFilters()
-        })
-
-        expect(router.replace).toHaveBeenCalledWith(
-            '/commerce/consumption-orders?size=10',
-        )
-        expect(result.current.pagination.pageIndex).toBe(0)
     })
 
     it('toggleMetric activates and deactivates the metric param', () => {
@@ -305,6 +292,7 @@ describe('useConsumptionOrdersUrlState', () => {
         })
         expect(router.replace).toHaveBeenCalledWith(
             '/commerce/consumption-orders?metric=paid',
+            { scroll: false },
         )
     })
 

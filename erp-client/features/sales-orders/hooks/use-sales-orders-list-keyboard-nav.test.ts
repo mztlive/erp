@@ -212,6 +212,29 @@ describe("useSalesOrdersListKeyboardNav", () => {
         expect(focus).toHaveBeenCalledTimes(1)
     })
 
+    it("弹层打开时 / 不聚焦背景搜索框", () => {
+        const focus = vi.spyOn(searchInput, "focus")
+        const dialog = document.createElement("div")
+        dialog.setAttribute("role", "dialog")
+        document.body.appendChild(dialog)
+        renderHook(() =>
+            useSalesOrdersListKeyboardNav({
+                items,
+                url: makeUrl(),
+                paperId: null,
+                onPaperChange: vi.fn(),
+                onRowNavigate: vi.fn(),
+            }),
+        )
+
+        act(() => {
+            pressKey("/")
+        })
+
+        expect(focus).not.toHaveBeenCalled()
+        dialog.remove()
+    })
+
     it("在输入框内按键不触发列表导航", () => {
         const onRowNavigate = vi.fn()
         const { result } = renderHook(() =>

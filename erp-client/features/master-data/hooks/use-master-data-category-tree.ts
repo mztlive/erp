@@ -2,6 +2,10 @@
 
 import * as React from "react"
 
+import {
+    useListUrl,
+    useSearchDraft,
+} from "@/features/master-data/hooks/use-list-url"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import { useSlashSearchHotkey } from "@/features/master-data/hooks/use-slash-search-hotkey"
 import {
@@ -9,21 +13,32 @@ import {
     flattenCategoryForest,
     type CategoryTreeNode,
 } from "@/features/master-data/lib/category-tree-model"
+import { lifecycleFilterLabel } from "@/features/master-data/lib/copy"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { parseLifecycleStatus } from "@/features/master-data/lib/list-filters"
 import {
     buildMasterDataExportCsv,
     downloadCsv,
 } from "@/features/master-data/lib/export-csv"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
-/** W14 商品分类树页状态：搜索、启停筛选、展开/选中与写操作弹窗。 */
+/** 分类树可被单独移除的已生效条件。 */
+export type CategoryTreeFilterKey = "q" | "lifecycleStatus"
+
+export type CategoryTreeAppliedChip = Readonly<{
+    key: CategoryTreeFilterKey
+    label: string
+}>
+
+/** W14 商品分类树页状态：URL 搜索/启停筛选、展开/选中与写操作弹窗。 */
 export function useMasterDataCategoryTree(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
-    const [search, setSearch] = React.useState("")
-    const [lifecycleStatus, setLifecycleStatus] = React.useState<
-        "enabled" | "disabled" | "all"
-    >("all")
+    const { searchParams, patchUrl, q } = useListUrl()
+    const lifecycleStatus = parseLifecycleStatus(
+        searchParams.get("lifecycleStatus"),
+    )
+    const { searchDraft, setSearchDraft } = useSearchDraft(q, searchInputRef)
     const [selectedId, setSelectedId] = React.useState<string | null>(null)
     const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
     const [createOpen, setCreateOpen] = React.useState(false)
@@ -43,7 +58,7 @@ export function useMasterDataCategoryTree(
 
     const listQuery = useMasterDataListQuery({
         resource: "categories",
-        q: search,
+        q: q.trim() || undefined,
         lifecycleStatus,
         revisionTiming: "all",
     })
@@ -87,7 +102,25 @@ export function useMasterDataCategoryTree(
     }, [forest, expanded])
 
     /** 搜索/启停筛选是否生效：空态与「系统从未建分类」区分。 */
-    const filterActive = search.trim() !== "" || lifecycleStatus !== "all"
+    const filterActive = q.trim() !== "" || lifecycleStatus !== "all"
+
+    /** 所有已生效条件均可从 chip 单独撤销。 */
+    const appliedChips = React.useMemo<readonly CategoryTreeAppliedChip[]>(
+        () => {
+            const chips: CategoryTreeAppliedChip[] = []
+            if (q.trim()) {
+                chips.push({ key: "q", label: `搜索：${q.trim()}` })
+            }
+            if (lifecycleStatus !== "all") {
+                chips.push({
+                    key: "lifecycleStatus",
+                    label: `启停：${lifecycleFilterLabel(lifecycleStatus)}`,
+                })
+            }
+            return chips
+        },
+        [lifecycleStatus, q],
+    )
 
     const toggle = React.useCallback((id: string) => {
         setExpanded((prev) => {
@@ -106,10 +139,35 @@ export function useMasterDataCategoryTree(
         setExpanded(new Set())
     }
 
-    const clearFilters = () => {
-        setSearch("")
-        setLifecycleStatus("all")
-    }
+    /** 表单内 Enter：把搜索草稿写入 URL。 */
+    const applyTreeFilters = React.useCallback(() => {
+        const next = searchDraft.trim()
+        if (next === q.trim()) return
+        patchUrl({ q: next || null })
+    }, [patchUrl, q, searchDraft])
+
+    /** 启停是快捷筛选：直接写入 Applied URL。 */
+    const setLifecycleStatus = React.useCallback(
+        (next: "enabled" | "disabled" | "all") => {
+            if (next === lifecycleStatus) return
+            patchUrl({ lifecycleStatus: next === "all" ? null : next })
+        },
+        [lifecycleStatus, patchUrl],
+    )
+
+    /** 移除单个已生效条件。 */
+    const removeFilter = React.useCallback(
+        (key: CategoryTreeFilterKey) => {
+            if (key === "q") setSearchDraft("")
+            patchUrl({ [key]: null })
+        },
+        [patchUrl, setSearchDraft],
+    )
+
+    const clearFilters = React.useCallback(() => {
+        setSearchDraft("")
+        patchUrl({ q: null, lifecycleStatus: null })
+    }, [patchUrl, setSearchDraft])
 
     const openCreateRoot = () => {
         setCreateParentId(undefined)
@@ -139,10 +197,13 @@ export function useMasterDataCategoryTree(
     }
 
     return {
-        search,
-        setSearch,
+        searchDraft,
+        setSearchDraft,
         lifecycleStatus,
         setLifecycleStatus,
+        appliedChips,
+        removeFilter,
+        applyTreeFilters,
         selectedId,
         setSelectedId,
         expanded,

@@ -23,25 +23,16 @@ import { ConsumptionOrdersTable } from "@/features/mall-consumption-orders/compo
 import { ConsumptionOrderPreviewSheet } from "@/features/mall-consumption-orders/components/list-page/preview-sheet"
 import { useConsumptionOrderListQuery } from "@/features/mall-consumption-orders/hooks/queries"
 import { useConsumptionOrderExportFlow } from "@/features/mall-consumption-orders/hooks/use-consumption-order-export"
-import { useSearchDraft } from "@/features/mall-consumption-orders/hooks/use-search-draft"
-import { useConsumptionOrdersUrlState } from "@/features/mall-consumption-orders/hooks/use-consumption-orders-url-state"
+import { useConsumptionOrdersFilters } from "@/features/mall-consumption-orders/hooks/use-consumption-orders-filters"
+import { buildMallConsumptionFilterChips } from "@/features/mall-consumption-orders/lib/filters"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { formatDateTime } from "@/lib/datetime"
 
 export function ConsumptionOrdersListPage() {
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const filters = useConsumptionOrdersFilters(searchInputRef)
     const {
-        qParam,
-        mallId,
-        fulfillmentChain,
-        attributionStatus,
-        paymentSource,
-        costBasis,
-        occurredFrom,
-        occurredTo,
-        factTypes,
-        supplierStatuses,
-        dataSources,
         periodSelected,
         metric,
         previewId,
@@ -49,16 +40,23 @@ export function ConsumptionOrdersListPage() {
         listQueryInput,
         hasActiveFilters,
         listReturnHref,
-        replaceParams,
         handlePaginationChange,
         openPreview,
         closePreview,
-        clearFilters,
         toggleMetric,
-    } = useConsumptionOrdersUrlState()
-
-    const { searchInput, setSearchInput, searchInputRef, commitSearch } =
-        useSearchDraft({ qParam, replaceParams })
+        applied,
+        searchDraft,
+        setSearchDraft,
+        filterDraft,
+        setFilterDraft,
+        panelOpen,
+        setPanelOpen,
+        hasStructuredFilters,
+        applyFilters,
+        removeFilter,
+        resetMoreFilters,
+        clearAllFilters,
+    } = filters
 
     const [columnPinning] = React.useState<ColumnPinningState>({
         left: ["mallOrder"],
@@ -72,6 +70,11 @@ export function ConsumptionOrdersListPage() {
     const rows = data?.rows ?? []
     const metrics = data?.metrics ?? []
     const empty = data?.emptyReason
+
+    const appliedChips = React.useMemo(
+        () => buildMallConsumptionFilterChips(applied, data?.malls ?? []),
+        [applied, data?.malls],
+    )
 
     const {
         exportPreviewOpen,
@@ -197,29 +200,38 @@ export function ConsumptionOrdersListPage() {
                     ) : null}
 
                     <BusinessTableFrame
-                        title="消费订单列表"
-                        description="商城订单与操作列固定；金额为人民币含税实付。Enter 打开预览抽屉。"
+                        showHeader
+                        title={
+                            <span className="inline-flex items-baseline gap-2">
+                                消费订单
+                                <span
+                                    className="font-normal text-muted-foreground"
+                                    aria-live="polite"
+                                >
+                                    {data?.pageInfo.total ?? 0} 条
+                                </span>
+                            </span>
+                        }
+                        description={
+                            hasActiveFilters && data?.filterSummary
+                                ? data.filterSummary
+                                : "商城订单与操作列固定；金额为人民币含税实付。Enter 打开预览抽屉。"
+                        }
                         toolbar={
                             <ConsumptionOrderFilterBar
-                                searchInput={searchInput}
                                 searchInputRef={searchInputRef}
-                                onSearchInputChange={setSearchInput}
-                                onCommitSearch={commitSearch}
-                                searchPending={searchInput.trim() !== qParam}
-                                filterSummary={data?.filterSummary}
-                                mallId={mallId}
-                                attributionStatus={attributionStatus}
-                                fulfillmentChain={fulfillmentChain}
-                                paymentSource={paymentSource}
-                                costBasis={costBasis}
-                                occurredFrom={occurredFrom}
-                                occurredTo={occurredTo}
-                                factTypes={factTypes}
-                                supplierStatuses={supplierStatuses}
-                                dataSources={dataSources}
-                                hasActiveFilters={hasActiveFilters}
-                                onClearFilters={clearFilters}
-                                onReplaceParams={replaceParams}
+                                searchDraft={searchDraft}
+                                setSearchDraft={setSearchDraft}
+                                panelOpen={panelOpen}
+                                setPanelOpen={setPanelOpen}
+                                hasStructuredFilters={hasStructuredFilters}
+                                appliedChips={appliedChips}
+                                onRemoveFilter={removeFilter}
+                                onApplyFilters={applyFilters}
+                                onClearAllFilters={clearAllFilters}
+                                onResetMoreFilters={resetMoreFilters}
+                                filterDraft={filterDraft}
+                                setFilterDraft={setFilterDraft}
                             />
                         }
                         table={
@@ -239,7 +251,7 @@ export function ConsumptionOrdersListPage() {
                                 onRowPreview={(row) =>
                                     openPreview(row.mallOrderId)
                                 }
-                                onClearFilters={clearFilters}
+                                onClearFilters={clearAllFilters}
                                 onRetry={() => {
                                     void listQuery.refetch()
                                 }}
@@ -252,10 +264,6 @@ export function ConsumptionOrdersListPage() {
                             仅支持卡券与微信两种支付来源
                         </Badge>
                         <Badge variant="outline">无福利账户支付</Badge>
-                        <Badge variant="outline">
-                            列表 {data?.pageInfo.total ?? 0} 条 · 每页{" "}
-                            {pagination.pageSize} 条
-                        </Badge>
                     </div>
                 </>
             )}

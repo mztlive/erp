@@ -4,6 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 
 import {
+    BusinessFailureState,
     FormalActionConfirmDialog,
     FormalActionResult,
     MetricFilterItem,
@@ -16,13 +17,11 @@ import { MallSyncMappingView } from "@/features/mall-sync/components/mall-sync-m
 import { MallSyncReadViews } from "@/features/mall-sync/components/mall-sync-read-views"
 import { SourceSystemsCard } from "@/features/mall-sync/components/source-systems-card"
 import { useMallSyncUrlState } from "@/features/mall-sync/pages/hooks/use-mall-sync-url-state"
+import type { MallSyncAppliedChip } from "@/features/mall-sync/pages/hooks/use-mall-sync-url-state"
 import { useMallSyncPage } from "@/features/mall-sync/pages/hooks/use-mall-sync-page"
 import { MallSyncPageHeader } from "@/features/mall-sync/pages/components/mall-sync-page-header"
 import { MallSyncOwnershipBanner } from "@/features/mall-sync/pages/components/mall-sync-ownership-banner"
-import {
-    MallSyncPageError,
-    MallSyncPageLoading,
-} from "@/features/mall-sync/pages/components/mall-sync-page-status"
+import { MallSyncPageLoading } from "@/features/mall-sync/pages/components/mall-sync-page-status"
 import { MallSyncViewToolbar } from "@/features/mall-sync/pages/components/mall-sync-view-toolbar"
 import {
     MallSyncIncrementalDialog,
@@ -33,6 +32,7 @@ import {
     MallSyncSourceFixDialog,
 } from "@/features/mall-sync/pages/components/mall-sync-mapping-dialogs"
 import { MallSyncConfirmMappingForm } from "@/features/mall-sync/pages/components/mall-sync-confirm-mapping-form"
+import { MAPPING_TYPE_LABEL } from "@/features/mall-sync/types"
 
 export function MallSyncPage() {
     const router = useRouter()
@@ -40,6 +40,7 @@ export function MallSyncPage() {
     const page = useMallSyncPage({
         view: url.view,
         q: url.q,
+        mappingType: url.mappingType,
         jobId: url.jobId,
         snapshotId: url.snapshotId,
         mappingTaskId: url.mappingTaskId,
@@ -50,20 +51,75 @@ export function MallSyncPage() {
         patchUrl: url.patchUrl,
     })
 
+    /** 已生效条件全部显性化为可单独移除的 chip（含深链对象定位条件）。 */
+    const appliedChips = React.useMemo<readonly MallSyncAppliedChip[]>(() => {
+        const chips: MallSyncAppliedChip[] = []
+        const appliedMappingType = url.mappingType
+        const trimmedQ = url.q.trim()
+        if (trimmedQ) {
+            chips.push({ key: "q", label: `搜索：${trimmedQ}` })
+        }
+        if (appliedMappingType) {
+            chips.push({
+                key: "mappingType",
+                label: `映射类型：${MAPPING_TYPE_LABEL[appliedMappingType]}`,
+            })
+        }
+        if (url.jobId) {
+            chips.push({
+                key: "jobId",
+                label: `任务：${page.data?.selectedJob?.jobNo ?? url.jobId}`,
+            })
+        }
+        if (url.snapshotId) {
+            chips.push({
+                key: "snapshotId",
+                label: `来源快照：${page.data?.selectedSnapshot?.externalOrderNo ?? url.snapshotId}`,
+            })
+        }
+        if (url.mappingTaskId) {
+            const task = page.data?.selectedMappingTask
+            chips.push({
+                key: "mappingTaskId",
+                label: task
+                    ? `映射任务：${task.externalOrderNo}（${task.mappingTypeLabel}）`
+                    : `映射任务：${url.mappingTaskId}`,
+            })
+        } else if (url.workItemId) {
+            const task = page.data?.selectedMappingTask
+            chips.push({
+                key: "workItemId",
+                label: task
+                    ? `映射待办：${task.externalOrderNo}`
+                    : `映射待办：${url.workItemId}`,
+            })
+        }
+        if (url.differenceId) {
+            chips.push({
+                key: "differenceId",
+                label: `核对差异：${page.data?.selectedDifference?.externalOrderNo ?? url.differenceId}`,
+            })
+        }
+        return chips
+    }, [
+        page.data?.selectedDifference,
+        page.data?.selectedJob,
+        page.data?.selectedMappingTask,
+        page.data?.selectedSnapshot,
+        url.differenceId,
+        url.jobId,
+        url.mappingTaskId,
+        url.mappingType,
+        url.q,
+        url.snapshotId,
+        url.workItemId,
+    ])
+
+    const { context } = page
+
     if (page.pageQuery.isPending && !page.data) {
         return <MallSyncPageLoading />
     }
-
-    if (page.pageQuery.isError) {
-        return (
-            <MallSyncPageError
-                message={(page.pageQuery.error as Error)?.message ?? "请重试"}
-                onRetry={() => void page.pageQuery.refetch()}
-            />
-        )
-    }
-
-    const { context } = page
 
     return (
         <PageScaffold>
@@ -82,67 +138,73 @@ export function MallSyncPage() {
                 onRefresh={() => void page.pageQuery.refetch()}
             />
 
-            <MallSyncOwnershipBanner
-                ownership={page.ownership}
-                sealed={page.sealed}
-                view={url.view}
-                onEnterHistory={() => url.patchUrl({ view: "history" })}
-            />
-
-            <Alert>
-                <AlertTitle>人工同步审计边界</AlertTitle>
-                <AlertDescription>
-                    授权管理员可直接提交带理由的立即增量与按单补拉；服务端重读执行阶段、来源身份与水位，封存后拒绝。
-                    {context?.scheduledIncrementalNote}
-                </AlertDescription>
-            </Alert>
-
-            {context?.sourceUnavailable ? (
-                <Alert variant="destructive">
-                    <AlertTitle>来源商城不可用</AlertTitle>
-                    <AlertDescription>
-                        {context.sourceUnavailableMessage}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {/* 来源系统列表 */}
-            <SourceSystemsCard />
-
-            <MetricStrip
-                columns={
-                    Math.min(5, Math.max(2, context?.metrics.length ?? 4)) as
-                        | 2
-                        | 3
-                        | 4
-                        | 5
-                }
-                aria-label="商城同步指标"
-            >
-                {(context?.metrics ?? []).map((m) => (
-                    <MetricFilterItem
-                        key={m.key}
-                        label={m.label}
-                        value={m.count != null ? m.count : (m.value ?? "—")}
-                        detail={m.detail}
-                        active={url.view === m.targetView}
-                        onClick={() => {
-                            url.patchUrl({
-                                view: m.targetView,
-                                ...url.clearObjectParamsForView(m.targetView),
-                            })
-                        }}
+            {!page.pageQuery.isError ? (
+                <>
+                    <MallSyncOwnershipBanner
+                        ownership={page.ownership}
+                        sealed={page.sealed}
+                        view={url.view}
+                        onEnterHistory={() =>
+                            url.patchUrl({ view: "history" })
+                        }
                     />
-                ))}
-            </MetricStrip>
+
+                    <Alert>
+                        <AlertTitle>人工同步审计边界</AlertTitle>
+                        <AlertDescription>
+                            授权管理员可直接提交带理由的立即增量与按单补拉；服务端重读执行阶段、来源身份与水位，封存后拒绝。
+                            {context?.scheduledIncrementalNote}
+                        </AlertDescription>
+                    </Alert>
+
+                    {context?.sourceUnavailable ? (
+                        <Alert variant="destructive">
+                            <AlertTitle>来源商城不可用</AlertTitle>
+                            <AlertDescription>
+                                {context.sourceUnavailableMessage}
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+
+                    {/* 来源系统列表 */}
+                    <SourceSystemsCard />
+
+                    <MetricStrip
+                        columns={
+                            Math.min(
+                                5,
+                                Math.max(2, context?.metrics.length ?? 4),
+                            ) as 2 | 3 | 4 | 5
+                        }
+                        aria-label="商城同步指标"
+                    >
+                        {(context?.metrics ?? []).map((m) => (
+                            <MetricFilterItem
+                                key={m.key}
+                                label={m.label}
+                                value={
+                                    m.count != null
+                                        ? m.count
+                                        : (m.value ?? "—")
+                                }
+                                detail={m.detail}
+                                active={url.view === m.targetView}
+                                onClick={() => {
+                                    url.patchUrl({
+                                        view: m.targetView,
+                                        ...url.clearObjectParamsForView(
+                                            m.targetView,
+                                        ),
+                                    })
+                                }}
+                            />
+                        ))}
+                    </MetricStrip>
+                </>
+            ) : null}
 
             <MallSyncViewToolbar
                 view={url.view}
-                searchInput={url.searchInput}
-                searchInputRef={url.searchInputRef}
-                onSearchChange={url.setSearchInput}
-                hasActiveFilters={url.hasActiveFilters}
-                onClearFilters={url.clearAllFilters}
                 onViewChange={(next) =>
                     url.patchUrl({
                         view: next,
@@ -150,27 +212,48 @@ export function MallSyncPage() {
                         ...url.clearObjectParamsForView(next),
                     })
                 }
+                searchInputRef={url.searchInputRef}
+                searchDraft={url.searchDraft}
+                setSearchDraft={url.setSearchDraft}
+                mappingTypeDraft={url.mappingTypeDraft}
+                setMappingTypeDraft={url.setMappingTypeDraft}
+                panelOpen={url.panelOpen}
+                setPanelOpen={url.setPanelOpen}
+                hasStructuredFilters={url.hasStructuredFilters}
+                hasActiveFilters={url.hasActiveFilters}
+                appliedChips={appliedChips}
+                removeFilter={url.removeFilter}
+                applyFilters={url.applyFilters}
+                resetMoreFilters={url.resetMoreFilters}
+                clearAllFilters={url.clearAllFilters}
             />
 
-            {page.result ? (
-                <FormalActionResult
-                    status={
-                        page.result.status === "succeeded"
-                            ? "succeeded"
-                            : page.result.status === "unknown"
-                              ? "unknown"
-                              : page.result.status === "blocked"
-                                ? "blocked"
-                                : "rejected"
-                    }
-                    title={page.result.title}
-                    description={page.result.description}
-                    reference={page.result.reference}
-                    facts={page.result.facts}
-                    actions={
-                        page.result.status === "unknown" &&
-                        page.mappingTask?.reapplyOperation?.status ===
-                            "UNKNOWN" ? (
+            {page.pageQuery.isError ? (
+                <BusinessFailureState
+                    error={page.pageQuery.error}
+                    onRetry={() => void page.pageQuery.refetch()}
+                />
+            ) : (
+                <>
+                    {page.result ? (
+                        <FormalActionResult
+                            status={
+                                page.result.status === "succeeded"
+                                    ? "succeeded"
+                                    : page.result.status === "unknown"
+                                      ? "unknown"
+                                      : page.result.status === "blocked"
+                                        ? "blocked"
+                                        : "rejected"
+                            }
+                            title={page.result.title}
+                            description={page.result.description}
+                            reference={page.result.reference}
+                            facts={page.result.facts}
+                            actions={
+                                page.result.status === "unknown" &&
+                                page.mappingTask?.reapplyOperation?.status ===
+                                    "UNKNOWN" ? (
                             <Button
                                 type="button"
                                 size="sm"
@@ -252,6 +335,8 @@ export function MallSyncPage() {
                     onStartProcessing={page.handleStartProcessing}
                 />
             ) : null}
+                </>
+            )}
 
             {/* 立即增量 */}
             <MallSyncIncrementalDialog

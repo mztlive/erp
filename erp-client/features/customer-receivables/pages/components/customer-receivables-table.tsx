@@ -5,6 +5,7 @@ import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
+    BusinessFailureState,
     BusinessTableFrame,
     DataTable,
     MoneyValue,
@@ -27,6 +28,9 @@ type CustomerReceivablesTableProps = {
     view: CustomerAccountsView
     data: CustomerAccountsListView | undefined
     isPending: boolean
+    isError: boolean
+    error: unknown
+    onRetry: () => void
     metrics: CustomerAccountsListView["metrics"] | undefined
     pagination: PaginationState
     receivableColumns: ColumnDef<ReceivableAccountRow>[]
@@ -42,6 +46,9 @@ export function CustomerReceivablesTable({
     view,
     data,
     isPending,
+    isError,
+    error,
+    onRetry,
     metrics,
     pagination,
     receivableColumns,
@@ -87,7 +94,18 @@ export function CustomerReceivablesTable({
             </Tabs>
 
             <BusinessTableFrame
-                title={VIEW_LABEL[view]}
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        {VIEW_LABEL[view]}
+                        <span
+                            aria-live="polite"
+                            className="font-normal text-muted-foreground"
+                        >
+                            {(data?.total ?? 0).toLocaleString("zh-CN")} 条
+                        </span>
+                    </span>
+                }
                 description={
                     <span aria-live="polite">
                         {data?.filterSummary ?? "加载中…"}
@@ -101,7 +119,13 @@ export function CustomerReceivablesTable({
                 }
                 toolbar={toolbar}
                 table={
-                    isPending && !data ? (
+                    isError && !data ? (
+                        <BusinessFailureState
+                            title="客户往来加载失败"
+                            error={error}
+                            onRetry={onRetry}
+                        />
+                    ) : isPending && !data ? (
                         <div className="h-64 animate-pulse rounded-xl bg-muted" />
                     ) : view === "unallocated" && data ? (
                         <div className="space-y-6 p-1">

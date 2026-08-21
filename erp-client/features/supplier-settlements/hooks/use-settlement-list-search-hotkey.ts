@@ -23,6 +23,10 @@ export function useSettlementListSearchHotkey() {
             ) {
                 return
             }
+            // 弹窗 / 抽屉打开时不得聚焦背景搜索框
+            if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+                return
+            }
             event.preventDefault()
             document
                 .querySelector<HTMLInputElement>(

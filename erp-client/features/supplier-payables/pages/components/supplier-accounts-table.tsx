@@ -96,7 +96,11 @@ export function SupplierAccountsTable({
     return (
         <BusinessTableFrame
             title={VIEW_LABEL[view]}
-            description={`${stripSummaryCount(data.filterSummary)} · 金额与状态均来自系统最新数据；付款与进项票轨道独立。`}
+            description={
+                <span aria-live="polite">
+                    {`${stripSummaryCount(data.filterSummary)} · 金额与状态均来自系统最新数据；付款与进项票轨道独立。`}
+                </span>
+            }
             toolbar={toolbar}
             table={
                 data.emptyReason === "FILTER_NO_RESULT" ? (

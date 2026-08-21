@@ -32,6 +32,9 @@ describe('useProductListFilters', () => {
         navMocks.replace.mockClear()
         navMocks.push.mockClear()
         currentSearchParams = new URLSearchParams()
+        navMocks.replace.mockImplementation((url: string) => {
+            currentSearchParams = new URLSearchParams(url.split('?')[1] ?? '')
+        })
     })
 
     it('uses defaults for an empty url', () => {
@@ -179,6 +182,78 @@ describe('useProductListFilters', () => {
         )
         expect(result.current.searchDraft).toBe('')
         expect(result.current.productKindDraft).toBe('all')
+    })
+
+    it('closes the panel after a successful apply and does not force it open on URL backfill', () => {
+        const { result, rerender } = renderFilters()
+
+        act(() => {
+            result.current.setProductFilterPanelOpen(true)
+            result.current.setProductKindDraft('VOUCHER')
+        })
+        act(() => result.current.applyProductFilters())
+        expect(result.current.productFilterPanelOpen).toBe(false)
+
+        // 提交写回 URL 后，回填 effect 只同步 Draft，不重新展开面板（§5.5）
+        currentSearchParams = new URLSearchParams('productKind=VOUCHER')
+        rerender()
+        expect(result.current.productKindDraft).toBe('VOUCHER')
+        expect(result.current.productFilterPanelOpen).toBe(false)
+    })
+
+    it('opens the panel initially when a deep link carries structured filters', () => {
+        currentSearchParams = new URLSearchParams('productKind=PHYSICAL')
+        const { result } = renderFilters()
+        expect(result.current.productFilterPanelOpen).toBe(true)
+    })
+
+    it('removes a single applied condition without touching the others', () => {
+        currentSearchParams = new URLSearchParams(
+            'q=shoe&productKind=PHYSICAL&lifecycleStatus=enabled&metricKey=enabled' +
+                '&revisionTiming=future&productSalesPriceMin=1&productSalesPriceMax=99',
+        )
+        const { result } = renderFilters()
+
+        act(() => result.current.removeFilter('salesPrice'))
+        expect(navMocks.replace).toHaveBeenLastCalledWith(
+            '/master-data/products?q=shoe&productKind=PHYSICAL&lifecycleStatus=enabled' +
+                '&metricKey=enabled&revisionTiming=future',
+            { scroll: false },
+        )
+        expect(result.current.productSalesPriceMinDraft).toBe('')
+        expect(result.current.productSalesPriceMaxDraft).toBe('')
+
+        navMocks.replace.mockClear()
+        act(() => result.current.removeFilter('lifecycleStatus'))
+        expect(navMocks.replace).toHaveBeenLastCalledWith(
+            '/master-data/products?q=shoe&productKind=PHYSICAL&revisionTiming=future',
+            { scroll: false },
+        )
+        expect(result.current.lifecycleStatusDraft).toBe('all')
+    })
+
+    it('resets only the more-filter conditions and keeps the keyword and quick lifecycle filter', () => {
+        currentSearchParams = new URLSearchParams(
+            'q=shoe&lifecycleStatus=enabled&metricKey=enabled' +
+                '&revisionTiming=future&productKind=PHYSICAL' +
+                '&productListingStatus=unlisted&productSupplyCoverage=none' +
+                '&productCategoryId=c1&productBrandId=b1&productSupplierId=s1' +
+                '&productSalesPriceMin=10&productSalesPriceMax=20',
+        )
+        const { result } = renderFilters()
+
+        act(() => result.current.resetMoreFilters())
+
+        expect(navMocks.replace).toHaveBeenLastCalledWith(
+            '/master-data/products?q=shoe&lifecycleStatus=enabled&metricKey=enabled',
+            { scroll: false },
+        )
+        expect(result.current.productKindDraft).toBe('all')
+        expect(result.current.revisionTimingDraft).toBe('all')
+        expect(result.current.productSalesPriceMinDraft).toBe('')
+        expect(result.current.productCategoryIdDraft).toBeNull()
+        expect(result.current.lifecycleStatusDraft).toBe('enabled')
+        expect(result.current.productFilterPanelOpen).toBe(true)
     })
 
     it('navigates pages through the url page param', () => {

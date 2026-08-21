@@ -27,9 +27,9 @@ export type FulfillmentFilterBarProps = {
     purchaseOrderId: string | undefined
     operations: readonly FulfillmentOperation[]
     autoNext: boolean
-    total: number
     showAutoNext: boolean
     onPatch: (patch: Record<string, string | null | undefined>) => void
+    onClearAllFilters: () => void
     onAutoNextChange: (next: boolean) => void
 }
 
@@ -46,11 +46,14 @@ export function FulfillmentFilterBar({
     purchaseOrderId,
     operations,
     autoNext,
-    total,
     showAutoNext,
     onPatch,
+    onClearAllFilters,
     onAutoNextChange,
 }: FulfillmentFilterBarProps) {
+    const warehouseLabel = operations.find(
+        (t) => t.source.warehouseId === warehouseId,
+    )?.source.warehouseLabel
     return (
         <div
             className={cn(
@@ -73,7 +76,6 @@ export function FulfillmentFilterBar({
                         }
                     }}
                     variant="outline"
-                    size="sm"
                     spacing={0}
                     className="w-fit flex-wrap"
                     aria-label="作业类型"
@@ -104,11 +106,12 @@ export function FulfillmentFilterBar({
                         (t) => t.source.purchaseOrderId === purchaseOrderId,
                     )?.source.purchaseNo
                 }
+                warehouseLabel={warehouseLabel}
                 autoNext={autoNext}
-                total={total}
                 showAutoNext={showAutoNext}
                 type={activeTypeSlug}
                 onPatch={onPatch}
+                onClearAllFilters={onClearAllFilters}
                 onAutoNextChange={onAutoNextChange}
             />
         </div>

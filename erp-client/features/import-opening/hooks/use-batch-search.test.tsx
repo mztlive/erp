@@ -1,81 +1,54 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, renderHook } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "vitest"
 
-import { useBatchSearch } from "@/features/import-opening/hooks/use-batch-search"
-
-beforeEach(() => {
-    vi.useFakeTimers()
-})
-
-afterEach(() => {
-    vi.useRealTimers()
-})
+import { useBatchSearchDraft } from "@/features/import-opening/hooks/use-batch-search"
 
 function setup(q?: string) {
-    const patchUrl = vi.fn()
     const view = renderHook(
-        ({ q }: { q?: string }) => useBatchSearch({ q, patchUrl }),
-        { initialProps: { q } },
+        ({ value }: { value?: string }) => useBatchSearchDraft(value ?? ""),
+        { initialProps: { value: q } },
     )
-    return { patchUrl, ...view }
+    return view
 }
 
-describe("useBatchSearch", () => {
+afterEach(() => {
+    document.body.innerHTML = ""
+})
+
+describe("useBatchSearchDraft", () => {
     it("initializes the draft from the URL q", () => {
         const { result } = setup("abc")
         expect(result.current.qDraft).toBe("abc")
     })
 
     it("syncs the draft when the URL q changes without writing back", () => {
-        const { patchUrl, result, rerender } = setup("old")
-        rerender({ q: "new" })
+        const { result, rerender } = setup("old")
+        rerender({ value: "new" })
         expect(result.current.qDraft).toBe("new")
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
-        expect(patchUrl).not.toHaveBeenCalled()
     })
 
-    it("debounces draft edits into a URL write with page reset", () => {
-        const { patchUrl, result } = setup()
+    it("never writes the URL while the draft changes", () => {
+        const { result } = setup()
         act(() => {
             result.current.setQDraft("  B-01 ")
         })
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
-        expect(patchUrl).toHaveBeenCalledWith({ q: "B-01", page: 1 })
+        expect(result.current.qDraft).toBe("  B-01 ")
     })
 
-    it("clears q when the draft becomes blank", () => {
-        const { patchUrl, result } = setup("B-01")
-        act(() => {
-            result.current.setQDraft("   ")
-        })
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
-        expect(patchUrl).toHaveBeenCalledWith({ q: undefined, page: 1 })
-    })
+    it("protects an in-progress draft while the search input is focused", () => {
+        const { result, rerender } = setup("old")
+        const input = document.createElement("input")
+        document.body.appendChild(input)
+        result.current.searchInputRef.current = input
+        input.focus()
 
-    it("does not write while edits keep arriving within the debounce window", () => {
-        const { patchUrl, result } = setup()
         act(() => {
-            result.current.setQDraft("a")
+            result.current.setQDraft("typed")
         })
-        act(() => {
-            vi.advanceTimersByTime(200)
-            result.current.setQDraft("ab")
-        })
-        act(() => {
-            vi.advanceTimersByTime(200)
-        })
-        expect(patchUrl).not.toHaveBeenCalled()
-        act(() => {
-            vi.advanceTimersByTime(100)
-        })
-        expect(patchUrl).toHaveBeenCalledTimes(1)
-        expect(patchUrl).toHaveBeenCalledWith({ q: "ab", page: 1 })
+        rerender({ value: "new" })
+        expect(result.current.qDraft).toBe("typed")
+
+        input.remove()
     })
 
     it("focuses the search input when / is pressed outside a field", () => {
@@ -123,5 +96,23 @@ describe("useBatchSearch", () => {
         expect(document.activeElement).toBe(target)
 
         target.remove()
+    })
+
+    it("ignores / while a dialog or sheet is open", () => {
+        const { result } = setup()
+        const input = document.createElement("input")
+        document.body.appendChild(input)
+        result.current.searchInputRef.current = input
+        const dialog = document.createElement("div")
+        dialog.setAttribute("role", "dialog")
+        document.body.appendChild(dialog)
+
+        act(() => {
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: "/" }))
+        })
+        expect(document.activeElement).not.toBe(input)
+
+        dialog.remove()
+        input.remove()
     })
 })

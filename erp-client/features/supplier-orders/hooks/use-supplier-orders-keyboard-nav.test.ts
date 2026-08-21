@@ -154,6 +154,21 @@ describe("useSupplierOrdersKeyboardNav — navigation actions", () => {
 
         expect(document.activeElement).toBe(input)
     })
+
+    it("ignores / while a dialog or sheet is open", () => {
+        const input = document.createElement("input")
+        input.setAttribute("data-slot", "sfo-list-search")
+        document.body.appendChild(input)
+
+        const dialog = document.createElement("div")
+        dialog.setAttribute("role", "dialog")
+        document.body.appendChild(dialog)
+
+        renderKeyboardNav([makeRow("a")], makeUrl())
+        fireEvent.keyDown(window, { key: "/" })
+
+        expect(document.activeElement).not.toBe(input)
+    })
 })
 
 describe("useSupplierOrdersKeyboardNav — resets", () => {

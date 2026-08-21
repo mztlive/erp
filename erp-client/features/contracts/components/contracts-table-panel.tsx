@@ -1,6 +1,12 @@
 "use client"
 
-import { FileUpIcon, SearchIcon } from "lucide-react"
+import * as React from "react"
+import {
+    ChevronDownIcon,
+    FileUpIcon,
+    FilterIcon,
+    SearchIcon,
+} from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import {
@@ -10,7 +16,9 @@ import {
     DataTable,
     FilterChip,
     ListToolbar,
+    OptionCombobox,
 } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     InputGroup,
@@ -18,7 +26,6 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { useContractsList } from "@/features/contracts/hooks/use-contracts-list"
-import { contractMetricLabel } from "@/features/contracts/lib/filter-contracts"
 import type { ContractListRow } from "@/features/contracts/types"
 
 type ContractsTablePanelProps = {
@@ -32,7 +39,10 @@ type ContractsTablePanelProps = {
     onPreview: (contractId: string) => void
 }
 
-/** 合同列表区：工具栏 + 空态/失败态 + 数据表。 */
+/**
+ * 合同列表区：筛选 form（ListToolbar + 更多筛选面板 + 已筛选 chip 行）+ 空态/失败态 + 数据表。
+ * 结构契约见 docs/ui-filter-design.md §1.2 / §3 / §8.2。
+ */
 export function ContractsTablePanel({
     list,
     columns,
@@ -44,15 +54,25 @@ export function ContractsTablePanel({
     onPreview,
 }: ContractsTablePanelProps) {
     const {
-        q,
-        metric,
         searchDraft,
         setSearchDraft,
-        lockedCustomer,
-        handleClearCustomerLock,
-        handleSearchCommit,
+        searchInputRef,
+        panelOpen,
+        setPanelOpen,
+        hasStructuredFilters,
+        settlementPartyIdDraft,
+        setSettlementPartyIdDraft,
+        ownerDraft,
+        setOwnerDraft,
+        applyFilters,
+        resetMoreFilters,
+        removeFilter,
         clearAllFilters,
+        appliedChips,
         isFiltered,
+        filterDescription,
+        settlementPartyOptions,
+        ownerOptions,
         pageRows,
         sorted,
         sorting,
@@ -61,66 +81,176 @@ export function ContractsTablePanel({
         handlePaginationChange,
     } = list
 
+    const panelId = React.useId()
+    const hasChips = appliedChips.length > 0
+
     return (
         <BusinessTableFrame
-            title="合同列表"
-            description={
-                metric === "all" && !(q ?? "").trim()
-                    ? "按将到期优先排序展示当前业务范围内的合同。"
-                    : `当前筛选：${contractMetricLabel(metric)}${
-                          (q ?? "").trim() ? ` · “${(q ?? "").trim()}”` : ""
-                      }`
+            showHeader
+            title={
+                <span className="inline-flex items-baseline gap-2">
+                    合同列表
+                    <span
+                        aria-live="polite"
+                        className="font-normal text-muted-foreground"
+                    >
+                        {sorted.length.toLocaleString("zh-CN")} 条
+                    </span>
+                </span>
             }
+            description={filterDescription}
             toolbar={
-                <ListToolbar
-                    search={
-                        <InputGroup>
-                            <InputGroupAddon>
-                                <SearchIcon aria-hidden="true" />
-                            </InputGroupAddon>
-                            <InputGroupInput
-                                data-slot="contracts-search"
-                                value={searchDraft}
-                                onChange={(event) => {
-                                    setSearchDraft(event.target.value)
-                                }}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                        handleSearchCommit(searchDraft)
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        applyFilters()
+                    }}
+                >
+                    <ListToolbar
+                        search={
+                            <InputGroup>
+                                <InputGroupAddon>
+                                    <SearchIcon aria-hidden="true" />
+                                </InputGroupAddon>
+                                <InputGroupInput
+                                    ref={searchInputRef}
+                                    value={searchDraft}
+                                    onChange={(event) => {
+                                        setSearchDraft(event.target.value)
+                                    }}
+                                    placeholder="合同号、客户、结算主体、负责人"
+                                    aria-label="搜索合同"
+                                />
+                                
+                            </InputGroup>
+                        }
+                        filters={
+                            <Button
+                                type="button"
+                                variant="outline"
+                                aria-expanded={panelOpen}
+                                aria-controls={panelId}
+                                onClick={() => setPanelOpen((open) => !open)}
+                            >
+                                <FilterIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                更多筛选
+                                {hasStructuredFilters ? (
+                                    <Badge variant="info">已启用</Badge>
+                                ) : null}
+                                <ChevronDownIcon
+                                    data-icon="inline-end"
+                                    aria-hidden="true"
+                                    className={
+                                        panelOpen
+                                            ? "rotate-180 transition-transform"
+                                            : "transition-transform"
                                     }
-                                }}
-                                placeholder="合同号、客户、结算主体、负责人"
-                                aria-label="搜索合同"
-                            />
-                        </InputGroup>
-                    }
-                    secondary={
-                        lockedCustomer ? (
-                            <FilterChip
-                                label={`客户：${lockedCustomer.displayName}`}
-                                onClear={handleClearCustomerLock}
-                                clearLabel="清除客户锁定"
-                            />
-                        ) : undefined
-                    }
-                    actions={
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span aria-live="polite">
-                                共 {sorted.length.toLocaleString("zh-CN")} 条
-                            </span>
-                            {isFiltered ? (
-                                <Button
-                                    type="button"
-                                    size="xs"
-                                    variant="ghost"
-                                    onClick={clearAllFilters}
-                                >
-                                    清除筛选
-                                </Button>
-                            ) : null}
-                        </div>
-                    }
-                />
+                                />
+                            </Button>
+                        }
+                        secondary={
+                            hasChips || panelOpen ? (
+                                <div className="w-full space-y-3">
+                                    {hasChips ? (
+                                        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                            <span className="text-xs text-muted-foreground">
+                                                已筛选
+                                            </span>
+                                            {appliedChips.map((chip) => (
+                                                <FilterChip
+                                                    key={chip.key}
+                                                    label={chip.label}
+                                                    clearLabel={`移除${chip.label}`}
+                                                    onClear={() =>
+                                                        removeFilter(chip.key)
+                                                    }
+                                                />
+                                            ))}
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="xs"
+                                                onClick={clearAllFilters}
+                                            >
+                                                清空全部
+                                            </Button>
+                                        </div>
+                                    ) : null}
+                                    {panelOpen ? (
+                                        <div
+                                            id={panelId}
+                                            className="flex w-full flex-col gap-3 border-t pt-3"
+                                            aria-label="合同更多筛选条件"
+                                        >
+                                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                                <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                                    <span className="text-muted-foreground">
+                                                        结算主体
+                                                    </span>
+                                                    <OptionCombobox
+                                                        className="w-full"
+                                                        value={
+                                                            settlementPartyIdDraft
+                                                        }
+                                                        aria-label="结算主体"
+                                                        onValueChange={
+                                                            setSettlementPartyIdDraft
+                                                        }
+                                                        options={
+                                                            settlementPartyOptions
+                                                        }
+                                                        placeholder="全部结算主体"
+                                                        searchPlaceholder="搜索结算主体名称"
+                                                    />
+                                                </div>
+                                                <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                                    <span className="text-muted-foreground">
+                                                        负责人
+                                                    </span>
+                                                    <OptionCombobox
+                                                        className="w-full"
+                                                        value={ownerDraft}
+                                                        aria-label="负责人"
+                                                        onValueChange={
+                                                            setOwnerDraft
+                                                        }
+                                                        options={ownerOptions}
+                                                        placeholder="全部负责人"
+                                                        searchPlaceholder="搜索负责人姓名"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                                <p className="text-xs text-muted-foreground">
+                                                    将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                                </p>
+                                                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        onClick={resetMoreFilters}
+                                                    >
+                                                        重置更多条件
+                                                    </Button>
+                                                    <Button type="submit">
+                                                        <SearchIcon
+                                                            data-icon="inline-start"
+                                                            aria-hidden="true"
+                                                        />
+                                                        应用全部筛选
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ) : undefined
+                        }
+                    />
+                </form>
             }
             table={
                 isError ? (

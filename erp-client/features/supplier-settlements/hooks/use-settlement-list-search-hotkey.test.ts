@@ -63,6 +63,26 @@ describe('useSettlementListSearchHotkey', () => {
         expect(document.activeElement).not.toBe(search)
     })
 
+    it('ignores the shortcut while a dialog or sheet is open', () => {
+        const search = setupSearchInput()
+        const dialog = document.createElement('div')
+        dialog.setAttribute('role', 'dialog')
+        document.body.appendChild(dialog)
+        renderHook(() => useSettlementListSearchHotkey())
+
+        fireEvent.keyDown(window, { key: '/' })
+
+        expect(document.activeElement).not.toBe(search)
+
+        dialog.remove()
+        const sheet = document.createElement('div')
+        sheet.setAttribute('data-slot', 'sheet')
+        document.body.appendChild(sheet)
+        fireEvent.keyDown(window, { key: '/' })
+
+        expect(document.activeElement).not.toBe(search)
+    })
+
     it('stops listening after unmount', () => {
         const input = setupSearchInput()
         const { unmount } = renderHook(() => useSettlementListSearchHotkey())

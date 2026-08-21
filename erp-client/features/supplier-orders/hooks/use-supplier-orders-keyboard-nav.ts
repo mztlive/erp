@@ -44,6 +44,14 @@ export function useSupplierOrdersKeyboardNav({
             }
 
             if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+                // 弹层（Dialog / Sheet / Popover / Combobox）打开时不抢焦点
+                if (
+                    document.querySelector(
+                        '[role="dialog"], [data-slot="sheet"], [data-slot="popover-content"], [data-slot="combobox-content"]',
+                    )
+                ) {
+                    return
+                }
                 event.preventDefault()
                 document
                     .querySelector<HTMLInputElement>(

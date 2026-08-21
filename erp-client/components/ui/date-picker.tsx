@@ -101,6 +101,7 @@ function DatePicker({
     clearable = true,
     className,
     "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
 }: {
     value?: string
     onValueChange?: (value?: string) => void
@@ -110,6 +111,7 @@ function DatePicker({
     clearable?: boolean
     className?: string
     "aria-invalid"?: boolean
+    "aria-describedby"?: string
 }) {
     const [open, setOpen] = React.useState(false)
     const selected = parseDateValue(value)
@@ -126,6 +128,7 @@ function DatePicker({
                             className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
+                            aria-describedby={ariaDescribedby}
                             aria-label={
                                 value ? `已选日期 ${value}` : placeholder
                             }

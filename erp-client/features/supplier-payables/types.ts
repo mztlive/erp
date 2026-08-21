@@ -425,6 +425,28 @@ export const PAYABLE_STATUS_TONE: Record<PayableStatus, StatusTone> = {
     SETTLED: "success",
 }
 
+export const DUE_LABEL: Record<
+    "not_due" | "due_today" | "overdue",
+    string
+> = {
+    not_due: "未到期",
+    due_today: "今日到期",
+    overdue: "已到期",
+}
+
+export const PAYMENT_GATE_LABEL: Record<
+    "satisfied" | "unsatisfied",
+    string
+> = {
+    satisfied: "已满足",
+    unsatisfied: "未满足",
+}
+
+export const TRACK_LABEL: Record<AllocationTrack, string> = {
+    payment: "付款",
+    purchase_invoice: "进项票",
+}
+
 /** 页面核销会话状态（URL 深链与本地会话共用） */
 export type SessionState = {
     track: AllocationTrack

@@ -22,6 +22,8 @@ export type PatchUrlParams = Record<string, string | null | undefined>
 
 export interface PatchUrlOptions {
     replace?: boolean
+    /** 传入 false 时保持当前滚动位置（筛选写入 URL 不跳动；不传则保持原行为）。 */
+    scroll?: boolean
 }
 
 export interface PatchUrlContext {
@@ -53,6 +55,12 @@ export function patchUrl(
     }
     const qs = next.toString()
     const href = qs ? `${pathname}?${qs}` : pathname
+    if (options?.scroll !== undefined) {
+        const scrollOption = { scroll: options.scroll }
+        if (options?.replace) router.replace(href, scrollOption)
+        else router.push(href, scrollOption)
+        return
+    }
     if (options?.replace) router.replace(href)
     else router.push(href)
 }

@@ -58,6 +58,17 @@ function expectedHref(base: string, extra?: Record<string, string | null>): stri
     return qs ? `/test?${qs}` : "/test"
 }
 
+/** 筛选写入 URL 统一 replace 且 scroll:false（docs/ui-filter-design.md §5.3）。 */
+function expectedReplace(
+    base: string,
+    extra?: Record<string, string | null>,
+): [string, { scroll: false }] {
+    return [expectedHref(base, extra), { scroll: false }]
+}
+
+const STRUCTURED_URL =
+    "&benefitScenario=节日福利&fulfillmentMode=电子交付,公司仓发&costType=printing,logistics"
+
 beforeEach(() => {
     nav.push.mockClear()
     nav.replace.mockClear()
@@ -89,6 +100,12 @@ describe("useActualProfitLossPage", () => {
         expect(result.current.dimension).toBe("sales_order")
         expect(result.current.searchInput).toBe("")
         expect(result.current.hasFilters).toBe(false)
+        expect(result.current.hasStructuredFilters).toBe(false)
+        expect(result.current.filterPanelOpen).toBe(false)
+        expect(result.current.benefitScenarioDraft).toBe("")
+        expect(result.current.fulfillmentModesDraft).toEqual([])
+        expect(result.current.costTypesDraft).toEqual([])
+        expect(result.current.appliedChips).toEqual([])
     })
 
     it("writes the configured period basis into the URL when it is missing", async () => {
@@ -146,6 +163,9 @@ describe("useActualProfitLossPage", () => {
             coverage: "covered",
             customerId: undefined,
             salesOrderId: undefined,
+            benefitScenario: undefined,
+            fulfillmentModes: undefined,
+            costTypes: undefined,
             dimension: "sales_order",
             q: undefined,
             sort: "actualProfitLossNet:asc",
@@ -157,7 +177,7 @@ describe("useActualProfitLossPage", () => {
         nav.searchParams = new URLSearchParams(
             "periodBasis=cost_occurred_date&from=2026-02-01&to=2026-02-28" +
                 "&coverage=all&dimension=customer&q=abc" +
-                "&sort=actualProfitLossNet:desc&customerId=c9&salesOrderId=so9",
+                `&sort=actualProfitLossNet:desc&customerId=c9&salesOrderId=so9${STRUCTURED_URL}`,
         )
         const { result } = renderHookWithProviders(() =>
             useActualProfitLossPage(),
@@ -171,6 +191,9 @@ describe("useActualProfitLossPage", () => {
             coverage: "all",
             customerId: "c9",
             salesOrderId: "so9",
+            benefitScenario: "节日福利",
+            fulfillmentModes: ["公司仓发", "电子交付"],
+            costTypes: ["logistics", "printing"],
             dimension: "customer",
             q: "abc",
             sort: "actualProfitLossNet:desc",
@@ -180,6 +203,52 @@ describe("useActualProfitLossPage", () => {
             { id: "actualProfitLossNet", desc: true },
         ])
         expect(result.current.hasFilters).toBe(true)
+        expect(result.current.hasStructuredFilters).toBe(true)
+        expect(result.current.appliedChips).toEqual(
+            expect.arrayContaining([
+                { key: "q", label: "搜索：abc" },
+                { key: "coverage", label: "覆盖：全部覆盖状态" },
+                { key: "customerId", label: "客户锁定" },
+                { key: "salesOrderId", label: "销售单锁定" },
+                { key: "benefitScenario", label: "福利场景：节日福利" },
+                { key: "fulfillmentMode:公司仓发", label: "履约方式：公司仓发" },
+                { key: "fulfillmentMode:电子交付", label: "履约方式：电子交付" },
+                { key: "costType:logistics", label: "成本类型：logistics" },
+                { key: "costType:printing", label: "成本类型：printing" },
+            ]),
+        )
+    })
+
+    it("shows the business label for a locked customer chip when the row is visible", async () => {
+        api.fetchProfitLossView.mockReset().mockResolvedValue(
+            makeView({
+                rows: {
+                    dimension: "sales_order",
+                    items: [
+                        makeRow({
+                            customerId: "c9",
+                            customerLabel: "示例客户",
+                            objectId: "so9",
+                            identityLabel: "SO-2026-0009",
+                        }),
+                    ],
+                    total: 1,
+                },
+            }),
+        )
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&customerId=c9&salesOrderId=so9`,
+        )
+        const { result } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.viewQuery.isSuccess).toBe(true))
+        expect(result.current.appliedChips).toEqual(
+            expect.arrayContaining([
+                { key: "customerId", label: "示例客户" },
+                { key: "salesOrderId", label: "SO-2026-0009" },
+            ]),
+        )
     })
 
     it("falls back to defaults for unrecognized URL values", async () => {
@@ -194,7 +263,203 @@ describe("useActualProfitLossPage", () => {
         expect(result.current.dimension).toBe("sales_order")
     })
 
-    it("debounces search input into the q URL parameter", async () => {
+    it("keeps the search draft local until an explicit apply action", async () => {
+        nav.searchParams = new URLSearchParams(urlWithBasis())
+        const { result } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
+        const viewCalls = api.fetchProfitLossView.mock.calls.length
+        nav.replace.mockClear()
+        act(() => {
+            result.current.setSearchInput("hello")
+        })
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 400))
+        })
+        expect(nav.replace).not.toHaveBeenCalled()
+        expect(api.fetchProfitLossView.mock.calls.length).toBe(viewCalls)
+        expect(result.current.searchInput).toBe("hello")
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(nav.replace).toHaveBeenCalledWith(
+            ...expectedReplace(urlWithBasis(), { q: "hello" }),
+        )
+        expect(result.current.filterPanelOpen).toBe(false)
+    })
+
+    it("applies search and structured drafts in one URL patch and closes the panel", async () => {
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&benefitScenario=节日福利`,
+        )
+        const { result } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
+        expect(result.current.filterPanelOpen).toBe(true)
+        nav.replace.mockClear()
+        act(() => {
+            result.current.setSearchInput("abc")
+            result.current.setFulfillmentModesDraft(["电子交付"])
+            result.current.setCostTypesDraft(["printing"])
+        })
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(nav.replace).toHaveBeenCalledWith(
+            ...expectedReplace(urlWithBasis(), {
+                benefitScenario: "节日福利",
+                q: "abc",
+                fulfillmentMode: "电子交付",
+                costType: "printing",
+            }),
+        )
+        expect(result.current.filterPanelOpen).toBe(false)
+    })
+
+    it("does not re-expand the panel when the URL backfills after a submit", async () => {
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&benefitScenario=节日福利`,
+        )
+        const { result } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(result.current.filterPanelOpen).toBe(false)
+        // 模拟提交成功后 URL 回填：只同步草稿，不得重新展开面板
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&benefitScenario=节日福利&q=abc`,
+        )
+        act(() => {
+            result.current.setSearchInput("")
+        })
+        expect(result.current.filterPanelOpen).toBe(false)
+        expect(result.current.searchInput).toBe("abc")
+        expect(result.current.benefitScenarioDraft).toBe("节日福利")
+    })
+
+    it("keeps an in-progress search draft when other URL filters change", async () => {
+        nav.searchParams = new URLSearchParams(urlWithBasis())
+        const { result, rerender } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
+        act(() => {
+            result.current.setSearchInput("hello")
+        })
+        nav.replace.mockClear()
+        act(() => {
+            result.current.handleCoverageChange("uncovered")
+        })
+        expect(nav.replace).toHaveBeenCalledWith(
+            ...expectedReplace(urlWithBasis(), { coverage: "uncovered" }),
+        )
+        expect(result.current.searchInput).toBe("hello")
+        // 模拟 router.replace 已生效：后续 patch 基于更新后的 URL 构建（Next.js 行为）
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&coverage=uncovered`,
+        )
+        rerender()
+        nav.replace.mockClear()
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(nav.replace).toHaveBeenCalledWith(
+            ...expectedReplace(urlWithBasis(), {
+                coverage: "uncovered",
+                q: "hello",
+            }),
+        )
+    })
+
+    it("clears all filters but keeps dimension and sort when clearing", async () => {
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&q=abc&customerId=c1&salesOrderId=so1` +
+                `&coverage=uncovered&dimension=customer&sort=actualProfitLossNet:desc${STRUCTURED_URL}`,
+        )
+        const { result } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
+        expect(result.current.hasFilters).toBe(true)
+        nav.replace.mockClear()
+        act(() => {
+            result.current.clearAllFilters()
+        })
+        expect(nav.replace).toHaveBeenCalledWith(
+            ...expectedReplace(urlWithBasis(), {
+                dimension: "customer",
+                sort: "actualProfitLossNet:desc",
+            }),
+        )
+        expect(result.current.searchInput).toBe("")
+        expect(result.current.benefitScenarioDraft).toBe("")
+        expect(result.current.fulfillmentModesDraft).toEqual([])
+        expect(result.current.costTypesDraft).toEqual([])
+        expect(result.current.filterPanelOpen).toBe(false)
+    })
+
+    it("resetMoreFilters clears structured conditions but keeps q and coverage", async () => {
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&q=abc&coverage=uncovered${STRUCTURED_URL}`,
+        )
+        const { result } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
+        expect(result.current.filterPanelOpen).toBe(true)
+        nav.replace.mockClear()
+        act(() => {
+            result.current.resetMoreFilters()
+        })
+        expect(nav.replace).toHaveBeenCalledWith(
+            ...expectedReplace(urlWithBasis(), {
+                q: "abc",
+                coverage: "uncovered",
+            }),
+        )
+        expect(result.current.filterPanelOpen).toBe(true)
+        expect(result.current.searchInput).toBe("abc")
+    })
+
+    it("removeFilter removes a single applied condition", async () => {
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&q=abc&customerId=c1&benefitScenario=节日福利`,
+        )
+        const { result, rerender } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
+        nav.replace.mockClear()
+        act(() => {
+            result.current.removeFilter("customerId")
+        })
+        expect(nav.replace).toHaveBeenCalledWith(
+            ...expectedReplace(urlWithBasis(), {
+                q: "abc",
+                benefitScenario: "节日福利",
+            }),
+        )
+        // 模拟 router.replace 已生效：后续 patch 基于更新后的 URL 构建（Next.js 行为）
+        nav.searchParams = new URLSearchParams(
+            `${urlWithBasis()}&q=abc&benefitScenario=节日福利`,
+        )
+        rerender()
+        nav.replace.mockClear()
+        act(() => {
+            result.current.removeFilter("q")
+        })
+        expect(nav.replace).toHaveBeenCalledWith(
+            ...expectedReplace(urlWithBasis(), { benefitScenario: "节日福利" }),
+        )
+        expect(result.current.searchInput).toBe("")
+    })
+
+    it("does not write the default coverage value to the URL", async () => {
         nav.searchParams = new URLSearchParams(urlWithBasis())
         const { result } = renderHookWithProviders(() =>
             useActualProfitLossPage(),
@@ -202,31 +467,15 @@ describe("useActualProfitLossPage", () => {
         await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
         nav.replace.mockClear()
         act(() => {
-            result.current.setSearchInput("hello")
+            result.current.handleCoverageChange("covered")
         })
-        expect(nav.replace).not.toHaveBeenCalled()
-        await waitFor(() => expect(nav.replace).toHaveBeenCalled(), {
-            timeout: 2000,
+        expect(nav.replace).toHaveBeenCalledWith(...expectedReplace(urlWithBasis()))
+        act(() => {
+            result.current.handleCoverageChange("all")
         })
         expect(nav.replace).toHaveBeenCalledWith(
-            expectedHref(urlWithBasis(), { q: "hello" }),
+            ...expectedReplace(urlWithBasis(), { coverage: "all" }),
         )
-    })
-
-    it("does not touch the URL when the debounced search input equals the URL value", async () => {
-        nav.searchParams = new URLSearchParams(`${urlWithBasis()}&q=same`)
-        const { result } = renderHookWithProviders(() =>
-            useActualProfitLossPage(),
-        )
-        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
-        nav.replace.mockClear()
-        act(() => {
-            result.current.setSearchInput("same")
-        })
-        await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 400))
-        })
-        expect(nav.replace).not.toHaveBeenCalled()
     })
 
     it("focuses the search input on the '/' keyboard shortcut and respects modifiers", async () => {
@@ -252,6 +501,34 @@ describe("useActualProfitLossPage", () => {
         expect(focus).toHaveBeenCalledTimes(1)
     })
 
+    it("does not focus the background search while a dialog or sheet is open", async () => {
+        const { result } = renderHookWithProviders(() =>
+            useActualProfitLossPage(),
+        )
+        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
+        const focus = vi.fn()
+        act(() => {
+            result.current.searchInputRef.current = {
+                focus,
+            } as unknown as HTMLInputElement
+        })
+        const dialog = document.createElement("div")
+        dialog.setAttribute("role", "dialog")
+        document.body.appendChild(dialog)
+        try {
+            act(() => {
+                window.dispatchEvent(new KeyboardEvent("keydown", { key: "/" }))
+            })
+            expect(focus).not.toHaveBeenCalled()
+        } finally {
+            document.body.removeChild(dialog)
+        }
+        act(() => {
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: "/" }))
+        })
+        expect(focus).toHaveBeenCalledTimes(1)
+    })
+
     it("writes a header sort change into the URL and resets the page", async () => {
         nav.searchParams = new URLSearchParams(urlWithBasis())
         const { result } = renderHookWithProviders(() =>
@@ -265,24 +542,8 @@ describe("useActualProfitLossPage", () => {
             ])
         })
         expect(nav.replace).toHaveBeenCalledWith(
-            expectedHref(urlWithBasis(), { sort: "marginRate:desc" }),
+            ...expectedReplace(urlWithBasis(), { sort: "marginRate:desc" }),
         )
-    })
-
-    it("removes q/customerId/salesOrderId/coverage when clearing filters", async () => {
-        nav.searchParams = new URLSearchParams(
-            `${urlWithBasis()}&q=abc&customerId=c1&salesOrderId=so1&coverage=uncovered`,
-        )
-        const { result } = renderHookWithProviders(() =>
-            useActualProfitLossPage(),
-        )
-        await waitFor(() => expect(result.current.basisQuery.isSuccess).toBe(true))
-        expect(result.current.hasFilters).toBe(true)
-        nav.replace.mockClear()
-        act(() => {
-            result.current.clearFilters()
-        })
-        expect(nav.replace).toHaveBeenCalledWith(expectedHref(urlWithBasis()))
     })
 
     it("updates the coverage filter through its handler", async () => {
@@ -296,7 +557,7 @@ describe("useActualProfitLossPage", () => {
             result.current.handleCoverageChange("uncovered")
         })
         expect(nav.replace).toHaveBeenCalledWith(
-            expectedHref(urlWithBasis(), { coverage: "uncovered" }),
+            ...expectedReplace(urlWithBasis(), { coverage: "uncovered" }),
         )
     })
 
@@ -311,7 +572,7 @@ describe("useActualProfitLossPage", () => {
             result.current.handleDimensionChange("customer")
         })
         expect(nav.replace).toHaveBeenCalledWith(
-            expectedHref(urlWithBasis(), { dimension: "customer" }),
+            ...expectedReplace(urlWithBasis(), { dimension: "customer" }),
         )
     })
 

@@ -167,6 +167,8 @@ describe("useSupplierAccountsPage", () => {
         })
         expect(view.result.current.trackFilter).toBe("all")
         expect(view.result.current.hasActiveFilters).toBe(false)
+        expect(view.result.current.panelOpen).toBe(false)
+        expect(view.result.current.appliedChips).toEqual([])
         expect(view.result.current.session).toBeNull()
         expect(view.result.current.previewPayableId).toBeNull()
         expect(view.result.current.sortedPayables).toEqual([])
@@ -207,8 +209,9 @@ describe("useSupplierAccountsPage", () => {
         expect(query?.due).toBeUndefined()
         expect(query?.paymentGate).toBeUndefined()
         expect(view.result.current.pagination.pageIndex).toBe(0)
-        // 清除筛选按原始参数是否存在判断，不校验取值（保持既有行为）
-        expect(view.result.current.hasActiveFilters).toBe(true)
+        // 非法枚举值解析时降级为默认：不激活筛选、不进 chip
+        expect(view.result.current.hasActiveFilters).toBe(false)
+        expect(view.result.current.appliedChips).toEqual([])
 
         const { view: view2 } = renderPage("page=-5")
         expect(view2.result.current.pagination.pageIndex).toBe(0)
@@ -218,6 +221,19 @@ describe("useSupplierAccountsPage", () => {
 
         const { view: view4 } = renderPage("due=all&paymentGate=all")
         expect(view4.result.current.hasActiveFilters).toBe(false)
+    })
+
+    it("drops an invalid status value and keeps valid ones in the query", () => {
+        const { view } = renderPage("status=NONSENSE")
+        const query = mockedListQuery.mock.calls.at(-1)?.[0]
+        expect(query?.status).toBeUndefined()
+        expect(view.result.current.hasActiveFilters).toBe(false)
+
+        const { view: view2 } = renderPage("status=PARTIAL")
+        const query2 = mockedListQuery.mock.calls.at(-1)?.[0]
+        expect(query2?.status).toBe("PARTIAL")
+        // hasActiveFilters 覆盖接口实际消费的 status
+        expect(view2.result.current.hasActiveFilters).toBe(true)
     })
 
     it("writes the page param via replace, omitting the first page", () => {
@@ -241,74 +257,211 @@ describe("useSupplierAccountsPage", () => {
         expect(href?.has("page")).toBe(false)
     })
 
-    it("clearFilters removes filter params, resets search input and keeps the view", () => {
+    it("clearFilters resets drafts, panel and all filter params, keeping the view", () => {
         const { view, router } = renderPage(
-            "q=abc&supplierId=S1&due=overdue&track=payment&page=2&view=payable",
+            "q=abc&supplierId=S1&status=OPEN&due=overdue&track=payment&purchaseOrderId=PO1&page=2&view=payable",
         )
 
         expect(view.result.current.hasActiveFilters).toBe(true)
+        expect(view.result.current.panelOpen).toBe(true)
+        act(() => {
+            view.result.current.setSourceTypeDraft("SUPPLIER_SETTLEMENT")
+        })
         act(() => {
             view.result.current.clearFilters()
         })
 
         expect(view.result.current.searchInput).toBe("")
-        // clearFilters 走 push（无 replace 选项）
-        const pushHref = lastPushHref(router)
-        expect(pushHref.startsWith("/test?")).toBe(true)
-        const href = new URLSearchParams(
-            pushHref.slice(pushHref.indexOf("?") + 1),
-        )
-        expect(href.get("view")).toBe("payable")
-        expect(href.has("q")).toBe(false)
-        expect(href.has("supplierId")).toBe(false)
-        expect(href.has("due")).toBe(false)
-        expect(href.has("track")).toBe(false)
-        expect(href.has("page")).toBe(false)
-        expect(router.replace).not.toHaveBeenCalled()
-        expect(router.push).toHaveBeenCalledTimes(1)
+        expect(view.result.current.supplierDraft).toBeNull()
+        expect(view.result.current.statusDraft).toBe("all")
+        expect(view.result.current.sourceTypeDraft).toBe("all")
+        expect(view.result.current.panelOpen).toBe(false)
+
+        // 模拟 URL 已被 replace 更新后的下一次渲染
+        currentUrl = "view=payable"
+        act(() => {
+            view.rerender()
+        })
+        expect(view.result.current.hasActiveFilters).toBe(false)
+        // 清空走 router.replace(scroll:false)，不膨胀浏览历史
+        const href = lastReplaceHref(router)
+        expect(href?.get("view")).toBe("payable")
+        expect(href?.has("q")).toBe(false)
+        expect(href?.has("supplierId")).toBe(false)
+        expect(href?.has("status")).toBe(false)
+        expect(href?.has("due")).toBe(false)
+        expect(href?.has("track")).toBe(false)
+        expect(href?.has("purchaseOrderId")).toBe(false)
+        expect(href?.has("page")).toBe(false)
+        expect(router.push).not.toHaveBeenCalled()
     })
 
-    it("debounces search input into the q param with replace", () => {
-        vi.useFakeTimers()
+    it("keeps drafts local: no URL writes or requests while drafts change", () => {
         const { view, router } = renderPage("")
 
         act(() => {
             view.result.current.setSearchInput("abc")
+            view.result.current.setSupplierDraft("S1")
+            view.result.current.setStatusDraft("PARTIAL")
         })
-        expect(router.replace).not.toHaveBeenCalled()
 
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
-        expect(lastReplaceHref(router)?.get("q")).toBe("abc")
-    })
-
-    it("does not patch the URL when the search input equals the current q param", () => {
-        vi.useFakeTimers()
-        const { view, router } = renderPage("q=abc")
-
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
         expect(router.replace).not.toHaveBeenCalled()
         expect(router.push).not.toHaveBeenCalled()
-        expect(view.result.current.searchInput).toBe("abc")
+        expect(view.result.current.hasActiveFilters).toBe(false)
     })
 
-    it("syncs search input when the q param changes", () => {
-        vi.useFakeTimers()
+    it("applyFilters writes all drafts in one replace, resets pagination and closes the panel", () => {
+        const { view, router } = renderPage("page=3")
+
+        act(() => {
+            view.result.current.setSearchInput("  PO-100  ")
+            view.result.current.setSupplierDraft("S1")
+            view.result.current.setSourceTypeDraft("SUPPLIER_SETTLEMENT")
+            view.result.current.setStatusDraft("PARTIAL")
+            view.result.current.setDueDraft("overdue")
+            view.result.current.setPaymentGateDraft("unsatisfied")
+        })
+        act(() => {
+            view.result.current.applyFilters()
+        })
+
+        const href = lastReplaceHref(router)
+        expect(href?.get("q")).toBe("PO-100")
+        expect(href?.get("supplierId")).toBe("S1")
+        expect(href?.get("sourceType")).toBe("SUPPLIER_SETTLEMENT")
+        expect(href?.get("status")).toBe("PARTIAL")
+        expect(href?.get("due")).toBe("overdue")
+        expect(href?.get("paymentGate")).toBe("unsatisfied")
+        expect(href?.has("page")).toBe(false)
+        expect(view.result.current.panelOpen).toBe(false)
+        expect(router.push).not.toHaveBeenCalled()
+    })
+
+    it("applyFilters drops 全部 drafts from the URL instead of writing defaults", () => {
+        const { view, router } = renderPage("status=OPEN&page=2")
+
+        act(() => {
+            view.result.current.setStatusDraft("all")
+            view.result.current.setSupplierDraft(null)
+        })
+        act(() => {
+            view.result.current.applyFilters()
+        })
+
+        const href = lastReplaceHref(router)
+        expect(href?.has("status")).toBe(false)
+        expect(href?.has("supplierId")).toBe(false)
+        expect(href?.has("page")).toBe(false)
+        expect(href?.has("q")).toBe(false)
+    })
+
+    it("resetMoreFilters clears structured conditions but keeps q and purchaseOrderId", () => {
+        const { view, router } = renderPage(
+            "q=abc&supplierId=S1&status=OPEN&purchaseOrderId=PO1",
+        )
+
+        expect(view.result.current.panelOpen).toBe(true)
+        act(() => {
+            view.result.current.resetMoreFilters()
+        })
+
+        const href = lastReplaceHref(router)
+        expect(href?.get("q")).toBe("abc")
+        expect(href?.get("purchaseOrderId")).toBe("PO1")
+        expect(href?.has("supplierId")).toBe(false)
+        expect(href?.has("status")).toBe(false)
+        expect(view.result.current.supplierDraft).toBeNull()
+        expect(view.result.current.statusDraft).toBe("all")
+        // 局部重置保持面板展开
+        expect(view.result.current.panelOpen).toBe(true)
+    })
+
+    it("removeFilter removes a single condition, its draft, and resets the page", () => {
+        const { view, router } = renderPage("q=abc&supplierId=S1&page=2")
+
+        act(() => {
+            view.result.current.removeFilter("supplierId")
+        })
+
+        const href = lastReplaceHref(router)
+        expect(href?.has("supplierId")).toBe(false)
+        expect(href?.get("q")).toBe("abc")
+        expect(href?.has("page")).toBe(false)
+        expect(view.result.current.supplierDraft).toBeNull()
+    })
+
+    it("opens the panel initially when the deep link carries structured filters", () => {
+        const { view } = renderPage("supplierId=S1&status=OPEN")
+        expect(view.result.current.panelOpen).toBe(true)
+
+        const { view: view2 } = renderPage("q=abc&purchaseOrderId=PO1")
+        // 仅关键词/来源锁定不强制展开面板
+        expect(view2.result.current.panelOpen).toBe(false)
+    })
+
+    it("does not force the panel open again on URL backfill after a successful submit", () => {
         const { view, router } = renderPage("")
 
-        currentUrl = "q=hello"
+        act(() => {
+            view.result.current.setPanelOpen(true)
+            view.result.current.setSupplierDraft("S1")
+        })
+        act(() => {
+            view.result.current.applyFilters()
+        })
+        expect(view.result.current.panelOpen).toBe(false)
+
+        // 提交后 URL 回填只同步草稿，不得重新展开面板
+        currentUrl = "supplierId=S1"
+        act(() => {
+            view.rerender()
+        })
+        expect(view.result.current.supplierDraft).toBe("S1")
+        expect(view.result.current.panelOpen).toBe(false)
+        expect(router.push).not.toHaveBeenCalled()
+    })
+
+    it("builds applied chips for every consumed filter, including source locks", () => {
+        currentListData = makeListView({
+            suppliers: [
+                {
+                    supplierId: "S1",
+                    supplierName: "供应商甲",
+                    openPayableTotal: "0",
+                    unallocatedPaymentTotal: "0",
+                    unallocatedInvoiceTotal: "0",
+                },
+            ],
+        })
+        const { view } = renderPage(
+            "q=abc&supplierId=S1&sourceType=PURCHASE_ORDER&status=PARTIAL&due=overdue&paymentGate=unsatisfied&track=payment&purchaseOrderId=PO1",
+        )
+
+        expect(view.result.current.appliedChips).toEqual([
+            { key: "q", label: "搜索：abc" },
+            { key: "supplierId", label: "供应商：供应商甲" },
+            { key: "sourceType", label: "来源类型：采购单" },
+            { key: "status", label: "状态：部分结清" },
+            { key: "due", label: "到期：已到期" },
+            { key: "paymentGate", label: "先款条件：未满足" },
+            { key: "track", label: "轨道：付款" },
+            { key: "purchaseOrderId", label: "采购单：PO1" },
+        ])
+    })
+
+    it("syncs drafts when URL params change (back/forward, quick filters)", () => {
+        const { view, router } = renderPage("")
+
+        currentUrl = "q=hello&supplierId=S1&status=OPEN"
         act(() => {
             view.rerender()
         })
         expect(view.result.current.searchInput).toBe("hello")
-
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
+        expect(view.result.current.supplierDraft).toBe("S1")
+        expect(view.result.current.statusDraft).toBe("OPEN")
+        // 回填只改草稿，不写 URL
         expect(router.replace).not.toHaveBeenCalled()
+        expect(router.push).not.toHaveBeenCalled()
     })
 
     it("openPreview/closePreview toggle preview state and the detailId param", () => {

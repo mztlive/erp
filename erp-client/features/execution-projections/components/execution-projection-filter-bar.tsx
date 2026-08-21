@@ -1,218 +1,279 @@
 "use client"
 
 import * as React from "react"
-import { SearchIcon } from "lucide-react"
+import {
+    ChevronDownIcon,
+    FilterIcon,
+    SearchIcon,
+} from "lucide-react"
 
-import { ListToolbar, OptionCombobox } from "@/components/business"
+import {
+    FilterChip,
+    FixedOptionRadioFilter,
+    ListToolbar,
+    OptionCombobox,
+    type ComboboxOption,
+    type FixedOptionRadioFilterOption,
+} from "@/components/business"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
 import type {
-    DeliveryStatus,
-    LatencyBand,
-    ProjectionSource,
-    ReconciliationStatus,
-} from "@/features/execution-projections/types"
+    ExecutionProjectionAppliedChip,
+    ExecutionProjectionFilterKey,
+    ExecutionProjectionFilterState,
+} from "@/features/execution-projections/hooks/use-execution-projection-filters"
 import {
     DELIVERY_STATUS_LABEL,
     LATENCY_LABEL,
+    SOURCE_LABEL,
+    type LatencyBand,
+    type ProjectionSource,
+    type ReconciliationStatus,
 } from "@/features/execution-projections/types"
 
-type ReplaceParams = (patch: Record<string, string | null | undefined>) => void
+const LATENCY_FILTER_OPTIONS: ReadonlyArray<
+    FixedOptionRadioFilterOption<LatencyBand | "all">
+> = [
+    { value: "all", label: "全部" },
+    { value: "normal", label: LATENCY_LABEL.normal },
+    { value: "near_sla", label: LATENCY_LABEL.near_sla },
+    { value: "over_sla", label: LATENCY_LABEL.over_sla },
+]
+
+const RECONCILIATION_FILTER_OPTIONS: ReadonlyArray<
+    FixedOptionRadioFilterOption<ReconciliationStatus | "all">
+> = [
+    { value: "all", label: "全部" },
+    { value: "VERSION_MISMATCH", label: "仅版本差异" },
+    { value: "MATCHED", label: "版本一致" },
+    { value: "NONE", label: "无对账" },
+]
+
+const SOURCE_FILTER_OPTIONS: ReadonlyArray<
+    FixedOptionRadioFilterOption<ProjectionSource | "all">
+> = [
+    { value: "all", label: "全部" },
+    { value: "ERP_SALES_REVISION", label: SOURCE_LABEL.ERP_SALES_REVISION },
+    { value: "MIGRATION_BASELINE", label: SOURCE_LABEL.MIGRATION_BASELINE },
+]
+
+const DELIVERY_STATUS_OPTIONS: readonly ComboboxOption[] = [
+    { value: "all", label: "全部接收状态" },
+    { value: "UNKNOWN", label: DELIVERY_STATUS_LABEL.UNKNOWN },
+    { value: "FAILED", label: DELIVERY_STATUS_LABEL.FAILED },
+    { value: "ESCALATED_MANUAL", label: DELIVERY_STATUS_LABEL.ESCALATED_MANUAL },
+    { value: "RETRYING", label: DELIVERY_STATUS_LABEL.RETRYING },
+    { value: "SENDING", label: DELIVERY_STATUS_LABEL.SENDING },
+    { value: "PENDING", label: DELIVERY_STATUS_LABEL.PENDING },
+    { value: "ACKED", label: DELIVERY_STATUS_LABEL.ACKED },
+    { value: "UNKNOWN,FAILED,ESCALATED_MANUAL", label: "未知+失败+转人工" },
+]
 
 export function ExecutionProjectionFilterBar({
-    replaceParams,
-    searchInputRef,
-    searchDraft,
-    onSearchDraftChange,
-    mallId,
-    deliveryStatus,
-    latency,
-    reconciliation,
-    source,
+    filters,
+    appliedChips,
+    removeFilter,
+    hasChips,
     malls,
-    total,
 }: {
-    replaceParams: ReplaceParams
-    searchInputRef: React.RefObject<HTMLInputElement | null>
-    searchDraft: string
-    onSearchDraftChange: (value: string) => void
-    mallId: string
-    deliveryStatus: string
-    latency: LatencyBand | "all"
-    reconciliation: ReconciliationStatus | "all"
-    source: ProjectionSource | "all"
+    filters: ExecutionProjectionFilterState
+    appliedChips: readonly ExecutionProjectionAppliedChip[]
+    removeFilter: (key: ExecutionProjectionFilterKey) => void
+    hasChips: boolean
     malls: Array<{ id: string; name: string }>
-    total: number
 }) {
+    const panelId = React.useId()
+    const { panelOpen, setPanelOpen } = filters
+
     return (
-        <ListToolbar
-            search={
-                <InputGroup className="max-w-sm">
-                    <InputGroupAddon>
-                        <SearchIcon aria-hidden="true" />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                        ref={searchInputRef}
-                        value={searchDraft}
-                        onChange={(e) => onSearchDraftChange(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                replaceParams({
-                                    q: searchDraft.trim() || null,
-                                    page: "1",
-                                })
+        <form
+            onSubmit={(event) => {
+                event.preventDefault()
+                filters.applyFilters()
+            }}
+        >
+            <ListToolbar
+                search={
+                    <InputGroup>
+                        <InputGroupAddon>
+                            <SearchIcon aria-hidden="true" />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            ref={filters.searchInputRef}
+                            value={filters.searchDraft}
+                            onChange={(event) =>
+                                filters.setSearchDraft(event.target.value)
                             }
-                        }}
-                        placeholder="销售单号、客户"
-                        aria-label="搜索执行信息"
-                    />
-                </InputGroup>
-            }
-            filters={
-                <>
-                    <OptionCombobox
-                        aria-label="目标商城"
-                        value={mallId}
-                        onValueChange={(v) =>
-                            replaceParams({
-                                mall: v ?? "all",
-                                page: "1",
-                            })
-                        }
-                        options={[
-                            { value: "all", label: "全部商城" },
-                            ...malls.map((m) => ({
-                                value: m.id,
-                                label: m.name,
-                            })),
-                        ]}
-                        className="w-[9rem]"
-                        size="sm"
-                        allowClear={false}
-                        placeholder="全部商城"
-                    />
-                    <OptionCombobox
-                        aria-label="接收状态"
-                        value={deliveryStatus}
-                        onValueChange={(v) =>
-                            replaceParams({
-                                deliveryStatus: v ?? "all",
-                                page: "1",
-                            })
-                        }
-                        options={[
-                            { value: "all", label: "全部接收状态" },
-                            ...(
-                                [
-                                    "UNKNOWN",
-                                    "FAILED",
-                                    "ESCALATED_MANUAL",
-                                    "RETRYING",
-                                    "SENDING",
-                                    "PENDING",
-                                    "ACKED",
-                                ] as DeliveryStatus[]
-                            ).map((s) => ({
-                                value: s,
-                                label: DELIVERY_STATUS_LABEL[s],
-                            })),
-                            {
-                                value: "UNKNOWN,FAILED,ESCALATED_MANUAL",
-                                label: "未知+失败+转人工",
-                            },
-                        ]}
-                        className="w-[11rem]"
-                        size="sm"
-                        allowClear={false}
-                        placeholder="全部接收状态"
-                    />
-                    <OptionCombobox
-                        aria-label="等待时长分组"
-                        value={latency}
-                        onValueChange={(v) =>
-                            replaceParams({
-                                latency: v ?? "all",
-                                page: "1",
-                            })
-                        }
-                        options={[
-                            {
-                                value: "all",
-                                label: "等待时长：全部",
-                            },
-                            ...(
-                                Object.keys(LATENCY_LABEL) as LatencyBand[]
-                            ).map((k) => ({
-                                value: k,
-                                label: LATENCY_LABEL[k],
-                            })),
-                        ]}
-                        className="w-[9rem]"
-                        size="sm"
-                        allowClear={false}
-                        placeholder="等待时长：全部"
-                    />
-                </>
-            }
-            secondary={
-                <>
-                    <OptionCombobox
-                        aria-label="版本差异"
-                        value={reconciliation}
-                        onValueChange={(v) =>
-                            replaceParams({
-                                reconciliation: v ?? "all",
-                                page: "1",
-                            })
-                        }
-                        options={[
-                            { value: "all", label: "对账：全部" },
-                            {
-                                value: "VERSION_MISMATCH",
-                                label: "仅版本差异",
-                            },
-                            { value: "MATCHED", label: "版本一致" },
-                        ]}
-                        className="w-[9rem]"
-                        size="sm"
-                        allowClear={false}
-                        placeholder="对账：全部"
-                    />
-                    <OptionCombobox
-                        aria-label="数据来源"
-                        value={source}
-                        onValueChange={(v) =>
-                            replaceParams({
-                                source: v ?? "all",
-                                page: "1",
-                            })
-                        }
-                        options={[
-                            { value: "all", label: "来源：全部" },
-                            {
-                                value: "ERP_SALES_REVISION",
-                                label: "ERP 销售版本",
-                            },
-                            {
-                                value: "MIGRATION_BASELINE",
-                                label: "迁移基线",
-                            },
-                        ]}
-                        className="w-[10rem]"
-                        size="sm"
-                        allowClear={false}
-                        placeholder="来源：全部"
-                    />
-                </>
-            }
-            actions={
-                <span className="text-xs text-muted-foreground">
-                    <span className="num">{total}</span> 条
-                </span>
-            }
-        />
+                            placeholder="销售单号、客户"
+                            aria-label="搜索执行信息"
+                        />
+                        
+                    </InputGroup>
+                }
+                filters={
+                    <Button
+                        type="button"
+                        variant="outline"
+                        aria-expanded={panelOpen}
+                        aria-controls={panelId}
+                        onClick={() => setPanelOpen((open) => !open)}
+                    >
+                        <FilterIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        更多筛选
+                        {filters.hasStructuredFilters ? (
+                            <Badge variant="info">已启用</Badge>
+                        ) : null}
+                        <ChevronDownIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                            className={
+                                panelOpen
+                                    ? "rotate-180 transition-transform"
+                                    : "transition-transform"
+                            }
+                        />
+                    </Button>
+                }
+                secondary={
+                    hasChips || panelOpen ? (
+                        <div className="w-full space-y-3">
+                            {hasChips ? (
+                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                    <span className="text-xs text-muted-foreground">
+                                        已筛选
+                                    </span>
+                                    {appliedChips.map((chip) => (
+                                        <FilterChip
+                                            key={chip.key}
+                                            label={chip.label}
+                                            clearLabel={`移除${chip.label}`}
+                                            onClear={() =>
+                                                removeFilter(chip.key)
+                                            }
+                                        />
+                                    ))}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={filters.clearAllFilters}
+                                    >
+                                        清空全部
+                                    </Button>
+                                </div>
+                            ) : null}
+                            {panelOpen ? (
+                                <div
+                                    id={panelId}
+                                    className="flex w-full flex-col gap-3 border-t pt-3"
+                                    aria-label="执行信息更多筛选条件"
+                                >
+                                    <FixedOptionRadioFilter
+                                        label="等待时长"
+                                        value={filters.latencyDraft}
+                                        onValueChange={filters.setLatencyDraft}
+                                        options={LATENCY_FILTER_OPTIONS}
+                                    />
+                                    <FixedOptionRadioFilter
+                                        label="版本核对"
+                                        value={filters.reconciliationDraft}
+                                        onValueChange={
+                                            filters.setReconciliationDraft
+                                        }
+                                        options={RECONCILIATION_FILTER_OPTIONS}
+                                    />
+                                    <FixedOptionRadioFilter
+                                        label="数据来源"
+                                        value={filters.sourceDraft}
+                                        onValueChange={filters.setSourceDraft}
+                                        options={SOURCE_FILTER_OPTIONS}
+                                    />
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                            <span className="text-muted-foreground">
+                                                目标商城
+                                            </span>
+                                            <OptionCombobox
+                                                className="w-full"
+                                                value={filters.mallIdDraft}
+                                                onValueChange={(value) =>
+                                                    filters.setMallIdDraft(
+                                                        value ?? "all",
+                                                    )
+                                                }
+                                                options={[
+                                                    {
+                                                        value: "all",
+                                                        label: "全部商城",
+                                                    },
+                                                    ...malls.map((mall) => ({
+                                                        value: mall.id,
+                                                        label: mall.name,
+                                                    })),
+                                                ]}
+                                                placeholder="全部商城"
+                                                searchPlaceholder="搜索商城名称"
+                                                aria-label="目标商城"
+                                            />
+                                        </div>
+                                        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                                            <span className="text-muted-foreground">
+                                                接收状态
+                                            </span>
+                                            <OptionCombobox
+                                                className="w-full"
+                                                value={filters.deliveryStatusDraft}
+                                                onValueChange={(value) =>
+                                                    filters.setDeliveryStatusDraft(
+                                                        value ?? "all",
+                                                    )
+                                                }
+                                                options={
+                                                    DELIVERY_STATUS_OPTIONS
+                                                }
+                                                placeholder="全部接收状态"
+                                                searchPlaceholder="搜索接收状态"
+                                                aria-label="接收状态"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-muted-foreground">
+                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={
+                                                    filters.resetMoreFilters
+                                                }
+                                            >
+                                                重置更多条件
+                                            </Button>
+                                            <Button type="submit">
+                                                <SearchIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                应用全部筛选
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : undefined
+                }
+            />
+        </form>
     )
 }

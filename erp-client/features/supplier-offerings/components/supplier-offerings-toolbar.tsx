@@ -24,6 +24,8 @@ import type {
     AvailabilityStatusFilter,
     OfferingSourceFilter,
     OfferingStatusFilter,
+    SupplierOfferingAppliedChip,
+    SupplierOfferingFilterKey,
 } from "@/features/supplier-offerings/hooks/use-supplier-offerings-page-state"
 import {
     AVAILABILITY_STATUS_LABELS,
@@ -60,16 +62,18 @@ export type SupplierOfferingsToolbarProps = {
     filterPanelOpen: boolean
     onFilterPanelOpenChange: (open: boolean) => void
     hasStructuredFilters: boolean
-    skuLocked: boolean
-    /** 商品页带入的公司 SKU 编号；用于锁定芯片文案。 */
-    lockedSkuNo?: string | null
-    onRemoveSkuLock: () => void
+    appliedChips: readonly SupplierOfferingAppliedChip[]
+    removeFilter: (key: SupplierOfferingFilterKey) => void
+    onApplyFilters: () => void
+    onClearFilters: () => void
+    onResetMoreFilters: () => void
     statusDraft: OfferingStatusFilter
     onStatusDraftChange: (value: OfferingStatusFilter) => void
     sourceTypeDraft: OfferingSourceFilter
     onSourceTypeDraftChange: (value: OfferingSourceFilter) => void
     availabilityStatusDraft: AvailabilityStatusFilter
     onAvailabilityStatusDraftChange: (value: AvailabilityStatusFilter) => void
+    skuLocked: boolean
     skuIdDraft: string | null
     onSkuIdDraftChange: (value: string | null) => void
     skuNoDraft: string
@@ -78,13 +82,12 @@ export type SupplierOfferingsToolbarProps = {
     onProductNoDraftChange: (value: string) => void
     supplierIdDraft: string | null
     onSupplierIdDraftChange: (value: string | null) => void
-    total: number
-    hasFilters: boolean
-    onApplyFilters: () => void
-    onClearFilters: () => void
 }
 
-/** 供给列表搜索、高级筛选与计数动作工具条。 */
+/**
+ * 供给列表的显式提交筛选区：单一 form，收起态靠搜索框尾部提交箭头与 Enter，
+ * 展开态只保留面板底部「应用全部筛选」，两条路径调用同一个 apply（§3.5）。
+ */
 export function SupplierOfferingsToolbar({
     searchInputRef,
     searchDraft,
@@ -92,15 +95,18 @@ export function SupplierOfferingsToolbar({
     filterPanelOpen,
     onFilterPanelOpenChange,
     hasStructuredFilters,
-    skuLocked,
-    lockedSkuNo,
-    onRemoveSkuLock,
+    appliedChips,
+    removeFilter,
+    onApplyFilters,
+    onClearFilters,
+    onResetMoreFilters,
     statusDraft,
     onStatusDraftChange,
     sourceTypeDraft,
     onSourceTypeDraftChange,
     availabilityStatusDraft,
     onAvailabilityStatusDraftChange,
+    skuLocked,
     skuIdDraft,
     onSkuIdDraftChange,
     skuNoDraft,
@@ -109,12 +115,9 @@ export function SupplierOfferingsToolbar({
     onProductNoDraftChange,
     supplierIdDraft,
     onSupplierIdDraftChange,
-    total,
-    hasFilters,
-    onApplyFilters,
-    onClearFilters,
 }: SupplierOfferingsToolbarProps) {
     const panelId = React.useId()
+    const hasChips = appliedChips.length > 0
 
     return (
         <form
@@ -135,73 +138,74 @@ export function SupplierOfferingsToolbar({
                             onChange={(event) =>
                                 onSearchDraftChange(event.target.value)
                             }
-                            placeholder="订货编码、SKU 名称/编号"
+                            placeholder="供应商订货编码"
                             aria-label="搜索供给"
                         />
+                        
                     </InputGroup>
                 }
                 filters={
-                    <>
-                        {!filterPanelOpen ? (
-                            <Button type="submit" size="sm">
-                                <SearchIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                搜索
-                            </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        aria-expanded={filterPanelOpen}
+                        aria-controls={panelId}
+                        onClick={() =>
+                            onFilterPanelOpenChange(!filterPanelOpen)
+                        }
+                    >
+                        <FilterIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        更多筛选
+                        {hasStructuredFilters ? (
+                            <Badge variant="info">已启用</Badge>
                         ) : null}
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            aria-expanded={filterPanelOpen}
-                            aria-controls={panelId}
-                            onClick={() =>
-                                onFilterPanelOpenChange(!filterPanelOpen)
+                        <ChevronDownIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                            className={
+                                filterPanelOpen
+                                    ? "rotate-180 transition-transform"
+                                    : "transition-transform"
                             }
-                        >
-                            <FilterIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            高级筛选
-                            {hasStructuredFilters ? (
-                                <Badge variant="info">已启用</Badge>
-                            ) : null}
-                            <ChevronDownIcon
-                                data-icon="inline-end"
-                                aria-hidden="true"
-                                className={
-                                    filterPanelOpen
-                                        ? "rotate-180 transition-transform"
-                                        : "transition-transform"
-                                }
-                            />
-                        </Button>
-                    </>
+                        />
+                    </Button>
                 }
                 secondary={
-                    filterPanelOpen || skuLocked ? (
-                        <div className="flex w-full flex-col gap-2">
-                            {skuLocked ? (
-                                <div>
-                                    <FilterChip
-                                        label={
-                                            lockedSkuNo
-                                                ? `公司 SKU：${lockedSkuNo}`
-                                                : "来自商品页的公司 SKU"
-                                        }
-                                        clearLabel="移除公司 SKU 限定"
-                                        onClear={onRemoveSkuLock}
-                                    />
+                    hasChips || filterPanelOpen ? (
+                        <div className="w-full space-y-3">
+                            {hasChips ? (
+                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                    <span className="text-xs text-muted-foreground">
+                                        已筛选
+                                    </span>
+                                    {appliedChips.map((chip) => (
+                                        <FilterChip
+                                            key={chip.key}
+                                            label={chip.label}
+                                            clearLabel={`移除${chip.label}`}
+                                            onClear={() =>
+                                                removeFilter(chip.key)
+                                            }
+                                        />
+                                    ))}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={onClearFilters}
+                                    >
+                                        清空全部
+                                    </Button>
                                 </div>
                             ) : null}
                             {filterPanelOpen ? (
                                 <div
                                     id={panelId}
-                                    className="flex w-full flex-col gap-3 rounded-lg border border-border bg-muted/30 px-3 py-3"
-                                    aria-label="供应商供给筛选条件"
+                                    className="flex w-full flex-col gap-3 border-t pt-3"
+                                    aria-label="供应商供给更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
                                         label="关系状态"
@@ -299,39 +303,31 @@ export function SupplierOfferingsToolbar({
                                             />
                                         </div>
                                     </div>
-                                    <div className="flex justify-end">
-                                        <Button type="submit" size="sm">
-                                            <SearchIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                            />
-                                            搜索
-                                        </Button>
+                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-muted-foreground">
+                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={onResetMoreFilters}
+                                            >
+                                                重置更多条件
+                                            </Button>
+                                            <Button type="submit">
+                                                <SearchIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                应用全部筛选
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             ) : null}
                         </div>
                     ) : undefined
-                }
-                actions={
-                    <>
-                        <span
-                            className="text-xs text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            共 {total} 条
-                        </span>
-                        {hasFilters ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={onClearFilters}
-                            >
-                                清除筛选
-                            </Button>
-                        ) : null}
-                    </>
                 }
             />
         </form>

@@ -12,6 +12,24 @@ vi.mock("@/features/master-data/hooks/queries", () => ({
     useMasterDataListQuery: queryMocks.useMasterDataListQuery,
 }))
 
+const navMocks = vi.hoisted(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    searchParams: new URLSearchParams(),
+}))
+
+vi.mock("next/navigation", () => ({
+    useRouter: () => ({
+        push: navMocks.push,
+        replace: navMocks.replace,
+        back: navMocks.back,
+    }),
+    useSearchParams: () => navMocks.searchParams,
+    usePathname: () => "/master-data/categories",
+    useParams: () => ({}),
+}))
+
 const csvMocks = vi.hoisted(() => ({
     buildMasterDataExportCsv: vi.fn(),
     downloadCsv: vi.fn(),
@@ -89,24 +107,41 @@ function listQueryState() {
 }
 
 beforeEach(() => {
+    navMocks.searchParams = new URLSearchParams()
+    navMocks.replace.mockClear()
     queryMocks.useMasterDataListQuery.mockReset()
     queryMocks.useMasterDataListQuery.mockReturnValue(listQueryState())
     csvMocks.buildMasterDataExportCsv.mockReset()
     csvMocks.downloadCsv.mockReset()
 })
 
+const treeSearchInputRef = { current: null as HTMLInputElement | null }
+
 function renderTree() {
     return renderHook(() =>
-        useMasterDataCategoryTree({ current: null }),
+        useMasterDataCategoryTree(treeSearchInputRef),
     )
 }
 
 describe("useMasterDataCategoryTree", () => {
-    it("queries categories with the local search and lifecycle state", () => {
+    it("queries categories with the URL applied search and lifecycle state", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=甲&lifecycleStatus=disabled",
+        )
         renderTree()
         expect(queryMocks.useMasterDataListQuery).toHaveBeenCalledWith({
             resource: "categories",
-            q: "",
+            q: "甲",
+            lifecycleStatus: "disabled",
+            revisionTiming: "all",
+        })
+    })
+
+    it("queries with defaults when the URL carries no filters", () => {
+        renderTree()
+        expect(queryMocks.useMasterDataListQuery).toHaveBeenCalledWith({
+            resource: "categories",
+            q: undefined,
             lifecycleStatus: "all",
             revisionTiming: "all",
         })
@@ -166,33 +201,87 @@ describe("useMasterDataCategoryTree", () => {
         expect(result.current.selectedPath).toBe("甲类 / 甲一")
     })
 
-    it("flags active filters for search or lifecycle", () => {
+    it("flags active filters from the URL applied state", () => {
         const { result } = renderTree()
         expect(result.current.filterActive).toBe(false)
 
-        act(() => {
-            result.current.setSearch(" 甲 ")
-        })
-        expect(result.current.filterActive).toBe(true)
+        navMocks.searchParams = new URLSearchParams("q= 甲 ")
+        const rerendered = renderTree()
+        expect(rerendered.result.current.filterActive).toBe(true)
 
+        navMocks.searchParams = new URLSearchParams(
+            "lifecycleStatus=disabled",
+        )
+        const disabledOnly = renderTree()
+        expect(disabledOnly.result.current.filterActive).toBe(true)
+        expect(result.current.appliedChips).toEqual([])
+    })
+
+    it("applies the search draft to the URL on form submit", () => {
+        const { result } = renderTree()
         act(() => {
-            result.current.setSearch("")
-            result.current.setLifecycleStatus("disabled")
+            result.current.setSearchDraft("  甲  ")
         })
-        expect(result.current.filterActive).toBe(true)
+        act(() => {
+            result.current.applyTreeFilters()
+        })
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/master-data/categories?q=%E7%94%B2",
+            { scroll: false },
+        )
+    })
+
+    it("writes the lifecycle quick filter directly to the URL", () => {
+        const { result } = renderTree()
+        act(() => {
+            result.current.setLifecycleStatus("enabled")
+        })
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/master-data/categories?lifecycleStatus=enabled",
+            { scroll: false },
+        )
+    })
+
+    it("builds applied chips for active search and lifecycle filters", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=甲&lifecycleStatus=disabled",
+        )
+        const { result } = renderTree()
+        expect(result.current.appliedChips).toEqual([
+            { key: "q", label: "搜索：甲" },
+            { key: "lifecycleStatus", label: "启停：当前停用" },
+        ])
+    })
+
+    it("removes a single applied chip", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=甲&lifecycleStatus=disabled",
+        )
+        const { result } = renderTree()
+        act(() => {
+            result.current.removeFilter("q")
+        })
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/master-data/categories?lifecycleStatus=disabled",
+            { scroll: false },
+        )
+        expect(result.current.searchDraft).toBe("")
     })
 
     it("clears search and lifecycle filters together", () => {
+        navMocks.searchParams = new URLSearchParams(
+            "q=甲&lifecycleStatus=enabled",
+        )
         const { result } = renderTree()
         act(() => {
-            result.current.setSearch("甲")
-            result.current.setLifecycleStatus("enabled")
-        })
-        act(() => {
+            result.current.setSearchDraft("甲")
             result.current.clearFilters()
         })
-        expect(result.current.search).toBe("")
-        expect(result.current.lifecycleStatus).toBe("all")
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/master-data/categories",
+            { scroll: false },
+        )
+        expect(result.current.searchDraft).toBe("")
     })
 
     it("opens the create dialog as root or child with the parent id", () => {

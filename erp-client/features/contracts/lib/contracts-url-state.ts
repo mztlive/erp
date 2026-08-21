@@ -24,6 +24,8 @@ const CONTRACTS_URL_FIELDS = [
     { key: "sort", type: "string" },
     { key: "dir", type: "enum", values: ["asc", "desc"] as const },
     { key: "customerId", type: "string" },
+    { key: "settlementPartyId", type: "string" },
+    { key: "owner", type: "string" },
 ] as const
 
 export type ContractsUrlState = {
@@ -34,6 +36,8 @@ export type ContractsUrlState = {
     sort?: string
     dir?: "asc" | "desc"
     customerId?: string
+    settlementPartyId?: string
+    owner?: string
 }
 
 export const contractsUrlCodec =

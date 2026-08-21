@@ -102,7 +102,7 @@ describe("useAccessAuditPage", () => {
 
         expect(view.result.current.view).toBe("users")
         expect(view.result.current.isAudit).toBe(false)
-        expect(view.result.current.searchInput).toBe("abc")
+        expect(view.result.current.searchDraft).toBe("abc")
         expect(view.result.current.pagination).toEqual({
             pageIndex: 1,
             pageSize: 20,
@@ -172,57 +172,65 @@ describe("useAccessAuditPage", () => {
         currentSearchParams = "view=audit&actorId=a1"
         const audit = renderPageHook()
         expect(audit.view.result.current.hasActiveFilters).toBe(true)
-        expect(audit.view.result.current.advancedAuditActive).toBe(true)
+        expect(audit.view.result.current.hasStructuredFilters).toBe(true)
     })
 
-    it("debounces search input and patches the URL with q plus page reset", async () => {
-        vi.useFakeTimers()
-        try {
-            currentSearchParams = "view=roles"
-            const { view } = renderPageHook()
+    it("applies the search draft to the URL only through applyFilters", () => {
+        currentSearchParams = "view=roles"
+        const { view } = renderPageHook()
 
-            act(() => {
-                view.result.current.setSearchInput("新关键词")
-            })
-            act(() => {
-                vi.advanceTimersByTime(300)
-            })
-            expect(mockReplace).toHaveBeenCalledWith(
-                "/system/access-audit?view=roles&q=%E6%96%B0%E5%85%B3%E9%94%AE%E8%AF%8D",
-            )
-        } finally {
-            vi.useRealTimers()
-        }
+        act(() => {
+            view.result.current.setSearchDraft("新关键词")
+        })
+        // Draft 变化不写 URL
+        expect(mockReplace).not.toHaveBeenCalled()
+
+        act(() => {
+            view.result.current.applyFilters()
+        })
+        expect(mockReplace).toHaveBeenCalledWith(
+            "/system/access-audit?view=roles&q=%E6%96%B0%E5%85%B3%E9%94%AE%E8%AF%8D",
+            { scroll: false },
+        )
+        expect(view.result.current.panelOpen).toBe(false)
     })
 
-    it("debounces advanced audit filters and clears the URL patch on empty input", async () => {
-        vi.useFakeTimers()
-        try {
-            currentSearchParams = "view=audit"
-            const { view } = renderPageHook()
+    it("applies panel drafts to the URL through applyFilters and opens the panel for structured deep links", () => {
+        currentSearchParams = "view=audit"
+        const { view } = renderPageHook()
+        expect(view.result.current.panelOpen).toBe(false)
 
-            act(() => {
-                view.result.current.setDebouncedFilters({ actorId: "张三" })
-            })
-            act(() => {
-                vi.advanceTimersByTime(300)
-            })
-            expect(mockReplace).toHaveBeenCalledWith(
-                "/system/access-audit?view=audit&actorId=%E5%BC%A0%E4%B8%89",
-            )
+        act(() => view.result.current.updateDraft("actorId", "张三"))
+        act(() => view.result.current.updateDraft("result", "DENIED"))
+        act(() => view.result.current.applyFilters())
+        expect(mockReplace).toHaveBeenCalledWith(
+            "/system/access-audit?view=audit&result=DENIED&actorId=%E5%BC%A0%E4%B8%89",
+            { scroll: false },
+        )
+        expect(view.result.current.panelOpen).toBe(false)
 
-            act(() => {
-                view.result.current.setDebouncedFilters({})
-            })
-            act(() => {
-                vi.advanceTimersByTime(300)
-            })
-            expect(mockReplace).toHaveBeenLastCalledWith(
-                "/system/access-audit?view=audit",
-            )
-        } finally {
-            vi.useRealTimers()
-        }
+        // 带结构化条件的初始深链展开面板
+        currentSearchParams = "view=audit&result=SUCCESS"
+        const deepLink = renderPageHook()
+        expect(deepLink.view.result.current.panelOpen).toBe(true)
+    })
+
+    it("builds applied chips including the scopes subject lock", () => {
+        currentSearchParams = "view=scopes&subjectType=USER&subjectId=u1&status=enabled"
+        const { view } = renderPageHook()
+
+        const keys = view.result.current.appliedChips.map((chip) => chip.key)
+        expect(keys).toContain("subject")
+        expect(keys).toContain("status")
+        expect(view.result.current.hasActiveFilters).toBe(true)
+
+        act(() => {
+            view.result.current.removeFilter("subject")
+        })
+        expect(mockReplace).toHaveBeenCalledWith(
+            "/system/access-audit?view=scopes&status=enabled",
+            { scroll: false },
+        )
     })
 
     it("updates pagination and URL on page change; page 1 removes the param", () => {
@@ -280,10 +288,11 @@ describe("useAccessAuditPage", () => {
         act(() => {
             view.result.current.clearFilters()
         })
-        expect(mockPush).toHaveBeenCalledWith(
+        expect(mockReplace).toHaveBeenCalledWith(
             "/system/access-audit?view=users",
+            { scroll: false },
         )
-        expect(view.result.current.searchInput).toBe("")
+        expect(view.result.current.searchDraft).toBe("")
         expect(view.result.current.pagination.pageIndex).toBe(0)
     })
 

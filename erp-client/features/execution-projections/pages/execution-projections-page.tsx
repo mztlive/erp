@@ -5,12 +5,7 @@ import Link from "next/link"
 import type { PaginationState, RowSelectionState } from "@tanstack/react-table"
 import { ShieldAlertIcon } from "lucide-react"
 
-import {
-    BusinessFailureState,
-    FormalActionResult,
-    PageHeader,
-    PageScaffold,
-} from "@/components/business"
+import { FormalActionResult, PageScaffold } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { BULK_SELECTION_LIMIT } from "@/features/execution-projections/api/projections"
@@ -29,22 +24,55 @@ import {
     useExecutionProjectionListQuery,
     useProjectionDeliveryCommandMutation,
 } from "@/features/execution-projections/hooks/queries"
-import { useExecutionProjectionSearch } from "@/features/execution-projections/hooks/use-execution-projection-search"
 import {
     useExecutionProjectionColumns,
     type ProjectionRowCommandAction,
 } from "@/features/execution-projections/hooks/use-execution-projection-columns"
-import { useExecutionProjectionUrlState } from "@/features/execution-projections/hooks/use-execution-projection-url-state"
+import {
+    useExecutionProjectionFilters,
+    type ExecutionProjectionAppliedChip,
+} from "@/features/execution-projections/hooks/use-execution-projection-filters"
 import { commandToResultState } from "@/features/execution-projections/lib/result-state"
 import type {
     BulkProjectionJob,
+    DeliveryStatus,
+    ExecutionProjectionMetricKey,
     ExecutionProjectionRow,
+} from "@/features/execution-projections/types"
+import {
+    DELIVERY_STATUS_LABEL,
+    LATENCY_LABEL,
+    RECONCILIATION_LABEL,
+    SOURCE_LABEL,
 } from "@/features/execution-projections/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { openWorkspaceLabel, resultText } from "@/lib/ui-text"
 import { type ResultState } from "@/components/business/feedback"
 
+/** 指标快捷筛选的 chip 文案兜底；正常以服务端指标 label 为准。 */
+const METRIC_CHIP_LABELS: Record<ExecutionProjectionMetricKey, string> = {
+    pending_send: "待发送",
+    inflight: "发送中",
+    timeout: "已超时",
+    fail_manual: "失败/转人工",
+    acked: "已确认",
+}
+
+/** 接收状态可多值逗号拼接（如 未知+失败+转人工 组合值），chip 逐个映射为业务文案。 */
+function deliveryStatusChipLabel(value: string): string {
+    if (value === "UNKNOWN,FAILED,ESCALATED_MANUAL") return "未知+失败+转人工"
+    return value
+        .split(",")
+        .map(
+            (part) =>
+                DELIVERY_STATUS_LABEL[part.trim() as DeliveryStatus] ??
+                part.trim(),
+        )
+        .join("、")
+}
+
 export function ExecutionProjectionsPage() {
+    const filters = useExecutionProjectionFilters()
     const {
         q,
         mallId,
@@ -60,11 +88,7 @@ export function ExecutionProjectionsPage() {
         hasActiveFilters,
         replaceParams,
         setPageState,
-        clearFilters,
-    } = useExecutionProjectionUrlState()
-
-    const { searchDraft, setSearchDraft, searchInputRef } =
-        useExecutionProjectionSearch({ q, replaceParams })
+    } = filters
 
     const listQueryInput = React.useMemo(
         () => ({
@@ -123,6 +147,72 @@ export function ExecutionProjectionsPage() {
         pageIndex: page - 1,
         pageSize,
     }
+
+    const appliedChips = React.useMemo<readonly ExecutionProjectionAppliedChip[]>(
+        () => {
+            const chips: ExecutionProjectionAppliedChip[] = []
+            if (filters.q.trim()) {
+                chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
+            }
+            if (filters.mallId !== "all") {
+                const mallName = view?.malls.find(
+                    (mall) => mall.id === filters.mallId,
+                )?.name
+                chips.push({
+                    key: "mall",
+                    label: `商城：${mallName ?? filters.mallId}`,
+                })
+            }
+            if (filters.deliveryStatus !== "all") {
+                chips.push({
+                    key: "deliveryStatus",
+                    label: `接收状态：${deliveryStatusChipLabel(
+                        filters.deliveryStatus,
+                    )}`,
+                })
+            }
+            if (filters.latency !== "all") {
+                chips.push({
+                    key: "latency",
+                    label: `等待时长：${LATENCY_LABEL[filters.latency]}`,
+                })
+            }
+            if (filters.reconciliation !== "all") {
+                chips.push({
+                    key: "reconciliation",
+                    label: `版本核对：${
+                        RECONCILIATION_LABEL[filters.reconciliation]
+                    }`,
+                })
+            }
+            if (filters.source !== "all") {
+                chips.push({
+                    key: "source",
+                    label: `数据来源：${SOURCE_LABEL[filters.source]}`,
+                })
+            }
+            if (filters.metric !== "all") {
+                const metricLabel =
+                    view?.metrics.find(
+                        (item) => item.key === filters.metric,
+                    )?.label ?? METRIC_CHIP_LABELS[filters.metric]
+                chips.push({ key: "metric", label: `指标：${metricLabel}` })
+            }
+            return chips
+        },
+        [
+            filters.deliveryStatus,
+            filters.latency,
+            filters.mallId,
+            filters.metric,
+            filters.q,
+            filters.reconciliation,
+            filters.source,
+            view?.malls,
+            view?.metrics,
+        ],
+    )
+    const hasChips = hasActiveFilters && appliedChips.length > 0
 
     React.useEffect(() => {
         if (result) {
@@ -224,30 +314,6 @@ export function ExecutionProjectionsPage() {
     const detail = detailQuery.data ?? undefined
     const objectOpen = Boolean(projectionId)
 
-    if (listQuery.isPending && !view) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader title="执行信息" description="正在加载列表…" />
-                <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                    <div className="h-20 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-64 animate-pulse rounded-lg bg-muted" />
-                </div>
-            </PageScaffold>
-        )
-    }
-
-    if (listQuery.isError) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader title="执行信息" description="列表加载失败" />
-                <BusinessFailureState
-                    error={listQuery.error}
-                    onRetry={() => void listQuery.refetch()}
-                />
-            </PageScaffold>
-        )
-    }
-
     return (
         <PageScaffold density="compact">
             <ExecutionProjectionPageHeader
@@ -316,19 +382,18 @@ export function ExecutionProjectionsPage() {
                 onRowSelectionChange={setRowSelection}
                 pagination={pagination}
                 onPaginationChange={setPageState}
+                listLoading={listQuery.isFetching}
+                listLoadFailed={listQuery.isError}
+                queryError={listQuery.error}
+                onRetry={() => void listQuery.refetch()}
                 hasActiveFilters={hasActiveFilters}
-                clearFilters={clearFilters}
+                clearAllFilters={filters.clearAllFilters}
                 filterSummary={view?.filterSummary}
-                replaceParams={replaceParams}
-                searchInputRef={searchInputRef}
-                searchDraft={searchDraft}
-                onSearchDraftChange={setSearchDraft}
-                mallId={mallId}
-                deliveryStatus={deliveryStatus}
-                latency={latency}
-                reconciliation={reconciliation}
-                source={source}
+                filters={filters}
+                appliedChips={appliedChips}
+                hasChips={hasChips}
                 malls={view?.malls ?? []}
+                replaceParams={replaceParams}
                 selectedCount={selectedIds.length}
                 bulkOverLimit={bulkOverLimit}
                 bulkPending={bulkMutation.isPending}

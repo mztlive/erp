@@ -5,13 +5,11 @@ import { Button } from "@/components/ui/button"
 
 export function SettlementListEmptyState({
     empty,
-    filterSummary,
     canCreate,
     onClearFilters,
     onCreateDraft,
 }: {
     empty: string
-    filterSummary: string
     canCreate: boolean
     onClearFilters: () => void
     onCreateDraft: () => void
@@ -23,7 +21,7 @@ export function SettlementListEmptyState({
                     kind="filter"
                     className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                     title="当前筛选无结果"
-                    description={`筛选摘要：${filterSummary}。可清除筛选回到默认待处理视图。`}
+                    description="没有记录符合当前筛选条件，可清除筛选后重试。"
                     action={
                         <Button
                             type="button"

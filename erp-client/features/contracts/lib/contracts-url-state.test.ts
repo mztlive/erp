@@ -12,13 +12,15 @@ describe('contractsUrlCodec', () => {
             sort: undefined,
             dir: undefined,
             customerId: undefined,
+            settlementPartyId: undefined,
+            owner: undefined,
         })
     })
 
     it('parses all fields from query params', () => {
         const state = contractsUrlCodec.parse(
             new URLSearchParams(
-                'q=甲&metric=expiring_30d&page=3&pageSize=50&sort=contractNo&dir=desc&customerId=c1',
+                'q=甲&metric=expiring_30d&page=3&pageSize=50&sort=contractNo&dir=desc&customerId=c1&settlementPartyId=p1&owner=张三',
             ),
         )
         expect(state).toEqual({
@@ -29,6 +31,8 @@ describe('contractsUrlCodec', () => {
             sort: 'contractNo',
             dir: 'desc',
             customerId: 'c1',
+            settlementPartyId: 'p1',
+            owner: '张三',
         })
     })
 
@@ -61,6 +65,8 @@ describe('contractsUrlCodec', () => {
                 sort: undefined,
                 dir: undefined,
                 customerId: undefined,
+                settlementPartyId: undefined,
+                owner: undefined,
             }),
         ).toBe('')
     })
@@ -75,9 +81,11 @@ describe('contractsUrlCodec', () => {
                 sort: 'contractNo',
                 dir: 'desc',
                 customerId: 'c1',
+                settlementPartyId: 'p1',
+                owner: '张三',
             }),
         ).toBe(
-            '?q=%E7%94%B2&metric=effective&page=2&pageSize=30&sort=contractNo&dir=desc&customerId=c1',
+            '?q=%E7%94%B2&metric=effective&page=2&pageSize=30&sort=contractNo&dir=desc&customerId=c1&settlementPartyId=p1&owner=%E5%BC%A0%E4%B8%89',
         )
     })
 

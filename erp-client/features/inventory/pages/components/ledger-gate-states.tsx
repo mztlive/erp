@@ -21,28 +21,6 @@ export function InventoryLedgerLoading() {
     )
 }
 
-export function InventoryLedgerError({
-    error,
-    onRetry,
-}: {
-    error: Error | null
-    onRetry: () => void
-}) {
-    return (
-        <PageScaffold>
-            <PageHeader title="库存台账" description="加载失败" />
-            <BusinessFailureState
-                error={error}
-                action={
-                    <Button type="button" onClick={onRetry}>
-                        重试
-                    </Button>
-                }
-            />
-        </PageScaffold>
-    )
-}
-
 export function InventoryLedgerPermissionRevoked({
     onRetry,
 }: {

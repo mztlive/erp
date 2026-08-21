@@ -109,11 +109,19 @@ export function WarehousesListPage() {
             loading={state.listQuery.isPending}
         >
             <BusinessTableFrame
-                title="仓库列表"
-                description={
-                    state.listTableDescription ??
-                    masterDataCopy.listDescription(state.rows.length)
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        仓库列表
+                        <span
+                            className="font-normal text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            {state.rows.length} 条
+                        </span>
+                    </span>
                 }
+                description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
                         searchInputRef={searchInputRef}
@@ -123,15 +131,17 @@ export function WarehousesListPage() {
                             "warehouses",
                         )}
                         countLabel="仓库"
-                        rowCount={state.rows.length}
                         hasActiveFilters={hasActiveFilters}
                         clearAllFilters={filters.clearAllFilters}
+                        appliedChips={filters.appliedChips}
+                        removeFilter={filters.removeFilter}
                         filterPanelOpen={filters.filterPanelOpen}
                         setFilterPanelOpen={filters.setFilterPanelOpen}
                         hasStructuredListFilters={
                             filters.hasStructuredListFilters
                         }
                         applyListFilters={filters.applyListFilters}
+                        resetMoreFilters={filters.resetMoreFilters}
                         lifecycleStatusDraft={filters.lifecycleStatusDraft}
                         setLifecycleStatusDraft={
                             filters.setLifecycleStatusDraft

@@ -18,6 +18,8 @@ export function filterContracts(
         search: string
         metricKey: ContractMetricFilter
         statusFilter: ContractStatusFilter
+        settlementPartyId?: string
+        owner?: string
     },
 ): ContractListRow[] {
     const q = options.search.trim().toLowerCase()
@@ -26,6 +28,15 @@ export function filterContracts(
             options.statusFilter !== "all" &&
             row.status !== options.statusFilter
         ) {
+            return false
+        }
+        if (
+            options.settlementPartyId &&
+            row.settlementParty.partyId !== options.settlementPartyId
+        ) {
+            return false
+        }
+        if (options.owner && row.ownerLabel !== options.owner) {
             return false
         }
         switch (options.metricKey) {

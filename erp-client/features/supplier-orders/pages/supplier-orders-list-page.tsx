@@ -19,10 +19,9 @@ import { SupplierOrdersListReturnBanner } from "@/features/supplier-orders/compo
 import { SupplierOrdersListTable } from "@/features/supplier-orders/components/supplier-orders-list-table"
 import { SupplierOrdersListToolbar } from "@/features/supplier-orders/components/supplier-orders-list-toolbar"
 import { useSupplierOrdersExport } from "@/features/supplier-orders/hooks/use-supplier-orders-export"
+import { useSupplierOrdersFilters } from "@/features/supplier-orders/hooks/use-supplier-orders-filters"
 import { useSupplierOrdersKeyboardNav } from "@/features/supplier-orders/hooks/use-supplier-orders-keyboard-nav"
 import { useSupplierOrdersQueryResult } from "@/features/supplier-orders/hooks/use-supplier-orders-query-result"
-import { useSupplierOrdersSearchDraft } from "@/features/supplier-orders/hooks/use-supplier-orders-search-draft"
-import { useSupplierOrdersUrlState } from "@/features/supplier-orders/hooks/use-supplier-orders-url-state"
 import { useSupplierOrdersListColumns } from "@/features/supplier-orders/hooks/use-supplier-orders-list-columns"
 import {
     useSupplierOrderDetailQuery,
@@ -40,9 +39,14 @@ const SORT_COLUMN_TO_FIELD: Record<
     updated: "lastBusinessAt",
 }
 
+/** 结果卡默认操作说明（无筛选时展示）。 */
+const DEFAULT_TABLE_DESCRIPTION =
+    "身份列与操作列固定；履约/取消/退款三种状态独立展示。"
+
 export function SupplierOrdersListPage() {
-    const { url, returnTo, updateUrl, hasActiveFilters, clearFilters } =
-        useSupplierOrdersUrlState()
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+    const filters = useSupplierOrdersFilters(searchInputRef)
+    const { url, returnTo, updateUrl } = filters
 
     const listQueryInput = React.useMemo<SupplierOrderListQuery>(
         () => ({
@@ -89,9 +93,6 @@ export function SupplierOrdersListPage() {
         rows,
         updateUrl,
     })
-
-    const { searchDraft, setSearchDraft, commitSearch, commitOnBlur } =
-        useSupplierOrdersSearchDraft({ q: url.q, updateUrl })
 
     const {
         exportPreviewOpen,
@@ -167,6 +168,16 @@ export function SupplierOrdersListPage() {
         onQueryResult: handleQueryFromList,
         queryPending,
     })
+
+    /** 表头说明：有筛选时读已生效条件摘要，无筛选时展示默认操作说明。 */
+    const tableDescription = React.useMemo(() => {
+        if (filters.appliedChips.length === 0) {
+            return DEFAULT_TABLE_DESCRIPTION
+        }
+        return `当前筛选：${filters.appliedChips
+            .map((chip) => chip.label)
+            .join(" · ")}`
+    }, [filters.appliedChips])
 
     return (
         <PageScaffold>
@@ -251,15 +262,39 @@ export function SupplierOrdersListPage() {
             <SupplierOrdersListTable
                 toolbar={
                     <SupplierOrdersListToolbar
-                        url={url}
-                        total={total}
-                        hasActiveFilters={hasActiveFilters}
-                        updateUrl={updateUrl}
-                        clearFilters={clearFilters}
-                        searchDraft={searchDraft}
-                        onSearchDraftChange={setSearchDraft}
-                        onSearchCommit={() => commitSearch(searchDraft)}
-                        onSearchBlur={commitOnBlur}
+                        searchInputRef={searchInputRef}
+                        view={url.view}
+                        onViewChange={(view) => updateUrl({ view, page: 1 })}
+                        searchDraft={filters.searchDraft}
+                        onSearchDraftChange={filters.setSearchDraft}
+                        panelOpen={filters.panelOpen}
+                        setPanelOpen={filters.setPanelOpen}
+                        hasStructuredFilters={filters.hasStructuredFilters}
+                        appliedChips={filters.appliedChips}
+                        onRemoveFilter={filters.removeFilter}
+                        onApplyFilters={filters.applyFilters}
+                        onClearAllFilters={filters.clearAllFilters}
+                        onResetMoreFilters={filters.resetMoreFilters}
+                        filterError={filters.filterError}
+                        setFilterError={filters.setFilterError}
+                        supplierIdDraft={filters.supplierIdDraft}
+                        setSupplierIdDraft={filters.setSupplierIdDraft}
+                        fulfillmentStatusesDraft={
+                            filters.fulfillmentStatusesDraft
+                        }
+                        setFulfillmentStatusesDraft={
+                            filters.setFulfillmentStatusesDraft
+                        }
+                        cancelStatusesDraft={filters.cancelStatusesDraft}
+                        setCancelStatusesDraft={
+                            filters.setCancelStatusesDraft
+                        }
+                        refundStatusesDraft={filters.refundStatusesDraft}
+                        setRefundStatusesDraft={filters.setRefundStatusesDraft}
+                        paidFromDraft={filters.paidFromDraft}
+                        setPaidFromDraft={filters.setPaidFromDraft}
+                        paidToDraft={filters.paidToDraft}
+                        setPaidToDraft={filters.setPaidToDraft}
                     />
                 }
                 rows={rows}
@@ -268,8 +303,9 @@ export function SupplierOrdersListPage() {
                 loading={listQuery.isPending}
                 error={listQuery.isError ? listQuery.error : null}
                 onRetry={() => void listQuery.refetch()}
-                hasActiveFilters={hasActiveFilters}
-                onClearFilters={clearFilters}
+                hasActiveFilters={filters.hasActiveFilters}
+                onClearFilters={filters.clearAllFilters}
+                description={tableDescription}
                 sorting={sorting}
                 onSortingChange={handleSortingChange}
                 pagination={pagination}

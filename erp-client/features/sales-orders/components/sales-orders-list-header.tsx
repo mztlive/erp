@@ -10,10 +10,7 @@ import {
     PageActions,
     PageHeader,
 } from "@/components/business"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import type { SalesOrderSummaryFilter } from "@/features/sales-orders/lib/filter-orders"
 import type { SalesOrdersListExportJob } from "@/features/sales-orders/lib/sales-orders-list-csv"
-import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 
 export function SalesOrdersListHeader(props: {
     isError: boolean
@@ -22,8 +19,6 @@ export function SalesOrdersListHeader(props: {
     exportDisabled: boolean
     onExport: () => void
     exportJob: SalesOrdersListExportJob | null
-    summary: SalesOrdersUrlState["summary"]
-    onSummaryChange: (summary: SalesOrderSummaryFilter) => void
 }) {
     const {
         isError,
@@ -32,8 +27,6 @@ export function SalesOrdersListHeader(props: {
         exportDisabled,
         onExport,
         exportJob,
-        summary,
-        onSummaryChange,
     } = props
 
     return (
@@ -109,26 +102,6 @@ export function SalesOrdersListHeader(props: {
                     ]}
                 />
             ) : null}
-
-            <ToggleGroup
-                value={[summary]}
-                onValueChange={(values) => {
-                    const next = values[0] as
-                        | SalesOrdersUrlState["summary"]
-                        | undefined
-                    // 工作视图会约束创建人或审核轨；切换时清掉重叠条件，避免同字段冲突。
-                    onSummaryChange(next ?? "all")
-                }}
-                variant="outline"
-                size="sm"
-                spacing={0}
-                aria-label="销售单工作视图"
-            >
-                <ToggleGroupItem value="all">全部</ToggleGroupItem>
-                <ToggleGroupItem value="mine">待我处理</ToggleGroupItem>
-                <ToggleGroupItem value="createdByMe">我创建的</ToggleGroupItem>
-                <ToggleGroupItem value="exception">异常</ToggleGroupItem>
-            </ToggleGroup>
         </>
     )
 }

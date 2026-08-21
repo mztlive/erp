@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
-import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { patchUrl as patchSearchParams, type PatchUrlOptions } from "@/lib/patch-search-params"
 import { parseView } from "@/features/access-audit/lib/url-state"
 import type { AccessView } from "@/features/access-audit/types"
 
@@ -35,7 +35,7 @@ function useAccessUrlState() {
 
     function patchUrl(
         patch: Record<string, string | null | undefined>,
-        options?: { replace?: boolean },
+        options?: PatchUrlOptions,
     ) {
         patchSearchParams(
             { router, pathname, searchParams, view },

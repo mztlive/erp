@@ -74,84 +74,39 @@ export function AccessAuditPage() {
         )
     }
 
-    if (page.pageQuery.isError || !page.data) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader title="权限与审计" />
-                <BusinessFailureState
-                    error={page.pageQuery.error}
-                    action={
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            className="rounded-lg shadow-none"
-                            onClick={() => void page.pageQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
     const data = page.data
     const view = page.view
 
     const rows =
         view === "roles"
-            ? data.roles
+            ? (data?.roles ?? [])
             : view === "users"
-              ? data.users
+              ? (data?.users ?? [])
               : view === "scopes"
-                ? data.scopes
+                ? (data?.scopes ?? [])
                 : view === "fields"
-                  ? data.fieldPolicies
-                  : data.auditEvents
-
-    // 组织维度选项：取自当前列表的角色/用户组织标签；选中值不在选项时并入，保证可回退
-    const orgOptions = (() => {
-        const seen = new Set<string>()
-        const options: { value: string; label: string }[] = []
-        for (const row of [...data.roles, ...data.users]) {
-            const label = row.organizationLabel
-            if (!label || seen.has(label)) continue
-            seen.add(label)
-            options.push({ value: label, label })
-        }
-        if (page.org && !seen.has(page.org)) {
-            options.unshift({ value: page.org, label: page.org })
-        }
-        return options
-    })()
+                  ? (data?.fieldPolicies ?? [])
+                  : (data?.auditEvents ?? [])
 
     const listToolbar = (
         <AccessListToolbar
             isAudit={page.isAudit}
-            searchInput={page.searchInput}
             searchInputRef={page.searchInputRef}
-            setSearchInput={page.setSearchInput}
-            org={page.org}
-            status={page.status}
-            risk={page.risk}
-            orgOptions={orgOptions}
-            fromParam={page.fromParam}
-            toParam={page.toParam}
-            action={page.action}
-            resultFilter={page.resultFilter}
-            advancedAuditActive={page.advancedAuditActive}
-            debouncedFilters={page.debouncedFilters}
-            setDebouncedFilters={page.setDebouncedFilters}
-            actorId={page.actorId}
-            traceId={page.traceId}
-            objectType={page.objectType}
-            objectId={page.objectId}
-            patchFilterUrl={page.patchFilterUrl}
-            hasActiveFilters={page.hasActiveFilters}
-            clearFilters={page.clearFilters}
-            exportBlocked={page.exportBlocked}
-            exportBlocker={page.exportBlocker}
-            handleExport={page.handleExport}
+            searchDraft={page.searchDraft}
+            setSearchDraft={page.setSearchDraft}
+            panelOpen={page.panelOpen}
+            setPanelOpen={page.setPanelOpen}
+            hasStructuredFilters={page.hasStructuredFilters}
+            appliedChips={page.appliedChips}
+            hasChips={page.hasActiveFilters && page.appliedChips.length > 0}
+            removeFilter={page.removeFilter}
+            clearAllFilters={page.clearFilters}
+            resetMoreFilters={page.resetMoreFilters}
+            applyFilters={page.applyFilters}
+            filterError={page.filterError}
+            draft={page.draft}
+            updateDraft={page.updateDraft}
+            orgOptions={page.orgOptions}
         />
     )
 
@@ -175,13 +130,17 @@ export function AccessAuditPage() {
                             state={
                                 page.pageQuery.isFetching ? "syncing" : "fresh"
                             }
-                            updatedAt={formatDateTime(
-                                data.calculatedAt,
-                                "full",
-                            )}
-                            dateTime={data.calculatedAt}
+                            updatedAt={
+                                data
+                                    ? formatDateTime(
+                                          data.calculatedAt,
+                                          "full",
+                                      )
+                                    : "—"
+                            }
+                            dateTime={data?.calculatedAt}
                         />
-                        {!page.isAudit ? (
+                        {!page.isAudit && data ? (
                             <span
                                 className="text-xs text-muted-foreground"
                                 aria-live="polite"
@@ -233,7 +192,12 @@ export function AccessAuditPage() {
                 }
             />
 
-            <PolicyBanner policies={data.governancePolicies} view={view} />
+            {data ? (
+                <PolicyBanner
+                    policies={data.governancePolicies}
+                    view={view}
+                />
+            ) : null}
 
             {page.actionError ? (
                 <Alert variant="destructive">
@@ -267,7 +231,7 @@ export function AccessAuditPage() {
                 />
             ) : null}
 
-            {data.fieldMaskNote ? (
+            {data?.fieldMaskNote ? (
                 <Alert variant="info">
                     <LockIcon aria-hidden="true" />
                     <AlertTitle>字段打码</AlertTitle>
@@ -284,9 +248,9 @@ export function AccessAuditPage() {
                 isFetching={
                     page.pageQuery.isFetching && !page.pageQuery.isPending
                 }
-                emptyReason={data.emptyReason}
-                auditCoverageFrom={data.auditCoverageFrom}
-                auditCoverageTo={data.auditCoverageTo}
+                emptyReason={data?.emptyReason}
+                auditCoverageFrom={data?.auditCoverageFrom}
+                auditCoverageTo={data?.auditCoverageTo}
                 roleColumns={page.roleColumns}
                 userColumns={page.userColumns}
                 scopeColumns={page.scopeColumns}
@@ -295,6 +259,28 @@ export function AccessAuditPage() {
                 onClearFilters={page.clearFilters}
                 toolbar={listToolbar}
                 onViewChange={page.switchView}
+                errorState={
+                    page.pageQuery.isError && !data ? (
+                        <BusinessFailureState
+                            error={page.pageQuery.error}
+                            action={
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="rounded-lg shadow-none"
+                                    onClick={() =>
+                                        void page.pageQuery.refetch()
+                                    }
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    ) : undefined
+                }
+                exportBlocked={page.exportBlocked}
+                exportBlocker={page.exportBlocker}
+                onExport={page.handleExport}
             />
             <AccessPreviewSheets
                 explainSubject={page.explainSubject}

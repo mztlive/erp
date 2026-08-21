@@ -31,9 +31,13 @@ describe("useMallSyncUrlState", () => {
         const { result } = renderHook(() => useMallSyncUrlState())
         expect(result.current.view).toBe("overview")
         expect(result.current.q).toBe("")
+        expect(result.current.mappingType).toBeUndefined()
         expect(result.current.jobId).toBeUndefined()
         expect(result.current.queueContextId).toBe("queue:W17:mall-sync")
         expect(result.current.hasActiveFilters).toBe(false)
+        expect(result.current.hasStructuredFilters).toBe(false)
+        expect(result.current.panelOpen).toBe(false)
+        expect(result.current.mappingTypeDraft).toBe("all")
     })
 
     it("parses every object param from the URL", () => {
@@ -63,67 +67,140 @@ describe("useMallSyncUrlState", () => {
         expect(result.current.view).toBe("overview")
     })
 
-    it("keeps the search input in sync with the q param", () => {
-        mocks.params = new URLSearchParams("q=abc")
-        const { result, rerender } = renderHook(() => useMallSyncUrlState())
-        expect(result.current.searchInput).toBe("abc")
-        mocks.params = new URLSearchParams("q=xyz")
-        rerender()
-        expect(result.current.searchInput).toBe("xyz")
+    it("degrades an invalid mappingType to the default", () => {
+        mocks.params = new URLSearchParams("view=mapping&mappingType=bogus")
+        const { result } = renderHook(() => useMallSyncUrlState())
+        expect(result.current.mappingType).toBeUndefined()
+        expect(result.current.mappingTypeDraft).toBe("all")
+        expect(result.current.hasStructuredFilters).toBe(false)
+        expect(result.current.panelOpen).toBe(false)
     })
 
-    it("debounces search input into the URL with replace", () => {
-        vi.useFakeTimers()
-        try {
-            mocks.params = new URLSearchParams("view=jobs&jobId=j1&q=abc")
-            const { result } = renderHook(() => useMallSyncUrlState())
+    it("opens the panel on an initial deep link with structured filters", () => {
+        mocks.params = new URLSearchParams(
+            "view=mapping&mappingType=CUSTOMER",
+        )
+        const { result } = renderHook(() => useMallSyncUrlState())
+        expect(result.current.mappingType).toBe("CUSTOMER")
+        expect(result.current.mappingTypeDraft).toBe("CUSTOMER")
+        expect(result.current.hasStructuredFilters).toBe(true)
+        expect(result.current.panelOpen).toBe(true)
+    })
 
-            act(() => {
-                result.current.setSearchInput("xyz")
-            })
-            act(() => {
-                result.current.setSearchInput("abc")
-            })
-            act(() => {
-                vi.advanceTimersByTime(350)
-            })
-            // 回到原值：防抖回调不应写 URL
-            expect(mocks.replace).not.toHaveBeenCalled()
+    it("keeps the search draft in sync with the q param", () => {
+        mocks.params = new URLSearchParams("q=abc")
+        const { result, rerender } = renderHook(() => useMallSyncUrlState())
+        expect(result.current.searchDraft).toBe("abc")
+        mocks.params = new URLSearchParams("q=xyz")
+        rerender()
+        expect(result.current.searchDraft).toBe("xyz")
+    })
 
-            act(() => {
-                result.current.setSearchInput("  xyz  ")
-            })
-            act(() => {
-                vi.advanceTimersByTime(300)
-            })
-            expect(mocks.replace).toHaveBeenCalledWith(
-                "/mall-sync?view=jobs&jobId=j1&q=xyz",
-            )
+    it("does not write the URL while the draft is being edited", () => {
+        const { result } = renderHook(() => useMallSyncUrlState())
+        act(() => {
+            result.current.setSearchDraft("xyz")
+        })
+        expect(mocks.replace).not.toHaveBeenCalled()
+        expect(mocks.push).not.toHaveBeenCalled()
+    })
 
-            act(() => {
-                result.current.setSearchInput("")
-            })
-            act(() => {
-                vi.advanceTimersByTime(300)
-            })
-            expect(mocks.replace).toHaveBeenLastCalledWith(
-                "/mall-sync?view=jobs&jobId=j1",
-            )
-        } finally {
-            vi.useRealTimers()
-        }
+    it("applies q and mappingType in one replace without page params", () => {
+        mocks.params = new URLSearchParams("view=mapping&mappingTaskId=mt-1")
+        const { result } = renderHook(() => useMallSyncUrlState())
+        act(() => {
+            result.current.setSearchDraft("  abc  ")
+            result.current.setMappingTypeDraft("CUSTOMER")
+        })
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(mocks.replace).toHaveBeenCalledWith(
+            "/mall-sync?view=mapping&mappingTaskId=mt-1&q=abc&mappingType=CUSTOMER",
+            { scroll: false },
+        )
+        expect(mocks.push).not.toHaveBeenCalled()
+        expect(result.current.panelOpen).toBe(false)
+    })
+
+    it("omits default values from the URL on apply", () => {
+        mocks.params = new URLSearchParams("view=mapping&q=abc")
+        const { result } = renderHook(() => useMallSyncUrlState())
+        act(() => {
+            result.current.setSearchDraft("")
+            result.current.setMappingTypeDraft("all")
+        })
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(mocks.replace).toHaveBeenCalledWith(
+            "/mall-sync?view=mapping",
+            { scroll: false },
+        )
+    })
+
+    it("keeps the panel closed after apply even when the URL backfills", () => {
+        mocks.params = new URLSearchParams(
+            "view=mapping&mappingType=CUSTOMER",
+        )
+        const { result, rerender } = renderHook(() => useMallSyncUrlState())
+        expect(result.current.panelOpen).toBe(true)
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(result.current.panelOpen).toBe(false)
+        // URL 回填（q 变化）只同步 Draft，不重新展开面板
+        mocks.params = new URLSearchParams(
+            "view=mapping&mappingType=CUSTOMER&q=abc",
+        )
+        rerender()
+        expect(result.current.searchDraft).toBe("abc")
+        expect(result.current.panelOpen).toBe(false)
+    })
+
+    it("resets only structured filters and keeps q on resetMoreFilters", () => {
+        mocks.params = new URLSearchParams(
+            "view=mapping&q=abc&mappingType=CUSTOMER",
+        )
+        const { result } = renderHook(() => useMallSyncUrlState())
+        act(() => {
+            result.current.resetMoreFilters()
+        })
+        expect(result.current.mappingTypeDraft).toBe("all")
+        expect(mocks.replace).toHaveBeenCalledWith(
+            "/mall-sync?view=mapping&q=abc",
+            { scroll: false },
+        )
+    })
+
+    it("removes a single condition and clears the paired work item", () => {
+        mocks.params = new URLSearchParams(
+            "view=mapping&mappingTaskId=m1&workItemId=w1&currentWorkItemId=w1",
+        )
+        const { result } = renderHook(() => useMallSyncUrlState())
+        act(() => {
+            result.current.removeFilter("mappingTaskId")
+        })
+        expect(mocks.replace).toHaveBeenCalledWith(
+            "/mall-sync?view=mapping",
+            { scroll: false },
+        )
     })
 
     it("clears all filters and keeps the view", () => {
         mocks.params = new URLSearchParams(
-            "view=mapping&mappingTaskId=m1&workItemId=w1&currentWorkItemId=w1&q=abc&jobId=j1&snapshotId=s1&differenceId=d1",
+            "view=mapping&mappingTaskId=m1&workItemId=w1&currentWorkItemId=w1&q=abc&jobId=j1&snapshotId=s1&differenceId=d1&mappingType=CUSTOMER",
         )
         const { result } = renderHook(() => useMallSyncUrlState())
         act(() => {
             result.current.clearAllFilters()
         })
-        expect(result.current.searchInput).toBe("")
-        expect(mocks.replace).toHaveBeenCalledWith("/mall-sync?view=mapping")
+        expect(result.current.searchDraft).toBe("")
+        expect(result.current.mappingTypeDraft).toBe("all")
+        expect(result.current.panelOpen).toBe(false)
+        expect(mocks.replace).toHaveBeenCalledWith("/mall-sync?view=mapping", {
+            scroll: false,
+        })
         expect(mocks.push).not.toHaveBeenCalled()
     })
 
@@ -190,5 +267,25 @@ describe("useMallSyncUrlState", () => {
 
         input.remove()
         other.remove()
+    })
+
+    it("does not steal focus on / while a dialog is open", () => {
+        const { result } = renderHook(() => useMallSyncUrlState())
+        const input = document.createElement("input")
+        document.body.appendChild(input)
+        result.current.searchInputRef.current = input
+        const dialog = document.createElement("div")
+        dialog.setAttribute("role", "dialog")
+        document.body.appendChild(dialog)
+
+        act(() => {
+            window.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "/", bubbles: true }),
+            )
+        })
+        expect(document.activeElement).not.toBe(input)
+
+        dialog.remove()
+        input.remove()
     })
 })

@@ -206,7 +206,6 @@ export function buildListTableDescription(input: {
     q: string
     lifecycleStatus: "enabled" | "disabled" | "all"
     revisionTiming: "current" | "future" | "all"
-    rowCount: number
 }): string {
     const active: string[] = []
     if (input.q.trim()) active.push(`搜索「${input.q.trim()}」`)
@@ -219,9 +218,108 @@ export function buildListTableDescription(input: {
         )
     }
     if (active.length === 0) {
-        return masterDataCopy.listDescription(input.rowCount)
+        return masterDataCopy.listDescription()
     }
-    return `共 ${input.rowCount} 条 · 当前筛选：${active.join(" · ")}`
+    return `当前筛选：${active.join(" · ")}`
+}
+
+/** 商品列表表头说明：有筛选时写人读摘要，否则默认操作说明。 */
+export function buildProductTableDescription(input: {
+    q: string
+    lifecycleStatus: "enabled" | "disabled" | "all"
+    revisionTiming: "current" | "future" | "all"
+    productKind?: ProductKind
+    productListingStatus?: ProductListingFilter
+    productSupplyCoverage?: ProductSkuCoverageFilter
+    productSalesPriceMin?: string
+    productSalesPriceMax?: string
+    selectedCategoryLabel?: string
+    selectedBrandLabel?: string
+    selectedSupplierLabel?: string
+}): string {
+    const active: string[] = []
+    if (input.q.trim()) active.push(`搜索「${input.q.trim()}」`)
+    if (input.lifecycleStatus !== "all") {
+        active.push(`启用状态 ${lifecycleFilterLabel(input.lifecycleStatus)}`)
+    }
+    if (input.revisionTiming !== "all") {
+        active.push(
+            `版本状态 ${revisionTimingFilterLabel(input.revisionTiming)}`,
+        )
+    }
+    if (input.productKind) {
+        active.push(`类型 ${PRODUCT_KIND_LABELS[input.productKind]}`)
+    }
+    if (input.selectedCategoryLabel) {
+        active.push(`分类 ${input.selectedCategoryLabel}`)
+    }
+    if (input.selectedBrandLabel) {
+        active.push(`品牌 ${input.selectedBrandLabel}`)
+    }
+    if (input.selectedSupplierLabel) {
+        active.push(`供应商 ${input.selectedSupplierLabel}`)
+    }
+    if (input.productListingStatus) {
+        const label = PRODUCT_LISTING_FILTER_OPTIONS.find(
+            (option) => option.value === input.productListingStatus,
+        )?.label
+        if (label) active.push(`上架 ${label}`)
+    }
+    if (input.productSupplyCoverage) {
+        const label = PRODUCT_COVERAGE_FILTER_OPTIONS.find(
+            (option) => option.value === input.productSupplyCoverage,
+        )?.label
+        if (label) active.push(`供给覆盖 ${label}`)
+    }
+    if (input.productSalesPriceMin || input.productSalesPriceMax) {
+        active.push(
+            `销售价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+        )
+    }
+    if (active.length === 0) {
+        return masterDataCopy.productListDescription()
+    }
+    return `当前筛选：${active.join(" · ")} · 回车打开详情。`
+}
+
+/** 供应商列表表头说明：有筛选时写人读摘要，否则默认操作说明。 */
+export function buildSupplierTableDescription(input: {
+    q: string
+    lifecycleStatus: "enabled" | "disabled" | "all"
+    supplierQualificationHealth?: SupplierQualificationHealth
+    supplierCapabilityCodes: readonly string[]
+    supplierQualificationTypes: readonly string[]
+}): string {
+    const active: string[] = []
+    if (input.q.trim()) active.push(`搜索「${input.q.trim()}」`)
+    if (input.lifecycleStatus !== "all") {
+        active.push(`启用状态 ${lifecycleFilterLabel(input.lifecycleStatus)}`)
+    }
+    if (input.supplierQualificationHealth) {
+        active.push(
+            `资质状态 ${qualificationHealthLabel(input.supplierQualificationHealth)}`,
+        )
+    }
+    if (input.supplierCapabilityCodes.length > 0) {
+        active.push(
+            `供应能力 ${selectedSupplierOptionLabels(
+                input.supplierCapabilityCodes,
+                SUPPLIER_CAPABILITY_OPTIONS,
+            ).join("、")}`,
+        )
+    }
+    if (input.supplierQualificationTypes.length > 0) {
+        active.push(
+            `资质类型 ${selectedSupplierOptionLabels(
+                input.supplierQualificationTypes,
+                SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
+            ).join("、")}`,
+        )
+    }
+    if (active.length === 0) {
+        return masterDataCopy.supplierListDescription()
+    }
+    return `当前筛选：${active.join(" · ")} · 回车打开详情。`
 }
 
 /**

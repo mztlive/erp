@@ -117,7 +117,9 @@ const workItemFixture: SupplierSupplyExceptionWorkItem = {
     reasonCode: "SUPPLIER_STOPPED",
     reasonLabel: "停止供应",
     impactSummary: "已暂停",
+    nextActionHint: "处理供给异常",
     summarySections: [],
+    briefLines: [],
     createdAt: 1_700_000_000_000,
 }
 

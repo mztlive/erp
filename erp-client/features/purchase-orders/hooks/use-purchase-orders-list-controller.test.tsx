@@ -168,48 +168,113 @@ describe("usePurchaseOrdersListController", () => {
         )
     })
 
-    it("搜索防抖：300ms 后把搜索词写回 URL 并回到第 1 页", async () => {
+    it("草稿变化不写 URL；应用筛选一次性写回并回第 1 页", async () => {
         const { result } = renderController()
         await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
 
         act(() => {
-            result.current.setSearchDraft("abc")
+            result.current.filters.setSearchDraft("abc")
+            result.current.filters.setStatusDraft("PENDING_REVIEW")
         })
         expect(mockRouter.replace).not.toHaveBeenCalled()
-        await waitFor(() =>
-            expect(mockRouter.replace).toHaveBeenCalledWith(
-                "/procurement/orders?q=abc",
-                { scroll: false },
-            ),
+
+        act(() => {
+            result.current.filters.applyFilters()
+        })
+        expect(mockRouter.replace).toHaveBeenCalledWith(
+            "/procurement/orders?q=abc&status=PENDING_REVIEW",
+            { scroll: false },
+        )
+        expect(result.current.filters.panelOpen).toBe(false)
+    })
+
+    it("应用筛选时清除同维度的指标粗筛", async () => {
+        mockUseSearchParams.mockReturnValue(
+            new URLSearchParams("metric=draft"),
+        )
+        const { result } = renderController()
+        await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
+        expect(result.current.filters.appliedChips[0]?.label).toBe(
+            "指标：草稿",
+        )
+
+        act(() => {
+            result.current.filters.applyFilters()
+        })
+        expect(mockRouter.replace).toHaveBeenCalledWith(
+            "/procurement/orders",
+            { scroll: false },
         )
     })
 
-    it("搜索词与 URL 一致时不重复写回", async () => {
-        mockUseSearchParams.mockReturnValue(new URLSearchParams("q=abc"))
+    it("清除筛选输出最小 URL 且保留排序与导航上下文", async () => {
+        mockUseSearchParams.mockReturnValue(
+            new URLSearchParams(
+                "q=abc&status=DRAFT&metric=draft&sort=purchase_no:asc&page=3&basisId=bas_1",
+            ),
+        )
+        const { result } = renderController()
+        await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
+        expect(result.current.filters.hasActiveFilters).toBe(true)
+
+        act(() => {
+            result.current.filters.clearAllFilters()
+        })
+        expect(mockRouter.replace).toHaveBeenCalledWith(
+            "/procurement/orders?sort=purchase_no%3Aasc&basisId=bas_1",
+            { scroll: false },
+        )
+    })
+
+    it("重置更多条件只清主状态，保留关键词与指标", async () => {
+        mockUseSearchParams.mockReturnValue(
+            new URLSearchParams("q=abc&status=DRAFT&metric=draft"),
+        )
         const { result } = renderController()
         await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
 
         act(() => {
-            result.current.setSearchDraft("abc")
+            result.current.filters.resetMoreFilters()
         })
-        await new Promise((resolve) => setTimeout(resolve, 400))
-        expect(mockRouter.replace).not.toHaveBeenCalled()
+        expect(mockRouter.replace).toHaveBeenCalledWith(
+            "/procurement/orders?q=abc&metric=draft",
+            { scroll: false },
+        )
+        expect(result.current.filters.panelOpen).toBe(true)
     })
 
-    it("清除筛选输出最小 URL", async () => {
+    it("chip 单独移除单个条件", async () => {
         mockUseSearchParams.mockReturnValue(
             new URLSearchParams("q=abc&status=DRAFT"),
         )
         const { result } = renderController()
         await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
-        expect(result.current.hasActiveFilters).toBe(true)
 
         act(() => {
-            result.current.clearFilters()
+            result.current.filters.removeFilter("status")
         })
-        expect(mockRouter.replace).toHaveBeenCalledWith("/procurement/orders", {
-            scroll: false,
-        })
+        expect(mockRouter.replace).toHaveBeenCalledWith(
+            "/procurement/orders?q=abc",
+            { scroll: false },
+        )
+    })
+
+    it("有结构化状态的深链初始展开面板", async () => {
+        mockUseSearchParams.mockReturnValue(new URLSearchParams("status=DRAFT"))
+        const { result } = renderController()
+        await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
+        expect(result.current.filters.panelOpen).toBe(true)
+    })
+
+    it("已生效条件全部显性化为 chip", async () => {
+        mockUseSearchParams.mockReturnValue(
+            new URLSearchParams("q=钢&status=PENDING_REVIEW&metric=fulfill"),
+        )
+        const { result } = renderController()
+        await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
+        expect(result.current.filters.appliedChips.map((c) => c.label)).toEqual(
+            ["搜索：钢", "状态：审批中", "指标：待履约"],
+        )
     })
 
     it("列表返回页码与 URL 不同步时校正 URL", async () => {

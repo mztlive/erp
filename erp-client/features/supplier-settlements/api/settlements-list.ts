@@ -46,7 +46,7 @@ export async function fetchSettlementList(
             page: input.page,
             page_size: pageSize,
             supplier_id: input.supplierId,
-            status: statusFilter?.split(",")[0]?.trim() || undefined,
+            status: statusFilter?.trim() || undefined,
             period_from: input.periodFrom,
             period_to: input.periodTo,
             statement_no: input.q?.trim() || undefined,

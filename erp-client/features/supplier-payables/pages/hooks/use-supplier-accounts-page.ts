@@ -19,10 +19,21 @@ import type {
     SessionState,
     SupplierAccountsQuery,
 } from "@/features/supplier-payables/types"
+import {
+    DUE_LABEL,
+    PAYABLE_STATUS_LABEL,
+    PAYMENT_GATE_LABEL,
+    SOURCE_TYPE_LABEL,
+    TRACK_LABEL,
+} from "@/features/supplier-payables/types"
+import type {
+    SupplierAppliedChip,
+    SupplierFilterKey,
+} from "../components/supplier-accounts-toolbar"
 
 /**
- * W12 供应商往来 · 页面级状态控制器：URL 参数解析、筛选/分页/排序、
- * 核销会话与预览开关、深链消费。所有筛选/导航状态都以 URL 为准。
+ * W12 供应商往来 · 页面级状态控制器：URL 参数解析、筛选 Draft/Applied/UI 三层状态、
+ * 分页/排序、核销会话与预览开关、深链消费。所有筛选/导航状态都以 URL 为准。
  */
 export function useSupplierAccountsPage() {
     const router = useRouter()
@@ -63,6 +74,66 @@ export function useSupplierAccountsPage() {
 
     const [searchInput, setSearchInput] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+
+    // Applied：URL 非法枚举值一律降级为默认（全部），不传给接口也不进 chip
+    const validSourceType =
+        sourceType === "PURCHASE_ORDER" || sourceType === "SUPPLIER_SETTLEMENT"
+            ? sourceType
+            : undefined
+    const validStatus =
+        status === "OPEN" || status === "PARTIAL" || status === "SETTLED"
+            ? status
+            : undefined
+    const validDue =
+        due === "not_due" || due === "due_today" || due === "overdue"
+            ? due
+            : undefined
+    const validPaymentGate =
+        paymentGate === "satisfied" || paymentGate === "unsatisfied"
+            ? paymentGate
+            : undefined
+    const trackFilter =
+        (searchParams.get("track") as
+            | "payment"
+            | "purchase_invoice"
+            | "all"
+            | null) ?? "all"
+    const validTrack =
+        trackFilter === "payment" || trackFilter === "purchase_invoice"
+            ? trackFilter
+            : undefined
+
+    // UI：面板展开态只由结构化条件决定初始值；回填不得改写它
+    const hasStructuredFilters = Boolean(
+        supplierId ||
+            validSourceType ||
+            validStatus ||
+            validDue ||
+            validPaymentGate ||
+            validTrack,
+    )
+    const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
+
+    // Draft：受控本地草稿，变化不触发请求
+    const [supplierDraft, setSupplierDraft] = React.useState<string | null>(
+        supplierId ?? null,
+    )
+    const [sourceTypeDraft, setSourceTypeDraft] = React.useState<
+        "PURCHASE_ORDER" | "SUPPLIER_SETTLEMENT" | "all"
+    >(validSourceType ?? "all")
+    const [statusDraft, setStatusDraft] = React.useState<
+        "OPEN" | "PARTIAL" | "SETTLED" | "all"
+    >(validStatus ?? "all")
+    const [dueDraft, setDueDraft] = React.useState<
+        "not_due" | "due_today" | "overdue" | "all"
+    >(validDue ?? "all")
+    const [paymentGateDraft, setPaymentGateDraft] = React.useState<
+        "satisfied" | "unsatisfied" | "all"
+    >(validPaymentGate ?? "all")
+    const [trackDraft, setTrackDraft] = React.useState<
+        AllocationTrack | "all"
+    >(validTrack ?? "all")
+
     // D23：分页写 URL（page），URL 最小化——第 1 页省略参数；本地不再持有分页副本。
     // 排序保留本地实现（服务端列表无排序参数，仅应付视图做客户端排序），记录在案。
     const pageParam = searchParams.get("page")
@@ -97,43 +168,27 @@ export function useSupplierAccountsPage() {
     const [lastResult, setLastResult] =
         React.useState<FormalSubmitResult | null>(null)
     const [sorting, setSorting] = React.useState<SortingState>([])
-    const trackFilter =
-        (searchParams.get("track") as
-            | "payment"
-            | "purchase_invoice"
-            | "all"
-            | null) ?? "all"
     const deepLinkHandled = React.useRef(false)
 
     const query = React.useMemo<SupplierAccountsQuery>(
         () => ({
             view,
-            q: qParam || undefined,
+            q: qParam.trim() || undefined,
             supplierId,
-            sourceType:
-                sourceType === "PURCHASE_ORDER" ||
-                sourceType === "SUPPLIER_SETTLEMENT"
-                    ? sourceType
-                    : undefined,
-            status,
-            due:
-                due === "not_due" || due === "due_today" || due === "overdue"
-                    ? due
-                    : undefined,
-            paymentGate:
-                paymentGate === "satisfied" || paymentGate === "unsatisfied"
-                    ? paymentGate
-                    : undefined,
+            sourceType: validSourceType,
+            status: validStatus,
+            due: validDue,
+            paymentGate: validPaymentGate,
             purchaseOrderId,
         }),
         [
             view,
             qParam,
             supplierId,
-            sourceType,
-            status,
-            due,
-            paymentGate,
+            validSourceType,
+            validStatus,
+            validDue,
+            validPaymentGate,
             purchaseOrderId,
         ],
     )
@@ -165,7 +220,7 @@ export function useSupplierAccountsPage() {
 
     function patchUrl(
         patch: Record<string, string | null | undefined>,
-        options?: { replace?: boolean },
+        options?: { replace?: boolean; scroll?: boolean },
     ) {
         patchSearchParams(
             { router, pathname, searchParams, view },
@@ -175,32 +230,171 @@ export function useSupplierAccountsPage() {
     }
 
     // P4：清除=清全部筛选参数并回第 1 页；保留 view（视图类参数）/排序/导航上下文
-    // （session/detailId/returnTo/from 等）。语义写进按钮 tooltip（D23）。
-    // 参数命名与其它页不同（detailId 对应 preview、session 为核销会话）属历史约定，
-    // 为向后兼容保留，不做重命名（D23 记录在案）。
+    // （session/detailId/returnTo/from 等）。
     const hasActiveFilters = Boolean(
-        qParam ||
-        supplierId ||
-        sourceType ||
-        (due && due !== "all") ||
-        (paymentGate && paymentGate !== "all") ||
-        purchaseOrderId ||
-        (trackFilter && trackFilter !== "all"),
+        qParam.trim() ||
+            supplierId ||
+            validSourceType ||
+            validStatus ||
+            validDue ||
+            validPaymentGate ||
+            validTrack ||
+            purchaseOrderId,
     )
-    function clearFilters() {
+
+    /** 单一提交入口：收起态 Enter / 搜索框尾部箭头 / 展开态「应用全部筛选」共用。 */
+    const applyFilters = React.useCallback(() => {
+        patchUrl(
+            {
+                q: searchInput.trim() || null,
+                supplierId: supplierDraft || null,
+                sourceType: sourceTypeDraft === "all" ? null : sourceTypeDraft,
+                status: statusDraft === "all" ? null : statusDraft,
+                due: dueDraft === "all" ? null : dueDraft,
+                paymentGate: paymentGateDraft === "all" ? null : paymentGateDraft,
+                track: trackDraft === "all" ? null : trackDraft,
+                page: null,
+            },
+            { replace: true, scroll: false },
+        )
+        setPanelOpen(false)
+    }, [
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        patchUrl,
+        searchInput,
+        supplierDraft,
+        sourceTypeDraft,
+        statusDraft,
+        dueDraft,
+        paymentGateDraft,
+        trackDraft,
+    ])
+
+    /** 仅清除「更多筛选」结构化条件；保留关键词与来源锁定采购单，面板保持展开。 */
+    const resetMoreFilters = React.useCallback(() => {
+        setSupplierDraft(null)
+        setSourceTypeDraft("all")
+        setStatusDraft("all")
+        setDueDraft("all")
+        setPaymentGateDraft("all")
+        setTrackDraft("all")
+        patchUrl(
+            {
+                supplierId: null,
+                sourceType: null,
+                status: null,
+                due: null,
+                paymentGate: null,
+                track: null,
+                page: null,
+            },
+            { replace: true, scroll: false },
+        )
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [patchUrl])
+
+    /** 移除单个已生效条件并回填对应草稿。 */
+    const removeFilter = React.useCallback(
+        (key: SupplierFilterKey) => {
+            if (key === "q") setSearchInput("")
+            if (key === "supplierId") setSupplierDraft(null)
+            if (key === "sourceType") setSourceTypeDraft("all")
+            if (key === "status") setStatusDraft("all")
+            if (key === "due") setDueDraft("all")
+            if (key === "paymentGate") setPaymentGateDraft("all")
+            if (key === "track") setTrackDraft("all")
+            patchUrl(
+                { [key]: null, page: null },
+                { replace: true, scroll: false },
+            )
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [patchUrl],
+    )
+
+    /** 清空全部：草稿、面板、URL 筛选参数与分页同时重置；保留视图/排序/导航上下文。 */
+    const clearFilters = React.useCallback(() => {
         setSearchInput("")
-        patchUrl({
-            q: null,
-            supplierId: null,
-            sourceType: null,
-            status: null,
-            due: null,
-            paymentGate: null,
-            purchaseOrderId: null,
-            track: null,
-            page: null,
-        })
-    }
+        setSupplierDraft(null)
+        setSourceTypeDraft("all")
+        setStatusDraft("all")
+        setDueDraft("all")
+        setPaymentGateDraft("all")
+        setTrackDraft("all")
+        setPanelOpen(false)
+        patchUrl(
+            {
+                q: null,
+                supplierId: null,
+                sourceType: null,
+                status: null,
+                due: null,
+                paymentGate: null,
+                purchaseOrderId: null,
+                track: null,
+                page: null,
+            },
+            { replace: true, scroll: false },
+        )
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [patchUrl])
+
+    /** 已生效条件全部显性为 chip（含来源锁定 supplierId / purchaseOrderId）。 */
+    const appliedChips = React.useMemo<readonly SupplierAppliedChip[]>(() => {
+        const chips: SupplierAppliedChip[] = []
+        const trimmedQ = qParam.trim()
+        if (trimmedQ) chips.push({ key: "q", label: `搜索：${trimmedQ}` })
+        if (supplierId) {
+            const supplierName = (data?.suppliers ?? []).find(
+                (item) => item.supplierId === supplierId,
+            )?.supplierName
+            chips.push({
+                key: "supplierId",
+                label: `供应商：${supplierName ?? supplierId}`,
+            })
+        }
+        if (validSourceType) {
+            chips.push({
+                key: "sourceType",
+                label: `来源类型：${SOURCE_TYPE_LABEL[validSourceType]}`,
+            })
+        }
+        if (validStatus) {
+            chips.push({
+                key: "status",
+                label: `状态：${PAYABLE_STATUS_LABEL[validStatus]}`,
+            })
+        }
+        if (validDue) {
+            chips.push({ key: "due", label: `到期：${DUE_LABEL[validDue]}` })
+        }
+        if (validPaymentGate) {
+            chips.push({
+                key: "paymentGate",
+                label: `先款条件：${PAYMENT_GATE_LABEL[validPaymentGate]}`,
+            })
+        }
+        if (validTrack) {
+            chips.push({ key: "track", label: `轨道：${TRACK_LABEL[validTrack]}` })
+        }
+        if (purchaseOrderId) {
+            chips.push({
+                key: "purchaseOrderId",
+                label: `采购单：${purchaseOrderId}`,
+            })
+        }
+        return chips
+    }, [
+        data?.suppliers,
+        purchaseOrderId,
+        qParam,
+        supplierId,
+        validDue,
+        validPaymentGate,
+        validSourceType,
+        validStatus,
+        validTrack,
+    ])
 
     // D23：分页变更只写 URL page（第 1 页省略），分页状态由 URL 派生
     const handlePaginationChange = (next: PaginationState) => {
@@ -210,18 +404,55 @@ export function useSupplierAccountsPage() {
         )
     }
 
+    /** URL 回填：同步草稿；面板展开态不回填重置。 */
     React.useEffect(() => {
-        setSearchInput(qParam)
-    }, [qParam])
+        setSearchInput(qParam.trim())
+        setSupplierDraft(supplierId ?? null)
+        setSourceTypeDraft(validSourceType ?? "all")
+        setStatusDraft(validStatus ?? "all")
+        setDueDraft(validDue ?? "all")
+        setPaymentGateDraft(validPaymentGate ?? "all")
+        setTrackDraft(validTrack ?? "all")
+    }, [
+        qParam,
+        supplierId,
+        validSourceType,
+        validStatus,
+        validDue,
+        validPaymentGate,
+        validTrack,
+    ])
 
+    /** `/` 聚焦搜索框；输入框/文本域/弹层打开时不抢焦点。 */
     React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchInput === qParam) return
-            patchUrl({ q: searchInput.trim() || null }, { replace: true })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchInput])
+        const onKey = (event: KeyboardEvent) => {
+            if (
+                event.key !== "/" ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.altKey
+            ) {
+                return
+            }
+            const target = event.target as HTMLElement | null
+            const tag = target?.tagName
+            if (
+                tag === "INPUT" ||
+                tag === "TEXTAREA" ||
+                tag === "SELECT" ||
+                target?.isContentEditable
+            ) {
+                return
+            }
+            if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+                return
+            }
+            event.preventDefault()
+            searchInputRef.current?.focus()
+        }
+        window.addEventListener("keydown", onKey)
+        return () => window.removeEventListener("keydown", onKey)
+    }, [])
 
     // Deep-link from W08/W09: open payment session with PO preselected
     React.useEffect(() => {
@@ -387,10 +618,10 @@ export function useSupplierAccountsPage() {
     return {
         view,
         supplierId,
-        sourceType,
-        status,
-        due,
-        paymentGate,
+        sourceType: validSourceType,
+        status: validStatus,
+        due: validDue,
+        paymentGate: validPaymentGate,
         purchaseOrderId,
         fromWorkspace,
         returnTo,
@@ -398,6 +629,25 @@ export function useSupplierAccountsPage() {
         searchInput,
         setSearchInput,
         searchInputRef,
+        panelOpen,
+        setPanelOpen,
+        hasStructuredFilters,
+        appliedChips,
+        applyFilters,
+        resetMoreFilters,
+        removeFilter,
+        supplierDraft,
+        setSupplierDraft,
+        sourceTypeDraft,
+        setSourceTypeDraft,
+        statusDraft,
+        setStatusDraft,
+        dueDraft,
+        setDueDraft,
+        paymentGateDraft,
+        setPaymentGateDraft,
+        trackDraft,
+        setTrackDraft,
         pagination,
         handlePaginationChange,
         sorting,

@@ -3,10 +3,19 @@
 import * as React from "react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
-import { BusinessTableFrame } from "@/components/business"
+import {
+    BusinessFailureState,
+    BusinessTableFrame,
+    OptionCombobox,
+} from "@/components/business"
+import {
+    defaultSortValue,
+    sortOptions,
+} from "@/features/inventory/lib/presentation"
+import type { LedgerAppliedChip } from "@/features/inventory/pages/hooks/use-ledger-filters"
+import type { useLedgerFilters } from "@/features/inventory/pages/hooks/use-ledger-filters"
 import { VIEW_LABEL } from "@/features/inventory/types"
 import type {
-    InventoryAvailability,
     InventoryListView,
     InventoryView,
     StockAdjustmentRow,
@@ -19,8 +28,11 @@ import { LedgerToolbar } from "./ledger-toolbar"
 
 interface LedgerTableFrameProps {
     view: InventoryView
-    data: InventoryListView
+    data: InventoryListView | undefined
     loading: boolean
+    isError: boolean
+    error: Error | null
+    onRetry: () => void
     pagination: PaginationState
     onPaginationChange: (pagination: PaginationState) => void
     balanceColumns: ColumnDef<StockBalanceRow, unknown>[]
@@ -29,31 +41,21 @@ interface LedgerTableFrameProps {
     adjustmentColumns: ColumnDef<StockAdjustmentRow, unknown>[]
     onOpenDetail: (balanceId: string) => void
     onOpenAdjustment: (adjustmentId: string) => void
-    searchInput: string
-    searchInputRef: React.RefObject<HTMLInputElement | null>
-    onSearchChange: (value: string) => void
-    warehouseId: string | undefined
-    availability: InventoryAvailability
-    movementType: string[]
-    occurredFrom: string | undefined
-    occurredTo: string | undefined
     sortValue: string
+    onSortChange: (value: string) => void
     hasActiveFilters: boolean
-    skuId: string | undefined
-    salesOrderLineId: string | undefined
-    adjustmentIdParam: string | undefined
-    chipSkuName: string | undefined
-    chipSalesLineLabel: string | undefined
-    chipAdjustmentNo: string | undefined
-    onApplyPatch: (patch: Record<string, string | null | undefined>) => void
-    onClearAll: () => void
-    onClearFiltersEmpty: () => void
+    appliedChips: readonly LedgerAppliedChip[]
+    searchInputRef: React.RefObject<HTMLInputElement | null>
+    filters: ReturnType<typeof useLedgerFilters>
 }
 
 export function LedgerTableFrame({
     view,
     data,
     loading,
+    isError,
+    error,
+    onRetry,
     pagination,
     onPaginationChange,
     balanceColumns,
@@ -62,45 +64,43 @@ export function LedgerTableFrame({
     adjustmentColumns,
     onOpenDetail,
     onOpenAdjustment,
-    searchInput,
-    searchInputRef,
-    onSearchChange,
-    warehouseId,
-    availability,
-    movementType,
-    occurredFrom,
-    occurredTo,
     sortValue,
+    onSortChange,
     hasActiveFilters,
-    skuId,
-    salesOrderLineId,
-    adjustmentIdParam,
-    chipSkuName,
-    chipSalesLineLabel,
-    chipAdjustmentNo,
-    onApplyPatch,
-    onClearAll,
-    onClearFiltersEmpty,
+    appliedChips,
+    searchInputRef,
+    filters,
 }: LedgerTableFrameProps) {
     const pageRows = (() => {
         if (view === "balance") {
-            return data.balances
+            return data?.balances ?? []
         }
         if (view === "movement") {
-            return data.movements
+            return data?.movements ?? []
         }
         if (view === "reservation") {
-            return data.reservations
+            return data?.reservations ?? []
         }
-        return data.adjustments
+        return data?.adjustments ?? []
     })()
 
     return (
         <BusinessTableFrame
-            title={VIEW_LABEL[view]}
+            showHeader
+            title={
+                <span className="inline-flex items-baseline gap-2">
+                    {VIEW_LABEL[view]}
+                    <span
+                        aria-live="polite"
+                        className="font-normal text-muted-foreground"
+                    >
+                        {(data?.total ?? 0).toLocaleString("zh-CN")} 条
+                    </span>
+                </span>
+            }
             description={
                 <span aria-live="polite">
-                    {data.filterSummary}
+                    {data?.filterSummary ?? ""}
                     {view === "balance" ? (
                         <span className="text-muted-foreground">
                             {" "}
@@ -109,36 +109,43 @@ export function LedgerTableFrame({
                     ) : null}
                 </span>
             }
+            headerActions={
+                <label className="flex items-center gap-1.5 text-sm">
+                    <span className="sr-only">排序</span>
+                    <OptionCombobox
+                        className="w-40"
+                        value={sortValue}
+                        onValueChange={(value) =>
+                            onSortChange(value ?? defaultSortValue(view))
+                        }
+                        options={sortOptions(view)}
+                        allowClear={false}
+                        aria-label="排序方式"
+                        placeholder="排序"
+                    />
+                </label>
+            }
             toolbar={
                 <LedgerToolbar
                     view={view}
-                    searchInput={searchInput}
-                    searchInputRef={searchInputRef}
-                    onSearchChange={onSearchChange}
-                    warehouseId={warehouseId}
-                    availability={availability}
-                    movementType={movementType}
-                    occurredFrom={occurredFrom}
-                    occurredTo={occurredTo}
-                    sortValue={sortValue}
-                    total={data.total}
                     hasActiveFilters={hasActiveFilters}
-                    skuId={skuId}
-                    salesOrderLineId={salesOrderLineId}
-                    adjustmentIdParam={adjustmentIdParam}
-                    chipSkuName={chipSkuName}
-                    chipSalesLineLabel={chipSalesLineLabel}
-                    chipAdjustmentNo={chipAdjustmentNo}
-                    onApplyPatch={onApplyPatch}
-                    onClearAll={onClearAll}
+                    appliedChips={appliedChips}
+                    searchInputRef={searchInputRef}
+                    {...filters}
                 />
             }
             table={
-                data.total === 0 ? (
+                isError ? (
+                    <BusinessFailureState
+                        title="库存台账加载失败"
+                        error={error}
+                        onRetry={onRetry}
+                    />
+                ) : (data?.total ?? 0) === 0 ? (
                     <LedgerTableEmpty
-                        emptyReason={data.emptyReason}
-                        filterSummary={data.filterSummary}
-                        onClearFilters={onClearFiltersEmpty}
+                        emptyReason={data?.emptyReason}
+                        filterSummary={data?.filterSummary ?? ""}
+                        onClearFilters={filters.clearAllFilters}
                     />
                 ) : view === "balance" ? (
                     <LedgerDataTable
@@ -146,7 +153,7 @@ export function LedgerTableFrame({
                         loading={loading}
                         columns={balanceColumns}
                         getRowId={(row) => row.balanceId}
-                        rowCount={data.total}
+                        rowCount={data?.total ?? 0}
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         defaultColumnPinning={{
@@ -162,7 +169,7 @@ export function LedgerTableFrame({
                         loading={loading}
                         columns={movementColumns}
                         getRowId={(row) => row.movementId}
-                        rowCount={data.total}
+                        rowCount={data?.total ?? 0}
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         defaultColumnPinning={{ left: ["identity"] }}
@@ -173,7 +180,7 @@ export function LedgerTableFrame({
                         loading={loading}
                         columns={reservationColumns}
                         getRowId={(row) => row.reservationId}
-                        rowCount={data.total}
+                        rowCount={data?.total ?? 0}
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         defaultColumnPinning={{
@@ -187,7 +194,7 @@ export function LedgerTableFrame({
                         loading={loading}
                         columns={adjustmentColumns}
                         getRowId={(row) => row.adjustmentId}
-                        rowCount={data.total}
+                        rowCount={data?.total ?? 0}
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         defaultColumnPinning={{ left: ["doc"] }}

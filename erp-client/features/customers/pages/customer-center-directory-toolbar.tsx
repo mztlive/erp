@@ -1,154 +1,239 @@
 "use client"
 
-import { SearchIcon } from "lucide-react"
+import * as React from "react"
+import {
+    ChevronDownIcon,
+    FilterIcon,
+    SearchIcon,
+} from "lucide-react"
 
-import { ListToolbar, OptionCombobox } from "@/components/business"
+import {
+    FilterChip,
+    FixedOptionRadioFilter,
+    ListToolbar,
+} from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     InputGroup,
     InputGroupAddon,
-    InputGroupButton,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { cn } from "@/lib/utils"
 import {
     SCOPE_LABELS,
     SCOPE_ORDER,
 } from "@/features/customers/lib/filter-customers"
 import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
+import type {
+    CustomerAppliedChip,
+    CustomerFilterKey,
+} from "@/features/customers/hooks/use-customer-center-directory-state"
 import type { CustomerScope } from "@/features/customers/types"
 
+type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+
+const STATUS_RADIO_OPTIONS = [
+    { value: "all", label: "全部" },
+    { value: "active", label: "启用" },
+    { value: "disabled", label: "停用" },
+] as const
+
 /**
- * 客户中心目录工具条：关键词搜索、范围切换、状态筛选与计数/清除。
- * 纯展示组件，筛选变更通过回调交由页面写 URL。
+ * 客户中心目录工具条（docs/ui-filter-design.md §8.2 模板）：
+ * 单一 form；关键词 + 范围快捷筛选 + 「更多筛选」；已生效条件以 chip 展示。
  */
 export function CustomerCenterDirectoryToolbar({
+    searchInputRef,
     searchDraft,
-    onSearchDraftChange,
-    onSearch,
+    setSearchDraft,
     scope,
     onScopeChange,
-    status,
-    onStatusChange,
+    statusDraft,
+    setStatusDraft,
     canReadAll,
-    total,
     hasActiveFilters,
-    onClearFilters,
+    appliedChips,
+    removeFilter,
+    panelOpen,
+    setPanelOpen,
+    hasStructuredFilters,
+    applyFilters,
+    resetMoreFilters,
+    clearAllFilters,
 }: {
+    searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
-    onSearchDraftChange: (value: string) => void
-    onSearch: (query: string) => void
+    setSearchDraft: SetState<string>
     scope: CustomerScope
     onScopeChange: (scope: CustomerScope) => void
-    status: DirectoryStatus
-    onStatusChange: (status: DirectoryStatus) => void
+    statusDraft: DirectoryStatus
+    setStatusDraft: SetState<DirectoryStatus>
     canReadAll: boolean
-    total: number
     hasActiveFilters: boolean
-    onClearFilters: () => void
+    appliedChips: readonly CustomerAppliedChip[]
+    removeFilter: (key: CustomerFilterKey) => void
+    panelOpen: boolean
+    setPanelOpen: SetState<boolean>
+    hasStructuredFilters: boolean
+    applyFilters: () => void
+    resetMoreFilters: () => void
+    clearAllFilters: () => void
 }) {
+    const panelId = React.useId()
+    const hasChips = hasActiveFilters && appliedChips.length > 0
+
     return (
-        <ListToolbar
-            search={
-                <InputGroup className="max-w-md">
-                    <InputGroupAddon>
-                        <SearchIcon aria-hidden="true" />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                        data-slot="customer-search"
-                        value={searchDraft}
-                        onChange={(e) => onSearchDraftChange(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                onSearch(searchDraft.trim())
+        <form
+            onSubmit={(event) => {
+                event.preventDefault()
+                applyFilters()
+            }}
+        >
+            <ListToolbar
+                search={
+                    <InputGroup>
+                        <InputGroupAddon>
+                            <SearchIcon aria-hidden="true" />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            ref={searchInputRef}
+                            data-slot="customer-search"
+                            value={searchDraft}
+                            onChange={(event) =>
+                                setSearchDraft(event.target.value)
                             }
-                        }}
-                        placeholder="客户名称或客户编号"
-                        aria-label="搜索客户"
-                    />
-                    <InputGroupAddon align="inline-end">
-                        <InputGroupButton
-                            aria-label="执行客户搜索"
-                            onClick={() => onSearch(searchDraft.trim())}
+                            placeholder="客户名称、编号或信用代码"
+                            aria-label="搜索客户"
+                        />
+                        
+                    </InputGroup>
+                }
+                filters={
+                    <>
+                        <div
+                            role="group"
+                            aria-label="客户范围"
+                            className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
                         >
-                            搜索
-                        </InputGroupButton>
-                    </InputGroupAddon>
-                </InputGroup>
-            }
-            filters={
-                <div className="flex flex-wrap items-center gap-2">
-                    <div
-                        role="group"
-                        aria-label="客户范围"
-                        className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                    >
-                        {SCOPE_ORDER.filter(
-                            (key) =>
-                                key !== "all_authorized" || canReadAll,
-                        ).map((key) => {
-                            const active = scope === key
-                            return (
-                                <button
-                                    key={key}
-                                    type="button"
-                                    aria-pressed={active}
-                                    onClick={() => onScopeChange(key)}
-                                    className={cn(
-                                        "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                        active
-                                            ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                                            : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                                    )}
-                                >
-                                    {SCOPE_LABELS[key]}
-                                </button>
-                            )
-                        })}
-                    </div>
-                    <OptionCombobox
-                        aria-label="客户状态"
-                        value={status}
-                        onValueChange={(v) =>
-                            onStatusChange(
-                                (v ?? "active") as DirectoryStatus,
-                            )
-                        }
-                        options={[
-                            { value: "active", label: "启用" },
-                            {
-                                value: "disabled",
-                                label: "停用",
-                            },
-                            { value: "all", label: "全部状态" },
-                        ]}
-                        className="w-[7.5rem]"
-                        size="sm"
-                        allowClear={false}
-                        placeholder="客户状态"
-                    />
-                </div>
-            }
-            actions={
-                <>
-                    <span
-                        className="text-xs text-muted-foreground"
-                        aria-live="polite"
-                    >
-                        共 {total.toLocaleString("zh-CN")} 条
-                    </span>
-                    {hasActiveFilters ? (
+                            {SCOPE_ORDER.filter(
+                                (key) =>
+                                    key !== "all_authorized" || canReadAll,
+                            ).map((key) => {
+                                const active = scope === key
+                                return (
+                                    <Button
+                                        key={key}
+                                        type="button"
+                                        variant={
+                                            active ? "secondary" : "ghost"
+                                        }
+                                        className={
+                                            active
+                                                ? "bg-card shadow-xs"
+                                                : "shadow-none"
+                                        }
+                                        aria-pressed={active}
+                                        onClick={() => onScopeChange(key)}
+                                    >
+                                        {SCOPE_LABELS[key]}
+                                    </Button>
+                                )
+                            })}
+                        </div>
                         <Button
                             type="button"
-                            size="xs"
-                            variant="ghost"
-                            onClick={onClearFilters}
+                            variant="outline"
+                            aria-expanded={panelOpen}
+                            aria-controls={panelId}
+                            onClick={() => setPanelOpen((open) => !open)}
                         >
-                            清除筛选
+                            <FilterIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            更多筛选
+                            {hasStructuredFilters ? (
+                                <Badge variant="info">已启用</Badge>
+                            ) : null}
+                            <ChevronDownIcon
+                                data-icon="inline-end"
+                                aria-hidden="true"
+                                className={
+                                    panelOpen
+                                        ? "rotate-180 transition-transform"
+                                        : "transition-transform"
+                                }
+                            />
                         </Button>
-                    ) : null}
-                </>
-            }
-        />
+                    </>
+                }
+                secondary={
+                    hasChips || panelOpen ? (
+                        <div className="w-full space-y-3">
+                            {hasChips ? (
+                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                    <span className="text-xs text-muted-foreground">
+                                        已筛选
+                                    </span>
+                                    {appliedChips.map((chip) => (
+                                        <FilterChip
+                                            key={chip.key}
+                                            label={chip.label}
+                                            clearLabel={`移除${chip.label}`}
+                                            onClear={() =>
+                                                removeFilter(chip.key)
+                                            }
+                                        />
+                                    ))}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={clearAllFilters}
+                                    >
+                                        清空全部
+                                    </Button>
+                                </div>
+                            ) : null}
+                            {panelOpen ? (
+                                <div
+                                    id={panelId}
+                                    className="flex w-full flex-col gap-3 border-t pt-3"
+                                    aria-label="客户目录筛选条件"
+                                >
+                                    <FixedOptionRadioFilter
+                                        label="状态"
+                                        value={statusDraft}
+                                        onValueChange={setStatusDraft}
+                                        options={STATUS_RADIO_OPTIONS}
+                                    />
+                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-muted-foreground">
+                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={resetMoreFilters}
+                                            >
+                                                重置更多条件
+                                            </Button>
+                                            <Button type="submit">
+                                                <SearchIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                应用全部筛选
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : undefined
+                }
+            />
+        </form>
     )
 }

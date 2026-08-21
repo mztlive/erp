@@ -9,24 +9,19 @@ import type { LedgerPatchUrl } from "./use-inventory-ledger-url-state"
 export interface LedgerFilterActionsInput {
     patchUrl: LedgerPatchUrl
     resetPagination: () => void
-    setSearchInput: React.Dispatch<React.SetStateAction<string>>
     sortValue: string
 }
 
+/**
+ * 视图与排序等非筛选工具栏动作：切换视图、调整排序直接写 URL（replace）并回第 1 页。
+ * 筛选条件（q / 仓库 / 状态 / 流水类型 / 日期）一律走 useLedgerFilters 的统一提交，
+ * 不在本 hook 内逐字段写 URL。
+ */
 export function useLedgerFilterActions({
     patchUrl,
     resetPagination,
-    setSearchInput,
     sortValue,
 }: LedgerFilterActionsInput) {
-    const handleApplyFilterPatch = React.useCallback(
-        (patch: Record<string, string | null | undefined>) => {
-            patchUrl(patch, { replace: true })
-            resetPagination()
-        },
-        [patchUrl, resetPagination],
-    )
-
     const handleViewChange = React.useCallback(
         (nextView: InventoryView) => {
             // 排序参数跨视图残留会让下拉显示占位而旧排序仍生效：不属于目标视图则一并清掉。
@@ -43,46 +38,16 @@ export function useLedgerFilterActions({
         [patchUrl, resetPagination, sortValue],
     )
 
-    const handleClearAllFilters = React.useCallback(() => {
-        setSearchInput("")
-        // P4：清全部筛选参数；保留视图、排序与预览（balanceId 导航上下文）
-        patchUrl(
-            {
-                q: null,
-                warehouseId: null,
-                availability: "all",
-                skuId: null,
-                salesOrderLineId: null,
-                adjustmentId: null,
-                movementType: null,
-                occurredFrom: null,
-                occurredTo: null,
-            },
-            { replace: true },
-        )
-        resetPagination()
-    }, [patchUrl, resetPagination, setSearchInput])
-
-    const handleClearFiltersEmptyState = React.useCallback(() => {
-        setSearchInput("")
-        // P4：清全部筛选参数；保留当前视图（不强制回 balance）
-        patchUrl(
-            {
-                q: null,
-                warehouseId: null,
-                availability: "all",
-                skuId: null,
-                salesOrderLineId: null,
-                adjustmentId: null,
-            },
-            { replace: true },
-        )
-    }, [patchUrl, setSearchInput])
+    const handleSortChange = React.useCallback(
+        (nextSort: string) => {
+            patchUrl({ sort: nextSort || null }, { replace: true })
+            resetPagination()
+        },
+        [patchUrl, resetPagination],
+    )
 
     return {
-        handleApplyFilterPatch,
         handleViewChange,
-        handleClearAllFilters,
-        handleClearFiltersEmptyState,
+        handleSortChange,
     }
 }

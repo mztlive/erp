@@ -8,7 +8,7 @@ import {
     renderHookWithProviders,
 } from "@/features/test-utils"
 import { useAccessDetailPanels } from "./use-access-detail-panels"
-import { useAccessListControls } from "./use-access-list-controls"
+import { useAccessListFilters } from "./use-access-list-filters"
 import { useAccessUrlState } from "./use-access-url-state"
 
 const wrapperWithClient = () => {
@@ -88,84 +88,206 @@ describe("useAccessUrlState", () => {
     })
 })
 
-describe("useAccessListControls", () => {
-    const patchUrl = vi.fn()
+describe("useAccessListFilters", () => {
     const patchFilterUrl = vi.fn()
-    const resetPaginationToFirstPage = vi.fn()
+    const searchInputRef = {
+        current: null,
+    } as React.RefObject<HTMLInputElement | null>
 
-    it("initializes search from qParam and syncs when it changes", () => {
-        const { result, rerender } = renderHook(
-            ({ qParam }: { qParam: string }) =>
-                useAccessListControls({
-                    qParam,
-                    patchUrl,
-                    patchFilterUrl,
-                    resetPaginationToFirstPage,
-                }),
-            {
-                wrapper: wrapperWithClient(),
-                initialProps: { qParam: "abc" },
-            },
+    const renderFilters = (view: "roles" | "audit" | "scopes" = "audit") =>
+        renderHookWithProviders(() =>
+            useAccessListFilters({ view, patchFilterUrl, searchInputRef }),
         )
-        expect(result.current.searchInput).toBe("abc")
 
-        rerender({ qParam: "next" })
-        expect(result.current.searchInput).toBe("next")
+    beforeEach(() => {
+        patchFilterUrl.mockClear()
     })
 
-    it("debounces search input and patches the URL with q plus page reset", async () => {
-        vi.useFakeTimers()
-        try {
-            const { result } = renderHookWithProviders(() =>
-                useAccessListControls({
-                    qParam: "",
-                    patchUrl,
-                    patchFilterUrl,
-                    resetPaginationToFirstPage,
-                }),
-            )
-            act(() => {
-                result.current.setSearchInput("新关键词")
-            })
-            act(() => {
-                vi.advanceTimersByTime(300)
-            })
-            expect(patchUrl).toHaveBeenCalledWith(
-                { q: "新关键词", page: null },
-                { replace: true },
-            )
-            expect(resetPaginationToFirstPage).toHaveBeenCalled()
-        } finally {
-            vi.useRealTimers()
-        }
+    it("initializes the draft from the URL and opens the panel for structured deep links", () => {
+        currentSearchParams = "view=audit&q=abc&result=SUCCESS&from=2026-01-01"
+        const { result } = renderFilters()
+
+        expect(result.current.applied.q).toBe("abc")
+        expect(result.current.applied.result).toBe("SUCCESS")
+        expect(result.current.draft.q).toBe("abc")
+        expect(result.current.draft.result).toBe("SUCCESS")
+        expect(result.current.draft.from).toBe("2026-01-01")
+        expect(result.current.panelOpen).toBe(true)
     })
 
-    it("debounces advanced filters and calls patchFilterUrl once", async () => {
-        vi.useFakeTimers()
-        try {
-            const { result } = renderHookWithProviders(() =>
-                useAccessListControls({
-                    qParam: "",
-                    patchUrl,
-                    patchFilterUrl,
-                    resetPaginationToFirstPage,
-                }),
-            )
-            act(() => {
-                result.current.setDebouncedFilters({ actorId: "张三" })
-            })
-            act(() => {
-                vi.advanceTimersByTime(300)
-            })
-            expect(patchFilterUrl).toHaveBeenCalledWith({
-                actorId: "张三",
-                traceId: null,
-                objectType: null,
-                objectId: null,
-            })
-        } finally {
-            vi.useRealTimers()
-        }
+    it("degrades invalid enum values and keeps the panel closed without structured filters", () => {
+        currentSearchParams = "view=roles&status=weird"
+        const { result } = renderFilters("roles")
+
+        expect(result.current.applied.status).toBeUndefined()
+        expect(result.current.draft.status).toBe("all")
+        expect(result.current.panelOpen).toBe(false)
+        expect(result.current.hasStructuredFilters).toBe(false)
+    })
+
+    it("keeps the panel closed for the scopes view when only the subject lock exists", () => {
+        currentSearchParams = "view=scopes&subjectType=USER&subjectId=u1"
+        const { result } = renderFilters("scopes")
+
+        expect(result.current.panelOpen).toBe(false)
+    })
+
+    it("does not patch the URL while editing drafts", () => {
+        currentSearchParams = "view=audit"
+        const { result } = renderFilters()
+
+        act(() => {
+            result.current.setSearchDraft("abc")
+            result.current.updateDraft("actorId", "张三")
+        })
+        expect(patchFilterUrl).not.toHaveBeenCalled()
+    })
+
+    it("applies all drafts in one patch, resets to page 1 and closes the panel", () => {
+        currentSearchParams = "view=audit"
+        const { result } = renderFilters()
+
+        act(() => result.current.updateDraft("q", " 关键词 "))
+        act(() => result.current.updateDraft("status", "enabled"))
+        act(() => result.current.updateDraft("result", "DENIED"))
+        act(() => result.current.updateDraft("from", "2026-01-01"))
+        act(() => result.current.updateDraft("to", "2026-01-02"))
+        act(() => result.current.updateDraft("actorId", "张三"))
+        act(() => result.current.applyFilters())
+        expect(patchFilterUrl).toHaveBeenCalledWith({
+            q: "关键词",
+            org: null,
+            status: "enabled",
+            risk: null,
+            from: "2026-01-01",
+            to: "2026-01-02",
+            action: null,
+            result: "DENIED",
+            actorId: "张三",
+            traceId: null,
+            objectType: null,
+            objectId: null,
+            page: null,
+        })
+        expect(result.current.panelOpen).toBe(false)
+    })
+
+    it("validates the audit date range on submit and keeps the panel open on error", () => {
+        currentSearchParams = "view=audit"
+        const { result } = renderFilters()
+
+        act(() => result.current.updateDraft("from", "2026-01-02"))
+        act(() => result.current.updateDraft("to", "2026-01-01"))
+        act(() => result.current.applyFilters())
+        expect(patchFilterUrl).not.toHaveBeenCalled()
+        expect(result.current.filterError).toBe("截止日期不能早于起始日期")
+        expect(result.current.panelOpen).toBe(true)
+    })
+
+    it("clears everything through clearAllFilters but keeps the view", () => {
+        currentSearchParams = "view=audit&q=x&from=2026-01-01"
+        const { result } = renderFilters()
+
+        act(() => {
+            result.current.clearAllFilters()
+        })
+        expect(patchFilterUrl).toHaveBeenCalledWith({
+            q: null,
+            org: null,
+            status: null,
+            risk: null,
+            from: null,
+            to: null,
+            action: null,
+            result: null,
+            actorId: null,
+            traceId: null,
+            objectType: null,
+            objectId: null,
+            page: null,
+        })
+        expect(result.current.draft.q).toBe("")
+        expect(result.current.panelOpen).toBe(false)
+    })
+
+    it("clears the scopes subject lock together with all filters", () => {
+        currentSearchParams = "view=scopes&subjectType=USER&subjectId=u1"
+        const { result } = renderFilters("scopes")
+
+        act(() => {
+            result.current.clearAllFilters()
+        })
+        expect(patchFilterUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ subjectType: null, subjectId: null }),
+        )
+    })
+
+    it("keeps the subject lock when clearing filters outside the scopes view", () => {
+        currentSearchParams = "view=roles&subjectType=ROLE&subjectId=role_1"
+        const { result } = renderFilters("roles")
+
+        act(() => {
+            result.current.clearAllFilters()
+        })
+        expect(patchFilterUrl).toHaveBeenCalledWith(
+            expect.not.objectContaining({ subjectType: expect.anything() }),
+        )
+    })
+
+    it("resetMoreFilters clears only structured conditions and keeps the panel open", () => {
+        currentSearchParams = "view=audit&q=abc&actorId=a1"
+        const { result } = renderFilters()
+
+        act(() => {
+            result.current.setPanelOpen(true)
+        })
+        act(() => result.current.resetMoreFilters())
+        expect(patchFilterUrl).toHaveBeenCalledWith({
+            org: null,
+            status: null,
+            risk: null,
+            from: null,
+            to: null,
+            action: null,
+            result: null,
+            actorId: null,
+            traceId: null,
+            objectType: null,
+            objectId: null,
+            page: null,
+        })
+        expect(result.current.panelOpen).toBe(true)
+        expect(result.current.draft.q).toBe("abc")
+    })
+
+    it("removes a single applied condition through removeFilter", () => {
+        currentSearchParams = "view=audit&from=2026-01-01&to=2026-01-02"
+        const { result } = renderFilters()
+
+        act(() => {
+            result.current.removeFilter("time")
+        })
+        expect(patchFilterUrl).toHaveBeenCalledWith({
+            from: null,
+            to: null,
+            page: null,
+        })
+    })
+
+    it("backfills drafts from the URL without reopening the panel", () => {
+        currentSearchParams = "view=audit&result=SUCCESS"
+        const { result, rerender } = renderFilters()
+        expect(result.current.panelOpen).toBe(true)
+
+        act(() => {
+            result.current.setPanelOpen(false)
+        })
+        currentSearchParams = "view=audit&result=DENIED&actorId=a1"
+        rerender()
+
+        expect(result.current.draft.result).toBe("DENIED")
+        expect(result.current.draft.actorId).toBe("a1")
+        expect(result.current.panelOpen).toBe(false)
     })
 })
 

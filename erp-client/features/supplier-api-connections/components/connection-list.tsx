@@ -5,7 +5,6 @@ import type { PaginationState } from "@tanstack/react-table"
 import { PlusIcon, RefreshCwIcon } from "lucide-react"
 
 import {
-    BusinessFailureState,
     BusinessTableFrame,
     DataFreshness,
     FormalActionResult,
@@ -19,6 +18,10 @@ import { ConnectionCreateDialog } from "@/features/supplier-api-connections/comp
 import { ConnectionListTable } from "@/features/supplier-api-connections/components/connection-list-table"
 import { ConnectionListToolbar } from "@/features/supplier-api-connections/components/connection-list-toolbar"
 import { ConnectionMetricStrip } from "@/features/supplier-api-connections/components/connection-metric-strip"
+import {
+    buildConnectionAppliedChips,
+    useConnectionListFilters,
+} from "@/features/supplier-api-connections/hooks/use-connection-list-filters"
 import { useConnectionListQuery } from "@/features/supplier-api-connections/hooks/queries"
 import { useConnectionListColumns } from "@/features/supplier-api-connections/hooks/use-connection-list-columns"
 import type { ConnectionsUrlState } from "@/features/supplier-api-connections/lib/url-state"
@@ -33,45 +36,32 @@ export function ConnectionList({
     patchUrl: (patch: Partial<ConnectionsUrlState>) => void
     onOpen: (connectionId: string) => void
 }) {
-    const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
+    const filters = useConnectionListFilters(urlState, patchUrl)
     const [createOpen, setCreateOpen] = React.useState(false)
     const [result, setResult] = React.useState<
         (ResultState & { actions?: React.ReactNode }) | null
     >(null)
 
-    React.useEffect(() => {
-        setSearchDraft(urlState.q ?? "")
-    }, [urlState.q])
-
+    // 查询只消费 Applied（URL 派生且已降级非法枚举值），Draft 变化不请求（§5、§6.3）
     const listQuery = useConnectionListQuery({
         environment: urlState.environment,
-        status: urlState.status,
-        health: urlState.health,
-        capability: urlState.capability,
-        catalogFreshness: urlState.catalogFreshness,
-        supplierId: urlState.supplierId,
-        q: urlState.q,
+        status: filters.applied.status,
+        health:
+            filters.applied.health.length > 0
+                ? filters.applied.health.join(",")
+                : undefined,
+        capability: filters.applied.capability,
+        catalogFreshness:
+            filters.applied.catalogFreshness.length > 0
+                ? filters.applied.catalogFreshness.join(",")
+                : undefined,
+        supplierId: filters.applied.supplierId,
+        q: filters.applied.q,
         page: urlState.page,
         pageSize: urlState.pageSize,
     })
 
     const data = listQuery.data
-
-    // D7：常驻/空态清除 = 清全部筛选参数并回第 1 页；environment 属视图类参数按 P4 保留，
-    // 语义通过按钮 title/aria 说明。status/health/catalogFreshness 为逗号分隔多值串
-    // （codec array 语义自洽），保持不变。
-    const clearFilters = React.useCallback(() => {
-        setSearchDraft("")
-        patchUrl({
-            q: undefined,
-            status: undefined,
-            health: undefined,
-            catalogFreshness: undefined,
-            capability: undefined,
-            supplierId: undefined,
-            page: 1,
-        })
-    }, [patchUrl])
 
     const [pagination, setPagination] = React.useState<PaginationState>({
         pageIndex: Math.max(0, urlState.page - 1),
@@ -88,35 +78,18 @@ export function ConnectionList({
 
     const columns = useConnectionListColumns(onOpen)
 
-    if (listQuery.isPending) {
-        return (
-            <PageScaffold density="compact">
-                <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-                <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                <div className="h-72 animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
-        )
-    }
-
-    if (listQuery.isError) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader title="API 供应商连接" description="加载失败" />
-                <BusinessFailureState
-                    title="连接列表加载失败"
-                    error={listQuery.error}
-                    action={
-                        <Button
-                            type="button"
-                            onClick={() => void listQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
+    // chip 展示供应商业务名称，不展示内部 ID（§4.5）
+    const supplierNameLabel = React.useMemo(
+        () =>
+            data?.items.find(
+                (item) => item.supplier.id === filters.applied.supplierId,
+            )?.supplier.name,
+        [data?.items, filters.applied.supplierId],
+    )
+    const appliedChips = React.useMemo(
+        () => buildConnectionAppliedChips(urlState, supplierNameLabel),
+        [supplierNameLabel, urlState],
+    )
 
     return (
         <PageScaffold density="compact">
@@ -130,7 +103,13 @@ export function ConnectionList({
                                 : "—"
                         }
                         dateTime={data?.projectedAt}
-                        state={listQuery.isFetching ? "syncing" : "fresh"}
+                        state={
+                            listQuery.isFetching
+                                ? "syncing"
+                                : listQuery.isError
+                                  ? "stale"
+                                  : "fresh"
+                        }
                         label="连接列表"
                     />
                 }
@@ -189,23 +168,59 @@ export function ConnectionList({
                 />
             ) : null}
 
-            {/* D7：空态不再隐藏筛选区——MetricStrip 与 ListToolbar 常驻，仅表格区切换空态 */}
+            {/* 只读指标与快捷筛选：不属于筛选表单（§2.1、§7） */}
             <ConnectionMetricStrip
                 data={data}
                 urlState={urlState}
                 patchUrl={patchUrl}
             />
 
+            {/* 空态/错误态只替换表格区，筛选区常驻（§11、§12.12） */}
             <BusinessTableFrame
-                title="连接列表"
-                description="一行展示代码、供应商、环境、状态、能力、健康与下一步；身份与操作列固定；默认仅展示生产环境连接，可在工具栏切换。"
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        连接列表
+                        <span
+                            className="font-normal text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            {data?.total ?? 0} 条
+                        </span>
+                    </span>
+                }
+                description={
+                    filters.appliedFilterLabels.length > 0
+                        ? `筛选条件：${filters.appliedFilterLabels.join("、")}`
+                        : "一行展示代码、供应商、环境、状态、能力、健康与下一步；身份与操作列固定；默认仅展示生产环境连接，可在工具栏切换。"
+                }
                 toolbar={
                     <ConnectionListToolbar
-                        urlState={urlState}
-                        patchUrl={patchUrl}
-                        searchDraft={searchDraft}
-                        onSearchDraftChange={setSearchDraft}
-                        onClearFilters={clearFilters}
+                        searchInputRef={filters.searchInputRef}
+                        searchDraft={filters.searchDraft}
+                        onSearchDraftChange={filters.setSearchDraft}
+                        environment={urlState.environment}
+                        onEnvironmentChange={filters.applyEnvironment}
+                        filterPanelOpen={filters.filterPanelOpen}
+                        onFilterPanelOpenChange={filters.setFilterPanelOpen}
+                        hasStructuredFilters={filters.hasStructuredFilters}
+                        appliedChips={appliedChips}
+                        removeFilter={filters.removeFilter}
+                        onApplyFilters={filters.applyFilters}
+                        onClearFilters={filters.clearFilters}
+                        onResetMoreFilters={filters.resetMoreFilters}
+                        statusDraft={filters.statusDraft}
+                        onStatusDraftChange={filters.setStatusDraft}
+                        healthDraft={filters.healthDraft}
+                        onHealthDraftChange={filters.setHealthDraft}
+                        capabilityDraft={filters.capabilityDraft}
+                        onCapabilityDraftChange={filters.setCapabilityDraft}
+                        catalogFreshnessDraft={filters.catalogFreshnessDraft}
+                        onCatalogFreshnessDraftChange={
+                            filters.setCatalogFreshnessDraft
+                        }
+                        supplierIdDraft={filters.supplierIdDraft}
+                        onSupplierIdDraftChange={filters.setSupplierIdDraft}
                     />
                 }
                 table={
@@ -221,8 +236,13 @@ export function ConnectionList({
                             })
                         }}
                         onRowOpen={onOpen}
-                        onClearFilters={clearFilters}
+                        onClearFilters={filters.clearFilters}
                         onCreate={() => setCreateOpen(true)}
+                        loading={listQuery.isFetching}
+                        isError={listQuery.isError}
+                        error={listQuery.error}
+                        onRetry={() => void listQuery.refetch()}
+                        hasFilters={filters.hasFilters}
                     />
                 }
             />

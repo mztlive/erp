@@ -37,6 +37,14 @@ function parseAvailability(raw: string | null): InventoryAvailability {
     return "all"
 }
 
+/** 发生日期区间校验：起始日期不得晚于截止日期。 */
+function ledgerDateRangeError(from: string, to: string): string | null {
+    if (from && to && from > to) {
+        return "截止日期不能早于起始日期"
+    }
+    return null
+}
+
 const MOVEMENT_TYPE_OPTIONS = [
     { value: "PURCHASE_RECEIPT", label: "采购入库" },
     { value: "WAREHOUSE_DISPATCH", label: "仓库发出" },
@@ -114,6 +122,7 @@ const adjustSchema = z.object({
 export {
     adjustSchema,
     defaultSortValue,
+    ledgerDateRangeError,
     localNowInput,
     MOVEMENT_TYPE_OPTIONS,
     parseAvailability,

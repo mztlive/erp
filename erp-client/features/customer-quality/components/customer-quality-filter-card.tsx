@@ -1,275 +1,213 @@
 "use client"
 
 import * as React from "react"
-import { SearchIcon } from "lucide-react"
+import {
+    ChevronDownIcon,
+    FilterIcon,
+    SearchIcon,
+} from "lucide-react"
 
-import { OptionCombobox, surfacePanelClassName } from "@/components/business"
-import { FilterChip } from "@/components/business/filter-chip"
+import { FilterChip, FixedOptionRadioFilter, ListToolbar } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { DatePicker } from "@/components/ui/date-picker"
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { Label } from "@/components/ui/label"
+import type { BusinessTypeFilter, FundsReviewFilter } from "../types"
 import type {
-    BusinessTypeFilter,
-    CustomerQualityPeriodPolicy,
-    FundsReviewFilter,
-} from "../types"
-import type { CustomerQualityPatch } from "../hooks/use-customer-quality-navigation-state"
+    CustomerQualityAppliedChip,
+    CustomerQualityFilterKey,
+} from "../hooks/use-customer-quality-filters"
 
-export function CustomerQualityFilterCard({
-    resolvedFrom,
-    resolvedTo,
-    periodInvalid,
-    presets,
-    periodPreset,
-    fundsReview,
-    businessType,
-    sort,
-    searchInput,
-    searchInputRef,
-    onSearchInputChange,
-    customerId,
-    chipCustomerName,
-    showClearFilters,
-    onClearFilters,
-    onPresetSelect,
-    patchUrl,
-    resetPage,
-    filterSummary,
-    filteredTotal,
-    total,
-}: {
-    resolvedFrom?: string
-    resolvedTo?: string
-    periodInvalid: boolean
-    presets?: CustomerQualityPeriodPolicy["presets"]
-    periodPreset?: string
-    fundsReview: FundsReviewFilter
-    businessType?: BusinessTypeFilter
-    sort: string
-    searchInput: string
+type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+
+const FUNDS_REVIEW_OPTIONS: ReadonlyArray<{
+    value: FundsReviewFilter
+    label: string
+}> = [
+    { value: "all", label: "全部授权记录" },
+    { value: "reviewed_only", label: "仅已复核卡券票款" },
+]
+
+const BUSINESS_TYPE_OPTIONS: ReadonlyArray<{
+    value: BusinessTypeFilter | "all"
+    label: string
+}> = [
+    { value: "all", label: "全部" },
+    { value: "VOUCHER", label: "卡券" },
+    { value: "GOODS_SERVICE", label: "非卡券" },
+]
+
+export type CustomerQualityFilterCardProps = {
+    searchDraft: string
+    onSearchDraftChange: (value: string) => void
     searchInputRef: React.RefObject<HTMLInputElement | null>
-    onSearchInputChange: (value: string) => void
-    customerId?: string
-    chipCustomerName?: string
-    showClearFilters: boolean
-    onClearFilters: () => void
-    onPresetSelect: (id: string) => void
-    patchUrl: CustomerQualityPatch
-    resetPage: () => void
-    filterSummary: string
-    filteredTotal: number
-    total: number
-}) {
+    panelOpen: boolean
+    setPanelOpen: SetState<boolean>
+    hasStructuredFilters: boolean
+    appliedChips: readonly CustomerQualityAppliedChip[]
+    onRemoveFilter: (key: CustomerQualityFilterKey) => void
+    onApplyFilters: () => void
+    onClearAllFilters: () => void
+    onResetMoreFilters: () => void
+    fundsReviewDraft: FundsReviewFilter
+    setFundsReviewDraft: SetState<FundsReviewFilter>
+    businessTypeDraft: BusinessTypeFilter | "all"
+    setBusinessTypeDraft: SetState<BusinessTypeFilter | "all">
+}
+
+/**
+ * 客户经营质量明细筛选工具栏（docs/ui-filter-design.md §8 公司商品池结构）：
+ * 整个筛选区是唯一语义 <form>；收起态搜索框尾部提交箭头与展开态面板
+ * 「应用全部筛选」走同一个 onApplyFilters；已生效条件统一进入 chip 行。
+ */
+export function CustomerQualityFilterCard({
+    searchDraft,
+    onSearchDraftChange,
+    searchInputRef,
+    panelOpen,
+    setPanelOpen,
+    hasStructuredFilters,
+    appliedChips,
+    onRemoveFilter,
+    onApplyFilters,
+    onClearAllFilters,
+    onResetMoreFilters,
+    fundsReviewDraft,
+    setFundsReviewDraft,
+    businessTypeDraft,
+    setBusinessTypeDraft,
+}: CustomerQualityFilterCardProps) {
+    const panelId = React.useId()
+    const hasChips = appliedChips.length > 0
+
     return (
-        <Card size="sm" className={surfacePanelClassName}>
-            <CardContent className="flex flex-col gap-3 pt-4">
-                <div className="flex flex-wrap items-end gap-3">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="cq-period-from">期间起</Label>
-                        <DatePicker
-                            className="w-[10.5rem]"
-                            value={resolvedFrom || undefined}
-                            onValueChange={(next) => {
-                                patchUrl({
-                                    from: next || null,
-                                    periodSelectionSource: "EXPLICIT",
-                                    periodPreset: null,
-                                })
-                                resetPage()
-                            }}
+        <form
+            onSubmit={(event) => {
+                event.preventDefault()
+                onApplyFilters()
+            }}
+        >
+            <ListToolbar
+                search={
+                    <InputGroup className="w-full">
+                        <InputGroupAddon>
+                            <SearchIcon aria-hidden="true" />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            ref={searchInputRef}
+                            value={searchDraft}
+                            onChange={(event) =>
+                                onSearchDraftChange(event.target.value)
+                            }
+                            placeholder="客户编号 / 名称"
+                            aria-label="搜索客户"
                         />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="cq-period-to">期间止</Label>
-                        <DatePicker
-                            className="w-[10.5rem]"
-                            value={resolvedTo || undefined}
-                            onValueChange={(next) => {
-                                patchUrl({
-                                    to: next || null,
-                                    periodSelectionSource: "EXPLICIT",
-                                    periodPreset: null,
-                                })
-                                resetPage()
-                            }}
+                        
+                    </InputGroup>
+                }
+                filters={
+                    <Button
+                        type="button"
+                        variant="outline"
+                        aria-expanded={panelOpen}
+                        aria-controls={panelId}
+                        onClick={() => setPanelOpen((open) => !open)}
+                    >
+                        <FilterIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
                         />
-                    </div>
-                    {periodInvalid ? (
-                        <p
-                            id="cq-period-invalid"
-                            className="w-full text-xs text-destructive"
-                            role="alert"
-                        >
-                            开始日期晚于结束日期，将查询不到结果，请调整。
-                        </p>
-                    ) : null}
-                    {presets?.length ? (
-                        <div className="space-y-1.5">
-                            <Label htmlFor="cq-preset">快捷期间</Label>
-                            <OptionCombobox
-                                id="cq-preset"
-                                value={periodPreset ?? ""}
-                                onValueChange={(v) => {
-                                    onPresetSelect(v ?? "")
-                                }}
-                                options={[
-                                    { value: "", label: "自定义" },
-                                    ...presets.map((p) => ({
-                                        value: p.id,
-                                        label: p.label,
-                                    })),
-                                ]}
-                                className="w-40"
-                                size="sm"
-                                allowClear={false}
-                                aria-label="快捷期间"
-                                placeholder="自定义"
-                            />
+                        更多筛选
+                        {hasStructuredFilters ? (
+                            <Badge variant="info">已启用</Badge>
+                        ) : null}
+                        <ChevronDownIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                            className={
+                                panelOpen
+                                    ? "rotate-180 transition-transform"
+                                    : "transition-transform"
+                            }
+                        />
+                    </Button>
+                }
+                secondary={
+                    hasChips || panelOpen ? (
+                        <div className="w-full space-y-3">
+                            {hasChips ? (
+                                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                                    <span className="text-xs text-muted-foreground">
+                                        已筛选
+                                    </span>
+                                    {appliedChips.map((chip) => (
+                                        <FilterChip
+                                            key={chip.key}
+                                            label={chip.label}
+                                            clearLabel={`移除${chip.label}`}
+                                            onClear={() =>
+                                                onRemoveFilter(chip.key)
+                                            }
+                                        />
+                                    ))}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={onClearAllFilters}
+                                    >
+                                        清空全部
+                                    </Button>
+                                </div>
+                            ) : null}
+                            {panelOpen ? (
+                                <div
+                                    id={panelId}
+                                    className="flex w-full flex-col gap-3 border-t pt-3"
+                                    aria-label="客户经营质量更多筛选条件"
+                                >
+                                    <FixedOptionRadioFilter
+                                        label="票款口径"
+                                        value={fundsReviewDraft}
+                                        onValueChange={setFundsReviewDraft}
+                                        options={FUNDS_REVIEW_OPTIONS}
+                                    />
+                                    <FixedOptionRadioFilter
+                                        label="业务性质"
+                                        value={businessTypeDraft}
+                                        onValueChange={setBusinessTypeDraft}
+                                        options={BUSINESS_TYPE_OPTIONS}
+                                    />
+                                    <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-muted-foreground">
+                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={onResetMoreFilters}
+                                            >
+                                                重置更多条件
+                                            </Button>
+                                            <Button type="submit">
+                                                <SearchIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                应用全部筛选
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
                         </div>
-                    ) : null}
-                    <div className="space-y-1.5">
-                        <Label htmlFor="cq-funds">票款口径</Label>
-                        <OptionCombobox
-                            id="cq-funds"
-                            value={fundsReview}
-                            onValueChange={(v) => {
-                                patchUrl({
-                                    fundsReview:
-                                        (v ?? "all") === "reviewed_only"
-                                            ? "reviewed_only"
-                                            : null,
-                                })
-                                resetPage()
-                            }}
-                            options={[
-                                { value: "all", label: "全部授权记录" },
-                                {
-                                    value: "reviewed_only",
-                                    label: "仅已复核卡券票款",
-                                },
-                            ]}
-                            className="w-44"
-                            size="sm"
-                            allowClear={false}
-                            aria-label="票款口径"
-                            placeholder="票款口径"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="cq-nature">业务性质</Label>
-                        <OptionCombobox
-                            id="cq-nature"
-                            value={businessType ?? ""}
-                            onValueChange={(v) => {
-                                patchUrl({
-                                    businessType: v || null,
-                                })
-                                resetPage()
-                            }}
-                            options={[
-                                { value: "", label: "全部" },
-                                { value: "VOUCHER", label: "卡券" },
-                                { value: "GOODS_SERVICE", label: "非卡券" },
-                            ]}
-                            className="w-36"
-                            size="sm"
-                            allowClear={false}
-                            aria-label="业务性质"
-                            placeholder="全部"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="cq-sort">排序</Label>
-                        <OptionCombobox
-                            id="cq-sort"
-                            value={sort}
-                            onValueChange={(v) => {
-                                patchUrl({ sort: v ?? sort })
-                                resetPage()
-                            }}
-                            options={[
-                                {
-                                    value: "salesGrossAmount:desc",
-                                    label: "成交金额降序",
-                                },
-                                {
-                                    value: "actualProfitLossNet:desc",
-                                    label: "实际盈亏降序",
-                                },
-                                {
-                                    value: "overdueGross:desc",
-                                    label: "逾期金额降序",
-                                },
-                                {
-                                    value: "costCoverageRate:asc",
-                                    label: "覆盖率升序",
-                                },
-                                {
-                                    value: "latestBusinessAt:desc",
-                                    label: "最近业务",
-                                },
-                            ]}
-                            className="w-44"
-                            size="sm"
-                            allowClear={false}
-                            aria-label="排序"
-                            placeholder="排序"
-                        />
-                    </div>
-                    <div className="min-w-[12rem] flex-1 space-y-1.5">
-                        <Label htmlFor="cq-q">搜索客户</Label>
-                        <InputGroup>
-                            <InputGroupAddon>
-                                <SearchIcon aria-hidden="true" />
-                            </InputGroupAddon>
-                            <InputGroupInput
-                                id="cq-q"
-                                ref={searchInputRef}
-                                value={searchInput}
-                                placeholder="客户编号 / 名称（/ 聚焦）"
-                                onChange={(e) =>
-                                    onSearchInputChange(e.target.value)
-                                }
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                        patchUrl({
-                                            q: searchInput.trim() || null,
-                                        })
-                                    }
-                                }}
-                            />
-                        </InputGroup>
-                    </div>
-                    {customerId ? (
-                        <FilterChip
-                            label={`客户：${chipCustomerName ?? "已定位客户"}`}
-                            onClear={() => patchUrl({ customerId: null })}
-                        />
-                    ) : null}
-                    {showClearFilters ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={onClearFilters}
-                        >
-                            清除筛选
-                        </Button>
-                    ) : null}
-                </div>
-                <p
-                    className="text-xs text-muted-foreground"
-                    aria-live="polite"
-                >
-                    当前口径：{filterSummary} · 明细 {filteredTotal}/{total} 户
-                </p>
-            </CardContent>
-        </Card>
+                    ) : undefined
+                }
+            />
+        </form>
     )
 }

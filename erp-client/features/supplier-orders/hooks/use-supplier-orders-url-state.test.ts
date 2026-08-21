@@ -83,9 +83,36 @@ describe("useSupplierOrdersUrlState — updateUrl", () => {
         })
 
         expect(navigation.push).toHaveBeenCalledWith(
-            "/supplier-api/orders?aftersalePending=0&preview=so_1",
+            "/supplier-api/orders?preview=so_1",
             { scroll: false },
         )
+    })
+
+    it("omits default values (aftersalePending=false, page=1) from the URL", () => {
+        navigation.searchParams = new URLSearchParams("view=all&page=3")
+        const { result } = renderUrlState()
+
+        act(() => {
+            result.current.updateUrl({ page: 4 })
+        })
+
+        const url = navigation.replace.mock.calls[0]![0]
+        const params = new URLSearchParams(url.slice(url.indexOf("?") + 1))
+        expect(params.get("page")).toBe("4")
+        expect(params.get("aftersalePending")).toBeNull()
+    })
+
+    it("drops the default aftersalePending=false when toggled off", () => {
+        navigation.searchParams = new URLSearchParams("aftersalePending=1")
+        const { result } = renderUrlState()
+
+        act(() => {
+            result.current.updateUrl({ aftersalePending: false, page: 1 })
+        })
+
+        const url = navigation.replace.mock.calls[0]![0]
+        const params = new URLSearchParams(url.slice(url.indexOf("?") + 1))
+        expect(params.get("aftersalePending")).toBeNull()
     })
 
     it("preserves the returnTo context in every navigation", () => {
@@ -101,43 +128,15 @@ describe("useSupplierOrdersUrlState — updateUrl", () => {
         const url = navigation.replace.mock.calls[0]![0]
         expect(url).toContain("returnTo=%2Fcommerce%2Fconsumption-orders")
     })
-})
-
-describe("useSupplierOrdersUrlState — filters", () => {
-    it("derives hasActiveFilters from the parsed state", () => {
-        navigation.searchParams = new URLSearchParams("q=SFO")
-        expect(renderUrlState().result.current.hasActiveFilters).toBe(true)
-
+    it("degrades invalid enum values to defaults on parse", () => {
         navigation.searchParams = new URLSearchParams(
-            "fulfillmentStatus=EXCEPTION",
-        )
-        expect(renderUrlState().result.current.hasActiveFilters).toBe(true)
-
-        navigation.searchParams = new URLSearchParams()
-        expect(renderUrlState().result.current.hasActiveFilters).toBe(false)
-    })
-
-    it("clears every filter and resets to page 1", () => {
-        navigation.searchParams = new URLSearchParams(
-            "q=SFO&supplierId=sup_1&fulfillmentStatus=EXCEPTION&cancelStatus=FAILED&refundStatus=MANUAL&aftersalePending=1&paidFrom=2026-08-01&paidTo=2026-08-08&page=5",
+            "view=bogus&dir=sideways&fulfillmentStatus=GARBAGE,EXCEPTION",
         )
         const { result } = renderUrlState()
 
-        act(() => {
-            result.current.clearFilters()
-        })
-
-        const url = navigation.replace.mock.calls[0]![0]
-        const params = new URLSearchParams(url.slice(url.indexOf("?") + 1))
-        expect(params.get("q")).toBeNull()
-        expect(params.get("supplierId")).toBeNull()
-        expect(params.get("fulfillmentStatus")).toBeNull()
-        expect(params.get("cancelStatus")).toBeNull()
-        expect(params.get("refundStatus")).toBeNull()
-        expect(params.get("paidFrom")).toBeNull()
-        expect(params.get("paidTo")).toBeNull()
-        expect(params.get("page")).toBeNull()
-        expect(params.get("aftersalePending")).toBe("0")
+        expect(result.current.url.view).toBe("actionable")
+        expect(result.current.url.dir).toBeUndefined()
+        expect(result.current.url.fulfillmentStatuses).toEqual(["EXCEPTION"])
     })
 })
 

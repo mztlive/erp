@@ -82,6 +82,7 @@ describe("useCustomerQualityNavigationState", () => {
 
         expect(mocks.replace).toHaveBeenCalledWith(
             "/analytics/customer-quality?fundsReview=reviewed_only",
+            { scroll: false },
         )
         expect(mocks.push).not.toHaveBeenCalled()
         expect(result.current.pagination.pageIndex).toBe(0)
@@ -100,7 +101,10 @@ describe("useCustomerQualityNavigationState", () => {
             )
         })
 
-        expect(mocks.push).toHaveBeenCalledWith("/analytics/customer-quality")
+        expect(mocks.push).toHaveBeenCalledWith(
+            "/analytics/customer-quality",
+            { scroll: false },
+        )
     })
 
     it("resetPage returns pagination to the first page", () => {
@@ -167,6 +171,7 @@ describe("useCustomerQualityNavigationState", () => {
 
         expect(mocks.replace).toHaveBeenCalledWith(
             "/analytics/customer-quality?sort=actualProfitLossNet%3Adesc",
+            { scroll: false },
         )
         expect(result.current.pagination.pageIndex).toBe(0)
     })
@@ -182,6 +187,7 @@ describe("useCustomerQualityNavigationState", () => {
 
         expect(mocks.replace).toHaveBeenCalledWith(
             "/analytics/customer-quality?sort=salesGrossAmount%3Adesc",
+            { scroll: false },
         )
     })
 

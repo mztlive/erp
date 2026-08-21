@@ -95,12 +95,12 @@ export function ActualProfitLossPage() {
                 <AnalysisBlockedPanel
                     basisConfig={page.basisConfig}
                     onSelectBasis={(code) =>
-                        page.patchUrl({ periodBasis: code }, { replace: true })
+                        page.patchUrl({ periodBasis: code })
                     }
                 />
             ) : null}
 
-            {/* 分析主体：仅在口径就绪后 */}
+            {/* 分析主体：仅在口径就绪后；查询失败时筛选区保持挂载（失败态在明细表面内） */}
             {page.analysisReady ? (
                 <>
                     {page.viewQuery.isPending && !page.data ? (
@@ -113,23 +113,6 @@ export function ActualProfitLossPage() {
                             </div>
                             <Skeleton className="h-64 w-full" />
                         </>
-                    ) : null}
-
-                    {page.viewQuery.isError && !page.data ? (
-                        <BusinessFailureState
-                            error={page.viewQuery.error}
-                            title="盈亏数据加载失败"
-                            action={
-                                <Button
-                                    type="button"
-                                    onClick={() =>
-                                        void page.viewQuery.refetch()
-                                    }
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
                     ) : null}
 
                     {page.data ? (
@@ -148,34 +131,61 @@ export function ActualProfitLossPage() {
                             <ProfitLossChartsAndStageReference
                                 data={page.data}
                             />
-                            <ProfitLossRowsPanel
-                                data={page.data}
-                                dimension={page.dimension}
-                                coverage={page.coverage}
-                                hasFilters={page.hasFilters}
-                                searchInput={page.searchInput}
-                                searchInputRef={page.searchInputRef}
-                                onSearchInputChange={page.setSearchInput}
-                                onSearchCommit={page.handleSearchCommit}
-                                onCoverageChange={page.handleCoverageChange}
-                                customerId={page.customerId}
-                                salesOrderId={page.salesOrderId}
-                                onClearCustomer={page.handleClearCustomer}
-                                onClearSalesOrder={page.handleClearSalesOrder}
-                                onClearFilters={page.clearFilters}
-                                onDimensionChange={page.handleDimensionChange}
-                                pageRows={page.pageRows}
-                                columns={page.columns}
-                                pagination={page.pagination}
-                                onPaginationChange={page.setPagination}
-                                sorting={page.tableSorting}
-                                onSortingChange={page.handleTableSortingChange}
-                                loading={
-                                    page.viewQuery.isFetching &&
-                                    !page.viewQuery.isPending
-                                }
-                            />
                         </>
+                    ) : null}
+
+                    {page.data || page.viewQuery.isError ? (
+                        <ProfitLossRowsPanel
+                            data={page.data}
+                            dimension={page.dimension}
+                            coverage={page.coverage}
+                            hasFilters={page.hasFilters}
+                            searchInput={page.searchInput}
+                            searchInputRef={page.searchInputRef}
+                            onSearchInputChange={page.setSearchInput}
+                            onApplyFilters={page.applyFilters}
+                            onCoverageChange={page.handleCoverageChange}
+                            panelOpen={page.filterPanelOpen}
+                            setPanelOpen={page.setFilterPanelOpen}
+                            hasStructuredFilters={page.hasStructuredFilters}
+                            appliedChips={page.appliedChips}
+                            onRemoveFilter={page.removeFilter}
+                            onResetMoreFilters={page.resetMoreFilters}
+                            onClearAllFilters={page.clearAllFilters}
+                            onDimensionChange={page.handleDimensionChange}
+                            benefitScenarioDraft={page.benefitScenarioDraft}
+                            onBenefitScenarioDraftChange={
+                                page.setBenefitScenarioDraft
+                            }
+                            fulfillmentModesDraft={
+                                page.fulfillmentModesDraft
+                            }
+                            onFulfillmentModesDraftChange={
+                                page.setFulfillmentModesDraft
+                            }
+                            costTypesDraft={page.costTypesDraft}
+                            onCostTypesDraftChange={page.setCostTypesDraft}
+                            benefitScenarioOptions={
+                                page.benefitScenarioOptions
+                            }
+                            fulfillmentModeOptions={
+                                page.fulfillmentModeOptions
+                            }
+                            costTypeOptions={page.costTypeOptions}
+                            pageRows={page.pageRows}
+                            columns={page.columns}
+                            pagination={page.pagination}
+                            onPaginationChange={page.setPagination}
+                            sorting={page.tableSorting}
+                            onSortingChange={page.handleTableSortingChange}
+                            loading={
+                                page.viewQuery.isFetching &&
+                                !page.viewQuery.isPending
+                            }
+                            isError={page.viewQuery.isError}
+                            error={page.viewQuery.error}
+                            onRetry={() => void page.viewQuery.refetch()}
+                        />
                     ) : null}
                 </>
             ) : null}

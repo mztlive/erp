@@ -89,13 +89,11 @@ export function useDictionaryListState({
                 q: filters.q,
                 lifecycleStatus: filters.lifecycleStatus,
                 revisionTiming: filters.revisionTiming,
-                rowCount: rows.length,
             }),
         [
             filters.lifecycleStatus,
             filters.q,
             filters.revisionTiming,
-            rows.length,
         ],
     )
 

@@ -56,12 +56,18 @@ export function parseGateParam(raw: string | null): GateFilter | undefined {
     return raw === "blocked" || raw === "satisfied" ? raw : undefined
 }
 
-export const DUE_FILTER_OPTIONS = [
+export const DUE_FILTER_OPTIONS: ReadonlyArray<{
+    value: DueFilter
+    label: string
+}> = [
     { value: "today", label: "今日到期" },
     { value: "overdue", label: "已超期" },
 ]
 
-export const GATE_FILTER_OPTIONS = [
+export const GATE_FILTER_OPTIONS: ReadonlyArray<{
+    value: GateFilter
+    label: string
+}> = [
     { value: "satisfied", label: "货款已到，可以收货" },
     { value: "blocked", label: "先款未到，暂时不能收货" },
 ]

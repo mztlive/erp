@@ -33,10 +33,13 @@ import { cn } from "@/lib/utils"
 export function CategoryTreePage() {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const {
-        search,
-        setSearch,
+        searchDraft,
+        setSearchDraft,
+        applyTreeFilters,
         lifecycleStatus,
         setLifecycleStatus,
+        appliedChips,
+        removeFilter,
         selectedId,
         setSelectedId,
         expanded,
@@ -64,48 +67,21 @@ export function CategoryTreePage() {
         onExport,
     } = useMasterDataCategoryTree(searchInputRef)
 
-    if (listQuery.isPending) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader title={masterDataCopy.pageTitle("商品分类")} />
-                <div
-                    className="h-40 animate-pulse rounded-lg bg-muted"
-                    aria-busy
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (listQuery.isError || !listQuery.data) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader title={masterDataCopy.pageTitle("商品分类")} />
-                <BusinessFailureState
-                    error={listQuery.error}
-                    action={
-                        <Button
-                            type="button"
-                            onClick={() => void listQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
+    const listLoadFailed = listQuery.isError || !listQuery.data
 
     return (
         <PageScaffold density="compact">
             <PageHeader
                 title={masterDataCopy.pageTitle("商品分类")}
                 metadata={
-                    <DataFreshness
-                        updatedAt="刚刚"
-                        dateTime={listQuery.data.queriedAt}
-                        state="fresh"
-                        label="商品分类树"
-                    />
+                    listQuery.data ? (
+                        <DataFreshness
+                            updatedAt="刚刚"
+                            dateTime={listQuery.data.queriedAt}
+                            state="fresh"
+                            label="商品分类树"
+                        />
+                    ) : undefined
                 }
                 actions={
                     <PageActions
@@ -130,9 +106,11 @@ export function CategoryTreePage() {
                 }
             />
 
-            <p className="text-sm text-muted-foreground">
-                {masterDataCopy.categoryTreeDesc(rows.length)}
-            </p>
+            {listQuery.data ? (
+                <p className="text-sm text-muted-foreground">
+                    {masterDataCopy.categoryTreeDesc(rows.length)}
+                </p>
+            ) : null}
 
             {exportMeta ? (
                 <p className="text-xs text-muted-foreground">
@@ -141,16 +119,6 @@ export function CategoryTreePage() {
                     。文件已开始下载。
                 </p>
             ) : null}
-
-            <CategoryTreeToolbar
-                searchInputRef={searchInputRef}
-                search={search}
-                onSearchChange={setSearch}
-                lifecycleStatus={lifecycleStatus}
-                onLifecycleStatusChange={setLifecycleStatus}
-                onExpandAll={expandAll}
-                onCollapseAll={collapseAll}
-            />
 
             <div className="grid min-h-[28rem] gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                 <section
@@ -164,35 +132,83 @@ export function CategoryTreePage() {
                         <h2 className="text-sm font-semibold">
                             {masterDataCopy.categoryTreeTitle}
                         </h2>
-                        <span className="text-xs text-muted-foreground">
-                            可见 {visibleCount} 项 · 共 {rows.length} 项
-                        </span>
+                        <div className="flex items-center gap-1">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={expandAll}
+                            >
+                                {masterDataCopy.categoryExpandAll}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={collapseAll}
+                            >
+                                {masterDataCopy.categoryCollapseAll}
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                                可见 {visibleCount} 项 · 共 {rows.length} 项
+                            </span>
+                        </div>
                     </div>
-                    <CategoryTreeList
-                        forest={forest}
-                        expanded={expanded}
-                        selectedId={selectedId}
-                        onToggle={toggle}
-                        onSelect={(item) => setSelectedId(item.stableId)}
-                        filterActive={filterActive}
-                        onClearFilters={clearFilters}
-                        onOpenCreateRoot={openCreateRoot}
+                    <CategoryTreeToolbar
+                        searchInputRef={searchInputRef}
+                        searchDraft={searchDraft}
+                        setSearchDraft={setSearchDraft}
+                        applyTreeFilters={applyTreeFilters}
+                        lifecycleStatus={lifecycleStatus}
+                        onLifecycleStatusChange={setLifecycleStatus}
+                        appliedChips={appliedChips}
+                        removeFilter={removeFilter}
+                        clearFilters={clearFilters}
                     />
+                    {listQuery.isPending ? (
+                        <div
+                            className="h-40 animate-pulse rounded-lg bg-muted"
+                            aria-busy
+                        />
+                    ) : listLoadFailed ? (
+                        <BusinessFailureState
+                            error={listQuery.error}
+                            action={
+                                <Button
+                                    type="button"
+                                    onClick={() => void listQuery.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    ) : (
+                        <CategoryTreeList
+                            forest={forest}
+                            expanded={expanded}
+                            selectedId={selectedId}
+                            onToggle={toggle}
+                            onSelect={(item) => setSelectedId(item.stableId)}
+                            filterActive={filterActive}
+                            onClearFilters={clearFilters}
+                            onOpenCreateRoot={openCreateRoot}
+                        />
+                    )}
                 </section>
 
-                <CategoryTreeDetailPanel
-                    selected={selected}
-                    selectedId={selectedId}
-                    selectedPath={selectedPath}
-                    rows={rows}
-                    onClearFilters={clearFilters}
-                    onOpenCreateChild={openCreateChild}
-                    onReviseTarget={setReviseTarget}
-                    onDisableTarget={setDisableTarget}
-                />
+                {listQuery.data ? (
+                    <CategoryTreeDetailPanel
+                        selected={selected}
+                        selectedId={selectedId}
+                        selectedPath={selectedPath}
+                        rows={rows}
+                        onClearFilters={clearFilters}
+                        onOpenCreateChild={openCreateChild}
+                        onReviseTarget={setReviseTarget}
+                        onDisableTarget={setDisableTarget}
+                    />
+                ) : null}
             </div>
 
-            <CategoryCreateDialog
+        <CategoryCreateDialog
                 key={`cat-create-${createParentId ?? "root"}-${createOpen}`}
                 open={createOpen}
                 onOpenChange={setCreateOpen}

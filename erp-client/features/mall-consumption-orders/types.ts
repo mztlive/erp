@@ -146,6 +146,12 @@ export const DATA_SOURCE_LABEL: Record<DataSource, string> = {
     MIXED: "混合",
 }
 
+export const PAYMENT_SOURCE_LABEL: Record<PaymentSourceFilter, string> = {
+    CARD: "卡券",
+    WECHAT: "微信",
+    MIXED: "组合",
+}
+
 type ActionBlocker = {
     action: string
     code: string
@@ -241,6 +247,17 @@ export type MallConsumptionOrderMetricKey =
     | "fact_diff"
     | "auto_exception"
     | "cost_none"
+
+export const MALL_CONSUMPTION_METRIC_LABELS: Record<
+    MallConsumptionOrderMetricKey,
+    string
+> = {
+    paid: "支付成功",
+    pending_attr: "待归集",
+    fact_diff: "记录差异",
+    auto_exception: "自动履约异常",
+    cost_none: "成本未覆盖",
+}
 
 export type MallConsumptionOrderMetric = {
     key: MallConsumptionOrderMetricKey

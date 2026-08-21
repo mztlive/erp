@@ -15,8 +15,9 @@ import {
  * 列表页 URL 状态管理：
  * - 解析 searchParams → url（含 returnTo 返回上下文）；
  * - 统一 updateUrl（筛选/分页 replace、预览 push）；
- * - 派生 hasActiveFilters / clearFilters；
  * - W25 钻取：supplierOrderId / from=W25 时跳转对象中心。
+ *
+ * 筛选草稿、清除与提交逻辑见 use-supplier-orders-filters.ts。
  */
 export function useSupplierOrdersUrlState() {
     const router = useRouter()
@@ -56,6 +57,8 @@ export function useSupplierOrdersUrlState() {
     const updateUrl = React.useCallback<SupplierOrdersUrlUpdater>(
         (patch: SupplierOrdersUrlPatch, navigate = "replace") => {
             const next = { ...url, ...patch }
+            // 默认值不写 URL：aftersalePending=false 是默认值，直接省略
+            if (!next.aftersalePending) next.aftersalePending = undefined
             let qs = buildSupplierOrdersSearchParams(next)
             // URL state codec 不声明 returnTo，筛选/分页变化时手动保留返回上下文
             if (returnTo) {
@@ -70,38 +73,10 @@ export function useSupplierOrdersUrlState() {
         [pathname, router, url, returnTo],
     )
 
-    // P4：清除=清全部筛选参数并回第 1 页；保留 view（视图类）与排序。
-    // 工具栏常驻清除与空态 BusinessEmptyState 共用同一函数（D21）。
-    const hasActiveFilters = Boolean(
-        url.q ||
-        url.supplierId ||
-        url.fulfillmentStatuses?.length ||
-        url.cancelStatuses?.length ||
-        url.refundStatuses?.length ||
-        url.aftersalePending ||
-        url.paidFrom ||
-        url.paidTo,
-    )
-    const clearFilters = React.useCallback(() => {
-        updateUrl({
-            fulfillmentStatuses: undefined,
-            cancelStatuses: undefined,
-            refundStatuses: undefined,
-            aftersalePending: false,
-            q: undefined,
-            supplierId: undefined,
-            paidFrom: undefined,
-            paidTo: undefined,
-            page: 1,
-        })
-    }, [updateUrl])
-
     return {
         url,
         returnTo,
         updateUrl,
-        hasActiveFilters,
-        clearFilters,
     }
 }
 

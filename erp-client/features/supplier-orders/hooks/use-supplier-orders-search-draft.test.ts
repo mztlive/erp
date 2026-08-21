@@ -1,16 +1,19 @@
 import { act, renderHook } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 import { useSupplierOrdersSearchDraft } from "./use-supplier-orders-search-draft"
 
 function renderSearchDraft(q: string | undefined) {
-    const updateUrl = vi.fn()
+    const ref = { current: null as HTMLInputElement | null }
     const rendered = renderHook(
         ({ currentQ }: { currentQ: string | undefined }) =>
-            useSupplierOrdersSearchDraft({ q: currentQ, updateUrl }),
+            useSupplierOrdersSearchDraft({
+                q: currentQ,
+                searchInputRef: ref,
+            }),
         { initialProps: { currentQ: q } },
     )
-    return { ...rendered, updateUrl }
+    return { ...rendered, ref }
 }
 
 describe("useSupplierOrdersSearchDraft", () => {
@@ -19,7 +22,7 @@ describe("useSupplierOrdersSearchDraft", () => {
         expect(result.current.searchDraft).toBe("SFO-9")
     })
 
-    it("resets the draft when q changes externally", () => {
+    it("resets the draft when q changes externally while the input is not focused", () => {
         const { result, rerender } = renderSearchDraft("SFO-9")
 
         act(() => {
@@ -31,44 +34,29 @@ describe("useSupplierOrdersSearchDraft", () => {
         expect(result.current.searchDraft).toBe("外部清除后")
     })
 
-    it("commits the draft on enter and resets the page", () => {
-        const { result, updateUrl } = renderSearchDraft(undefined)
+    it("keeps the uncommitted draft while the search input is focused", () => {
+        const { result, rerender, ref } = renderSearchDraft("SFO-9")
+
+        act(() => {
+            result.current.setSearchDraft("手写内容")
+        })
+
+        const input = document.createElement("input")
+        ref.current = input
+        document.body.appendChild(input)
+        input.focus()
+
+        rerender({ currentQ: "外部变化" })
+        expect(result.current.searchDraft).toBe("手写内容")
+    })
+
+    it("does not commit drafts on its own", () => {
+        const { result } = renderSearchDraft(undefined)
 
         act(() => {
             result.current.setSearchDraft("SFO-9")
         })
-        act(() => {
-            result.current.commitSearch("SFO-9")
-        })
 
-        expect(updateUrl).toHaveBeenCalledWith({ q: "SFO-9", page: 1 })
-    })
-
-    it("turns an empty commit into q=undefined", () => {
-        const { result, updateUrl } = renderSearchDraft("SFO-9")
-
-        act(() => {
-            result.current.commitSearch("")
-        })
-
-        expect(updateUrl).toHaveBeenCalledWith({ q: undefined, page: 1 })
-    })
-
-    it("commits on blur only when the draft differs from q", () => {
-        const { result, updateUrl, rerender } = renderSearchDraft("SFO-9")
-
-        act(() => {
-            result.current.commitOnBlur()
-        })
-        expect(updateUrl).not.toHaveBeenCalled()
-
-        act(() => {
-            result.current.setSearchDraft("SFO-10")
-        })
-        rerender({ currentQ: "SFO-9" })
-        act(() => {
-            result.current.commitOnBlur()
-        })
-        expect(updateUrl).toHaveBeenCalledWith({ q: "SFO-10", page: 1 })
+        expect(result.current.searchDraft).toBe("SFO-9")
     })
 })

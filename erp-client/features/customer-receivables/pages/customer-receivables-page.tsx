@@ -11,7 +11,6 @@ import {
 } from "@/components/business"
 import { type ResultState } from "@/components/business/feedback"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import {
     createInvoiceColumns,
     createReceivableColumns,
@@ -34,6 +33,9 @@ import {
 } from "@/features/customer-receivables/hooks/queries"
 import { buildAccountsCsv, downloadCsv } from "@/features/customer-receivables/lib/export-csv"
 import {
+    DUE_LABEL,
+    RECEIVABLE_STATUS_LABEL,
+    REVIEW_STATUS_LABEL,
     VIEW_LABEL,
     type AllocationMode,
 } from "@/features/customer-receivables/types"
@@ -48,7 +50,10 @@ import { AllocationSessionScreen } from "./components/allocation-session-screen"
 import { CustomerReceivablesHeader } from "./components/customer-receivables-header"
 import { CustomerReceivablesMetrics } from "./components/customer-receivables-metrics"
 import { CustomerReceivablesTable } from "./components/customer-receivables-table"
-import { CustomerReceivablesToolbar } from "./components/customer-receivables-toolbar"
+import {
+    CustomerReceivablesToolbar,
+    type ReceivableAppliedChip,
+} from "./components/customer-receivables-toolbar"
 import { SalesOrderReturnAlert } from "./components/sales-order-return-alert"
 import { useAutoAllocationSession } from "./hooks/use-auto-allocation-session"
 import { useCustomerReceivablesPreview } from "./hooks/use-customer-receivables-preview"
@@ -136,6 +141,85 @@ export function CustomerReceivablesPage() {
             )?.customerName,
         [data?.counterparties, urlState.customerId],
     )
+
+    /** 已生效条件全部显性化为可单独移除的 chip（含深链来源锁定）。 */
+    const appliedChips = React.useMemo<
+        readonly ReceivableAppliedChip[]
+    >(() => {
+        const chips: ReceivableAppliedChip[] = []
+        const trimmedQ = urlState.qParam.trim()
+        if (trimmedQ) {
+            chips.push({ key: "q", label: `搜索：${trimmedQ}` })
+        }
+        if (urlState.counterpartyPartyId) {
+            const party = data?.counterparties.find(
+                (c) =>
+                    c.counterpartyPartyId === urlState.counterpartyPartyId,
+            )
+            chips.push({
+                key: "counterpartyId",
+                label: `往来主体：${party?.counterpartyPartyName ?? urlState.counterpartyPartyId}`,
+            })
+        }
+        if (urlState.customerId) {
+            chips.push({
+                key: "customerId",
+                label: `经营客户 ${lockedCustomerName ?? urlState.customerId}`,
+            })
+        }
+        if (urlState.due && urlState.due !== "all") {
+            chips.push({
+                key: "due",
+                label: `到期：${DUE_LABEL[urlState.due]}`,
+            })
+        }
+        if (urlState.status) {
+            chips.push({
+                key: "status",
+                label: `状态：${RECEIVABLE_STATUS_LABEL[urlState.status]}`,
+            })
+        }
+        if (urlState.reviewStatus) {
+            chips.push({
+                key: "reviewStatus",
+                label: `复核状态：${REVIEW_STATUS_LABEL[urlState.reviewStatus]}`,
+            })
+        }
+        if (urlState.salesOrderId) {
+            const row = data?.receivables.find(
+                (r) => r.salesOrderId === urlState.salesOrderId,
+            )
+            chips.push({
+                key: "salesOrderId",
+                label: `销售单：${row?.salesOrderNo ?? urlState.salesOrderId}`,
+            })
+        }
+        if (urlState.receivableAccountId) {
+            const row = data?.receivables.find(
+                (r) => r.accountId === urlState.receivableAccountId,
+            )
+            chips.push({
+                key: "receivableAccountId",
+                label:
+                    row?.accountSeq != null
+                        ? `往来子账：${row.accountSeq}`
+                        : `往来子账：${urlState.receivableAccountId}`,
+            })
+        }
+        return chips
+    }, [
+        data?.counterparties,
+        data?.receivables,
+        lockedCustomerName,
+        urlState.counterpartyPartyId,
+        urlState.customerId,
+        urlState.due,
+        urlState.qParam,
+        urlState.receivableAccountId,
+        urlState.reviewStatus,
+        urlState.salesOrderId,
+        urlState.status,
+    ])
 
     useAutoAllocationSession({
         data,
@@ -239,25 +323,6 @@ export function CustomerReceivablesPage() {
         )
     }
 
-    if (listQuery.isError) {
-        return (
-            <PageScaffold>
-                <BusinessFailureState
-                    title="客户往来加载失败"
-                    error={listQuery.error}
-                    action={
-                        <Button
-                            type="button"
-                            onClick={() => void listQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
     const metrics = data?.metrics
     return (
         <PageScaffold density="compact">
@@ -323,18 +388,23 @@ export function CustomerReceivablesPage() {
                 />
             ) : (
                 <>
-                    <CustomerReceivablesMetrics
-                        view={urlState.view}
-                        due={urlState.due}
-                        metrics={metrics}
-                        queriedAt={data?.queriedAt}
-                        patchUrl={urlState.patchUrl}
-                    />
+                    {!listQuery.isError ? (
+                        <CustomerReceivablesMetrics
+                            view={urlState.view}
+                            due={urlState.due}
+                            metrics={metrics}
+                            queriedAt={data?.queriedAt}
+                            patchUrl={urlState.patchUrl}
+                        />
+                    ) : null}
 
                     <CustomerReceivablesTable
                         view={urlState.view}
                         data={data}
                         isPending={listQuery.isPending}
+                        isError={listQuery.isError}
+                        error={listQuery.error}
+                        onRetry={() => void listQuery.refetch()}
                         metrics={metrics}
                         pagination={urlState.pagination}
                         receivableColumns={receivableColumns}
@@ -343,22 +413,36 @@ export function CustomerReceivablesPage() {
                         toolbar={
                             <CustomerReceivablesToolbar
                                 view={urlState.view}
-                                due={urlState.due}
-                                status={urlState.status}
-                                reviewStatus={urlState.reviewStatus}
-                                counterpartyPartyId={
-                                    urlState.counterpartyPartyId
-                                }
-                                customerId={urlState.customerId}
-                                lockedCustomerName={lockedCustomerName}
-                                hasActiveFilters={urlState.hasActiveFilters}
-                                total={data?.total ?? 0}
-                                searchInput={urlState.searchInput}
+                                searchDraft={urlState.searchDraft}
+                                setSearchDraft={urlState.setSearchDraft}
                                 searchInputRef={urlState.searchInputRef}
-                                setSearchInput={urlState.setSearchInput}
-                                patchUrl={urlState.patchUrl}
+                                counterpartyPartyIdDraft={
+                                    urlState.counterpartyPartyIdDraft
+                                }
+                                setCounterpartyPartyIdDraft={
+                                    urlState.setCounterpartyPartyIdDraft
+                                }
+                                dueDraft={urlState.dueDraft}
+                                setDueDraft={urlState.setDueDraft}
+                                statusDraft={urlState.statusDraft}
+                                setStatusDraft={urlState.setStatusDraft}
+                                reviewStatusDraft={
+                                    urlState.reviewStatusDraft
+                                }
+                                setReviewStatusDraft={
+                                    urlState.setReviewStatusDraft
+                                }
+                                panelOpen={urlState.panelOpen}
+                                setPanelOpen={urlState.setPanelOpen}
+                                hasStructuredFilters={
+                                    urlState.hasStructuredFilters
+                                }
+                                hasActiveFilters={urlState.hasActiveFilters}
+                                appliedChips={appliedChips}
+                                removeFilter={urlState.removeFilter}
+                                applyFilters={urlState.applyFilters}
+                                resetMoreFilters={urlState.resetMoreFilters}
                                 clearFilters={urlState.clearFilters}
-                                onRefresh={() => void listQuery.refetch()}
                             />
                         }
                         patchUrl={urlState.patchUrl}

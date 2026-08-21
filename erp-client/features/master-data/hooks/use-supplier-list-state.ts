@@ -5,12 +5,28 @@ import * as React from "react"
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useClientPagedRows } from "@/features/master-data/hooks/use-client-paged-rows"
 import { useSupplierListFilters } from "@/features/master-data/hooks/use-supplier-list-filters"
+import type { SupplierFilterKey } from "@/features/master-data/hooks/use-supplier-list-filters"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import { useMasterDataListExport } from "@/features/master-data/hooks/use-master-data-list-export"
-import { buildSupplierFilterSnapshotLabel } from "@/features/master-data/lib/master-data-list-summaries"
+import {
+    buildSupplierFilterSnapshotLabel,
+    buildSupplierTableDescription,
+} from "@/features/master-data/lib/master-data-list-summaries"
 import { syncListMetrics } from "@/features/master-data/lib/master-data-list-summaries"
+import { lifecycleFilterLabel } from "@/features/master-data/lib/copy"
+import {
+    qualificationHealthLabel,
+    selectedSupplierOptionLabels,
+    SUPPLIER_CAPABILITY_OPTIONS,
+    SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
+} from "@/features/master-data/lib/list-filters"
 import { resourceLabel } from "@/features/master-data/lib/data"
 import type { MasterDataListItem } from "@/features/master-data/types"
+
+export type SupplierAppliedChip = Readonly<{
+    key: SupplierFilterKey
+    label: string
+}>
 
 export function useSupplierListState(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
@@ -42,6 +58,69 @@ export function useSupplierListState(
             (metric) => metric.key !== "pending",
         )
     }, [listQuery.data, rows])
+    /** 所有已生效条件均可从 chip 单独撤销。 */
+    const appliedChips = React.useMemo<readonly SupplierAppliedChip[]>(() => {
+        const chips: SupplierAppliedChip[] = []
+        if (filters.q.trim()) {
+            chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
+        }
+        if (filters.lifecycleStatus !== "all") {
+            chips.push({
+                key: "lifecycleStatus",
+                label: `启停：${lifecycleFilterLabel(filters.lifecycleStatus)}`,
+            })
+        }
+        if (filters.supplierQualificationHealth) {
+            chips.push({
+                key: "supplierQualificationHealth",
+                label: `资质状态：${qualificationHealthLabel(filters.supplierQualificationHealth)}`,
+            })
+        }
+        if (filters.supplierCapabilityCodes.length > 0) {
+            chips.push({
+                key: "supplierCapabilityCodes",
+                label: `供应能力：${selectedSupplierOptionLabels(
+                    filters.supplierCapabilityCodes,
+                    SUPPLIER_CAPABILITY_OPTIONS,
+                ).join("、")}`,
+            })
+        }
+        if (filters.supplierQualificationTypes.length > 0) {
+            chips.push({
+                key: "supplierQualificationTypes",
+                label: `资质类型：${selectedSupplierOptionLabels(
+                    filters.supplierQualificationTypes,
+                    SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
+                ).join("、")}`,
+            })
+        }
+        return chips
+    }, [
+        filters.lifecycleStatus,
+        filters.q,
+        filters.supplierCapabilityCodes,
+        filters.supplierQualificationHealth,
+        filters.supplierQualificationTypes,
+    ])
+    const listTableDescription = React.useMemo(
+        () =>
+            buildSupplierTableDescription({
+                q: filters.q,
+                lifecycleStatus: filters.lifecycleStatus,
+                supplierQualificationHealth:
+                    filters.supplierQualificationHealth,
+                supplierCapabilityCodes: filters.supplierCapabilityCodes,
+                supplierQualificationTypes:
+                    filters.supplierQualificationTypes,
+            }),
+        [
+            filters.lifecycleStatus,
+            filters.q,
+            filters.supplierCapabilityCodes,
+            filters.supplierQualificationHealth,
+            filters.supplierQualificationTypes,
+        ],
+    )
     const filterSnapshotLabel = React.useMemo(
         () =>
             buildSupplierFilterSnapshotLabel({
@@ -92,6 +171,8 @@ export function useSupplierListState(
         setDisableTarget,
         rows,
         pageRows,
+        appliedChips,
+        listTableDescription,
         syncedMetrics,
         onExport,
     }

@@ -5,6 +5,7 @@ import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-t
 
 import {
     BusinessEmptyState,
+    PageHeader,
     PageScaffold,
 } from "@/components/business"
 import type {
@@ -14,7 +15,6 @@ import type {
     CustomerQualityPeriodPolicy,
     CustomerQualityRow,
     CustomerQualityView,
-    FundsReviewFilter,
 } from "../types"
 import type { CustomerQualityPatch } from "../hooks/use-customer-quality-navigation-state"
 import { BusinessTagDialog } from "./business-tag-dialog"
@@ -23,13 +23,19 @@ import { CustomerQualityCharts } from "./customer-quality-charts"
 import { CustomerQualityCoveragePanels } from "./customer-quality-coverage-panels"
 import { CustomerQualityDetailTable } from "./customer-quality-detail-table"
 import { CustomerQualityExportProgress } from "./customer-quality-export-progress"
-import { CustomerQualityFilterCard } from "./customer-quality-filter-card"
 import { CustomerQualityMetricStrip } from "./customer-quality-metric-strip"
 import { CustomerQualityPageAlerts } from "./customer-quality-page-alerts"
 import { CustomerQualityPageHeader } from "./customer-quality-page-header"
+import { CustomerQualityPeriodBar } from "./customer-quality-period-bar"
 
 export function CustomerQualityMainView({
     data,
+    viewError,
+    onRetryView,
+    toolbar,
+    loading,
+    hasActiveFilters,
+    onClearFilters,
     refreshError,
     refreshing,
     onRefresh,
@@ -41,16 +47,8 @@ export function CustomerQualityMainView({
     periodInvalid,
     presets,
     periodPreset,
-    fundsReview,
     businessType,
     sort,
-    searchInput,
-    searchInputRef,
-    onSearchInputChange,
-    customerId,
-    chipCustomerName,
-    showClearFilters,
-    onClearFilters,
     onPresetSelect,
     patchUrl,
     resetPage,
@@ -68,11 +66,16 @@ export function CustomerQualityMainView({
     onSortingChange,
     tableSectionRef,
     onFocusTable,
-    onClearTableFilters,
     tagDialog,
     onTagDialogOpenChange,
 }: {
-    data: CustomerQualityView
+    data: CustomerQualityView | null
+    viewError: unknown
+    onRetryView: () => void
+    toolbar: React.ReactNode
+    loading: boolean
+    hasActiveFilters: boolean
+    onClearFilters: () => void
     refreshError: string | null
     refreshing: boolean
     onRefresh: () => void
@@ -84,16 +87,8 @@ export function CustomerQualityMainView({
     periodInvalid: boolean
     presets?: CustomerQualityPeriodPolicy["presets"]
     periodPreset?: string
-    fundsReview: FundsReviewFilter
     businessType?: BusinessTypeFilter
     sort: string
-    searchInput: string
-    searchInputRef: React.RefObject<HTMLInputElement | null>
-    onSearchInputChange: (value: string) => void
-    customerId?: string
-    chipCustomerName?: string
-    showClearFilters: boolean
-    onClearFilters: () => void
     onPresetSelect: (id: string) => void
     patchUrl: CustomerQualityPatch
     resetPage: () => void
@@ -115,57 +110,54 @@ export function CustomerQualityMainView({
     onSortingChange: (next: SortingState) => void
     tableSectionRef: React.RefObject<HTMLDivElement | null>
     onFocusTable: () => void
-    onClearTableFilters: () => void
     tagDialog: BusinessTag | null
     onTagDialogOpenChange: (open: boolean) => void
 }) {
     const isVoucherOnly = businessType === "VOUCHER"
+    const items = data?.customers.items ?? []
+    const filteredTotal = data?.customers.filteredTotal ?? 0
+    const total = data?.customers.total ?? 0
+    const emptyKind = data?.emptyKind
+    const filterSummary = data?.filterSummary ?? ""
 
     return (
         <PageScaffold>
-            <CustomerQualityPageHeader
-                freshness={data.freshness}
-                refreshing={refreshing}
-                period={data.period}
-                scopeLabel={data.scope.label}
-                onRefresh={onRefresh}
-                canExport={data.canExport}
-                filteredTotal={data.customers.filteredTotal}
-                exportPending={exportPending}
-                onExport={onExport}
-            />
+            {data ? (
+                <CustomerQualityPageHeader
+                    freshness={data.freshness}
+                    refreshing={refreshing}
+                    period={data.period}
+                    scopeLabel={data.scope.label}
+                    onRefresh={onRefresh}
+                    canExport={data.canExport}
+                    filteredTotal={filteredTotal}
+                    exportPending={exportPending}
+                    onExport={onExport}
+                />
+            ) : (
+                <PageHeader title="客户经营质量" />
+            )}
 
-            <CustomerQualityPageAlerts
-                refreshError={refreshError}
-                freshness={data.freshness}
-            />
+            {data ? (
+                <CustomerQualityPageAlerts
+                    refreshError={refreshError}
+                    freshness={data.freshness}
+                />
+            ) : null}
 
-            {/* Filters */}
-            <CustomerQualityFilterCard
+            <CustomerQualityPeriodBar
                 resolvedFrom={resolvedFrom}
                 resolvedTo={resolvedTo}
                 periodInvalid={periodInvalid}
                 presets={presets}
                 periodPreset={periodPreset}
-                fundsReview={fundsReview}
-                businessType={businessType}
                 sort={sort}
-                searchInput={searchInput}
-                searchInputRef={searchInputRef}
-                onSearchInputChange={onSearchInputChange}
-                customerId={customerId}
-                chipCustomerName={chipCustomerName}
-                showClearFilters={showClearFilters}
-                onClearFilters={onClearFilters}
                 onPresetSelect={onPresetSelect}
                 patchUrl={patchUrl}
                 resetPage={resetPage}
-                filterSummary={data.filterSummary}
-                filteredTotal={data.customers.filteredTotal}
-                total={data.customers.total}
             />
 
-            {data.emptyKind === "no-scope" ? (
+            {data?.emptyKind === "no-scope" ? (
                 <BusinessEmptyState
                     kind="no-scope"
                     title="当前角色无客户数据范围"
@@ -173,63 +165,75 @@ export function CustomerQualityMainView({
                 />
             ) : (
                 <>
-                    <CustomerQualityCoveragePanels
-                        coverage={data.coverage}
-                        isVoucherOnly={isVoucherOnly}
-                        periodFrom={data.period.from}
-                        periodTo={data.period.to}
-                        onShowReviewedOnly={() =>
-                            patchUrl({ fundsReview: "reviewed_only" })
-                        }
-                    />
+                    {data ? (
+                        <>
+                            <CustomerQualityCoveragePanels
+                                coverage={data.coverage}
+                                isVoucherOnly={isVoucherOnly}
+                                periodFrom={data.period.from}
+                                periodTo={data.period.to}
+                                onShowReviewedOnly={() =>
+                                    patchUrl({ fundsReview: "reviewed_only" })
+                                }
+                            />
 
-                    {/* Metrics */}
-                    <CustomerQualityMetricStrip
-                        metrics={data.metrics}
-                        onFocusTable={onFocusTable}
-                    />
+                            <CustomerQualityMetricStrip
+                                metrics={data.metrics}
+                                onFocusTable={onFocusTable}
+                            />
 
-                    <CustomerQualityCharts
-                        scaleDimension={scaleDimension}
-                        profitDimension={profitDimension}
-                        natureDimension={natureDimension}
-                        chartDimension={chartDimension}
-                        chartCode={chartCode}
-                        isVoucherOnly={isVoucherOnly}
-                        patchUrl={patchUrl}
-                        setPagination={setPagination}
-                    />
+                            <CustomerQualityCharts
+                                scaleDimension={scaleDimension}
+                                profitDimension={profitDimension}
+                                natureDimension={natureDimension}
+                                chartDimension={chartDimension}
+                                chartCode={chartCode}
+                                isVoucherOnly={isVoucherOnly}
+                                patchUrl={patchUrl}
+                                setPagination={setPagination}
+                            />
 
-                    {chartFilterSummary ? (
-                        <ChartFilterSummaryAlert
-                            dimensionTitle={chartFilterSummary.dimensionTitle}
-                            itemLabel={chartFilterSummary.itemLabel}
-                            resultCount={chartFilterSummary.resultCount}
-                            onClear={() => {
-                                patchUrl({
-                                    chartDimension: null,
-                                    chartCode: null,
-                                    scaleTag: null,
-                                    profitTag: null,
-                                })
-                                resetPage()
-                            }}
-                        />
+                            {chartFilterSummary ? (
+                                <ChartFilterSummaryAlert
+                                    dimensionTitle={
+                                        chartFilterSummary.dimensionTitle
+                                    }
+                                    itemLabel={chartFilterSummary.itemLabel}
+                                    resultCount={chartFilterSummary.resultCount}
+                                    onClear={() => {
+                                        patchUrl({
+                                            chartDimension: null,
+                                            chartCode: null,
+                                            scaleTag: null,
+                                            profitTag: null,
+                                            riskTag: null,
+                                        })
+                                        resetPage()
+                                    }}
+                                />
+                            ) : null}
+                        </>
                     ) : null}
 
                     {/* Customer detail table */}
                     <CustomerQualityDetailTable
                         sectionRef={tableSectionRef}
-                        items={data.customers.items}
-                        filteredTotal={data.customers.filteredTotal}
+                        items={items}
+                        filteredTotal={filteredTotal}
+                        total={total}
                         columns={columns}
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         sorting={tableSorting}
                         onSortingChange={onSortingChange}
-                        emptyKind={data.emptyKind}
-                        filterSummary={data.filterSummary}
-                        onClearFilters={onClearTableFilters}
+                        emptyKind={emptyKind}
+                        filterSummary={filterSummary}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={onClearFilters}
+                        toolbar={toolbar}
+                        viewError={viewError}
+                        onRetryView={onRetryView}
+                        loading={loading}
                     />
                 </>
             )}

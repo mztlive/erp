@@ -12,7 +12,7 @@ vi.mock("../hooks/use-search-input", async (importOriginal) => {
         useSearchInput: () => {
             const s = original.useSearchInput()
             const set = s.onSearchChange
-            s.onSearchChange = (v: string) => {
+            s.onSearchChange = (v) => {
                 console.log("SEARCH-SET ->", JSON.stringify(v))
                 set(v)
             }
@@ -21,12 +21,12 @@ vi.mock("../hooks/use-search-input", async (importOriginal) => {
     }
 })
 
-const { ITEM, LABEL } = vi.hoisted(() => {
+const { ITEM } = vi.hoisted(() => {
     const ITEM: CustomerComboboxItem = {
         id: "c-1", customerNo: "KH-000001", legalName: "上海示例贸易有限公司",
         shortName: "示例贸易", statusLabel: "启用", statusTone: "success",
     }
-    return { ITEM, LABEL: "上海示例贸易有限公司（示例贸易）" }
+    return { ITEM }
 })
 
 const calls: string[] = []

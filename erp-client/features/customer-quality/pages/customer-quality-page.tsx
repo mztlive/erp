@@ -15,15 +15,16 @@ import {
     useStartCustomerQualityExportMutation,
 } from "../hooks/queries"
 import { useCustomerQualityColumns } from "../hooks/use-customer-quality-columns"
+import { useCustomerQualityFilters } from "../hooks/use-customer-quality-filters"
 import { useCustomerQualityNavigationState } from "../hooks/use-customer-quality-navigation-state"
 import { useCustomerQualityPeriodState } from "../hooks/use-customer-quality-period-state"
 import { useCustomerQualityRowFocus } from "../hooks/use-customer-quality-row-focus"
-import { useCustomerQualitySearch } from "../hooks/use-customer-quality-search"
 import {
     parseBusinessType,
     parseFundsReview,
     parseScenario,
 } from "../lib/url-state"
+import { CustomerQualityFilterCard } from "../components/customer-quality-filter-card"
 import { CustomerQualityMainView } from "../components/customer-quality-main-view"
 import { CustomerQualityPageSkeleton } from "../components/customer-quality-page-skeleton"
 import { PeriodBlockerCard } from "../components/period-blocker-card"
@@ -50,10 +51,6 @@ export function CustomerQualityPage() {
     const scopeId = "scope:team:sales-east"
 
     const nav = useCustomerQualityNavigationState()
-    const search = useCustomerQualitySearch({
-        qParam,
-        patchUrl: nav.patchUrl,
-    })
     const period = useCustomerQualityPeriodState({
         scenario,
         fromParam,
@@ -96,6 +93,20 @@ export function CustomerQualityPage() {
     }
 
     const data = viewQuery.data
+    // customerId 深链参数的显性名称（在当前页数据中反查客户名；未加载时回退通用文案）
+    const chipCustomerName = data?.customers.items.find(
+        (c) => c.customerId === customerId,
+    )?.customerName
+
+    // 明细筛选三层状态：Applied 在 URL、Draft 本地、UI 本地；统一提交与清除
+    const filters = useCustomerQualityFilters({
+        qParam,
+        fundsReview,
+        businessType,
+        customerId,
+        customerName: chipCustomerName,
+        patchUrl: nav.patchUrl,
+    })
 
     // 定位失败降级：目标客户不在当前页/排序结果时滚动到明细表顶部
     const tableSectionRef = React.useRef<HTMLDivElement>(null)
@@ -139,6 +150,49 @@ export function CustomerQualityPage() {
         }
     }, [chartDimension, chartCode, data])
 
+    // 已生效条件全部进入 chip 行：关键词、票款口径、业务性质、来源锁定客户与图表筛选
+    const appliedChips = React.useMemo(() => {
+        if (!chartFilterSummary) return filters.appliedChips
+        return [
+            ...filters.appliedChips,
+            {
+                key: "chart" as const,
+                label: `图表筛选：${chartFilterSummary.dimensionTitle} · ${chartFilterSummary.itemLabel}`,
+            },
+        ]
+    }, [chartFilterSummary, filters.appliedChips])
+
+    const hasActiveFilters = Boolean(
+        qParam ||
+            fundsReview === "reviewed_only" ||
+            businessType ||
+            customerId ||
+            chartCode ||
+            scaleTag ||
+            profitTag ||
+            riskTag,
+    )
+
+    const filterToolbar = (
+        <CustomerQualityFilterCard
+            searchDraft={filters.searchDraft}
+            onSearchDraftChange={filters.setSearchDraft}
+            searchInputRef={filters.searchInputRef}
+            panelOpen={filters.panelOpen}
+            setPanelOpen={filters.setPanelOpen}
+            hasStructuredFilters={filters.hasStructuredFilters}
+            appliedChips={appliedChips}
+            onRemoveFilter={filters.removeFilter}
+            onApplyFilters={filters.applyFilters}
+            onClearAllFilters={filters.clearAllFilters}
+            onResetMoreFilters={filters.resetMoreFilters}
+            fundsReviewDraft={filters.fundsReviewDraft}
+            setFundsReviewDraft={filters.setFundsReviewDraft}
+            businessTypeDraft={filters.businessTypeDraft}
+            setBusinessTypeDraft={filters.setBusinessTypeDraft}
+        />
+    )
+
     async function handleExport() {
         if (!data || !period.analysisQuery) return
         const job = await exportMutation.mutateAsync({
@@ -151,40 +205,9 @@ export function CustomerQualityPage() {
         setExportJob(job)
     }
 
-    function clearAllFilters() {
-        search.setSearchInput("")
-        // P4：清除筛选保留排序与期间（分析页维度参数）
-        nav.patchUrl({
-            q: null,
-            scaleTag: null,
-            profitTag: null,
-            riskTag: null,
-            chartDimension: null,
-            chartCode: null,
-            businessType: null,
-            fundsReview: null,
-            customerId: null,
-            focusMetric: null,
-        })
-        nav.resetPage()
-    }
-
-    function clearTableFilters() {
-        // P4：清除筛选保留排序与期间（分析页维度参数）
-        nav.patchUrl({
-            q: null,
-            scaleTag: null,
-            profitTag: null,
-            riskTag: null,
-            chartDimension: null,
-            chartCode: null,
-            businessType: null,
-            fundsReview: null,
-            customerId: null,
-            focusMetric: null,
-        })
-        nav.resetPage()
-    }
+    // 视图查询失败且无缓存时保留筛选区与期间条，失败态只替换结果内容
+    const viewError =
+        viewQuery.isError && !data ? viewQuery.error : null
 
     // —— Loading shells ——
     if (
@@ -232,30 +255,11 @@ export function CustomerQualityPage() {
         )
     }
 
-    if (viewQuery.isError) {
-        return (
-            <PageScaffold>
-                <BusinessFailureState
-                    title="经营质量数据加载失败"
-                    error={viewQuery.error}
-                    action={
-                        <Button
-                            type="button"
-                            onClick={() => void viewQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (viewQuery.isPending || !data) {
+    if (!viewError && (viewQuery.isPending || !data)) {
         return <CustomerQualityPageSkeleton variant="view-loading" />
     }
 
-    if (data.emptyKind === "forbidden") {
+    if (data && data.emptyKind === "forbidden") {
         return (
             <PageScaffold>
                 <BusinessFailureState
@@ -276,25 +280,17 @@ export function CustomerQualityPage() {
         )
     }
 
-    // customerId 深链参数的显性名称（在当前页数据中反查客户名）
-    const chipCustomerName = data.customers.items.find(
-        (c) => c.customerId === customerId,
-    )?.customerName
-
-    const showClearFilters = Boolean(
-        qParam ||
-            scaleTag ||
-            profitTag ||
-            riskTag ||
-            chartCode ||
-            businessType ||
-            fundsReview === "reviewed_only" ||
-            customerId,
-    )
-
     return (
         <CustomerQualityMainView
-            data={data}
+            data={data ?? null}
+            viewError={viewError}
+            onRetryView={() => {
+                void viewQuery.refetch()
+            }}
+            toolbar={filterToolbar}
+            loading={viewQuery.isFetching && !viewQuery.isPending}
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={filters.clearAllFilters}
             refreshError={refreshError}
             refreshing={viewQuery.isFetching && !viewQuery.isPending}
             onRefresh={() => {
@@ -310,16 +306,8 @@ export function CustomerQualityPage() {
             periodInvalid={period.periodInvalid}
             presets={period.periodPolicy?.presets}
             periodPreset={periodPreset}
-            fundsReview={fundsReview}
             businessType={businessType}
             sort={nav.sort}
-            searchInput={search.searchInput}
-            searchInputRef={search.searchInputRef}
-            onSearchInputChange={search.setSearchInput}
-            customerId={customerId}
-            chipCustomerName={chipCustomerName}
-            showClearFilters={showClearFilters}
-            onClearFilters={clearAllFilters}
             onPresetSelect={(id) => {
                 const preset = period.periodPolicy?.presets?.find(
                     (p) => p.id === id,
@@ -345,7 +333,6 @@ export function CustomerQualityPage() {
             onSortingChange={nav.handleTableSortingChange}
             tableSectionRef={tableSectionRef}
             onFocusTable={scrollToTableTop}
-            onClearTableFilters={clearTableFilters}
             tagDialog={tagDialog}
             onTagDialogOpenChange={(open) => {
                 if (!open) setTagDialog(null)

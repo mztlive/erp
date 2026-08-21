@@ -27,6 +27,8 @@ export type FulfillmentPageStatesProps = {
     visibleTypes?: readonly FulfillmentOperationType[]
     filterSummary?: string
     onClearAllFilters?: () => void
+    /** 已由页面脚手架承载时跳过 PageScaffold / PageHeader，只渲染状态体 */
+    standalone?: boolean
 }
 
 /**
@@ -45,38 +47,49 @@ export function FulfillmentPageStates({
     visibleTypes,
     filterSummary,
     onClearAllFilters,
+    standalone = false,
 }: FulfillmentPageStatesProps) {
     if (status === "pending") {
+        const body = (
+            <>
+                <div className="h-20 animate-pulse rounded-lg bg-muted" />
+                <div className="grid gap-4 xl:grid-cols-[minmax(16rem,1fr)_minmax(0,2fr)]">
+                    <div className="h-80 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-96 animate-pulse rounded-lg bg-muted" />
+                </div>
+            </>
+        )
+        if (standalone) return body
         return (
             <PageScaffold>
                 <PageHeader
                     title={headerDescription}
                     description="正在加载队列…"
                 />
-                <div className="h-20 animate-pulse rounded-lg bg-muted" />
-                <div className="grid gap-4 xl:grid-cols-[minmax(16rem,1fr)_minmax(0,2fr)]">
-                    <div className="h-80 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-96 animate-pulse rounded-lg bg-muted" />
-                </div>
+                {body}
             </PageScaffold>
         )
     }
 
     if (status === "error") {
+        const body = (
+            <BusinessFailureState
+                error={error}
+                action={
+                    <Button type="button" onClick={() => onRetry?.()}>
+                        重新加载
+                    </Button>
+                }
+            />
+        )
+        if (standalone) return body
         return (
             <PageScaffold>
                 <PageHeader
                     title={headerDescription}
                     description="队列加载失败"
                 />
-                <BusinessFailureState
-                    error={error}
-                    action={
-                        <Button type="button" onClick={() => onRetry?.()}>
-                            重新加载
-                        </Button>
-                    }
-                />
+                {body}
             </PageScaffold>
         )
     }

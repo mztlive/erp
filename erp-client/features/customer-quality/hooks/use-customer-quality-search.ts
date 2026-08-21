@@ -2,34 +2,24 @@
 
 import * as React from "react"
 
-import type { CustomerQualityPatch } from "./use-customer-quality-navigation-state"
-
-export function useCustomerQualitySearch({
-    qParam,
-    patchUrl,
-}: {
-    qParam: string
-    patchUrl: CustomerQualityPatch
-}) {
-    const [searchInput, setSearchInput] = React.useState(qParam)
+/**
+ * 搜索关键词草稿：URL 回填 + `/` 聚焦快捷键。
+ *
+ * 只维护 Draft 与输入框引用，不写 URL —— 提交统一走显式 apply
+ * （收起态 Enter / 搜索框尾部提交箭头 / 展开态「应用全部筛选」）。
+ */
+export function useCustomerQualitySearch({ qParam }: { qParam: string }) {
+    const [searchDraft, setSearchDraft] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
-    // P3：URL 回填搜索草稿（输入中不被旧值覆盖）；300ms 防抖自动写 URL；`/` 聚焦；Enter 兜底
+    // URL 回填搜索草稿（输入框聚焦时保留未提交的编辑）
     React.useEffect(() => {
         const el = searchInputRef.current
         if (el && document.activeElement === el) return
-        setSearchInput(qParam)
+        setSearchDraft(qParam)
     }, [qParam])
 
-    React.useEffect(() => {
-        const handle = globalThis.setTimeout(() => {
-            if (searchInput.trim() === qParam) return
-            patchUrl({ q: searchInput.trim() || null })
-        }, 300)
-        return () => globalThis.clearTimeout(handle)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
-    }, [searchInput])
-
+    // `/` 聚焦搜索；忽略输入框/文本域/可编辑区域与弹层场景
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             if (
@@ -49,6 +39,13 @@ export function useCustomerQualitySearch({
             ) {
                 return
             }
+            if (
+                document.querySelector(
+                    '[role="dialog"], [data-slot="sheet"]',
+                )
+            ) {
+                return
+            }
             event.preventDefault()
             searchInputRef.current?.focus()
         }
@@ -56,5 +53,5 @@ export function useCustomerQualitySearch({
         return () => window.removeEventListener("keydown", onKey)
     }, [])
 
-    return { searchInput, setSearchInput, searchInputRef }
+    return { searchDraft, setSearchDraft, searchInputRef }
 }

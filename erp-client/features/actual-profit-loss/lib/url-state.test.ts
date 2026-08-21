@@ -5,9 +5,11 @@ import {
     coveragePercentNumber,
     mapFreshnessState,
     parseCoverage,
+    parseCsvValues,
     parseDimension,
     parsePreset,
     resolvePeriod,
+    serializeCsvValues,
 } from "@/features/actual-profit-loss/lib/url-state"
 
 function pad(n: number): string {
@@ -135,6 +137,41 @@ describe("mapFreshnessState", () => {
             uiState: "fresh",
             statusLabel: "数据已更新",
         })
+    })
+})
+
+describe("parseCsvValues", () => {
+    it("splits, trims and dedupes comma-separated values", () => {
+        expect(parseCsvValues("电子交付, 公司仓发 ,电子交付")).toEqual([
+            "公司仓发",
+            "电子交付",
+        ])
+    })
+
+    it("sorts values for stable serialization", () => {
+        expect(parseCsvValues("printing,logistics")).toEqual([
+            "logistics",
+            "printing",
+        ])
+    })
+
+    it("returns an empty list for missing or blank input", () => {
+        expect(parseCsvValues(null)).toEqual([])
+        expect(parseCsvValues("")).toEqual([])
+        expect(parseCsvValues(" , ,")).toEqual([])
+    })
+})
+
+describe("serializeCsvValues", () => {
+    it("joins deduped sorted values", () => {
+        expect(serializeCsvValues(["电子交付", "公司仓发", "电子交付"])).toBe(
+            "公司仓发,电子交付",
+        )
+    })
+
+    it("returns an empty string for no values", () => {
+        expect(serializeCsvValues([])).toBe("")
+        expect(serializeCsvValues(["  ", ""])).toBe("")
     })
 })
 

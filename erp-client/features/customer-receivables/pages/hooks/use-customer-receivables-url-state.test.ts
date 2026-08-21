@@ -59,8 +59,10 @@ describe('useCustomerReceivablesUrlState', () => {
         expect(result.current.previewKind).toBeNull()
         expect(result.current.previewId).toBeUndefined()
         expect(result.current.workItemId).toBeUndefined()
-        expect(result.current.searchInput).toBe('')
+        expect(result.current.searchDraft).toBe('')
         expect(result.current.hasActiveFilters).toBe(false)
+        expect(result.current.hasStructuredFilters).toBe(false)
+        expect(result.current.panelOpen).toBe(false)
         expect(result.current.pageFromUrl).toBe(1)
         expect(result.current.pagination).toEqual({
             pageIndex: 0,
@@ -95,7 +97,11 @@ describe('useCustomerReceivablesUrlState', () => {
         expect(result.current.previewKind).toBe('receipt')
         expect(result.current.previewId).toBe('prv1')
         expect(result.current.workItemId).toBe('wi-cr-1')
-        expect(result.current.searchInput).toBe('SO-1')
+        expect(result.current.searchDraft).toBe('SO-1')
+        expect(result.current.counterpartyPartyIdDraft).toBe('p1')
+        expect(result.current.dueDraft).toBe('overdue')
+        expect(result.current.statusDraft).toBe('open')
+        expect(result.current.reviewStatusDraft).toBe('reviewed')
         expect(result.current.pageFromUrl).toBe(3)
         expect(result.current.pagination.pageIndex).toBe(2)
     })
@@ -161,11 +167,18 @@ describe('useCustomerReceivablesUrlState', () => {
 
     it('ignores unknown enum values by falling back to defaults', () => {
         mockedSearchParams.mockReturnValue(
-            new URLSearchParams('view=bogus&due=soon') as unknown as ReadonlyURLSearchParams,
+            new URLSearchParams(
+                'view=bogus&due=soon&status=bogus&reviewStatus=weird',
+            ) as unknown as ReadonlyURLSearchParams,
         )
         const { result } = renderHook(() => useCustomerReceivablesUrlState())
         expect(result.current.view).toBe('receivable')
         expect(result.current.due).toBeUndefined()
+        expect(result.current.status).toBeUndefined()
+        expect(result.current.reviewStatus).toBeUndefined()
+        expect(result.current.dueDraft).toBe('all')
+        expect(result.current.statusDraft).toBe('all')
+        expect(result.current.reviewStatusDraft).toBe('all')
     })
 
     it('builds the list query from params with empty values coalesced', () => {
@@ -190,7 +203,7 @@ describe('useCustomerReceivablesUrlState', () => {
         })
     })
 
-    it('derives hasActiveFilters from filter params, ignoring blank q', () => {
+    it('derives hasActiveFilters from filter params, ignoring blank q and all', () => {
         mockedSearchParams.mockReturnValue(
             new URLSearchParams('view=receivable&q=%20%20') as unknown as ReadonlyURLSearchParams,
         )
@@ -203,6 +216,13 @@ describe('useCustomerReceivablesUrlState', () => {
         )
         const filtered = renderHook(() => useCustomerReceivablesUrlState())
         expect(filtered.result.current.hasActiveFilters).toBe(true)
+        filtered.unmount()
+
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams('view=receivable&due=all') as unknown as ReadonlyURLSearchParams,
+        )
+        const dueAll = renderHook(() => useCustomerReceivablesUrlState())
+        expect(dueAll.result.current.hasActiveFilters).toBe(false)
     })
 
     it('patchUrl removes null values, sets strings and keeps the view param', () => {
@@ -220,6 +240,7 @@ describe('useCustomerReceivablesUrlState', () => {
         })
         expect(router.replace).toHaveBeenCalledWith(
             '/finance/customer-accounts?view=receivable&q=SO-2&page=2',
+            { scroll: false },
         )
 
         act(() => {
@@ -230,7 +251,138 @@ describe('useCustomerReceivablesUrlState', () => {
         )
     })
 
-    it('clearFilters resets every filter param, page and the search input', () => {
+    it('typing the search draft does not write the URL', () => {
+        const router = setupRouter()
+        const { result } = renderHook(() => useCustomerReceivablesUrlState())
+
+        act(() => {
+            result.current.setSearchDraft('SO-9')
+        })
+        expect(result.current.searchDraft).toBe('SO-9')
+        expect(router.replace).not.toHaveBeenCalled()
+        expect(router.push).not.toHaveBeenCalled()
+    })
+
+    it('applyFilters patches every structured filter at once, resets page and closes the panel', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams('view=receivable&page=3') as unknown as ReadonlyURLSearchParams,
+        )
+        const router = setupRouter()
+        const { result } = renderHook(() => useCustomerReceivablesUrlState())
+
+        act(() => {
+            result.current.setSearchDraft('SO-9')
+            result.current.setCounterpartyPartyIdDraft('p1')
+            result.current.setDueDraft('overdue')
+            result.current.setStatusDraft('open')
+            result.current.setReviewStatusDraft('pending_opening')
+            result.current.setPanelOpen(true)
+        })
+        act(() => {
+            result.current.applyFilters()
+        })
+
+        expect(router.replace).toHaveBeenCalledTimes(1)
+        expect(router.replace).toHaveBeenCalledWith(
+            '/finance/customer-accounts?view=receivable&q=SO-9&counterpartyId=p1&due=overdue&status=open&reviewStatus=pending_opening',
+            { scroll: false },
+        )
+        expect(result.current.panelOpen).toBe(false)
+    })
+
+    it('applyFilters omits defaults from the URL', () => {
+        const router = setupRouter()
+        const { result } = renderHook(() => useCustomerReceivablesUrlState())
+
+        act(() => {
+            result.current.setSearchDraft('   ')
+            result.current.applyFilters()
+        })
+
+        expect(router.replace).toHaveBeenCalledWith(
+            '/finance/customer-accounts?view=receivable',
+            { scroll: false },
+        )
+    })
+
+    it('removeFilter removes a single applied condition and its draft', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=receivable&q=abc&due=overdue&counterpartyId=p1&salesOrderId=s1',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        const router = setupRouter()
+        const { result, rerender } = renderHook(() =>
+            useCustomerReceivablesUrlState(),
+        )
+
+        act(() => {
+            result.current.removeFilter('q')
+        })
+        expect(result.current.searchDraft).toBe('')
+        expect(router.replace).toHaveBeenCalledWith(
+            '/finance/customer-accounts?view=receivable&due=overdue&counterpartyId=p1&salesOrderId=s1',
+            { scroll: false },
+        )
+
+        // router.replace 后 useSearchParams 已同步（同 openPreview/closePreview 的模拟方式）
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=receivable&due=overdue&counterpartyId=p1&salesOrderId=s1',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        rerender()
+        act(() => {
+            result.current.removeFilter('due')
+        })
+        expect(result.current.dueDraft).toBe('all')
+        expect(router.replace).toHaveBeenCalledWith(
+            '/finance/customer-accounts?view=receivable&counterpartyId=p1&salesOrderId=s1',
+            { scroll: false },
+        )
+
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=receivable&counterpartyId=p1&salesOrderId=s1',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        rerender()
+        act(() => {
+            result.current.removeFilter('salesOrderId')
+        })
+        expect(router.replace).toHaveBeenCalledWith(
+            '/finance/customer-accounts?view=receivable&counterpartyId=p1',
+            { scroll: false },
+        )
+    })
+
+    it('resetMoreFilters clears structured conditions but keeps q and customerId and keeps the panel open', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=receivable&q=SO-1&customerId=c1&counterpartyId=p1&due=overdue&status=open&reviewStatus=reviewed',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        const router = setupRouter()
+        const { result } = renderHook(() => useCustomerReceivablesUrlState())
+        expect(result.current.panelOpen).toBe(true)
+
+        act(() => {
+            result.current.resetMoreFilters()
+        })
+
+        expect(router.replace).toHaveBeenCalledWith(
+            '/finance/customer-accounts?view=receivable&q=SO-1&customerId=c1',
+            { scroll: false },
+        )
+        expect(result.current.searchDraft).toBe('SO-1')
+        expect(result.current.counterpartyPartyIdDraft).toBeNull()
+        expect(result.current.dueDraft).toBe('all')
+        expect(result.current.statusDraft).toBe('all')
+        expect(result.current.reviewStatusDraft).toBe('all')
+        expect(result.current.panelOpen).toBe(true)
+    })
+
+    it('clearFilters resets every filter param, drafts, panel and page but keeps the view', () => {
         mockedSearchParams.mockReturnValue(
             new URLSearchParams(
                 'view=receipt&q=abc&counterpartyId=p1&customerId=c1&due=overdue' +
@@ -245,10 +397,56 @@ describe('useCustomerReceivablesUrlState', () => {
         act(() => {
             result.current.clearFilters()
         })
-        expect(result.current.searchInput).toBe('')
+        expect(result.current.searchDraft).toBe('')
+        expect(result.current.counterpartyPartyIdDraft).toBeNull()
+        expect(result.current.dueDraft).toBe('all')
+        expect(result.current.statusDraft).toBe('all')
+        expect(result.current.reviewStatusDraft).toBe('all')
+        expect(result.current.panelOpen).toBe(false)
         expect(router.replace).toHaveBeenCalledWith(
             '/finance/customer-accounts?view=receipt',
+            { scroll: false },
         )
+    })
+
+    it('opens the panel initially for deep links with structured filters', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams('view=receivable&due=overdue') as unknown as ReadonlyURLSearchParams,
+        )
+        const first = renderHook(() => useCustomerReceivablesUrlState())
+        expect(first.result.current.panelOpen).toBe(true)
+        first.unmount()
+
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams('view=receivable&q=SO-1') as unknown as ReadonlyURLSearchParams,
+        )
+        const second = renderHook(() => useCustomerReceivablesUrlState())
+        expect(second.result.current.panelOpen).toBe(false)
+    })
+
+    it('URL backfill syncs drafts without forcing the panel back open', () => {
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams('view=receivable&due=overdue') as unknown as ReadonlyURLSearchParams,
+        )
+        const { result, rerender } = renderHook(() =>
+            useCustomerReceivablesUrlState(),
+        )
+        expect(result.current.panelOpen).toBe(true)
+
+        act(() => {
+            result.current.applyFilters()
+        })
+        expect(result.current.panelOpen).toBe(false)
+
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams(
+                'view=receivable&due=overdue&status=open',
+            ) as unknown as ReadonlyURLSearchParams,
+        )
+        rerender()
+        expect(result.current.dueDraft).toBe('overdue')
+        expect(result.current.statusDraft).toBe('open')
+        expect(result.current.panelOpen).toBe(false)
     })
 
     it('handlePaginationChange removes the page param on page 1 and sets it otherwise', () => {
@@ -263,6 +461,7 @@ describe('useCustomerReceivablesUrlState', () => {
         })
         expect(router.replace).toHaveBeenCalledWith(
             '/finance/customer-accounts?view=receivable',
+            { scroll: false },
         )
 
         act(() => {
@@ -270,71 +469,21 @@ describe('useCustomerReceivablesUrlState', () => {
         })
         expect(router.replace).toHaveBeenCalledWith(
             '/finance/customer-accounts?view=receivable&page=5',
+            { scroll: false },
         )
     })
 
-    it('debounces search input into the q param and resets the page', () => {
-        vi.useFakeTimers()
-        mockedSearchParams.mockReturnValue(
-            new URLSearchParams('view=receivable&page=2') as unknown as ReadonlyURLSearchParams,
-        )
-        const router = setupRouter()
-        const { result } = renderHook(() => useCustomerReceivablesUrlState())
-
-        act(() => {
-            result.current.setSearchInput('SO-9')
-        })
-        vi.advanceTimersByTime(299)
-        expect(router.replace).not.toHaveBeenCalled()
-
-        vi.advanceTimersByTime(1)
-        expect(router.replace).toHaveBeenCalledWith(
-            '/finance/customer-accounts?view=receivable&q=SO-9',
-        )
-    })
-
-    it('does not write the URL when the debounced input equals the URL value', () => {
-        vi.useFakeTimers()
-        mockedSearchParams.mockReturnValue(
-            new URLSearchParams('view=receivable&q=SO-9') as unknown as ReadonlyURLSearchParams,
-        )
-        const router = setupRouter()
-        const { result } = renderHook(() => useCustomerReceivablesUrlState())
-
-        act(() => {
-            result.current.setSearchInput('SO-9')
-        })
-        vi.advanceTimersByTime(300)
-        expect(router.replace).not.toHaveBeenCalled()
-        expect(result.current.searchInput).toBe('SO-9')
-    })
-
-    it('trims the debounced q and writes null for whitespace-only input', () => {
-        vi.useFakeTimers()
-        mockedSearchParams.mockReturnValue(new URLSearchParams('view=receipt') as unknown as ReadonlyURLSearchParams)
-        const router = setupRouter()
-        const { result } = renderHook(() => useCustomerReceivablesUrlState())
-
-        act(() => {
-            result.current.setSearchInput('   ')
-        })
-        vi.advanceTimersByTime(300)
-        expect(router.replace).toHaveBeenCalledWith(
-            '/finance/customer-accounts?view=receipt',
-        )
-    })
-
-    it('syncs the search input when the URL q param changes', () => {
+    it('syncs the search draft when the URL q param changes', () => {
         const { result, rerender } = renderHook(() =>
             useCustomerReceivablesUrlState(),
         )
-        expect(result.current.searchInput).toBe('')
+        expect(result.current.searchDraft).toBe('')
 
         mockedSearchParams.mockReturnValue(
             new URLSearchParams('view=receivable&q=EXT') as unknown as ReadonlyURLSearchParams,
         )
         rerender()
-        expect(result.current.searchInput).toBe('EXT')
+        expect(result.current.searchDraft).toBe('EXT')
     })
 
     it('focuses the search input on "/" unless modifiers or editable targets are active', () => {

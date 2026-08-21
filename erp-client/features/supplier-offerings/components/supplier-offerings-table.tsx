@@ -77,8 +77,9 @@ export function SupplierOfferingsTable({
                     hasFilters ? (
                         <Button
                             type="button"
+                            variant="secondary"
                             size="sm"
-                            variant="outline"
+                            className="rounded-lg shadow-none"
                             onClick={onClearFilters}
                         >
                             清除筛选

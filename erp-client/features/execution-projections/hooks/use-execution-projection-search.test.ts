@@ -1,87 +1,29 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, afterEach } from "vitest"
 import { renderHook, act } from "@testing-library/react"
 
 import { useExecutionProjectionSearch } from "./use-execution-projection-search"
 
+afterEach(() => {
+    document.body.innerHTML = ""
+})
+
 describe("useExecutionProjectionSearch", () => {
-    beforeEach(() => {
-        vi.useFakeTimers()
-    })
-
-    afterEach(() => {
-        vi.useRealTimers()
-    })
-
     it("初始草稿取 URL 中的 q", () => {
-        const { result } = renderHook(() =>
-            useExecutionProjectionSearch({ q: "SO-1", replaceParams: vi.fn() }),
-        )
+        const { result } = renderHook(() => useExecutionProjectionSearch("SO-1"))
         expect(result.current.searchDraft).toBe("SO-1")
     })
 
-    it("输入 300ms 防抖后把搜索词与分页写回 URL", () => {
-        const replaceParams = vi.fn()
-        const { result } = renderHook(() =>
-            useExecutionProjectionSearch({ q: "", replaceParams }),
-        )
-
+    it("输入只改草稿，不写 URL（提交由筛选表单统一承担）", () => {
+        const { result } = renderHook(() => useExecutionProjectionSearch(""))
         act(() => {
             result.current.setSearchDraft("abc")
         })
-        expect(replaceParams).not.toHaveBeenCalled()
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
-        expect(replaceParams).toHaveBeenCalledWith({ q: "abc", page: "1" })
-    })
-
-    it("草稿与 q 一致（含首尾空白）时不写 URL", () => {
-        const replaceParams = vi.fn()
-        const { result } = renderHook(() =>
-            useExecutionProjectionSearch({ q: "abc", replaceParams }),
-        )
-        act(() => {
-            result.current.setSearchDraft(" abc ")
-        })
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
-        expect(replaceParams).not.toHaveBeenCalled()
-    })
-
-    it("清空草稿时以 null 移除 q 参数", () => {
-        const replaceParams = vi.fn()
-        const { result } = renderHook(() =>
-            useExecutionProjectionSearch({ q: "abc", replaceParams }),
-        )
-        act(() => {
-            result.current.setSearchDraft("   ")
-        })
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
-        expect(replaceParams).toHaveBeenCalledWith({ q: null, page: "1" })
-    })
-
-    it("卸载后不再触发未到期的防抖写回", () => {
-        const replaceParams = vi.fn()
-        const { result, unmount } = renderHook(() =>
-            useExecutionProjectionSearch({ q: "", replaceParams }),
-        )
-        act(() => {
-            result.current.setSearchDraft("abc")
-        })
-        unmount()
-        act(() => {
-            vi.advanceTimersByTime(300)
-        })
-        expect(replaceParams).not.toHaveBeenCalled()
+        expect(result.current.searchDraft).toBe("abc")
     })
 
     it("q 变化且输入框未聚焦时回填草稿", () => {
         const { result, rerender } = renderHook(
-            ({ q }: { q: string }) =>
-                useExecutionProjectionSearch({ q, replaceParams: vi.fn() }),
+            ({ q }: { q: string }) => useExecutionProjectionSearch(q),
             { initialProps: { q: "" } },
         )
         rerender({ q: "NEW" })
@@ -92,8 +34,7 @@ describe("useExecutionProjectionSearch", () => {
         const input = document.createElement("input")
         document.body.appendChild(input)
         const { result, rerender } = renderHook(
-            ({ q }: { q: string }) =>
-                useExecutionProjectionSearch({ q, replaceParams: vi.fn() }),
+            ({ q }: { q: string }) => useExecutionProjectionSearch(q),
             { initialProps: { q: "" } },
         )
         result.current.searchInputRef.current = input
@@ -108,9 +49,7 @@ describe("useExecutionProjectionSearch", () => {
     it("按 / 聚焦搜索输入框，输入控件内不抢占", () => {
         const input = document.createElement("input")
         document.body.appendChild(input)
-        const { result } = renderHook(() =>
-            useExecutionProjectionSearch({ q: "", replaceParams: vi.fn() }),
-        )
+        const { result } = renderHook(() => useExecutionProjectionSearch(""))
         result.current.searchInputRef.current = input
 
         act(() => {
@@ -131,5 +70,25 @@ describe("useExecutionProjectionSearch", () => {
 
         document.body.removeChild(input)
         document.body.removeChild(typing)
+    })
+
+    it("弹层或抽屉打开时 / 不聚焦搜索框", () => {
+        const input = document.createElement("input")
+        document.body.appendChild(input)
+        const dialog = document.createElement("div")
+        dialog.setAttribute("role", "dialog")
+        document.body.appendChild(dialog)
+        const { result } = renderHook(() => useExecutionProjectionSearch(""))
+        result.current.searchInputRef.current = input
+        input.focus()
+        input.blur()
+
+        act(() => {
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: "/" }))
+        })
+        expect(document.activeElement).not.toBe(input)
+
+        document.body.removeChild(input)
+        document.body.removeChild(dialog)
     })
 })

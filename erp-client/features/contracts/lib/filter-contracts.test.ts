@@ -137,6 +137,49 @@ describe('filterContracts', () => {
         ).toEqual([terminated.contractId])
     })
 
+    it('filters by settlement party id and owner', () => {
+        const target = row({
+            settlementParty: { partyId: 'p-x', displayName: '华东结算' },
+            ownerLabel: '李四',
+        })
+        const others = [row(), row()]
+        const all = [target, ...others]
+
+        expect(
+            filterContracts(all, {
+                search: '',
+                metricKey: 'all',
+                statusFilter: 'all',
+                settlementPartyId: 'p-x',
+            }),
+        ).toEqual([target])
+        expect(
+            filterContracts(all, {
+                search: '',
+                metricKey: 'all',
+                statusFilter: 'all',
+                owner: '李四',
+            }),
+        ).toEqual([target])
+        expect(
+            filterContracts(all, {
+                search: '',
+                metricKey: 'all',
+                statusFilter: 'all',
+                settlementPartyId: 'p-x',
+                owner: '李四',
+            }),
+        ).toEqual([target])
+        expect(
+            filterContracts(all, {
+                search: '',
+                metricKey: 'all',
+                statusFilter: 'all',
+                owner: '不存在的人',
+            }),
+        ).toEqual([])
+    })
+
     it('filters by status', () => {
         const effective = row()
         const terminated = row({

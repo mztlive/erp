@@ -38,7 +38,7 @@ function isInApprovalPaymentStatus(status?: string): boolean {
 function failedPayment(
     code: string,
     message: string,
-): Extract<FormalSubmitResult, { status: "failed" }> {
+): Extract<EnsurePaymentDraftResult, { status: "failed" }> {
     return {
         status: "failed",
         title: "付款失败",
@@ -94,6 +94,19 @@ async function createSupplierPaymentDraft(input: {
     })
 }
 
+export type EnsurePaymentDraftResult =
+    | {
+          status: "succeeded"
+          payment: BackendSupplierPayment
+          session?: AllocationSessionView
+      }
+    | {
+          status: "failed"
+          title: string
+          description: string
+          errorCode?: string
+      }
+
 /**
  * 读取或创建付款草稿，并在会话存在时写回只读审批绑定。
  *
@@ -109,14 +122,7 @@ export async function ensureSupplierPaymentDraft(input: {
     bankReference: string
     existingPaymentId?: string
     idempotencyKey: string
-}): Promise<
-    | {
-          status: "succeeded"
-          payment: BackendSupplierPayment
-          session?: AllocationSessionView
-      }
-    | Extract<FormalSubmitResult, { status: "failed" }>
-> {
+}): Promise<EnsurePaymentDraftResult> {
     const session = sessions.get(input.draftSessionId)
     if (session && session.track !== "payment") {
         return failedPayment("NOT_PAYMENT", "当前核销不是付款。")

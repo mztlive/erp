@@ -13,6 +13,7 @@ import { SalesOrdersListFilterBar } from "@/features/sales-orders/components/sal
 import { SalesOrdersListFilterPanel } from "@/features/sales-orders/components/sales-orders-list-filter-panel"
 import { SalesOrdersListHeader } from "@/features/sales-orders/components/sales-orders-list-header"
 import { SalesOrdersListTable } from "@/features/sales-orders/components/sales-orders-list-table"
+import { useSalesOrdersListChips } from "@/features/sales-orders/hooks/use-sales-orders-list-chips"
 import { useSalesOrdersListExport } from "@/features/sales-orders/hooks/use-sales-orders-list-export"
 import { useSalesOrdersListFilters } from "@/features/sales-orders/hooks/use-sales-orders-list-filters"
 import { useSalesOrdersListQuery } from "@/features/sales-orders/hooks/use-sales-orders-list-query"
@@ -41,8 +42,12 @@ export function SalesOrdersListPage() {
         setFilterPanelOpen,
         hasStructuredFilters,
         applyFilters,
+        removeFilter,
+        resetMoreFilters,
         clearFilters,
     } = useSalesOrdersListFilters(url, pushUrl)
+
+    const panelId = React.useId()
 
     const items = React.useMemo(
         () => ordersQuery.data?.items ?? [],
@@ -54,6 +59,7 @@ export function SalesOrdersListPage() {
         query,
         total,
     )
+    const chips = useSalesOrdersListChips(url, items, removeFilter)
 
     const [paperId, setPaperId] = React.useState<string | null>(null)
     const [downloadingContractId, setDownloadingContractId] = React.useState<
@@ -146,23 +152,25 @@ export function SalesOrdersListPage() {
                     void exportCsv()
                 }}
                 exportJob={exportJob}
-                summary={url.summary}
-                onSummaryChange={(summary) => {
-                    pushUrl({
-                        summary,
-                        createdBy: undefined,
-                        commercialStatus: "all",
-                        reviewStatus: "all",
-                        page: 1,
-                    })
-                }}
             />
 
             <BusinessTableFrame
-                title="销售单列表"
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        销售单
+                        <span
+                            className="font-normal text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            {total} 条
+                        </span>
+                    </span>
+                }
                 description={salesOrdersListFilterDescription(url)}
                 toolbar={
                     <SalesOrdersListFilterBar
+                        panelId={panelId}
                         searchDraft={searchDraft}
                         onSearchDraftChange={setSearchDraft}
                         onSubmit={applyFilters}
@@ -171,13 +179,26 @@ export function SalesOrdersListPage() {
                             setFilterPanelOpen((open) => !open)
                         }}
                         hasStructuredFilters={hasStructuredFilters}
-                        total={total}
-                        filtersActive={filtersActive}
+                        hasChips={filtersActive && chips.length > 0}
+                        chips={chips}
                         onClearFilters={clearFilters}
+                        summary={url.summary}
+                        onSummaryChange={(summary) => {
+                            // 工作视图会约束创建人或审核轨；切换时清掉重叠条件，避免同字段冲突。
+                            pushUrl({
+                                summary,
+                                createdBy: undefined,
+                                commercialStatus: "all",
+                                reviewStatus: "all",
+                                page: 1,
+                            })
+                        }}
                         filterPanel={
                             <SalesOrdersListFilterPanel
+                                panelId={panelId}
                                 draft={filterDraft}
                                 onDraftChange={setFilterDraft}
+                                onResetMoreFilters={resetMoreFilters}
                             />
                         }
                     />

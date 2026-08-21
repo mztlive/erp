@@ -10,6 +10,31 @@ export type CustomerAccountsView =
 
 export type DueFilter = "not_due" | "due_today" | "overdue" | "all"
 
+/** 应收台账状态筛选；"all" 只存在于草稿，写 URL 时转为参数缺省。 */
+export type ReceivableStatusFilter =
+    | "all"
+    | "open"
+    | "partial"
+    | "settled"
+
+/** 卡券票款复核状态筛选；"all" 只存在于草稿，写 URL 时转为参数缺省。 */
+export type ReceivableReviewStatusFilter =
+    | "all"
+    | "pending_opening"
+    | "reviewed"
+    | "pending_sync_diff"
+
+/** 可被单独移除的已生效条件（含深链来源锁定）。 */
+export type CustomerReceivablesFilterKey =
+    | "q"
+    | "counterpartyId"
+    | "customerId"
+    | "due"
+    | "status"
+    | "reviewStatus"
+    | "salesOrderId"
+    | "receivableAccountId"
+
 export type AllocationMode = "receipt" | "invoice"
 
 export type CustomerAccountsQuery = {
@@ -431,4 +456,22 @@ export const DUE_LABEL: Record<DueFilter, string> = {
     not_due: "未到期",
     due_today: "今日到期",
     overdue: "已逾期",
+}
+
+export const RECEIVABLE_STATUS_LABEL: Record<
+    Exclude<ReceivableStatusFilter, "all">,
+    string
+> = {
+    open: "未结",
+    partial: "部分结清",
+    settled: "已结清",
+}
+
+export const REVIEW_STATUS_LABEL: Record<
+    Exclude<ReceivableReviewStatusFilter, "all">,
+    string
+> = {
+    pending_opening: "期初待复核",
+    reviewed: "已复核",
+    pending_sync_diff: "同步差额待复核",
 }

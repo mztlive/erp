@@ -8,6 +8,7 @@ import type {
 
 import {
     BusinessEmptyState,
+    BusinessFailureState,
     BusinessTableFrame,
     DataTable,
 } from "@/components/business"
@@ -15,11 +16,10 @@ import { Button } from "@/components/ui/button"
 import { ExecutionProjectionBulkBar } from "@/features/execution-projections/components/execution-projection-bulk-bar"
 import { ExecutionProjectionFilterBar } from "@/features/execution-projections/components/execution-projection-filter-bar"
 import type {
-    ExecutionProjectionRow,
-    LatencyBand,
-    ProjectionSource,
-    ReconciliationStatus,
-} from "@/features/execution-projections/types"
+    ExecutionProjectionAppliedChip,
+    ExecutionProjectionFilterState,
+} from "@/features/execution-projections/hooks/use-execution-projection-filters"
+import type { ExecutionProjectionRow } from "@/features/execution-projections/types"
 
 type ReplaceParams = (patch: Record<string, string | null | undefined>) => void
 
@@ -31,19 +31,18 @@ export function ExecutionProjectionListPanel({
     onRowSelectionChange,
     pagination,
     onPaginationChange,
+    listLoading,
+    listLoadFailed,
+    queryError,
+    onRetry,
     hasActiveFilters,
-    clearFilters,
+    clearAllFilters,
     filterSummary,
-    replaceParams,
-    searchInputRef,
-    searchDraft,
-    onSearchDraftChange,
-    mallId,
-    deliveryStatus,
-    latency,
-    reconciliation,
-    source,
+    filters,
+    appliedChips,
+    hasChips,
     malls,
+    replaceParams,
     selectedCount,
     bulkOverLimit,
     bulkPending,
@@ -58,19 +57,18 @@ export function ExecutionProjectionListPanel({
     onRowSelectionChange: (next: RowSelectionState) => void
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
+    listLoading: boolean
+    listLoadFailed: boolean
+    queryError: unknown
+    onRetry: () => void
     hasActiveFilters: boolean
-    clearFilters: () => void
+    clearAllFilters: () => void
     filterSummary: string | undefined
-    replaceParams: ReplaceParams
-    searchInputRef: React.RefObject<HTMLInputElement | null>
-    searchDraft: string
-    onSearchDraftChange: (value: string) => void
-    mallId: string
-    deliveryStatus: string
-    latency: LatencyBand | "all"
-    reconciliation: ReconciliationStatus | "all"
-    source: ProjectionSource | "all"
+    filters: ExecutionProjectionFilterState
+    appliedChips: readonly ExecutionProjectionAppliedChip[]
+    hasChips: boolean
     malls: Array<{ id: string; name: string }>
+    replaceParams: ReplaceParams
     selectedCount: number
     bulkOverLimit: boolean
     bulkPending: boolean
@@ -79,28 +77,31 @@ export function ExecutionProjectionListPanel({
     onBulkRetry: () => void
 }) {
     return (
-        /* D24：ListToolbar 移入 frame 的 toolbar 槽；批量选择条进 selectionBar 槽（表格正上方） */
         <BusinessTableFrame
-            title="执行信息列表"
-            description={
-                <span aria-live="polite">
-                    销售单身份列与操作列固定；每页条数可在分页条切换。指标与列表数据均受权限范围控制。
-                    {filterSummary ? ` 筛选：${filterSummary}` : ""}
+            showHeader
+            title={
+                <span className="inline-flex items-baseline gap-2">
+                    执行信息
+                    <span
+                        aria-live="polite"
+                        className="font-normal text-muted-foreground"
+                    >
+                        {total} 条
+                    </span>
                 </span>
+            }
+            description={
+                filterSummary
+                    ? `筛选：${filterSummary}`
+                    : "销售单身份列与操作列固定；每页条数可在分页条切换。指标与列表数据均受权限范围控制。"
             }
             toolbar={
                 <ExecutionProjectionFilterBar
-                    replaceParams={replaceParams}
-                    searchInputRef={searchInputRef}
-                    searchDraft={searchDraft}
-                    onSearchDraftChange={onSearchDraftChange}
-                    mallId={mallId}
-                    deliveryStatus={deliveryStatus}
-                    latency={latency}
-                    reconciliation={reconciliation}
-                    source={source}
+                    filters={filters}
+                    appliedChips={appliedChips}
+                    removeFilter={filters.removeFilter}
+                    hasChips={hasChips}
                     malls={malls}
-                    total={total}
                 />
             }
             selectionBar={
@@ -145,8 +146,17 @@ export function ExecutionProjectionListPanel({
                         left: ["select", "salesOrder"],
                         right: ["actions"],
                     }}
+                    loading={listLoading}
+                    errorState={
+                        listLoadFailed ? (
+                            <BusinessFailureState
+                                error={queryError}
+                                onRetry={onRetry}
+                            />
+                        ) : undefined
+                    }
                     emptyState={
-                        rows.length === 0 ? (
+                        !listLoadFailed && rows.length === 0 ? (
                             hasActiveFilters ? (
                                 <BusinessEmptyState
                                     kind="filter"
@@ -163,14 +173,13 @@ export function ExecutionProjectionListPanel({
                                             size="sm"
                                             variant="secondary"
                                             className="rounded-lg shadow-none"
-                                            onClick={clearFilters}
+                                            onClick={clearAllFilters}
                                         >
                                             清除筛选
                                         </Button>
                                     }
                                 />
                             ) : (
-                                // D24：无筛选时空态不引导「清除筛选」，避免误导
                                 <BusinessEmptyState
                                     kind="no-data"
                                     title="当前范围没有执行信息"

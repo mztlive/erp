@@ -11,6 +11,10 @@ import {
     useBalanceDetailQuery,
     useInventoryListQuery,
 } from "@/features/inventory/hooks/queries"
+import {
+    AVAILABILITY_LABEL,
+    MOVEMENT_TYPE_LABEL,
+} from "@/features/inventory/types"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { AdjustmentConfirmDialog } from "./components/adjustment-confirm-dialog"
@@ -19,7 +23,6 @@ import { AdjustmentDialog } from "./components/adjustment-dialog"
 import { AdjustmentResultBanner } from "./components/adjustment-result-banner"
 import { ExportJobProgress } from "./components/export-job-progress"
 import {
-    InventoryLedgerError,
     InventoryLedgerLoading,
     InventoryLedgerNoScope,
     InventoryLedgerPermissionRevoked,
@@ -33,6 +36,8 @@ import { useInventoryExportJob } from "./hooks/use-inventory-export-job"
 import { useInventoryLedgerPagination } from "./hooks/use-inventory-ledger-pagination"
 import { useInventoryLedgerUrlState } from "./hooks/use-inventory-ledger-url-state"
 import { useLedgerFilterActions } from "./hooks/use-ledger-filter-actions"
+import type { LedgerAppliedChip } from "./hooks/use-ledger-filters"
+import { useLedgerFilters } from "./hooks/use-ledger-filters"
 import { useLedgerSearch } from "./hooks/use-ledger-search"
 import { usePhoneNarrow } from "./hooks/use-phone-narrow"
 import { buildListQuery } from "./lib/build-list-query"
@@ -59,9 +64,8 @@ export function InventoryLedgerPage() {
         patchUrl,
     } = useInventoryLedgerUrlState()
     const isPhoneNarrow = usePhoneNarrow()
-    const { searchInput, setSearchInput, searchInputRef } = useLedgerSearch({
+    const { searchDraft, setSearchDraft, searchInputRef } = useLedgerSearch({
         qParam,
-        patchUrl,
     })
     const { pagination, resetPagination, handlePaginationChange } =
         useInventoryLedgerPagination({
@@ -70,6 +74,23 @@ export function InventoryLedgerPage() {
             cursorOffset,
             patchUrl,
         })
+    const filters = useLedgerFilters({
+        view,
+        warehouseId,
+        availability,
+        movementType,
+        occurredFrom,
+        occurredTo,
+        searchDraft,
+        setSearchDraft,
+        patchUrl,
+        resetPagination,
+    })
+    const { handleViewChange, handleSortChange } = useLedgerFilterActions({
+        patchUrl,
+        resetPagination,
+        sortValue,
+    })
 
     const [previewBalanceId, setPreviewBalanceId] = React.useState<
         string | null
@@ -212,34 +233,100 @@ export function InventoryLedgerPage() {
         startAdjustment: adjustment.startAdjustment,
     })
 
-    const {
-        handleApplyFilterPatch,
-        handleViewChange,
-        handleClearAllFilters,
-        handleClearFiltersEmptyState,
-    } = useLedgerFilterActions({
-        patchUrl,
-        resetPagination,
-        setSearchInput,
-        sortValue,
-    })
-
     const data = listQuery.data
+
+    // 深链筛选 chip 的业务名称（skuId/salesOrderLineId/adjustmentId 不直接上屏内部 ID）；
+    // 与 appliedChips 一起放在 early return 之前，保证 Hook 调用顺序稳定。
+    const chipSkuName = allViewRows.find((r) => r.skuId === skuId)?.skuName
+    const chipSalesLineLabel = (data?.reservations ?? []).find(
+        (r) => r.salesOrderLineId === salesOrderLineId,
+    )?.salesOrderLineLabel
+    const chipAdjustmentNo = (data?.adjustments ?? []).find(
+        (a) => a.adjustmentId === adjustmentIdParam,
+    )?.adjustmentNo
+
+    /** 已生效条件全部显性为 chip；来源锁定参数（skuId 等）不得成为隐形查询参数。 */
+    const appliedChips = React.useMemo<readonly LedgerAppliedChip[]>(() => {
+        const chips: LedgerAppliedChip[] = []
+        const trimmedQ = qParam.trim()
+        if (trimmedQ) {
+            chips.push({ key: "q", label: `搜索：${trimmedQ}` })
+        }
+        if (warehouseId) {
+            const warehouseLabel = (data?.warehouses ?? []).find(
+                (w) => w.id === warehouseId,
+            )?.name
+            chips.push({
+                key: "warehouseId",
+                label: `仓库：${warehouseLabel ?? warehouseId}`,
+            })
+        }
+        if (view === "balance" && availability !== "all") {
+            chips.push({
+                key: "availability",
+                label: `可用状态：${AVAILABILITY_LABEL[availability]}`,
+            })
+        }
+        if (view === "movement" && movementType.length > 0) {
+            chips.push({
+                key: "movementType",
+                label: `流水类型：${movementType
+                    .map((type) => MOVEMENT_TYPE_LABEL[type] ?? type)
+                    .join("、")}`,
+            })
+        }
+        if (view === "movement" && (occurredFrom || occurredTo)) {
+            chips.push({
+                key: "occurredRange",
+                label: `发生日期：${occurredFrom ?? "不限"} 至 ${
+                    occurredTo ?? "不限"
+                }`,
+            })
+        }
+        if (skuId) {
+            chips.push({
+                key: "skuId",
+                label: `当前 SKU：${chipSkuName ?? "已定位单品"}`,
+            })
+        }
+        if (salesOrderLineId) {
+            chips.push({
+                key: "salesOrderLineId",
+                label: `销售单明细：${chipSalesLineLabel ?? "已定位"}`,
+            })
+        }
+        if (adjustmentIdParam) {
+            chips.push({
+                key: "adjustmentId",
+                label: `调整单：${chipAdjustmentNo ?? "已定位"}`,
+            })
+        }
+        return chips
+    }, [
+        adjustmentIdParam,
+        availability,
+        chipAdjustmentNo,
+        chipSalesLineLabel,
+        chipSkuName,
+        data?.warehouses,
+        movementType,
+        occurredFrom,
+        occurredTo,
+        qParam,
+        salesOrderLineId,
+        skuId,
+        view,
+        warehouseId,
+    ])
+
+    // 查询失败但无缓存数据时只替换表格内容为失败态，筛选区保持挂载（§11.2）
+    const listLoadFailed = listQuery.isError || !data
 
     if (listQuery.isPending) {
         return <InventoryLedgerLoading />
     }
 
-    if (listQuery.isError || !data) {
-        return (
-            <InventoryLedgerError
-                error={listQuery.error}
-                onRetry={() => void listQuery.refetch()}
-            />
-        )
-    }
-
-    if (data.emptyReason === "PERMISSION_REVOKED") {
+    if (data?.emptyReason === "PERMISSION_REVOKED") {
         return (
             <InventoryLedgerPermissionRevoked
                 onRetry={() => void listQuery.refetch()}
@@ -247,17 +334,9 @@ export function InventoryLedgerPage() {
         )
     }
 
-    if (data.emptyReason === "NO_DATA_SCOPE") {
+    if (data?.emptyReason === "NO_DATA_SCOPE") {
         return <InventoryLedgerNoScope />
     }
-
-    const chipSkuName = allViewRows.find((r) => r.skuId === skuId)?.skuName
-    const chipSalesLineLabel = data.reservations.find(
-        (r) => r.salesOrderLineId === salesOrderLineId,
-    )?.salesOrderLineLabel
-    const chipAdjustmentNo = data.adjustments.find(
-        (a) => a.adjustmentId === adjustmentIdParam,
-    )?.adjustmentNo
 
     const metricActive =
         availability === "zero"
@@ -274,17 +353,17 @@ export function InventoryLedgerPage() {
         <PageScaffold>
             <LedgerHeader
                 isPhoneNarrow={isPhoneNarrow}
-                queriedAt={data.queriedAt}
-                canExport={data.canExport}
-                total={data.total}
+                queriedAt={data?.queriedAt ?? ""}
+                canExport={data?.canExport ?? false}
+                total={data?.total ?? 0}
                 onRefresh={() => {
                     void listQuery.refetch()
                     if (previewBalanceId) void detailQuery.refetch()
                 }}
                 onExport={() => {
                     startExport({
-                        total: data.total,
-                        filterSummary: data.filterSummary,
+                        total: data?.total ?? 0,
+                        filterSummary: data?.filterSummary ?? "",
                     })
                 }}
             />
@@ -310,25 +389,33 @@ export function InventoryLedgerPage() {
                 </Alert>
             ) : null}
 
-            <details className={`${surfaceInsetClassName} px-3 py-2.5 text-sm`}>
-                <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
-                    自有实物库存边界说明
-                </summary>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    {data.excludedKindsNote}
-                    <span className="mt-1 block">{data.openingStockNote}</span>
-                </p>
-            </details>
+            {data ? (
+                <details
+                    className={`${surfaceInsetClassName} px-3 py-2.5 text-sm`}
+                >
+                    <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+                        自有实物库存边界说明
+                    </summary>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {data.excludedKindsNote}
+                        <span className="mt-1 block">
+                            {data.openingStockNote}
+                        </span>
+                    </p>
+                </details>
+            ) : null}
 
-            <LedgerMetricStrip
-                metrics={data.metrics}
-                metricActive={metricActive}
-                view={view}
-                onSelect={(patch) => {
-                    patchUrl(patch, { replace: true })
-                    resetPagination()
-                }}
-            />
+            {data ? (
+                <LedgerMetricStrip
+                    metrics={data.metrics}
+                    metricActive={metricActive}
+                    view={view}
+                    onSelect={(patch) => {
+                        patchUrl(patch, { replace: true })
+                        resetPagination()
+                    }}
+                />
+            ) : null}
 
             <LedgerViewTabs view={view} onViewChange={handleViewChange} />
 
@@ -336,6 +423,9 @@ export function InventoryLedgerPage() {
                 view={view}
                 data={data}
                 loading={listQuery.isFetching && !listQuery.isPending}
+                isError={listLoadFailed}
+                error={listQuery.error}
+                onRetry={() => void listQuery.refetch()}
                 pagination={pagination}
                 onPaginationChange={handlePaginationChange}
                 balanceColumns={balanceColumns}
@@ -344,28 +434,12 @@ export function InventoryLedgerPage() {
                 adjustmentColumns={adjustmentColumns}
                 onOpenDetail={openDetail}
                 onOpenAdjustment={openAdjustment}
-                searchInput={searchInput}
-                searchInputRef={searchInputRef}
-                onSearchChange={(value) => {
-                    setSearchInput(value)
-                    resetPagination()
-                }}
-                warehouseId={warehouseId}
-                availability={availability}
-                movementType={movementType}
-                occurredFrom={occurredFrom}
-                occurredTo={occurredTo}
                 sortValue={sortValue}
+                onSortChange={handleSortChange}
                 hasActiveFilters={hasActiveFilters}
-                skuId={skuId}
-                salesOrderLineId={salesOrderLineId}
-                adjustmentIdParam={adjustmentIdParam}
-                chipSkuName={chipSkuName}
-                chipSalesLineLabel={chipSalesLineLabel}
-                chipAdjustmentNo={chipAdjustmentNo}
-                onApplyPatch={handleApplyFilterPatch}
-                onClearAll={handleClearAllFilters}
-                onClearFiltersEmpty={handleClearFiltersEmptyState}
+                appliedChips={appliedChips}
+                searchInputRef={searchInputRef}
+                filters={filters}
             />
 
             <InventoryBalancePreview

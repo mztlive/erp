@@ -29,6 +29,10 @@ import { useSettlementListColumns } from "@/features/supplier-settlements/hooks/
 import { useSettlementListSearchHotkey } from "@/features/supplier-settlements/hooks/use-settlement-list-search-hotkey"
 import { useSettlementListState } from "@/features/supplier-settlements/hooks/use-settlement-list-state"
 import { outcomeToResult } from "@/features/supplier-settlements/lib/operations"
+import {
+    joinSettlementStatusParam,
+    parseSettlementStatusParam,
+} from "@/features/supplier-settlements/lib/settlement-list-filters"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import { VIEW_LABEL } from "@/features/supplier-settlements/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -44,6 +48,7 @@ function SettlementList({
     onOpen: (statementId: string) => void
     returnTo?: string
 }) {
+    const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const [createOpen, setCreateOpen] = React.useState(false)
     const [result, setResult] = React.useState<ResultState>(null)
     const [columnPinning] = React.useState<ColumnPinningState>({
@@ -56,7 +61,10 @@ function SettlementList({
         supplierId: urlState.supplierId,
         periodFrom: urlState.periodFrom,
         periodTo: urlState.periodTo,
-        status: urlState.status,
+        // 非法枚举值在解析时降级，不继续传给接口
+        status: joinSettlementStatusParam(
+            parseSettlementStatusParam(urlState.status),
+        ),
         differenceType: urlState.differenceType,
         q: urlState.q,
         page: urlState.page,
@@ -64,8 +72,8 @@ function SettlementList({
     })
 
     const data = listQuery.data
-    const { pagination, hasActiveFilters, clearFilters } =
-        useSettlementListState(urlState, patchUrl)
+    const filters = useSettlementListState(urlState, patchUrl, searchInputRef)
+    const { pagination } = filters
 
     // 与加载/错误早返回无关，热键始终挂载（原行为：早返回前已注册）。
     useSettlementListSearchHotkey()
@@ -76,6 +84,7 @@ function SettlementList({
     const columns = useSettlementListColumns(patchUrl, onOpen)
 
     const canCreate = data?.hasModulePermission && data?.hasDataScope
+    const listLoadFailed = listQuery.isError || !listQuery.data
 
     if (listQuery.isPending) {
         return (
@@ -87,26 +96,7 @@ function SettlementList({
         )
     }
 
-    if (listQuery.isError) {
-        return (
-            <PageScaffold>
-                <PageHeader title="API 供应商结算" description="加载失败" />
-                <BusinessFailureState
-                    title="结算列表加载失败"
-                    error={listQuery.error}
-                    action={
-                        <Button
-                            type="button"
-                            onClick={() => void listQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
+    const total = data?.total ?? 0
     const empty = data?.emptyReason
 
     return (
@@ -122,7 +112,13 @@ function SettlementList({
                         }
                         dateTime={data?.sourceAsOf}
                         label="结算数据更新时间"
-                        state={listQuery.isFetching ? "syncing" : "fresh"}
+                        state={
+                            listLoadFailed
+                                ? "failed"
+                                : listQuery.isFetching
+                                  ? "syncing"
+                                  : "fresh"
+                        }
                     />
                 }
                 actions={
@@ -225,47 +221,98 @@ function SettlementList({
             </Tabs>
 
             <BusinessTableFrame
-                title="结算单列表"
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        结算单列表
+                        <span
+                            aria-live="polite"
+                            className="font-normal text-muted-foreground"
+                        >
+                            {total.toLocaleString("zh-CN")} 条
+                        </span>
+                    </span>
+                }
                 description={data?.filterSummary ?? "默认待处理"}
                 toolbar={
                     <SettlementListToolbar
                         urlState={urlState}
-                        patchUrl={patchUrl}
-                        total={data?.total ?? 0}
-                        hasActiveFilters={hasActiveFilters}
-                        onClearFilters={clearFilters}
+                        suppliers={data?.suppliers ?? []}
+                        searchInputRef={searchInputRef}
+                        searchDraft={filters.searchDraft}
+                        setSearchDraft={filters.setSearchDraft}
+                        panelOpen={filters.panelOpen}
+                        setPanelOpen={filters.setPanelOpen}
+                        hasActiveFilters={filters.hasActiveFilters}
+                        applyFilters={filters.applyFilters}
+                        removeFilter={filters.removeFilter}
+                        resetMoreFilters={filters.resetMoreFilters}
+                        clearAllFilters={filters.clearAllFilters}
+                        supplierIdDraft={filters.supplierIdDraft}
+                        setSupplierIdDraft={filters.setSupplierIdDraft}
+                        statusDraft={filters.statusDraft}
+                        setStatusDraft={filters.setStatusDraft}
+                        differenceTypeDraft={filters.differenceTypeDraft}
+                        setDifferenceTypeDraft={
+                            filters.setDifferenceTypeDraft
+                        }
+                        periodFromDraft={filters.periodFromDraft}
+                        setPeriodFromDraft={filters.setPeriodFromDraft}
+                        periodToDraft={filters.periodToDraft}
+                        setPeriodToDraft={filters.setPeriodToDraft}
+                        periodError={filters.periodError}
+                        setPeriodError={filters.setPeriodError}
                     />
                 }
                 table={
-                    empty ? (
-                        <SettlementListEmptyState
-                            empty={empty}
-                            filterSummary={data?.filterSummary ?? "—"}
-                            canCreate={Boolean(canCreate)}
-                            onClearFilters={clearFilters}
-                            onCreateDraft={() => setCreateOpen(true)}
-                        />
-                    ) : (
-                        <DataTable
-                            data={data?.rows ?? []}
-                            columns={columns}
-                            getRowId={(row) => row.statementId}
-                            rowCount={data?.total ?? 0}
-                            pagination={pagination}
-                            onPaginationChange={(next) => {
-                                // 只写 URL，分页由 URL 派生，消除本地/URL 双写漂移
-                                patchUrl({ page: next.pageIndex + 1 })
-                            }}
-                            columnPinning={columnPinning}
-                            enableColumnPinning
-                            manualPagination
-                            layout="flush"
-                            onRowPreview={(row) =>
-                                patchUrl({ preview: row.statementId })
-                            }
-                            onRowOpen={(row) => onOpen(row.statementId)}
-                        />
-                    )
+                    <DataTable
+                        data={data?.rows ?? []}
+                        columns={columns}
+                        getRowId={(row) => row.statementId}
+                        rowCount={total}
+                        pagination={pagination}
+                        onPaginationChange={(next) => {
+                            // 只写 URL，分页由 URL 派生，消除本地/URL 双写漂移
+                            patchUrl({ page: next.pageIndex + 1 })
+                        }}
+                        columnPinning={columnPinning}
+                        enableColumnPinning
+                        manualPagination
+                        layout="flush"
+                        loading={listQuery.isFetching}
+                        errorState={
+                            listLoadFailed ? (
+                                <BusinessFailureState
+                                    title="结算列表加载失败"
+                                    error={listQuery.error}
+                                    action={
+                                        <Button
+                                            type="button"
+                                            onClick={() =>
+                                                void listQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
+                                    }
+                                />
+                            ) : undefined
+                        }
+                        emptyState={
+                            !listLoadFailed && total === 0 ? (
+                                <SettlementListEmptyState
+                                    empty={empty ?? "NO_STATEMENTS"}
+                                    canCreate={Boolean(canCreate)}
+                                    onClearFilters={filters.clearAllFilters}
+                                    onCreateDraft={() => setCreateOpen(true)}
+                                />
+                            ) : undefined
+                        }
+                        onRowPreview={(row) =>
+                            patchUrl({ preview: row.statementId })
+                        }
+                        onRowOpen={(row) => onOpen(row.statementId)}
+                    />
                 }
             />
 
