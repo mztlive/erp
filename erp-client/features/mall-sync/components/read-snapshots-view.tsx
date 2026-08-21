@@ -44,7 +44,6 @@ export function MallSyncSnapshotsView({
                         getRowId={(r) => r.snapshotId}
                         rowCount={(data?.snapshots ?? []).length}
                         layout="flush"
-                        density="compact"
                     />
                 }
             />

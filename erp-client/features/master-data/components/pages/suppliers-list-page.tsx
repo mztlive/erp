@@ -134,7 +134,6 @@ export function SuppliersListPage() {
                         onPaginationChange={filters.changePagination}
                         loading={state.listQuery.isFetching}
                         layout="flush"
-                        density="compact"
                         defaultColumnPinning={{
                             left: ["name"],
                             right: ["actions"],

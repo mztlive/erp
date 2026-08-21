@@ -65,7 +65,6 @@ export function CardBusinessDrillTable({
                     onSortingChange={onSortingChange}
                     manualPagination
                     layout="flush"
-                    density="compact"
                 />
             }
         />

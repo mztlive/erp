@@ -121,7 +121,6 @@ export function ConsumptionOrdersTable({
             data={rows}
             columns={columns}
             getRowId={(row) => row.mallOrderId}
-            density="compact"
             layout="flush"
             enableColumnPinning
             columnPinning={columnPinning}

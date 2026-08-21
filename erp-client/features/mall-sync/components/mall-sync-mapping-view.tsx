@@ -87,7 +87,6 @@ function MallSyncMappingView({
                             getRowId={(r) => r.mappingTaskId}
                             rowCount={(data?.mappingTasks ?? []).length}
                             layout="flush"
-                            density="compact"
                         />
                     }
                 />

@@ -126,7 +126,6 @@ export function BrandsListPage() {
                         onPaginationChange={filters.changePagination}
                         loading={state.listQuery.isFetching}
                         layout="flush"
-                        density="compact"
                         defaultColumnPinning={{
                             left: ["stableNo"],
                             right: ["actions"],

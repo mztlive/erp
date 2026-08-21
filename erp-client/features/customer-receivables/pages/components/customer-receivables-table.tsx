@@ -141,7 +141,6 @@ export function CustomerReceivablesTable({
                                             data.unallocated.receipts.length
                                         }
                                         layout="flush"
-                                        density="compact"
                                         defaultColumnPinning={{
                                             left: ["doc"],
                                             right: ["actions"],
@@ -181,7 +180,6 @@ export function CustomerReceivablesTable({
                                             data.unallocated.invoices.length
                                         }
                                         layout="flush"
-                                        density="compact"
                                         defaultColumnPinning={{
                                             left: ["doc"],
                                             right: ["actions"],
@@ -225,7 +223,6 @@ export function CustomerReceivablesTable({
                             pagination={pagination}
                             onPaginationChange={onPaginationChange}
                             layout="flush"
-                            density="compact"
                             defaultColumnPinning={{
                                 left: ["party"],
                                 right: ["actions"],
@@ -240,7 +237,6 @@ export function CustomerReceivablesTable({
                             pagination={pagination}
                             onPaginationChange={onPaginationChange}
                             layout="flush"
-                            density="compact"
                             defaultColumnPinning={{
                                 left: ["doc"],
                                 right: ["actions"],
@@ -255,7 +251,6 @@ export function CustomerReceivablesTable({
                             pagination={pagination}
                             onPaginationChange={onPaginationChange}
                             layout="flush"
-                            density="compact"
                             defaultColumnPinning={{
                                 left: ["doc"],
                                 right: ["actions"],

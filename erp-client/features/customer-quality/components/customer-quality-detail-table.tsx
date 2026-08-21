@@ -93,7 +93,6 @@ export function CustomerQualityDetailTable({
                         sorting={sorting}
                         onSortingChange={onSortingChange}
                         layout="flush"
-                        density="compact"
                     />
                 }
             />

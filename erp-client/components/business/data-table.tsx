@@ -170,7 +170,7 @@ function DataTable<TData>({
     enableColumnResizing = true,
     enableColumnPinning = true,
     layout = "flush",
-    density = "compact",
+    density = "comfortable",
     striped = false,
     loading = false,
     errorState,
@@ -636,9 +636,10 @@ function DataTable<TData>({
             data-layout={layout}
             className={cn(
                 // inset：外层统一内边距。
-                // flush：表格独立圆角描边，分页在表外。
+                // flush：表格独立圆角描边；分页在表外。结果卡片（showHeader）
+                // 会把 gap 收成 0，让分页贴成卡内页脚。
                 layout === "inset" && "flex flex-col gap-3 p-table-frame-inset",
-                layout === "flush" && "flex flex-col gap-4",
+                layout === "flush" && "flex flex-col gap-3",
                 className,
             )}
             aria-busy={loading}

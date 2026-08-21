@@ -104,7 +104,6 @@ export function CustomerCenterDirectoryTable({
             onPaginationChange={onPaginationChange}
             pageSizeOptions={[20]}
             layout="flush"
-            density="compact"
             rowLabel={(row) => row.shortName || row.legalName}
             defaultColumnPinning={{
                 left: ["customer"],

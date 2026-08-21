@@ -57,7 +57,6 @@ export function MallSyncJobsView({
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         layout="flush"
-                        density="compact"
                     />
                 }
             />

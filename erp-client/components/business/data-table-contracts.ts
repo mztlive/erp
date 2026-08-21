@@ -65,6 +65,7 @@ export type DataTableProps<TData> = {
     enableColumnPinning?: boolean
     /** inset 自带卡片内距与圆角边框；flush 由外部框架提供边界。 */
     layout?: DataTableLayout
+    /** 默认 comfortable，与公司商品池行高/单元格留白一致；高密度账表再显式传 compact。 */
     density?: "compact" | "comfortable"
     striped?: boolean
     loading?: boolean

@@ -131,7 +131,6 @@ function AccessViewTable({
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         layout="flush"
-                        density="compact"
                         loading={isFetching}
                         showRefreshingBanner={isFetching}
                         defaultColumnPinning={{
@@ -148,7 +147,6 @@ function AccessViewTable({
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         layout="flush"
-                        density="compact"
                         loading={isFetching}
                         showRefreshingBanner={isFetching}
                         defaultColumnPinning={{
@@ -165,7 +163,6 @@ function AccessViewTable({
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         layout="flush"
-                        density="compact"
                         loading={isFetching}
                         showRefreshingBanner={isFetching}
                         defaultColumnPinning={{
@@ -182,7 +179,6 @@ function AccessViewTable({
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         layout="flush"
-                        density="compact"
                         loading={isFetching}
                         showRefreshingBanner={isFetching}
                         defaultColumnPinning={{
@@ -199,7 +195,6 @@ function AccessViewTable({
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
                         layout="flush"
-                        density="compact"
                         loading={isFetching}
                         showRefreshingBanner={isFetching}
                         defaultColumnPinning={{

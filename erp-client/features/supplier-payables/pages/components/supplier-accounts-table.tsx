@@ -138,7 +138,6 @@ export function SupplierAccountsTable({
                                 onSortingChange={onSortingChange}
                                 rowCount={data.payables.length}
                                 layout="flush"
-                                density="compact"
                             />
                         ) : null}
                         {view === "payment" ? (
@@ -150,7 +149,6 @@ export function SupplierAccountsTable({
                                 onPaginationChange={onPaginationChange}
                                 rowCount={data.payments.length}
                                 layout="flush"
-                                density="compact"
                             />
                         ) : null}
                         {view === "purchase_invoice" ? (
@@ -162,7 +160,6 @@ export function SupplierAccountsTable({
                                 onPaginationChange={onPaginationChange}
                                 rowCount={data.invoices.length}
                                 layout="flush"
-                                density="compact"
                             />
                         ) : null}
                         {view === "unallocated" ? (
@@ -174,7 +171,6 @@ export function SupplierAccountsTable({
                                 onPaginationChange={onPaginationChange}
                                 rowCount={unallocatedRowCount}
                                 layout="flush"
-                                density="compact"
                             />
                         ) : null}
                     </>

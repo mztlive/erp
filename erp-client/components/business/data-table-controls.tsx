@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import {
     ArrowDownIcon,
     ArrowUpIcon,
@@ -228,58 +229,70 @@ function DataTablePagination<TData>({
     pageSizeOptions: readonly number[]
     layout?: DataTableLayout
 }) {
+    const pageSizeId = useId()
     const { pageIndex, pageSize } = table.getState().pagination
     const pageCount = table.getPageCount()
     const rowCount = table.getRowCount()
     const selectedCount = Object.keys(table.getState().rowSelection).length
+    const needsPager = pageCount > 1
 
     return (
         <div
             data-slot="data-table-pagination"
             className={cn(
-                "flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between",
-                layout === "inset" && "px-(--card-spacing)",
+                "flex flex-wrap items-center gap-x-4 gap-y-2 text-sm",
+                needsPager && "justify-between",
+                layout === "flush" && "px-table-cell-inline py-2.5",
+                layout === "inset" && "px-(--card-spacing) py-2",
             )}
         >
-            <label className="flex shrink-0 items-center gap-2 text-muted-foreground">
-                <OptionCombobox
-                    size="sm"
-                    value={String(pageSize)}
-                    onValueChange={(next) => {
-                        if (next == null) return
-                        table.setPageSize(Number(next))
-                    }}
-                    options={pageSizeOptions.map((size) => ({
-                        value: String(size),
-                        label: String(size),
-                    }))}
-                    allowClear={false}
-                    aria-label="每页记录数"
-                    className="w-[5.5rem]"
-                />
-                条 / 页
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-muted-foreground">
+                <label
+                    htmlFor={pageSizeId}
+                    className="flex items-center gap-2"
+                >
+                    <OptionCombobox
+                        id={pageSizeId}
+                        size="sm"
+                        value={String(pageSize)}
+                        onValueChange={(next) => {
+                            if (next == null) return
+                            table.setPageSize(Number(next))
+                        }}
+                        options={pageSizeOptions.map((size) => ({
+                            value: String(size),
+                            label: String(size),
+                        }))}
+                        allowClear={false}
+                        aria-label="每页记录数"
+                        className="w-[4.5rem]"
+                    />
+                    条 / 页
+                </label>
+                <span aria-hidden="true">·</span>
                 {selectedCount > 0 ? (
                     <span className="num">
-                        · 已选择 {selectedCount.toLocaleString("zh-CN")} 条
+                        已选择 {selectedCount.toLocaleString("zh-CN")} 条
                     </span>
                 ) : (
                     <span className="num">
-                        · 共 {rowCount.toLocaleString("zh-CN")} 条
+                        共 {rowCount.toLocaleString("zh-CN")} 条
                     </span>
                 )}
-            </label>
+                {needsPager ? null : (
+                    <>
+                        <span aria-hidden="true">·</span>
+                        <span>已全部显示</span>
+                    </>
+                )}
+            </div>
 
-            {pageCount <= 1 ? (
-                <span className="shrink-0 text-muted-foreground">
-                    已全部显示
-                </span>
-            ) : (
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:justify-end">
+            {needsPager ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <span className="num shrink-0 text-muted-foreground">
                         第 {pageCount === 0 ? 0 : pageIndex + 1} / {pageCount}{" "}
                         页
                     </span>
-
                     <div
                         role="group"
                         aria-label="翻页"
@@ -327,7 +340,7 @@ function DataTablePagination<TData>({
                         </Button>
                     </div>
                 </div>
-            )}
+            ) : null}
         </div>
     )
 }

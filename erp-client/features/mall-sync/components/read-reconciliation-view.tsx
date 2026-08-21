@@ -65,7 +65,6 @@ export function MallSyncReconciliationView({
                                         data.reconciliation.differences.length
                                     }
                                     layout="flush"
-                                    density="compact"
                                 />
                             }
                         />

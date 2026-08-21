@@ -260,7 +260,6 @@ function SettlementList({
                             enableColumnPinning
                             manualPagination
                             layout="flush"
-                            density="compact"
                             onRowPreview={(row) =>
                                 patchUrl({ preview: row.statementId })
                             }

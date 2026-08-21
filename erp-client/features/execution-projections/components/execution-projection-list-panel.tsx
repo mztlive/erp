@@ -140,7 +140,6 @@ export function ExecutionProjectionListPanel({
                     onPaginationChange={onPaginationChange}
                     manualPagination
                     layout="flush"
-                    density="compact"
                     pageSizeOptions={[8, 20, 50]}
                     defaultColumnPinning={{
                         left: ["select", "salesOrder"],

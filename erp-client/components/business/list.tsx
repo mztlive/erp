@@ -326,7 +326,8 @@ interface BusinessTableFrameProps extends Omit<
 }
 
 /**
- * 列表工作面：工具条贴画布，表格单独圆角描边，分页在表外。
+ * 列表工作面：工具条贴画布；表格单独圆角描边。
+ * showHeader 时分页贴在结果卡页脚；否则分页在表外。
  * 页头标题由 PageHeader 承担，这里的 title 仅作辅助标题。
  */
 function BusinessTableFrame({
@@ -400,7 +401,7 @@ function BusinessTableFrame({
                         </div>
                         <div
                             data-slot="business-table-frame-table"
-                            className="[&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0"
+                            className="[&_[data-slot=data-table]]:gap-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0"
                         >
                             {table}
                         </div>

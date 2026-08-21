@@ -105,7 +105,6 @@ export function LedgerDataTable<TData>({
             pagination={pagination}
             onPaginationChange={onPaginationChange}
             layout="flush"
-            density="compact"
             defaultColumnPinning={defaultColumnPinning}
             onRowPreview={onRowPreview}
             onRowOpen={onRowOpen}

@@ -159,7 +159,6 @@ export function JobTable({
                             patchUrl({ page: next.pageIndex + 1 })
                         }}
                         layout="flush"
-                        density="compact"
                         loading={listQuery.isPending}
                     />
                 )

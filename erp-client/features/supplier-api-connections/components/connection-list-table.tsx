@@ -73,7 +73,6 @@ export function ConnectionListTable({
             rowCount={data?.total ?? 0}
             rowLabel={(row) => row.connectionCode}
             caption="API 供应商连接列表"
-            density="compact"
             layout="flush"
             enableColumnPinning
             defaultColumnVisibility={{ owners: false }}

@@ -180,8 +180,6 @@ export function PurchaseOrdersListPage() {
                             })
                         }}
                         layout="flush"
-                        density="comfortable"
-                        className="[&_[data-slot=table-cell]]:h-auto [&_[data-slot=table-cell]]:min-h-(--table-row-height) [&_[data-slot=table-cell]]:py-2.5 [&_[data-slot=table-head]]:h-auto [&_[data-slot=table-head]]:min-h-(--table-row-height) [&_[data-slot=table-head]]:py-2.5"
                         loading={ctrl.listQuery.isFetching}
                         defaultColumnPinning={{
                             left: ["document"],

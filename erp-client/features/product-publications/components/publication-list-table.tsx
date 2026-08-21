@@ -110,7 +110,6 @@ export function PublicationListTable({
             data={items}
             columns={columns}
             getRowId={(row) => row.publicationId}
-            density="compact"
             layout="flush"
             enableColumnPinning
             columnPinning={columnPinning}

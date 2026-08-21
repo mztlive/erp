@@ -57,7 +57,6 @@ export function DictionaryListTable({
             onPaginationChange={onPaginationChange}
             loading={loading}
             layout="flush"
-            density="compact"
             defaultColumnPinning={{
                 left: ["stableNo"],
                 right: ["actions"],

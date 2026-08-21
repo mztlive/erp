@@ -136,7 +136,6 @@ export function HealthSection({
                         getRowId={(r) => r.recordId}
                         rowCount={records.length}
                         caption="健康检查记录"
-                        density="compact"
                         layout="flush"
                         manualPagination={false}
                         emptyState={

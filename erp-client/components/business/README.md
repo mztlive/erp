@@ -91,9 +91,13 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
   `meta.width` 只能使用 `reference`、`status`、`amount`、`quantity`、`rate`、`tracks`
   等主题宽度档位，不传颜色、像素宽度或任意样式；
 - `layout="inset"` 用于需要自带业务卡片内距与边界的列表，`layout="flush"` 用于边界已由
-  外部框架（如 `BusinessTableFrame`）提供的场景；多行复合单元格使用 `density="comfortable"`；
-- **flush 分页**：`DataTablePagination` 在 `layout="flush"` 时使用 `px-(--card-spacing) py-3`，
-  与卡片头/工具条对齐；禁止分页贴左右边或贴卡片底边；
+  外部框架（如 `BusinessTableFrame`）提供的场景；**默认 `density="comfortable"`**（行高与
+  单元格留白对齐公司商品池 `/master-data/sellable-items`）；高密度账表再显式传
+  `density="compact"`；
+- **flush 分页**：`DataTablePagination` 使用 `px-table-cell-inline py-2.5`，与结果卡
+  片头和单元格对齐。只有一页时「每页条数 / 共 N 条 / 已全部显示」收在左侧一组，
+  不把状态文案甩到最右侧；多页时左侧元信息、右侧翻页。`BusinessTableFrame
+  showHeader` 下分页贴成结果卡页脚（顶部分割线），禁止再额外拉开大空隙；
 - 页面选择只保存稳定 ID。选择“当前筛选全部结果”时必须调用批量预览 API 冻结选择快照，
   不能把客户端当前页推断为正式批量范围；
 - 正在刷新时保留已有行；轮询/自动刷新页可传 `showRefreshingBanner={false}` 关闭

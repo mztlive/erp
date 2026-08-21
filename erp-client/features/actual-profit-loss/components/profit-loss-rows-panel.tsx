@@ -232,7 +232,6 @@ export function ProfitLossRowsPanel({
                         onSortingChange={onSortingChange}
                         loading={loading}
                         layout="flush"
-                        density="compact"
                     />
                 )
             }

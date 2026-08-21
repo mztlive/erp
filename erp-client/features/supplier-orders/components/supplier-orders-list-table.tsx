@@ -119,7 +119,6 @@ export function SupplierOrdersListTable({
                     pagination={pagination}
                     onPaginationChange={onPaginationChange}
                     layout="flush"
-                    density="compact"
                     defaultColumnPinning={{
                         left: ["identity"],
                         right: ["actions"],

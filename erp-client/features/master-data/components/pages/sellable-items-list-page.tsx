@@ -167,7 +167,6 @@ export function SellableItemsListPage() {
                         manualPagination={false}
                         loading={state.listQuery.isFetching}
                         layout="flush"
-                        density="comfortable"
                         defaultColumnPinning={{
                             left: ["name"],
                             right: [],

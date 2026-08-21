@@ -176,7 +176,6 @@ export function ContractsTablePanel({
                         onPaginationChange={handlePaginationChange}
                         loading={isPending}
                         layout="flush"
-                        density="compact"
                         defaultColumnPinning={{
                             left: ["contractNo"],
                             right: ["actions"],

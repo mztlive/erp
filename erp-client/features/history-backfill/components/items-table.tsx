@@ -246,7 +246,6 @@ export function ItemsTable({
                         onPageChange(next.pageIndex + 1)
                     }
                     layout="flush"
-                    density="compact"
                     loading={loading}
                     showRefreshingBanner={false}
                 />

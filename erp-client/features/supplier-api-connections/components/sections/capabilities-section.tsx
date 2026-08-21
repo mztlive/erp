@@ -133,7 +133,6 @@ export function CapabilitiesSection({
                         getRowId={(r) => r.capabilityCode}
                         rowCount={conn.capabilities.length}
                         caption="连接能力矩阵"
-                        density="compact"
                         layout="flush"
                         showPagination={false}
                         defaultColumnPinning={{ left: ["code"] }}
