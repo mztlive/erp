@@ -7,13 +7,13 @@
 /* ==========================================================================
    ERP 商务主题 — shadcn Neutral 表面 + 语义状态色
    --------------------------------------------------------------------------
-   布局：极浅灰画布 + 白侧栏 + 白卡片浮起；顶栏与主工作面用 --card。
+   布局：浅色画布 + 白侧栏/白页头壳 + 白卡片浮起。
    表面对齐 shadcn/ui Neutral：
-     background 极浅灰 · sidebar / card 纯白 · primary 近黑 · accent 浅灰
+     background 浅底 · sidebar / card / 页头 纯白 · primary 近黑 · accent 浅灰
    侧栏选中：浅灰底 + 近黑字 + 左侧竖标；悬停比选中更淡一档。
    单据状态色仍用独立色相（成功绿 / 警告金 / 信息蓝 / 危险红），不灰度化。
 
-   层级靠表面色差（灰底托白卡）和 border / grid 发丝线，不靠重阴影。
+   层级靠发丝 border / grid 和字重，不靠大块灰底。
 
    尺寸令牌来自 docs/erp-ui-design.md 第 2.1 / 2.2 节。
    ========================================================================== */
@@ -166,13 +166,14 @@
 }
 
 /* --------------------------------------------------------------------------
-   浅色模式：shadcn Neutral 表面（白画布 + 近黑主色）
+   浅色模式：shadcn Neutral 表面（浅画布 + 白壳 + 近黑主色）
    -------------------------------------------------------------------------- */
 :root {
-    /* 12px 基线，对齐灰底白卡工作面 */
+    /* 12px 基线，对齐浅底白卡工作面 */
     --radius: 0.75rem;
 
-    --background: oklch(0.985 0 0);
+    /* 浅画布：比纯白壳（侧栏/页头/卡片）略沉，但比旧底更亮，避免发灰 */
+    --background: oklch(0.99 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
@@ -228,8 +229,8 @@
     /* 表单控件静止态背景：与 card 同色，靠 border 提示可编辑，避免和 --muted
      disabled 态灰度太接近而被误读成「已禁用」 */
     --surface-control: oklch(1 0 0);
-    /* 表头必须比行悬停更深一档，否则表头压不住内容、hover 也看不出来 */
-    --table-header: oklch(0.955 0 0);
+    /* 表头与卡片同色，靠字号/字重和底边线压住内容，不用灰底条 */
+    --table-header: var(--card);
     --row-hover: oklch(0.97 0 0);
     --row-selected: oklch(0.945 0 0);
     --row-striped: oklch(0.985 0 0);
@@ -308,7 +309,7 @@
 
     --surface-sunken: oklch(0.18 0 0);
     --surface-control: oklch(0.205 0 0);
-    --table-header: oklch(0.22 0 0);
+    --table-header: var(--card);
     --row-hover: oklch(0.269 0 0);
     --row-selected: oklch(0.3 0 0);
     --row-striped: oklch(0.18 0 0);

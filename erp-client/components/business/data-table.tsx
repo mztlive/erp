@@ -760,7 +760,7 @@ function DataTable<TData>({
                                                     className={cn(
                                                         // TableHead 本身是 text-xs；size="xs" 也是 text-xs，
                                                         // 不要再抬成 text-sm，否则排序列会比其它列头大一号。
-                                                        "w-full px-0 text-xs",
+                                                        "w-full px-0 text-xs font-medium text-muted-foreground hover:text-foreground",
                                                         sortableHeaderClass(
                                                             meta?.align,
                                                         ),

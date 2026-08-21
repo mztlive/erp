@@ -39,6 +39,9 @@ export type PageHeaderProps = Omit<
     variant?: PageHeaderVariant
 }
 
+const metaSlotClassName =
+    "min-w-0 text-xs leading-5 text-muted-foreground [&_svg:not([class*='size-'])]:size-3.5"
+
 function PageHeader({
     title,
     description,
@@ -65,8 +68,9 @@ function PageHeader({
             data-density={objectChrome ? "compact" : density}
             data-variant={variant}
             className={cn(
+                // 白壳：与侧栏同色，压在浅色内容区之上，吸顶时发丝底边托住滚上来的卡片。
                 "sticky top-0 z-20 flex shrink-0 flex-col border-b border-border bg-card",
-                objectChrome ? "gap-1.5" : compact ? "gap-2" : "gap-3",
+                objectChrome ? "gap-1.5" : compact ? "gap-1.5" : "gap-2.5",
                 className,
             )}
             {...props}
@@ -74,9 +78,7 @@ function PageHeader({
             {objectChrome && (metadata || actions) ? (
                 <div className="flex min-h-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     {metadata ? (
-                        <div className="min-w-0 text-xs text-muted-foreground">
-                            {metadata}
-                        </div>
+                        <div className={metaSlotClassName}>{metadata}</div>
                     ) : null}
                     {actions ? (
                         <div className="shrink-0 sm:ml-auto">{actions}</div>
@@ -95,14 +97,16 @@ function PageHeader({
                         <div
                             className={cn(
                                 "flex flex-wrap items-center",
-                                compact ? "gap-x-3 gap-y-1" : "gap-2",
+                                compact ? "gap-x-2.5 gap-y-1" : "gap-2.5",
                             )}
                         >
                             {title != null ? (
                                 <h1
                                     className={cn(
                                         "font-semibold tracking-tight text-foreground",
-                                        compact ? "text-xl" : "text-2xl",
+                                        compact
+                                            ? "text-xl leading-7"
+                                            : "text-2xl leading-8",
                                     )}
                                 >
                                     {title}
@@ -110,24 +114,36 @@ function PageHeader({
                             ) : null}
                             {status ? <StatusBadge {...status} /> : null}
                             {compact && metadata ? (
-                                <div className="min-w-0 text-sm text-muted-foreground">
+                                <div className={metaSlotClassName}>
                                     {metadata}
                                 </div>
                             ) : null}
                         </div>
                         {description ? (
-                            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                            <p
+                                className={cn(
+                                    "max-w-2xl text-sm leading-relaxed text-muted-foreground",
+                                    compact ? "mt-1" : "mt-1.5",
+                                )}
+                            >
                                 {description}
                             </p>
                         ) : null}
                         {!compact && metadata ? (
-                            <div className="mt-2 text-xs text-muted-foreground [&_svg:not([class*='size-'])]:size-3.5">
+                            <div className={cn("mt-3", metaSlotClassName)}>
                                 {metadata}
                             </div>
                         ) : null}
                     </div>
                     {actions ? (
-                        <div className="shrink-0 lg:ml-auto">{actions}</div>
+                        <div
+                            className={cn(
+                                "shrink-0 lg:ml-auto",
+                                !compact && "lg:pt-0.5",
+                            )}
+                        >
+                            {actions}
+                        </div>
                     ) : null}
                 </div>
             ) : !objectChrome && actions ? (
@@ -137,4 +153,33 @@ function PageHeader({
     )
 }
 
-export { PageHeader }
+/**
+ * 页头约束/口径提示行。描边胶囊，不用灰底，避免和说明文字糊成一层。
+ */
+function PageHeaderMeta({ className, ...props }: React.ComponentProps<"div">) {
+    return (
+        <div
+            data-slot="page-header-meta"
+            className={cn("flex flex-wrap items-center gap-1.5", className)}
+            {...props}
+        />
+    )
+}
+
+function PageHeaderMetaItem({
+    className,
+    ...props
+}: React.ComponentProps<"span">) {
+    return (
+        <span
+            data-slot="page-header-meta-item"
+            className={cn(
+                "inline-flex items-center gap-1.5 rounded-md border border-border/80 bg-background px-2 py-0.5 text-xs text-muted-foreground [&_svg]:size-3.5",
+                className,
+            )}
+            {...props}
+        />
+    )
+}
+
+export { PageHeader, PageHeaderMeta, PageHeaderMetaItem }

@@ -14,6 +14,8 @@ import {
     BusinessFailureState,
     BusinessTableFrame,
     DataTable,
+    PageHeaderMeta,
+    PageHeaderMetaItem,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
@@ -44,20 +46,20 @@ export function SellableItemsListPage() {
             hint={masterDataCopy.sellableItemsHint}
             headerDensity="default"
             metadata={
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                    <span className="inline-flex items-center gap-1">
+                <PageHeaderMeta>
+                    <PageHeaderMetaItem>
                         <EyeIcon aria-hidden="true" />
                         只读查询
-                    </span>
-                    <span className="inline-flex items-center gap-1">
+                    </PageHeaderMetaItem>
+                    <PageHeaderMetaItem>
                         <CircleDollarSignIcon aria-hidden="true" />
                         销售可见口径
-                    </span>
-                    <span className="inline-flex items-center gap-1">
+                    </PageHeaderMetaItem>
+                    <PageHeaderMetaItem>
                         <ShieldCheckIcon aria-hidden="true" />
                         采购成本受保护
-                    </span>
-                </div>
+                    </PageHeaderMetaItem>
+                </PageHeaderMeta>
             }
             exportMeta={state.exportMeta}
             actions={[
