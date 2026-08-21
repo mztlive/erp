@@ -155,18 +155,6 @@ export function FulfillmentOperationsPage() {
             <PageHeader
                 title={header.label}
                 description={header.description}
-                breadcrumbs={[
-                    ...(header.group
-                        ? [
-                              {
-                                  id: "group",
-                                  label: header.group.label,
-                                  href: header.group.href,
-                              },
-                          ]
-                        : []),
-                    { id: "fulfillment", label: header.label, current: true },
-                ]}
                 metadata={
                     <div className="flex flex-wrap items-center gap-3">
                         <DataFreshness

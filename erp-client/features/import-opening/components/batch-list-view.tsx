@@ -87,15 +87,6 @@ export function BatchListView({
         <PageScaffold>
             <PageHeader
                 title="导入与期初"
-                breadcrumbs={[
-                    {
-                        id: "gov",
-                        label: "治理",
-                        href: "/governance/imports",
-                        current: false,
-                    },
-                    { id: "imp", label: "导入与期初", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt={

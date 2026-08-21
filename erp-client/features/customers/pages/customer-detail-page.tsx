@@ -107,8 +107,6 @@ export function CustomerDetailPage({
         )
     }
 
-    const displayName =
-        customer.currentRevision.shortName || customer.currentRevision.legalName
     const isDisabled = customer.status === "disabled"
     const uploadContractHref = `/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}`
     const createSalesOrderHref = `/sales/orders?mode=create&customerId=${encodeURIComponent(customer.customerId)}`
@@ -118,23 +116,6 @@ export function CustomerDetailPage({
 
     return (
         <PageScaffold>
-            <PageHeader
-                variant="object-chrome"
-                breadcrumbs={[
-                    { id: "sales", label: "销售", href: "/sales/orders" },
-                    {
-                        id: "customers",
-                        label: "客户中心",
-                        href: "/sales/customers",
-                    },
-                    {
-                        id: "detail",
-                        label: displayName,
-                        current: true,
-                    },
-                ]}
-            />
-
             {/* First screen: identity + owner + metrics + primary actions */}
             <DocumentHeader
                 density="compact"

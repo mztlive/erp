@@ -67,10 +67,6 @@ export function CustomerCenterPage() {
         <PageScaffold>
             <PageHeader
                 title="客户中心"
-                breadcrumbs={[
-                    { id: "sales", label: "销售", href: "/sales/orders" },
-                    { id: "customers", label: "客户中心", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt={data?.queriedAt?.slice(11, 16) ?? "—"}
@@ -168,9 +164,7 @@ export function CustomerCenterPage() {
                             canCreate={canCreate}
                             hasActiveFilters={directoryState.hasActiveFilters}
                             sorting={directoryState.sorting}
-                            onSortingChange={
-                                directoryState.handleSortingChange
-                            }
+                            onSortingChange={directoryState.handleSortingChange}
                             pagination={pagination}
                             onPaginationChange={
                                 directoryState.handlePaginationChange

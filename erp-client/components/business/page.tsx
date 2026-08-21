@@ -3,14 +3,6 @@
 import * as React from "react"
 import type { LucideIcon } from "lucide-react"
 
-import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
@@ -51,25 +43,11 @@ type StatusBadgeProps = React.ComponentProps<typeof StatusBadge>
 
 export type SemanticStatus = Pick<StatusBadgeProps, "label" | "tone" | "icon">
 
-export type PageBreadcrumbItem =
-    | {
-          id: string
-          label: React.ReactNode
-          current: true
-          href?: never
-      }
-    | {
-          id: string
-          label: React.ReactNode
-          current?: false
-          href: string
-      }
-
 export type PageHeaderDensity = "default" | "compact"
 
 /**
  * page：工作台/列表/治理等「页面级」标题头。
- * object-chrome：M4 对象中心壳层，只保留面包屑与轻动作；对象身份交给 DocumentHeader，
+ * object-chrome：M4 对象中心壳层，只保留轻动作与 metadata；对象身份交给 DocumentHeader，
  * 禁止再叠一层与 DocumentHeader 重复的大标题。
  */
 export type PageHeaderVariant = "page" | "object-chrome"
@@ -83,49 +61,25 @@ export type PageHeaderProps = Omit<
      */
     title?: React.ReactNode
     description?: React.ReactNode
-    /**
-     * 面包屑路径。object-chrome 始终渲染。
-     * page + default 密度：深度 ≥ 2 即渲染（落地页用路径替代「领域 · 页面」双写标题）。
-     * page + compact：仅深度 ≥ 3 渲染，避免高频作业页与侧栏/h1 重复。
-     */
-    breadcrumbs?: readonly PageBreadcrumbItem[]
-    breadcrumbLabel?: string
     status?: SemanticStatus
     metadata?: React.ReactNode
     actions?: React.ReactNode
     /**
-     * compact（默认）：标题、状态与 metadata 同排，面包屑压到 xs，供高频作业页压缩首屏。
+     * compact（默认）：标题、状态与 metadata 同排，供高频作业页压缩首屏。
      * default：标题 text-2xl、metadata 独占一行，用于需要展示语气的落地页。
      * object-chrome 变体始终按 compact 节奏渲染，本 prop 仅影响 page 变体。
      */
     density?: PageHeaderDensity
     /**
-     * page（默认）：列表/工作台页头（一级页不展示面包屑）。
-     * object-chrome：对象中心导航条（面包屑 + 可选 metadata/返回），不渲染 h1 工作面名。
+     * page（默认）：列表/工作台页头。
+     * object-chrome：对象中心导航条（可选 metadata/返回），不渲染 h1 工作面名。
      */
     variant?: PageHeaderVariant
-}
-
-/**
- * object-chrome 任意深度都展示。
- * default 密度落地页展示领域 › 当前页；compact 作业页仍要求深度 ≥ 3。
- */
-function shouldRenderBreadcrumbs(
-    breadcrumbs: readonly PageBreadcrumbItem[],
-    objectChrome: boolean,
-    density: PageHeaderDensity,
-): boolean {
-    if (breadcrumbs.length === 0) return false
-    if (objectChrome) return true
-    if (density === "default") return breadcrumbs.length >= 2
-    return breadcrumbs.length >= 3
 }
 
 function PageHeader({
     title,
     description,
-    breadcrumbs = [],
-    breadcrumbLabel = "面包屑导航",
     status,
     metadata,
     actions,
@@ -136,11 +90,6 @@ function PageHeader({
 }: PageHeaderProps) {
     const objectChrome = variant === "object-chrome"
     const compact = objectChrome || density === "compact"
-    const showBreadcrumbs = shouldRenderBreadcrumbs(
-        breadcrumbs,
-        objectChrome,
-        density,
-    )
     const showTitleBlock =
         !objectChrome &&
         (title != null ||
@@ -160,54 +109,14 @@ function PageHeader({
             )}
             {...props}
         >
-            {showBreadcrumbs || (objectChrome && (metadata || actions)) ? (
-                <div
-                    className={cn(
-                        "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
-                        objectChrome && "min-h-0",
-                    )}
-                >
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                        {showBreadcrumbs ? (
-                            <Breadcrumb
-                                aria-label={breadcrumbLabel}
-                                className="text-xs"
-                            >
-                                <BreadcrumbList
-                                    className={
-                                        compact ? "gap-1 sm:gap-1.5" : undefined
-                                    }
-                                >
-                                    {breadcrumbs.map((item, index) => (
-                                        <React.Fragment key={item.id}>
-                                            {index > 0 ? (
-                                                <BreadcrumbSeparator />
-                                            ) : null}
-                                            <BreadcrumbItem>
-                                                {item.current ? (
-                                                    <BreadcrumbPage>
-                                                        {item.label}
-                                                    </BreadcrumbPage>
-                                                ) : (
-                                                    <BreadcrumbLink
-                                                        href={item.href}
-                                                    >
-                                                        {item.label}
-                                                    </BreadcrumbLink>
-                                                )}
-                                            </BreadcrumbItem>
-                                        </React.Fragment>
-                                    ))}
-                                </BreadcrumbList>
-                            </Breadcrumb>
-                        ) : null}
-                        {objectChrome && metadata ? (
-                            <div className="min-w-0 text-xs text-muted-foreground">
-                                {metadata}
-                            </div>
-                        ) : null}
-                    </div>
-                    {objectChrome && actions ? (
+            {objectChrome && (metadata || actions) ? (
+                <div className="flex min-h-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    {metadata ? (
+                        <div className="min-w-0 text-xs text-muted-foreground">
+                            {metadata}
+                        </div>
+                    ) : null}
+                    {actions ? (
                         <div className="shrink-0 sm:ml-auto">{actions}</div>
                     ) : null}
                 </div>

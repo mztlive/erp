@@ -172,14 +172,6 @@ export function SupplierOrdersListPage() {
         <PageScaffold>
             <PageHeader
                 title="供应商订单"
-                breadcrumbs={[
-                    {
-                        id: "api",
-                        label: "供应商 API",
-                        href: "/supplier-api/orders",
-                    },
-                    { id: "so", label: "供应商订单", current: true },
-                ]}
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
                         <DataFreshness

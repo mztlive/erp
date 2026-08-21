@@ -7,7 +7,6 @@ import { useQueryClient } from "@tanstack/react-query"
 
 import {
     DiscardConfirmDialog,
-    PageHeader,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
@@ -382,23 +381,5 @@ export function SalesOrderCreateForm({
 
     if (chrome === "none") return editor
 
-    return (
-        <PageScaffold className="pb-8">
-            <PageHeader
-                variant="object-chrome"
-                breadcrumbs={[
-                    { id: "sales", label: "销售", href: "/sales/orders" },
-                    { id: "orders", label: "销售单", href: "/sales/orders" },
-                    {
-                        id: "create",
-                        label: initialDraft
-                            ? initialDraft.documentNumber
-                            : "新建",
-                        current: true,
-                    },
-                ]}
-            />
-            {editor}
-        </PageScaffold>
-    )
+    return <PageScaffold className="pb-8">{editor}</PageScaffold>
 }

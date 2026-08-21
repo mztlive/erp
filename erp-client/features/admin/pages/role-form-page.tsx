@@ -108,22 +108,7 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
     if (isEdit && rolesQuery.isError) {
         return (
             <PageScaffold density="compact">
-                <PageHeader
-                    title="编辑角色"
-                    breadcrumbs={[
-                        {
-                            id: "system",
-                            label: "系统",
-                            href: "/system/access-audit",
-                        },
-                        {
-                            id: "access",
-                            label: "权限与审计",
-                            href: "/system/access-audit?view=roles",
-                        },
-                        { id: "edit", label: "编辑角色", current: true },
-                    ]}
-                />
+                <PageHeader title="编辑角色" />
                 <BusinessFailureState
                     error={rolesQuery.error}
                     title="角色信息加载失败"
@@ -146,22 +131,7 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
     if (isEdit && !role) {
         return (
             <PageScaffold density="compact">
-                <PageHeader
-                    title="编辑角色"
-                    breadcrumbs={[
-                        {
-                            id: "system",
-                            label: "系统",
-                            href: "/system/access-audit",
-                        },
-                        {
-                            id: "access",
-                            label: "权限与审计",
-                            href: "/system/access-audit?view=roles",
-                        },
-                        { id: "edit", label: "编辑角色", current: true },
-                    ]}
-                />
+                <PageHeader title="编辑角色" />
                 <BusinessFailureState
                     kind="system"
                     title="未找到角色"
@@ -190,23 +160,6 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
                         ? "调整角色名称与权限策略；保存后立即对绑定该角色的账号生效。"
                         : "创建角色并配置权限策略；权限决定该角色可访问的工作面与动作。"
                 }
-                breadcrumbs={[
-                    {
-                        id: "system",
-                        label: "系统",
-                        href: "/system/access-audit",
-                    },
-                    {
-                        id: "access",
-                        label: "权限与审计",
-                        href: "/system/access-audit?view=roles",
-                    },
-                    {
-                        id: "form",
-                        label: isEdit ? "编辑角色" : "新建角色",
-                        current: true,
-                    },
-                ]}
                 actions={
                     <Button
                         type="button"

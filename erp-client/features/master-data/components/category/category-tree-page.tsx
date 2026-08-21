@@ -99,10 +99,6 @@ export function CategoryTreePage() {
         <PageScaffold density="compact">
             <PageHeader
                 title={masterDataCopy.pageTitle("商品分类")}
-                breadcrumbs={[
-                    { id: "md", label: "基础资料", href: "/master-data" },
-                    { id: "resource", label: "商品分类", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt="刚刚"

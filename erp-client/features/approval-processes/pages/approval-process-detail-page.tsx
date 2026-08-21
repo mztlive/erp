@@ -126,15 +126,6 @@ export function ApprovalProcessDetailPage({
     const typeTitle = documentType
         ? documentTypeLabel(documentType, catalogItem?.document_type_label)
         : "审批流程配置"
-    const catalogBreadcrumbs = [
-        { id: "system", label: "系统", href: "/system/approval-processes" },
-        {
-            id: "catalog",
-            label: "审批流程配置",
-            href: "/system/approval-processes",
-        },
-        { id: "type", label: typeTitle, current: true as const },
-    ]
 
     if (!documentType) {
         return (
@@ -209,7 +200,6 @@ export function ApprovalProcessDetailPage({
                 <PageHeader
                     title={typeTitle}
                     description="无需审批 / 不适用"
-                    breadcrumbs={catalogBreadcrumbs}
                     actions={
                         <Button
                             type="button"
@@ -248,7 +238,6 @@ export function ApprovalProcessDetailPage({
         <PageScaffold density="compact">
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={catalogBreadcrumbs}
                 actions={
                     <Button
                         type="button"

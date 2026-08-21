@@ -27,23 +27,13 @@ export function MallSyncPageHeader({
     return (
         <PageHeader
             title="商城同步与映射"
-            breadcrumbs={[
-                {
-                    id: "gov",
-                    label: "治理",
-                    href: "/governance",
-                    current: false,
-                },
-                { id: "sync", label: "商城同步与映射", current: true },
-            ]}
             metadata={
                 <div className="flex flex-wrap items-center gap-3">
                     <DataFreshness
                         updatedAt={
                             context?.freshness.latestSuccessfulJobAt
                                 ? formatDateTime(
-                                      context.freshness
-                                          .latestSuccessfulJobAt,
+                                      context.freshness.latestSuccessfulJobAt,
                                       "default",
                                   )
                                 : "—"

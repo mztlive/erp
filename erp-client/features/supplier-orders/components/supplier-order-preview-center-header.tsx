@@ -1,6 +1,5 @@
 "use client"
 
-import type { RefObject } from "react"
 import Link from "next/link"
 import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react"
 
@@ -16,7 +15,6 @@ export function SupplierOrderCenterHeader({
     order,
     from,
     sourceId,
-    titleRef,
     canQuery,
     canReplay,
     isResultUnknown,
@@ -30,7 +28,6 @@ export function SupplierOrderCenterHeader({
     order: SupplierOrderDetailView["order"]
     from: string | null
     sourceId: string | null
-    titleRef: RefObject<HTMLSpanElement | null>
     canQuery: boolean
     canReplay: boolean
     isResultUnknown: boolean
@@ -45,26 +42,6 @@ export function SupplierOrderCenterHeader({
         <>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "list",
-                        label: "供应商订单",
-                        href: "/supplier-api/orders",
-                    },
-                    {
-                        id: "order",
-                        label: (
-                            <span
-                                ref={titleRef}
-                                tabIndex={-1}
-                                className="outline-none"
-                            >
-                                {order.orderNo}
-                            </span>
-                        ),
-                        current: true,
-                    },
-                ]}
                 actions={
                     from === "mall-order" && sourceId ? (
                         <Button

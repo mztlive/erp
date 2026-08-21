@@ -2,7 +2,11 @@
 
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
-import { DataFreshness, GuardedBusinessAction, PageHeader } from "@/components/business"
+import {
+    DataFreshness,
+    GuardedBusinessAction,
+    PageHeader,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { formatClock, freshnessPresentation } from "../lib/presentation"
 import type { CustomerQualityView } from "../types"
@@ -37,14 +41,6 @@ export function CustomerQualityPageHeader({
     return (
         <PageHeader
             title="客户经营质量"
-            breadcrumbs={[
-                {
-                    id: "an",
-                    label: "分析",
-                    href: "/analytics/customer-quality",
-                },
-                { id: "cq", label: "客户经营质量", current: true },
-            ]}
             metadata={
                 <div className="flex flex-col gap-1">
                     <DataFreshness
@@ -59,8 +55,7 @@ export function CustomerQualityPageHeader({
                             期间 {period.from} ~ {period.to}
                             {period.selectionSource === "SERVER_DEFAULT"
                                 ? " · 系统默认"
-                                : period.selectionSource ===
-                                    "CONFIGURED_PRESET"
+                                : period.selectionSource === "CONFIGURED_PRESET"
                                   ? " · 配置快捷项"
                                   : " · 显式选择"}
                         </span>

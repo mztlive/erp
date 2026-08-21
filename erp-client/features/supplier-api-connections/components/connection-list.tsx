@@ -122,14 +122,6 @@ export function ConnectionList({
         <PageScaffold density="compact">
             <PageHeader
                 title="API 供应商连接"
-                breadcrumbs={[
-                    {
-                        id: "api",
-                        label: "供应商 API",
-                        href: "/supplier-api/connections",
-                    },
-                    { id: "conn", label: "API 连接", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt={

@@ -5,16 +5,10 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { HistoryIcon, PrinterIcon } from "lucide-react"
 
-import {
-    DocumentHeader,
-    PageActions,
-    PageHeader,
-} from "@/components/business"
+import { DocumentHeader, PageActions, PageHeader } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    contractOwnerLabel,
-} from "@/features/contracts/types"
+import { contractOwnerLabel } from "@/features/contracts/types"
 import type { ContractCenterView } from "@/features/contracts/types"
 import {
     isExpiringWithin30Days,
@@ -28,7 +22,7 @@ type ContractDetailHeaderProps = {
 }
 
 /**
- * 详情页头：面包屑、对象头部、有效期提示与分区导航（导航写 URL，保持可回退）。
+ * 详情页头：对象头部、有效期提示与分区导航（导航写 URL，保持可回退）。
  */
 export function ContractDetailHeader({
     contract,
@@ -83,19 +77,6 @@ export function ContractDetailHeader({
         <>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    { id: "sales", label: "销售", href: "/sales/orders" },
-                    {
-                        id: "contracts",
-                        label: "合同",
-                        href: "/sales/contracts",
-                    },
-                    {
-                        id: "detail",
-                        label: contract.contractNo,
-                        current: true,
-                    },
-                ]}
                 actions={
                     <PageActions
                         actions={[

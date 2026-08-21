@@ -20,7 +20,10 @@ import { BrandDisableDialog } from "@/features/master-data/components/shared/dis
 import { useBrandListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
-import { masterDataCopy, masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
+import {
+    masterDataCopy,
+    masterDataSearchPlaceholder,
+} from "@/features/master-data/lib/copy"
 
 export function BrandsListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
@@ -45,7 +48,6 @@ export function BrandsListPage() {
     return (
         <ListPageFrame
             title={masterDataCopy.pageTitle("品牌")}
-            currentLabel="品牌"
             hint={masterDataCopy.brandListHint}
             exportMeta={state.exportMeta}
             actions={[
@@ -133,7 +135,9 @@ export function BrandsListPage() {
                             listLoadFailed ? (
                                 <BusinessFailureState
                                     error={state.listQuery.error}
-                                    onRetry={() => void state.listQuery.refetch()}
+                                    onRetry={() =>
+                                        void state.listQuery.refetch()
+                                    }
                                 />
                             ) : undefined
                         }
@@ -161,7 +165,9 @@ export function BrandsListPage() {
                                                 variant="secondary"
                                                 size="sm"
                                                 className="rounded-lg shadow-none"
-                                                onClick={filters.clearAllFilters}
+                                                onClick={
+                                                    filters.clearAllFilters
+                                                }
                                             >
                                                 清除筛选
                                             </Button>

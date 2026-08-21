@@ -41,8 +41,6 @@ export function CategoryObjectPage({
     return (
         <ObjectCenterView
             data={query.data}
-            listHref={listHref}
-            listLabel="商品分类"
             baseHref={`${listHref}/${query.data.stableId}`}
             section={section}
             onBack={() => router.push(listHref)}

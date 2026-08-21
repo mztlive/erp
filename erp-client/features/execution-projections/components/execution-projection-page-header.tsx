@@ -27,14 +27,6 @@ export function ExecutionProjectionPageHeader({
     return (
         <PageHeader
             title="执行信息"
-            breadcrumbs={[
-                {
-                    id: "com",
-                    label: "商城与发布",
-                    href: "/commerce/execution-projections",
-                },
-                { id: "ep", label: "执行信息", current: true },
-            ]}
             metadata={
                 <DataFreshness
                     updatedAt={

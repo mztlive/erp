@@ -42,7 +42,6 @@ export function SuppliersListPage() {
     return (
         <ListPageFrame
             title={masterDataCopy.pageTitle("供应商与资质")}
-            currentLabel="供应商与资质"
             exportMeta={state.exportMeta}
             actions={[
                 {
@@ -144,7 +143,9 @@ export function SuppliersListPage() {
                             listLoadFailed ? (
                                 <BusinessFailureState
                                     error={state.listQuery.error}
-                                    onRetry={() => void state.listQuery.refetch()}
+                                    onRetry={() =>
+                                        void state.listQuery.refetch()
+                                    }
                                 />
                             ) : undefined
                         }
@@ -172,7 +173,9 @@ export function SuppliersListPage() {
                                                 variant="secondary"
                                                 size="sm"
                                                 className="rounded-lg shadow-none"
-                                                onClick={filters.clearAllFilters}
+                                                onClick={
+                                                    filters.clearAllFilters
+                                                }
                                             >
                                                 清除筛选
                                             </Button>

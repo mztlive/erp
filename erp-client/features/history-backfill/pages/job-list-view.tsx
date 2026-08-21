@@ -88,15 +88,6 @@ function JobListView({
         <PageScaffold>
             <PageHeader
                 title="历史消费回填"
-                breadcrumbs={[
-                    {
-                        id: "gov",
-                        label: "治理",
-                        href: "/governance/history-backfill",
-                        current: false,
-                    },
-                    { id: "hb", label: "历史消费回填", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt={

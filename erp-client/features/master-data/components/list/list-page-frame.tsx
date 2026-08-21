@@ -14,7 +14,6 @@ import type { ListExportMeta } from "@/features/master-data/hooks/use-master-dat
 
 export function ListPageFrame({
     title,
-    currentLabel,
     hint,
     metadata,
     headerDensity = "compact",
@@ -29,7 +28,6 @@ export function ListPageFrame({
     children,
 }: {
     title: string
-    currentLabel: string
     hint?: React.ReactNode
     metadata?: React.ReactNode
     headerDensity?: "default" | "compact"
@@ -62,10 +60,6 @@ export function ListPageFrame({
                 description={hint}
                 metadata={metadata}
                 density={headerDensity}
-                breadcrumbs={[
-                    { id: "md", label: "基础资料", href: "/master-data" },
-                    { id: "resource", label: currentLabel, current: true },
-                ]}
                 actions={
                     <PageActions
                         actions={actions}

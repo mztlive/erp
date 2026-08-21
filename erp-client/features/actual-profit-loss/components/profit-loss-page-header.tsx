@@ -1,10 +1,6 @@
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
-import {
-    DataFreshness,
-    PageActions,
-    PageHeader,
-} from "@/components/business"
+import { DataFreshness, PageActions, PageHeader } from "@/components/business"
 import type { DataFreshnessState } from "@/components/business/page"
 import { formatDateTime } from "@/lib/datetime"
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
@@ -29,15 +25,14 @@ export function ProfitLossPageHeader({
     return (
         <PageHeader
             title={`实际经营盈亏（${SCOPE_LABEL}）`}
-            breadcrumbs={[
-                { id: "an", label: "分析", href: "/analytics/profit-loss" },
-                { id: "pl", label: "实际经营盈亏", current: true },
-            ]}
             metadata={
                 hasData ? (
                     <div className="flex flex-col gap-1">
                         <DataFreshness
-                            updatedAt={formatDateTime(projectedAt ?? "", "full")}
+                            updatedAt={formatDateTime(
+                                projectedAt ?? "",
+                                "full",
+                            )}
                             dateTime={projectedAt}
                             state={freshnessUi.uiState}
                             statusLabel={freshnessUi.statusLabel}

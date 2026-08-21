@@ -41,7 +41,6 @@ export function SellableItemsListPage() {
     return (
         <ListPageFrame
             title="公司商品池"
-            currentLabel="公司商品池"
             hint={masterDataCopy.sellableItemsHint}
             headerDensity="default"
             metadata={

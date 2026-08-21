@@ -11,7 +11,10 @@ import { VoucherCategoryFormDialog } from "@/features/master-data/components/lis
 import { useVoucherCategoryListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
-import { masterDataCopy, masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
+import {
+    masterDataCopy,
+    masterDataSearchPlaceholder,
+} from "@/features/master-data/lib/copy"
 
 export function VoucherCategoriesListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
@@ -36,7 +39,6 @@ export function VoucherCategoriesListPage() {
     return (
         <ListPageFrame
             title={masterDataCopy.pageTitle("卡券类目")}
-            currentLabel="卡券类目"
             exportMeta={state.exportMeta}
             actions={[
                 {

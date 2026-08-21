@@ -42,8 +42,6 @@ function resolveSection(section?: string | null): MasterDataSectionId {
 
 export function ObjectCenterView({
     data,
-    listHref,
-    listLabel,
     baseHref,
     section,
     onBack,
@@ -52,8 +50,6 @@ export function ObjectCenterView({
     dialogs,
 }: {
     data: MasterDataCenterView
-    listHref: string
-    listLabel: string
     baseHref: string
     section?: string
     onBack: () => void
@@ -85,11 +81,6 @@ export function ObjectCenterView({
         <PageScaffold>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    { id: "md", label: "基础资料", href: "/master-data" },
-                    { id: "resource", label: listLabel, href: listHref },
-                    { id: "object", label: data.name, current: true },
-                ]}
                 actions={
                     <PageActions
                         actions={[

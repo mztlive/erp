@@ -2,7 +2,11 @@
 
 import { ArrowLeftIcon } from "lucide-react"
 
-import { PageHeader, PageScaffold, surfacePanelClassName } from "@/components/business"
+import {
+    PageHeader,
+    PageScaffold,
+    surfacePanelClassName,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SupplierEditorBasicSection } from "@/features/master-data/components/supplier/supplier-editor-basic-section"
 import { SupplierEditorCommercialSection } from "@/features/master-data/components/supplier/supplier-editor-commercial-section"
@@ -81,25 +85,6 @@ export function SupplierEditorForm({ editor }: { editor: SupplierEditor }) {
         <PageScaffold density="compact">
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "master-data",
-                        label: "基础资料",
-                        href: "/master-data",
-                    },
-                    {
-                        id: "suppliers",
-                        label: "供应商",
-                        href: listHref,
-                    },
-                    {
-                        id: "detail",
-                        label: isCreate
-                            ? "新建供应商"
-                            : data?.stableNo || title,
-                        current: true,
-                    },
-                ]}
                 actions={
                     <Button
                         type="button"
@@ -139,10 +124,7 @@ export function SupplierEditorForm({ editor }: { editor: SupplierEditor }) {
                     <SupplierSummaryStrip rows={summaryRows} />
 
                     <div
-                        className={cn(
-                            surfacePanelClassName,
-                            "overflow-hidden",
-                        )}
+                        className={cn(surfacePanelClassName, "overflow-hidden")}
                     >
                         <SupplierSectionTabs
                             value={activeSection}
@@ -202,9 +184,7 @@ export function SupplierEditorForm({ editor }: { editor: SupplierEditor }) {
                             {activeSection === "history" &&
                                 !isCreate &&
                                 data && (
-                                    <SupplierEditorHistorySection
-                                        data={data}
-                                    />
+                                    <SupplierEditorHistorySection data={data} />
                                 )}
                         </div>
                     </div>

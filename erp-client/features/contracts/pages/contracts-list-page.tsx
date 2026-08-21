@@ -57,10 +57,6 @@ export function ContractsListPage() {
         <PageScaffold density="compact">
             <PageHeader
                 title="合同"
-                breadcrumbs={[
-                    { id: "sales", label: "销售", href: "/sales/orders" },
-                    { id: "contracts", label: "合同", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt={

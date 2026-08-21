@@ -118,12 +118,6 @@ export function SupplierOrderCenterPage({
         forgetCommandIdentity: identity.forgetCommandIdentity,
     })
 
-    const titleRef = React.useRef<HTMLSpanElement>(null)
-
-    React.useEffect(() => {
-        titleRef.current?.focus()
-    }, [supplierOrderId, activeSection])
-
     React.useEffect(() => {
         return () => {
             void clearAddressReveal(supplierOrderId)
@@ -188,7 +182,6 @@ export function SupplierOrderCenterPage({
                 order={o}
                 from={from}
                 sourceId={sourceId}
-                titleRef={titleRef}
                 canQuery={derivation.canQuery}
                 canReplay={derivation.canReplay}
                 isResultUnknown={derivation.isResultUnknown}

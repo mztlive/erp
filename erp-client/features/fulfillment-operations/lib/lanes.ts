@@ -4,7 +4,7 @@
  * - warehouse → 收货与发货（入库 + 公司仓发）
  * - procurement → 交付与代发（直发 + 电子 + 服务）
  *
- * lane 只决定**标题、说明和面包屑**。可见作业类型仍由角色在服务端收敛
+ * lane 只决定**标题和说明**。可见作业类型仍由角色在服务端收敛
  * （见 `fulfillment-roles.ts` 与工作面文档 §2.2）—— 这里不再放第二份类型清单，
  * 否则前端会多出一套可能与服务端对不上的可见性口径。
  */
@@ -16,8 +16,6 @@ export type FulfillmentLaneHeader = {
     label: string
     /** 页头说明 */
     description: string
-    /** 面包屑上级分组；无归属岗位时为空 */
-    group?: { label: string; href: string }
 }
 
 const FULFILLMENT_LANES: Record<
@@ -32,14 +30,12 @@ const FULFILLMENT_LANES: Record<
         value: "warehouse",
         label: "收货与发货",
         description: "处理待入库和公司仓发货，连续做完再下一条。",
-        group: { label: "仓储", href: "/fulfillment?lane=warehouse" },
         navHref: "/fulfillment?lane=warehouse",
     },
     procurement: {
         value: "procurement",
         label: "交付与代发",
         description: "处理供应商直发、电子交付和线下服务。",
-        group: { label: "采购与履约", href: "/procurement/confirm" },
         navHref: "/fulfillment?lane=procurement",
     },
 }
@@ -72,7 +68,7 @@ export function resolveLane(laneRaw: string | null): FulfillmentLane | null {
     return parseLaneParam(laneRaw)
 }
 
-/** 页头/面包屑用：有岗位取岗位口径，无岗位取中性口径。 */
+/** 页头用：有岗位取岗位口径，无岗位取中性口径。 */
 export function laneHeader(
     lane: FulfillmentLane | null,
 ): FulfillmentLaneHeader {

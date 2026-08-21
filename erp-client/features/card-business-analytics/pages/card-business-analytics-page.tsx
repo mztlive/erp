@@ -73,24 +73,23 @@ export function CardBusinessAnalyticsPage() {
         analysisQuery: state.analysisQuery,
     })
 
-    const { refreshing, refreshFailed, handleRefresh } =
-        useCardBusinessRefresh(() => viewQuery.refetch())
+    const { refreshing, refreshFailed, handleRefresh } = useCardBusinessRefresh(
+        () => viewQuery.refetch(),
+    )
 
     const [basisSheetOpen, setBasisSheetOpen] = React.useState(false)
 
-    const dateBasisOptions = (basisConfig?.allowedDateBases ?? []).map(
-        (b) => ({
-            value: b.code,
-            label: b.label,
-        }),
-    )
+    const dateBasisOptions = (basisConfig?.allowedDateBases ?? []).map((b) => ({
+        value: b.code,
+        label: b.label,
+    }))
 
     const hasActiveFilters = Boolean(
         state.customerId ||
-            state.salesOrderId ||
-            (state.costBasis && state.costBasis.length > 0) ||
-            state.expiryState !== "all" ||
-            state.coverage !== "all",
+        state.salesOrderId ||
+        (state.costBasis && state.costBasis.length > 0) ||
+        state.expiryState !== "all" ||
+        state.coverage !== "all",
     )
 
     function clearFilters() {
@@ -145,14 +144,6 @@ export function CardBusinessAnalyticsPage() {
                 <PageHeader
                     title="卡券消费台账与经营分析"
                     description="系统尚未配置默认日期口径。请显式选择期间与日期口径后再开始分析。"
-                    breadcrumbs={[
-                        {
-                            id: "an",
-                            label: "分析",
-                            href: "/analytics/card-business",
-                        },
-                        { id: "cb", label: "卡券经营分析", current: true },
-                    ]}
                 />
                 <Alert variant="warning">
                     <CalendarRangeIcon aria-hidden="true" />
@@ -179,14 +170,6 @@ export function CardBusinessAnalyticsPage() {
         <PageScaffold>
             <PageHeader
                 title="卡券消费台账与经营分析"
-                breadcrumbs={[
-                    {
-                        id: "an",
-                        label: "分析",
-                        href: "/analytics/card-business",
-                    },
-                    { id: "cb", label: "卡券经营分析", current: true },
-                ]}
                 metadata={
                     data ? (
                         <CardBusinessHeaderMetadata

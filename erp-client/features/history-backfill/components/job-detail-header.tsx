@@ -59,23 +59,6 @@ export function JobDetailHeader({
         <>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "gov",
-                        label: "治理",
-                        href: "/governance/history-backfill",
-                    },
-                    {
-                        id: "hb",
-                        label: "历史消费回填",
-                        href: "/governance/history-backfill",
-                    },
-                    {
-                        id: "job",
-                        label: job.jobNo,
-                        current: true,
-                    },
-                ]}
                 actions={
                     <div className="flex flex-wrap gap-2">
                         <Button
@@ -169,20 +152,12 @@ export function JobDetailHeader({
                             </Button>
                         ) : null}
                         {canStart ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                onClick={onStart}
-                            >
+                            <Button type="button" size="sm" onClick={onStart}>
                                 开始回填
                             </Button>
                         ) : null}
                         {canResume ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                onClick={onResume}
-                            >
+                            <Button type="button" size="sm" onClick={onResume}>
                                 续跑原任务
                             </Button>
                         ) : null}

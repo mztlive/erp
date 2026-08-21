@@ -23,14 +23,6 @@ export function SupplierAccountsHeader({
     return (
         <PageHeader
             title="供应商往来"
-            breadcrumbs={[
-                {
-                    id: "fin",
-                    label: "财务",
-                    href: "/finance/supplier-accounts",
-                },
-                { id: "ap", label: "供应商往来", current: true },
-            ]}
             metadata={
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                     <DataFreshness

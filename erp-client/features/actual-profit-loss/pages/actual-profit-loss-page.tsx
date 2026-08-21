@@ -18,12 +18,6 @@ import { ProfitLossMetrics } from "@/features/actual-profit-loss/components/prof
 import { ProfitLossPageHeader } from "@/features/actual-profit-loss/components/profit-loss-page-header"
 import { ProfitLossRowsPanel } from "@/features/actual-profit-loss/components/profit-loss-rows-panel"
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
-import type { PageBreadcrumbItem } from "@/components/business"
-
-const BREADCRUMBS = [
-    { id: "an", label: "分析", href: "/analytics/profit-loss" },
-    { id: "pl", label: "实际经营盈亏", current: true },
-] as const satisfies readonly PageBreadcrumbItem[]
 
 export function ActualProfitLossPage() {
     const page = useActualProfitLossPage()
@@ -35,7 +29,6 @@ export function ActualProfitLossPage() {
                 <PageHeader
                     title={`实际经营盈亏（${SCOPE_LABEL}）`}
                     description="读取期间归属口径配置…"
-                    breadcrumbs={BREADCRUMBS}
                 />
                 <Skeleton className="h-16 w-full rounded-lg" />
                 <Skeleton className="h-24 w-full rounded-lg" />
@@ -51,10 +44,7 @@ export function ActualProfitLossPage() {
     if (page.basisQuery.isError || !page.basisConfig) {
         return (
             <PageScaffold>
-                <PageHeader
-                    title={`实际经营盈亏（${SCOPE_LABEL}）`}
-                    breadcrumbs={BREADCRUMBS}
-                />
+                <PageHeader title={`实际经营盈亏（${SCOPE_LABEL}）`} />
                 <BusinessFailureState
                     error={page.basisQuery.error}
                     title="期间归属口径配置读取失败"
@@ -118,10 +108,7 @@ export function ActualProfitLossPage() {
                             <Skeleton className="h-20 w-full" />
                             <div className="grid gap-4 xl:grid-cols-5">
                                 {Array.from({ length: 5 }).map((_, i) => (
-                                    <Skeleton
-                                        key={i}
-                                        className="h-24 w-full"
-                                    />
+                                    <Skeleton key={i} className="h-24 w-full" />
                                 ))}
                             </div>
                             <Skeleton className="h-64 w-full" />
@@ -182,9 +169,7 @@ export function ActualProfitLossPage() {
                                 pagination={page.pagination}
                                 onPaginationChange={page.setPagination}
                                 sorting={page.tableSorting}
-                                onSortingChange={
-                                    page.handleTableSortingChange
-                                }
+                                onSortingChange={page.handleTableSortingChange}
                                 loading={
                                     page.viewQuery.isFetching &&
                                     !page.viewQuery.isPending

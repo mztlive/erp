@@ -69,15 +69,6 @@ export function SalesOrderEditableCenter({
         <PageScaffold className="pb-8">
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    { id: "sales", label: "销售", href: "/sales/orders" },
-                    { id: "orders", label: "销售单", href: "/sales/orders" },
-                    {
-                        id: "detail",
-                        label: order.documentNumber,
-                        current: true,
-                    },
-                ]}
                 metadata={
                     fromQueue ? (
                         <span>

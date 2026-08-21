@@ -18,20 +18,6 @@ export function IntegrationPageHeader({
                     ? (itemNumber ?? "接口错误与对账中心")
                     : "接口错误与对账中心"
             }
-            breadcrumbs={[
-                {
-                    id: "gov",
-                    label: "治理",
-                    href: "/governance/integration-errors",
-                },
-                {
-                    id: "ie",
-                    label: focusMode
-                        ? (itemNumber ?? "详情")
-                        : "接口错误与对账",
-                    current: true,
-                },
-            ]}
             metadata={
                 <DataFreshness
                     state="fresh"

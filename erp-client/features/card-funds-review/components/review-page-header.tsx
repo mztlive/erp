@@ -14,14 +14,6 @@ export function ReviewPageHeader({
     return (
         <PageHeader
             title="卡券票款复核"
-            breadcrumbs={[
-                {
-                    id: "fin",
-                    label: "财务",
-                    href: "/finance/card-funds-review",
-                },
-                { id: "card", label: "卡券票款复核", current: true },
-            ]}
             metadata={
                 <div className="flex flex-wrap items-center gap-3">
                     <DataFreshness

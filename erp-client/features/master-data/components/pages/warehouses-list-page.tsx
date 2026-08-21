@@ -3,10 +3,7 @@
 import Link from "next/link"
 import { DownloadIcon, PlusIcon } from "lucide-react"
 
-import {
-    BusinessTableFrame,
-    FormalActionResult,
-} from "@/components/business"
+import { BusinessTableFrame, FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { DictionaryListTable } from "@/features/master-data/components/list/dictionary-list-table"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
@@ -20,7 +17,10 @@ import {
 import { useWarehouseListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
-import { masterDataCopy, masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
+import {
+    masterDataCopy,
+    masterDataSearchPlaceholder,
+} from "@/features/master-data/lib/copy"
 
 export function WarehousesListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
@@ -47,7 +47,6 @@ export function WarehousesListPage() {
     return (
         <ListPageFrame
             title={masterDataCopy.pageTitle("仓库")}
-            currentLabel="仓库"
             banner={
                 <FormalActionResult
                     status="blocked"

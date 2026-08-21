@@ -13,10 +13,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     AuditSection,
@@ -35,7 +32,10 @@ import {
     useImportIssuesQuery,
 } from "@/features/import-opening/hooks/queries"
 import { formatObjectSet } from "@/features/import-opening/lib/labels"
-import { buildStageStates, importStageLabels } from "@/features/import-opening/lib/pipeline"
+import {
+    buildStageStates,
+    importStageLabels,
+} from "@/features/import-opening/lib/pipeline"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import type { BatchSection } from "@/features/import-opening/types"
 import {
@@ -152,19 +152,6 @@ export function BatchDetailView({
         <PageScaffold>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    { id: "gov", label: "治理", href: "/governance/imports" },
-                    {
-                        id: "imp",
-                        label: "导入与期初",
-                        href: "/governance/imports",
-                    },
-                    {
-                        id: "batch",
-                        label: batch.batchNo,
-                        current: true,
-                    },
-                ]}
                 actions={
                     <Button
                         type="button"

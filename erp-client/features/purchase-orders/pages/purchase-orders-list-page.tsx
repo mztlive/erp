@@ -73,14 +73,6 @@ export function PurchaseOrdersListPage() {
         <PageScaffold density="compact">
             <PageHeader
                 title="采购单"
-                breadcrumbs={[
-                    {
-                        id: "proc",
-                        label: "采购与履约",
-                        href: "/procurement/confirm",
-                    },
-                    { id: "orders", label: "采购单", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt={

@@ -43,7 +43,9 @@ export function ProductPublicationsListPage() {
                 ? undefined
                 : filters.publicationStatus,
         deliveryStatus:
-            filters.deliveryStatus === "all" ? undefined : filters.deliveryStatus,
+            filters.deliveryStatus === "all"
+                ? undefined
+                : filters.deliveryStatus,
         metric: filters.metric === "all" ? undefined : filters.metric,
         page: filters.page,
         pageSize: filters.pageSize,
@@ -72,14 +74,6 @@ export function ProductPublicationsListPage() {
         <PageScaffold>
             <PageHeader
                 title="商品发布"
-                breadcrumbs={[
-                    {
-                        id: "com",
-                        label: "商城与发布",
-                        href: "/commerce/publications",
-                    },
-                    { id: "pub", label: "商品发布", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt="列表"
@@ -145,7 +139,9 @@ export function ProductPublicationsListPage() {
                             filters.supplierOfferingRevisionId
                         }
                         resolvedSkuCode={data?.resolvedFilters.skuCode}
-                        resolvedSupplierName={data?.resolvedFilters.supplierName}
+                        resolvedSupplierName={
+                            data?.resolvedFilters.supplierName
+                        }
                         filterSummary={data?.filterSummary}
                         hasActiveFilters={filters.hasActiveFilters}
                         onPatch={filters.replaceParams}

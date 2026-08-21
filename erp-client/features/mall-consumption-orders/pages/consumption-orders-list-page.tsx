@@ -94,14 +94,6 @@ export function ConsumptionOrdersListPage() {
         <PageScaffold density="compact">
             <PageHeader
                 title="商城消费订单"
-                breadcrumbs={[
-                    {
-                        id: "com",
-                        label: "商城与发布",
-                        href: "/commerce/consumption-orders",
-                    },
-                    { id: "co", label: "商城消费订单", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt={

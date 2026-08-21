@@ -1,16 +1,8 @@
 "use client"
 
-import {
-    DownloadIcon,
-    FileTextIcon,
-    WalletIcon,
-} from "lucide-react"
+import { DownloadIcon, FileTextIcon, WalletIcon } from "lucide-react"
 
-import {
-    DataFreshness,
-    PageActions,
-    PageHeader,
-} from "@/components/business"
+import { DataFreshness, PageActions, PageHeader } from "@/components/business"
 import type { CustomerAccountsListView } from "@/features/customer-receivables/types"
 import { freshnessText } from "@/lib/ui-text"
 
@@ -33,14 +25,6 @@ export function CustomerReceivablesHeader({
     return (
         <PageHeader
             title="客户往来"
-            breadcrumbs={[
-                {
-                    id: "fin",
-                    label: "财务",
-                    href: "/finance/customer-accounts",
-                },
-                { id: "ar", label: "客户往来", current: true },
-            ]}
             metadata={
                 data ? (
                     <DataFreshness

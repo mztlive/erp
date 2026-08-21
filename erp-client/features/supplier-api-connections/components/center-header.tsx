@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import type { ConnectionCenterView } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
 
-/** 连接中心页头：面包屑、文档头与启停/健康动作。 */
+/** 连接中心页头：文档头与启停/健康动作。 */
 export function CenterHeader({
     conn,
     onBack,
@@ -44,23 +44,6 @@ export function CenterHeader({
         <>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "api",
-                        label: "供应商 API",
-                        href: "/supplier-api/connections",
-                    },
-                    {
-                        id: "conn",
-                        label: "API 连接",
-                        href: "/supplier-api/connections",
-                    },
-                    {
-                        id: "detail",
-                        label: conn.connectionCode,
-                        current: true,
-                    },
-                ]}
                 actions={
                     <Button
                         type="button"

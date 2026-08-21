@@ -64,19 +64,6 @@ export function PurchaseOrderDetailHeader({
         <>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "proc",
-                        label: "采购与履约",
-                        href: "/procurement/confirm",
-                    },
-                    {
-                        id: "orders",
-                        label: "采购单",
-                        href: "/procurement/orders",
-                    },
-                    { id: "current", label: displayNo, current: true },
-                ]}
                 metadata={
                     <span className="inline-flex items-center gap-2">
                         <span

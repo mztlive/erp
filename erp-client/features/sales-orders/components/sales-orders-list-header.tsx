@@ -40,10 +40,6 @@ export function SalesOrdersListHeader(props: {
         <>
             <PageHeader
                 title="销售单"
-                breadcrumbs={[
-                    { id: "sales", label: "销售", href: "/sales/orders" },
-                    { id: "orders", label: "销售单", current: true },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt={

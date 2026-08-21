@@ -54,23 +54,6 @@ export function PublicationCenterHeader({
         <>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "com",
-                        label: "商城与发布",
-                        href: "/commerce/publications",
-                    },
-                    {
-                        id: "list",
-                        label: "商品发布",
-                        href: "/commerce/publications",
-                    },
-                    {
-                        id: "obj",
-                        label: data.identity.skuCode,
-                        current: true,
-                    },
-                ]}
                 metadata={
                     <DataFreshness
                         updatedAt="详情"

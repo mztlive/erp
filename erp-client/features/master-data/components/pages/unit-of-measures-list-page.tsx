@@ -16,7 +16,10 @@ import { UnitOfMeasureDisableDialog } from "@/features/master-data/components/sh
 import { useUnitOfMeasureListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
-import { masterDataCopy, masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
+import {
+    masterDataCopy,
+    masterDataSearchPlaceholder,
+} from "@/features/master-data/lib/copy"
 
 export function UnitOfMeasuresListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
@@ -41,7 +44,6 @@ export function UnitOfMeasuresListPage() {
     return (
         <ListPageFrame
             title={masterDataCopy.pageTitle("计量单位")}
-            currentLabel="计量单位"
             hint={masterDataCopy.unitListHint}
             exportMeta={state.exportMeta}
             actions={[

@@ -43,8 +43,6 @@ export function WarehouseObjectPage({
     return (
         <ObjectCenterView
             data={query.data}
-            listHref={listHref}
-            listLabel="仓库"
             baseHref={`${listHref}/${query.data.stableId}`}
             section={section}
             onBack={() => router.push(listHref)}

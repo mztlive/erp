@@ -35,23 +35,6 @@ function SettlementCenterDocumentHeader({
         <>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "api",
-                        label: "供应商 API",
-                        href: "/supplier-api/settlements",
-                    },
-                    {
-                        id: "list",
-                        label: "API 供应商结算",
-                        href: "/supplier-api/settlements",
-                    },
-                    {
-                        id: "detail",
-                        label: st.statementNo,
-                        current: true,
-                    },
-                ]}
                 actions={
                     <Button
                         type="button"
@@ -91,8 +74,7 @@ function SettlementCenterDocumentHeader({
                             ·
                         </span>
                         <span className="text-muted-foreground">
-                            记录{" "}
-                            {formatDateTime(immutableFactsAsOf, "default")}
+                            记录 {formatDateTime(immutableFactsAsOf, "default")}
                         </span>
                     </span>
                 }

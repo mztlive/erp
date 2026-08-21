@@ -38,14 +38,6 @@ export function PeriodBlockerCard({
             <PageHeader
                 title="客户经营质量"
                 description="未配置默认统计期间，请选择起止日期后开始分析。"
-                breadcrumbs={[
-                    {
-                        id: "an",
-                        label: "分析",
-                        href: "/analytics/customer-quality",
-                    },
-                    { id: "cq", label: "客户经营质量", current: true },
-                ]}
             />
             <Alert variant="warning">
                 <CalendarRangeIcon aria-hidden="true" />
@@ -76,9 +68,7 @@ export function PeriodBlockerCard({
                             <Label htmlFor="cq-to">结束日期</Label>
                             <DatePicker
                                 value={explicitTo || undefined}
-                                onValueChange={(next) =>
-                                    onToChange(next ?? "")
-                                }
+                                onValueChange={(next) => onToChange(next ?? "")}
                             />
                         </div>
                     </div>

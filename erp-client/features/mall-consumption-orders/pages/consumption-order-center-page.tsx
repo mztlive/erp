@@ -85,18 +85,6 @@ export function ConsumptionOrderCenterPage({
         <PageScaffold>
             <PageHeader
                 variant="object-chrome"
-                breadcrumbs={[
-                    {
-                        id: "com",
-                        label: "商城消费订单",
-                        href: "/commerce/consumption-orders",
-                    },
-                    {
-                        id: "detail",
-                        label: view.identity.externalOrderNo,
-                        current: true,
-                    },
-                ]}
                 actions={
                     <div className="flex flex-wrap gap-2">
                         <Button
