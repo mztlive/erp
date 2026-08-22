@@ -10,16 +10,29 @@
 #   bash scripts/run-flow.sh tests/flow-01-sales-warehouse.spec.ts
 #   bash scripts/run-flow.sh all          # 依序运行全部 spec
 #   E2E_RESET=0 bash scripts/run-flow.sh tests/xxx.spec.ts   # 跳过 reset（调试用）
+#   E2E_HEADED=1 bash scripts/run-flow.sh tests/xxx.spec.ts  # 有界面观察浏览器操作
+#   E2E_HEADED=1 E2E_SLOW_MO=500 bash scripts/run-flow.sh tests/xxx.spec.ts  # 有界面 + 慢动作
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 E2E_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RESET="${E2E_RESET:-1}"
+HEADED="${E2E_HEADED:-0}"
+SLOW_MO="${E2E_SLOW_MO:-}"
 
 run_one() {
     local spec="$1"
     local name
+    local -a pw_args
     name="$(basename "${spec}")"
+    pw_args=("${spec}" --workers=1)
+    if [[ "${HEADED}" == "1" ]]; then
+        pw_args+=(--headed)
+    fi
+    if [[ -n "${SLOW_MO}" ]]; then
+        pw_args+=(--slow-mo="${SLOW_MO}")
+    fi
+
     echo ""
     echo "############################################################"
     echo "# 流程: ${name}"
@@ -38,8 +51,8 @@ run_one() {
         node "${SCRIPT_DIR}/publish-approval-definitions.mjs"
     fi
 
-    echo "-- 执行 playwright: ${spec} --"
-    (cd "${E2E_DIR}" && npx playwright test "${spec}" --workers=1)
+    echo "-- 执行 playwright: ${pw_args[*]} --"
+    (cd "${E2E_DIR}" && npx playwright test "${pw_args[@]}")
 }
 
 if [[ "${1:-}" == "all" ]]; then

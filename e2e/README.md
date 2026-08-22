@@ -35,6 +35,43 @@ E2E_ALLOW_REMOTE_RESET=1 bash scripts/run-flow.sh all
 E2E_RESET=0 bash scripts/run-flow.sh tests/flow-01-sales-warehouse.spec.ts
 ```
 
+### 环境变量
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `E2E_RESET` | `1` | `1`：跑 spec 前 stop → reset DB → restart → 发布审批定义；`0`：跳过，适合快速复跑 |
+| `E2E_ALLOW_REMOTE_RESET` | （无） | reset 远端/共享库时需显式设为 `1`，防止误清 |
+| `E2E_HEADED` | `0` | `1`：打开真实浏览器窗口，可观察自动化操作过程 |
+| `E2E_SLOW_MO` | （空） | 传给 Playwright `--slow-mo` 的毫秒数；每个动作间隔，便于肉眼跟流程 |
+
+### 观察浏览器操作
+
+默认无头（`headless: true`）。需要看见点击、填表、跳转时：
+
+```bash
+# 有界面观察（仍走完整 reset 编排）
+E2E_HEADED=1 E2E_ALLOW_REMOTE_RESET=1 bash scripts/run-flow.sh tests/flow-01-sales-warehouse.spec.ts
+
+# 有界面 + 慢动作（500ms/动作，更容易跟）
+E2E_HEADED=1 E2E_SLOW_MO=500 E2E_ALLOW_REMOTE_RESET=1 bash scripts/run-flow.sh tests/flow-01-sales-warehouse.spec.ts
+
+# 跳过 reset + 有界面（数据已就绪时快速复看）
+E2E_RESET=0 E2E_HEADED=1 bash scripts/run-flow.sh tests/flow-01-sales-warehouse.spec.ts
+```
+
+其它调试方式（不经 `run-flow.sh`，需自行保证服务与数据就绪）：
+
+```bash
+# Playwright UI 模式：可视化选用例、看时间线
+npx playwright test tests/flow-01-sales-warehouse.spec.ts --ui
+
+# 逐步调试（Playwright Inspector）
+npx playwright test tests/flow-01-sales-warehouse.spec.ts --debug
+
+# 只跑某个 test 标题（grep）
+npx playwright test tests/flow-10-stock-adjustment.spec.ts -g "盘亏调整单" --headed --workers=1
+```
+
 ## 关键约定
 
 - **每个流程从 0 开始**：run-flow.sh 在每个 spec 前执行数据库 reset。
