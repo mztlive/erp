@@ -29,7 +29,7 @@ import { expect, test } from "@playwright/test"
 import type { APIRequestContext, Locator, Page } from "@playwright/test"
 
 import { api, apiLogin } from "../helpers/api"
-import { newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { openCreateDialog } from "../helpers/ui"
 
 test.setTimeout(300_000)
@@ -199,14 +199,18 @@ async function approveOnDetail(
 /* ------------------------------------------------------------------ */
 
 test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起/提交变更 → 财务复核 → 生效断言", async ({
-    browser,
+    page,
     request,
 }) => {
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const salesPage = page
+    const procurementPage = page
+    const financePage = page
+
     /* ============ 前置：销售链（客户 → 合同 → 销售单 → 采购确认 → 销售单生效） ============ */
 
     // 1) 销售创建客户（新建客户 Dialog）
-    const salesCtx = await newLoggedInContext(browser, "sales")
-    const salesPage = salesCtx.page
+    await switchAccount("sales")
     const customerName = `E2E客户${uid("C")}`
     const creditCode = ("913" + Date.now().toString().slice(-13)).padEnd(17, "0") + "A"
     await salesPage.goto("/sales/customers")
@@ -271,8 +275,7 @@ test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起
 
     // 4) 采购确认：caigou 在工作台/详情审批通过 → 销售单生效
     const salesOrderId = new URL(salesPage.url()).pathname.split("/").pop() ?? ""
-    const procurementCtx = await newLoggedInContext(browser, "procurement")
-    const procurementPage = procurementCtx.page
+    await switchAccount("procurement")
     const salesTaskId = await fetchOpenWorkItemId(request, "procurement", {
         businessObjectType: "SalesOrder",
         businessObjectId: salesOrderId,
@@ -320,12 +323,11 @@ test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起
     await expect(
         procurementPage.getByRole("button", { name: "撤回审批" }).first(),
     ).toBeVisible({ timeout: 30_000 })
-    const financeCtx = await newLoggedInContext(browser, "finance")
-    const financePage = financeCtx.page
     const poTaskId = await fetchOpenWorkItemId(request, "finance", {
         businessObjectType: "PurchaseOrder",
         businessObjectId: purchaseOrderId,
     })
+    await switchAccount("finance")
     await approveOnDetail(
         financePage,
         `/procurement/orders/${purchaseOrderId}`,
@@ -336,6 +338,7 @@ test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起
     /* ============ 核心流程：采购变更单 ============ */
 
     // 7) 采购发起采购变更：变更与异常 → 发起采购变更 → 创建工作副本
+    await switchAccount("procurement")
     await procurementPage.goto(`/procurement/orders/${purchaseOrderId}?section=changes`)
     await expectVisible(procurementPage, "变更与异常")
     await procurementPage.getByRole("button", { name: "发起采购变更" }).first().click()
@@ -364,6 +367,7 @@ test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起
     const changeTaskId = await fetchOpenWorkItemId(request, "finance", {
         businessObjectType: "PurchaseChangeOrder",
     })
+    await switchAccount("finance")
     await approveOnDetail(
         financePage,
         `/procurement/orders/${purchaseOrderId}`,
@@ -371,6 +375,7 @@ test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起
     )
 
     // 10) 断言变更已生效 + 采购单仍生效 + 应付可见（按变更更新）
+    await switchAccount("procurement")
     await procurementPage.goto(`/procurement/orders/${purchaseOrderId}?section=changes`)
     await expect(procurementPage.getByText("已生效").first()).toBeVisible({ timeout: 20_000 })
     const changesAfter = procurementPage
@@ -384,8 +389,4 @@ test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起
     // 采购单主体仍为已生效（变更不改变主状态），应付与票款子区展示应付未结
     await procurementPage.goto(`/procurement/orders/${purchaseOrderId}?section=payable`)
     await expectVisible(procurementPage, "应付未结")
-
-    await salesCtx.context.close()
-    await procurementCtx.context.close()
-    await financeCtx.context.close()
 })

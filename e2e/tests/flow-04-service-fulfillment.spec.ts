@@ -24,7 +24,7 @@
 import { test, expect, type APIRequestContext, type Locator, type Page } from "@playwright/test"
 import * as path from "node:path"
 
-import { newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import { gotoPage, clickButton } from "../helpers/ui"
 
@@ -175,9 +175,14 @@ async function approveWorkItem(page: Page, taskButtonId: string): Promise<void> 
 // ── 主流程 ───────────────────────────────────────────────────────────────────
 
 test("flow-04 线下服务履约：客户/合同→销售单→采购确认→生效→采购单→服务履约→销售验收", async ({
-    browser,
+    page,
     request,
 }) => {
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const salesPage = page
+    const procPage = page
+    const financePage = page
+
     // ── 步骤 0: API 前置发现（主数据保留项，UI 选择器所需名称动态获取） ──
     const salesToken = await apiLogin(request, "sales")
     const sku = await discoverOfflineServiceSku(request, salesToken)
@@ -191,8 +196,7 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
     const unitPrice = "1000.00"
 
     // ── 步骤 1: 销售建客户（客户中心） ──
-    const salesCtx = await newLoggedInContext(browser, "sales")
-    const salesPage = salesCtx.page
+    await switchAccount("sales")
     await gotoPage(salesPage, "/sales/customers")
     await clickButton(salesPage, "新建客户")
     const customerDialog = salesPage.locator('[role="dialog"]').last()
@@ -259,16 +263,17 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
     console.log(`销售单已提交: ${salesOrderNo}（${salesOrderId}）`)
 
     // ── 步骤 3: 采购确认（caigou 在 W02 工作台审批通过） ──
-    const procCtx = await newLoggedInContext(browser, "procurement")
-    const procPage = procCtx.page
+    await switchAccount("procurement")
     await gotoPage(procPage, "/workspace")
     await approveWorkItem(procPage, `work-item-${salesOrderId}`)
 
     // ── 步骤 4: 销售单生效 ──
+    await switchAccount("sales")
     await gotoPage(salesPage, `/sales/orders/${salesOrderId}`)
     await expect(salesPage.getByText("已生效").first()).toBeVisible({ timeout: 20_000 })
 
     // ── 步骤 5: 采购创建采购单（当前代码被后端阻塞，见文件头差异登记 #1） ──
+    await switchAccount("procurement")
     await gotoPage(procPage, "/procurement/orders")
     await clickButton(procPage, "新建采购单")
     const poCreateDialog = procPage.locator('[role="dialog"]').last()
@@ -311,10 +316,10 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
         await expect(procPage.getByText("审批中").first()).toBeVisible({ timeout: 20_000 })
 
         // 5b. 采购单财务审核（caiwu 在 W02 工作台审批通过）
-        const financeCtx = await newLoggedInContext(browser, "finance")
-        const financePage = financeCtx.page
+        await switchAccount("finance")
         await gotoPage(financePage, "/workspace")
         await approveWorkItem(financePage, `work-item-${poId}`)
+        await switchAccount("procurement")
         await gotoPage(procPage, `/procurement/orders/${poId}`)
         await expect(procPage.getByText("已生效").first()).toBeVisible({ timeout: 20_000 })
 
@@ -344,6 +349,7 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
         })
 
         // ── 步骤 7: 销售登记客户验收 ──
+        await switchAccount("sales")
         await gotoPage(salesPage, `/sales/orders/${salesOrderId}?section=acceptance`)
         await expect(
             salesPage.getByRole("heading", { name: "可验收的交付记录" }),

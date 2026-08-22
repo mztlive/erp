@@ -79,7 +79,7 @@ npx playwright test tests/flow-10-stock-adjustment.spec.ts -g "盘亏调整单" 
   reset 清理客户/合同/销售单/采购单/票款/库存/审批实例等业务数据，
   **保留账号/RBAC（4 个测试账号密码均为 123456）、供应商/商品/仓库主数据、
   source_systems、file_assets、审计、编号计数器**；不填充任何种子数据。
-- **账号**：xiaoshou(销售) / caigou(采购) / yunying(运营) / caiwu(财务) / lisiyong(销售领导) / admin(超级管理员)，密码均为 `123456`。流程内允许中途切换账号（每个账号独立 browser context）。
+- **账号**：xiaoshou(销售) / caigou(采购) / yunying(运营) / caiwu(财务) / lisiyong(销售领导) / admin(超级管理员)，密码均为 `123456`。所有 `flow-*` 流程在同一个浏览器页面内串行切换账号，不为账号额外创建窗口。
 - **审批定义**：reset 会删除全部审批定义，按合同必须先创建并发布定义才能开单。
   `publish-approval-definitions.mjs` 幂等补齐 12 个 PROCESS_REQUIRED 类型的定义。
 - **岗位分离**：提交人不得审批自己的单据，各类型审批人按部门职责分配（见发布脚本）。

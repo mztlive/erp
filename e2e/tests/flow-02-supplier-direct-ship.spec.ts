@@ -39,7 +39,7 @@ import {
 } from "@playwright/test"
 import path from "node:path"
 
-import { newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import {
     gotoPage,
@@ -197,9 +197,14 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
     test.setTimeout(600_000)
 
     test("客户/合同/销售单→采购确认→采购单→财务审核→代发→客户验收→库存无变化", async ({
-        browser,
+        page,
         request,
     }) => {
+        const switchAccount = createSinglePageAccountSwitcher(page)
+        const salesPage = page
+        const procurementPage = page
+        const financePage = page
+
         // -----------------------------------------------------------------
         // 0) 准备：唯一业务标识 + API 上下文（库存台账断言用）
         // -----------------------------------------------------------------
@@ -220,8 +225,7 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         // -----------------------------------------------------------------
         // 1) 销售(xiaoshou)：新建客户
         // -----------------------------------------------------------------
-        const salesCtx = await newLoggedInContext(browser, "sales")
-        const salesPage = salesCtx.page
+        await switchAccount("sales")
         await gotoPage(salesPage, "/sales/customers")
 
         const createDialog = await test.step("1.1 新建客户", async () => {
@@ -336,12 +340,12 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         // -----------------------------------------------------------------
         // 4) 采购(caigou)：工作台通过"采购确认"节点 → 销售单生效
         // -----------------------------------------------------------------
-        const procurementCtx = await newLoggedInContext(browser, "procurement")
-        const procurementPage = procurementCtx.page
+        await switchAccount("procurement")
         await gotoPage(procurementPage, "/workspace")
         await approveFromWorkspace(procurementPage, `work-item-${salesOrderId}`)
 
         // 销售侧回看：销售单已生效（详情 + 列表）
+        await switchAccount("sales")
         await gotoPage(salesPage, `/sales/orders/${salesOrderId}`)
         await expect(
             salesPage.getByText("已生效", { exact: true }).first(),
@@ -352,6 +356,7 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         // -----------------------------------------------------------------
         // 5) 采购(caigou)：创建采购单并提交 → 财务审核
         // -----------------------------------------------------------------
+        await switchAccount("procurement")
         await gotoPage(procurementPage, "/procurement/orders")
         await clickButton(procurementPage, "新建采购单")
         const basisDialog = procurementPage.getByRole("dialog").last()
@@ -412,11 +417,11 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         // -----------------------------------------------------------------
         // 6) 财务(caiwu)：工作台通过"采购单财务审核" → 采购单生效
         // -----------------------------------------------------------------
-        const financeCtx = await newLoggedInContext(browser, "finance")
-        const financePage = financeCtx.page
+        await switchAccount("finance")
         await gotoPage(financePage, "/workspace")
         await approveFromWorkspace(financePage, `work-item-${purchaseOrderId}`)
 
+        await switchAccount("procurement")
         await gotoPage(procurementPage, `/procurement/orders/${purchaseOrderId}`)
         await expect(
             procurementPage.getByText("已生效", { exact: true }).first(),
@@ -492,6 +497,7 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         // -----------------------------------------------------------------
         // 10) 销售(xiaoshou)：登记客户验收
         // -----------------------------------------------------------------
+        await switchAccount("sales")
         await gotoPage(salesPage, `/sales/orders/${salesOrderId}?section=acceptance`)
         await expect(
             salesPage.getByRole("heading", { name: "可验收的交付记录" }),
@@ -525,8 +531,5 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         ).toHaveCount(0, { timeout: 20_000 })
 
         await apiCtx.dispose()
-        await salesCtx.context.close()
-        await procurementCtx.context.close()
-        await financeCtx.context.close()
     })
 })

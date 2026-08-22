@@ -41,7 +41,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test"
 import path from "path"
 
 import { api, apiLogin } from "../helpers/api"
-import { newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { clickButton, expectTableRow, gotoPage, pickOption } from "../helpers/ui"
 
 // ---------------------------------------------------------------------------
@@ -202,10 +202,15 @@ async function approveTask(page: Page, businessObjectId: string): Promise<void> 
 // ---------------------------------------------------------------------------
 
 test("供应商票款：付款→审批→过账→核销应付；进项发票登记与核销；付款冲正→审批→过账", async ({
-    browser,
+    page,
     request,
 }) => {
     test.setTimeout(600_000)
+
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const salesPage = page
+    const procurementPage = page
+    const finPage = page
 
     const financeToken = await apiLogin(request, "finance")
     const salesToken = await apiLogin(request, "sales")
@@ -257,8 +262,7 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
     const creditCode = `91330100${String(Date.now()).slice(0, 10)}`
     const contractNo = `HT-E2E-${uniq}`
 
-    const sales = await newLoggedInContext(browser, "sales")
-    const salesPage = sales.page
+    await switchAccount("sales")
     await gotoPage(salesPage, "/sales/customers")
 
     // --- 新建客户 ---
@@ -314,12 +318,11 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
     await salesPage.waitForURL(/\/sales\/orders\/[^/]+$/, { timeout: 20_000 })
     const salesOrderId = salesPage.url().split("/").pop()!
     expect(salesOrderId).toBeTruthy()
-    await sales.context.close()
 
     // --- caigou 在工作台审批销售单 ---
-    const procurement = await newLoggedInContext(browser, "procurement")
-    await gotoPage(procurement.page, "/workspace")
-    await approveTask(procurement.page, salesOrderId)
+    await switchAccount("procurement")
+    await gotoPage(procurementPage, "/workspace")
+    await approveTask(procurementPage, salesOrderId)
 
     // 断言：销售单已生效（后端主状态）
     const orderDetail = await api<{ commercial_status?: string }>(
@@ -333,9 +336,9 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
     // =====================================================================
     // 阶段 2：caigou 创建采购单并提交 → caiwu 财务审核 → 生效形成应付
     // =====================================================================
-    await gotoPage(procurement.page, "/procurement/orders")
-    await clickButton(procurement.page, "新建采购单")
-    dlg = await lastDialog(procurement.page)
+    await gotoPage(procurementPage, "/procurement/orders")
+    await clickButton(procurementPage, "新建采购单")
+    dlg = await lastDialog(procurementPage)
     await expect(dlg.getByText("从采购创建依据建单", { exact: true })).toBeVisible({
         timeout: 20_000,
     })
@@ -349,38 +352,37 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
         )
     }
     // 依据存在时首条自动选中，直接建单并进入编辑工作区
-    await confirmDialog(procurement.page, "创建草稿并打开")
-    await procurement.page.waitForURL(/\/procurement\/orders\/[^/]+\?mode=edit/, {
+    await confirmDialog(procurementPage, "创建草稿并打开")
+    await procurementPage.waitForURL(/\/procurement\/orders\/[^/]+\?mode=edit/, {
         timeout: 30_000,
     })
-    const purchaseOrderId = procurement.page.url().split("/").pop()!.split("?")[0]!
+    const purchaseOrderId = procurementPage.url().split("/").pop()!.split("?")[0]!
     expect(purchaseOrderId).toBeTruthy()
 
     // 明细行来自采购二次确认分行（预填）；直接提交审批
-    await expect(procurement.page.getByText("采购草稿", { exact: true })).toBeVisible({
+    await expect(procurementPage.getByText("采购草稿", { exact: true })).toBeVisible({
         timeout: 20_000,
     })
-    await procurement.page.getByRole("button", { name: "提交审批", exact: true }).click()
-    dlg = await lastDialog(procurement.page)
+    await procurementPage.getByRole("button", { name: "提交审批", exact: true }).click()
+    dlg = await lastDialog(procurementPage)
     await expect(dlg.getByText("确认提交采购单", { exact: true })).toBeVisible({
         timeout: 20_000,
     })
-    await confirmDialog(procurement.page, "确认提交")
+    await confirmDialog(procurementPage, "确认提交")
     // 提交成功进入详情页：结果面板出现「撤回审批」入口。
     // 注意：确认对话框自身含「草稿→审批中」文案，不能以文本「审批中」断言提交成功
     await expect(
-        procurement.page.getByRole("button", { name: "撤回审批" }).first(),
+        procurementPage.getByRole("button", { name: "撤回审批" }).first(),
     ).toBeVisible({ timeout: 30_000 })
     // 提交成功后才分配正式采购单号（当前后端为 "PO-<UUID>"，无自增编号）
-    const headerText = await procurement.page
+    const headerText = await procurementPage
         .locator('[data-slot="document-header"]')
         .innerText()
     const poNo = headerText.match(/PO[0-9A-Za-z-]+/)?.[0]
     expect(poNo, "提交后应分配采购单号").toBeTruthy()
 
     // --- caiwu 在工作台审批采购单（PurchaseOrder=财务审核） ---
-    const finance = await newLoggedInContext(browser, "finance")
-    const finPage = finance.page
+    await switchAccount("finance")
     await gotoPage(finPage, "/workspace")
     await approveTask(finPage, purchaseOrderId)
 
@@ -461,8 +463,9 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
     await finPage.getByRole("button", { name: "回到列表" }).first().click()
 
     // --- caigou 审批付款 ---
-    await gotoPage(procurement.page, "/workspace")
-    await approveTask(procurement.page, paymentId)
+    await switchAccount("procurement")
+    await gotoPage(procurementPage, "/workspace")
+    await approveTask(procurementPage, paymentId)
 
     // 断言：付款已过账（API + UI 徽标）
     const postedPayment = await api<{ status: string }>(
@@ -473,6 +476,7 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
     )
     expect(postedPayment.status.toLowerCase()).toBe("posted")
 
+    await switchAccount("finance")
     await finPage.goto("/finance/supplier-accounts?view=payment")
     const postedRow = await expectTableRow(finPage, pmNo!, { timeout: 30_000 })
     await expect(postedRow.getByText("已过账", { exact: true })).toBeVisible({ timeout: 20_000 })
@@ -572,8 +576,9 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
         .catch(() => {})
 
     // --- caigou 审批冲正 ---
-    await gotoPage(procurement.page, "/workspace")
-    await approveTask(procurement.page, reversalId!)
+    await switchAccount("procurement")
+    await gotoPage(procurementPage, "/workspace")
+    await approveTask(procurementPage, reversalId!)
 
     // 断言：冲正已过账、原付款已冲正（API + UI 徽标）
     // 注：冲正详情读取用财务 token（冲正单属财务域，采购账号读详情 403）
@@ -592,6 +597,7 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
     )
     expect(reversedPayment.status.toLowerCase()).toBe("reversed")
 
+    await switchAccount("finance")
     await finPage.goto("/finance/supplier-accounts?view=payment")
     const reversedRow = await expectTableRow(finPage, pmNo!, { timeout: 30_000 })
     await expect(reversedRow.getByText("已冲正", { exact: true })).toBeVisible({ timeout: 20_000 })
@@ -618,7 +624,4 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
     await expect(
         unallocatedTable.getByRole("row").filter({ hasText: invoiceNo }),
     ).toHaveCount(0)
-
-    await procurement.context.close()
-    await finance.context.close()
 })

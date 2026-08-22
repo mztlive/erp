@@ -41,7 +41,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test"
 import path from "path"
 
 import { api, apiLogin } from "../helpers/api"
-import { newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { clickButton, expectTableRow, gotoPage, pickOption } from "../helpers/ui"
 
 // ---------------------------------------------------------------------------
@@ -225,10 +225,16 @@ type SkuDto = { sku_id: string; sku_no: string; name: string; product_kind: stri
 // ---------------------------------------------------------------------------
 
 test("客户票款：回款→审批→过账→核销应收；销项发票登记与核销；回款冲正→审批→过账", async ({
-    browser,
+    page,
     request,
 }) => {
     test.setTimeout(300_000)
+
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const salesPage = page
+    const procurementPage = page
+    const finPage = page
+    const leaderPage = page
 
     const financeToken = await apiLogin(request, "finance")
     const salesToken = await apiLogin(request, "sales")
@@ -260,8 +266,7 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     const creditCode = `91330100${String(Date.now()).slice(0, 10)}`
     const contractNo = `HT-E2E-${uniq}`
 
-    const sales = await newLoggedInContext(browser, "sales")
-    const salesPage = sales.page
+    await switchAccount("sales")
     await gotoPage(salesPage, "/sales/customers")
 
     // --- 新建客户 ---
@@ -322,13 +327,11 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     await salesPage.waitForURL(/\/sales\/orders\/[^/]+$/, { timeout: 20_000 })
     const salesOrderId = salesPage.url().split("/").pop()!
     expect(salesOrderId).toBeTruthy()
-    await sales.context.close()
 
     // --- caigou 在 W02 工作台审批销售单 ---
-    const procurement = await newLoggedInContext(browser, "procurement")
-    await gotoPage(procurement.page, "/workspace")
-    await approveTask(procurement.page, salesOrderId)
-    await procurement.context.close()
+    await switchAccount("procurement")
+    await gotoPage(procurementPage, "/workspace")
+    await approveTask(procurementPage, salesOrderId)
 
     // 断言：销售单已生效（后端主状态），应收随后在客户往来出现
     const orderDetail = await api<{ commercial_status?: string }>(
@@ -350,8 +353,7 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     // =====================================================================
     // 阶段 2：财务登记客户回款 → 提交 → 销售领导审批 → 过账 → 应收结清
     // =====================================================================
-    const finance = await newLoggedInContext(browser, "finance")
-    const finPage = finance.page
+    await switchAccount("finance")
     await gotoPage(finPage, "/finance/customer-accounts")
     // 销售单生效后应收台账出现该单（行文本为销售单号 XS...）
     const receivableRow = await expectTableRow(finPage, orderNo, { timeout: 30_000 })
@@ -401,10 +403,9 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     await finPage.getByRole("button", { name: "返回列表" }).first().click()
 
     // --- lisiyong 审批回款 ---
-    const leader = await newLoggedInContext(browser, "salesLeader")
-    await gotoPage(leader.page, "/workspace")
-    await approveTask(leader.page, receiptId)
-    await leader.context.close()
+    await switchAccount("salesLeader")
+    await gotoPage(leaderPage, "/workspace")
+    await approveTask(leaderPage, receiptId)
 
     // 断言：回款已过账（API + UI 徽标）
     const postedReceipt = await api<{ status: string }>(
@@ -415,6 +416,7 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     )
     expect(postedReceipt.status.toLowerCase()).toBe("posted")
 
+    await switchAccount("finance")
     await finPage.goto("/finance/customer-accounts?view=receipt")
     const postedRow = await expectTableRow(finPage, receiptNo, { timeout: 30_000 })
     await expect(postedRow.getByText("已过账")).toBeVisible({ timeout: 20_000 })
@@ -511,10 +513,9 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     await sheet.getByRole("button", { name: "关闭" }).click().catch(() => {})
 
     // --- lisiyong 审批冲正 ---
-    const leader2 = await newLoggedInContext(browser, "salesLeader")
-    await gotoPage(leader2.page, "/workspace")
-    await approveTask(leader2.page, reversalId!)
-    await leader2.context.close()
+    await switchAccount("salesLeader")
+    await gotoPage(leaderPage, "/workspace")
+    await approveTask(leaderPage, reversalId!)
 
     // 断言：冲正已过账、原回款已冲正（API + UI 徽标）
     const postedReversal = await api<{ status: string }>(
@@ -532,6 +533,7 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     )
     expect(reversedReceipt.status.toLowerCase()).toBe("reversed")
 
+    await switchAccount("finance")
     await finPage.goto("/finance/customer-accounts?view=receipt")
     const reversedRow = await expectTableRow(finPage, receiptNo, { timeout: 30_000 })
     await expect(reversedRow.getByText("已冲正")).toBeVisible({ timeout: 20_000 })
@@ -547,6 +549,4 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     await finPage.goto("/finance/customer-accounts")
     const reopenedRow = await expectTableRow(finPage, orderNo, { timeout: 30_000 })
     await expect(reopenedRow.getByText("未结")).toBeVisible({ timeout: 20_000 })
-
-    await finance.context.close()
 })

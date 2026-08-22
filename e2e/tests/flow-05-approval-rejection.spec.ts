@@ -6,7 +6,7 @@
  *   照原条件承接（不撤回不改单，下一轮重新决定）/ 不做（作废销售单）），§10.2，
  *   以及 docs/ui-workspaces/w05-sales-orders.md §5.4。
  *
- * 使用账号: xiaoshou(销售) / caigou(采购)，密码 123456（每账号独立 context）。
+ * 使用账号: xiaoshou(销售) / caigou(采购)，密码 123456（同一页面串行切号）。
  *
  * 流程（4 个串行 test 共享流程状态；刻意未启用 serial 模式——个别断言失败不阻断
  * 后续可验证步骤，见 risks）:
@@ -55,7 +55,7 @@ import { expect, test } from "@playwright/test"
 import type { APIRequestContext, Locator, Page } from "@playwright/test"
 
 import { api, apiLogin } from "../helpers/api"
-import { newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { gotoPage } from "../helpers/ui"
 
 // ---------------------------------------------------------------------------
@@ -320,9 +320,11 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
     test.setTimeout(300_000)
 
     test("01 前置：建客户、上传合同，建两张销售单并提交（审批中）", async ({
-        browser,
+        page,
         request,
     }) => {
+        const switchAccount = createSinglePageAccountSwitcher(page)
+        const salesPage = page
         const salesToken = await apiLogin(request, "sales")
 
         // ---------- 主数据探测（可售 SKU / 结算主体，不随 reset 清除） ----------
@@ -348,7 +350,7 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         settlementParty = partyPage.items[0]
 
         // ---------- 销售登录，创建客户 ----------
-        const { page: salesPage } = await newLoggedInContext(browser, "sales")
+        await switchAccount("sales")
         await gotoPage(salesPage, "/sales/customers")
         // 页面操作区与空态各有一个「新建客户」，二者等价，取第一个
         await salesPage.getByRole("button", { name: "新建客户" }).first().click()
@@ -408,18 +410,18 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
     })
 
     test("02 采购驳回（决策 API）：销售单不生效、内容不变、轮次回到首节点加一", async ({
-        browser,
+        page,
         request,
     }) => {
+        const switchAccount = createSinglePageAccountSwitcher(page)
+        const procurementPage = page
+        const salesPage = page
         expect(order1Id, "前置 test 01 必须已创建销售单").toBeTruthy()
         const salesToken = await apiLogin(request, "sales")
         const procurementToken = await apiLogin(request, "procurement")
 
         // ---------- 采购在 W01 工作台看到「采购确认」任务 ----------
-        const { page: procurementPage } = await newLoggedInContext(
-            browser,
-            "procurement",
-        )
+        await switchAccount("procurement")
         await gotoPage(procurementPage, "/workspace")
         await openWorkspaceTask(procurementPage, order1Id)
 
@@ -437,7 +439,7 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         expect(decision.latest_rejection_reason).toBe(REJECT_REASON)
 
         // ---------- 销售视角：销售单不生效、内容不变 ----------
-        const { page: salesPage } = await newLoggedInContext(browser, "sales")
+        await switchAccount("sales")
         await gotoPage(salesPage, `/sales/orders/${order1Id}`)
         await expect(salesPage.getByText("审批中", { exact: true }).first()).toBeVisible({
             timeout: 20_000,
@@ -490,18 +492,18 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
     })
 
     test("03 场景A：照原条件承接——第 2 轮重新通过后销售单生效", async ({
-        browser,
+        page,
         request,
     }) => {
+        const switchAccount = createSinglePageAccountSwitcher(page)
+        const procurementPage = page
+        const salesPage = page
         expect(order1Id, "前置 test 01 必须已创建销售单").toBeTruthy()
         const salesToken = await apiLogin(request, "sales")
         const procurementToken = await apiLogin(request, "procurement")
 
         // ---------- 不撤回不改单：采购工作台出现第 2 轮任务 ----------
-        const { page: procurementPage } = await newLoggedInContext(
-            browser,
-            "procurement",
-        )
+        await switchAccount("procurement")
         await gotoPage(procurementPage, "/workspace")
         await openWorkspaceTask(procurementPage, order1Id)
 
@@ -527,7 +529,7 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
             .toBe("APPROVED")
 
         // ---------- 销售视角：销售单生效 ----------
-        const { page: salesPage } = await newLoggedInContext(browser, "sales")
+        await switchAccount("sales")
         await gotoPage(salesPage, `/sales/orders/${order1Id}`)
         await expect(salesPage.getByText("已生效", { exact: true }).first()).toBeVisible({
             timeout: 20_000,
@@ -535,16 +537,16 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         await expect(salesPage.getByText("审批中", { exact: true })).toHaveCount(0)
     })
 
-    test("04 场景B：驳回后销售撤回审批回草稿并作废", async ({ browser, request }) => {
+    test("04 场景B：驳回后销售撤回审批回草稿并作废", async ({ page, request }) => {
+        const switchAccount = createSinglePageAccountSwitcher(page)
+        const procurementPage = page
+        const salesPage = page
         expect(order2Id, "前置 test 01 必须已创建销售单").toBeTruthy()
         const salesToken = await apiLogin(request, "sales")
         const procurementToken = await apiLogin(request, "procurement")
 
         // ---------- 采购在工作台处理第二张单：驳回并填写原因 ----------
-        const { page: procurementPage } = await newLoggedInContext(
-            browser,
-            "procurement",
-        )
+        await switchAccount("procurement")
         await gotoPage(procurementPage, "/workspace")
         await openWorkspaceTask(procurementPage, order2Id)
         const REJECT_REASON2 = "交期无法满足，客户确认后请重新提交"
@@ -559,7 +561,7 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         expect(decision.latest_rejection_reason).toBe(REJECT_REASON2)
 
         // ---------- 销售视角：仍审批中、金额未变 ----------
-        const { page: salesPage } = await newLoggedInContext(browser, "sales")
+        await switchAccount("sales")
         await gotoPage(salesPage, `/sales/orders/${order2Id}`)
         await expect(salesPage.getByText("审批中", { exact: true }).first()).toBeVisible({
             timeout: 20_000,

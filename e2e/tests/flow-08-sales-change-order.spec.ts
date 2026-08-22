@@ -32,7 +32,7 @@ import {
 } from "@playwright/test"
 import * as path from "path"
 
-import { loginViaUi, newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import { gotoPage } from "../helpers/ui"
 
@@ -160,10 +160,13 @@ async function discoverSellableSku(
 
 test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 → 销售领导复核 → 生效追加 v2", async ({
     page,
-    browser,
     request,
 }) => {
     test.setTimeout(300_000)
+
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const caigouPage = page
+    const leaderPage = page
 
     // 准备：账号 token 与可销售 SKU（只读发现主数据）
     const salesToken = await apiLogin(request, "sales")
@@ -176,7 +179,7 @@ test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 →
     const contractNo = `HT-E2E-${ts}`
 
     // ---------- 步骤 1：销售登录并创建客户 ----------
-    await loginViaUi(page, "sales")
+    await switchAccount("sales")
     await gotoPage(page, "/sales/customers")
     // 页面操作区与空态各有一个「新建客户」，二者等价，取第一个
     await page.getByRole("button", { name: "新建客户" }).first().click()
@@ -237,9 +240,10 @@ test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 →
     await expect(page.getByText("审批中").first()).toBeVisible({ timeout: 20_000 })
 
     // ---------- 步骤 3：采购确认节点通过 → 销售单生效（不履约） ----------
-    const { context: caigouCtx, page: caigouPage } = await newLoggedInContext(browser, "procurement")
+    await switchAccount("procurement")
     await approveFirstWorkspaceTask(caigouPage)
 
+    await switchAccount("sales")
     await gotoPage(page, `/sales/orders/${salesOrderId}`)
     await expect(page.getByText("已生效").first()).toBeVisible({ timeout: 20_000 })
     await expect(page.getByRole("button", { name: "发起改单" })).toBeEnabled({ timeout: 20_000 })
@@ -274,12 +278,14 @@ test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 →
     await expect(page.getByText("改单已提交审批").first()).toBeVisible({ timeout: 20_000 })
 
     // ---------- 步骤 6：采购确认节点（caigou）→ 销售领导复核节点（lisiyong） ----------
+    await switchAccount("procurement")
     await approveFirstWorkspaceTask(caigouPage)
 
-    const { context: leaderCtx, page: leaderPage } = await newLoggedInContext(browser, "salesLeader")
+    await switchAccount("salesLeader")
     await approveFirstWorkspaceTask(leaderPage)
 
     // ---------- 步骤 7：变更生效 → 销售单追加 v2，明细/金额按改单工作副本更新 ----------
+    await switchAccount("sales")
     await gotoPage(page, `/sales/orders/${salesOrderId}`)
     await expect(page.getByText("已生效").first()).toBeVisible({ timeout: 20_000 })
 
@@ -313,7 +319,4 @@ test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 →
     )
     const active = changes.items.find((item) => item.id)
     expect(active?.status).toBe("EFFECTIVE")
-
-    await caigouCtx.close()
-    await leaderCtx.close()
 })

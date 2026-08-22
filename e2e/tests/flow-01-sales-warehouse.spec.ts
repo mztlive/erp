@@ -37,8 +37,7 @@ import {
 } from "@playwright/test"
 import path from "node:path"
 
-import { loginViaUi } from "../helpers/login"
-import { ACCOUNTS, type AccountKey } from "../helpers/accounts"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import {
     clickButton,
@@ -61,65 +60,6 @@ const UNIT_PRICE = "100.00"
 const RECEIPT_AMOUNT = "100.00"
 /** 日历默认展示当月；选择"今天"的日号，避免跨月翻页。 */
 const TODAY_DAY = String(new Date().getDate())
-/** 前端登录态唯一存储键；必须与 erp-client/lib/api/session.ts 保持一致。 */
-const TOKEN_STORAGE_KEY = "erp.token"
-
-/**
- * 创建单页面账号切换器。
- *
- * 合同：
- * - 每个账号首次使用时必须通过真实登录页登录；
- * - 后续切回账号时可以恢复首次登录取得的 token；
- * - 恢复 token 前必须先进入无登录态页面，恢复后必须整页导航；
- * - 每次切换完成后必须以侧栏账号标识确认当前身份。
- */
-function createSinglePageAccountSwitcher(
-    page: Page,
-): (accountKey: AccountKey) => Promise<void> {
-    const tokens = new Map<AccountKey, string>()
-    let activeAccount: AccountKey | undefined
-
-    return async (accountKey: AccountKey): Promise<void> => {
-        if (activeAccount === accountKey) return
-
-        // 先清除旧身份，再离开旧业务页面，禁止旧页面携带新账号 token 发起请求。
-        if (page.url() !== "about:blank") {
-            await page.evaluate(
-                (storageKey) => localStorage.removeItem(storageKey),
-                TOKEN_STORAGE_KEY,
-            )
-        }
-
-        const cachedToken = tokens.get(accountKey)
-        if (cachedToken) {
-            await page.goto("/login")
-            await page.evaluate(
-                ({ storageKey, token }) => localStorage.setItem(storageKey, token),
-                { storageKey: TOKEN_STORAGE_KEY, token: cachedToken },
-            )
-            // 整页导航销毁旧账号的 React Query 与权限菜单内存状态。
-            await page.goto("/workspace")
-        } else {
-            await loginViaUi(page, accountKey)
-            const token = await page.evaluate(
-                (storageKey) => localStorage.getItem(storageKey),
-                TOKEN_STORAGE_KEY,
-            )
-            if (!token) {
-                throw new Error(`账号 ${ACCOUNTS[accountKey].account} 登录后未写入 token`)
-            }
-            tokens.set(accountKey, token)
-        }
-
-        await expect(page.getByRole("button", { name: "账号菜单" })).toContainText(
-            ACCOUNTS[accountKey].account,
-            { timeout: 20_000 },
-        )
-        expect(page.context().pages()).toHaveLength(1)
-        activeAccount = accountKey
-    }
-}
-
 /** 页面上的弹窗（含 AlertDialog，role 为 alertdialog）。 */
 function dialogOn(page: Page): Locator {
     return page.locator('[role="dialog"], [role="alertdialog"]').last()

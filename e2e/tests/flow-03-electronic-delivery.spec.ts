@@ -29,7 +29,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import path from "path"
 
-import { loginViaUi, newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import { gotoPage } from "../helpers/ui"
 
@@ -135,9 +135,12 @@ async function approveInWorkbench(page: Page): Promise<void> {
 // 全流程串行步骤多，放宽单测超时（playwright.config.ts 默认 240s 不够）
 test.setTimeout(600_000)
 
-test("flow-03 虚拟商品电子交付全流程", async ({ browser, page }) => {
-    // ========== 准备：各账号独立 context ==========
-    const sales = page // 默认 context 登录销售
+test("flow-03 虚拟商品电子交付全流程", async ({ page }) => {
+    // ========== 准备：单页面串行切号 ==========
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const sales = page
+    const procurement = page
+    const finance = page
     const suffix = ts()
     const customerLegalName = `E2E电子交付客户${suffix}`
     const creditCode = `91${suffix.padEnd(16, "0").slice(0, 16)}` // 18 位字母数字
@@ -146,7 +149,7 @@ test("flow-03 虚拟商品电子交付全流程", async ({ browser, page }) => {
     const skuPrice = "100.00"
 
     // ========== 第一步（销售）：创建客户 ==========
-    await loginViaUi(sales, "sales")
+    await switchAccount("sales")
 
     await gotoPage(sales, "/sales/customers")
     await sales.getByRole("button", { name: "新建客户" }).first().click()
@@ -230,19 +233,20 @@ test("flow-03 虚拟商品电子交付全流程", async ({ browser, page }) => {
     expect(soDetail.lines.length).toBeGreaterThan(0)
 
     // ========== 第四步（采购）：W01 办理「采购确认」审批 ==========
-    const { context: procurementCtx, page: procurement } =
-        await newLoggedInContext(browser, "procurement")
-    try {
+    await switchAccount("procurement")
+    {
         await gotoPage(procurement, "/workspace")
         await approveInWorkbench(procurement)
 
         // ========== 第五步（销售）：销售单已生效 ==========
-        await sales.reload()
+        await switchAccount("sales")
+        await gotoPage(sales, `/sales/orders/${soId}`)
         await expect(
             sales.getByText(/已生效|履约中/).first(),
         ).toBeVisible({ timeout: 30_000 })
 
         // ========== 第六步（采购）：从二次确认依据创建采购单并提交 ==========
+        await switchAccount("procurement")
         await gotoPage(procurement, "/procurement/orders")
         await procurement.getByRole("button", { name: "新建采购单" }).first().click()
         const basisDialog = procurement.locator('[role="dialog"]').last()
@@ -269,13 +273,13 @@ test("flow-03 虚拟商品电子交付全流程", async ({ browser, page }) => {
         })
 
         // ========== 第七步（财务）：采购单「财务审核」审批 ==========
-        const { context: financeCtx, page: finance } =
-            await newLoggedInContext(browser, "finance")
-        try {
+        await switchAccount("finance")
+        {
             await gotoPage(finance, "/workspace")
             await approveInWorkbench(finance)
 
             // ========== 第八步（采购）：创建并确认电子交付记录 ==========
+            await switchAccount("procurement")
             const procurementToken = await apiLogin(procurement.request, "procurement")
             const poCenter = await api<{
                 sales_order_id: string
@@ -336,6 +340,7 @@ test("flow-03 虚拟商品电子交付全流程", async ({ browser, page }) => {
             ).toBeVisible({ timeout: 30_000 })
 
             // ========== 第九步（销售）：客户验收 ==========
+            await switchAccount("sales")
             await gotoPage(sales, `/sales/orders/${soId}`)
             await sales.getByRole("tab", { name: "履约" }).click()
             await expect(
@@ -386,10 +391,6 @@ test("flow-03 虚拟商品电子交付全流程", async ({ browser, page }) => {
             await expect(
                 sales.getByRole("button", { name: "打开交付" }),
             ).toBeVisible({ timeout: 20_000 })
-        } finally {
-            await financeCtx.close()
         }
-    } finally {
-        await procurementCtx.close()
     }
 })

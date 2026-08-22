@@ -40,9 +40,9 @@
  * 保留账号/RBAC 与供应商/商品/仓库主数据）并发布 12 个审批定义
  * （StockAdjustment=财务审批(caiwu)）。
  */
-import { Browser, Locator, Page, expect, test } from "@playwright/test"
+import { Locator, Page, expect, test } from "@playwright/test"
 
-import { newLoggedInContext } from "../helpers/login"
+import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { pickOption } from "../helpers/ui"
 
 // 库存调整弹窗内容较长，使用全局最大化窗口与实际 viewport，禁止退回 720px 固定视口。
@@ -77,14 +77,6 @@ const CONTRACT_PDF = "fixtures/sample-contract.pdf"
 const ADJUST_NO_PATTERN = /TZ[0-9A-Z]+/
 
 // ─── 流程内小工具（仅本 spec 使用，勿写入 helpers） ─────────────────────────
-
-/** 账号登录（每个账号独立 context，复用 helpers/login.ts）。 */
-async function login(
-    browser: Browser,
-    key: "sales" | "procurement" | "finance" | "admin",
-) {
-    return newLoggedInContext(browser, key)
-}
 
 /**
  * 选择组合框选项：点击触发元素后，在页面级（选项弹层 portal 到 body）选择选项。
@@ -185,14 +177,18 @@ async function readPreviewStat(scope: Locator, label: string): Promise<string> {
 // ─── 用例 ────────────────────────────────────────────────────────────────────
 
 test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动过账 → 台账数量变化", async ({
-    browser,
+    page,
 }) => {
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const adminPage = page
+    const salesPage = page
+    const caigouPage = page
+    const caiwuPage = page
+
     // ============================================================
     // S1 基线核查（admin）：reset 后台账为空（业务数据从 0 开始）
     // ============================================================
-    const admin = await login(browser, "admin")
-    const adminPage = admin.page
-
+    await switchAccount("admin")
     await adminPage.goto("/inventory")
     await expect(adminPage.getByText("库存台账").first()).toBeVisible({ timeout: 30_000 })
     await expect(
@@ -208,9 +204,7 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     // ============================================================
 
     // ---- S2.1 销售(xiaoshou) 创建客户 ----
-    const sales = await login(browser, "sales")
-    const salesPage = sales.page
-
+    await switchAccount("sales")
     await salesPage.goto("/sales/customers")
     await salesPage.getByRole("button", { name: "新建客户" }).first().click()
     const customerDialog = salesPage.getByRole("dialog")
@@ -279,8 +273,7 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     await expect(salesPage.getByText("审批中").first()).toBeVisible({ timeout: 30_000 })
 
     // ---- S2.4 采购(caigou) 审批销售单「采购确认」节点 → 销售单生效 ----
-    const procurement = await login(browser, "procurement")
-    const caigouPage = procurement.page
+    await switchAccount("procurement")
     await caigouPage.goto("/workspace")
     await approveFirstTask(caigouPage)
     await expect(caigouPage.getByText("当前没有待处理事项").first()).toBeVisible({
@@ -326,12 +319,12 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     await expect(caigouPage.getByText("审批中").first()).toBeVisible({ timeout: 30_000 })
 
     // ---- S2.6 财务(caiwu) 审批采购单「财务审核」→ 采购单生效 ----
-    const finance = await login(browser, "finance")
-    const caiwuPage = finance.page
+    await switchAccount("finance")
     await caiwuPage.goto("/workspace")
     await approveFirstTask(caiwuPage)
 
     // ---- S2.7 admin 代行仓储：采购入库（W09 收货与发货，PurchaseReceipt 为 NO_APPROVAL）----
+    await switchAccount("admin")
     await adminPage.goto("/fulfillment?lane=warehouse")
     // 待处理单据出现「入库」作业。注意：收货 DTO 不含供应商/客户标签（显示缺口），
     // 卡片无法按客户名过滤，重置后当前唯一入库作业，直接取第一条
@@ -420,6 +413,7 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     // ============================================================
     // S4 核心流程（caiwu）：财务审批「财务审批」节点 → 末节点通过自动过账
     // ============================================================
+    await switchAccount("finance")
     await caiwuPage.goto("/workspace")
     await approveByDocumentNo(caiwuPage, adjustNo!)
 
@@ -427,6 +421,7 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     // S5 断言（admin）：调整记录已过账 + 余额变化 + 正式流水
     // ============================================================
     // S5.1 调整记录：状态「已过账」
+    await switchAccount("admin")
     await adminPage.goto("/inventory")
     await adminPage.getByRole("tab", { name: "调整记录" }).click()
     const postedRow = adminPage
@@ -465,26 +460,21 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     await expect(movementRow).toBeVisible({ timeout: 30_000 })
     await expect(movementRow.getByText("减少").first()).toBeVisible()
     await expect(movementRow.getByText(ADJUST_QTY).first()).toBeVisible()
-
-    // 收尾：关闭全部 context
-    await admin.context.close()
-    await sales.context.close()
-    await procurement.context.close()
-    await finance.context.close()
 })
 
 test("flow-10 库存调整：盘盈调整单 → 财务审批 → 自动过账 → 台账数量增加", async ({
-    browser,
+    page,
 }) => {
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const adminPage = page
+    const caiwuPage = page
+
     // 前置：上一用例结束后账面现存 = 18（盘亏 2）。本用例验证盘盈（增加）方向
     // 从 UI 提交到过账的全链路（历史缺陷：草稿固定为减少方向，盘盈提交后
     // 过账被「原因类型与明细方向不一致」拒绝）。
-    const admin = await login(browser, "admin")
-    const adminPage = admin.page
-    const finance = await login(browser, "finance")
-    const caiwuPage = finance.page
 
     // ---- G1 admin 核查基线：余额 18 ----
+    await switchAccount("admin")
     await adminPage.goto("/inventory")
     const balanceRow = adminPage
         .locator("table")
@@ -537,10 +527,12 @@ test("flow-10 库存调整：盘盈调整单 → 财务审批 → 自动过账 �
     await expect(gainRow.getByText(/盘盈/).first()).toBeVisible()
 
     // ---- G3 财务（caiwu）审批 → 末节点通过自动过账 ----
+    await switchAccount("finance")
     await caiwuPage.goto("/workspace")
     await approveByDocumentNo(caiwuPage, gainNo!)
 
     // ---- G4 断言：已过账 + 余额 18 → 21 + 流水「库存调整 · 增加 3」 ----
+    await switchAccount("admin")
     await adminPage.goto("/inventory")
     await adminPage.getByRole("tab", { name: "调整记录" }).click()
     const postedGain = adminPage
@@ -578,7 +570,4 @@ test("flow-10 库存调整：盘盈调整单 → 财务审批 → 自动过账 �
     await expect(movementRow).toBeVisible({ timeout: 30_000 })
     await expect(movementRow.getByText("增加").first()).toBeVisible()
     await expect(movementRow.getByText(GAIN_QTY).first()).toBeVisible()
-
-    await admin.context.close()
-    await finance.context.close()
 })
