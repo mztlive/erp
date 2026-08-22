@@ -61,6 +61,7 @@ function makeOrder(
         welfareScene: "",
         version: 3,
         lockVersion: 3,
+        currentRevisionNo: 1,
         settlementEntity: "",
         sellerEntity: "",
         paymentTerms: "",

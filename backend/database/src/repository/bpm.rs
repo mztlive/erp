@@ -557,6 +557,30 @@ impl<'a> BpmWorkflowRepository<'a> {
         mongo_ops::insert_one(&self.db.collection(EXECUTIONS), execution, executor).await
     }
 
+    /// 追加实例审批人绑定（通过/驳回进入新节点或新一轮时写入）。
+    ///
+    /// # 错误
+    /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
+    pub async fn insert_assignees(
+        &self,
+        assignees: &[ApprovalInstanceAssignee],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_many(&self.db.collection(ASSIGNEES), assignees.to_vec(), executor).await
+    }
+
+    /// 插入命令收据。唯一键冲突由调用方按同/异载荷回读分类。
+    ///
+    /// # 错误
+    /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
+    pub async fn insert_command_receipt(
+        &self,
+        receipt: &ApprovalCommandReceipt,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_one(&self.db.collection(RECEIPTS), receipt, executor).await
+    }
+
     async fn load_definition_nodes(
         &self,
         definition_id: &ApprovalProcessDefinitionId,

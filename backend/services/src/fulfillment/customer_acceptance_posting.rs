@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use database::{AccessControlExt, FulfillmentExt, Transactional};
+use database::{AccessControlExt, FulfillmentExt, SalesOrderExt, Transactional};
 use entities::common::time::Instant;
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceResult, AllocationAction,
@@ -8,15 +8,20 @@ use entities::fulfillment::{
     CustomerAcceptanceState, DeliveryState, ElectronicDeliveryState, FulfillmentFactType,
     ServiceFulfillmentState,
 };
-use entities::ids::{AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId};
+use entities::ids::{
+    AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
+};
 use entities::money::Quantity;
+use entities::sales_order::{BusinessType, FulfillmentProgress};
 use id_generator::next_id;
+use mongodb::bson::doc;
 use mongodb::Database;
 use validator::Validate;
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
+use super::acceptance_eligibility::{build_eligibility_groups, so_line_ids, EligibilityGroupSources};
 use super::{
     AcceptanceAllocationInput, CustomerAcceptanceView, FulfillmentService, PostAcceptanceLineInput,
     PostCustomerAcceptanceRequest, ReverseCustomerAcceptanceRequest,
@@ -97,6 +102,9 @@ impl FulfillmentService {
                     }
                     acceptance.mark_posted()?;
                     db.customer_acceptances().update(&mut acceptance, session).await?;
+                    // 验收通过即履约完成（§4.3.1）：按净已验收汇总刷新销售单履约进度
+                    update_sales_order_fulfillment_progress(&db, session, &acceptance.sales_order_id, actor.id().to_string())
+                        .await?;
                     let audit = actor.resource_log(
                         "customer_acceptance.post",
                         "customer_acceptance",
@@ -243,6 +251,9 @@ impl FulfillmentService {
                         .await?;
                     original.reverse(reverse_acceptance.base.id.clone().into())?;
                     db.customer_acceptances().update(&mut original, session).await?;
+                    // 冲正后净已验收减少：同步刷新销售单履约进度（可能从已完成回退）
+                    update_sales_order_fulfillment_progress(&db, session, &original.sales_order_id, actor.id().to_string())
+                        .await?;
                     let audit = actor.resource_log(
                         "customer_acceptance.reverse",
                         "customer_acceptance",
@@ -515,6 +526,176 @@ async fn fact_sales_line(
             Ok(record.sales_order_line_id.to_string())
         }
     }
+}
+
+/// 验收过账/冲正后刷新销售单履约进度（§4.3.1：实物与服务「客户验收通过即履约完成」）。
+///
+/// 按销售明细汇总净已验收（APPLY − REVERSE）并与应履约数量比较：
+/// 全部明细验收通过 → 已完成；部分通过 → 部分履约；否则 → 未开始。
+/// 卡券销售单进度由履约期限到期任务写入（§4.3.1），本函数不触碰。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `session` - 事务会话执行器
+/// * `sales_order_id` - 销售单
+/// * `actor_id` - 审计操作人
+///
+/// # 返回
+/// 无返回值；进度变化时更新销售单并写版本触及。
+async fn update_sales_order_fulfillment_progress(
+    db: &Database,
+    session: &mut mongodb::ClientSession,
+    sales_order_id: &SalesOrderId,
+    actor_id: String,
+) -> Result<()> {
+    let order = db
+        .sales_orders()
+        .find_by_id(sales_order_id.as_ref(), session)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+    if order.business_type != BusinessType::GoodsService {
+        return Ok(());
+    }
+    let revision_id = order
+        .stable
+        .current_revision_id
+        .clone()
+        .ok_or_else(|| Error::NotFound("销售单没有生效版本".to_string()))?;
+    let revision = db
+        .sales_order_revisions()
+        .find_by_id(&revision_id, session)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售生效版本不存在".to_string()))?;
+    let revision_lines = db
+        .sales_order_revision_lines()
+        .list_lines_by_revision(&revision.base.id.clone().into(), session)
+        .await?;
+    let revision_line_ids: Vec<entities::ids::SalesOrderRevisionLineId> = revision_lines
+        .iter()
+        .map(|line| line.base.id.clone().into())
+        .collect();
+    let goods_service_lines = db
+        .sales_order_goods_service_line_revisions()
+        .list_by_revision_line_ids(&revision_line_ids, session)
+        .await?;
+    let deliveries = db
+        .deliveries()
+        .find_many(
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "status": { "$in": vec![DeliveryState::Shipped.as_str(), DeliveryState::Signed.as_str()] },
+            },
+            session,
+        )
+        .await?;
+    let delivery_ids: Vec<entities::ids::DeliveryId> = deliveries
+        .iter()
+        .map(|delivery| delivery.base.id.clone().into())
+        .collect();
+    let delivery_lines = db
+        .fulfillment()
+        .delivery_lines_by_delivery_ids(&delivery_ids, session)
+        .await?;
+    let electronic = db
+        .electronic_deliveries()
+        .find_many(
+            doc! {
+                "sales_order_line_id": { "$in": so_line_ids(&revision_lines) },
+                "status": ElectronicDeliveryState::Confirmed.as_str(),
+            },
+            session,
+        )
+        .await?;
+    let service = db
+        .service_fulfillments()
+        .find_many(
+            doc! {
+                "sales_order_line_id": { "$in": so_line_ids(&revision_lines) },
+                "status": ServiceFulfillmentState::Confirmed.as_str(),
+            },
+            session,
+        )
+        .await?;
+    let delivery_allocations = db
+        .fulfillment()
+        .allocations_by_fulfillment_fact(
+            FulfillmentFactType::Delivery,
+            &delivery_lines
+                .iter()
+                .map(|line| line.base.id.clone())
+                .collect::<Vec<_>>(),
+            session,
+        )
+        .await?;
+    let electronic_allocations = db
+        .fulfillment()
+        .allocations_by_fulfillment_fact(
+            FulfillmentFactType::ElectronicDelivery,
+            &electronic
+                .iter()
+                .map(|record| record.base.id.clone())
+                .collect::<Vec<_>>(),
+            session,
+        )
+        .await?;
+    let service_allocations = db
+        .fulfillment()
+        .allocations_by_fulfillment_fact(
+            FulfillmentFactType::ServiceFulfillment,
+            &service
+                .iter()
+                .map(|record| record.base.id.clone())
+                .collect::<Vec<_>>(),
+            session,
+        )
+        .await?;
+    let groups = build_eligibility_groups(EligibilityGroupSources {
+        revision_lines: &revision_lines,
+        goods_service_lines: &goods_service_lines,
+        deliveries: &deliveries,
+        delivery_lines: &delivery_lines,
+        electronic: &electronic,
+        service: &service,
+        delivery_allocations: &delivery_allocations,
+        electronic_allocations: &electronic_allocations,
+        service_allocations: &service_allocations,
+    });
+    if groups.is_empty() {
+        return Ok(());
+    }
+    let mut all_fulfilled = true;
+    let mut any_accepted = false;
+    for group in &groups {
+        let mut net_accepted = Quantity::from_str("0").unwrap();
+        for fact in &group.fulfillment_facts {
+            net_accepted = Quantity::try_from(
+                net_accepted.to_decimal() + fact.net_accepted_allocated_quantity.to_decimal(),
+            )
+            .unwrap_or_else(|_| Quantity::from_str("0").unwrap());
+        }
+        if net_accepted != Quantity::from_str("0").unwrap() {
+            any_accepted = true;
+        }
+        if net_accepted.to_decimal() < group.required_quantity.to_decimal() {
+            all_fulfilled = false;
+        }
+    }
+    let progress = if all_fulfilled {
+        FulfillmentProgress::Completed
+    } else if any_accepted {
+        FulfillmentProgress::PartiallyFulfilled
+    } else {
+        FulfillmentProgress::NotStarted
+    };
+    // 履约进度变化后联动刷新回款/开票进度与关闭状态（§9.3 自动结案）
+    crate::sales_order::update_sales_order_money_progress(
+        db,
+        session,
+        sales_order_id,
+        actor_id,
+        Some(progress),
+    )
+    .await
 }
 
 #[cfg(test)]

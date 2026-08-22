@@ -2,6 +2,8 @@
 
 import * as React from "react"
 
+import { useStore } from "@tanstack/react-form"
+
 import { useAppForm } from "@/components/form"
 import {
     useAllocationSessionQuery,
@@ -43,6 +45,8 @@ export type AllocationSessionParams = {
 
 export type AllocationSessionOptions = {
     onCompleted?: (result: FormalSubmitResult) => void
+    /** 会话加载后把服务端/客户端会话主键回写页面状态，保持跨刷新会话身份稳定。 */
+    onDraftSessionIdChange?: (draftSessionId: string) => void
 }
 
 /** 核销工作区全部状态与派生数据：会话查询、两张记录表单、勾选/金额状态、校验问题与提交。 */
@@ -58,7 +62,7 @@ export function useAllocationSession(
         existingInvoiceId,
         preselectPayableAccountId,
     }: AllocationSessionParams,
-    { onCompleted }: AllocationSessionOptions = {},
+    { onCompleted, onDraftSessionIdChange }: AllocationSessionOptions = {},
 ) {
     const sessionQuery = useAllocationSessionQuery({
         track,
@@ -124,6 +128,20 @@ export function useAllocationSession(
 
     const preselectKey = session?.preselectedPayableAccountIds.join("|")
 
+    // 订阅表单 store：记录金额/校验问题/提交按钮随输入实时更新
+    const paymentValues = useStore(paymentForm.store, (s) => s.values)
+    const invoiceValues = useStore(invoiceForm.store, (s) => s.values)
+
+    // 会话身份回写：fetchAllocationSession 在未带 draftSessionId 时会现场生成新会话主键，
+    // 若页面不把它写回状态/URL，任何查询失效后的重取都会换新主键，预选效果重跑并清空用户勾选。
+    React.useEffect(() => {
+        if (!session?.draftSessionId) return
+        if (session.draftSessionId !== draftSessionId) {
+            onDraftSessionIdChange?.(session.draftSessionId)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅会话主键变化时同步
+    }, [session?.draftSessionId, draftSessionId])
+
     React.useEffect(() => {
         if (!session) return
         const next = new Set(session.preselectedPayableAccountIds)
@@ -172,9 +190,7 @@ export function useAllocationSession(
     ])
 
     const factAmount =
-        track === "payment"
-            ? paymentForm.state.values.amount
-            : invoiceForm.state.values.grossAmount
+        track === "payment" ? paymentValues.amount : invoiceValues.grossAmount
 
     const allocatedHint = React.useMemo(() => {
         let c = 0

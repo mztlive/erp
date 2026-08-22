@@ -19,6 +19,8 @@ import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
 export type BackendEligibleFact = {
     fulfillment_line_id: string
     fulfillment_fact_type: string
+    /** 发货类型（仓发/直发区分；仅发货事实携带） */
+    delivery_type?: string | null
     fulfillment_no: string
     sales_order_line_id: string
     line_no: number
@@ -96,15 +98,22 @@ export function formatInstant(secs?: number | null): string {
     return new Date(secs * 1000).toISOString()
 }
 
-export function mapFactType(code: string): FulfillmentFactType {
+export function mapFactType(
+    code: string,
+    deliveryType?: string | null,
+): FulfillmentFactType {
     switch (code) {
         case "ELECTRONIC_DELIVERY":
             return "ELECTRONIC"
         case "SERVICE_FULFILLMENT":
             return "SERVICE"
         case "DELIVERY":
+            // 后端只有 DELIVERY / ELECTRONIC / SERVICE；发货事实按 delivery_type
+            // 区分仓发与直发（W06 验收区标签分别显示「仓发/代发」）
+            return deliveryType === "SUPPLIER_DIRECT"
+                ? "SUPPLIER_DIRECT"
+                : "WAREHOUSE_SHIP"
         default:
-            // 后端只有 DELIVERY / ELECTRONIC / SERVICE；仓发与代发统一为 WAREHOUSE_SHIP 展示
             return "WAREHOUSE_SHIP"
     }
 }
@@ -137,7 +146,10 @@ export function mapEligibleFact(
 ): AcceptanceEligibleFact {
     return {
         fulfillmentLineId: f.fulfillment_line_id,
-        fulfillmentFactType: mapFactType(f.fulfillment_fact_type),
+        fulfillmentFactType: mapFactType(
+            f.fulfillment_fact_type,
+            f.delivery_type,
+        ),
         fulfillmentNo: f.fulfillment_no,
         salesOrderLineId: f.sales_order_line_id,
         lineNo: f.line_no,

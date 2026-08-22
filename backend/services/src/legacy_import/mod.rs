@@ -2303,6 +2303,8 @@ fn work_item_action_code(action: WorkItemAllowedAction) -> &'static str {
     match action {
         WorkItemAllowedAction::View => "VIEW",
         WorkItemAllowedAction::Process => "PROCESS",
+        WorkItemAllowedAction::Approve => "APPROVE",
+        WorkItemAllowedAction::Reject => "REJECT",
         WorkItemAllowedAction::Reassign => "RELEASE_TO_TEAM",
         WorkItemAllowedAction::Close => "CLOSE",
     }

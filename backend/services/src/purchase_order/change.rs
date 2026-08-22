@@ -11,7 +11,7 @@ use entities::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeSubmission,
     PurchaseChangeSubmissionData, PurchaseOrder, PurchaseOrderRevision, PurchaseOrderStatus,
-    SubmissionStatus,
+    PurchaseOrderSubmissionLine, SubmissionStatus,
 };
 use id_generator::next_id;
 use mongodb::ClientSession;
@@ -482,8 +482,14 @@ impl PurchaseOrderService {
         let submission = self
             .build_change_submission(change, order, &base_revision, &supplier_name, req)
             .await?;
+        // 生效版本中心视图不携带销售提交行引用（版本行只保留采购二次确认分行），
+        // 变更目标行必须沿采购确认行回查原采购提交行补齐销售分配（§6.6），
+        // 否则变更提交行校验「商品/服务行必须引用销售提交行」会失败。
+        let enriched_lines = self
+            .enrich_change_lines_with_sales_allocation(&req.lines)
+            .await?;
         let lines = self
-            .build_change_submission_lines(&submission.base.id.clone(), &req.lines)
+            .build_change_submission_lines(&submission.base.id.clone(), &enriched_lines)
             .await?;
         let mut submission_mut = submission.clone();
         submission_mut.submit(Instant::now(), actor.id())?;
@@ -493,6 +499,76 @@ impl PurchaseOrderService {
             content_hash: content_fingerprint(&req.lines),
             idempotency_key: req.idempotency_key.clone(),
         })
+    }
+
+    /// 变更目标行补齐销售分配引用（生效版本中心视图不携带）。
+    ///
+    /// 版本行只保留 `procurement_confirmation_line_id`（即原销售稳定明细），
+    /// 沿它在历史采购提交行中回查 `sales_order_submission_line_id` 与分配数量，
+    /// 使变更提交行满足「商品/服务行必须引用销售提交行」的实体校验。
+    ///
+    /// # 参数
+    /// * `lines` - 变更目标行请求
+    ///
+    /// # 返回
+    /// 返回补齐销售引用后的目标行请求。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回错误。
+    async fn enrich_change_lines_with_sales_allocation(
+        &self,
+        lines: &[SavePurchaseOrderLine],
+    ) -> Result<Vec<SavePurchaseOrderLine>> {
+        let missing: Vec<String> = lines
+            .iter()
+            .filter(|line| {
+                line.line_type == entities::purchase_order::PurchaseLineType::ItemService
+                    && line.sales_order_submission_line_id.is_none()
+            })
+            .filter_map(|line| line.procurement_confirmation_line_id.clone())
+            .collect();
+        if missing.is_empty() {
+            return Ok(lines.to_vec());
+        }
+        let originals = self
+            .db
+            .purchase_order_submission_lines()
+            .find_many(
+                mongodb::bson::doc! {
+                    "procurement_confirmation_line_id": { "$in": missing },
+                    "sales_order_submission_line_id": { "$ne": null },
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        let mut by_confirmation: std::collections::HashMap<String, &PurchaseOrderSubmissionLine> =
+            std::collections::HashMap::new();
+        for original in &originals {
+            if let Some(confirmation_id) = &original.procurement_confirmation_line_id {
+                by_confirmation
+                    .entry(confirmation_id.to_string())
+                    .or_insert(original);
+            }
+        }
+        let mut enriched = lines.to_vec();
+        for line in &mut enriched {
+            if line.line_type != entities::purchase_order::PurchaseLineType::ItemService
+                || line.sales_order_submission_line_id.is_some()
+            {
+                continue;
+            }
+            let Some(confirmation_id) = &line.procurement_confirmation_line_id else {
+                continue;
+            };
+            if let Some(original) = by_confirmation.get(confirmation_id) {
+                line.sales_order_submission_line_id = original
+                    .sales_order_submission_line_id
+                    .as_ref()
+                    .map(ToString::to_string);
+                line.allocated_quantity = original.allocated_quantity.map(|quantity| quantity.to_string());
+            }
+        }
+        Ok(enriched)
     }
 
     /// 从绑定读取定义并持久化启动事实。

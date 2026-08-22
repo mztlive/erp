@@ -169,6 +169,12 @@ export function mapWorkingCopyLines(
     })
 }
 
+const REVISION_SOURCE_LABEL: Record<string, string> = {
+    ERP_APPROVAL: "审批生效",
+    SALES_CHANGE: "销售变更单",
+    MALL_SYNC: "商城同步",
+}
+
 export function mapRevisions(
     revisions: BackendRevision[] | undefined,
 ): SalesOrderRevisionSnapshot[] {
@@ -180,7 +186,7 @@ export function mapRevisions(
         customerSnapshot: "",
         amountGross: rev.gross_amount,
         lineSummary: "",
-        note: rev.revision_source,
+        note: REVISION_SOURCE_LABEL[rev.revision_source] ?? rev.revision_source,
     }))
 }
 
@@ -246,6 +252,7 @@ export function mapListItemFromBackend(
         customerContact?: string
         closeEligibility?: BackendCloseEligibility
         startSalesChange?: { allowed: boolean; blocker?: string | null }
+        currentRevisionNo?: number
     },
 ): SalesOrderListItem {
     const nature = mapNature(row.business_type)
@@ -309,6 +316,8 @@ export function mapListItemFromBackend(
         remark: extras?.remark,
         version: Number(row.version) || 1,
         lockVersion: Number(row.version) || 1,
+        currentRevisionNo:
+            extras?.currentRevisionNo ?? (Number(row.version) || 1),
         settlementEntity: extras?.settlementEntity ?? "",
         sellerEntity: "",
         paymentTerms: extras?.paymentTerms ?? "",

@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, WorkItemExt};
+use database::{AccessControlExt, NoTransaction, PayableExt, PurchaseOrderExt, WorkItemExt};
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use validator::Validate;
@@ -180,6 +180,24 @@ impl PurchaseOrderService {
             None => None,
         };
         let review_work_item = self.resolve_review_work_item(&order, actor_id).await?;
+        let payable_summary = self
+            .db
+            .payable_accounts()
+            .find_many(
+                mongodb::bson::doc! {
+                    "source_document_id": order.base.id.clone(),
+                    "source_type": entities::payable::PayableSourceType::PurchaseOrder.as_str(),
+                },
+                &mut NoTransaction,
+            )
+            .await?
+            .into_iter()
+            .next()
+            .map(|account| super::dto::PurchaseOrderPayableSummaryView {
+                payable_open_amount: account.open_total,
+                paid_allocated_amount: account.settled_total,
+                purchase_invoice_allocated_amount: account.invoiced_total,
+            });
         let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction).await {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,
@@ -209,6 +227,7 @@ impl PurchaseOrderService {
             totals,
             allocations,
             changes,
+            payable_summary,
             review_work_item,
             approval: document_approval_view(binding.as_ref(), None, order.stable.status),
             created_at: order.base.created_at,

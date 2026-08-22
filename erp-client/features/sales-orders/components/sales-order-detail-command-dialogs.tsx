@@ -166,7 +166,7 @@ export function SalesOrderDetailCommandDialogs({
                 actionLabel="创建改单"
                 confirmLabel="确认创建"
                 fromStatus={{
-                    label: `当前 v${order.version}`,
+                    label: `当前 v${order.currentRevisionNo}`,
                     tone: "success",
                 }}
                 toStatus={{ label: "改单草稿", tone: "warning" }}

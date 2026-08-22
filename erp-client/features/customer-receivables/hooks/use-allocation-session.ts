@@ -2,6 +2,8 @@
 
 import * as React from "react"
 
+import { useStore } from "@tanstack/react-form"
+
 import { type ResultState } from "@/components/business/feedback"
 import { type ValidationIssue } from "@/components/business"
 import { useAppForm } from "@/components/form"
@@ -86,6 +88,9 @@ export function useAllocationSession({
         },
     })
 
+    // 订阅表单 store：记录金额/拟分配/校验与提交按钮随输入实时更新
+    const formValues = useStore(form.store, (s) => s.values)
+
     const snapshot = () =>
         JSON.stringify({ values: form.state.values, allocations })
 
@@ -127,7 +132,7 @@ export function useAllocationSession({
     // 发票 gross 变化时按 13% 预填不含税/税额（可手动覆盖）
     const invoiceGross = isReceipt
         ? ""
-        : String(form.state.values.grossAmount ?? "")
+        : String(formValues.grossAmount ?? "")
     React.useEffect(() => {
         if (isReceipt || !invoiceGross) return
         const net = String(form.state.values.netAmount ?? "").trim()
@@ -141,8 +146,8 @@ export function useAllocationSession({
     }, [invoiceGross, isReceipt])
 
     const factAmountStr = isReceipt
-        ? String(form.state.values.amount ?? "")
-        : String(form.state.values.grossAmount ?? "")
+        ? String(formValues.amount ?? "")
+        : String(formValues.grossAmount ?? "")
     const proposedAllocated = allocations.reduce(
         (s, a) => s + parseAmt(a.amount),
         0,

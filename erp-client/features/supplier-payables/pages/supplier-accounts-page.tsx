@@ -94,6 +94,7 @@ export function SupplierAccountsPage() {
         session,
         openSession,
         closeSession,
+        syncSessionId,
         pickSupplierOpen,
         setPickSupplierOpen,
         pickSupplierId,
@@ -199,6 +200,7 @@ export function SupplierAccountsPage() {
                 <AllocationSession
                     {...session}
                     onClose={closeSession}
+                    onDraftSessionIdChange={syncSessionId}
                     onGoToInvoiceView={() => {
                         closeSession()
                         patchUrl({ view: "purchase_invoice" })

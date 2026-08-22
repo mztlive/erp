@@ -1,10 +1,14 @@
 "use client"
 
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { useWorkspaceDashboardQuery } from "@/features/workspace/hooks/queries"
+import {
+    useWorkspaceDashboardQuery,
+    workspaceHomeKeys,
+} from "@/features/workspace/hooks/queries"
 import {
     buildWorkspaceSearchParams,
     metricKeyFromUrlState,
@@ -29,6 +33,7 @@ export function useWorkspaceHome() {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
+    const queryClient = useQueryClient()
 
     const urlState = React.useMemo(
         () => parseWorkspaceSearchParams(searchParams),
@@ -95,7 +100,13 @@ export function useWorkspaceHome() {
                 ...urlState,
                 currentWorkItemId: item.workItemId,
             })
-            setNarrowDetailOpen(true)
+            // 窄屏才打开详情 Sheet；桌面端详情已内联展示，弹出模态框会遮挡并
+            // 把背景（桌面详情区）置为 aria-hidden。
+            setNarrowDetailOpen(
+                typeof window !== "undefined" &&
+                    typeof window.matchMedia === "function" &&
+                    window.matchMedia("(max-width: 1023.98px)").matches,
+            )
         },
         [replaceUrl, urlState],
     )
@@ -114,6 +125,22 @@ export function useWorkspaceHome() {
             if (!next) setNarrowDetailOpen(false)
         },
         [replaceUrl, urlState, view?.items],
+    )
+
+    /**
+     * 决策应用后的收尾：切换到下一条并失效工作台列表查询。
+     * 列表查询键随 URL(currentWorkItemId) 变化；若直接 refetch 旧键，
+     * 请求会携带已完成任务的 current_work_item_id 被后端 404，列表不更新。
+     * 失效后由键回退后的活动查询重新拉取（不受 staleTime 影响）。
+     */
+    const applyDecisionAfter = React.useCallback(
+        (completedWorkItemId: string) => {
+            selectNextAfter(completedWorkItemId)
+            void queryClient.invalidateQueries({
+                queryKey: workspaceHomeKeys.all,
+            })
+        },
+        [queryClient, selectNextAfter],
     )
 
     const onFamilyChange = React.useCallback(
@@ -170,6 +197,7 @@ export function useWorkspaceHome() {
         clearFilters,
         onSelectTask,
         selectNextAfter,
+        applyDecisionAfter,
         onFamilyChange,
         onSortChange,
         applySearch,

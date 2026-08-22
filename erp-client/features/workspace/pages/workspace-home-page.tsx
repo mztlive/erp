@@ -46,7 +46,7 @@ export function WorkspaceHomePage() {
         onMetricClick,
         clearFilters,
         onSelectTask,
-        selectNextAfter,
+        applyDecisionAfter,
         onFamilyChange,
         onSortChange,
         applySearch,
@@ -137,9 +137,9 @@ export function WorkspaceHomePage() {
     const detail = selected ? (
         <WorkspaceTaskDetail
             item={selected}
-            onDecisionApplied={(_view, workItemId) =>
-                selectNextAfter(workItemId)
-            }
+            onDecisionApplied={(_view, workItemId) => {
+                applyDecisionAfter(workItemId)
+            }}
         />
     ) : (
         <BusinessEmptyState
@@ -296,7 +296,7 @@ export function WorkspaceHomePage() {
                             <WorkspaceTaskDetail
                                 item={selected}
                                 onDecisionApplied={(_view, workItemId) => {
-                                    selectNextAfter(workItemId)
+                                    applyDecisionAfter(workItemId)
                                     setNarrowDetailOpen(false)
                                 }}
                             />

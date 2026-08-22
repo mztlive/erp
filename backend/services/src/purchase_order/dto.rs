@@ -13,6 +13,7 @@
 //! - 表单类写操作（创建/保存/提交/审核）统一返回稳定业务结果，不再返回
 //!   `FormalActionResponse` 信封（由 HTTP 统一信封承载）。
 
+use entities::money::Amount;
 use entities::purchase_order::{
     FulfillmentResponsibility, ProgressStatus, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
     PurchaseType,
@@ -402,12 +403,25 @@ pub struct PurchaseOrderCenterView {
     pub allocations: Vec<PurchaseSalesAllocationView>,
     /// 本采购单的变更单列表。
     pub changes: Vec<PurchaseChangeSummaryView>,
+    /// 应付往来子账汇总（采购单生效形成应付后存在，否则为空）。
+    pub payable_summary: Option<PurchaseOrderPayableSummaryView>,
     /// 当前开放的财务审核责任；统一审批后为空。
     pub review_work_item: Option<PurchaseReviewWorkItemView>,
     /// 统一只读审批结构。客户端不得据此选择定义或审批人。
     pub approval: DocumentApprovalView,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 采购单应付往来子账汇总（按采购单维度，来自应付子账派生；未生效时为空）。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PurchaseOrderPayableSummaryView {
+    /// 应付未结（含税）。
+    pub payable_open_amount: Amount,
+    /// 已付并核销（含税）。
+    pub paid_allocated_amount: Amount,
+    /// 已收票并核销（含税）。
+    pub purchase_invoice_allocated_amount: Amount,
 }
 
 /// 单据详情返回的统一只读审批结构。
@@ -554,19 +568,25 @@ pub struct CreationBasisLineView {
     pub gross_amount: String,
 }
 
-/// 采购创建依据视图（已通过且未完全消费的采购确认）。
+/// 采购创建依据视图（已生效销售单 × 合格供给供应商，§7.4 选源建单入口）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisView {
-    /// 采购确认批次（W07 结果）。
+    /// 创建依据（`{sales_order_id}:{supplier_id}`）。
     pub basis_id: String,
     /// 被确认的销售单。
     pub sales_order_id: String,
+    /// 销售单号。
+    pub sales_order_no: String,
     /// 被确认的销售提交。
     pub submission_id: String,
     /// 供应商。
     pub supplier_id: String,
     /// 供应商名称。
     pub supplier_name: String,
+    /// 采购类型（由首条明细履约方式推导）。
+    pub purchase_type: String,
+    /// 履约责任（由首条明细履约方式推导）。
+    pub fulfillment_responsibility: String,
     /// 付款条件（供应商商业资料快照，缺省 `NET-30`）。
     pub payment_term_code: String,
     /// 可拆入本单的已确认分行。

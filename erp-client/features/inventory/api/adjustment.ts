@@ -141,6 +141,14 @@ export async function submitAdjustment(input: {
                 {
                     version: detail.adjustment.version,
                     reason_type: reasonTypeBackend(input.reasonType),
+                    // 创建草稿时明细为占位数量/方向，提交前必须把表单数量与方向写回明细行，
+                    // 否则过账按占位数量扣减、盘盈方向不一致被拒（历史缺陷）
+                    lines: detail.lines.map((line) => ({
+                        line_id: line.id,
+                        quantity: input.quantity,
+                        direction:
+                            input.direction === "increase" ? "INCREASE" : "DECREASE",
+                    })),
                 },
             )
         }

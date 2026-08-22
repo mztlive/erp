@@ -6,9 +6,13 @@ use database::{
 };
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
-use entities::fulfillment::{PurchaseReceipt, PurchaseReceiptLine, PurchaseReceiptState};
+use entities::fulfillment::{
+    Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState, DeliveryType,
+    PurchaseReceipt, PurchaseReceiptLine, PurchaseReceiptState,
+};
 use entities::ids::{
-    PurchaseOrderId, PurchaseReceiptId, SalesOrderRevisionLineId, StockBalanceId, StockMovementId,
+    DeliveryId, DeliveryLineId, PurchaseOrderId, PurchaseReceiptId, SalesOrderLineId,
+    SalesOrderId, SalesOrderRevisionLineId, StockBalanceId, StockMovementId,
     StockReservationEntryId, StockReservationId,
 };
 use entities::inventory::{
@@ -116,6 +120,9 @@ impl FulfillmentService {
                     let progress = compute_po_fulfillment_progress(&revision_lines, &received);
                     po.set_fulfillment_progress(progress, actor.id().to_string());
                     db.purchase_orders().update(&mut po, session).await?;
+                    // 入库过账后自动生成仓发草稿：W09 仓储队列按 DRAFT 发货单
+                    // 投影「公司仓发」待办，行引用本次入库建立的销售预占。
+                    create_warehouse_ship_drafts(&db, session, &lines).await?;
                     let audit = actor.resource_log(
                         "purchase_receipt.post",
                         "purchase_receipt",
@@ -512,6 +519,126 @@ fn compute_po_fulfillment_progress(
     }
 }
 
+/// 入库过账后为涉及的销售单自动创建仓发草稿（幂等：已有 DRAFT 草稿则跳过）。
+///
+/// 仓发草稿行引用本次入库沿采购销售分配建立的预占：`delivery_line` 的
+/// `stock_reservation_id` 指向预占，数量取预占数量；销售单已存在草稿时不
+/// 重复创建（同一采购单多次入库只补新预占行由后续批量创建补充）。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `session` - 事务会话执行器
+/// * `receipt_lines` - 本次过账的入库行
+///
+/// # 返回
+/// 无返回值；查询或写入失败时返回错误。
+async fn create_warehouse_ship_drafts(
+    db: &Database,
+    session: &mut mongodb::ClientSession,
+    receipt_lines: &[PurchaseReceiptLine],
+) -> Result<()> {
+    if receipt_lines.is_empty() {
+        return Ok(());
+    }
+    let receipt_line_ids: Vec<String> = receipt_lines
+        .iter()
+        .map(|line| line.base.id.clone())
+        .collect();
+    let reservations = db
+        .stock_reservations()
+        .find_many(doc! { "source_receipt_line_id": { "$in": receipt_line_ids } }, session)
+        .await?;
+    if reservations.is_empty() {
+        return Ok(());
+    }
+    // 按销售明细分组（一个销售明细可能对应多条预占/多次入库）
+    let mut by_line: HashMap<String, Vec<&StockReservation>> = HashMap::new();
+    for reservation in &reservations {
+        by_line
+            .entry(reservation.sales_order_line_id.to_string())
+            .or_default()
+            .push(reservation);
+    }
+    let line_ids: Vec<String> = by_line.keys().cloned().collect();
+    let sales_lines = db
+        .sales_order_lines()
+        .find_many(doc! { "id": { "$in": line_ids } }, session)
+        .await?;
+    // 按销售单分组
+    let mut by_order: HashMap<String, Vec<(&String, Vec<&StockReservation>)>> = HashMap::new();
+    for (line_id, reservations) in &by_line {
+        let sales_line = sales_lines
+            .iter()
+            .find(|line| line.base.id == **line_id)
+            .ok_or_else(|| Error::BusinessLogicError("销售明细不存在，无法生成仓发草稿".to_string()))?;
+        by_order
+            .entry(sales_line.sales_order_id.to_string())
+            .or_default()
+            .push((line_id, reservations.clone()));
+    }
+    for (order_id, line_reservations) in by_order {
+        let existing = db
+            .deliveries()
+            .find_one(
+                doc! {
+                    "sales_order_id": &order_id,
+                    "status": DeliveryState::Draft.as_str(),
+                },
+                session,
+            )
+            .await?;
+        if existing.is_some() {
+            continue;
+        }
+        let delivery_id = DeliveryId::new(next_id());
+        let warehouse_id = line_reservations
+            .first()
+            .and_then(|(_, reservations)| reservations.first())
+            .map(|reservation| reservation.warehouse_id.clone())
+            .ok_or_else(|| Error::BusinessLogicError("仓发草稿缺少仓库".to_string()))?;
+        let delivery = Delivery::new(
+            delivery_id.clone(),
+            DeliveryData {
+                delivery_no: format!("FH-{}", delivery_id.as_ref()),
+                delivery_type: DeliveryType::WarehouseShip,
+                sales_order_id: SalesOrderId::new(order_id.clone()),
+                purchase_order_id: None,
+                warehouse_id: Some(warehouse_id),
+                carrier: None,
+                tracking_no: None,
+                address_snapshot_encrypted: None,
+                address_snapshot_fingerprint: None,
+            },
+        )?;
+        let mut lines = Vec::new();
+        let mut line_no = 1u32;
+        for (line_id, reservations) in &line_reservations {
+            for reservation in reservations {
+                lines.push(
+                    DeliveryLine::new(
+                        DeliveryLineId::new(next_id()),
+                        DeliveryLineData {
+                            delivery_id: delivery_id.clone(),
+                            line_no,
+                            sales_order_line_id: SalesOrderLineId::new((*line_id).clone()),
+                            quantity: reservation.reserved_quantity,
+                            stock_reservation_id: Some(reservation.base.id.clone().into()),
+                            purchase_line_sales_allocation_id: None,
+                        },
+                        DeliveryType::WarehouseShip,
+                    )
+                    .map_err(Error::Logic)?,
+                );
+                line_no += 1;
+            }
+        }
+        db.fulfillment()
+            .create_delivery_with_lines(&delivery, &lines, session)
+            .await?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{compute_po_fulfillment_progress, reservation_shares};
@@ -520,7 +647,6 @@ mod tests {
     use entities::purchase_order::ProgressStatus;
     use std::collections::HashMap;
     use std::str::FromStr;
-
     #[test]
     fn reservation_shares_split_proportionally_and_absorb_rounding() {
         let allocation_quantities = vec![

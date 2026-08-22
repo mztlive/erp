@@ -52,6 +52,7 @@ function makeSalesOrderListItem(
         welfareScene: "",
         version: 1,
         lockVersion: 1,
+        currentRevisionNo: 1,
         settlementEntity: "主体",
         sellerEntity: "主体",
         paymentTerms: "月结",

@@ -1,0 +1,11 @@
+# E2E 测试产物
+node_modules/
+playwright-report/
+test-results/
+blob-report/
+logs/
+*.log
+.auth/
+
+# 系统
+.DS_Store

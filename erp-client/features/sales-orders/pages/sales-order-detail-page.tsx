@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { ArrowLeftIcon } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
 
 import {
     BusinessFailureState,
@@ -26,7 +27,10 @@ import {
     SalesOrderIdentityHeader,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
 import { SalesOrderDetailTabs } from "@/features/sales-orders/components/sales-order-detail-tabs"
-import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
+import {
+    salesOrderKeys,
+    useSalesOrderDetailQuery,
+} from "@/features/sales-orders/hooks/queries"
 import {
     useSalesOrderDetailRejectionResolution,
     useSalesOrderDetailStartChange,
@@ -81,6 +85,21 @@ export function SalesOrderDetailPage({
     const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
     const [result, setResult] =
         React.useState<SalesOrderDetailActionResult | null>(null)
+
+    // 审批决定/命令成功后单据状态会变（如审批中→已生效、改单中→新版本），
+    // 统一在结果落定时刷新详情查询，避免页面停留在旧状态。
+    const queryClient = useQueryClient()
+    const handleActionResult = React.useCallback(
+        (next: SalesOrderDetailActionResult) => {
+            if (next.status === "succeeded" || next.status === "unknown") {
+                void queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.detail(salesOrderId),
+                })
+            }
+            setResult(next)
+        },
+        [queryClient, salesOrderId],
+    )
 
     const commandLedgerRef = React.useRef<{
         salesOrderId: string
@@ -162,7 +181,7 @@ export function SalesOrderDetailPage({
                 fromQueue={fromQueue}
                 fromWorkspace={fromWorkspace}
                 result={result}
-                onResult={setResult}
+                onResult={handleActionResult}
                 showBackToDetail={derived.openRejection}
                 onBackToDetail={leaveRejectionEdit}
                 canVoidAfterRejection={derived.canVoid}
@@ -278,7 +297,7 @@ export function SalesOrderDetailPage({
                     workItemId={focusedWorkItem?.workItemId}
                     expectedTaskVersion={focusedWorkItem?.taskVersion}
                     workItemAllowedActions={focusedWorkItem?.allowedActions}
-                    onResult={setResult}
+                    onResult={handleActionResult}
                 />
             ) : null}
 
@@ -335,7 +354,7 @@ export function SalesOrderDetailPage({
                             : focusedWorkItem?.allowedActions
                     }
                     onSelectSection={selectSection}
-                    onApprovalResult={setResult}
+                    onApprovalResult={handleActionResult}
                 />
             </div>
 
@@ -348,7 +367,7 @@ export function SalesOrderDetailPage({
                     rejectionResolution.voidAfterRejection({
                         order,
                         commandLedger,
-                        onResult: setResult,
+                        onResult: handleActionResult,
                         reason,
                     })
                 }
@@ -363,7 +382,7 @@ export function SalesOrderDetailPage({
                     rejectionResolution.requestLowMargin({
                         order,
                         commandLedger,
-                        onResult: setResult,
+                        onResult: handleActionResult,
                         reason: lowMarginReason,
                         evidence: lowMarginEvidence,
                     })
@@ -374,7 +393,7 @@ export function SalesOrderDetailPage({
                     startChangeCommand.startChange({
                         order,
                         commandLedger,
-                        onResult: setResult,
+                        onResult: handleActionResult,
                     })
                 }
             />

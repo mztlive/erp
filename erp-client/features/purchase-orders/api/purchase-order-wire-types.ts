@@ -121,6 +121,11 @@ export type BackendCenter = {
             message: string
         }[]
     } | null
+    payable_summary?: {
+        payable_open_amount: string
+        paid_allocated_amount: string
+        purchase_invoice_allocated_amount: string
+    } | null
     approval?: DocumentApprovalViewDto | null
     created_at: number
 }
@@ -141,9 +146,12 @@ export type BackendBasisLine = {
 export type BackendBasis = {
     basis_id: string
     sales_order_id: string
+    sales_order_no?: string | null
     submission_id: string
     supplier_id: string
     supplier_name: string
+    purchase_type?: string | null
+    fulfillment_responsibility?: string | null
     payment_term_code: string
     lines: BackendBasisLine[]
     estimated_gross: string

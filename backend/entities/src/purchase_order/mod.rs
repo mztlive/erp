@@ -25,7 +25,7 @@ mod purchase_submission;
 mod snapshot;
 mod types;
 
-pub use allocation::PurchaseLineSalesAllocation;
+pub use allocation::{PurchaseLineSalesAllocation, PurchaseLineSalesAllocationData};
 pub use change_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeOrderUpdate,
     PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseChangeSubmissionLine,

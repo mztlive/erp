@@ -123,7 +123,7 @@ export function mapMovement(
         recordedByLabel: "", // backend_gap
         sourceDocumentType: sourceDocType,
         sourceDocumentId: m.source_document_id,
-        sourceDocumentNo: m.source_document_id,
+        sourceDocumentNo: m.source_document_no ?? m.source_document_id,
         sourceHref:
             sourceDocType === "PURCHASE_RECEIPT" ||
             sourceDocType === "WAREHOUSE_DISPATCH"

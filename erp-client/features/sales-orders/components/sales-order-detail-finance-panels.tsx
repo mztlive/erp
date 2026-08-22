@@ -78,7 +78,7 @@ export function VersionsPanel({
             </SectionLead>
             <RevisionHistoryCard
                 revisions={order.revisions}
-                currentVersion={order.version}
+                currentVersion={order.currentRevisionNo}
                 contractRevisionLabel={order.contractRevisionLabel}
             />
             {order.activeChangeOrder ? (

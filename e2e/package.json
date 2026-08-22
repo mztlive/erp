@@ -1,0 +1,16 @@
+{
+    "name": "erp-e2e",
+    "version": "0.1.0",
+    "private": true,
+    "description": "ERP 一期业务流程 Playwright 端到端测试（独立于前后端目录，自成体系）",
+    "scripts": {
+        "test": "playwright test",
+        "test:flow": "bash scripts/run-flow.sh",
+        "reset:db": "bash scripts/reset-db.sh",
+        "ensure:services": "bash scripts/ensure-services.sh"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.52.0",
+        "typescript": "^5.7.0"
+    }
+}

@@ -40,6 +40,7 @@ import {
     PAYABLE_STATUS_LABEL,
     SOURCE_TYPE_LABEL,
 } from "@/features/supplier-payables/types"
+import { fetchSupplierOption } from "@/features/entity-selectors/api/suppliers"
 
 export async function fetchSupplierAccounts(
     query: SupplierAccountsQuery,
@@ -323,7 +324,7 @@ export async function fetchAllocationSession(input: {
             accountLockVersion: a.version,
             sourceType,
             sourceTypeLabel: SOURCE_TYPE_LABEL[sourceType],
-            sourceDocumentNo: a.source_document_id,
+            sourceDocumentNo: a.source_document_no || a.source_document_id,
             sourceDocumentId: a.source_document_id,
             openTotal: a.open_total,
             openInvoiceableTotal: a.open_invoiceable_total,
@@ -358,11 +359,15 @@ export async function fetchAllocationSession(input: {
     }
 
     const draftSessionId = input.draftSessionId ?? nextSessionId()
+    // 会话内供应商名以主数据实时解析（缺失时回退供应商 ID，不阻断核销）
+    const supplierOption = await fetchSupplierOption(input.supplierId).catch(
+        () => null,
+    )
     const view: AllocationSessionView = {
         draftSessionId,
         track: input.track,
         supplierId: input.supplierId,
-        supplierName: input.supplierId,
+        supplierName: supplierOption?.supplierName ?? input.supplierId,
         pool,
         payablePriorityPolicy: {
             state: "MISSING",

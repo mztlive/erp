@@ -264,6 +264,8 @@ export type SalesOrderListItem = {
     remark?: string
     version: number
     lockVersion: number
+    /** 当前生效版本的版本号（`current_revision_id` 对应 revision_no；与实体乐观锁 `version` 不同）。 */
+    currentRevisionNo: number
     settlementEntity: string
     sellerEntity: string
     paymentTerms: string

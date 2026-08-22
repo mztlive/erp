@@ -293,6 +293,10 @@ pub enum WorkItemAllowedAction {
     View,
     /// 进入固定强类型处理器。
     Process,
+    /// 审批通过。
+    Approve,
+    /// 审批驳回。
+    Reject,
     /// 受控转交。
     Reassign,
     /// 受控关闭无效任务。

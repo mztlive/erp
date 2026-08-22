@@ -31,11 +31,13 @@ mod dto;
 mod formalize;
 mod mapper;
 mod pricing;
+mod progress;
 mod query;
 mod start_approval;
 mod status;
 
 pub use self::adapter::sales_order_object_readable;
+pub(crate) use self::progress::update_sales_order_money_progress;
 pub use self::dto::{
     ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CancelSalesOrderApprovalRequest,
     CardSalesApprovalAllowedAction, CloseEligibilityView, CreateSalesOrderRequest, DocumentApprovalView,

@@ -12,7 +12,6 @@ import {
 import type {
     BackendContractDetail,
     BackendContractView,
-    BackendPartyView,
 } from "@/features/contracts/api/wire-types"
 import type {
     UploadContractPdfInput,
@@ -55,28 +54,11 @@ export async function uploadContractPdf(
         throw err
     }
 
-    // 结算主体：优先客户主体；名称不同时尝试按关键字查 party 列表
-    let settlementPartyId = customer.partyId
-    if (
-        input.settlementPartyName.trim() &&
-        input.settlementPartyName.trim() !== customer.displayName
-    ) {
-        try {
-            const parties = await apiGet<Page<BackendPartyView>>(
-                "/admin/parties",
-                {
-                    keyword: input.settlementPartyName.trim(),
-                    page: 1,
-                    page_size: 5,
-                },
-            )
-            if (parties.items[0]) {
-                settlementPartyId = parties.items[0].id
-            }
-        } catch {
-            // keep customer.partyId
-        }
-    }
+    // 结算主体：以表单选定为准；未提供时退回客户自有主体。
+    // 不能用名称反查：/admin/parties 的 keyword 仅匹配主体编号，名称搜索
+    // 永远落空，曾导致所选结算主体被静默替换为客户自有主体。
+    const settlementPartyId =
+        input.settlementPartyId?.trim() || customer.partyId
 
     const termCode = paymentTermCodeFromLabel(input.paymentTerms)
     const termName =

@@ -873,6 +873,8 @@ pub struct EligibleFulfillmentFactView {
     pub fulfillment_line_id: String,
     /// 履约事实类型。
     pub fulfillment_fact_type: FulfillmentFactType,
+    /// 发货类型（仅发货事实；仓发/直发展示区分用，其他事实为空）。
+    pub delivery_type: Option<DeliveryType>,
     /// 履约单号（发货单号/履约记录号）。
     pub fulfillment_no: String,
     /// 销售稳定明细。

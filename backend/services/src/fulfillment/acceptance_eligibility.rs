@@ -176,7 +176,7 @@ impl FulfillmentService {
 ///
 /// # 返回
 /// 返回销售稳定明细 ID 字符串集合。
-fn so_line_ids(revision_lines: &[entities::sales_order::SalesOrderRevisionLine]) -> Vec<String> {
+pub(super) fn so_line_ids(revision_lines: &[entities::sales_order::SalesOrderRevisionLine]) -> Vec<String> {
     revision_lines
         .iter()
         .map(|line| line.sales_order_line_id.to_string())
@@ -199,25 +199,25 @@ fn so_line_ids(revision_lines: &[entities::sales_order::SalesOrderRevisionLine])
 ///
 /// # 关键业务约束
 /// 事实/分配由数据模型 §6.7 固定为三类来源，字段不可压缩。
-struct EligibilityGroupSources<'a> {
+pub(super) struct EligibilityGroupSources<'a> {
     /// 销售版本公共行。
-    revision_lines: &'a [entities::sales_order::SalesOrderRevisionLine],
+    pub(super) revision_lines: &'a [entities::sales_order::SalesOrderRevisionLine],
     /// 实物及服务行（数量/单位）。
-    goods_service_lines: &'a [entities::sales_order::SalesOrderGoodsServiceLineRevision],
+    pub(super) goods_service_lines: &'a [entities::sales_order::SalesOrderGoodsServiceLineRevision],
     /// 有效发货单。
-    deliveries: &'a [Delivery],
+    pub(super) deliveries: &'a [Delivery],
     /// 发货行。
-    delivery_lines: &'a [DeliveryLine],
+    pub(super) delivery_lines: &'a [DeliveryLine],
     /// 已确认电子交付。
-    electronic: &'a [ElectronicDelivery],
+    pub(super) electronic: &'a [ElectronicDelivery],
     /// 已确认服务履约。
-    service: &'a [ServiceFulfillment],
+    pub(super) service: &'a [ServiceFulfillment],
     /// 发货事实的验收分配。
-    delivery_allocations: &'a [AcceptanceFulfillmentAllocation],
+    pub(super) delivery_allocations: &'a [AcceptanceFulfillmentAllocation],
     /// 电子交付事实的验收分配。
-    electronic_allocations: &'a [AcceptanceFulfillmentAllocation],
+    pub(super) electronic_allocations: &'a [AcceptanceFulfillmentAllocation],
     /// 服务履约事实的验收分配。
-    service_allocations: &'a [AcceptanceFulfillmentAllocation],
+    pub(super) service_allocations: &'a [AcceptanceFulfillmentAllocation],
 }
 
 /// 构建验收工作台分组（销售行 + 可验收事实 + 净数量守恒计算）。
@@ -236,7 +236,7 @@ struct EligibilityGroupSources<'a> {
 ///
 /// # 关键业务约束
 /// 事实/分配入参由数据模型 §6.7 固定为三类来源，字段不可压缩。
-fn build_eligibility_groups(sources: EligibilityGroupSources<'_>) -> Vec<AcceptanceSalesLineGroupView> {
+pub(super) fn build_eligibility_groups(sources: EligibilityGroupSources<'_>) -> Vec<AcceptanceSalesLineGroupView> {
     let EligibilityGroupSources {
         revision_lines,
         goods_service_lines,
@@ -288,6 +288,7 @@ fn build_eligibility_groups(sources: EligibilityGroupSources<'_>) -> Vec<Accepta
             EligibleFulfillmentFactView {
                 fulfillment_line_id: line.base.id.clone(),
                 fulfillment_fact_type: FulfillmentFactType::Delivery,
+                delivery_type: delivery.map(|delivery| delivery.delivery_type),
                 fulfillment_no: delivery
                     .map(|delivery| delivery.delivery_no.clone())
                     .unwrap_or_default(),
@@ -324,6 +325,7 @@ fn build_eligibility_groups(sources: EligibilityGroupSources<'_>) -> Vec<Accepta
             EligibleFulfillmentFactView {
                 fulfillment_line_id: record.base.id.clone(),
                 fulfillment_fact_type: FulfillmentFactType::ElectronicDelivery,
+                delivery_type: None,
                 fulfillment_no: record.fulfillment_no.clone(),
                 sales_order_line_id: line_id.clone(),
                 line_no,
@@ -357,6 +359,7 @@ fn build_eligibility_groups(sources: EligibilityGroupSources<'_>) -> Vec<Accepta
             EligibleFulfillmentFactView {
                 fulfillment_line_id: record.base.id.clone(),
                 fulfillment_fact_type: FulfillmentFactType::ServiceFulfillment,
+                delivery_type: None,
                 fulfillment_no: record.fulfillment_no.clone(),
                 sales_order_line_id: line_id.clone(),
                 line_no,

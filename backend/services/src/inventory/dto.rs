@@ -155,6 +155,8 @@ pub struct StockMovementView {
     pub quantity: Quantity,
     /// 来源单据标识。
     pub source_document_id: String,
+    /// 来源单据号（可读展示；无法解析时为空，前端回退显示主键）。
+    pub source_document_no: Option<String>,
     /// 来源单据行标识。
     pub source_line_id: Option<String>,
     /// 业务实际发生时间（秒级时间戳）。
@@ -619,6 +621,22 @@ pub struct UpdateStockAdjustmentRequest {
     pub version: u64,
     /// 调整原因类型；缺省表示不修改。
     pub reason_type: Option<AdjustmentReasonType>,
+    /// 明细数量更新（按行覆盖；缺省表示不修改）。
+    #[validate(nested)]
+    pub lines: Option<Vec<StockAdjustmentLineUpdateInput>>,
+}
+
+/// 库存调整明细数量/方向更新（行必须属于该调整单；仅草稿/驳回可更新）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct StockAdjustmentLineUpdateInput {
+    /// 明细行主键。
+    #[validate(length(min = 1, max = 128, message = "明细行 id 不能为空"))]
+    pub line_id: String,
+    /// 调整数量（正数）。
+    #[validate(length(min = 1, max = 32, message = "调整数量不能为空"))]
+    pub quantity: String,
+    /// 调整方向（可空：不传保持不变；盘盈必增、盘亏/损坏必减）。
+    pub direction: Option<MovementDirection>,
 }
 
 /// 库存调整单提交审批请求。客户端不得选择定义或审批人。

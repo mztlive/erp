@@ -45,8 +45,8 @@ async function buildPool(
                 .map((e) => ({
                     targetId: e.id,
                     targetKind: "receivable_entry" as const,
-                    label: `${r.sales_order_id} · ${e.entry_type}`,
-                    salesOrderNo: r.sales_order_id,
+                    label: `${r.sales_order_no || r.sales_order_id} · ${e.entry_type}`,
+                    salesOrderNo: r.sales_order_no || r.sales_order_id,
                     // open amount is server field on account; entry-level open is not exposed — use amount as display open
                     openAmount: e.amount,
                     dueDate: e.due_date,
@@ -65,8 +65,8 @@ async function buildPool(
         .map((r) => ({
             targetId: r.id,
             targetKind: "receivable_account" as const,
-            label: `应收子账 #${r.account_seq} · ${r.sales_order_id}`,
-            salesOrderNo: r.sales_order_id,
+            label: `应收子账 #${r.account_seq} · ${r.sales_order_no || r.sales_order_id}`,
+            salesOrderNo: r.sales_order_no || r.sales_order_id,
             openAmount: r.open_invoiceable_total,
             dueDate: r.entries?.[0]?.due_date,
             counterpartyPartyId: r.counterparty_party_id,

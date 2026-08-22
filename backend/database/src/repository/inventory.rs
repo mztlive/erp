@@ -893,6 +893,54 @@ impl<'a> InventoryRepository<'a> {
         )
         .await
     }
+
+    /// 更新调整明细数量与方向（草稿/驳回编辑；数量必须为正）。
+    ///
+    /// 行命中即 `$set quantity`（方向非空时一并更新）并推进行版本；
+    /// 行不存在或已软删除时返回 `false`。
+    ///
+    /// # 参数
+    /// * `id` - 明细行主键
+    /// * `quantity` - 正数调整数量
+    /// * `direction` - 调整方向（`None` 表示保持现状）
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 命中并更新返回 `true`；行不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 写入失败时返回错误。
+    pub async fn update_adjustment_line(
+        &self,
+        id: &str,
+        quantity: Quantity,
+        direction: Option<MovementDirection>,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let quantity = to_bson(quantity)?;
+        let mut set = doc! {
+            "quantity": quantity,
+            "updated_at": Local::now().timestamp(),
+        };
+        if let Some(direction) = direction {
+            set.insert("direction", mongodb::bson::to_bson(&direction)?);
+        }
+        let result = mongo_ops::update_one(
+            &self.db.collection::<StockAdjustmentLine>(STOCK_ADJUSTMENT_LINES),
+            doc! {
+                "id": id,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            doc! {
+                "$set": set,
+                "$inc": { "version": 1 },
+            },
+            false,
+            executor,
+        )
+        .await?;
+        Ok(result.matched_count > 0)
+    }
 }
 
 /// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。

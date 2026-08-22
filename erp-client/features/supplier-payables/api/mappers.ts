@@ -47,7 +47,10 @@ type BackendPayableEntry = {
 export type BackendPayableAccount = {
     id: string
     source_document_id: string
+    source_document_no?: string | null
     supplier_id: string
+    supplier_no?: string | null
+    supplier_name?: string | null
     source_type: string
     gross_total: string
     settled_total: string
@@ -241,11 +244,11 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
     return {
         payableAccountId: a.id,
         supplierId: a.supplier_id,
-        supplierName: a.supplier_id,
+        supplierName: a.supplier_name || a.supplier_id,
         sourceType,
         sourceTypeLabel: SOURCE_TYPE_LABEL[sourceType],
         sourceDocumentId: a.source_document_id,
-        sourceDocumentNo: a.source_document_id,
+        sourceDocumentNo: a.source_document_no || a.source_document_id,
         primaryEntryId: primary?.id ?? a.entries?.[0]?.id ?? a.id,
         entryLockVersion: a.version,
         accountLockVersion: a.version,

@@ -17,7 +17,9 @@ use entities::ids::{
     SalesOrderId, SalesOrderLineId, SalesOrderWorkingCopyId,
 };
 use entities::money::Amount;
-use entities::sales_order::{WorkingCopyStatus, WorkingPurpose};
+use entities::sales_order::{
+    SalesOrderWorkingCopyLineData, WorkingCopyStatus, WorkingPurpose,
+};
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderData, SalesChangeOrderStatus, SalesChangeSubmission,
     SalesChangeSubmissionData, SalesChangeSubmissionLine, SalesChangeSubmissionLineData,
@@ -252,7 +254,8 @@ impl SalesReviewService {
             .list_lines_by_order(&req.sales_order_id, &mut NoTransaction)
             .await?;
         let working_copy_id = SalesOrderWorkingCopyId::new(next_id());
-        let lines = build_change_working_copy_lines(&working_copy_id, &stable_lines, &req.draft.lines)?;
+        let (line_datas, lines) =
+            build_change_working_copy_lines(&working_copy_id, &stable_lines, &req.draft.lines)?;
         let (gross, net, tax) = change_line_totals(&lines);
         if order.business_type == entities::sales_order::BusinessType::Voucher {
             return Err(Error::BusinessLogicError(
@@ -290,7 +293,7 @@ impl SalesReviewService {
                 gross_amount: gross,
                 net_amount: net,
                 tax_amount: tax,
-                lines: Vec::new(),
+                lines: line_datas,
             },
             actor.id(),
         )?;
@@ -567,9 +570,8 @@ impl SalesReviewService {
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let (mut working_copy, copy_lines) = load_change_working_copy(&self.db, &change_order).await?;
         let submission_no = next_change_submission_no(&self.db, id).await?;
-        let submission =
+        let (submission, submission_lines) =
             build_change_submission_with_no(&change_order, &working_copy, &copy_lines, submission_no, actor)?;
-        let submission_lines = build_change_submission_lines(&submission, &copy_lines)?;
         lock_working_copy_if_editing(&mut working_copy)?;
         start_sales_change_approval(
             &mut change_order,
@@ -685,35 +687,51 @@ fn detail_view(
 ///
 /// # 错误
 /// 行字段组与行类型不一致、金额非法时返回错误。
+/// 构建变更工作副本行（行创建数据同时用于头实体跨行断言与行实体落库）。
+///
+/// # 参数
+/// * `working_copy_id` - 所属工作副本 ID
+/// * `stable_lines` - 稳定明细行（行号与草稿行一一对应）
+/// * `lines` - 变更目标草稿行请求
+///
+/// # 返回
+/// 返回 `(行创建数据, 行实体清单)`。
+///
+/// # 错误
+/// 行号无对应稳定明细时返回错误。
 fn build_change_working_copy_lines(
     working_copy_id: &SalesOrderWorkingCopyId,
     stable_lines: &[entities::sales_order::SalesOrderLine],
     lines: &[SalesChangeLineRequest],
-) -> Result<Vec<entities::sales_order::SalesOrderWorkingCopyLine>> {
-    let mut built = Vec::with_capacity(lines.len());
+) -> Result<(Vec<SalesOrderWorkingCopyLineData>, Vec<entities::sales_order::SalesOrderWorkingCopyLine>)> {
+    let mut datas = Vec::with_capacity(lines.len());
     for line in lines {
         let stable_id = stable_lines
             .iter()
             .find(|stable| stable.line_no == line.line_no)
             .map(|stable| stable.base.id.clone())
             .ok_or_else(|| Error::ValidationError(format!("行号 {} 无对应稳定明细", line.line_no)))?;
+        datas.push(SalesOrderWorkingCopyLineData {
+            sales_order_line_id: SalesOrderLineId::new(stable_id),
+            line_no: line.line_no,
+            line_type: line.line_type.clone(),
+            sales_tax_rate: line.sales_tax_rate.clone(),
+            item_name_snapshot: line.item_name_snapshot.clone(),
+            spec_snapshot: line.spec_snapshot.clone(),
+            unit_snapshot: line.unit_snapshot.clone(),
+            goods: line.goods.clone(),
+            voucher: line.voucher.clone(),
+        });
+    }
+    let mut built = Vec::with_capacity(datas.len());
+    for data in &datas {
         built.push(entities::sales_order::SalesOrderWorkingCopyLine::new(
             entities::ids::SalesOrderWorkingCopyLineId::new(next_id()),
             working_copy_id.clone(),
-            entities::sales_order::SalesOrderWorkingCopyLineData {
-                sales_order_line_id: SalesOrderLineId::new(stable_id),
-                line_no: line.line_no,
-                line_type: line.line_type,
-                sales_tax_rate: line.sales_tax_rate,
-                item_name_snapshot: line.item_name_snapshot.clone(),
-                spec_snapshot: line.spec_snapshot.clone(),
-                unit_snapshot: line.unit_snapshot.clone(),
-                goods: line.goods.clone(),
-                voucher: line.voucher.clone(),
-            },
+            data.clone(),
         )?);
     }
-    Ok(built)
+    Ok((datas, built))
 }
 
 /// 变更行金额访问器。
@@ -792,7 +810,7 @@ fn change_header_snapshot(
 /// * `actor` - 提交人
 ///
 /// # 返回
-/// 返回变更提交实体。
+/// 返回 `(变更提交实体, 变更提交行清单)`。
 ///
 /// # 错误
 /// 提交字段校验失败时返回错误。
@@ -802,9 +820,11 @@ fn build_change_submission_with_no(
     lines: &[entities::sales_order::SalesOrderWorkingCopyLine],
     submission_no: u32,
     actor: &AuditActor,
-) -> Result<SalesChangeSubmission> {
+) -> Result<(SalesChangeSubmission, Vec<SalesChangeSubmissionLine>)> {
     let (gross, net, tax) = change_line_totals(lines);
-    SalesChangeSubmission::new(
+    // 提交头 `validate_line_list` 需要行摘要；行实体另集存储，但创建数据必须非空。
+    let line_datas = build_change_submission_line_datas(lines)?;
+    let submission = SalesChangeSubmission::new(
         SalesChangeSubmissionId::new(next_id()),
         SalesChangeSubmissionData {
             sales_change_order_id: change_order.base.id.clone().into(),
@@ -841,10 +861,19 @@ fn build_change_submission_with_no(
             tax_amount: tax,
             submitted_at: Instant::now(),
             submitted_by: actor.id().to_string(),
-            lines: Vec::new(),
+            lines: line_datas.clone(),
         },
     )
-    .map_err(Error::Logic)
+    .map_err(Error::Logic)?;
+    let mut submission_lines = Vec::with_capacity(line_datas.len());
+    for data in line_datas {
+        submission_lines.push(SalesChangeSubmissionLine::new(
+            SalesChangeSubmissionLineId::new(next_id()),
+            submission.base.id.clone().into(),
+            data,
+        )?);
+    }
+    Ok((submission, submission_lines))
 }
 
 /// D13 业务性质 → D14 同形类型转换。
@@ -857,42 +886,36 @@ fn convert_business_type(value: entities::sales_order::BusinessType) -> entities
     }
 }
 
-/// 从变更工作副本行构建变更提交行。
+/// 从变更工作副本行构建变更提交行创建数据（提交头行摘要校验用）。
 ///
 /// # 参数
-/// * `submission` - 变更提交
 /// * `lines` - 工作副本行
 ///
 /// # 返回
-/// 返回变更提交行清单。
+/// 返回变更提交行创建数据清单。
 ///
 /// # 错误
 /// 行字段组缺失或非法时返回错误。
-fn build_change_submission_lines(
-    submission: &SalesChangeSubmission,
+fn build_change_submission_line_datas(
     lines: &[entities::sales_order::SalesOrderWorkingCopyLine],
-) -> Result<Vec<SalesChangeSubmissionLine>> {
-    let mut built = Vec::with_capacity(lines.len());
+) -> Result<Vec<SalesChangeSubmissionLineData>> {
+    let mut datas = Vec::with_capacity(lines.len());
     for line in lines {
         let goods = change_copy_goods(line)?;
         let voucher = change_copy_voucher(line)?;
-        built.push(SalesChangeSubmissionLine::new(
-            SalesChangeSubmissionLineId::new(next_id()),
-            submission.base.id.clone().into(),
-            SalesChangeSubmissionLineData {
-                sales_order_line_id: line.sales_order_line_id.clone(),
-                line_no: line.line_no,
-                line_type: convert_line_type(line.line_type),
-                sales_tax_rate: line.sales_tax_rate,
-                item_name_snapshot: line.item_name_snapshot.clone(),
-                spec_snapshot: line.spec_snapshot.clone(),
-                unit_snapshot: line.unit_snapshot.clone(),
-                goods,
-                voucher,
-            },
-        )?);
+        datas.push(SalesChangeSubmissionLineData {
+            sales_order_line_id: line.sales_order_line_id.clone(),
+            line_no: line.line_no,
+            line_type: convert_line_type(line.line_type),
+            sales_tax_rate: line.sales_tax_rate,
+            item_name_snapshot: line.item_name_snapshot.clone(),
+            spec_snapshot: line.spec_snapshot.clone(),
+            unit_snapshot: line.unit_snapshot.clone(),
+            goods,
+            voucher,
+        });
     }
-    Ok(built)
+    Ok(datas)
 }
 
 /// 销售变更单创建事务写入集合。

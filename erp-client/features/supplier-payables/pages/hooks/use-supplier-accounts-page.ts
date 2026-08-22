@@ -66,6 +66,7 @@ export function useSupplierAccountsPage() {
     const fromWorkspace = searchParams.get("from") ?? undefined
     const returnTo = searchParams.get("returnTo") ?? undefined
     const sessionTrack = searchParams.get("session") as AllocationTrack | null
+    const draftSessionId = searchParams.get("draftSessionId") ?? undefined
     const detailId = searchParams.get("detailId") ?? undefined
     const previewKind = parsePreviewKind(searchParams.get("previewKind"))
     const workItemId = parseWorkItemId(searchParams)
@@ -464,6 +465,7 @@ export function useSupplierAccountsPage() {
                 setSession({
                     track: sessionTrack,
                     supplierId,
+                    draftSessionId,
                     purchaseOrderId,
                     returnTo,
                     fromWorkspace,
@@ -519,6 +521,7 @@ export function useSupplierAccountsPage() {
             {
                 session: next.track,
                 supplierId: next.supplierId,
+                draftSessionId: next.draftSessionId ?? null,
                 paymentId: next.existingPaymentId ?? null,
                 invoiceId: next.existingInvoiceId ?? null,
                 detailId: null,
@@ -532,11 +535,24 @@ export function useSupplierAccountsPage() {
         patchUrl(
             {
                 session: null,
+                draftSessionId: null,
                 paymentId: null,
                 invoiceId: null,
             },
             { replace: true },
         )
+    }
+
+    /**
+     * 核销会话主键回写：会话视图加载后携带新生成的 draftSessionId 时，
+     * 写入页面状态与 URL，保证查询失效重取复用同一会话（不换主键、不清空用户勾选）。
+     */
+    function syncSessionId(nextDraftSessionId: string) {
+        setSession((prev) => {
+            if (!prev || prev.draftSessionId === nextDraftSessionId) return prev
+            return { ...prev, draftSessionId: nextDraftSessionId }
+        })
+        patchUrl({ draftSessionId: nextDraftSessionId }, { replace: true })
     }
 
     function openPreview(payableAccountId: string) {
@@ -665,6 +681,7 @@ export function useSupplierAccountsPage() {
         session,
         openSession,
         closeSession,
+        syncSessionId,
         pickSupplierOpen,
         setPickSupplierOpen,
         pickSupplierId,

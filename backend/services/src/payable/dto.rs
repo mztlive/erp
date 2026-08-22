@@ -171,8 +171,14 @@ pub struct PayableAccountView {
     pub id: String,
     /// 来源单据 ID。
     pub source_document_id: String,
+    /// 来源单据业务单号（采购单号等；未知来源为空）。
+    pub source_document_no: Option<String>,
     /// 往来供应商。
     pub supplier_id: String,
+    /// 供应商编号（主数据缺失时为空）。
+    pub supplier_no: Option<String>,
+    /// 供应商名称（主数据缺失时为空）。
+    pub supplier_name: Option<String>,
     /// 来源类型。
     pub source_type: PayableSourceType,
     /// 含税应付总额。

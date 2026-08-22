@@ -86,7 +86,6 @@ export function useContractUploadForm({
         "customer_scope:detail",
     )
     const uploadMutation = useUploadContractPdfMutation()
-    const seededCustomerRef = React.useRef(false)
     const [discardOpen, setDiscardOpen] = React.useState(false)
 
     const form = useAppForm({
@@ -111,6 +110,7 @@ export function useContractUploadForm({
                 customerId:
                     value.customerId.trim() || initialCustomerId || undefined,
                 customerName: value.customerName.trim(),
+                settlementPartyId: value.settlementPartyId.trim() || undefined,
                 settlementPartyName: value.settlementPartyName.trim(),
                 paymentTerms:
                     paymentTermLabel(value.paymentTerms) ||
@@ -141,7 +141,6 @@ export function useContractUploadForm({
 
     React.useEffect(() => {
         if (!open) {
-            seededCustomerRef.current = false
             uploadMutation.reset()
             return
         }
@@ -165,10 +164,19 @@ export function useContractUploadForm({
     React.useEffect(() => {
         if (!open) return
         const customer = customerQuery.data
-        if (!customer || seededCustomerRef.current) return
-        seededCustomerRef.current = true
-        form.setFieldValue("customerId", customer.customerId)
-        form.setFieldValue("customerName", customer.currentRevision.legalName)
+        if (!customer) return
+        // 幂等补写客户名：StrictMode（dev）双跑 effect 时 open 效果会二次 reset，
+        // 以「值为空」为守卫而非 ref，保证名称最终就绪；用户改选客户由 onItemChange 维护。
+        const values = form.state.values
+        if (values.customerId !== customer.customerId) {
+            form.setFieldValue("customerId", customer.customerId)
+        }
+        if (!values.customerName) {
+            form.setFieldValue(
+                "customerName",
+                customer.currentRevision.legalName,
+            )
+        }
     }, [customerQuery.data, form, open])
 
     return {

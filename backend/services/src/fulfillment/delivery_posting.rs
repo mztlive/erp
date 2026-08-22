@@ -163,19 +163,21 @@ async fn post_warehouse_ship_line(
         },
     )?;
     db.stock_reservation_entries().create(&entry, session).await?;
-    if !db
-        .stock_balances()
-        .deduct_available(&balance.base.id, line.quantity, session)
-        .await?
-    {
-        return Err(Error::BusinessLogicError("可用库存不足，无法发货".to_string()));
-    }
+    // 先释放预占再扣可用：预占建立时已扣减 available（reserved += q / available -= q），
+    // 消耗本单预占发货时 available 已不含这部分，必须先释放（available += q）才能扣减
     if !db
         .stock_balances()
         .release_reserved(&balance.base.id, line.quantity, session)
         .await?
     {
         return Err(Error::BusinessLogicError("预占余额不足，无法发货".to_string()));
+    }
+    if !db
+        .stock_balances()
+        .deduct_available(&balance.base.id, line.quantity, session)
+        .await?
+    {
+        return Err(Error::BusinessLogicError("可用库存不足，无法发货".to_string()));
     }
     let movement = StockMovement::new(
         StockMovementId::new(next_id()),

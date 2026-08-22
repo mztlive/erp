@@ -104,7 +104,9 @@ export function usePaymentReversalFlow(args: {
         setReversalDraft(res.reversal)
         setReversalRequest(null)
         openReversalPreview(res.reversal.reversalId)
-        setReversalSubmitOpen(true)
+        // 抽屉与确认弹窗同帧挂载时，Base UI 两个同级 portal 会互相标记 aria-hidden，
+        // 顶层弹窗按钮会从无障碍树消失（getByRole 不可见）；把弹窗推迟到下一帧再打开。
+        setTimeout(() => setReversalSubmitOpen(true), 0)
     }
 
     /**

@@ -142,6 +142,9 @@ const SALES_PERMISSIONS: &[&str] = &[
 const SALES_LEADER_PERMISSIONS: &[&str] = &[
     "work_item:list",
     "work_item:detail",
+    // 直接指派的审批任务依赖 manage 参与权可见（与采购/财务等审批角色一致）；
+    // 无 manage 时既非创建人又非参与人，任务会被参与权过滤掉。
+    "work_item:manage",
     "approval_instance:read",
     "approval_instance:decide",
     "approval_instance:cancel",
@@ -400,7 +403,9 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     "business_document:detail",
     "document_relation:list",
     "document_participant:list",
-    // 上下文只读
+    // 上下文只读（往来主体搜索：登记回款/销项发票需选择结算主体）
+    "party:list",
+    "party:detail",
     "customer:list",
     "customer:detail",
     "customer_scope:detail",
@@ -417,6 +422,12 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     "purchase_order:list",
     "purchase_order:detail",
     "purchase_order:review",
+    // 采购变更复核：审批区与变更清单需要读取变更单（决定走 approval_instance:decide）
+    "purchase_change_order:list",
+    "purchase_change_order:detail",
+    // 库存调整复核：审批区与调整单详情需要读取调整单（决定走 approval_instance:decide）
+    "stock_adjustment:list",
+    "stock_adjustment:detail",
     "contract:list",
     "contract:detail",
     // 客户往来
@@ -478,6 +489,11 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "sales_order:detail",
     "purchase_order:list",
     "purchase_order:detail",
+    // 管理层打开变更任务详情页需读取变更单（只读，不参与决定）
+    "purchase_change_order:list",
+    "purchase_change_order:detail",
+    "stock_adjustment:list",
+    "stock_adjustment:detail",
     "stock_balance:list",
     "stock_balance:detail",
     "stock_movement:list",
@@ -598,6 +614,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     upgrade_workflow_permissions(rbac).await?;
     upgrade_purchase_review_permissions(rbac).await?;
     upgrade_sales_role_permissions(rbac).await?;
+    upgrade_finance_role_party_read_permissions(rbac).await?;
     upgrade_customer_role_boundaries(rbac).await?;
     upgrade_procurement_role_permissions(rbac).await?;
     upgrade_sellable_sku_reader_permissions(rbac).await?;
@@ -807,6 +824,29 @@ fn sales_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<P
     before_customer_boundary.push(Permission::parse("customer:*")?);
     before_customer_boundary.push(Permission::parse("party_bank_account:*")?);
     Ok(vec![before_sellable_pool, before_customer_boundary])
+}
+
+/// 仅为仍保持历史默认种子的财务角色补齐往来主体只读权限。
+///
+/// 登记回款/销项发票的往来主体选择器调用 `GET /admin/parties`（`party:list`），
+/// 财务角色缺该权限时无法选择结算主体（E2E flow-01 W11 复现）。
+async fn upgrade_finance_role_party_read_permissions(rbac: &SharedRbacService) -> Result<()> {
+    let desired = parse_permissions(FINANCE_PERMISSIONS)?;
+    for previous in finance_legacy_permission_snapshots(&desired)? {
+        upgrade_exact(rbac, "role-finance", previous, desired.clone()).await?;
+    }
+    Ok(())
+}
+
+/// 本轮补齐前财务默认种子缺少的往来主体只读权限。
+const FINANCE_PARTY_READ_GAP_PERMISSIONS: &[&str] = &["party:list", "party:detail"];
+
+/// 构造可安全识别的历史财务默认权限快照。
+fn finance_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
+    Ok(vec![remove_permissions(
+        desired,
+        FINANCE_PARTY_READ_GAP_PERMISSIONS,
+    )])
 }
 
 /// 仅为仍保持历史默认种子的采购角色补齐当前供应商维护权限。
@@ -1231,6 +1271,64 @@ mod tests {
             assert!(previous
                 .iter()
                 .all(|permission| permission.resource() != "integration_task"));
+        }
+    }
+
+    #[test]
+    fn purchase_change_read_follows_review_responsibility_roles() {
+        // 采购变更由财务复核；管理层可打开任务详情。两者必须能读取变更单，
+        // 决定本身走 approval_instance:decide，无需 approve/reject 资源动作。
+        // 采购用通配 `purchase_change_order:*` 覆盖，按解析后的覆盖关系断言。
+        let required = ["purchase_change_order:list", "purchase_change_order:detail"];
+        let read_roles = ["role-procurement", "role-finance", "role-management"];
+        for role in PREDEFINED_ROLES {
+            let permissions = parse_permissions(role.permissions).unwrap();
+            for permission in required {
+                let parsed = Permission::parse(permission).unwrap();
+                let covered = permissions
+                    .iter()
+                    .any(|seeded| seeded.covers(&parsed));
+                assert_eq!(
+                    covered,
+                    read_roles.contains(&role.id),
+                    "{} 的采购变更读取权限不符合固定责任角色注册表: {permission}",
+                    role.id
+                );
+            }
+            assert!(
+                !role
+                    .permissions
+                    .contains(&"purchase_change_order:approve"),
+                "{} 不应配置采购变更 approve（决定走 approval_instance:decide）",
+                role.id
+            );
+        }
+    }
+
+    #[test]
+    fn stock_adjustment_read_follows_review_responsibility_roles() {
+        // 库存调整由财务复核（仓储可创建并代行）；管理层可打开任务详情。
+        // 决定本身走 approval_instance:decide，无需 approve/reject 资源动作。
+        let required = ["stock_adjustment:list", "stock_adjustment:detail"];
+        let read_roles = [
+            "role-warehouse",
+            "role-finance",
+            "role-management",
+        ];
+        for role in PREDEFINED_ROLES {
+            let permissions = parse_permissions(role.permissions).unwrap();
+            for permission in required {
+                let parsed = Permission::parse(permission).unwrap();
+                let covered = permissions
+                    .iter()
+                    .any(|seeded| seeded.covers(&parsed));
+                assert_eq!(
+                    covered,
+                    read_roles.contains(&role.id),
+                    "{} 的库存调整读取权限不符合固定责任角色注册表: {permission}",
+                    role.id
+                );
+            }
         }
     }
 

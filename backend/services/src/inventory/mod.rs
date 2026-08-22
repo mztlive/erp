@@ -15,7 +15,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, CatalogExt, InventoryExt, NoTransaction, Transactional, WarehouseExt};
+use database::{AccessControlExt, CatalogExt, FulfillmentExt, InventoryExt, NoTransaction, Transactional, WarehouseExt};
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
 use entities::ids::{StockAdjustmentId, StockAdjustmentLineId, StockMovementId, StockReservationEntryId};
@@ -266,24 +266,30 @@ impl InventoryService {
             )
             .await?;
         let balance_view = build_balance_view(&balance, &enrichments, !reservations.is_empty());
+        let mut recent_movements: Vec<StockMovementView> = movements
+            .items
+            .into_iter()
+            .map(|row| StockMovementView {
+                id: row.id,
+                warehouse_id: row.warehouse_id.to_string(),
+                sku_id: row.sku_id.to_string(),
+                movement_type: row.movement_type,
+                direction: row.direction,
+                quantity: row.quantity,
+                source_document_id: row.source_document_id,
+                source_document_no: None,
+                source_line_id: row.source_line_id,
+                occurred_at: row.occurred_at.unix_secs(),
+                recorded_at: row.recorded_at.unix_secs(),
+            })
+            .collect();
+        let source_document_nos = load_movement_source_document_nos(&self.db, &recent_movements).await?;
+        for movement in &mut recent_movements {
+            movement.source_document_no = source_document_nos.get(&movement.source_document_id).cloned();
+        }
         Ok(StockBalanceDetailView {
             balance: balance_view,
-            recent_movements: movements
-                .items
-                .into_iter()
-                .map(|row| StockMovementView {
-                    id: row.id,
-                    warehouse_id: row.warehouse_id.to_string(),
-                    sku_id: row.sku_id.to_string(),
-                    movement_type: row.movement_type,
-                    direction: row.direction,
-                    quantity: row.quantity,
-                    source_document_id: row.source_document_id,
-                    source_line_id: row.source_line_id,
-                    occurred_at: row.occurred_at.unix_secs(),
-                    recorded_at: row.recorded_at.unix_secs(),
-                })
-                .collect(),
+            recent_movements,
             active_reservations: reservations.into_iter().map(Into::into).collect(),
             pending_adjustments: pending.into_iter().map(Into::into).collect(),
         })
@@ -323,7 +329,7 @@ impl InventoryService {
             .stock_movements()
             .search_stock_movements(&filter, &mut NoTransaction)
             .await?;
-        let items = page
+        let mut items: Vec<StockMovementView> = page
             .items
             .into_iter()
             .map(|row| StockMovementView {
@@ -334,11 +340,16 @@ impl InventoryService {
                 direction: row.direction,
                 quantity: row.quantity,
                 source_document_id: row.source_document_id,
+                source_document_no: None,
                 source_line_id: row.source_line_id,
                 occurred_at: row.occurred_at.unix_secs(),
                 recorded_at: row.recorded_at.unix_secs(),
             })
             .collect();
+        let source_document_nos = load_movement_source_document_nos(&self.db, &items).await?;
+        for item in &mut items {
+            item.source_document_no = source_document_nos.get(&item.source_document_id).cloned();
+        }
         Ok(PageView {
             items,
             total: page.total,
@@ -606,10 +617,67 @@ impl InventoryService {
                 .resource_log("stock_adjustment.update", "stock_adjustment", id.to_string())?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let adjustment_id = StockAdjustmentId::new(id.to_string());
+        let line_updates = req.lines.unwrap_or_default();
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.stock_adjustments().update(&mut adjustment, session).await?;
+                    if !line_updates.is_empty() {
+                        let existing = db
+                            .inventory()
+                            .adjustment_lines_by_adjustment_ids(
+                                std::slice::from_ref(&adjustment_id),
+                                session,
+                            )
+                            .await?;
+                        let existing_ids: std::collections::HashSet<&str> = existing
+                            .iter()
+                            .map(|line| line.base.id.as_str())
+                            .collect();
+                        for line_update in &line_updates {
+                            if !existing_ids.contains(line_update.line_id.as_str()) {
+                                return Err(Error::ValidationError(
+                                    "明细行不属于该调整单".to_string(),
+                                ));
+                            }
+                            let quantity = Quantity::from_str(&line_update.quantity)
+                                .map_err(Error::Logic)?;
+                            if quantity <= Quantity::from_str("0").map_err(Error::Logic)? {
+                                return Err(Error::ValidationError(
+                                    "调整数量必须为正数".to_string(),
+                                ));
+                            }
+                            if line_update.direction.is_some() {
+                                let expected = match adjustment.reason_type {
+                                    AdjustmentReasonType::StockGain => MovementDirection::Increase,
+                                    AdjustmentReasonType::StockLoss
+                                    | AdjustmentReasonType::Damage => MovementDirection::Decrease,
+                                };
+                                if line_update.direction != Some(expected) {
+                                    return Err(Error::ValidationError(format!(
+                                        "调整原因 {} 的明细方向必须为 {}",
+                                        adjustment.reason_type.label(),
+                                        expected.as_str()
+                                    )));
+                                }
+                            }
+                            if !db
+                                .inventory()
+                                .update_adjustment_line(
+                                    &line_update.line_id,
+                                    quantity,
+                                    line_update.direction,
+                                    session,
+                                )
+                                .await?
+                            {
+                                return Err(Error::NotFound(
+                                    "调整明细不存在".to_string(),
+                                ));
+                            }
+                        }
+                    }
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<StockAdjustment, crate::errors::Error>(adjustment)
                 })
@@ -1146,8 +1214,15 @@ async fn post_adjustment_line(
             }
         }
         MovementDirection::Decrease => {
-            release_applicable_reservations(db, session, &adjustment.warehouse_id, &line.sku_id, line)
-                .await?;
+            release_applicable_reservations(
+                db,
+                session,
+                &adjustment.warehouse_id,
+                &line.sku_id,
+                &balance.base.id,
+                line,
+            )
+            .await?;
             if !db
                 .stock_balances()
                 .deduct_available(&balance.base.id, line.quantity, session)
@@ -1172,6 +1247,7 @@ async fn post_adjustment_line(
 /// * `session` - 事务会话执行器
 /// * `warehouse_id` - 调整仓库
 /// * `sku_id` - 调整 SKU
+/// * `balance_id` - 库存余额主键（同步释放预占）
 /// * `line` - 调整明细（来源单据引用）
 ///
 /// # 返回
@@ -1184,6 +1260,7 @@ async fn release_applicable_reservations(
     session: &mut mongodb::ClientSession,
     warehouse_id: &entities::ids::WarehouseId,
     sku_id: &entities::ids::SkuId,
+    balance_id: &str,
     line: &StockAdjustmentLine,
 ) -> Result<()> {
     let active = [
@@ -1219,6 +1296,17 @@ async fn release_applicable_reservations(
         {
             continue;
         }
+        // 同步余额预占（释放量从 reserved 转入 available），否则后续
+        // deduct_available 会因可用量不足而误拒盘亏/损坏过账。
+        if !db
+            .stock_balances()
+            .release_reserved(balance_id, reservation.reserved_quantity, session)
+            .await?
+        {
+            return Err(Error::BusinessLogicError(
+                "库存余额预占与预占记录不一致，无法过账库存调整".to_string(),
+            ));
+        }
         db.stock_reservation_entries()
             .create(
                 &StockReservationEntry::new(
@@ -1237,6 +1325,61 @@ async fn release_applicable_reservations(
             .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
     }
     Ok(())
+}
+
+/// 批量解析流水来源单据号（按流水类型查对应单据集合，`$in` 批量避免 N+1）。
+///
+/// 当前支持库存调整单（盘盈/盘亏/损坏）与采购入库单；其余来源类型暂不解析，
+/// 由前端回退显示来源主键。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `movements` - 流水视图列表
+///
+/// # 返回
+/// 返回「来源单据主键 → 单据号」映射。
+///
+/// # 错误
+/// 查询失败时返回 `RepositoryError`。
+async fn load_movement_source_document_nos(
+    db: &Database,
+    movements: &[StockMovementView],
+) -> Result<HashMap<String, String>> {
+    let mut document_nos = HashMap::new();
+    let adjustment_ids: Vec<&str> = movements
+        .iter()
+        .filter(|movement| {
+            matches!(
+                movement.movement_type,
+                MovementType::StockGain | MovementType::StockLoss | MovementType::Damage
+            )
+        })
+        .map(|movement| movement.source_document_id.as_str())
+        .collect();
+    if !adjustment_ids.is_empty() {
+        let adjustments = db
+            .stock_adjustments()
+            .find_many(doc! { "id": { "$in": adjustment_ids } }, &mut NoTransaction)
+            .await?;
+        for adjustment in adjustments {
+            document_nos.insert(adjustment.base.id.clone(), adjustment.adjustment_no.clone());
+        }
+    }
+    let receipt_ids: Vec<&str> = movements
+        .iter()
+        .filter(|movement| matches!(movement.movement_type, MovementType::PurchaseReceiptIn))
+        .map(|movement| movement.source_document_id.as_str())
+        .collect();
+    if !receipt_ids.is_empty() {
+        let receipts = db
+            .purchase_receipts()
+            .find_many(doc! { "id": { "$in": receipt_ids } }, &mut NoTransaction)
+            .await?;
+        for receipt in receipts {
+            document_nos.insert(receipt.base.id.clone(), receipt.receipt_no.clone());
+        }
+    }
+    Ok(document_nos)
 }
 
 /// 按主键集合批量取回仓库（`$in`，禁止 N+1）。
@@ -1461,6 +1604,7 @@ impl From<StockMovement> for StockMovementView {
             direction: movement.direction,
             quantity: movement.quantity,
             source_document_id: movement.source_document_id,
+            source_document_no: None,
             source_line_id: movement.source_line_id,
             occurred_at: movement.fact.occurred_at.unix_secs(),
             recorded_at: movement.fact.recorded_at.unix_secs(),

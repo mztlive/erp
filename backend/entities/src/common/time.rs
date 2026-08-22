@@ -9,7 +9,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, Utc};
 use serde::{de, de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::errors::{Error, Result};
@@ -35,9 +35,16 @@ impl BusinessDate {
     /// 返回今天的业务自然日。
     ///
     /// # 返回
-    /// 以服务端统一时基（UTC）计算的今天；跨时区业务由上层换算后显式构造。
+    /// 以业务时区（Asia/Shanghai，+08:00）计算的今天。业务日期无时区语义，
+    /// 前端与各类业务输入（客户/合同/单据的生效日期、到期日）均按中国业务
+    /// 时区的自然日构造，这里必须与之一致，否则 00:00–08:00 期间以 UTC 计算
+    /// 的“今天”会早于前端日期，导致归属范围查询（如客户列表）查不到当天
+    /// 新建的数据。
     pub fn today() -> Self {
-        Self(Utc::now().date_naive())
+        const BUSINESS_UTC_OFFSET_SECS: i32 = 8 * 3600;
+        let business_tz = FixedOffset::east_opt(BUSINESS_UTC_OFFSET_SECS)
+            .expect("+08:00 固定偏移量必然合法");
+        Self(Utc::now().with_timezone(&business_tz).date_naive())
     }
 
     /// 返回底层 `NaiveDate`。

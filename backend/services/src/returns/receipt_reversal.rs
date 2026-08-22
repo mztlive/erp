@@ -534,6 +534,37 @@ async fn apply_receipt_reversal_final_post(
         reversal.base.id.clone(),
     )?;
     db.audit_logs().create(&audit, session).await?;
+    // 冲正后刷新销售单回款进度与关闭状态（已结清可能退回部分回款）
+    let allocations = db
+        .receipt_allocations()
+        .find_allocations_by_receipts(&[reversal.original_customer_receipt_id.clone().into()], session)
+        .await?;
+    let mut sales_order_ids = Vec::new();
+    for allocation in &allocations {
+        let entry = db
+            .receivable_entries()
+            .find_by_id(&allocation.receivable_entry_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("应收分录不存在".to_string()))?;
+        let account = db
+            .receivable_accounts()
+            .find_by_id(&entry.receivable_account_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
+        sales_order_ids.push(account.sales_order_id.to_string());
+    }
+    sales_order_ids.sort();
+    sales_order_ids.dedup();
+    for sales_order_id in sales_order_ids {
+        crate::sales_order::update_sales_order_money_progress(
+            db,
+            session,
+            &entities::ids::SalesOrderId::new(sales_order_id),
+            actor_id.to_string(),
+            None,
+        )
+        .await?;
+    }
     Ok(())
 }
 

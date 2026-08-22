@@ -34,6 +34,7 @@ export type BackendStockMovement = {
     direction: string
     quantity: string
     source_document_id: string
+    source_document_no?: string | null
     source_line_id?: string | null
     occurred_at: number
     recorded_at: number

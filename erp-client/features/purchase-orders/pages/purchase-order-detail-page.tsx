@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 
 import {
     BusinessEmptyState,
@@ -19,8 +20,11 @@ import { EditSurface } from "@/features/purchase-orders/components/purchase-orde
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
 import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
 import { PurchaseOrderDetailSections } from "@/features/purchase-orders/components/purchase-order-detail-sections"
-import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
-import { usePurchaseOrderDetailCommandState } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
+import { usePurchaseOrderCenterQuery, purchaseOrderKeys } from "@/features/purchase-orders/hooks/queries"
+import {
+    type PurchaseOrderDetailResult,
+    usePurchaseOrderDetailCommandState,
+} from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import { usePurchaseOrderDetailEditActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-actions"
 import { usePurchaseOrderDetailEditGuard } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-guard"
 import { usePurchaseOrderDetailPermissions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-permissions"
@@ -75,12 +79,33 @@ export function PurchaseOrderDetailPage({
     const { commandLedger, result, setResult } =
         usePurchaseOrderDetailCommandState(purchaseOrderId)
 
+    // 审批决定/命令成功后单据状态会变（如审批中→已生效），统一在结果落定时
+    // 刷新采购单查询，避免页面停留在旧状态。
+    const queryClient = useQueryClient()
+    const handleResult = React.useCallback(
+        (next: React.SetStateAction<PurchaseOrderDetailResult | null>) => {
+            const resolved =
+                typeof next === "function" ? next(result) : next
+            if (
+                resolved &&
+                (resolved.status === "succeeded" ||
+                    resolved.status === "unknown")
+            ) {
+                void queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.detail(purchaseOrderId),
+                })
+            }
+            setResult(resolved)
+        },
+        [queryClient, purchaseOrderId, result],
+    )
+
     const reviewActions = usePurchaseOrderDetailReviewActions({
         purchaseOrderId,
         order,
         refetch: query.refetch,
         commandLedger,
-        setResult,
+        setResult: handleResult,
     })
 
     const draftForm = useAppForm({
@@ -100,7 +125,7 @@ export function PurchaseOrderDetailPage({
         order,
         refetch: query.refetch,
         commandLedger,
-        setResult,
+        setResult: handleResult,
         getPaymentTermCode: () => draftForm.state.values.paymentTermCode,
         setDraftPaymentTermCode: (value) =>
             draftForm.setFieldValue("paymentTermCode", value),
@@ -245,7 +270,7 @@ export function PurchaseOrderDetailPage({
                 requestLeave={guard.requestLeave}
                 onRequestChange={() => editActions.setChangeConfirmOpen(true)}
                 result={result}
-                onDismissResult={() => setResult(null)}
+                onDismissResult={() => handleResult(null)}
             />
 
             {isChangeOrderTask && activeSection !== "changes" ? (
@@ -255,7 +280,7 @@ export function PurchaseOrderDetailPage({
                     workItemId={focusedWorkItem?.workItemId}
                     expectedTaskVersion={focusedWorkItem?.taskVersion}
                     workItemAllowedActions={focusedWorkItem?.allowedActions}
-                    onResult={setResult}
+                    onResult={handleResult}
                 />
             ) : !isChangeOrderTask ? (
                 <PurchaseOrderApprovalArea
@@ -269,7 +294,7 @@ export function PurchaseOrderDetailPage({
                     expectedTaskVersion={focusedWorkItem?.taskVersion}
                     workItemAllowedActions={focusedWorkItem?.allowedActions}
                     onDecisionApplied={(view: ApprovalCommandView) =>
-                        setResult({
+                        handleResult({
                             status: "succeeded",
                             title: "审批决定已提交",
                             description: view.latestRejectionReason
@@ -334,7 +359,7 @@ export function PurchaseOrderDetailPage({
                         ? focusedWorkItem?.allowedActions
                         : undefined
                 }
-                onChangeApprovalResult={setResult}
+                onChangeApprovalResult={handleResult}
             />
 
             <PurchaseOrderDetailDialogs

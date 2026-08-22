@@ -20,8 +20,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, DocumentRegistryExt, NoTransaction, PayableExt, PurchaseOrderExt, ReceivableExt,
-    SupplierExt, Transactional,
+    AccessControlExt, DocumentRegistryExt, NoTransaction, PartyExt, PayableExt, PurchaseOrderExt,
+    ReceivableExt, SupplierExt, Transactional,
 };
 use entities::common::time::Instant;
 use entities::document_registry::{BusinessDocument, DocumentType};
@@ -954,10 +954,16 @@ impl PayableService {
                 posted_at: entry.posted_at,
             })
             .collect();
+        let (supplier_no, supplier_name) =
+            resolve_supplier_display(&self.db, account.supplier_id.as_ref()).await?;
+        let source_document_no = resolve_source_document_no(&self.db, &account).await?;
         Ok(PayableAccountView {
             id: account.base.id.clone(),
             source_document_id: account.source_document_id,
+            source_document_no,
             supplier_id: account.supplier_id.to_string(),
+            supplier_no,
+            supplier_name,
             source_type: account.source_type,
             gross_total: account.gross_total,
             settled_total: account.settled_total,
@@ -1016,6 +1022,68 @@ impl PayableService {
             approval: document_approval_view(binding.as_ref(), None, payment.status),
         })
     }
+}
+
+/// 解析供应商展示信息（编号 + 名称）。
+///
+/// 供应商编号取自 `supplier_accounts`；名称取共用主体当前修订的法定名称
+/// （与 supplier_offering 的解析路径一致）。主数据缺失时返回 `None`，不阻断列表。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `supplier_id` - 供应商账号 ID
+///
+/// # 返回
+/// 返回 `(供应商编号, 供应商名称)`。
+async fn resolve_supplier_display(
+    db: &mongodb::Database,
+    supplier_id: &str,
+) -> Result<(Option<String>, Option<String>)> {
+    let account = db
+        .supplier_accounts()
+        .find_by_id(supplier_id, &mut NoTransaction)
+        .await?;
+    let Some(account) = account else {
+        return Ok((None, None));
+    };
+    let supplier_no = Some(account.supplier_no.clone());
+    let party = db
+        .parties()
+        .find_by_id(account.party_id.as_ref(), &mut NoTransaction)
+        .await?;
+    let Some(party) = party else {
+        return Ok((supplier_no, None));
+    };
+    let Some(revision_id) = party.stable.current_revision_id.clone() else {
+        return Ok((supplier_no, None));
+    };
+    let revision = db
+        .party_revisions()
+        .find_by_id(&revision_id, &mut NoTransaction)
+        .await?;
+    Ok((supplier_no, revision.map(|value| value.legal_name)))
+}
+
+/// 解析应付子账来源单据的业务单号（采购单来源取采购单号）。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `account` - 应付子账
+///
+/// # 返回
+/// 返回业务单号；未知来源或单据缺失时返回 `None`。
+async fn resolve_source_document_no(
+    db: &mongodb::Database,
+    account: &PayableAccount,
+) -> Result<Option<String>> {
+    if account.source_type != entities::payable::PayableSourceType::PurchaseOrder {
+        return Ok(None);
+    }
+    let order = db
+        .purchase_orders()
+        .find_by_id(&account.source_document_id, &mut NoTransaction)
+        .await?;
+    Ok(order.map(|value| value.purchase_no.clone()))
 }
 
 /// 返回固定零金额。

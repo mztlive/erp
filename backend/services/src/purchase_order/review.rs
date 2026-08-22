@@ -1,14 +1,31 @@
 //! 采购财务审核、应付与成本事实编排。
 
+use std::collections::HashMap;
+use std::str::FromStr;
+
 use database::{
-    AccessControlExt, CostExt, Executor, NoTransaction, PayableExt, PurchaseOrderExt, Transactional,
+    AccessControlExt, CostExt, Executor, FulfillmentExt, NoTransaction, PayableExt, PurchaseOrderExt,
+    SalesOrderExt, Transactional, WarehouseExt,
 };
+use entities::common::source::SourceType;
 use entities::common::time::Instant;
-use entities::ids::{CostEntryId, PayableEntryId};
+use entities::fulfillment::{
+    Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId,
+    FulfillmentResult, PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine,
+    PurchaseReceiptLineData, PurchaseReceiptLineId, QualityResult, ServiceFulfillment,
+    ServiceFulfillmentData, ServiceFulfillmentId,
+};
+use entities::ids::{
+    CostEntryId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseReceiptId,
+    SalesOrderLineId,
+};
+use entities::money::Quantity;
 use entities::purchase_order::{
+    FulfillmentResponsibility, PurchaseLineSalesAllocation, PurchaseLineSalesAllocationData,
     PurchaseLineType, PurchaseOrder, PurchaseOrderReviewDecision, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine, SubmissionStatus,
 };
+use entities::warehouse::EnableStatus;
 use entities::work_item::WorkItemStatus;
 use id_generator::next_id;
 
@@ -277,6 +294,7 @@ async fn persist_formalized_order(
         payable,
         cost_entries,
     } = persist;
+    let fulfillment_responsibility = order.fulfillment_responsibility;
     let actor_id = actor.id().to_string();
     let audit = actor.clone().resource_log(
         "purchase_order.formalize",
@@ -313,11 +331,320 @@ async fn persist_formalized_order(
                         .create_cost_entry_with_allocations(entry, Vec::new(), session)
                         .await?;
                 }
+                // 采购生效必须形成「采购行→销售行」分配（§6.6）：入库预占沿
+                // 分配关系回到原销售明细，仓发/履约草稿依赖预占。
+                let allocations =
+                    create_sales_allocations(&db, &revision_lines, session).await?;
+                // 入仓采购单生效后自动生成采购入库草稿：履约工作面（W09）按
+                // DRAFT 采购入库单投影「入库」待办，仓储确认后过账入库。
+                if fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
+                    create_receipt_draft_for_order(&db, &order_mut, &revision_lines, session).await?;
+                } else if fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
+                    // 供应商直发同样需要履约待办：按 DRAFT 发货单（直发类型）
+                    // 投影「代发」待办，采购在履约工作面登记物流后过账发货。
+                    create_delivery_draft_for_order(
+                        &db,
+                        &order_mut,
+                        &revision_lines,
+                        &allocations,
+                        session,
+                    )
+                    .await?;
+                } else if fulfillment_responsibility == FulfillmentResponsibility::Service {
+                    // 线下服务同样需要履约待办：按 DRAFT 服务履约记录投影
+                    // 「服务」待办，采购在履约工作面登记服务事实后确认完成。
+                    create_service_fulfillment_draft_for_order(
+                        &db,
+                        &order_mut,
+                        &revision_lines,
+                        &allocations,
+                        &actor_id,
+                        session,
+                    )
+                    .await?;
+                }
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
             })
         })
         .await
+}
+
+/// 为生效采购单创建「采购行→销售行」分配（§6.6）。
+///
+/// 采购版本行通过 `procurement_confirmation_line_id` 引用销售稳定明细
+/// （建单时以销售提交行/明细身份填充），据此反查销售版本行形成分配；
+/// 入库预占沿本分配回到原销售明细。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `revision_lines` - 采购生效版本行
+/// * `executor` - 数据访问执行器，必须位于事务中
+///
+/// # 返回
+/// 返回「采购版本行 id → 分配 id」映射（供应商直发草稿按行引用分配）。
+///
+/// # 错误
+/// 销售版本行缺失或写入失败时返回错误。
+async fn create_sales_allocations(
+    db: &mongodb::Database,
+    revision_lines: &[entities::purchase_order::PurchaseOrderRevisionLine],
+    executor: &mut dyn Executor,
+) -> Result<HashMap<String, PurchaseLineSalesAllocationId>> {
+    let mut allocations = HashMap::new();
+    let sales_order_line_ids: Vec<String> = revision_lines
+        .iter()
+        .filter(|line| line.line_type == PurchaseLineType::ItemService)
+        .filter_map(|line| line.procurement_confirmation_line_id.clone())
+        .map(|id| id.to_string())
+        .collect();
+    if sales_order_line_ids.is_empty() {
+        return Ok(allocations);
+    }
+    let sales_revision_lines = db
+        .sales_order_revision_lines()
+        .find_many(
+            mongodb::bson::doc! { "sales_order_line_id": { "$in": sales_order_line_ids } },
+            executor,
+        )
+        .await?;
+    for line in revision_lines {
+        if line.line_type != PurchaseLineType::ItemService {
+            continue;
+        }
+        let Some(confirmation_line_id) = &line.procurement_confirmation_line_id else {
+            continue;
+        };
+        let Some(sales_revision_line) = sales_revision_lines
+            .iter()
+            .find(|sales_line| sales_line.sales_order_line_id.to_string() == confirmation_line_id.to_string())
+        else {
+            return Err(Error::BusinessLogicError(
+                "采购明细缺少对应的销售版本行，无法形成销售分配".to_string(),
+            ));
+        };
+        let quantity = line
+            .quantity
+            .ok_or_else(|| Error::BusinessLogicError("采购明细缺少数量，无法形成销售分配".to_string()))?;
+        let allocation_id = PurchaseLineSalesAllocationId::new(next_id());
+        let allocation = PurchaseLineSalesAllocation::new(
+            allocation_id.clone(),
+            PurchaseLineSalesAllocationData {
+                purchase_order_revision_line_id: entities::ids::PurchaseOrderRevisionLineId::new(
+                    line.base.id.clone(),
+                ),
+                sales_order_revision_line_id: entities::ids::SalesOrderRevisionLineId::new(
+                    sales_revision_line.base.id.clone(),
+                ),
+                allocated_quantity: quantity,
+                allocated_cost_gross: line.gross_amount,
+                allocated_cost_net: line.net_amount,
+            },
+        )
+        .map_err(Error::Logic)?;
+        db.purchase_line_sales_allocations()
+            .create(&allocation, executor)
+            .await?;
+        allocations.insert(line.base.id.to_string(), allocation_id);
+    }
+    Ok(allocations)
+}
+
+/// 为生效采购单创建采购入库草稿（默认取最早启用的仓库；行按版本行全额合格）。
+async fn create_receipt_draft_for_order(
+    db: &mongodb::Database,
+    order: &PurchaseOrder,
+    revision_lines: &[entities::purchase_order::PurchaseOrderRevisionLine],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let warehouse = db
+        .warehouses()
+        .find_one(
+            mongodb::bson::doc! { "status": EnableStatus::Active.as_str() },
+            executor,
+        )
+        .await?
+        .ok_or_else(|| Error::BusinessLogicError("缺少启用仓库，无法生成采购入库草稿".to_string()))?;
+    let receipt_id = PurchaseReceiptId::new(next_id());
+    let receipt = PurchaseReceipt::new(
+        receipt_id.clone(),
+        PurchaseReceiptData {
+            receipt_no: format!("GRN-{}", receipt_id.as_ref()),
+            purchase_order_id: entities::ids::PurchaseOrderId::new(order.base.id.clone()),
+            warehouse_id: entities::ids::WarehouseId::new(warehouse.base.id.clone()),
+        },
+    )?;
+    let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
+    let mut lines = Vec::with_capacity(revision_lines.len());
+    for (index, line) in revision_lines.iter().enumerate() {
+        if line.line_type != PurchaseLineType::ItemService {
+            continue;
+        }
+        let quantity = line.quantity.unwrap_or(zero);
+        lines.push(
+            PurchaseReceiptLine::new(
+                PurchaseReceiptLineId::new(next_id()),
+                PurchaseReceiptLineData {
+                    purchase_receipt_id: receipt_id.clone(),
+                    line_no: (index + 1) as u32,
+                    purchase_order_revision_line_id: entities::ids::PurchaseOrderRevisionLineId::new(
+                        line.base.id.clone(),
+                    ),
+                    received_quantity: quantity,
+                    qualified_quantity: quantity,
+                    rejected_quantity: zero,
+                    quality_result: QualityResult::Passed,
+                },
+            )
+            .map_err(Error::Logic)?,
+        );
+    }
+    db.fulfillment()
+        .create_purchase_receipt_with_lines(&receipt, &lines, executor)
+        .await?;
+    Ok(())
+}
+
+/// 为生效供应商直发采购单创建发货草稿（§6.7 直发）。
+///
+/// 行按版本行全额生成，引用同一事务内已创建的「采购行→销售行」分配
+/// （`DeliveryLine` 行级校验要求直发必填分配）；草稿进入履约工作面（W09）
+/// 「交付与代发」通道，采购登记物流后过账发货。
+async fn create_delivery_draft_for_order(
+    db: &mongodb::Database,
+    order: &PurchaseOrder,
+    revision_lines: &[entities::purchase_order::PurchaseOrderRevisionLine],
+    allocations: &HashMap<String, PurchaseLineSalesAllocationId>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let delivery_id = DeliveryId::new(next_id());
+    let delivery = Delivery::new(
+        delivery_id.clone(),
+        DeliveryData {
+            delivery_no: format!("DLV-{}", delivery_id.as_ref()),
+            delivery_type: entities::fulfillment::DeliveryType::SupplierDirect,
+            sales_order_id: order.sales_order_id.clone(),
+            purchase_order_id: Some(PurchaseOrderId::new(order.base.id.clone())),
+            warehouse_id: None,
+            carrier: None,
+            tracking_no: None,
+            address_snapshot_encrypted: None,
+            address_snapshot_fingerprint: None,
+        },
+    )
+    .map_err(Error::Logic)?;
+    let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
+    let mut lines = Vec::with_capacity(revision_lines.len());
+    for (index, line) in revision_lines.iter().enumerate() {
+        if line.line_type != PurchaseLineType::ItemService {
+            continue;
+        }
+        let Some(confirmation_line_id) = &line.procurement_confirmation_line_id else {
+            continue;
+        };
+        let Some(allocation_id) = allocations.get(line.base.id.as_str()) else {
+            return Err(Error::BusinessLogicError(
+                "供应商直发明细缺少销售分配，无法生成发货草稿".to_string(),
+            ));
+        };
+        let quantity = line.quantity.unwrap_or(zero);
+        lines.push(
+            DeliveryLine::new(
+                DeliveryLineId::new(next_id()),
+                DeliveryLineData {
+                    delivery_id: delivery_id.clone(),
+                    line_no: (index + 1) as u32,
+                    sales_order_line_id: SalesOrderLineId::new(confirmation_line_id.to_string()),
+                    quantity,
+                    stock_reservation_id: None,
+                    purchase_line_sales_allocation_id: Some(allocation_id.clone()),
+                },
+                entities::fulfillment::DeliveryType::SupplierDirect,
+            )
+            .map_err(Error::Logic)?,
+        );
+    }
+    if lines.is_empty() {
+        return Ok(());
+    }
+    db.fulfillment()
+        .create_delivery_with_lines(&delivery, &lines, executor)
+        .await?;
+    Ok(())
+}
+
+/// 服务履约草稿敏感字段的查询指纹密钥（域内常量，同 warehouse 域先例；
+/// 草稿阶段为占位快照，代码库无按指纹查询服务履约的路径）。
+const SERVICE_FULFILLMENT_FINGERPRINT_KEY: &[u8] = b"erp-service-fulfillment-draft-key-v1";
+
+/// 为生效线下服务采购单创建服务履约草稿（§6.7 服务）。
+///
+/// 服务履约记录按采购版本行逐行生成（单记录单明细），引用同一事务内已创建
+/// 的「采购行→销售行」分配；草稿进入履约工作面（W09）「交付与代发」通道的
+/// 服务类型，采购登记服务地点/时间/结果后确认完成。交付对象与服务地点为
+/// 占位快照（UI 不采集交付对象；确认后仍以占位值落库）。
+async fn create_service_fulfillment_draft_for_order(
+    db: &mongodb::Database,
+    order: &PurchaseOrder,
+    revision_lines: &[entities::purchase_order::PurchaseOrderRevisionLine],
+    allocations: &HashMap<String, PurchaseLineSalesAllocationId>,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
+    let now = Instant::now();
+    let placeholder = "待填写".to_string();
+    for line in revision_lines {
+        if line.line_type != PurchaseLineType::ItemService {
+            continue;
+        }
+        let Some(confirmation_line_id) = &line.procurement_confirmation_line_id else {
+            continue;
+        };
+        let Some(allocation_id) = allocations.get(line.base.id.as_str()) else {
+            return Err(Error::BusinessLogicError(
+                "线下服务明细缺少销售分配，无法生成服务履约草稿".to_string(),
+            ));
+        };
+        let quantity = line.quantity.unwrap_or(zero);
+        let record_id = ServiceFulfillmentId::new(next_id());
+        let record = ServiceFulfillment::new(
+            record_id.clone(),
+            ServiceFulfillmentData {
+                fulfillment_no: format!("SF-{}", record_id.as_ref()),
+                sales_order_line_id: SalesOrderLineId::new(confirmation_line_id.to_string()),
+                purchase_order_id: PurchaseOrderId::new(order.base.id.clone()),
+                purchase_line_sales_allocation_id: allocation_id.clone(),
+                recipient_snapshot: placeholder.clone(),
+                recipient_snapshot_fingerprint: ServiceFulfillment::recipient_snapshot_fingerprint(
+                    &placeholder,
+                    SERVICE_FULFILLMENT_FINGERPRINT_KEY,
+                ),
+                quantity,
+                result: FulfillmentResult::Success,
+                evidence_attachment_id: None,
+                service_location_encrypted: placeholder.clone(),
+                service_location_fingerprint: ServiceFulfillment::service_location_fingerprint(
+                    &placeholder,
+                    SERVICE_FULFILLMENT_FINGERPRINT_KEY,
+                ),
+                service_started_at: None,
+                service_ended_at: None,
+                completion_note: None,
+                fact_no: next_id(),
+                occurred_at: now,
+                recorded_at: now,
+                recorded_by: actor_id.to_string(),
+                source_type: SourceType::Erp,
+                source_reference: None,
+                reason_code: None,
+                reason_text: None,
+            },
+        )
+        .map_err(Error::Logic)?;
+        db.service_fulfillments().create(&record, executor).await?;
+    }
+    Ok(())
 }
 
 /// 在审核通过事务内重验冻结金额、销售分配与采购确认的精确供给来源。

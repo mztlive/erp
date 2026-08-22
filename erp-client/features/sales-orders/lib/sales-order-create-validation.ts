@@ -77,6 +77,7 @@ const createSalesOrderSchema = z
         nature: z.enum(["physical_service", "card_voucher"]),
         ownerUserId: z.string().trim().min(1, "负责销售未就绪，请刷新后重试"),
         ownerName: z.string().trim().min(1, "负责销售未就绪，请刷新后重试"),
+        fulfillmentMode: z.string(),
         welfareScene: z
             .string()
             .trim()
@@ -220,6 +221,7 @@ const draftSalesOrderSchema = z
         nature: z.enum(["physical_service", "card_voucher"]),
         ownerUserId: z.string(),
         ownerName: z.string(),
+        fulfillmentMode: z.string(),
         welfareScene: z.string(),
         paymentTerms: z.string(),
         fulfillmentDeadline: z.string(),

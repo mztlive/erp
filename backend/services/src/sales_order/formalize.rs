@@ -1,17 +1,26 @@
 //! 销售单最终通过：包装既有 `formalize_submission` 仓储端口。
 
+use std::str::FromStr;
+
 use database::{
-    AccessControlExt, DocumentRegistryExt, NoTransaction, ProjectionExt, SalesOrderExt, Transactional,
+    AccessControlExt, DocumentRegistryExt, NoTransaction, ProjectionExt, ReceivableExt, SalesOrderExt,
+    Transactional,
 };
-use entities::common::time::Instant;
+use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
-    SalesOrderId, SalesOrderProjectionDeliveryId, SalesOrderProjectionId, SalesOrderProjectionRevisionId,
-    SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderSubmissionId, SalesOrderVoucherLineRevisionId,
+    ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderProjectionDeliveryId,
+    SalesOrderProjectionId, SalesOrderProjectionRevisionId, SalesOrderRevisionId, SalesOrderRevisionLineId,
+    SalesOrderSubmissionId, SalesOrderVoucherLineRevisionId,
 };
+use entities::money::Amount;
 use entities::projection::{
     CardForm as ProjectionCardForm, ProjectionDeliveryStatus, ProjectionSource, SalesOrderProjection,
     SalesOrderProjectionData, SalesOrderProjectionDelivery, SalesOrderProjectionDeliveryData,
     SalesOrderProjectionRevision, SalesOrderProjectionRevisionData,
+};
+use entities::receivable::{
+    AccountReviewStatus, EntryDirection, ReceivableAccount, ReceivableAccountData, ReceivableEntry,
+    ReceivableEntryData, ReceivableEntryType,
 };
 use entities::sales_order::{
     BusinessType, CardForm, GoodsLineFields, LineType, RevisionSource, SalesOrder,
@@ -155,12 +164,83 @@ async fn persist_formalized_submission(
                 if let Some((proj, revision, delivery)) = projection {
                     persist_voucher_projection(&db, &proj, &revision, &delivery, session).await?;
                 }
+                // 销售单生效即形成原始应收（§6.8/§8.1.1）：子账 + 原始应收分录原子写入。
+                // 后续销售变更差额由 sales_review 生效路径另行入账，本路径只写首次生效。
+                create_original_receivable(&db, &order_for_tx, &aggregate, now, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
             })
         })
         .await?;
     let _ = SalesOrderId::new(order.base.id.clone());
+    Ok(())
+}
+
+/// 构建并写入销售单生效的应收往来子账与原始应收分录（§6.8/§8.1.1）。
+///
+/// 只应由首次生效（最终审批通过）路径调用：子账 `account_seq = 1`，分录类型
+/// 为原始应收（增加方向，金额 = 版本含税合计）；后续销售变更差额由
+/// `sales_review` 生效路径写入。写在同一事务内，重复生效由提交状态守卫拦截。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `order` - 已生效的销售单（事务内最新版本）
+/// * `aggregate` - 生效版本聚合
+/// * `posted_at` - 入账时间
+/// * `session` - 事务会话执行器
+///
+/// # 返回
+/// 无返回值；写入失败时返回错误。
+async fn create_original_receivable(
+    db: &Database,
+    order: &SalesOrder,
+    aggregate: &RevisionAggregate,
+    posted_at: Instant,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let account_id = ReceivableAccountId::new(next_id());
+    let entry_id = ReceivableEntryId::new(next_id());
+    let revision_id = aggregate.revision.base.id.clone();
+    let gross = aggregate.revision.gross_amount;
+    let account = ReceivableAccount::new(
+        account_id.clone(),
+        ReceivableAccountData {
+            sales_order_id: order.base.id.clone().into(),
+            account_seq: 1,
+            customer_id: order.customer_id.clone(),
+            counterparty_party_id: order.settlement_party_id.clone(),
+            source_sales_order_revision_id: revision_id.clone().into(),
+            review_status: AccountReviewStatus::NotApplicable,
+            reviewed_by: None,
+            reviewed_at: None,
+            review_evidence_reference: None,
+            gross_total: gross,
+            settled_total: Amount::from_str("0.00").expect("静态零值必须合法"),
+            invoiceable_total: gross,
+            invoiced_total: Amount::from_str("0.00").expect("静态零值必须合法"),
+        },
+        "system",
+    )
+    .map_err(Error::Logic)?;
+    let entry = ReceivableEntry::new(
+        entry_id,
+        ReceivableEntryData {
+            receivable_account_id: account_id,
+            entry_type: ReceivableEntryType::Original,
+            direction: EntryDirection::Increase,
+            amount: gross,
+            due_date: BusinessDate::today(),
+            source_fact_type: "sales_order".to_string(),
+            source_document_id: order.base.id.clone(),
+            source_revision_id: revision_id,
+            source_sequence: 1,
+            posted_at,
+        },
+    )
+    .map_err(Error::Logic)?;
+    db.receivable()
+        .create_receivable_with_entry(&account, &entry, session)
+        .await?;
     Ok(())
 }
 

@@ -148,6 +148,7 @@ export type UploadContractPdfInput = {
     contractNo: string
     customerId?: string
     customerName: string
+    settlementPartyId?: string
     settlementPartyName: string
     signedAt: string
     validFrom: string

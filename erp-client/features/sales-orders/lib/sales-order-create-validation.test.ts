@@ -19,6 +19,7 @@ const makeValues = (
     settlementPartyId: "sp-1",
     settlementEntity: "结算主体甲",
     nature: "physical_service",
+    fulfillmentMode: "公司仓发",
     ownerUserId: "u-1",
     ownerName: "张三",
     welfareScene: "ANNUAL_GIFT_BAG",

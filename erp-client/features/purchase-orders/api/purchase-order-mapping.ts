@@ -198,7 +198,16 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             salesOrderLineLabel: a.sales_order_revision_line_id,
             allocatedQuantity: a.allocated_quantity,
         })),
-        payableSummary: undefined,
+        payableSummary: center.payable_summary
+            ? {
+                  payableOpenAmount: center.payable_summary.payable_open_amount,
+                  paidAllocatedAmount:
+                      center.payable_summary.paid_allocated_amount,
+                  purchaseInvoiceAllocatedAmount:
+                      center.payable_summary
+                          .purchase_invoice_allocated_amount,
+              }
+            : undefined,
         fulfillmentSummary: {
             progressLabel: fulfillmentLabel,
             progressTone:
@@ -290,15 +299,15 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
     return {
         basisId: basis.basis_id,
         salesOrderId: basis.sales_order_id,
-        // 缺口：依据无 sales_order_no
-        salesOrderNo: basis.sales_order_id,
+        salesOrderNo: basis.sales_order_no ?? basis.sales_order_id,
         salesSubmissionId: basis.submission_id,
         salesSubmissionNo: 0,
         supplierId: basis.supplier_id,
         supplierName: basis.supplier_name,
-        // 缺口：依据无 purchase_type / fulfillment_responsibility
-        purchaseType: "PHYSICAL",
-        fulfillmentResponsibility: "WAREHOUSE",
+        purchaseType: mapPurchaseType(basis.purchase_type ?? "PHYSICAL"),
+        fulfillmentResponsibility: mapFulfillment(
+            basis.fulfillment_responsibility ?? "WAREHOUSE",
+        ),
         paymentTermCode: basis.payment_term_code || "POSTPAY_NET30",
         paymentTermLabel: paymentTermLabel(
             basis.payment_term_code || "POSTPAY_NET30",

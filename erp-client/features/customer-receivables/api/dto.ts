@@ -27,9 +27,15 @@ export type BackendFundsReview = {
 export type BackendReceivableAccount = {
     id: string
     sales_order_id: string
+    sales_order_no: string
+    sales_order_revision_no?: number
+    sales_order_snapshot_at?: number
+    current_sales_order_revision_id?: string
     account_seq: number
     customer_id: string
+    customer_name: string
     counterparty_party_id: string
+    counterparty_party_name?: string | null
     review_status: string
     gross_total: string
     settled_total: string

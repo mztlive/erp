@@ -37,6 +37,7 @@ export type AllocationSessionProps = {
     onClose: () => void
     onCompleted?: (result: FormalSubmitResult) => void
     onGoToInvoiceView?: () => void
+    onDraftSessionIdChange?: (draftSessionId: string) => void
 }
 
 export function AllocationSession({
@@ -52,6 +53,7 @@ export function AllocationSession({
     onClose,
     onCompleted,
     onGoToInvoiceView,
+    onDraftSessionIdChange,
 }: AllocationSessionProps) {
     const {
         sessionQuery,
@@ -96,7 +98,7 @@ export function AllocationSession({
             existingInvoiceId,
             preselectPayableAccountId,
         },
-        { onCompleted },
+        { onCompleted, onDraftSessionIdChange },
     )
 
     if (sessionQuery.isPending) {

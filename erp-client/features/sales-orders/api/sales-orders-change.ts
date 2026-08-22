@@ -42,8 +42,17 @@ export async function prepareStartSalesChangeOrder(
     )
     const wc = detail.working_copy
     const latestRev = detail.revisions?.[0]
+    // 已生效订单的 FIRST_SUBMISSION 工作副本已提交（status=SUBMITTED），
+    // 详情视图只返回可编辑副本（Editing/Conflict），故 wc 通常为空；
+    // 与 fetchSalesOrderDraftForResume 同策略：回退到最近一次提交快照。
+    const submissions = [...(detail.submissions ?? [])].sort(
+        (a, b) => (b.submission_no ?? 0) - (a.submission_no ?? 0),
+    )
+    const latestSubmission = submissions[0]
+    const draftSource =
+        wc && wc.lines.length > 0 ? wc : latestSubmission
 
-    // 变更单创建需要完整 draft；以当前工作副本/最新版本金额行作为目标草稿骨架。
+    // 变更单创建需要完整 draft；以当前工作副本/最近提交快照行作为目标草稿骨架。
     // 字段不足时后端会校验失败并经 ApiError 抛出。
     let contractNo: string | null = null
     let customerName = detail.customer_id
@@ -76,7 +85,7 @@ export async function prepareStartSalesChangeOrder(
     }
 
     const lines =
-        wc?.lines?.map((line) => {
+        draftSource?.lines?.map((line) => {
             const isVoucher = line.line_type === "VOUCHER"
             const row: Record<string, unknown> = {
                 line_no: line.line_no,
@@ -139,7 +148,10 @@ export async function prepareStartSalesChangeOrder(
             change_type: input.nature === "card_voucher" ? "OTHER" : "AMOUNT",
             reason: "销售发起变更",
             draft: {
-                editor_user_id: wc?.editor_user_id ?? "unknown",
+                editor_user_id:
+                    (wc && wc.lines.length > 0
+                        ? wc.editor_user_id
+                        : latestSubmission?.submitted_by) ?? "unknown",
                 customer_name: customerName,
                 contract_no: contractNo,
                 settlement_party_name: settlementName,

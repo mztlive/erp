@@ -44,6 +44,7 @@ impl From<mongodb::error::Error> for Error {
     /// 其他写入或连接错误保持数据库错误。
     fn from(error: mongodb::error::Error) -> Self {
         if is_duplicate_key(&error) {
+            tracing::warn!(%error, "duplicate key write rejected");
             return Self::DuplicateKey(error);
         }
         if error.contains_label(TRANSIENT_TRANSACTION_ERROR) {
