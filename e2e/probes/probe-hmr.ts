@@ -4,8 +4,14 @@ import { chromium } from "@playwright/test"
 import { loginViaUi } from "../helpers/login"
 
 async function main() {
-    const browser = await chromium.launch({ headless: true })
-    const context = await browser.newContext({ baseURL: "http://localhost:3000" })
+    const browser = await chromium.launch({
+        headless: process.env.E2E_HEADED !== "1",
+        args: ["--start-maximized"],
+    })
+    const context = await browser.newContext({
+        baseURL: "http://localhost:3000",
+        viewport: null,
+    })
     const page = await context.newPage()
     await loginViaUi(page, "procurement")
     await page.goto("/workspace")

@@ -1,4 +1,4 @@
-import { BrowserContext, Page, expect } from "@playwright/test"
+import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
 import { ACCOUNTS, AccountKey } from "./accounts"
 
 /**
@@ -24,11 +24,12 @@ export async function loginViaUi(page: Page, accountKey: AccountKey): Promise<vo
  * 每个账号独立 context，避免 localStorage token 互相覆盖。
  */
 export async function newLoggedInContext(
-    browser: BrowserContext["browser"],
+    browser: Browser,
     accountKey: AccountKey,
 ): Promise<{ context: BrowserContext; page: Page }> {
     if (!browser) throw new Error("newLoggedInContext 需要 browser 实例")
-    const context = await browser.newContext()
+    // 关闭固定 viewport，让独立账号窗口继承 Chromium 最大化后的可用尺寸。
+    const context = await browser.newContext({ viewport: null })
     const page = await context.newPage()
     await loginViaUi(page, accountKey)
     return { context, page }

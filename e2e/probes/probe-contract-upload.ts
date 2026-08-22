@@ -11,8 +11,11 @@ const CUSTOMER_NAME = "e2e代发客户53788099"
 const CONTRACT_NO = `HT-PROBE-${Date.now().toString().slice(-6)}`
 
 async function main() {
-    const browser = await chromium.launch({ headless: true })
-    const context = await browser.newContext({ baseURL: BASE })
+    const browser = await chromium.launch({
+        headless: process.env.E2E_HEADED !== "1",
+        args: ["--start-maximized"],
+    })
+    const context = await browser.newContext({ baseURL: BASE, viewport: null })
     const page = await context.newPage()
     await loginViaUi(page, "sales")
     await page.goto(`${BASE}/sales/contracts?customerId=${CUSTOMER_ID}`)

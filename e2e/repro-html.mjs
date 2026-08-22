@@ -1,7 +1,10 @@
 import { chromium } from "@playwright/test"
 
-const browser = await chromium.launch()
-const context = await browser.newContext()
+const browser = await chromium.launch({
+    headless: process.env.E2E_HEADED !== "1",
+    args: ["--start-maximized"],
+})
+const context = await browser.newContext({ viewport: null })
 const page = await context.newPage()
 
 await page.goto("http://localhost:3000/login")

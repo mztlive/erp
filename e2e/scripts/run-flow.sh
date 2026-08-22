@@ -29,9 +29,8 @@ run_one() {
     if [[ "${HEADED}" == "1" ]]; then
         pw_args+=(--headed)
     fi
-    if [[ -n "${SLOW_MO}" ]]; then
-        pw_args+=(--slow-mo="${SLOW_MO}")
-    fi
+    # E2E_SLOW_MO 由 playwright.config.ts 读取为 launchOptions.slowMo；
+    # Playwright Test CLI 没有 --slow-mo，不能拼进 npx playwright test。
 
     echo ""
     echo "############################################################"
@@ -52,6 +51,10 @@ run_one() {
     fi
 
     echo "-- 执行 playwright: ${pw_args[*]} --"
+    if [[ -n "${SLOW_MO}" ]]; then
+        echo "-- 慢动作: E2E_SLOW_MO=${SLOW_MO}ms（playwright.config launchOptions.slowMo） --"
+        export E2E_SLOW_MO
+    fi
     (cd "${E2E_DIR}" && npx playwright test "${pw_args[@]}")
 }
 

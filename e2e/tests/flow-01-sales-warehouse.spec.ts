@@ -14,6 +14,7 @@
  *   断言销售单履约/回款/开票进度与关闭条件（履约完成 + 应收结清 → 已关闭；开票不挡结案）
  *
  * 使用账号: xiaoshou(销售) / caigou(采购) / caiwu(财务) / lisiyong(销售领导) / admin(代仓储作业，见 risks)
+ * 运行方式: 单个浏览器页面按业务节点串行切换账号，禁止同时打开多个账号窗口。
  *
  * 文档-代码差异（以代码为准）:
  * 1. doc=7.3.1: 采购先"提交到货信息"，再由仓储"创建采购入库单并入库"→"创建仓发出库单并出库"。
@@ -36,7 +37,8 @@ import {
 } from "@playwright/test"
 import path from "node:path"
 
-import { newLoggedInContext } from "../helpers/login"
+import { loginViaUi } from "../helpers/login"
+import { ACCOUNTS, type AccountKey } from "../helpers/accounts"
 import { api, apiLogin } from "../helpers/api"
 import {
     clickButton,
@@ -59,6 +61,64 @@ const UNIT_PRICE = "100.00"
 const RECEIPT_AMOUNT = "100.00"
 /** 日历默认展示当月；选择"今天"的日号，避免跨月翻页。 */
 const TODAY_DAY = String(new Date().getDate())
+/** 前端登录态唯一存储键；必须与 erp-client/lib/api/session.ts 保持一致。 */
+const TOKEN_STORAGE_KEY = "erp.token"
+
+/**
+ * 创建单页面账号切换器。
+ *
+ * 合同：
+ * - 每个账号首次使用时必须通过真实登录页登录；
+ * - 后续切回账号时可以恢复首次登录取得的 token；
+ * - 恢复 token 前必须先进入无登录态页面，恢复后必须整页导航；
+ * - 每次切换完成后必须以侧栏账号标识确认当前身份。
+ */
+function createSinglePageAccountSwitcher(
+    page: Page,
+): (accountKey: AccountKey) => Promise<void> {
+    const tokens = new Map<AccountKey, string>()
+    let activeAccount: AccountKey | undefined
+
+    return async (accountKey: AccountKey): Promise<void> => {
+        if (activeAccount === accountKey) return
+
+        // 先清除旧身份，再离开旧业务页面，禁止旧页面携带新账号 token 发起请求。
+        if (page.url() !== "about:blank") {
+            await page.evaluate(
+                (storageKey) => localStorage.removeItem(storageKey),
+                TOKEN_STORAGE_KEY,
+            )
+        }
+
+        const cachedToken = tokens.get(accountKey)
+        if (cachedToken) {
+            await page.goto("/login")
+            await page.evaluate(
+                ({ storageKey, token }) => localStorage.setItem(storageKey, token),
+                { storageKey: TOKEN_STORAGE_KEY, token: cachedToken },
+            )
+            // 整页导航销毁旧账号的 React Query 与权限菜单内存状态。
+            await page.goto("/workspace")
+        } else {
+            await loginViaUi(page, accountKey)
+            const token = await page.evaluate(
+                (storageKey) => localStorage.getItem(storageKey),
+                TOKEN_STORAGE_KEY,
+            )
+            if (!token) {
+                throw new Error(`账号 ${ACCOUNTS[accountKey].account} 登录后未写入 token`)
+            }
+            tokens.set(accountKey, token)
+        }
+
+        await expect(page.getByRole("button", { name: "账号菜单" })).toContainText(
+            ACCOUNTS[accountKey].account,
+            { timeout: 20_000 },
+        )
+        expect(page.context().pages()).toHaveLength(1)
+        activeAccount = accountKey
+    }
+}
 
 /** 页面上的弹窗（含 AlertDialog，role 为 alertdialog）。 */
 function dialogOn(page: Page): Locator {
@@ -268,23 +328,20 @@ async function openAllocationSession(page: Page, registerButton: string): Promis
     await expect(page.getByText(/^核销 · /).first()).toBeVisible({ timeout: 20_000 })
 }
 
-test("flow-01 实物销售单仓发完整基准流程", async ({ browser, request }) => {
+test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }) => {
     test.setTimeout(260_000)
 
     // ── 主数据准备：确保存在启用仓库（入库草稿生成依赖；UI 禁止新建，走 API）──
     await ensureWarehouse(request)
 
-    // ── 账号独立 context ────────────────────────────────────────────────────
-    const sales = await newLoggedInContext(browser, "sales") // xiaoshou
-    const salesPage = sales.page
-    const procurement = await newLoggedInContext(browser, "procurement") // caigou
-    const poPage = procurement.page
-    const finance = await newLoggedInContext(browser, "finance") // caiwu
-    const financePage = finance.page
-    const leader = await newLoggedInContext(browser, "salesLeader") // lisiyong
-    const leaderPage = leader.page
-    const warehouse = await newLoggedInContext(browser, "admin") // admin 代仓储（risks 见文件头）
-    const whPage = warehouse.page
+    // ── 单页面串行切号：角色别名均指向同一个可见页面 ─────────────────────────
+    const switchAccount = createSinglePageAccountSwitcher(page)
+    const salesPage = page
+    const poPage = page
+    const financePage = page
+    const leaderPage = page
+    const whPage = page
+    await switchAccount("sales") // xiaoshou
 
     // ── W03 客户创建 ────────────────────────────────────────────────────────
     await gotoPage(salesPage, "/sales/customers")
@@ -373,6 +430,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ browser, reques
     })
 
     // ── 采购确认审批通过 → 销售单生效 ───────────────────────────────────────
+    await switchAccount("procurement") // caigou
     await approveInWorkspace(poPage, salesOrderNo)
     await gotoPage(poPage, `/sales/orders/${salesOrderId}`)
     await expect(poPage.getByText("已生效").first()).toBeVisible({ timeout: 20_000 })
@@ -408,11 +466,13 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ browser, reques
     })
 
     // ── 财务审核通过 → 采购单生效 ───────────────────────────────────────────
+    await switchAccount("finance") // caiwu
     await approveInWorkspace(financePage)
     await gotoPage(financePage, `/procurement/orders/${purchaseOrderId}`)
     await expect(financePage.getByText("已生效").first()).toBeVisible({ timeout: 20_000 })
 
     // ── W09 采购入库（入仓）→ 仓发出库 ──────────────────────────────────────
+    await switchAccount("admin") // admin 代仓储（risks 见文件头）
     await gotoPage(whPage, `/fulfillment?lane=warehouse&purchaseOrderId=${purchaseOrderId}&autoNext=0`)
     await postFulfillmentOperation(whPage, "入库", "确认入库", "已入库")
     // 入库后按销售单维度进入仓发：仓发草稿只关联销售单（purchase_order_id 为空），
@@ -427,6 +487,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ browser, reques
     await postFulfillmentOperation(whPage, "公司仓发", "确认发货", "已发货")
 
     // ── W06 销售登记客户验收 ────────────────────────────────────────────────
+    await switchAccount("sales")
     await gotoPage(salesPage, `/sales/orders/${salesOrderId}`)
     await salesPage.getByRole("tab", { name: "履约" }).click()
     await salesPage.getByRole("button", { name: "登记验收" }).click()
@@ -446,6 +507,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ browser, reques
     await expect(salesPage.getByText("已完成").first()).toBeVisible({ timeout: 20_000 })
 
     // ── W11 客户回款登记并核销 → 销售领导复核 → 过账 ─────────────────────────
+    await switchAccount("finance")
     await gotoPage(financePage, "/finance/customer-accounts")
     // 应收台账出现本单（销售单生效即形成应收）
     await expectTableRow(financePage, salesOrderNo)
@@ -463,8 +525,10 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ browser, reques
         await financePage.getByText(/已进入审批。单号 \S+/).first().textContent()
     )!.match(/单号 (SK-\d+)/)![1]
     // 销售领导复核
+    await switchAccount("salesLeader") // lisiyong
     await approveInWorkspace(leaderPage)
     // 里程碑：回款单过账
+    await switchAccount("finance")
     await gotoPage(financePage, "/finance/customer-accounts?view=receipt")
     const receiptRow = await expectTableRow(financePage, receiptNo)
     await expect(receiptRow.getByText("已过账")).toBeVisible({ timeout: 20_000 })
@@ -488,6 +552,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ browser, reques
     })
 
     // ── 终态断言：销售单履约/回款/开票进度与关闭条件 ─────────────────────────
+    await switchAccount("sales")
     await gotoPage(salesPage, `/sales/orders/${salesOrderId}`)
     // 履约完成 + 应收结清 → 已关闭（开票不挡结案）
     await expect(salesPage.getByText("已关闭").first()).toBeVisible({ timeout: 20_000 })
@@ -497,13 +562,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ browser, reques
     await expect(salesPage.getByText(/· 已结清/).first()).toBeVisible()
     await expect(salesPage.getByText(/· 已完成/).first()).toBeVisible()
     // 发票台账出现本票
+    await switchAccount("finance")
     await gotoPage(financePage, "/finance/customer-accounts?view=sales_invoice")
     await expectTableRow(financePage, INVOICE_NO)
-
-    // 关闭所有 context
-    await sales.context.close()
-    await procurement.context.close()
-    await finance.context.close()
-    await leader.context.close()
-    await warehouse.context.close()
 })

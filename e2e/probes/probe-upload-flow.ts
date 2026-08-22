@@ -9,8 +9,11 @@ const BASE = "http://localhost:3000"
 async function main() {
     const customerId = process.argv[2]
     if (!customerId) throw new Error("需要 customerId 参数")
-    const browser = await chromium.launch({ headless: true })
-    const context = await browser.newContext({ baseURL: BASE })
+    const browser = await chromium.launch({
+        headless: process.env.E2E_HEADED !== "1",
+        args: ["--start-maximized"],
+    })
+    const context = await browser.newContext({ baseURL: BASE, viewport: null })
     const page = await context.newPage()
     page.on("console", (msg) => {
         const t = msg.text()

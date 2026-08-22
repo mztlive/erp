@@ -45,9 +45,7 @@ import { Browser, Locator, Page, expect, test } from "@playwright/test"
 import { newLoggedInContext } from "../helpers/login"
 import { pickOption } from "../helpers/ui"
 
-// 库存调整弹窗内容较长（说明/原因类型/数量/说明/发生时间），720px 视口下
-// 提交按钮落在弹窗视口之外且弹窗无内部滚动，本流程统一用更高的视口。
-test.use({ viewport: { width: 1440, height: 1000 } })
+// 库存调整弹窗内容较长，使用全局最大化窗口与实际 viewport，禁止退回 720px 固定视口。
 
 // ─── 流程常量 ────────────────────────────────────────────────────────────────
 

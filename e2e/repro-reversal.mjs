@@ -5,8 +5,11 @@ const BASE = "http://localhost:3000"
 const API = "http://127.0.0.1:10001"
 
 async function main() {
-  const browser = await chromium.launch()
-  const ctx = await browser.newContext()
+  const browser = await chromium.launch({
+    headless: process.env.E2E_HEADED !== "1",
+    args: ["--start-maximized"],
+  })
+  const ctx = await browser.newContext({ viewport: null })
   const page = await ctx.newPage()
   page.on("console", (m) => {
     if (m.type() === "error") console.log("[console.error]", m.text().slice(0, 200))

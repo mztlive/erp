@@ -41,12 +41,13 @@ E2E_RESET=0 bash scripts/run-flow.sh tests/flow-01-sales-warehouse.spec.ts
 |------|------|------|
 | `E2E_RESET` | `1` | `1`：跑 spec 前 stop → reset DB → restart → 发布审批定义；`0`：跳过，适合快速复跑 |
 | `E2E_ALLOW_REMOTE_RESET` | （无） | reset 远端/共享库时需显式设为 `1`，防止误清 |
-| `E2E_HEADED` | `0` | `1`：打开真实浏览器窗口，可观察自动化操作过程 |
-| `E2E_SLOW_MO` | （空） | 传给 Playwright `--slow-mo` 的毫秒数；每个动作间隔，便于肉眼跟流程 |
+| `E2E_HEADED` | `0` | `1`：打开真实浏览器窗口；窗口默认最大化，页面 viewport 跟随实际可用尺寸 |
+| `E2E_SLOW_MO` | （空） | 每个动作间隔毫秒数，写入 `playwright.config.ts` 的 `launchOptions.slowMo`。Playwright Test CLI 没有 `--slow-mo`，不要把它当命令行参数传 |
 
 ### 观察浏览器操作
 
-默认无头（`headless: true`）。需要看见点击、填表、跳转时：
+默认无头（`headless: true`）。所有 flow、浏览器 probe 与 `repro-*.mjs`
+统一使用 `E2E_HEADED=1` 打开最大化窗口。需要看见点击、填表、跳转时：
 
 ```bash
 # 有界面观察（仍走完整 reset 编排）

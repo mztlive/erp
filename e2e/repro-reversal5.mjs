@@ -4,8 +4,11 @@ import { chromium } from "@playwright/test"
 const BASE = "http://localhost:3000"
 
 async function main() {
-  const browser = await chromium.launch()
-  const ctx = await browser.newContext()
+  const browser = await chromium.launch({
+    headless: process.env.E2E_HEADED !== "1",
+    args: ["--start-maximized"],
+  })
+  const ctx = await browser.newContext({ viewport: null })
   const page = await ctx.newPage()
 
   await page.goto(`${BASE}/login`)
