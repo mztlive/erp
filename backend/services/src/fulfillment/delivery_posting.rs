@@ -201,5 +201,13 @@ async fn post_warehouse_ship_line(
         },
     )?;
     db.stock_movements().create(&movement, session).await?;
+    // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
+    if !db
+        .stock_balances()
+        .apply_last_movement(&balance.base.id, &movement.base.id, session)
+        .await?
+    {
+        return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
+    }
     Ok(())
 }

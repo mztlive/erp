@@ -437,6 +437,8 @@ mod tests {
                 warehouse_id: WarehouseId::new("wh-1"),
                 reason_type: AdjustmentReasonType::StockGain,
                 prepared_by: "user-1".into(),
+                note: None,
+                occurred_at: None,
             },
         )
         .expect("草稿必须可构造")

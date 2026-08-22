@@ -295,6 +295,14 @@ async fn post_receipt_line(
         },
     )?;
     db.stock_movements().create(&movement, session).await?;
+    // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
+    if !db
+        .stock_balances()
+        .apply_last_movement(&balance_id, &movement.base.id, session)
+        .await?
+    {
+        return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
+    }
     establish_reservations(db, session, receipt, line, revision_line, &sku_id, &balance_id).await
 }
 

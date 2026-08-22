@@ -313,7 +313,11 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
         await procPage.getByLabel(`${sku.name} 含税单价`).fill("800.00")
         await procPage.getByRole("button", { name: "提交审批" }).click()
         await confirmInDialog(procPage, "确认提交")
-        await expect(procPage.getByText("审批中").first()).toBeVisible({ timeout: 20_000 })
+        // 确认对话框自身含「草稿→审批中」文案，不能以文本「审批中」断言成功，
+        // 以详情页「撤回审批」入口作为成功信号（与 flow-07/flow-09 一致）
+        await expect(
+            procPage.getByRole("button", { name: "撤回审批" }).first(),
+        ).toBeVisible({ timeout: 30_000 })
 
         // 5b. 采购单财务审核（caiwu 在 W02 工作台审批通过）
         await switchAccount("finance")

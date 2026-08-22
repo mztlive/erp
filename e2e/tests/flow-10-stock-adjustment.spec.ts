@@ -35,6 +35,11 @@
  *      code: services/src/inventory/adapter.rs 中 on_final_approve =
  *           ApprovalDomainAction::StockAdjustmentPost，末节点（唯一节点财务审批）通过时
  *           同事务写流水并更新余额，无需人工「过账」动作；前端无过账按钮。
+ *   7. 本流程验证的修复（历史缺陷 → 现状）:
+ *      - 原因说明/业务发生时间随保存落库，过账时带入正式流水（reason_text/occurred_at）；
+ *      - 余额台账「最后变动」列显示流水类型与业务时间（此前恒 Invalid Date，
+ *        余额 last_movement_id 从未被写入）；
+ *      - 流水视图「记录人」列显示后端记录人（此前恒为空）。
  *
  * 运行前提（见 e2e/README.md）：run-flow.sh 已 reset 数据库（业务数据为空、无种子，
  * 保留账号/RBAC 与供应商/商品/仓库主数据）并发布 12 个审批定义
@@ -42,6 +47,7 @@
  */
 import { Locator, Page, expect, test } from "@playwright/test"
 
+import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { pickOption } from "../helpers/ui"
 
@@ -178,6 +184,7 @@ async function readPreviewStat(scope: Locator, label: string): Promise<string> {
 
 test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动过账 → 台账数量变化", async ({
     page,
+    request,
 }) => {
     const switchAccount = createSinglePageAccountSwitcher(page)
     const adminPage = page
@@ -316,7 +323,12 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     await expect(poConfirm).toBeVisible({ timeout: 20_000 })
     await expect(poConfirm.getByText("确认提交采购单")).toBeVisible()
     await poConfirm.getByRole("button", { name: "确认提交" }).click()
-    await expect(caigouPage.getByText("审批中").first()).toBeVisible({ timeout: 30_000 })
+    // 提交成功进入详情页；确认对话框自身含「草稿→审批中」文案，不能以文本「审批中」
+    // 断言成功（提交慢时弹窗未关，测试切号会中止在途保存请求，造成静默失败），
+    // 以详情页「撤回审批」入口作为成功信号（与 flow-07/flow-09 一致）
+    await expect(
+        caigouPage.getByRole("button", { name: "撤回审批" }).first(),
+    ).toBeVisible({ timeout: 30_000 })
 
     // ---- S2.6 财务(caiwu) 审批采购单「财务审核」→ 采购单生效 ----
     await switchAccount("finance")
@@ -379,7 +391,20 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     // 调整数量（label=调整数量（基础单位，正数）；基础单位后端暂缺，前缀匹配）
     await adjustDialog.getByLabel("调整数量", { exact: false }).fill(ADJUST_QTY)
     await adjustDialog.getByLabel("原因说明", { exact: false }).fill("E2E 盘亏测试")
-    // 业务发生时间已默认预填当前时间，不修改
+    // 业务发生时间：改为今天 00:07（默认预填当前时间）——验证业务时间落库并带入正式流水
+    const bizDate = (() => {
+        const now = new Date()
+        return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(
+            now.getDate(),
+        ).padStart(2, "0")}`
+    })()
+    const bizLocalInput = `${bizDate.replaceAll("/", "-")}T00:07:00`
+    await adjustDialog.getByRole("button", { name: /· Asia\/Shanghai/ }).click()
+    const bizTimeInput = adminPage.getByLabel("时间，精确到秒")
+    await expect(bizTimeInput).toBeVisible({ timeout: 10_000 })
+    await bizTimeInput.fill("00:07:00")
+    await adminPage.getByRole("button", { name: "完成" }).click()
+    await expect(bizTimeInput).not.toBeVisible({ timeout: 10_000 }).catch(() => {})
 
     await adjustDialog.getByRole("button", { name: "提交审批" }).click()
     const adjustConfirm = adminPage.getByRole("alertdialog")
@@ -397,6 +422,25 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     await expect(adminPage.getByText(/余额尚未变化/).first()).toBeVisible({
         timeout: 10_000,
     })
+
+    // 原因说明与业务发生时间随保存落库（GET 调整单列表断言；修复前二者均不落库）
+    const adminToken = await apiLogin(request, "admin")
+    const adjustmentPage = await api<{
+        items: Array<{
+            adjustment_no: string
+            note: string | null
+            occurred_at: number | null
+        }>
+    }>(request, "GET", "/admin/stock-adjustments", {
+        token: adminToken,
+        query: { page: 1, page_size: 50 },
+    })
+    const persisted = adjustmentPage.items.find((item) => item.adjustment_no === adjustNo)
+    expect(persisted).toBeTruthy()
+    expect(persisted?.note).toBe("E2E 盘亏测试")
+    expect(persisted?.occurred_at).toBe(
+        Math.floor(new Date(bizLocalInput).getTime() / 1000),
+    )
 
     // 调整记录视图出现「审批中」记录（提交后、审批前里程碑）
     await adminPage.getByRole("tab", { name: "调整记录" }).click()
@@ -442,6 +486,12 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
         .filter({ hasText: skuName })
         .first()
     await expect(balanceRowAfter).toBeVisible({ timeout: 30_000 })
+    // 最后变动列：显示流水类型「库存调整」与合法业务时间（修复前恒为 Invalid Date）
+    const lastChangedCell = balanceRowAfter.getByRole("cell").nth(5)
+    await expect(lastChangedCell.getByText("库存调整").first()).toBeVisible()
+    await expect(
+        lastChangedCell.getByText(new RegExp(`^${bizDate} 00:07$`)).first(),
+    ).toBeVisible()
     await balanceRowAfter.getByRole("button", { name: "查看" }).click()
     const sheetAfter = adminPage.locator('[data-slot="quick-preview-content"]').last()
     await expect(sheetAfter.getByText("账面现存").first()).toBeVisible({ timeout: 20_000 })
@@ -460,6 +510,13 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     await expect(movementRow).toBeVisible({ timeout: 30_000 })
     await expect(movementRow.getByText("减少").first()).toBeVisible()
     await expect(movementRow.getByText(ADJUST_QTY).first()).toBeVisible()
+    // 业务发生时间落库：流水「发生」时间 = 表单选择的业务时间（今天 00:07），而非过账时刻
+    await expect(
+        movementRow.getByText(new RegExp(`发生 ${bizDate} 00:07`)).first(),
+    ).toBeVisible()
+    // 记录人：流水视图不再为空（后端 recorded_by 已透出）
+    const recorderCell = movementRow.getByRole("cell").nth(5)
+    expect((await recorderCell.innerText()).trim()).not.toBe("")
 })
 
 test("flow-10 库存调整：盘盈调整单 → 财务审批 → 自动过账 → 台账数量增加", async ({

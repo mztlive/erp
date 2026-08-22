@@ -141,6 +141,12 @@ export async function submitAdjustment(input: {
                 {
                     version: detail.adjustment.version,
                     reason_type: reasonTypeBackend(input.reasonType),
+                    // 原因说明与业务发生时间随保存写回调整单，过账时带入正式流水
+                    // （历史缺陷：note/occurredAt 从未落库，流水原因与发生时间丢失）
+                    note: input.note || null,
+                    occurred_at: input.occurredAt
+                        ? Math.floor(new Date(input.occurredAt).getTime() / 1000)
+                        : null,
                     // 创建草稿时明细为占位数量/方向，提交前必须把表单数量与方向写回明细行，
                     // 否则过账按占位数量扣减、盘盈方向不一致被拒（历史缺陷）
                     lines: detail.lines.map((line) => ({

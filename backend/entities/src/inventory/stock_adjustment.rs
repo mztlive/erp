@@ -12,6 +12,7 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::common::state::{ensure_transition, DocumentState};
+use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
 use crate::money::Quantity;
@@ -23,6 +24,8 @@ use super::stock_movement::MovementDirection;
 const ADJUSTMENT_NO_MAX_LEN: usize = 64;
 /// 经办人/复核人标识最大长度。
 const ACTOR_MAX_LEN: usize = 128;
+/// 原因说明最大长度。
+const NOTE_MAX_LEN: usize = 512;
 
 /// 库存调整单状态（数据模型 §6.7：草稿、待仓储复核、待财务确认、已过账、驳回）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,6 +155,10 @@ pub struct StockAdjustmentData {
     pub reason_type: AdjustmentReasonType,
     /// 仓储经办人。
     pub prepared_by: String,
+    /// 原因说明（可空）。
+    pub note: Option<String>,
+    /// 业务发生时间（可空；过账时缺省回退过账时刻）。
+    pub occurred_at: Option<Instant>,
 }
 
 /// 库存调整单更新数据（仅草稿/驳回可更新）。
@@ -163,6 +170,10 @@ pub struct StockAdjustmentUpdate {
     pub reviewed_by: Option<String>,
     /// 成本影响确认人；`None` 表示不修改。
     pub finance_reviewed_by: Option<String>,
+    /// 原因说明；`None` 表示不修改，空串清除。
+    pub note: Option<String>,
+    /// 业务发生时间；`None` 表示不修改。
+    pub occurred_at: Option<Instant>,
 }
 
 /// 库存调整单实体（数据模型 §6.7）。
@@ -188,6 +199,10 @@ pub struct StockAdjustment {
     pub reviewed_by: Option<String>,
     /// 成本影响确认人。
     pub finance_reviewed_by: Option<String>,
+    /// 原因说明（可空）。
+    pub note: Option<String>,
+    /// 业务发生时间（可空；过账时缺省回退过账时刻）。
+    pub occurred_at: Option<Instant>,
     /// 审批提交版本，初值 0。
     #[serde(default)]
     pub approval_subject_version: u32,
@@ -220,6 +235,19 @@ impl StockAdjustment {
             ACTOR_MAX_LEN,
             "仓储经办人过长",
         )?;
+        let note = match data.note {
+            Some(text) => {
+                let text = text.trim().to_string();
+                if text.is_empty() {
+                    None
+                } else if text.len() > NOTE_MAX_LEN {
+                    return Err(Error::from("原因说明过长"));
+                } else {
+                    Some(text)
+                }
+            }
+            None => None,
+        };
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             adjustment_no,
@@ -229,6 +257,8 @@ impl StockAdjustment {
             prepared_by,
             reviewed_by: None,
             finance_reviewed_by: None,
+            note,
+            occurred_at: data.occurred_at,
             approval_subject_version: 0,
         })
     }
@@ -263,6 +293,16 @@ impl StockAdjustment {
                 ACTOR_MAX_LEN,
                 "成本影响确认人过长",
             )?);
+        }
+        if let Some(note) = update.note {
+            let note = note.trim().to_string();
+            if note.len() > NOTE_MAX_LEN {
+                return Err(Error::from("原因说明过长"));
+            }
+            self.note = if note.is_empty() { None } else { Some(note) };
+        }
+        if let Some(occurred_at) = update.occurred_at {
+            self.occurred_at = Some(occurred_at);
         }
         Ok(())
     }
@@ -480,6 +520,8 @@ mod tests {
             warehouse_id: WarehouseId::new("wh-1"),
             reason_type: AdjustmentReasonType::StockLoss,
             prepared_by: " operator-1 ".to_string(),
+            note: None,
+            occurred_at: None,
         }
     }
 

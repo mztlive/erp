@@ -68,6 +68,8 @@ pub struct StockMovementRow {
     pub occurred_at: Instant,
     /// ERP 记录时间。
     pub recorded_at: Instant,
+    /// ERP 记录人。
+    pub recorded_by: String,
 }
 
 /// 库存流水列表筛选条件（正式事实，恒为未删除）。
@@ -299,6 +301,10 @@ pub struct StockAdjustmentRow {
     pub reviewed_by: Option<String>,
     /// 成本影响确认人。
     pub finance_reviewed_by: Option<String>,
+    /// 原因说明。
+    pub note: Option<String>,
+    /// 业务发生时间。
+    pub occurred_at: Option<Instant>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -602,6 +608,43 @@ impl<'a> Repository<'a, StockBalance> {
         };
         let update = cross_inc(quantity, "available_quantity", "reserved_quantity")?;
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
+        Ok(result.matched_count > 0)
+    }
+
+    /// 登记余额「已应用最后流水」（台账最后变动列）。
+    ///
+    /// 与数量增减同事务调用；行不存在或已软删除时返回 `false`。
+    ///
+    /// # 参数
+    /// * `id` - 余额主键
+    /// * `movement_id` - 刚应用的正式流水主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 命中并更新返回 `true`；余额行不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 写入失败时返回错误。
+    pub async fn apply_last_movement(
+        &self,
+        id: &str,
+        movement_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let result = mongo_ops::update_one(
+            &self.collection(),
+            doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            doc! {
+                "$set": {
+                    "last_movement_id": mongodb::bson::to_bson(movement_id)?,
+                    "updated_at": Local::now().timestamp(),
+                },
+                "$inc": { "version": 1 },
+            },
+            false,
+            executor,
+        )
+        .await?;
         Ok(result.matched_count > 0)
     }
 }
@@ -1111,6 +1154,7 @@ fn stock_movement_projection() -> Document {
         "source_line_id": 1,
         "occurred_at": 1,
         "recorded_at": 1,
+        "recorded_by": 1,
     }
 }
 
@@ -1163,6 +1207,8 @@ fn stock_adjustment_projection() -> Document {
         "prepared_by": 1,
         "reviewed_by": 1,
         "finance_reviewed_by": 1,
+        "note": 1,
+        "occurred_at": 1,
         "version": 1,
         "created_at": 1,
     }

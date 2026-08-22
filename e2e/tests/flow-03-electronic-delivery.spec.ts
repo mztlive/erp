@@ -268,7 +268,11 @@ test("flow-03 虚拟商品电子交付全流程", async ({ page }) => {
         const poSubmitDialog = procurement.getByRole("alertdialog").last()
         await expect(poSubmitDialog).toBeVisible({ timeout: 20_000 })
         await poSubmitDialog.getByRole("button", { name: "确认提交" }).click()
-        await expect(procurement.getByText("审批中").first()).toBeVisible({
+        // 确认对话框自身含「草稿→审批中」文案，不能以文本「审批中」断言成功，
+        // 以详情页「撤回审批」入口作为成功信号（与 flow-07/flow-09 一致）
+        await expect(
+            procurement.getByRole("button", { name: "撤回审批" }).first(),
+        ).toBeVisible({
             timeout: 30_000,
         })
 

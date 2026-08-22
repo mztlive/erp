@@ -80,7 +80,9 @@ export function mapBalance(b: BackendStockBalance): StockBalanceRow {
         lockVersion: b.version,
         lastMovementId: b.last_movement_id ?? "",
         lastMovementAt: secsToIso(b.last_movement_at),
-        lastMovementTypeLabel: "", // backend_gap
+        lastMovementTypeLabel: b.last_movement_type
+            ? movementTypeLabel(b.last_movement_type)
+            : "",
         availability: availabilityOf(b),
         statusLabel,
         statusTone,
@@ -120,7 +122,7 @@ export function mapMovement(
         quantity: m.quantity,
         occurredAt: secsToIso(m.occurred_at),
         recordedAt: secsToIso(m.recorded_at),
-        recordedByLabel: "", // backend_gap
+        recordedByLabel: m.recorded_by ?? "",
         sourceDocumentType: sourceDocType,
         sourceDocumentId: m.source_document_id,
         sourceDocumentNo: m.source_document_no ?? m.source_document_id,

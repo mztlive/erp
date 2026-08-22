@@ -134,6 +134,8 @@ pub struct StockBalanceView {
     pub last_movement_id: Option<String>,
     /// 最后流水业务时间（秒级时间戳）。
     pub last_movement_at: Option<i64>,
+    /// 最后流水类型（可空）。
+    pub last_movement_type: Option<MovementType>,
     /// 是否存在有效预占。
     pub has_active_reservation: bool,
 }
@@ -163,6 +165,8 @@ pub struct StockMovementView {
     pub occurred_at: i64,
     /// ERP 记录时间（秒级时间戳）。
     pub recorded_at: i64,
+    /// ERP 记录人。
+    pub recorded_by: String,
 }
 
 /// 库存预占列表视图。
@@ -207,6 +211,10 @@ pub struct StockAdjustmentView {
     pub reviewed_by: Option<String>,
     /// 成本影响确认人。
     pub finance_reviewed_by: Option<String>,
+    /// 原因说明（可空）。
+    pub note: Option<String>,
+    /// 业务发生时间（秒级时间戳；可空）。
+    pub occurred_at: Option<i64>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -611,6 +619,10 @@ pub struct CreateStockAdjustmentRequest {
     /// 调整明细（1–100 行）。
     #[validate(length(min = 1, max = 100, message = "调整明细行数必须在1-100之间"))]
     pub lines: Vec<StockAdjustmentLineInput>,
+    /// 原因说明（可空）。
+    pub note: Option<String>,
+    /// 业务发生时间（秒级时间戳；可空）。
+    pub occurred_at: Option<i64>,
 }
 
 /// 库存调整单更新请求（携带乐观锁版本；仅草稿/驳回可更新）。
@@ -624,6 +636,10 @@ pub struct UpdateStockAdjustmentRequest {
     /// 明细数量更新（按行覆盖；缺省表示不修改）。
     #[validate(nested)]
     pub lines: Option<Vec<StockAdjustmentLineUpdateInput>>,
+    /// 原因说明；缺省表示不修改，空串清除。
+    pub note: Option<String>,
+    /// 业务发生时间（秒级时间戳）；缺省表示不修改。
+    pub occurred_at: Option<i64>,
 }
 
 /// 库存调整明细数量/方向更新（行必须属于该调整单；仅草稿/驳回可更新）。

@@ -23,6 +23,7 @@ export type BackendStockBalance = {
     version: number
     last_movement_id?: string | null
     last_movement_at?: number | null
+    last_movement_type?: string | null
     has_active_reservation: boolean
 }
 
@@ -38,6 +39,7 @@ export type BackendStockMovement = {
     source_line_id?: string | null
     occurred_at: number
     recorded_at: number
+    recorded_by?: string | null
 }
 
 export type BackendStockReservation = {
@@ -61,6 +63,8 @@ export type BackendStockAdjustment = {
     prepared_by: string
     reviewed_by?: string | null
     finance_reviewed_by?: string | null
+    note?: string | null
+    occurred_at?: number | null
     version: number
     created_at: number
 }

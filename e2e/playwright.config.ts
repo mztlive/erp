@@ -30,7 +30,10 @@ export default defineConfig({
         actionTimeout: 20_000,
         navigationTimeout: 30_000,
         launchOptions: {
-            args: ["--start-maximized"],
+            // headed 下 --start-maximized 最大化跟随实际窗口；headless 下最大化被忽略，
+            // 窗口默认 800x600 会触发移动端壳布局（无「账号菜单」按钮），
+            // 因此补 --window-size 保证 headless 也获得桌面壳尺寸。
+            args: ["--start-maximized", "--window-size=1440,1000"],
             ...(Number.isFinite(slowMo) && slowMo > 0 ? { slowMo } : {}),
         },
     },

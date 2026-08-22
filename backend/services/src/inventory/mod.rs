@@ -177,6 +177,11 @@ impl InventoryService {
                         .as_ref()
                         .and_then(|id| enrichments.movements.get(&id.to_string()))
                         .map(|movement| movement.fact.occurred_at.unix_secs()),
+                    last_movement_type: row
+                        .last_movement_id
+                        .as_ref()
+                        .and_then(|id| enrichments.movements.get(&id.to_string()))
+                        .map(|movement| movement.movement_type),
                     has_active_reservation: active_reservation_dims
                         .contains(&(row.warehouse_id.to_string(), row.sku_id.to_string())),
                 }
@@ -281,6 +286,7 @@ impl InventoryService {
                 source_line_id: row.source_line_id,
                 occurred_at: row.occurred_at.unix_secs(),
                 recorded_at: row.recorded_at.unix_secs(),
+                recorded_by: row.recorded_by.clone(),
             })
             .collect();
         let source_document_nos = load_movement_source_document_nos(&self.db, &recent_movements).await?;
@@ -344,6 +350,7 @@ impl InventoryService {
                 source_line_id: row.source_line_id,
                 occurred_at: row.occurred_at.unix_secs(),
                 recorded_at: row.recorded_at.unix_secs(),
+                recorded_by: row.recorded_by.clone(),
             })
             .collect();
         let source_document_nos = load_movement_source_document_nos(&self.db, &items).await?;
@@ -455,6 +462,8 @@ impl InventoryService {
                 prepared_by: row.prepared_by,
                 reviewed_by: row.reviewed_by,
                 finance_reviewed_by: row.finance_reviewed_by,
+                note: row.note,
+                occurred_at: row.occurred_at.map(|instant| instant.unix_secs()),
                 version: row.version,
                 created_at: row.created_at,
             })
@@ -537,6 +546,8 @@ impl InventoryService {
                 warehouse_id: req.warehouse_id,
                 reason_type: req.reason_type,
                 prepared_by: actor.id().to_string(),
+                note: req.note,
+                occurred_at: req.occurred_at.map(Instant::from_unix_secs),
             },
         )?;
         let lines = build_adjustment_lines(&id, &req.lines)?;
@@ -610,6 +621,8 @@ impl InventoryService {
             reason_type: req.reason_type,
             reviewed_by: None,
             finance_reviewed_by: None,
+            note: req.note,
+            occurred_at: req.occurred_at.map(Instant::from_unix_secs),
         })?;
         let audit =
             actor
@@ -1181,13 +1194,13 @@ async fn post_adjustment_line(
             source_line_id: Some(line.base.id.clone()),
             reversal_of_movement_id: None,
             fact_no: next_id(),
-            occurred_at: *occurred_at,
+            occurred_at: adjustment.occurred_at.unwrap_or(*occurred_at),
             recorded_at: *occurred_at,
             recorded_by: actor.id().to_string(),
             source_type: SourceType::Erp,
             source_reference: None,
             reason_code: Some(adjustment.reason_type.as_str().to_string()),
-            reason_text: None,
+            reason_text: adjustment.note.clone(),
         },
     )?;
     db.stock_movements().create(&movement, session).await?;
@@ -1233,6 +1246,14 @@ async fn post_adjustment_line(
                 ));
             }
         }
+    }
+    // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
+    if !db
+        .stock_balances()
+        .apply_last_movement(&balance.base.id, &movement.base.id, session)
+        .await?
+    {
+        return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
     }
     Ok(())
 }
@@ -1589,6 +1610,11 @@ fn build_balance_view(
             .as_ref()
             .and_then(|id| enrichments.movements.get(&id.to_string()))
             .map(|movement| movement.fact.occurred_at.unix_secs()),
+        last_movement_type: balance
+            .last_movement_id
+            .as_ref()
+            .and_then(|id| enrichments.movements.get(&id.to_string()))
+            .map(|movement| movement.movement_type),
         has_active_reservation,
     }
 }
@@ -1608,6 +1634,7 @@ impl From<StockMovement> for StockMovementView {
             source_line_id: movement.source_line_id,
             occurred_at: movement.fact.occurred_at.unix_secs(),
             recorded_at: movement.fact.recorded_at.unix_secs(),
+            recorded_by: movement.fact.recorded_by.clone(),
         }
     }
 }
@@ -1641,6 +1668,8 @@ impl From<StockAdjustment> for StockAdjustmentView {
             prepared_by: adjustment.prepared_by,
             reviewed_by: adjustment.reviewed_by,
             finance_reviewed_by: adjustment.finance_reviewed_by,
+            note: adjustment.note,
+            occurred_at: adjustment.occurred_at.map(|instant| instant.unix_secs()),
             version: adjustment.base.version,
             created_at: adjustment.base.created_at,
         }
