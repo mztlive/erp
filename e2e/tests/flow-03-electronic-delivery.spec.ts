@@ -32,6 +32,7 @@ import path from "path"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import { gotoPage } from "../helpers/ui"
+import { approveFirstWorkspaceTask } from "../helpers/workspace"
 
 // ---------------------------------------------------------------------------
 // 流程内专用小工具（不进 helpers）
@@ -111,18 +112,10 @@ async function pickFutureDay(
 
 /**
  * W01 工作台：点击待办列表首个任务并完成「通过」审批。
- * 任务按钮只展示类型标签+内部 id（list_summary 仅采购审核简报填充），
- * 全流程串行、数据库已重置，首个任务即当前唯一审批待办。
+ * 任务行展示类型标签 + 稳定单号；全流程串行、数据库已重置，首个任务即当前唯一审批待办。
  */
 async function approveInWorkbench(page: Page): Promise<void> {
-    // 工作台在桌面/窄屏各渲染一份待办列表（已知重复渲染），取第一份
-    const taskList = page.locator('ul[aria-label="待办列表"]').first()
-    await expect(taskList).toBeVisible({ timeout: 30_000 })
-    const task = taskList.getByRole("button").first()
-    await expect(task).toBeVisible({ timeout: 30_000 })
-    await task.click()
-    await page.getByRole("button", { name: "通过" }).first().click()
-    await expect(page.locator('[role="dialog"]')).toHaveCount(0)
+    await approveFirstWorkspaceTask(page)
 }
 
 // ---------------------------------------------------------------------------

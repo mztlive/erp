@@ -47,6 +47,7 @@ import {
     fillByLabel,
     expectTableRow,
 } from "../helpers/ui"
+import { approveWorkspaceTaskByButtonId } from "../helpers/workspace"
 
 // ---------------------------------------------------------------------------
 // 流程内专用小工具（保持 helpers 通用，不放业务逻辑）
@@ -96,20 +97,12 @@ async function pickFirstOption(scope: Page | Locator, ariaLabel: string): Promis
     await option.click()
 }
 
-/** 在统一工作台（W02 /workspace）中按任务按钮 id 完成"通过"。 */
+/** 在 W01 工作台按任务按钮 id 完成「通过」。 */
 async function approveFromWorkspace(
     page: Page,
     taskButtonId: string,
 ): Promise<void> {
-    // 工作台列表在桌面/移动布局各渲染一份（后者 lg:hidden），取第一个（可见的桌面列表）
-    const task = page.locator(`#${taskButtonId}`).first()
-    await expect(task).toBeVisible({ timeout: 30_000 })
-    await task.click()
-    const detail = page.locator('section[aria-label="当前任务"]').first()
-    const approveButton = detail.getByRole("button", { name: "通过" }).first()
-    await expect(approveButton).toBeVisible({ timeout: 20_000 })
-    await approveButton.click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    const task = await approveWorkspaceTaskByButtonId(page, taskButtonId)
     await expect(task).toHaveCount(0, { timeout: 20_000 })
 }
 

@@ -136,7 +136,7 @@ return (
 ```
 [画布 background]
   PageHeader / object-chrome     ← 贴画布，无底、无框
-  MetricStrip / 处理条 / 分段切换  ← 轻控件，不另开厚卡
+  MetricStrip / 处理条 / 分段切换  ← 轻控件，不另开厚卡（M1 工作台不用 MetricStrip，口径放进主表面工具条）
   主工作面 1～2 张                ← surfacePanelClassName
 ```
 
@@ -193,7 +193,7 @@ return (
 
 | 模式 | 骨架 |
 | --- | --- |
-| M1 工作台 | `PageScaffold` → Header（含分段/刷新）→ Metric → 双栏 surface 卡 |
+| M1 工作台 | `PageScaffold` → Header → **一张**主表面（口径胶囊 + 类型页签 + 列表/详情主从；无独立统计卡） |
 | M2 列表 | `PageScaffold` → Header → Metric → **一张** `BusinessTableFrame`（**含** `ListToolbar`，禁止 frame 外平行工具条） |
 | M3 队列 | `PageScaffold` → Header → **一张 sticky 处理面**（surface：范围/类型 + `ListToolbar` + chip + 连续处理条）→ 主卡 + 侧卡 |
 | M4 对象中心 | `PageScaffold` → object-chrome → `DocumentHeader` → Metric → 正文 surface（Tabs 外壳） |
@@ -346,7 +346,7 @@ return (
 
 | 模式 | 代号 | 适用 | 主组件 |
 | --- | --- | --- | --- |
-| 角色工作台 | M1 | 我的工作台 | `PageScaffold` `PageHeader` `MetricStrip` 列表 + 详情主从 |
+| 角色工作台 | M1 | 我的工作台 | `PageScaffold` `PageHeader` 工具条口径胶囊 + `WorkTaskItem` 列表/详情主从 |
 | 高密度查询列表 | M2 | 单据列表、台账、同步批次 | `PageScaffold` `ListToolbar` `DataTable` `BusinessTableFrame` `QuickPreviewSheet` |
 | 连续处理队列 | M3 | 履约作业、票款复核、接口异常（审批已并入 W01） | `PageScaffold` `SequentialProcessBar` `WorkTaskItem` |
 | 对象中心（单据枢纽） | M4 | 销售单、采购单、客户、供应商 | `PageScaffold` `PageHeader(object-chrome)` + `DocumentHeader(compact)` `DocumentSection` … |
@@ -358,19 +358,20 @@ return (
 
 ```
 ┌ PageHeader：我的工作台          [刷新] [数据更新时间]
-├ MetricStrip：待我处理 | 已超期 | 受阻 | 我发起的
-├ 类型页签：全部 | 审批 | 履约 | 财务 | 集成
-├ 主区两栏
-│  ├ 左 38%：跨领域待办列表
-│  └ 右 62%：当前项摘要 + 审批上下文 + 通过/驳回/打开单据
+├ 一张主表面
+│  ├ 口径胶囊：待我处理 | 已超期 | 受阻 | 我发起的     搜索  排序
+│  ├ 类型页签：全部 | 审批 | 履约 | 财务 | 集成
+│  └ 有任务：左列列表 + 右侧详情（决定条吸底）
+│     无任务：单个空态，不拆左右栏
 ```
 
 交互要点：
 
-- 指标可点：过滤左列，不跳到第二个待办页。
+- 口径胶囊可点：过滤左列，不跳到第二个待办页；禁止用独立 `MetricStrip` 统计卡。
 - 审批任务在右侧提交通过或驳回，成功后自动选中下一条。
 - 非审批任务只提供「打开单据」，正式动作仍在对应业务工作面。
-- 数据更新时间：`DataFreshness` 标明工作台异步刷新（≤1 分钟）与台账同步域的区别。
+- 数据更新时间：页头只展示一条待办 `DataFreshness`（≤1 分钟）。
+- 待办列表全页只渲染一份；窄屏详情降级为 Sheet。
 - 完整页面合同见 `docs/ui-workspaces/w01-today-workspace.md`。
 
 ### 4.3 M2 高密度查询列表
@@ -744,7 +745,8 @@ W01 销售单审批最终通过
 
 ```
 ┌ 我的工作台                              数据更新 12:03  [刷新] ─────────┐
-│ [待我处理 12] [已超期 3] [受阻 1] [我发起的 5]                           │
+│ [待我处理 12] [已超期 3] [受阻 1] [我发起的 5]     搜索   排序          │
+│  全部 | 审批 | 履约 | 财务 | 集成                                        │
 ├──────────────────────────────┬─────────────────────────────────────────┤
 │▸销售单审批 SO-0031  ●        │ SO-2026-0031                            │
 │ 采购确认   SO-0044           │ 客户A · 12.8万 · 8行                     │
@@ -752,6 +754,7 @@ W01 销售单审批最终通过
 │                              │ 当前节点：销售审核                       │
 │                              │ [通过] [驳回] [打开单据]                 │
 └──────────────────────────────┴─────────────────────────────────────────┘
+无任务时不拆栏，主面板只保留一个空态。口径数量在工具条胶囊上，不用独立统计卡。
 ```
 
 ### 7.3 客户票款会话（核销）
@@ -917,7 +920,7 @@ W01 销售单审批最终通过
 | --- | --- |
 | 应用壳 | `ErpAppShell` `GlobalTopbar` |
 | 内容脚手架 | `PageScaffold`（统一 max-width / 页边距）；主表面 `surfacePanelClassName`，卡内轻提示 `surfaceInsetClassName` |
-| 页头指标 | `PageHeader`（M1/M2 默认 `page`；M4 必须 `object-chrome`）`PageActions` `MetricStrip`（独立轻卡） |
+| 页头指标 | `PageHeader`（M1/M2 默认 `page`；M4 必须 `object-chrome`）`PageActions`；M2/M6 用 `MetricStrip` 独立轻卡，**M1 工作台不用** |
 | 列表 | `ListToolbar` `DataTable` `BusinessTableFrame` `QuickPreviewSheet`（单据默认 `size="detail"`） |
 | 状态金额 | `BusinessStatusBadge` / `StatusBadge` `MoneyValue` `QuantityValue` `RateValue` `DocumentTotals` |
 | 单据/对象中心 | `DocumentHeader density="compact"` `DocumentSummary` `DocumentSection` `RevisionTimeline`；禁止与 page 大标题叠放 |
@@ -971,7 +974,7 @@ W01 销售单审批最终通过
 
 | 样板 | 路由 | 重点验证 |
 | --- | --- | --- |
-| M1 我的工作台 | `/workspace` | 指标筛选、列表 + 详情主从、页内通过/驳回、数据更新时间 |
+| M1 我的工作台 | `/workspace` | 工具条口径筛选、单张主从面板、页内通过/驳回、一条数据更新时间 |
 | M2 销售单列表 | `/sales/orders` | 36px 密度、固定身份/操作列、有效筛选、detail 预览、打印预览 |
 | M4 销售单中心 | `/sales/orders/[id]` | 运行摘要、轮次历史、打开单据后的作业 |
 

@@ -11,7 +11,7 @@
  *
  * 使用账号（密码均 123456）:
  *   - xiaoshou（销售）: 新建客户、上传合同 PDF、创建并提交销售单
- *   - caigou（采购）  : W02 工作台审批销售单（SalesOrder=采购确认）
+ *   - caigou（采购）  : W01 工作台审批销售单（SalesOrder=采购确认）
  *   - caiwu（财务）   : 登记客户回款、登记销项发票并核销、发起回款冲正
  *   - lisiyong（销售领导）: 审批客户回款（CustomerReceipt）与回款冲正（ReceiptReversal）
  *
@@ -43,6 +43,7 @@ import path from "path"
 import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { clickButton, expectTableRow, gotoPage, pickOption } from "../helpers/ui"
+import { approveWorkspaceTaskByButtonId } from "../helpers/workspace"
 
 // ---------------------------------------------------------------------------
 // 流程内专用小工具（不写入 helpers，避免影响其他 spec）
@@ -196,20 +197,11 @@ async function pickDateTime(
 }
 
 /**
- * W02 工作台按业务对象 ID（单据 UUID）找到审批任务并提交「通过」。
- * 任务行按钮 id 来自 workspace-task-list.tsx: id=`work-item-${stableNumber}`，
- * stableNumber=businessObjectId（approval 任务即单据 UUID，见 dto.rs / store.rs）。
+ * W01 工作台按业务对象 ID 找到审批任务并提交「通过」。
+ * 任务行按钮 id 来自 workspace-task-list.tsx: id=`work-item-${stableNumber}`。
  */
 async function approveTask(page: Page, businessObjectId: string): Promise<void> {
-    const task = page
-        .locator(`button[id="work-item-${businessObjectId}"]`)
-        .first()
-    await expect(task).toBeVisible({ timeout: 30_000 })
-    await task.click()
-    const approve = page.getByRole("button", { name: "通过", exact: true })
-    await expect(approve).toBeVisible({ timeout: 20_000 })
-    await approve.click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    const task = await approveWorkspaceTaskByButtonId(page, businessObjectId)
     await expect(task).not.toBeVisible({ timeout: 30_000 })
 }
 
@@ -324,7 +316,7 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     const salesOrderId = salesPage.url().split("/").pop()!
     expect(salesOrderId).toBeTruthy()
 
-    // --- caigou 在 W02 工作台审批销售单 ---
+    // --- caigou 在 W01 工作台审批销售单 ---
     await switchAccount("procurement")
     await gotoPage(procurementPage, "/workspace")
     await approveTask(procurementPage, salesOrderId)

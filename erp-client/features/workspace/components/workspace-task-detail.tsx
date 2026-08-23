@@ -65,112 +65,116 @@ export function WorkspaceTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
+    const actions = approvalTask ? (
+        <ApprovalActionBar
+            allowedActions={item.allowedActions}
+            recoveryOptions={recoveryQuery.data?.actions ?? []}
+            workItemId={item.workItemId}
+            expectedTaskVersion={item.taskVersion}
+            instance={instance}
+            documentHref={documentHref}
+            canReadSensitive={canReadSensitive}
+            approveWithoutDialog
+            onDecisionApplied={(view) =>
+                onDecisionApplied?.(view, item.workItemId)
+            }
+        />
+    ) : documentHref ? (
+        <Button
+            type="button"
+            render={<a href={documentHref} aria-label="打开单据" />}
+        >
+            打开单据
+        </Button>
+    ) : null
 
     return (
-        <section className="space-y-4" aria-label="当前任务">
-            <header className="space-y-1">
-                <h2 className="text-lg font-medium">{item.objectTitle}</h2>
-                {canReadSensitive ? (
-                    <p className="text-sm text-muted-foreground">
-                        {[counterpartyName, listSummary]
-                            .filter(Boolean)
-                            .join(" · ")}
-                    </p>
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        当前账号无权查看部分业务字段
-                    </p>
-                )}
-            </header>
-
-            {summarySections && summarySections.length > 0 ? (
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-                    {summarySections.map((section) => (
-                        <div key={section.label} className="min-w-0">
-                            <dt className="text-xs text-muted-foreground">
-                                {section.label}
-                            </dt>
-                            <dd
-                                className={
-                                    section.numeric
-                                        ? "num truncate"
-                                        : "truncate"
-                                }
-                            >
-                                {section.value}
-                            </dd>
-                        </div>
-                    ))}
-                </dl>
-            ) : documentFacts.isPending ? (
-                <p className="text-sm text-muted-foreground">正在读取单据事实…</p>
-            ) : impactSummary ? (
-                <p className="text-sm">{impactSummary}</p>
-            ) : null}
-
-            {briefLines && briefLines.length > 0 ? (
-                <ul className="space-y-1 text-sm">
-                    {briefLines.map((line) => (
-                        <li key={line.title} className="flex justify-between gap-2">
-                            <span className="min-w-0 truncate">{line.title}</span>
-                            {line.quantity ? (
-                                <span className="num shrink-0 text-muted-foreground">
-                                    {line.quantity}
-                                </span>
-                            ) : null}
-                        </li>
-                    ))}
-                    {briefMoreCount ? (
-                        <li className="text-xs text-muted-foreground">
-                            另有 {briefMoreCount} 行
-                        </li>
-                    ) : null}
-                </ul>
-            ) : null}
-
-            {item.actionBlockers.length > 0 ? (
-                <p className="text-sm text-muted-foreground">
-                    {item.actionBlockers[0]?.message}
-                </p>
-            ) : null}
-
-            {approvalTask ? (
-                <>
-                    <RuntimeSummary instance={instance} />
-                    <ApprovalActionBar
-                        allowedActions={item.allowedActions}
-                        recoveryOptions={recoveryQuery.data?.actions ?? []}
-                        workItemId={item.workItemId}
-                        expectedTaskVersion={item.taskVersion}
-                        instance={instance}
-                        documentHref={documentHref}
-                        canReadSensitive={canReadSensitive}
-                        approveWithoutDialog
-                        onDecisionApplied={(view) =>
-                            onDecisionApplied?.(view, item.workItemId)
-                        }
-                    />
-                </>
-            ) : (
-                <div className="space-y-3">
-                    <p className="text-sm">{item.impactSummary}</p>
-                    {item.actionBlockers.length > 0 ? (
+        <section className="flex h-full min-h-0 flex-col" aria-label="当前任务">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+                <header className="flex flex-col gap-1">
+                    <h2 className="text-lg font-medium">{item.objectTitle}</h2>
+                    {canReadSensitive ? (
                         <p className="text-sm text-muted-foreground">
-                            {item.actionBlockers[0]?.message}
+                            {[counterpartyName, listSummary]
+                                .filter(Boolean)
+                                .join(" · ")}
                         </p>
-                    ) : null}
-                    {documentHref ? (
-                        <Button
-                            type="button"
-                            render={
-                                <a href={documentHref} aria-label="打开单据" />
-                            }
-                        >
-                            打开单据
-                        </Button>
-                    ) : null}
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            当前账号无权查看部分业务字段
+                        </p>
+                    )}
+                </header>
+
+                {summarySections && summarySections.length > 0 ? (
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                        {summarySections.map((section) => (
+                            <div key={section.label} className="min-w-0">
+                                <dt className="text-xs text-muted-foreground">
+                                    {section.label}
+                                </dt>
+                                <dd
+                                    className={
+                                        section.numeric
+                                            ? "num truncate"
+                                            : "truncate"
+                                    }
+                                >
+                                    {section.value}
+                                </dd>
+                            </div>
+                        ))}
+                    </dl>
+                ) : documentFacts.isPending ? (
+                    <p className="text-sm text-muted-foreground">
+                        正在读取单据事实…
+                    </p>
+                ) : impactSummary ? (
+                    <p className="text-sm">{impactSummary}</p>
+                ) : null}
+
+                {briefLines && briefLines.length > 0 ? (
+                    <ul className="flex flex-col gap-1 text-sm">
+                        {briefLines.map((line) => (
+                            <li
+                                key={line.title}
+                                className="flex justify-between gap-2"
+                            >
+                                <span className="min-w-0 truncate">
+                                    {line.title}
+                                </span>
+                                {line.quantity ? (
+                                    <span className="num shrink-0 text-muted-foreground">
+                                        {line.quantity}
+                                    </span>
+                                ) : null}
+                            </li>
+                        ))}
+                        {briefMoreCount ? (
+                            <li className="text-xs text-muted-foreground">
+                                另有 {briefMoreCount} 行
+                            </li>
+                        ) : null}
+                    </ul>
+                ) : null}
+
+                {item.actionBlockers.length > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        {item.actionBlockers[0]?.message}
+                    </p>
+                ) : null}
+
+                {approvalTask ? (
+                    <RuntimeSummary instance={instance} />
+                ) : item.impactSummary ? (
+                    <p className="text-sm">{item.impactSummary}</p>
+                ) : null}
+            </div>
+            {actions ? (
+                <div className="shrink-0 border-t border-border/30 bg-card px-4 py-3">
+                    {actions}
                 </div>
-            )}
+            ) : null}
         </section>
     )
 }

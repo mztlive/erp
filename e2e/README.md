@@ -7,7 +7,7 @@
 ```
 e2e/
 ├── playwright.config.ts        # 单 worker、长超时、失败截图/trace
-├── helpers/                    # 共享工具（账号、登录、API、UI）
+├── helpers/                    # 共享工具（账号、登录、API、UI、工作台）
 ├── scripts/
 │   ├── ensure-services.sh      # 检查/启动前后端（已启动则复用）
 │   ├── stop-backend.sh         # 停止 web-api（重置前停写）
@@ -83,6 +83,7 @@ npx playwright test tests/flow-10-stock-adjustment.spec.ts -g "盘亏调整单" 
 - **审批定义**：reset 会删除全部审批定义，按合同必须先创建并发布定义才能开单。
   `publish-approval-definitions.mjs` 幂等补齐 12 个 PROCESS_REQUIRED 类型的定义。
 - **岗位分离**：提交人不得审批自己的单据，各类型审批人按部门职责分配（见发布脚本）。
+- **工作台**：W01 `/workspace` 是唯一待办页。页头标题为「我的工作台」；口径胶囊在主面板工具条（无独立 MetricStrip 统计卡）；待办列表只渲染一份。定位与「通过」动作见 `helpers/workspace.ts`。
 - **服务**：优先复用已启动的前后端（后端 :10001、前端 :3000），未启动才拉起。
 - **修复后的重启**：若测试暴露代码问题并修复，对应服务会重启（后端 `restart-backend.sh --build`；前端 next dev 热更新，必要时重启）。
 

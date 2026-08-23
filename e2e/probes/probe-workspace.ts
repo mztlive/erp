@@ -15,7 +15,7 @@ async function main() {
     const page = await context.newPage()
     await loginViaUi(page, "procurement")
     await page.goto("/workspace")
-    const task = page.locator('ul[aria-label="待办列表"] > li > button').first()
+    const task = page.getByRole("list", { name: "待办列表" }).getByRole("button").first()
     await task.waitFor({ timeout: 30_000 })
     console.log("task found, clicking")
     await task.click()

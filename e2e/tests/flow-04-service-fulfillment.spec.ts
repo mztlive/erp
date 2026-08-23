@@ -27,6 +27,7 @@ import * as path from "node:path"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import { gotoPage, clickButton } from "../helpers/ui"
+import { approveWorkspaceTaskByButtonId } from "../helpers/workspace"
 
 // ── 流程内专用工具（保持 helpers 通用，不放业务专有逻辑） ─────────────────────────
 
@@ -150,19 +151,11 @@ async function confirmInDialog(page: Page, buttonName: string | RegExp): Promise
 }
 
 /**
- * W02 工作台审批（按任务按钮 id 定位，与 flow-02 同口径）：
+ * W01 工作台审批（按任务按钮 id 定位）：
  * 点击任务 → 当前任务区「通过」→ 提交决定 → 任务消失。
  */
 async function approveWorkItem(page: Page, taskButtonId: string): Promise<void> {
-    // 工作台列表在桌面/移动布局各渲染一份（后者 lg:hidden），取第一个（可见的桌面列表）
-    const task = page.locator(`#${taskButtonId}`).first()
-    await expect(task).toBeVisible({ timeout: 30_000 })
-    await task.click()
-    const detail = page.locator('section[aria-label="当前任务"]').first()
-    const approveButton = detail.getByRole("button", { name: "通过" }).first()
-    await expect(approveButton).toBeVisible({ timeout: 20_000 })
-    await approveButton.click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    const task = await approveWorkspaceTaskByButtonId(page, taskButtonId)
     await expect(task).toHaveCount(0, { timeout: 20_000 })
 }
 
@@ -256,7 +249,7 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
     const salesOrderId = salesPage.url().match(/\/sales\/orders\/([^?]+)/)?.[1] ?? ""
     console.log(`销售单已提交: ${salesOrderNo}（${salesOrderId}）`)
 
-    // ── 步骤 3: 采购确认（caigou 在 W02 工作台审批通过） ──
+    // ── 步骤 3: 采购确认（caigou 在 W01 工作台审批通过） ──
     await switchAccount("procurement")
     await gotoPage(procPage, "/workspace")
     await approveWorkItem(procPage, `work-item-${salesOrderId}`)
@@ -313,7 +306,7 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
             procPage.getByRole("button", { name: "撤回审批" }).first(),
         ).toBeVisible({ timeout: 30_000 })
 
-        // 5b. 采购单财务审核（caiwu 在 W02 工作台审批通过）
+        // 5b. 采购单财务审核（caiwu 在 W01 工作台审批通过）
         await switchAccount("finance")
         await gotoPage(financePage, "/workspace")
         await approveWorkItem(financePage, `work-item-${poId}`)

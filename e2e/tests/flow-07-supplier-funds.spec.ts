@@ -43,6 +43,7 @@ import path from "path"
 import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { clickButton, expectTableRow, gotoPage, pickOption } from "../helpers/ui"
+import { approveWorkspaceTaskByButtonId } from "../helpers/workspace"
 
 // ---------------------------------------------------------------------------
 // 流程内专用小工具（不写入 helpers，避免影响其他 spec）
@@ -176,20 +177,11 @@ async function pickDate(page: Page, label: string, ymd: string): Promise<void> {
 }
 
 /**
- * W01 工作台按业务对象 ID（单据 UUID）找到审批任务并提交「通过」。
- * 任务行按钮 id 来自 workspace-task-list.tsx: id=`work-item-${stableNumber}`，
- * stableNumber=businessObjectId（approval 任务即单据 UUID）。
+ * W01 工作台按业务对象 ID 找到审批任务并提交「通过」。
+ * 任务行按钮 id 来自 workspace-task-list.tsx: id=`work-item-${stableNumber}`。
  */
 async function approveTask(page: Page, businessObjectId: string): Promise<void> {
-    const task = page
-        .locator(`button[id="work-item-${businessObjectId}"]`)
-        .first()
-    await expect(task).toBeVisible({ timeout: 30_000 })
-    await task.click()
-    const approve = page.getByRole("button", { name: "通过", exact: true })
-    await expect(approve).toBeVisible({ timeout: 20_000 })
-    await approve.click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    const task = await approveWorkspaceTaskByButtonId(page, businessObjectId)
     await expect(task).not.toBeVisible({ timeout: 30_000 })
 }
 

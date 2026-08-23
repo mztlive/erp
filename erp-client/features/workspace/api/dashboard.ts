@@ -193,7 +193,6 @@ export function mapWorkspaceWorkItem(
 }
 
 function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
-    const detail = "当前授权范围"
     return [
         {
             key: "inbox",
@@ -201,7 +200,6 @@ function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
             count: stats.inbox ?? stats.assigned,
             visible: true,
             tone: "info",
-            detail,
         },
         {
             key: "overdue",
@@ -209,7 +207,6 @@ function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
             count: stats.overdue,
             visible: true,
             tone: "destructive",
-            detail,
         },
         {
             key: "blocked",
@@ -217,7 +214,6 @@ function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
             count: stats.blocked ?? 0,
             visible: stats.blocked != null,
             tone: "warning",
-            detail,
         },
         {
             key: "started",
@@ -225,7 +221,6 @@ function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
             count: stats.started ?? 0,
             visible: stats.started != null,
             tone: "info",
-            detail,
         },
     ]
 }

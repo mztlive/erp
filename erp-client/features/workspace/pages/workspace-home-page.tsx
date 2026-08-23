@@ -6,25 +6,26 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     DataFreshness,
-    MetricFilterItem,
-    MetricStrip,
     PageActions,
     PageHeader,
     PageScaffold,
+    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetTitle,
+} from "@/components/ui/sheet"
 import { WorkspaceFilterBar } from "@/features/workspace/components/workspace-filter-bar"
 import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
 import { WorkspaceTaskDetail } from "@/features/workspace/components/workspace-task-detail"
 import { WorkspaceTaskList } from "@/features/workspace/components/workspace-task-list"
 import { useWorkspaceHome } from "@/features/workspace/hooks/use-workspace-home"
-import {
-    deriveProjectionFreshness,
-    deriveWorkItemsFreshness,
-    greetingForNow,
-} from "@/features/workspace/lib/freshness"
+import { deriveWorkItemsFreshness } from "@/features/workspace/lib/freshness"
 import { filterSummaryFor } from "@/features/workspace/lib/url-state"
+import { cn } from "@/lib/utils"
 
 /**
  * 唯一工作台：指标筛选左列，审批决定在右侧详情连续提交。
@@ -113,8 +114,8 @@ export function WorkspaceHomePage() {
         return (
             <PageScaffold>
                 <PageHeader
-                    title={greetingForNow(view.viewer.displayName)}
-                    description={`${view.viewer.activeRoleLabel}工作台`}
+                    title="我的工作台"
+                    description="当前角色无数据范围"
                 />
                 <BusinessEmptyState
                     kind="no-scope"
@@ -125,15 +126,24 @@ export function WorkspaceHomePage() {
         )
     }
 
-    const projectionFreshness = deriveProjectionFreshness(view.freshness, {
-        refreshing,
-    })
     const workItemsFreshness = deriveWorkItemsFreshness(view.freshness, {
         refreshing,
     })
     const filterLabel = filterSummaryFor(activeMetric)
     const metrics = view.metrics.filter((metric) => metric.visible)
     const items = view.items
+    const emptyTitle = hasActiveFilter
+        ? "当前筛选没有待办"
+        : "当前没有待处理事项"
+    const emptyDescription = hasActiveFilter
+        ? "可清除筛选后回到待我处理。"
+        : "新任务到达后会出现在这里。"
+    const emptyAction = hasActiveFilter ? (
+        <Button type="button" variant="outline" onClick={clearFilters}>
+            回到待我处理
+        </Button>
+    ) : undefined
+
     const detail = selected ? (
         <WorkspaceTaskDetail
             item={selected}
@@ -142,50 +152,28 @@ export function WorkspaceHomePage() {
             }}
         />
     ) : (
-        <BusinessEmptyState
-            kind="no-tasks"
-            title={hasActiveFilter ? "当前筛选没有待办" : "当前没有待处理事项"}
-            description={
-                hasActiveFilter
-                    ? "可清除筛选后回到待我处理。"
-                    : "新任务到达后会出现在左侧列表。"
-            }
-            action={
-                hasActiveFilter ? (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={clearFilters}
-                    >
-                        回到待我处理
-                    </Button>
-                ) : undefined
-            }
-        />
+        <div className="flex flex-1 items-center justify-center p-6">
+            <BusinessEmptyState
+                kind="no-tasks"
+                title="选择一条待办开始处理"
+                description="从左侧列表选中任务后，可在此查看摘要并处理。"
+                className="bg-transparent ring-0"
+            />
+        </div>
     )
 
     return (
-        <PageScaffold>
+        <PageScaffold className="min-h-0">
             <PageHeader
-                title={greetingForNow(view.viewer.displayName)}
-                description={`${view.viewer.activeRoleLabel}工作台`}
+                title="我的工作台"
+                description={`当前共 ${view.total} 项`}
                 metadata={
-                    <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
-                        <DataFreshness
-                            label="待办"
-                            updatedAt={workItemsFreshness.updatedAtLabel}
-                            dateTime={workItemsFreshness.dateTime}
-                            state={workItemsFreshness.state}
-                            statusLabel={workItemsFreshness.statusLabel}
-                        />
-                        <DataFreshness
-                            label="工作台汇总"
-                            updatedAt={projectionFreshness.updatedAtLabel}
-                            dateTime={projectionFreshness.dateTime}
-                            state={projectionFreshness.state}
-                            statusLabel={projectionFreshness.statusLabel}
-                        />
-                    </div>
+                    <DataFreshness
+                        updatedAt={workItemsFreshness.updatedAtLabel}
+                        dateTime={workItemsFreshness.dateTime}
+                        state={workItemsFreshness.state}
+                        statusLabel={workItemsFreshness.statusLabel}
+                    />
                 }
                 actions={
                     <PageActions
@@ -205,105 +193,93 @@ export function WorkspaceHomePage() {
                 }
             />
 
-            <MetricStrip columns={4} aria-label="待办筛选">
-                {metrics.map((metric) => (
-                    <MetricFilterItem
-                        key={metric.key}
-                        label={metric.label}
-                        value={metric.count}
-                        detail={metric.detail}
-                        active={activeMetric === metric.key}
-                        onClick={() => onMetricClick(metric.key)}
-                        status={
-                            metric.tone === "destructive" ||
-                            metric.tone === "warning"
-                                ? { label: metric.label, tone: metric.tone }
-                                : undefined
-                        }
-                    />
-                ))}
-            </MetricStrip>
+            <div
+                className={cn(
+                    surfacePanelClassName,
+                    "flex min-h-0 flex-1 flex-col overflow-hidden",
+                )}
+            >
+                <WorkspaceFilterBar
+                    urlState={urlState}
+                    metrics={metrics}
+                    activeMetric={activeMetric}
+                    searchDraft={searchDraft}
+                    onSearchDraftChange={setSearchDraft}
+                    onMetricClick={onMetricClick}
+                    onFamilyChange={onFamilyChange}
+                    onSortChange={onSortChange}
+                    onSearch={applySearch}
+                />
 
-            <WorkspaceFilterBar
-                urlState={urlState}
-                searchDraft={searchDraft}
-                onSearchDraftChange={setSearchDraft}
-                onFamilyChange={onFamilyChange}
-                onSortChange={onSortChange}
-                onSearch={applySearch}
-            />
-
-            <div className="hidden min-h-[32rem] gap-4 lg:grid lg:grid-cols-[minmax(18rem,38%)_minmax(0,62%)]">
-                <section
-                    className="overflow-hidden rounded-lg border border-border"
-                    aria-labelledby="workspace-task-main-title"
-                >
-                    <header className="border-b border-grid px-3 py-2">
-                        <h2
-                            id="workspace-task-main-title"
-                            className="text-sm font-medium"
-                        >
-                            {filterLabel}
-                        </h2>
-                        <p
-                            className="text-xs text-muted-foreground"
-                            aria-live="polite"
-                        >
-                            当前共 {view.total} 项
-                        </p>
-                    </header>
-                    {items.length === 0 ? (
-                        <div className="p-4">
-                            <BusinessEmptyState
-                                kind="no-tasks"
-                                title={
-                                    hasActiveFilter
-                                        ? "当前筛选没有待办"
-                                        : "当前没有待处理事项"
-                                }
-                            />
-                        </div>
-                    ) : (
-                        <WorkspaceTaskList
-                            items={items}
-                            selectedWorkItemId={selected?.workItemId}
-                            onSelect={onSelectTask}
+                {items.length === 0 ? (
+                    <div className="flex flex-1 items-center justify-center p-6">
+                        <BusinessEmptyState
+                            kind={hasActiveFilter ? "filter" : "no-tasks"}
+                            title={emptyTitle}
+                            description={emptyDescription}
+                            action={emptyAction}
+                            className="bg-transparent ring-0"
                         />
-                    )}
-                </section>
-                <div className="rounded-lg border border-border p-4">
-                    {detail}
-                </div>
+                    </div>
+                ) : (
+                    <div className="flex min-h-0 flex-1">
+                        <section
+                            className="flex min-h-0 w-full flex-col overflow-hidden lg:w-[min(24rem,38%)] lg:shrink-0 lg:border-r lg:border-border/30"
+                            aria-labelledby="workspace-task-main-title"
+                        >
+                            <header className="border-b border-border/30 px-3 py-2">
+                                <h2
+                                    id="workspace-task-main-title"
+                                    className="text-sm font-medium"
+                                >
+                                    {filterLabel}
+                                </h2>
+                                <p
+                                    className="text-xs text-muted-foreground"
+                                    aria-live="polite"
+                                >
+                                    当前共 {view.total} 项
+                                </p>
+                            </header>
+                            <WorkspaceTaskList
+                                items={items}
+                                selectedWorkItemId={selected?.workItemId}
+                                onSelect={onSelectTask}
+                            />
+                        </section>
+                        <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col">
+                            {detail}
+                        </div>
+                    </div>
+                )}
             </div>
 
-            <div className="lg:hidden">
-                <section className="overflow-hidden rounded-lg border border-border">
-                    <header className="border-b border-grid px-3 py-2">
-                        <h2 className="text-sm font-medium">{filterLabel}</h2>
-                    </header>
-                    <WorkspaceTaskList
-                        items={items}
-                        selectedWorkItemId={selected?.workItemId}
-                        onSelect={onSelectTask}
-                    />
-                </section>
-                <Sheet
-                    open={narrowDetailOpen && Boolean(selected)}
-                    onOpenChange={setNarrowDetailOpen}
+            <Sheet
+                open={narrowDetailOpen && Boolean(selected)}
+                onOpenChange={setNarrowDetailOpen}
+            >
+                <SheetContent
+                    side="right"
+                    size="detail"
+                    className="w-full p-0 sm:max-w-lg"
                 >
-                    <SheetContent side="right" className="w-full sm:max-w-lg">
-                        {selected ? (
-                            <WorkspaceTaskDetail
-                                item={selected}
-                                onDecisionApplied={(_view, workItemId) => {
-                                    applyDecisionAfter(workItemId)
-                                    setNarrowDetailOpen(false)
-                                }}
-                            />
-                        ) : null}
-                    </SheetContent>
-                </Sheet>
-            </div>
+                    <SheetTitle className="sr-only">
+                        {selected?.objectTitle ?? "任务详情"}
+                    </SheetTitle>
+                    <SheetDescription className="sr-only">
+                        当前待办的摘要与处理动作
+                    </SheetDescription>
+                    {selected ? (
+                        <WorkspaceTaskDetail
+                            item={selected}
+                            onDecisionApplied={(_view, workItemId) => {
+                                applyDecisionAfter(workItemId)
+                                setNarrowDetailOpen(false)
+                            }}
+                        />
+                    ) : null}
+                </SheetContent>
+            </Sheet>
         </PageScaffold>
     )
 }

@@ -10,17 +10,18 @@ export const metadata: Metadata = {
 
 function WorkspaceHomeFallback() {
     return (
-        <PageScaffold>
-            <div className="h-8 w-64 animate-pulse rounded-lg bg-muted" />
-            <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                    <div
-                        key={i}
-                        className="h-20 animate-pulse rounded-lg bg-muted"
-                    />
-                ))}
+        <PageScaffold className="min-h-0">
+            <div className="flex flex-col gap-2">
+                <div className="h-8 w-40 animate-pulse rounded-lg bg-muted" />
+                <div className="h-4 w-64 max-w-full animate-pulse rounded-lg bg-muted" />
             </div>
-            <div className="h-80 w-full animate-pulse rounded-lg bg-muted" />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border">
+                <div className="flex flex-col gap-2 border-b border-border/30 px-3 py-2">
+                    <div className="h-7 w-80 max-w-full animate-pulse rounded-lg bg-muted" />
+                    <div className="h-7 w-64 max-w-full animate-pulse rounded-lg bg-muted" />
+                </div>
+                <div className="min-h-80 flex-1 animate-pulse bg-muted/40" />
+            </div>
         </PageScaffold>
     )
 }

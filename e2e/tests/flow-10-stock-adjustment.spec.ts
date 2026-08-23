@@ -16,8 +16,9 @@
  * 文档-代码差异（doc=文档说法 / code=代码实际行为）:
  *   1. doc: 审批待办在 W02 统一待办（/workspace/tasks）
  *      code: app/(workspace)/workspace/tasks/page.tsx 对 /workspace/tasks 做 permanentRedirect
- *            到 W01 唯一工作台 /workspace；审批决定在工作台右侧详情页内完成
+ *            到 W01 唯一工作台 /workspace；审批决定在工作台详情区完成
  *            （features/workspace/components/workspace-task-detail.tsx + ApprovalActionBar）。
+ *            待办列表只渲染一份；口径筛选在主面板工具条，无独立统计卡。
  *   2. doc: 库存调整单由仓储经办人创建（§6.4）；无仓储账号时实际以代码为准
  *      code: 预置账号中没有仓储角色；仓储职责权限（stock_adjustment:* 等）由
  *            admin(role-root, *:*) 代行；财务 FINANCE_PERMISSIONS 不含
@@ -50,6 +51,12 @@ import { Locator, Page, expect, test } from "@playwright/test"
 import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { pickOption } from "../helpers/ui"
+import {
+    approveVisibleWorkspaceTask,
+    approveWorkspaceTaskByDocumentNo,
+    openWorkspaceTask,
+    workspaceTaskButtons,
+} from "../helpers/workspace"
 
 // 库存调整弹窗内容较长，使用全局最大化窗口与实际 viewport，禁止退回 720px 固定视口。
 
@@ -124,45 +131,19 @@ async function pickToday(page: Page, trigger: Locator): Promise<void> {
 }
 
 /**
- * W01 工作台审批：打开当前唯一「单据审批」任务 → 通过 → 决定弹窗提交。
- * 待办行按钮文案为「工作项类型 + 内部 ID」（如 DOCUMENT_APPROVAL {id}），
- * 不含单号；详情区（当前任务）标题才带业务对象标签。数据库已重置，
- * 当前账号此刻只有一个待办，直接取第一行。
+ * W01 工作台审批：打开当前唯一审批任务 → 通过。
+ * 待办行展示类型标签 + 稳定单号；详情标题带业务对象标签。
+ * 数据库已重置，当前账号此刻只有一个待办，直接取第一行。
  */
 async function approveFirstTask(page: Page): Promise<void> {
-    // 工作台在桌面/窄屏各渲染一份待办列表（已知重复渲染），取第一份
-    const taskList = page.locator('ul[aria-label="待办列表"]').first()
-    await expect(taskList).toBeVisible({ timeout: 20_000 })
-    const task = taskList.getByRole("button").first()
-    await expect(task).toBeVisible({ timeout: 20_000 })
-    await task.click()
-    await approveCurrentTask(page)
+    const task = workspaceTaskButtons(page).first()
+    await openWorkspaceTask(page, task)
+    await approveVisibleWorkspaceTask(page)
 }
 
-/** 同上，但打开任务后先校验详情区标题含期望单号再通过（列表行不展示单号）。 */
+/** 同上，并校验列表或详情含期望单号。 */
 async function approveByDocumentNo(page: Page, docNo: string): Promise<void> {
-    // 工作台在桌面/窄屏各渲染一份待办列表（已知重复渲染），取第一份
-    const taskList = page.locator('ul[aria-label="待办列表"]').first()
-    await expect(taskList).toBeVisible({ timeout: 20_000 })
-    const task = taskList.getByRole("button").first()
-    await expect(task).toBeVisible({ timeout: 20_000 })
-    await task.click()
-    const detailArea = page.locator('section[aria-label="当前任务"]')
-    await expect(detailArea).toBeVisible({ timeout: 20_000 })
-    await expect(detailArea.getByRole("heading").first()).toBeVisible({
-        timeout: 20_000,
-    })
-    await expect(detailArea.getByText(new RegExp(docNo)).first()).toBeVisible({
-        timeout: 20_000,
-    })
-    await approveCurrentTask(page)
-}
-
-/** 在已选中的任务详情区点击「通过」并提交决定。 */
-async function approveCurrentTask(page: Page): Promise<void> {
-    const detail = page.locator('section[aria-label="当前任务"]')
-    await detail.getByRole("button", { name: "通过" }).click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await approveWorkspaceTaskByDocumentNo(page, docNo)
 }
 
 /**

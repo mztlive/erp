@@ -649,6 +649,8 @@ const listQuery = useDomainListQuery({
 
 `MetricStrip` 位于筛选表单之外。主行快捷筛选位于 `ListToolbar.filters`。两者都只能表达明确、可回退的 Applied 条件。
 
+例外：W01 我的工作台的待办口径（待我处理 / 已超期 / 受阻 / 我发起的）使用主面板工具条分段控件，**不**使用独立 `MetricStrip` 轻卡。数量仍来自服务端统计，点击写入与列表相同的 URL 筛选。
+
 | 类型 | 组件 | 行为 |
 | --- | --- | --- |
 | 只读指标 | `MetricItem` | 只展示，不可点击 |

@@ -46,6 +46,11 @@ import {
     fillByLabel,
     gotoPage,
 } from "../helpers/ui"
+import {
+    approveVisibleWorkspaceTask,
+    openWorkspaceTask,
+    workspaceTaskButtons,
+} from "../helpers/workspace"
 
 // ── 流程专用小工具（保持 helpers 通用，业务细节留在本文件）──────────────────
 
@@ -185,25 +190,21 @@ async function pickDateTime(page: Page, label: string, day: string, time: string
 }
 
 /**
- * W02 统一待办审批：/workspace（/workspace/tasks 永久重定向至此）。
- * 左侧任务行包含 workItemTypeLabel + stableNumber + listSummary；
- * 流程中各审批人此刻恰好只有一个待办，guardText 命中失败时回退到第一行。
+ * W01 工作台审批：/workspace。
+ * 左列任务行展示类型标签 + 稳定单号 + 摘要；各审批人此刻恰好一条待办，
+ * guardText 命中失败时回退到第一行。
  */
 async function approveInWorkspace(page: Page, guardText?: string): Promise<void> {
     await gotoPage(page, "/workspace")
-    const rows = page.locator('ul[aria-label="待办列表"] > li > button')
+    const rows = workspaceTaskButtons(page)
     await expect(rows.first()).toBeVisible({ timeout: 30_000 })
     let target = rows.first()
     if (guardText) {
         const filtered = rows.filter({ hasText: guardText }).first()
         if ((await filtered.count()) > 0) target = filtered
     }
-    await target.click()
-    const detail = page.locator('section[aria-label="当前任务"]').last()
-    await expect(detail).toBeVisible({ timeout: 20_000 })
-    const approve = detail.getByRole("button", { name: "通过", exact: true })
-    await expect(approve).toBeVisible({ timeout: 20_000 })
-    await approve.click()
+    await openWorkspaceTask(page, target)
+    await approveVisibleWorkspaceTask(page)
     await expect(target).toHaveCount(0, { timeout: 20_000 })
 }
 

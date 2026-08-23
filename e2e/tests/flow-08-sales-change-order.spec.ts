@@ -35,6 +35,7 @@ import * as path from "path"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import { gotoPage } from "../helpers/ui"
+import { approveFirstWorkspaceTask } from "../helpers/workspace"
 
 /** 弹窗统一选择器（shadcn Dialog=role dialog / AlertDialog=role alertdialog）。 */
 const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"]'
@@ -114,16 +115,12 @@ async function pickDateInScope(page: Page, scope: Locator): Promise<void> {
  * 在工作台（W01）处理第一条审批任务：通过 → 提交决定 → 弹窗关闭。
  * 数据库每个流程前已重置，各审批人每个节点恰好一条待办。
  */
-async function approveFirstWorkspaceTask(page: Page): Promise<void> {
+async function approveFirstTaskOnWorkspace(page: Page): Promise<void> {
     await gotoPage(page, "/workspace")
-    const list = page.locator('ul[aria-label="待办列表"]')
-    await expect(list.getByRole("button").first()).toBeVisible({ timeout: 20_000 })
-    await list.getByRole("button").first().click()
-    const approve = page.getByRole("button", { name: "通过", exact: true }).first()
-    await expect(approve).toBeVisible({ timeout: 20_000 })
-    await approve.click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
-    await expect(page.getByText("当前没有待处理事项").first()).toBeVisible({ timeout: 20_000 })
+    await approveFirstWorkspaceTask(page)
+    await expect(page.getByText("当前没有待处理事项")).toBeVisible({
+        timeout: 20_000,
+    })
 }
 
 type SellableSkuRow = {
@@ -237,7 +234,7 @@ test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 →
 
     // ---------- 步骤 3：采购确认节点通过 → 销售单生效（不履约） ----------
     await switchAccount("procurement")
-    await approveFirstWorkspaceTask(caigouPage)
+    await approveFirstTaskOnWorkspace(caigouPage)
 
     await switchAccount("sales")
     await gotoPage(page, `/sales/orders/${salesOrderId}`)
@@ -275,10 +272,10 @@ test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 →
 
     // ---------- 步骤 6：采购确认节点（caigou）→ 销售领导复核节点（lisiyong） ----------
     await switchAccount("procurement")
-    await approveFirstWorkspaceTask(caigouPage)
+    await approveFirstTaskOnWorkspace(caigouPage)
 
     await switchAccount("salesLeader")
-    await approveFirstWorkspaceTask(leaderPage)
+    await approveFirstTaskOnWorkspace(leaderPage)
 
     // ---------- 步骤 7：变更生效 → 销售单追加 v2，明细/金额按改单工作副本更新 ----------
     await switchAccount("sales")

@@ -1,8 +1,9 @@
 "use client"
 
+import { WorkTaskItem } from "@/components/business"
 import { cn } from "@/lib/utils"
 
-import { isBlockedWorkItem } from "../lib/work-item"
+import { isBlockedWorkItem, responsiblePartyLabel } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 
 /**
@@ -19,7 +20,7 @@ export function WorkspaceTaskList({
 }) {
     return (
         <ul
-            className="divide-y divide-grid overflow-auto"
+            className="flex min-h-0 flex-1 flex-col overflow-auto"
             aria-label="待办列表"
         >
             {items.map((item) => {
@@ -27,34 +28,44 @@ export function WorkspaceTaskList({
                 const blocked = isBlockedWorkItem(item)
                 return (
                     <li key={item.workItemId}>
-                        <button
-                            type="button"
-                            id={`work-item-${item.stableNumber}`}
+                        <WorkTaskItem
+                            render={
+                                <button
+                                    type="button"
+                                    id={`work-item-${item.stableNumber}`}
+                                    aria-label={`${item.workItemTypeLabel} ${item.stableNumber}`}
+                                    aria-current={selected ? "true" : undefined}
+                                />
+                            }
+                            density="compact"
                             className={cn(
-                                "flex min-h-11 w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm",
-                                selected && "bg-muted font-medium",
-                                blocked && "border-l-2 border-destructive",
+                                "w-full rounded-none border-x-0 border-t-0 text-left shadow-none",
+                                selected && "bg-muted",
+                                blocked && "border-l-2 border-l-destructive",
                             )}
-                            aria-current={selected ? "true" : undefined}
+                            taskType={item.workItemTypeLabel}
+                            businessObject={item.stableNumber}
+                            counterparty={item.counterpartyName}
+                            contentSummary={item.listSummary}
+                            enteredAt={item.enteredAtLabel}
+                            enteredDateTime={item.createdAt}
+                            dueAt={item.dueAtLabel}
+                            dueDateTime={item.dueAt}
+                            responsibleParty={responsiblePartyLabel(item)}
+                            reason={item.reasonLabel}
+                            impact={item.impactSummary}
+                            status={
+                                blocked
+                                    ? { label: "受阻", tone: "warning" }
+                                    : item.dueBucket === "overdue"
+                                      ? {
+                                            label: "已超期",
+                                            tone: "destructive",
+                                        }
+                                      : undefined
+                            }
                             onClick={() => onSelect(item)}
-                        >
-                            <span>
-                                {item.workItemTypeLabel} {item.stableNumber}
-                                {blocked ? (
-                                    <span className="ml-2 text-destructive">
-                                        受阻
-                                    </span>
-                                ) : null}
-                            </span>
-                            {item.listSummary || item.counterpartyName ? (
-                                <span className="text-muted-foreground">
-                                    {item.listSummary ?? item.counterpartyName}
-                                </span>
-                            ) : null}
-                            {item.dueBucket === "overdue" ? (
-                                <span className="text-destructive">已超期</span>
-                            ) : null}
-                        </button>
+                        />
                     </li>
                 )
             })}
