@@ -24,9 +24,8 @@
  *      代码中销售单号由前端生成 XS+14位时间戳（erp-client/features/sales-orders/api/mappers.ts
  *      localOrderNo），采购单号在提交时生成 PO-<uuid>（backend/services/src/purchase_order/submission.rs
  *      assign_formal_purchase_no）。
- *   3. 销售单建单页不提供履约方式选择，实物/服务单固定提交 COMPANY_WAREHOUSE
- *      （erp-client/features/sales-orders/lib/sales-order-create-model.ts createEmptyLine +
- *      api/mappers.ts mapFulfillmentMode）；履约责任在采购单侧才体现。
+ *   3. 实物/服务销售单必须在单据头选择履约方式，并同步写入全部明细行；
+ *      本流程选择「供应商直发」，采购单生效后进入代发工作面。
  *
  * 说明: e2e/tests 目录原不存在，本文件为该目录首个 spec；不修改 helpers/其他文件。
  */
@@ -47,7 +46,7 @@ import {
     fillByLabel,
     expectTableRow,
 } from "../helpers/ui"
-import { approveWorkspaceTaskByButtonId } from "../helpers/workspace"
+import { approveWorkspaceTaskByDocumentNo } from "../helpers/workspace"
 
 // ---------------------------------------------------------------------------
 // 流程内专用小工具（保持 helpers 通用，不放业务逻辑）
@@ -97,12 +96,12 @@ async function pickFirstOption(scope: Page | Locator, ariaLabel: string): Promis
     await option.click()
 }
 
-/** 在 W01 工作台按任务按钮 id 完成「通过」。 */
+/** 在 W01 工作台按可见稳定单号完成「通过」。 */
 async function approveFromWorkspace(
     page: Page,
-    taskButtonId: string,
+    documentNo: string,
 ): Promise<void> {
-    const task = await approveWorkspaceTaskByButtonId(page, taskButtonId)
+    const task = await approveWorkspaceTaskByDocumentNo(page, documentNo)
     await expect(task).toHaveCount(0, { timeout: 20_000 })
 }
 
@@ -225,11 +224,14 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
             await dialog.getByRole("button", { name: "创建客户" }).click()
             return dialog
         })
-        // 成功结果卡 + 弹窗关闭 + 进入客户详情
+        // 成功结果卡 + 弹窗关闭；当前客户中心留在列表页，由客户链接进入详情。
         await expect(createDialog.getByText("客户已创建")).toBeVisible({
             timeout: 20_000,
         })
         await expect(createDialog).not.toBeVisible({ timeout: 20_000 })
+        await salesPage
+            .getByRole("link", { name: customerShortName, exact: true })
+            .click()
         await expect(salesPage).toHaveURL(/\/sales\/customers\/[0-9a-f]{32}/, {
             timeout: 20_000,
         })
@@ -328,7 +330,7 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         // -----------------------------------------------------------------
         await switchAccount("procurement")
         await gotoPage(procurementPage, "/workspace")
-        await approveFromWorkspace(procurementPage, `work-item-${salesOrderId}`)
+        await approveFromWorkspace(procurementPage, salesOrderNo)
 
         // 销售侧回看：销售单已生效（详情 + 列表）
         await switchAccount("sales")
@@ -399,13 +401,18 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         await expect(
             procurementPage.getByText("审批中", { exact: true }).first(),
         ).toBeVisible({ timeout: 20_000 })
+        const purchaseOrderHeader = await procurementPage
+            .locator('[data-slot="document-header"]')
+            .innerText()
+        const purchaseOrderNo = purchaseOrderHeader.match(/PO[0-9A-Za-z-]+/)?.[0]
+        expect(purchaseOrderNo, "提交后应分配采购单号").toBeTruthy()
 
         // -----------------------------------------------------------------
         // 6) 财务(caiwu)：工作台通过"采购单财务审核" → 采购单生效
         // -----------------------------------------------------------------
         await switchAccount("finance")
         await gotoPage(financePage, "/workspace")
-        await approveFromWorkspace(financePage, `work-item-${purchaseOrderId}`)
+        await approveFromWorkspace(financePage, purchaseOrderNo!)
 
         await switchAccount("procurement")
         await gotoPage(procurementPage, `/procurement/orders/${purchaseOrderId}`)
@@ -438,11 +445,9 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         ).toBeVisible({ timeout: 20_000 })
 
         // 承运方 + 物流单号（发货数量已由系统带出）
-        await procurementPage.locator("#direct-carrier").click()
         await procurementPage
-            .getByRole("option")
-            .filter({ hasText: "顺丰速运" })
-            .first()
+            .getByRole("radiogroup", { name: "承运方" })
+            .getByRole("button", { name: "顺丰速运", exact: true })
             .click()
         await procurementPage.locator("#direct-tracking").fill(trackingNo)
 

@@ -194,6 +194,12 @@ afterEach(() => {
 })
 
 describe("SalesOrderCreateForm submit recovery", () => {
+    it("renders the fulfillment mode selector for physical and service orders", () => {
+        renderCreateForm(makeDraft(filledLine))
+
+        expect(screen.getByLabelText("履约方式")).toBeTruthy()
+    })
+
     it("re-enables submit after fixing unit price and due date", async () => {
         renderCreateForm(makeDraft(filledLine))
         const button = screen.getByRole("button", {

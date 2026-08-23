@@ -156,18 +156,23 @@ export function useContractUploadForm({
         const nextYear = new Date(today)
         nextYear.setFullYear(today.getFullYear() + 1)
         const nextYearText = `${nextYear.getFullYear()}-${pad(nextYear.getMonth() + 1)}-${pad(nextYear.getDate())}`
-        form.reset({
-            pdfFile: null,
-            contractNo: "",
-            customerId: initialCustomerId,
-            customerName: "",
-            settlementPartyId: "",
-            settlementPartyName: "",
-            paymentTerms: "CONTRACT",
-            signedAt: todayText,
-            validFrom: todayText,
-            validTo: nextYearText,
-        })
+        form.reset(
+            {
+                pdfFile: null,
+                contractNo: "",
+                customerId: initialCustomerId,
+                customerName: "",
+                settlementPartyId: "",
+                settlementPartyName: "",
+                paymentTerms: "CONTRACT",
+                signedAt: todayText,
+                validFrom: todayText,
+                validTo: nextYearText,
+            },
+            // useAppForm 下一次 layout effect 仍会同步声明处的空表单默认值。
+            // 保留该默认值，避免未 touch 的开窗日期种子被 formApi.update 回滚为空。
+            { keepDefaultValues: true },
+        )
         // eslint-disable-next-line react-hooks/exhaustive-deps -- only seed when dialog opens
     }, [open, initialCustomerId])
 

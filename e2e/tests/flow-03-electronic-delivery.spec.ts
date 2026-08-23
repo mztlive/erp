@@ -19,9 +19,7 @@
  *      recipientMasked 恒为空，clientValidation 报「交付对象不能为空」→ 确认交付按钮
  *      被禁用（features/fulfillment-operations/lib/validation.ts）。因此本测试经 API 确认，
  *      UI 侧只断言队列出现与清空。
- *   3. 销售单建单页不提供履约方式选择，明细恒为「公司仓发」
- *      （features/sales-orders/lib/sales-order-create-model.ts「履约方式由后续审批节点写入结论」），
- *      后端确认电子交付时也不校验销售行履约方式（backend/services/src/fulfillment/purchase_context.rs）。
+ *   3. 销售单建单页选择「电子交付」并同步到明细；后续采购与履约投影以该冻结值分流。
  *   4. 电子交付「凭证」（evidence_attachment_id）仅 API 支持，UI 无录入入口。
  *   5. 文档 W07「二次确认队列」在实现中为销售单审批的「采购确认」普通审批节点，
  *      在 W01 工作台办理（e2e/scripts/publish-approval-definitions.mjs: sales_order 单节点）。
@@ -149,7 +147,8 @@ test("flow-03 虚拟商品电子交付全流程", async ({ page }) => {
     await customerDialog.getByLabel("统一社会信用代码").fill(creditCode)
     await customerDialog.getByRole("button", { name: "创建客户" }).click()
     await expect(sales.getByText("客户已创建").first()).toBeVisible({ timeout: 20_000 })
-    // 创建成功后弹窗自动关闭并进入客户详情
+    // 创建成功后弹窗自动关闭并留在列表页，由客户链接进入详情。
+    await sales.getByRole("link", { name: customerLegalName, exact: true }).click()
     await expect(sales).toHaveURL(/\/sales\/customers\/[^/]+$/, { timeout: 20_000 })
 
     // ========== 第二步（销售）：上传合同 PDF（e2e/fixtures/sample-contract.pdf） ==========
@@ -191,6 +190,7 @@ test("flow-03 虚拟商品电子交付全流程", async ({ page }) => {
     })
     // 单据头：福利场景 + 履约期限（付款条件随合同带出，税率默认 13%）
     await pickComboboxOption(sales, sales.getByLabel("福利场景"), "年节礼包")
+    await pickComboboxOption(sales, sales.getByLabel("履约方式"), "电子交付")
     const headerSection = sales
         .locator("section")
         .filter({ has: sales.getByRole("heading", { name: "单据头" }) })

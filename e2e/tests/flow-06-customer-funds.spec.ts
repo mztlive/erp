@@ -43,7 +43,7 @@ import path from "path"
 import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { clickButton, expectTableRow, gotoPage, pickOption } from "../helpers/ui"
-import { approveWorkspaceTaskByButtonId } from "../helpers/workspace"
+import { approveWorkspaceTaskByDocumentNo } from "../helpers/workspace"
 
 // ---------------------------------------------------------------------------
 // 流程内专用小工具（不写入 helpers，避免影响其他 spec）
@@ -90,6 +90,36 @@ async function confirmDialog(page: Page, name: string | RegExp): Promise<void> {
     await expect(button).toBeVisible({ timeout: 20_000 })
     await button.click()
     await expect(button).not.toBeVisible({ timeout: 20_000 }).catch(() => {})
+}
+
+/**
+ * 进入客户侧核销工作区。
+ * 唯一往来主体时页面会直接创建会话；存在多个主体时才显示选择弹窗。
+ */
+async function enterReceivableAllocationSession(
+    page: Page,
+    pickerTitle: string,
+    partyNo: string,
+): Promise<void> {
+    const title = page.getByText(pickerTitle, { exact: true })
+    const sessionHeading = page.getByRole("heading", { name: /^核销 · / })
+    await expect
+        .poll(async () => (await title.isVisible()) || (await sessionHeading.isVisible()), {
+            timeout: 20_000,
+            message: "登记动作应直接进入核销工作区或打开往来主体选择弹窗",
+        })
+        .toBe(true)
+    if (await title.isVisible()) {
+        const dialog = page.getByRole("dialog").filter({ has: title }).last()
+        await pickRemoteOption(
+            page,
+            dialog.getByPlaceholder("请选择往来主体"),
+            partyNo,
+            partyNo,
+        )
+        await dialog.getByRole("button", { name: "打开核销工作区" }).click()
+    }
+    await expect(sessionHeading).toBeVisible({ timeout: 30_000 })
 }
 
 /** 表单字段容器：Field 根节点（data-slot=field）内包含指定 label 文本。 */
@@ -197,11 +227,10 @@ async function pickDateTime(
 }
 
 /**
- * W01 工作台按业务对象 ID 找到审批任务并提交「通过」。
- * 任务行按钮 id 来自 workspace-task-list.tsx: id=`work-item-${stableNumber}`。
+ * W01 工作台按可见业务单号找到审批任务并提交「通过」。
  */
-async function approveTask(page: Page, businessObjectId: string): Promise<void> {
-    const task = await approveWorkspaceTaskByButtonId(page, businessObjectId)
+async function approveTask(page: Page, documentNo: string): Promise<void> {
+    const task = await approveWorkspaceTaskByDocumentNo(page, documentNo)
     await expect(task).not.toBeVisible({ timeout: 30_000 })
 }
 
@@ -267,6 +296,7 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     await pickOption(salesPage, dlg.getByLabel("默认付款条件"), "先款 100%")
     await dlg.getByRole("button", { name: "创建客户" }).click()
     await expect(salesPage.getByText("客户已创建")).toBeVisible({ timeout: 20_000 })
+    await salesPage.getByRole("link", { name: customerName, exact: true }).click()
     await salesPage.waitForURL(/\/sales\/customers\/[^/]+$/, { timeout: 20_000 })
     const customerId = salesPage.url().split("/").pop()!
     expect(customerId).toBeTruthy()
@@ -315,11 +345,18 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     await salesPage.waitForURL(/\/sales\/orders\/[^/]+$/, { timeout: 20_000 })
     const salesOrderId = salesPage.url().split("/").pop()!
     expect(salesOrderId).toBeTruthy()
+    const pendingOrder = await api<{ order_no: string }>(
+        request,
+        "GET",
+        `/admin/sales-orders/${salesOrderId}`,
+        { token: salesToken },
+    )
+    expect(pendingOrder.order_no, "提交后应分配销售单号").toBeTruthy()
 
     // --- caigou 在 W01 工作台审批销售单 ---
     await switchAccount("procurement")
     await gotoPage(procurementPage, "/workspace")
-    await approveTask(procurementPage, salesOrderId)
+    await approveTask(procurementPage, pendingOrder.order_no)
 
     // 断言：销售单已生效（后端主状态），应收随后在客户往来出现
     const orderDetail = await api<{ commercial_status?: string }>(
@@ -349,12 +386,11 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
 
     // --- 登记回款：选择往来主体 → 核销工作区 ---
     await clickButton(finPage, "登记回款")
-    dlg = await lastDialog(finPage)
-    await expect(dlg.getByText("登记回款 — 选择往来主体", { exact: true })).toBeVisible({
-        timeout: 20_000,
-    })
-    await pickRemoteOption(finPage, dlg.getByPlaceholder("请选择往来主体"), partyNo, partyNo)
-    await confirmDialog(finPage, "打开核销工作区")
+    await enterReceivableAllocationSession(
+        finPage,
+        "登记回款 — 选择往来主体",
+        partyNo,
+    )
 
     // --- 填写回款事实并分配 ---
     const postButton = finPage.getByRole("button", { name: "确认登记并核销" })
@@ -374,7 +410,7 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
         finPage.getByRole("button", { name: "撤回审批" }).first(),
     ).toBeVisible({ timeout: 20_000 })
 
-    // 取回款单号与 ID（审批任务按单据 UUID 定位）
+    // 取回款单号与 ID（工作台按可见单号定位，UUID 只用于 API）
     const receipts = await api<
         { items: Array<{ id: string; receipt_no: string; status: string }> }
     >(request, "GET", "/admin/customer-receipts", {
@@ -393,7 +429,7 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     // --- lisiyong 审批回款 ---
     await switchAccount("salesLeader")
     await gotoPage(leaderPage, "/workspace")
-    await approveTask(leaderPage, receiptId)
+    await approveTask(leaderPage, receiptNo)
 
     // 断言：回款已过账（API + UI 徽标）
     const postedReceipt = await api<{ status: string }>(
@@ -427,12 +463,11 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     // =====================================================================
     const invoiceNo = `3330${String(Date.now()).slice(-8)}`
     await clickButton(finPage, "登记销项发票")
-    dlg = await lastDialog(finPage)
-    await expect(dlg.getByText("登记销项发票 — 选择往来主体", { exact: true })).toBeVisible({
-        timeout: 20_000,
-    })
-    await pickRemoteOption(finPage, dlg.getByPlaceholder("请选择往来主体"), partyNo, partyNo)
-    await confirmDialog(finPage, "打开核销工作区")
+    await enterReceivableAllocationSession(
+        finPage,
+        "登记销项发票 — 选择往来主体",
+        partyNo,
+    )
 
     await expect(finPage.getByRole("button", { name: "确认登记并核销" })).toBeVisible({
         timeout: 30_000,
@@ -498,12 +533,19 @@ test("客户票款：回款→审批→过账→核销应收；销项发票登�
     const reversalUrl = new URL(finPage.url())
     const reversalId = reversalUrl.searchParams.get("previewId")
     expect(reversalId, "应能拿到回款冲正单 ID").toBeTruthy()
+    const pendingReversal = await api<{ reversal_no: string }>(
+        request,
+        "GET",
+        `/admin/receipt-reversals/${reversalId}`,
+        { token: financeToken },
+    )
+    expect(pendingReversal.reversal_no, "提交后应分配回款冲正单号").toBeTruthy()
     await sheet.getByRole("button", { name: "关闭" }).click().catch(() => {})
 
     // --- lisiyong 审批冲正 ---
     await switchAccount("salesLeader")
     await gotoPage(leaderPage, "/workspace")
-    await approveTask(leaderPage, reversalId!)
+    await approveTask(leaderPage, pendingReversal.reversal_no)
 
     // 断言：冲正已过账、原回款已冲正（API + UI 徽标）
     const postedReversal = await api<{ status: string }>(

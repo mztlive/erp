@@ -1,56 +1,54 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { renderHook, act } from "@testing-library/react"
 
 import {
     uploadErrorMessage,
     uploadSchema,
     useContractUploadForm,
-} from '@/features/contracts/hooks/use-contract-upload-form'
-import { useUploadContractPdfMutation } from '@/features/contracts/hooks/queries'
-import type { UploadContractPdfResult } from '@/features/contracts/types'
+} from "@/features/contracts/hooks/use-contract-upload-form"
+import { useUploadContractPdfMutation } from "@/features/contracts/hooks/queries"
+import type { UploadContractPdfResult } from "@/features/contracts/types"
 
-vi.mock('@/features/contracts/hooks/queries', () => ({
+vi.mock("@/features/contracts/hooks/queries", () => ({
     useUploadContractPdfMutation: vi.fn(),
 }))
 
-vi.mock('@/features/customers/queries', () => ({
+vi.mock("@/features/customers/queries", () => ({
     useCustomerCenterQuery: vi.fn(),
 }))
 
-vi.mock('@/features/auth/queries', () => ({
+vi.mock("@/features/auth/queries", () => ({
     useAccountProfileQuery: vi.fn(),
 }))
 
-vi.mock('@/lib/permissions', () => ({
+vi.mock("@/lib/permissions", () => ({
     hasPermission: vi.fn(),
 }))
 
-const { useCustomerCenterQuery } = await import(
-    '@/features/customers/queries'
-)
-const { useAccountProfileQuery } = await import('@/features/auth/queries')
-const { hasPermission } = await import('@/lib/permissions')
+const { useCustomerCenterQuery } = await import("@/features/customers/queries")
+const { useAccountProfileQuery } = await import("@/features/auth/queries")
+const { hasPermission } = await import("@/lib/permissions")
 
 const mockedUploadMutation = vi.mocked(useUploadContractPdfMutation)
 const mockedCustomerQuery = vi.mocked(useCustomerCenterQuery)
 const mockedAccountProfile = vi.mocked(useAccountProfileQuery)
 const mockedHasPermission = vi.mocked(hasPermission)
 
-const validFile = new File(['pdf'], 'signed.pdf', {
-    type: 'application/pdf',
+const validFile = new File(["pdf"], "signed.pdf", {
+    type: "application/pdf",
 })
 
 const validValues = {
     pdfFile: validFile,
-    contractNo: 'CT-2026-01',
-    customerId: 'c1',
-    customerName: '客户甲',
-    settlementPartyId: 'p1',
-    settlementPartyName: '主体乙',
-    paymentTerms: 'CONTRACT',
-    signedAt: '2026-01-01',
-    validFrom: '2026-01-01',
-    validTo: '2027-01-01',
+    contractNo: "CT-2026-01",
+    customerId: "c1",
+    customerName: "客户甲",
+    settlementPartyId: "p1",
+    settlementPartyName: "主体乙",
+    paymentTerms: "CONTRACT",
+    signedAt: "2026-01-01",
+    validFrom: "2026-01-01",
+    validTo: "2027-01-01",
 }
 
 function makeUploadMutationMock() {
@@ -67,10 +65,10 @@ function makeUploadMutationMock() {
 type UploadMutationMock = ReturnType<typeof makeUploadMutationMock>
 
 function pad(n: number): string {
-    return String(n).padStart(2, '0')
+    return String(n).padStart(2, "0")
 }
 
-describe('useContractUploadForm', () => {
+describe("useContractUploadForm", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockedCustomerQuery.mockReturnValue({
@@ -92,30 +90,30 @@ describe('useContractUploadForm', () => {
         vi.useRealTimers()
     })
 
-    it('returns form state with defaults while closed', () => {
+    it("returns form state with defaults while closed", () => {
         const { result } = renderHook(() =>
             useContractUploadForm({
                 open: false,
                 onOpenChange: vi.fn(),
-                initialCustomerId: 'c-seed',
+                initialCustomerId: "c-seed",
             }),
         )
 
         expect(result.current.form.state.values).toMatchObject({
             pdfFile: null,
-            contractNo: '',
-            customerId: 'c-seed',
-            paymentTerms: 'CONTRACT',
-            signedAt: '',
-            validFrom: '',
-            validTo: '',
+            contractNo: "",
+            customerId: "c-seed",
+            paymentTerms: "CONTRACT",
+            signedAt: "",
+            validFrom: "",
+            validTo: "",
         })
         expect(result.current.dirty).toBe(false)
         expect(result.current.discardOpen).toBe(false)
         expect(result.current.canReadAllCustomers).toBe(false)
     })
 
-    it('seeds signedAt/validFrom to today and validTo to one year later when opened', () => {
+    it("seeds signedAt/validFrom to today and validTo to one year later when opened", () => {
         const now = new Date(2026, 5, 15, 10, 0, 0)
         vi.useFakeTimers()
         vi.setSystemTime(now)
@@ -125,11 +123,16 @@ describe('useContractUploadForm', () => {
                 useContractUploadForm({
                     open,
                     onOpenChange: vi.fn(),
-                    initialCustomerId: '',
+                    initialCustomerId: "",
                 }),
             { initialProps: { open: false } },
         )
 
+        act(() => {
+            rerender({ open: true })
+        })
+        // 完整组件中的字段订阅会触发后续 render；日期种子必须经受
+        // useAppForm 的下一次 options 同步，不能被声明处的空默认值覆盖。
         act(() => {
             rerender({ open: true })
         })
@@ -143,11 +146,11 @@ describe('useContractUploadForm', () => {
         expect(result.current.dirty).toBe(false)
     })
 
-    it('seeds the preselected customer into the form once when opened', () => {
+    it("seeds the preselected customer into the form once when opened", () => {
         mockedCustomerQuery.mockReturnValue({
             data: {
-                customerId: 'c-77',
-                currentRevision: { legalName: '预选客户有限公司' },
+                customerId: "c-77",
+                currentRevision: { legalName: "预选客户有限公司" },
             },
             isPending: false,
         } as unknown as ReturnType<typeof useCustomerCenterQuery>)
@@ -157,7 +160,7 @@ describe('useContractUploadForm', () => {
                 useContractUploadForm({
                     open,
                     onOpenChange: vi.fn(),
-                    initialCustomerId: 'c-77',
+                    initialCustomerId: "c-77",
                 }),
             { initialProps: { open: false } },
         )
@@ -166,21 +169,21 @@ describe('useContractUploadForm', () => {
             rerender({ open: true })
         })
 
-        expect(result.current.form.state.values.customerId).toBe('c-77')
+        expect(result.current.form.state.values.customerId).toBe("c-77")
         expect(result.current.form.state.values.customerName).toBe(
-            '预选客户有限公司',
+            "预选客户有限公司",
         )
     })
 
-    it('submits valid values through the upload mutation and closes', async () => {
+    it("submits valid values through the upload mutation and closes", async () => {
         const uploaded: UploadContractPdfResult = {
-            contractId: 'ct-new',
-            contractNo: 'CT-2026-01',
-            revisionId: 'r1',
+            contractId: "ct-new",
+            contractNo: "CT-2026-01",
+            revisionId: "r1",
             revisionNo: 1,
-            uploadedAt: '2026-01-01T00:00:00.000Z',
-            fileName: 'signed.pdf',
-            reference: 'CT-UP-CT-2026-01',
+            uploadedAt: "2026-01-01T00:00:00.000Z",
+            fileName: "signed.pdf",
+            reference: "CT-UP-CT-2026-01",
         }
         const mutation: UploadMutationMock = makeUploadMutationMock()
         mutation.mutateAsync.mockResolvedValue(uploaded)
@@ -197,7 +200,7 @@ describe('useContractUploadForm', () => {
                 useContractUploadForm({
                     open,
                     onOpenChange,
-                    initialCustomerId: '',
+                    initialCustomerId: "",
                     onSuccess,
                 }),
             { initialProps: { open: false } },
@@ -209,22 +212,22 @@ describe('useContractUploadForm', () => {
 
         const { form } = result.current
         act(() => {
-            form.setFieldValue('pdfFile', validValues.pdfFile)
-            form.setFieldValue('contractNo', validValues.contractNo)
-            form.setFieldValue('customerId', validValues.customerId)
-            form.setFieldValue('customerName', validValues.customerName)
+            form.setFieldValue("pdfFile", validValues.pdfFile)
+            form.setFieldValue("contractNo", validValues.contractNo)
+            form.setFieldValue("customerId", validValues.customerId)
+            form.setFieldValue("customerName", validValues.customerName)
             form.setFieldValue(
-                'settlementPartyId',
+                "settlementPartyId",
                 validValues.settlementPartyId,
             )
             form.setFieldValue(
-                'settlementPartyName',
+                "settlementPartyName",
                 validValues.settlementPartyName,
             )
-            form.setFieldValue('paymentTerms', validValues.paymentTerms)
-            form.setFieldValue('signedAt', validValues.signedAt)
-            form.setFieldValue('validFrom', validValues.validFrom)
-            form.setFieldValue('validTo', validValues.validTo)
+            form.setFieldValue("paymentTerms", validValues.paymentTerms)
+            form.setFieldValue("signedAt", validValues.signedAt)
+            form.setFieldValue("validFrom", validValues.validFrom)
+            form.setFieldValue("validTo", validValues.validTo)
         })
 
         await act(async () => {
@@ -235,14 +238,14 @@ describe('useContractUploadForm', () => {
         const input = mutation.mutateAsync.mock.calls[0][0]
         expect(input).toMatchObject({
             pdfFile: validFile,
-            contractNo: 'CT-2026-01',
-            customerId: 'c1',
-            customerName: '客户甲',
-            settlementPartyName: '主体乙',
-            paymentTerms: '按合同约定',
-            signedAt: '2026-01-01',
-            validFrom: '2026-01-01',
-            validTo: '2027-01-01',
+            contractNo: "CT-2026-01",
+            customerId: "c1",
+            customerName: "客户甲",
+            settlementPartyName: "主体乙",
+            paymentTerms: "按合同约定",
+            signedAt: "2026-01-01",
+            validFrom: "2026-01-01",
+            validTo: "2027-01-01",
         })
         expect(String(input.idempotencyKey)).toMatch(/^upload-/)
         expect(onOpenChange).toHaveBeenCalledWith(false)
@@ -250,7 +253,7 @@ describe('useContractUploadForm', () => {
         expect(mutation.reset).toHaveBeenCalled()
     })
 
-    it('skips submission when no PDF file is attached', async () => {
+    it("skips submission when no PDF file is attached", async () => {
         const mutation: UploadMutationMock = makeUploadMutationMock()
         mockedUploadMutation.mockReturnValue(
             mutation as unknown as ReturnType<
@@ -264,7 +267,7 @@ describe('useContractUploadForm', () => {
                 useContractUploadForm({
                     open,
                     onOpenChange,
-                    initialCustomerId: '',
+                    initialCustomerId: "",
                 }),
             { initialProps: { open: false } },
         )
@@ -282,8 +285,8 @@ describe('useContractUploadForm', () => {
     })
 })
 
-describe('uploadSchema', () => {
-    it('flags a missing PDF file', () => {
+describe("uploadSchema", () => {
+    it("flags a missing PDF file", () => {
         const result = uploadSchema.safeParse({
             ...validValues,
             pdfFile: null,
@@ -291,80 +294,80 @@ describe('uploadSchema', () => {
         expect(result.success).toBe(false)
         if (result.success) return
         const pdfIssue = result.error.issues.find(
-            (issue) => issue.path[0] === 'pdfFile',
+            (issue) => issue.path[0] === "pdfFile",
         )
-        expect(pdfIssue?.message).toBe('请上传合同 PDF')
+        expect(pdfIssue?.message).toBe("请上传合同 PDF")
     })
 
-    it('flags an empty contract number', () => {
+    it("flags an empty contract number", () => {
         const result = uploadSchema.safeParse({
             ...validValues,
-            contractNo: '   ',
+            contractNo: "   ",
         })
         expect(result.success).toBe(false)
         if (result.success) return
         expect(
             result.error.issues.some(
                 (issue) =>
-                    issue.path[0] === 'contractNo' &&
-                    issue.message === '请填写合同编号',
+                    issue.path[0] === "contractNo" &&
+                    issue.message === "请填写合同编号",
             ),
         ).toBe(true)
     })
 
-    it('flags validTo earlier than validFrom', () => {
+    it("flags validTo earlier than validFrom", () => {
         const result = uploadSchema.safeParse({
             ...validValues,
-            validFrom: '2026-06-01',
-            validTo: '2026-01-01',
+            validFrom: "2026-06-01",
+            validTo: "2026-01-01",
         })
         expect(result.success).toBe(false)
         if (result.success) return
         expect(
             result.error.issues.some(
                 (issue) =>
-                    issue.path[0] === 'validTo' &&
-                    issue.message === '有效期止不能早于有效期起',
+                    issue.path[0] === "validTo" &&
+                    issue.message === "有效期止不能早于有效期起",
             ),
         ).toBe(true)
     })
 
-    it('accepts a fully valid input', () => {
+    it("accepts a fully valid input", () => {
         const result = uploadSchema.safeParse(validValues)
         expect(result.success).toBe(true)
     })
 })
 
-describe('uploadErrorMessage', () => {
-    it('maps CONTRACT_NO_EXISTS to a business message', () => {
+describe("uploadErrorMessage", () => {
+    it("maps CONTRACT_NO_EXISTS to a business message", () => {
         expect(
             uploadErrorMessage({
-                kind: 'Http',
+                kind: "Http",
                 status: 409,
-                message: 'CONTRACT_NO_EXISTS',
+                message: "CONTRACT_NO_EXISTS",
             }),
-        ).toBe('该合同编号已存在，请打开已有合同核对；重复编号不能新建合同。')
+        ).toBe("该合同编号已存在，请打开已有合同核对；重复编号不能新建合同。")
     })
 
-    it('maps CONTRACT_VALIDITY_INVALID to a business message', () => {
+    it("maps CONTRACT_VALIDITY_INVALID to a business message", () => {
         expect(
             uploadErrorMessage({
-                kind: 'Validation',
+                kind: "Validation",
                 status: 400,
-                message: 'CONTRACT_VALIDITY_INVALID',
+                message: "CONTRACT_VALIDITY_INVALID",
             }),
-        ).toBe('有效期止不能早于有效期起。')
+        ).toBe("有效期止不能早于有效期起。")
     })
 
-    it('passes through ordinary messages', () => {
-        expect(uploadErrorMessage(new Error('网络连接失败'))).toBe(
-            '网络连接失败',
+    it("passes through ordinary messages", () => {
+        expect(uploadErrorMessage(new Error("网络连接失败"))).toBe(
+            "网络连接失败",
         )
     })
 
-    it('falls back to the retry wording for unknown errors', () => {
+    it("falls back to the retry wording for unknown errors", () => {
         expect(uploadErrorMessage(undefined)).toBe(
-            '上传失败，请使用原任务号重试。',
+            "上传失败，请使用原任务号重试。",
         )
     })
 })

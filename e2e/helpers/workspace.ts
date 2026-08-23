@@ -58,10 +58,16 @@ export async function approveVisibleWorkspaceTask(page: Page): Promise<void> {
 
 /** 打开工作台并通过列表第一行。调用方自行断言任务消失或空态。 */
 export async function approveFirstWorkspaceTask(page: Page): Promise<Locator> {
-    const task = workspaceTaskButtons(page).first()
-    await expect(task).toBeVisible({ timeout: 30_000 })
+    const firstTask = workspaceTaskButtons(page).first()
+    await expect(firstTask).toBeVisible({ timeout: 30_000 })
+    const taskId = await firstTask.getAttribute("id")
+    const task = taskId
+        ? page.locator(`[id=${JSON.stringify(taskId)}]`)
+        : firstTask
     await openWorkspaceTask(page, task)
     await approveVisibleWorkspaceTask(page)
+    // 审批命令成功并由查询刷新移除任务后才能切号，否则整页导航会中断在途请求。
+    await expect(task).toHaveCount(0, { timeout: 30_000 })
     return task
 }
 
@@ -81,6 +87,7 @@ export async function approveWorkspaceTaskByButtonId(
     const task = page.locator(`#${id}`)
     await openWorkspaceTask(page, task)
     await approveVisibleWorkspaceTask(page)
+    await expect(task).toHaveCount(0, { timeout: 30_000 })
     return task
 }
 
@@ -101,5 +108,6 @@ export async function approveWorkspaceTaskByDocumentNo(
         workspaceTaskDetail(page).getByText(new RegExp(docNo)).first(),
     ).toBeVisible({ timeout: 20_000 })
     await approveVisibleWorkspaceTask(page)
+    await expect(task).toHaveCount(0, { timeout: 30_000 })
     return task
 }

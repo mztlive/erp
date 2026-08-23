@@ -27,7 +27,7 @@ import * as path from "node:path"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
 import { gotoPage, clickButton } from "../helpers/ui"
-import { approveWorkspaceTaskByButtonId } from "../helpers/workspace"
+import { approveWorkspaceTaskByDocumentNo } from "../helpers/workspace"
 
 // ── 流程内专用工具（保持 helpers 通用，不放业务专有逻辑） ─────────────────────────
 
@@ -151,11 +151,10 @@ async function confirmInDialog(page: Page, buttonName: string | RegExp): Promise
 }
 
 /**
- * W01 工作台审批（按任务按钮 id 定位）：
- * 点击任务 → 当前任务区「通过」→ 提交决定 → 任务消失。
+ * W01 工作台审批：按可见稳定单号定位，点击任务 → 当前任务区「通过」→ 任务消失。
  */
-async function approveWorkItem(page: Page, taskButtonId: string): Promise<void> {
-    const task = await approveWorkspaceTaskByButtonId(page, taskButtonId)
+async function approveWorkItem(page: Page, documentNo: string): Promise<void> {
+    const task = await approveWorkspaceTaskByDocumentNo(page, documentNo)
     await expect(task).toHaveCount(0, { timeout: 20_000 })
 }
 
@@ -191,7 +190,8 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
     await customerDialog.getByLabel("法定名称").fill(legalName)
     await customerDialog.getByLabel("统一社会信用代码").fill(unifiedCreditCode)
     await customerDialog.getByRole("button", { name: "创建客户" }).click()
-    // 创建成功后进入客户详情（客户已创建结果卡短暂停留后自动跳转）
+    // 创建成功后留在客户列表，由客户链接进入详情。
+    await salesPage.getByRole("link", { name: legalName, exact: true }).click()
     await expect(salesPage).toHaveURL(/\/sales\/customers\/[^?]+/, { timeout: 20_000 })
     await expect(salesPage.getByText(legalName).first()).toBeVisible({ timeout: 20_000 })
 
@@ -252,7 +252,7 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
     // ── 步骤 3: 采购确认（caigou 在 W01 工作台审批通过） ──
     await switchAccount("procurement")
     await gotoPage(procPage, "/workspace")
-    await approveWorkItem(procPage, `work-item-${salesOrderId}`)
+    await approveWorkItem(procPage, salesOrderNo)
 
     // ── 步骤 4: 销售单生效 ──
     await switchAccount("sales")
@@ -305,11 +305,16 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
         await expect(
             procPage.getByRole("button", { name: "撤回审批" }).first(),
         ).toBeVisible({ timeout: 30_000 })
+        const poHeader = await procPage
+            .locator('[data-slot="document-header"]')
+            .innerText()
+        const poNo = poHeader.match(/PO[0-9A-Za-z-]+/)?.[0]
+        expect(poNo, "提交后应分配采购单号").toBeTruthy()
 
         // 5b. 采购单财务审核（caiwu 在 W01 工作台审批通过）
         await switchAccount("finance")
         await gotoPage(financePage, "/workspace")
-        await approveWorkItem(financePage, `work-item-${poId}`)
+        await approveWorkItem(financePage, poNo!)
         await switchAccount("procurement")
         await gotoPage(procPage, `/procurement/orders/${poId}`)
         await expect(procPage.getByText("已生效").first()).toBeVisible({ timeout: 20_000 })
@@ -331,7 +336,7 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
         await pickComboboxOption(procPage, procPage.getByLabel("履约结果"), "成功")
         await procPage.getByLabel("完成说明").fill("线下服务已按约定完成并交付")
         await procPage.getByLabel("服务数量").fill("1")
-        await procPage.getByRole("button", { name: "确认完成", exact: true }).click()
+        await procPage.getByRole("button", { name: /^确认完成/ }).click()
         await confirmInDialog(procPage, "确认完成")
         await expect(
             procPage.getByRole("button", { name: "去登记客户验收" }),

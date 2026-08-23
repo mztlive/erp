@@ -183,7 +183,8 @@ test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 →
     await customerDialog.getByLabel("统一社会信用代码").fill(creditCode)
     await customerDialog.getByRole("button", { name: "创建客户" }).click()
     await expect(customerDialog).not.toBeVisible({ timeout: 20_000 })
-    // 创建成功自动进入客户详情（创建时自动建立 OWNER 归属，销售可检索该客户）
+    // 创建成功后留在列表页（已自动建立 OWNER 归属），由客户链接进入详情。
+    await page.getByRole("link", { name: shortName, exact: true }).click()
     await expect(page).toHaveURL(/\/sales\/customers\//, { timeout: 20_000 })
     await expect(page.getByText(legalName).first()).toBeVisible({ timeout: 20_000 })
 

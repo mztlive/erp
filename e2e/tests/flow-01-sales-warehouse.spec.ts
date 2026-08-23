@@ -296,7 +296,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     await fillByLabel(salesPage, "统一社会信用代码", CREDIT_CODE)
     await pickComboboxOption(salesPage, salesPage.getByLabel("默认付款条件"), "货到 15 天")
     await clickButton(salesPage, "创建客户")
-    await clickButton(salesPage, "打开客户")
+    await salesPage.getByRole("link", { name: CUSTOMER_SHORT, exact: true }).click()
     await expect(salesPage).toHaveURL(/\/sales\/customers\/[0-9a-f]{24,32}/, {
         timeout: 20_000,
     })
@@ -311,11 +311,20 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     await salesPage.locator('input[type="file"][aria-label="上传合同 PDF"]').setInputFiles(CONTRACT_PDF)
     await fillByLabel(salesPage, "合同编号", CONTRACT_NO)
     await pickSearchedOption(salesPage, "搜索客户编号或名称", CUSTOMER_LEGAL)
-    // 结算主体为保留主数据，内容未知：取第一个可选主体（列表按 party_no 升序）。
-    // 回款/开票登记的往来主体选择器会过滤出「已有应收子账的主体」，唯一主体即本单主体
-    await pickFirstComboboxOption(salesPage, "搜索结算主体")
-    // 付款条件默认"按合同约定"，日期已预填（今天/明年同日），直接归档
-    await clickButton(salesPage, "上传并归档")
+    // 客户资料异步回填并锁定该客户对应的结算主体，同时带出付款条件。
+    await expect(uploadDialog.getByRole("combobox", { name: "结算主体" })).toHaveValue(
+        CUSTOMER_LEGAL,
+        { timeout: 20_000 },
+    )
+    await expect(uploadDialog.getByRole("combobox", { name: "付款条件" })).toHaveValue(
+        "货到 15 天",
+    )
+    // 签订日期/有效期起默认今天，有效期止默认明年同日；等待打开弹窗的表单种子稳定。
+    const defaultContractDates = uploadDialog.getByRole("button", {
+        name: /^已选日期 \d{4}-\d{2}-\d{2}$/,
+    })
+    await expect(defaultContractDates).toHaveCount(3)
+    await uploadDialog.getByRole("button", { name: "上传并归档" }).click()
     await expect(salesPage.getByText("合同 PDF 已归档")).toBeVisible({ timeout: 20_000 })
     await expectTableRow(salesPage, CONTRACT_NO)
 

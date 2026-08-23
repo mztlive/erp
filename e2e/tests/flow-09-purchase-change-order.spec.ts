@@ -224,7 +224,8 @@ test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起
     })
     await clickDialogButton(salesPage, "创建客户")
     await expectVisible(salesPage, "客户已创建")
-    // 弹窗短暂停留后自动进入客户详情
+    // 弹窗关闭后留在客户列表，由客户链接进入详情。
+    await salesPage.getByRole("link", { name: customerName, exact: true }).click()
     await expect(salesPage).toHaveURL(/\/sales\/customers\/[0-9a-f]+/, { timeout: 20_000 })
 
     // 2) 销售上传合同 PDF（合同列表页 → 上传合同 PDF Dialog）

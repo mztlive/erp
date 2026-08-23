@@ -52,10 +52,8 @@ import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { pickOption } from "../helpers/ui"
 import {
-    approveVisibleWorkspaceTask,
+    approveFirstWorkspaceTask,
     approveWorkspaceTaskByDocumentNo,
-    openWorkspaceTask,
-    workspaceTaskButtons,
 } from "../helpers/workspace"
 
 // 库存调整弹窗内容较长，使用全局最大化窗口与实际 viewport，禁止退回 720px 固定视口。
@@ -136,9 +134,7 @@ async function pickToday(page: Page, trigger: Locator): Promise<void> {
  * 数据库已重置，当前账号此刻只有一个待办，直接取第一行。
  */
 async function approveFirstTask(page: Page): Promise<void> {
-    const task = workspaceTaskButtons(page).first()
-    await openWorkspaceTask(page, task)
-    await approveVisibleWorkspaceTask(page)
+    await approveFirstWorkspaceTask(page)
 }
 
 /** 同上，并校验列表或详情含期望单号。 */
@@ -159,6 +155,8 @@ async function readPreviewStat(scope: Locator, label: string): Promise<string> {
 }
 
 // ─── 用例 ────────────────────────────────────────────────────────────────────
+
+test.describe.configure({ mode: "serial" })
 
 test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动过账 → 台账数量变化", async ({
     page,
@@ -290,10 +288,11 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     await basisCombobox.click()
     await caigouPage.getByRole("option").first().click()
     await poDialog.getByRole("button", { name: "创建草稿并打开" }).click()
-    // 采购草稿编辑面（EditSurface 无 <form> 包裹，直接页面级定位）：
-    // 付款条件（aria-label=付款条件）+ 明细数量/含税单价（aria-label 带商品名后缀）
+    // 采购草稿编辑面：付款条件来自创建依据且只读，仅数量/含税单价可调整。
     await expect(caigouPage.getByText("采购草稿").first()).toBeVisible({ timeout: 30_000 })
-    await selectOption(caigouPage, caigouPage.getByLabel("付款条件"), "货到 30 天")
+    await expect(
+        caigouPage.getByText("付款条件（只读）", { exact: true }),
+    ).toBeVisible()
     await caigouPage.getByRole("textbox", { name: /数量$/ }).fill(RECEIPT_QTY)
     await caigouPage.getByRole("textbox", { name: /含税单价/ }).fill("80")
     await caigouPage.getByRole("button", { name: "提交审批" }).click()

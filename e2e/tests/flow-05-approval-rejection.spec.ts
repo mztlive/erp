@@ -8,46 +8,17 @@
  *
  * 使用账号: xiaoshou(销售) / caigou(采购)，密码 123456（同一页面串行切号）。
  *
- * 流程（4 个串行 test 共享流程状态；刻意未启用 serial 模式——个别断言失败不阻断
- * 后续可验证步骤，见 risks）:
+ * 流程（4 个串行 test 共享流程状态，任一步失败后不得以空状态继续后续步骤）:
  *   01 销售建客户 → 上传合同 PDF → 建两张实物/服务销售单并提交（SalesOrder 定义：采购确认 1 节点）
  *   02 采购在 W01 工作台看到「采购确认」任务；经决策 API 驳回并填原因；
  *      断言销售单不生效、内容不变、审批轮次 +1 且回到首节点（审批实例 API 佐证）
  *   03 场景A（照原条件承接）: 不撤回不改单，对第 2 轮开放任务重新「通过」→ 销售单生效
  *   04 场景B（驳回后作废）: 第二张单被驳回后，销售撤回审批回草稿、再作废
  *
- * ⚠️ 当前构建的关键缺口（详见文末 doc_mismatches / risks，均已对照源码核实）:
- *   - 通过/驳回在 UI 无任何入口：工作项 allowed_actions 仅 VIEW/PROCESS/REASSIGN/CLOSE
- *     （backend/services/src/work_item/dto.rs WorkItemAllowedAction 枚举），单据层
- *     allowed_actions 仅 CANCEL/SUBMIT（services/src/sales_order/query.rs），审批区动作
- *     是两者并集 → APPROVE/REJECT 按钮不会渲染；
- *   - POST /admin/approval-decisions 当前为桩实现（services/src/approval/execution/
- *     runtime_service.rs submit_decision 丢弃 decision/reason/expected_task_version/
- *     idempotency_key，只回显视图，不推进 BPM 实例），crates/bpm/src/engine/decision.rs
- *     的 decide/apply_approve/apply_reject 没有任何调用方。
- *     → 测试 02/03 的「轮次 +1」「最终生效」断言在当前构建必然失败（用于暴露该缺口）；
- *     「撤回审批」（POST /admin/sales-orders/{id}/cancel-approval）与「作废」
- *     （POST /admin/sales-orders/{id}/void）接口已接线，测试 04 应通过。
- *
- * 发现的文档-代码差异:
- *   1. docs 称 W02 统一待办（/workspace/tasks）；代码中该路由 permanentRedirect 到
- *      /workspace（W01 唯一工作台），审批任务在 W01 右侧详情展示。
- *   2. docs 称任一节点可驳回并填原因；代码中 UI 无通过/驳回入口（见上），决策 API 为桩
- *      实现 → 本测试只能先经决策 API 提交决定并断言协议层回显（outcome/reason），
- *      轮次 +1 断言在当前构建必然失败。
- *   3. docs 称对象中心运行摘要展示轮次/节点/最近驳回；代码中销售单详情 approval.instance
- *      恒为 null、recent_history 为空（query.rs 传 None），工作台任务 DTO 也不下发轮次/
- *      驳回字段 → 轮次断言走审批实例 API（GET /admin/approval-instances?view=started）；
- *      且后端 /approval-instances/{id}/history 实际返回字段（instance_id/status/
- *      current_round_no/current_node_key/current_node_name）与前端历史 DTO
- *      （execution_id/round_no/result/node_key/decision_reason）不一致，历史 UI 无法渲染。
- *   4. docs 称出路一「撤回改单重提」在对象中心可用；代码中「撤回审批」按钮可见（CANCEL
- *      动作来自单据层）但 CancelApprovalDialog 仅在 approval.instance 存在时渲染（恒为
- *      null）→ UI 撤回不可用，只能走已接线的撤回接口。
- *   5. docs 称出路三「作废」在对象中心可用；代码中作废入口（canVoid/作废弹窗）挂在
- *      open_procurement_rejection 路径（resolve_open_procurement_rejection 恒返回 None），
- *      且 PendingReview→Voided 非法（实体 allowed_next 仅 [Draft, Effective]）→ 场景B
- *      先撤回至草稿，再调作废接口（Draft→Voided 已接线）。
+ * 定位契约:
+ *   - 工作台列表使用用户可见的业务单号作为稳定标识；不得用业务对象 UUID 拼 DOM id。
+ *   - UUID 只用于审批实例、销售单详情及命令 API 的后端事实查询。
+ *   - 驳回后必须产生新一轮首节点任务；通过后必须推进实例与销售单状态。
  */
 import path from "path"
 
@@ -153,12 +124,18 @@ async function pickDate(page: Page, label: string, date: Date): Promise<void> {
     await expect(calendar).not.toBeVisible({ timeout: 10_000 })
 }
 
-/** 打开工作台（W01）中某销售单的待办任务（任务按钮 id = work-item-{销售单id}）。 */
-async function openWorkspaceTask(page: Page, orderId: string): Promise<void> {
-    // 同一任务可能同时出现在工作台多个列表区，取第一个
-    const task = page.locator(`#work-item-${orderId}`).first()
+/** 按可见销售单号打开工作台（W01）中的对应待办任务。 */
+async function openWorkspaceTask(page: Page, orderNo: string): Promise<void> {
+    const task = page
+        .getByRole("list", { name: "待办列表" })
+        .getByRole("button")
+        .filter({ hasText: orderNo })
+        .first()
     await expect(task).toBeVisible({ timeout: 20_000 })
     await task.click()
+    await expect(page.locator('section[aria-label="当前任务"]:visible')).toBeVisible({
+        timeout: 20_000,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -253,8 +230,7 @@ async function findOpenApprovalWorkItem(
 
 /**
  * 提交审批决定（通过/驳回）。
- * 当前构建 UI 无通过/驳回按钮（见头部注释），这是唯一可用的决定通道；
- * 当前实现为桩：请求成功并回显原因，但不推进审批实例（见 doc_mismatches/risks）。
+ * 该流程同时校验命令响应与后端审批轮次，避免只凭页面刷新判断领域状态。
  */
 async function submitApprovalDecisionViaApi(
     request: APIRequestContext,
@@ -314,9 +290,12 @@ let settlementParty: PartyRow | undefined
 /** 流程状态（test 01 创建后共享给 02/03/04）。 */
 let order1Id = ""
 let order2Id = ""
+let order1No = ""
+let order2No = ""
 let order1LinesBeforeReject = ""
 
 test.describe("[flow-05] 审批驳回与三条出路", () => {
+    test.describe.configure({ mode: "serial" })
     test.setTimeout(300_000)
 
     test("01 前置：建客户、上传合同，建两张销售单并提交（审批中）", async ({
@@ -360,6 +339,7 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         await customerDialog.getByLabel("统一社会信用代码").fill(CREDIT_CODE)
         await pickComboboxOption(salesPage, customerDialog, "默认付款条件", "货到 30 天")
         await customerDialog.getByRole("button", { name: "创建客户" }).click()
+        await salesPage.getByRole("link", { name: CUSTOMER_NAME, exact: true }).click()
         await expect(salesPage).toHaveURL(/\/sales\/customers\/[^/?]+/, {
             timeout: 20_000,
         })
@@ -378,6 +358,14 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
             uploadContract: true,
         })
         order1Id = order1.id
+        order1No = (
+            await api<BackendSalesOrderDetail>(
+                request,
+                "GET",
+                `/admin/sales-orders/${order1Id}`,
+                { token: salesToken },
+            )
+        ).order_no
         // 提交后落在详情页：审批中、金额正确
         await expect(salesPage.getByText("审批中", { exact: true }).first()).toBeVisible({
             timeout: 20_000,
@@ -403,6 +391,14 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
             uploadContract: false,
         })
         order2Id = order2.id
+        order2No = (
+            await api<BackendSalesOrderDetail>(
+                request,
+                "GET",
+                `/admin/sales-orders/${order2Id}`,
+                { token: salesToken },
+            )
+        ).order_no
         await expect(salesPage.getByText("审批中", { exact: true }).first()).toBeVisible({
             timeout: 20_000,
         })
@@ -417,15 +413,16 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         const procurementPage = page
         const salesPage = page
         expect(order1Id, "前置 test 01 必须已创建销售单").toBeTruthy()
+        expect(order1No, "前置 test 01 必须已取得销售单号").toBeTruthy()
         const salesToken = await apiLogin(request, "sales")
         const procurementToken = await apiLogin(request, "procurement")
 
         // ---------- 采购在 W01 工作台看到「采购确认」任务 ----------
         await switchAccount("procurement")
         await gotoPage(procurementPage, "/workspace")
-        await openWorkspaceTask(procurementPage, order1Id)
+        await openWorkspaceTask(procurementPage, order1No)
 
-        // ---------- 驳回并填写原因（UI 无入口，见头部注释；经决策 API） ----------
+        // ---------- 驳回并填写原因（经决策 API，同时校验命令回显） ----------
         const REJECT_REASON = "成本上涨，请重新报价后再提交"
         const decision = await submitApprovalDecisionViaApi(
             request,
@@ -434,7 +431,7 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
             "REJECT",
             REJECT_REASON,
         )
-        // 协议层事实（当前构建仅回显，不推进实例——见 risks）
+        // 协议层事实
         expect(decision.outcome).toBe("APPLIED")
         expect(decision.latest_rejection_reason).toBe(REJECT_REASON)
 
@@ -458,16 +455,15 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         ).toBeVisible({ timeout: 20_000 })
 
         // ---------- 审批轮次 +1 且回到首节点（审批实例 API 佐证） ----------
-        // 预期: 驳回后进入第 2 轮、节点回到「采购确认」。
-        // 当前构建决策接口为桩实现，轮次不会推进 → 本断言失败即暴露该缺口（见 doc_mismatches/risks）。
+        // 驳回后进入第 2 轮、节点回到「采购确认」。
         const inst = await findApprovalInstance(request, salesToken, order1Id)
         expect(
             inst.current_round_no,
-            "驳回后审批轮次应加一（当前构建 decision API 为桩实现，不会推进轮次，见 risks）",
+            "驳回后审批轮次应加一",
         ).toBe(2)
         expect(inst.current_node_name).toBe("采购确认")
 
-        // 执行历史：第 1 轮 REJECTED、第 2 轮 ACTIVE（同样依赖决策接线，当前构建失败）
+        // 执行历史：第 1 轮 REJECTED、第 2 轮 ACTIVE
         const history = await api<ApprovalHistoryExecution[]>(
             request,
             "GET",
@@ -499,13 +495,14 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         const procurementPage = page
         const salesPage = page
         expect(order1Id, "前置 test 01 必须已创建销售单").toBeTruthy()
+        expect(order1No, "前置 test 01 必须已取得销售单号").toBeTruthy()
         const salesToken = await apiLogin(request, "sales")
         const procurementToken = await apiLogin(request, "procurement")
 
         // ---------- 不撤回不改单：采购工作台出现第 2 轮任务 ----------
         await switchAccount("procurement")
         await gotoPage(procurementPage, "/workspace")
-        await openWorkspaceTask(procurementPage, order1Id)
+        await openWorkspaceTask(procurementPage, order1No)
 
         // ---------- 对当前开放任务提交「通过」 ----------
         const decision = await submitApprovalDecisionViaApi(
@@ -516,14 +513,13 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         )
         expect(decision.outcome).toBe("APPLIED")
 
-        // 实例最终通过（当前构建决策接口为桩实现，实例停在 RUNNING → 本断言失败即暴露缺口）
+        // 实例最终通过
         await expect
             .poll(
                 async () => (await findApprovalInstance(request, salesToken, order1Id)).status,
                 {
                     timeout: 20_000,
-                    message:
-                        "第 2 轮通过后实例应 APPROVED（当前构建 decision API 为桩实现，见 doc_mismatches/risks）",
+                    message: "第 2 轮通过后实例应 APPROVED",
                 },
             )
             .toBe("APPROVED")
@@ -542,13 +538,14 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         const procurementPage = page
         const salesPage = page
         expect(order2Id, "前置 test 01 必须已创建销售单").toBeTruthy()
+        expect(order2No, "前置 test 01 必须已取得销售单号").toBeTruthy()
         const salesToken = await apiLogin(request, "sales")
         const procurementToken = await apiLogin(request, "procurement")
 
         // ---------- 采购在工作台处理第二张单：驳回并填写原因 ----------
         await switchAccount("procurement")
         await gotoPage(procurementPage, "/workspace")
-        await openWorkspaceTask(procurementPage, order2Id)
+        await openWorkspaceTask(procurementPage, order2No)
         const REJECT_REASON2 = "交期无法满足，客户确认后请重新提交"
         const decision = await submitApprovalDecisionViaApi(
             request,
