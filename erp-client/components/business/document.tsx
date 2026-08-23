@@ -101,15 +101,11 @@ function DocumentHeader({
             )}
             {...props}
         >
-            <div
-                className={cn(
-                    "flex flex-col lg:flex-row lg:justify-between",
-                    compact ? "gap-3 lg:items-center" : "gap-4 lg:items-start",
-                )}
-            >
+            {/* 标题行与动作同一带；避免动作掉到状态轨上方与徽章挤成一团 */}
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                 <div
                     className={cn(
-                        "min-w-0",
+                        "min-w-0 flex-1",
                         compact ? "space-y-1" : "space-y-2",
                     )}
                 >
@@ -129,7 +125,7 @@ function DocumentHeader({
                     </div>
                     <div
                         className={cn(
-                            "flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground",
+                            "flex flex-wrap items-center gap-x-2.5 gap-y-1 text-muted-foreground",
                             compact ? "text-xs" : "text-sm",
                         )}
                     >
@@ -162,7 +158,7 @@ function DocumentHeader({
                 {hasActions ? (
                     <div
                         data-slot="document-header-actions"
-                        className="flex shrink-0 flex-wrap items-center gap-2"
+                        className="flex shrink-0 flex-wrap items-center justify-end gap-2"
                     >
                         {secondaryActions}
                         {primaryAction}
@@ -175,17 +171,17 @@ function DocumentHeader({
                     role="list"
                     aria-label="单据并行状态"
                     className={cn(
-                        "flex flex-wrap gap-x-5 gap-y-2 rounded-md bg-muted/40",
-                        compact ? "mt-2.5 px-3 py-2" : "mt-4 gap-y-3 px-4 py-3",
+                        "flex flex-wrap items-center gap-x-4 gap-y-2",
+                        compact ? "mt-3" : "mt-4",
                     )}
                 >
                     {statuses.map((track) => (
                         <div
                             key={track.id}
                             role="listitem"
-                            className="flex items-center gap-2"
+                            className="flex items-center gap-1.5"
                         >
-                            <span className="text-xs font-medium text-muted-foreground">
+                            <span className="text-xs text-muted-foreground">
                                 {track.label}
                             </span>
                             <StatusBadge
@@ -198,14 +194,7 @@ function DocumentHeader({
             ) : null}
 
             {children ? (
-                <div
-                    className={cn(
-                        "border-t border-grid",
-                        compact ? "mt-2.5 pt-2.5" : "mt-4 pt-4",
-                    )}
-                >
-                    {children}
-                </div>
+                <div className={cn(compact ? "mt-3" : "mt-4")}>{children}</div>
             ) : null}
         </header>
     )

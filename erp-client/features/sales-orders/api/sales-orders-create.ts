@@ -22,6 +22,7 @@ import {
     mapCardForm,
     mapCardFormFromBackend,
     mapFulfillmentMode,
+    mapFulfillmentModeFromBackend,
     mapWelfareScenarioCode,
     percentToRate,
     rateToPercent,
@@ -319,7 +320,10 @@ function mapDraftLines(
                 ? "张"
                 : (line.unit_snapshot ?? line.base_unit_code ?? ""),
             unitPriceGross: line.unit_price_gross ?? "0.00",
-            fulfillmentMode: !isVoucher ? "公司仓发" : "",
+            fulfillmentMode: !isVoucher
+                ? mapFulfillmentModeFromBackend(line.fulfillment_mode) ||
+                  "公司仓发"
+                : "",
             dueDate: formatEpochDate(line.fulfillment_due_at),
             faceValue: line.face_value ?? "",
             giftRate: "",

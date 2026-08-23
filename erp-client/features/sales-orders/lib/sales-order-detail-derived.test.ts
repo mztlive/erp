@@ -56,6 +56,7 @@ function makeOrder(
         taxAmount: "0.00",
         receivedAmount: "0.00",
         invoicedAmount: "0.00",
+        ownerUserId: "u-1",
         ownerName: "张三",
         submittedAt: "",
         welfareScene: "",
@@ -125,6 +126,41 @@ describe("deriveSalesOrderDetailState", () => {
             "receivable",
             "versions",
         ])
+        expect(state.visibleNav.map((item) => item.id)).not.toContain(
+            "approval",
+        )
+    })
+
+    it("maps approval section onto the approval tab and shows the nav item", () => {
+        const withApproval = makeOrder({
+            approval: {
+                requirement: "PROCESS_REQUIRED",
+                definition: {
+                    id: "def-1",
+                    name: "实物销售审批",
+                    version: 1,
+                    nodes: [],
+                    publishedNodes: [],
+                },
+                recentHistory: [],
+                historyHasMore: false,
+                allowedActions: [],
+            },
+        })
+        const state = deriveSalesOrderDetailState(withApproval, {
+            ...baseInput,
+            section: "approval",
+        })
+
+        expect(state.navSection).toBe("approval")
+        expect(state.showApproval).toBe(true)
+        expect(state.visibleNav.map((item) => item.id)).toEqual([
+            "overview",
+            "approval",
+            "fulfillment",
+            "receivable",
+            "versions",
+        ])
     })
 
     it("maps acceptance section onto the fulfillment tab", () => {
@@ -186,6 +222,40 @@ describe("deriveSalesOrderDetailState", () => {
             baseInput,
         )
         expect(card.canAccept).toBe(false)
+    })
+
+    it("prefers approval focus over acceptance while still in approval", () => {
+        const state = deriveSalesOrderDetailState(
+            makeOrder({
+                primaryStatus: {
+                    code: "in_approval",
+                    label: "审批中",
+                    tone: "warning",
+                },
+                // 审批中不应开放验收；即便误带了动作，焦点也必须优先审批。
+                allowedActions: ["REGISTER_ACCEPTANCE"],
+                approval: {
+                    requirement: "PROCESS_REQUIRED",
+                    definition: {
+                        id: "def-1",
+                        name: "实物销售审批",
+                        version: 1,
+                        nodes: [],
+                        publishedNodes: [],
+                    },
+                    recentHistory: [],
+                    historyHasMore: false,
+                    allowedActions: ["CANCEL"],
+                },
+            }),
+            baseInput,
+        )
+
+        expect(state.focusTask?.id).toBe("approval")
+        expect(state.focusTask?.title).toBe("销售单等审批")
+        // 审批由「审批」tab 承接，不再提供「去审批」主按钮。
+        expect(state.actionableFocusTask).toBeNull()
+        expect(state.bannerJump).toBe(false)
     })
 
     it("embeds the voucher-order approval area from the server projection", () => {

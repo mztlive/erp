@@ -108,9 +108,9 @@ function mapInvoicing(code: string): ProgressTrack {
 }
 
 /**
- * 结案条件卡只在详情页展示（`components/close-conditions-card.tsx`），列表行从不渲染
- * 这个字段；纯列表拉取（`sales_order_list`）不携带后端权威结案资格，避免为
- * 不可见字段逐行加查询成本。详情路径（`mapDetailToListItem`）会用
+ * 结案资格只在详情路径使用（生命周期轨、履约焦点等）；列表行从不渲染。
+ * 纯列表拉取（`sales_order_list`）不携带后端权威结案资格，避免为不可见字段
+ * 逐行加查询成本。详情路径（`mapDetailToListItem`）会用
  * `detail.close_eligibility` 覆盖这个占位值。
  */
 const LIST_ROW_CLOSE_ELIGIBILITY_PLACEHOLDER: SalesOrderListItem["closeEligibility"] =
@@ -133,6 +133,24 @@ function mapCloseEligibilityFromBackend(
         eligibleToClose: backend.eligible_to_close,
         blockers: backend.blockers,
         note: backend.note,
+    }
+}
+
+/** 后端履约方式码 → 建单/详情展示中文；无法识别时原样回退。 */
+export function mapFulfillmentModeFromBackend(
+    code: string | null | undefined,
+): string {
+    switch ((code ?? "").trim()) {
+        case "COMPANY_WAREHOUSE":
+            return "公司仓发"
+        case "SUPPLIER_DIRECT":
+            return "供应商直发"
+        case "ELECTRONIC_DELIVERY":
+            return "电子交付"
+        case "OFFLINE_SERVICE":
+            return "线下服务"
+        default:
+            return code?.trim() || ""
     }
 }
 
@@ -164,6 +182,13 @@ export function mapWorkingCopyLines(
                     : line.card_form === "ELECTRONIC"
                       ? "电子卡"
                       : (line.card_form ?? undefined)
+        } else {
+            const fulfillmentMode = mapFulfillmentModeFromBackend(
+                line.fulfillment_mode,
+            )
+            if (fulfillmentMode) item.fulfillmentMode = fulfillmentMode
+            const dueDate = formatEpochDate(line.fulfillment_due_at)
+            if (dueDate) item.dueDate = dueDate
         }
         return item
     })
@@ -219,8 +244,9 @@ function defaultAllowedActions(
         })
     }
 
+    // 客户验收只属于已生效后的履约收口；审批中（PENDING_REVIEW）不得开放。
     if (
-        (commercial === "EFFECTIVE" || commercial === "PENDING_REVIEW") &&
+        commercial === "EFFECTIVE" &&
         fulfillment !== "COMPLETED" &&
         close !== "CLOSED"
     ) {
@@ -246,6 +272,7 @@ export function mapListItemFromBackend(
         receivedAmount?: string
         invoicedAmount?: string
         lineItems?: SalesOrderLineItem[]
+        ownerUserId?: string
         ownerName?: string
         paymentTerms?: string
         welfareScene?: string
@@ -321,6 +348,7 @@ export function mapListItemFromBackend(
         taxAmount: extras?.taxAmount ?? "0.00",
         receivedAmount: extras?.receivedAmount ?? "0.00",
         invoicedAmount: extras?.invoicedAmount ?? "0.00",
+        ownerUserId: extras?.ownerUserId ?? "",
         ownerName: extras?.ownerName ?? "",
         submittedAt: formatInstant(row.created_at),
         welfareScene: extras?.welfareScene ?? "",

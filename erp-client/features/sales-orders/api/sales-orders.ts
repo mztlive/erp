@@ -16,6 +16,7 @@ export { createSalesOrderExportJob } from "@/features/sales-orders/api/export"
 
 export { fetchSalesOrders } from "@/features/sales-orders/api/sales-orders-list"
 export {
+    cancelSalesOrderApproval,
     downloadSalesOrderContractPdf,
     fetchSalesOrderDetail,
 } from "@/features/sales-orders/api/sales-orders-detail"

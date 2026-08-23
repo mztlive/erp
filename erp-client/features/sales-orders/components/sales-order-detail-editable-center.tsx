@@ -70,15 +70,20 @@ export function SalesOrderEditableCenter({
             <PageHeader
                 variant="object-chrome"
                 metadata={
-                    fromQueue ? (
-                        <span>
-                            {fromWorkspace === "W09"
-                                ? "从履约处理打开 · 处理完可点返回，回到列表原位"
-                                : fromWorkspace === "W08"
-                                  ? "从采购单打开 · 处理完可点返回，回到列表原位"
-                                  : "从工作台打开 · 处理完可点返回，回到列表原位"}
+                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-xl font-semibold tracking-tight text-foreground">
+                            销售单
                         </span>
-                    ) : undefined
+                        {fromQueue ? (
+                            <span>
+                                {fromWorkspace === "W09"
+                                    ? "从履约处理打开 · 处理完可点返回，回到列表原位"
+                                    : fromWorkspace === "W08"
+                                      ? "从采购单打开 · 处理完可点返回，回到列表原位"
+                                      : "从工作台打开 · 处理完可点返回，回到列表原位"}
+                            </span>
+                        ) : null}
+                    </span>
                 }
                 actions={
                     <PageActions

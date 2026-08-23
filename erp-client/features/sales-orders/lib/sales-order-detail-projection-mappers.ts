@@ -30,6 +30,29 @@ import {
 } from "@/features/sales-orders/lib/sales-order-detail-mappers"
 
 /**
+ * 表头履约期限：卡券读 `voucher_expiry_at`；实物/服务从明细 `fulfillment_due_at` 汇总。
+ * 多行不同日期时展示最早~最晚。
+ */
+function resolveFulfillmentDeadline(
+    voucherExpiryAt: number | null | undefined,
+    lines: BackendWorkingCopyLine[],
+): string {
+    const fromVoucher = formatEpochDate(voucherExpiryAt)
+    if (fromVoucher) return fromVoucher
+
+    const dates = Array.from(
+        new Set(
+            lines
+                .map((line) => formatEpochDate(line.fulfillment_due_at))
+                .filter(Boolean),
+        ),
+    ).sort()
+    if (dates.length === 0) return ""
+    if (dates.length === 1) return dates[0] ?? ""
+    return `${dates[0]} ~ ${dates[dates.length - 1]}`
+}
+
+/**
  * 详情商业内容优先：可编辑草稿 → 最新提交快照。
  * 提交后 working_copy 为空时必须从 submission 回填明细与表头。
  */
@@ -66,14 +89,18 @@ function pickCommercialContent(detail: BackendSalesOrderDetail): {
             settlementPartyName: wc.settlement_party_name || undefined,
             paymentTerms: wc.payment_term_name || wc.payment_term_code || "",
             welfareScene: wc.project_name || "",
-            fulfillmentDeadline: formatEpochDate(wc.voucher_expiry_at),
+            fulfillmentDeadline: resolveFulfillmentDeadline(
+                wc.voucher_expiry_at,
+                wc.lines,
+            ),
             remark: wc.business_remark || undefined,
         }
     }
 
     if (latestSubmission) {
+        const lines = latestSubmission.lines ?? []
         return {
-            lines: latestSubmission.lines ?? [],
+            lines,
             amountGross: latestSubmission.gross_amount,
             amountNet: latestSubmission.net_amount,
             taxAmount: latestSubmission.tax_amount,
@@ -87,8 +114,9 @@ function pickCommercialContent(detail: BackendSalesOrderDetail): {
                 latestSubmission.payment_term_code ||
                 "",
             welfareScene: latestSubmission.project_name || "",
-            fulfillmentDeadline: formatEpochDate(
+            fulfillmentDeadline: resolveFulfillmentDeadline(
                 latestSubmission.voucher_expiry_at,
+                lines,
             ),
             remark: latestSubmission.business_remark || undefined,
         }
@@ -108,6 +136,7 @@ export function mapDetailToListItem(
     extras?: {
         customerName?: string
         contractNumber?: string
+        ownerUserId?: string
         ownerName?: string
         procurementRejection?: ProcurementRejectionResolution | null
         activeChangeOrder?: SalesChangeOrderSummary | null
@@ -169,6 +198,7 @@ export function mapDetailToListItem(
             receivedAmount: detail.settled_total,
             invoicedAmount: detail.invoiced_total,
             lineItems: mapWorkingCopyLines(commercial.lines),
+            ownerUserId: extras?.ownerUserId || detail.owner_user_id || "",
             ownerName: extras?.ownerName || "",
             customerContact: extras?.customerContact,
             paymentTerms: commercial.paymentTerms,

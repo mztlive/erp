@@ -4,6 +4,7 @@ export {
     formatEpochDate,
     formatInstant,
     formatIsoNow,
+    mapFulfillmentModeFromBackend,
     mapListItemFromBackend,
     mapNature,
     throwValidation,

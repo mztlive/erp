@@ -23,7 +23,6 @@ import {
 import { SalesOrderEditableCenter } from "@/features/sales-orders/components/sales-order-detail-editable-center"
 import {
     FocusTaskBanner,
-    LifecycleRail,
     SalesOrderIdentityHeader,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
 import { SalesOrderDetailTabs } from "@/features/sales-orders/components/sales-order-detail-tabs"
@@ -36,6 +35,7 @@ import {
     useSalesOrderDetailStartChange,
 } from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
 import { useSalesOrderDetailModeGuard } from "@/features/sales-orders/hooks/use-sales-order-detail-mode-guard"
+import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { useSalesOrderDetailUrlState } from "@/features/sales-orders/hooks/use-sales-order-detail-url-state"
 import { salesOrderMarginRiskHint } from "@/features/sales-orders/lib/sales-order-approval"
 import { deriveSalesOrderDetailState } from "@/features/sales-orders/lib/sales-order-detail-derived"
@@ -73,6 +73,7 @@ export function SalesOrderDetailPage({
     } = useSalesOrderDetailUrlState({ salesOrderId })
     const rejectionResolution = useSalesOrderDetailRejectionResolution()
     const startChangeCommand = useSalesOrderDetailStartChange()
+    const detailPermissions = useSalesOrderDetailPermissions()
     const focusedWorkItemQuery = useWorkItemDetailQuery(focusedWorkItemId)
     const focusedWorkItem = focusedWorkItemQuery.data
         ? mapWorkItemDto(focusedWorkItemQuery.data)
@@ -190,11 +191,25 @@ export function SalesOrderDetailPage({
         )
     }
 
+    const resubmitGate = detailPermissions.editAfterRejection(
+        derived.canResubmit,
+        "当前不能改完再报",
+    )
+    const acceptanceFocusGate = detailPermissions.registerAcceptance(
+        derived.canAccept,
+        "当前不能验收，请先完成交付或确认业务条件。",
+    )
     const primaryTaskAction =
         order.nature !== "physical_service" &&
         derived.openRejection &&
         derived.canResubmit ? (
-            <Button type="button" size="sm" onClick={enterRejectionEdit}>
+            <Button
+                type="button"
+                size="sm"
+                disabled={!resubmitGate.enabled}
+                title={resubmitGate.reason}
+                onClick={enterRejectionEdit}
+            >
                 改完再报
             </Button>
         ) : derived.actionableFocusTask &&
@@ -206,6 +221,15 @@ export function SalesOrderDetailPage({
             <Button
                 type="button"
                 size="sm"
+                disabled={
+                    derived.actionableFocusTask.id === "acceptance" &&
+                    !acceptanceFocusGate.enabled
+                }
+                title={
+                    derived.actionableFocusTask.id === "acceptance"
+                        ? acceptanceFocusGate.reason
+                        : undefined
+                }
                 onClick={() => selectSection(derived.actionableFocusTask!.id)}
             >
                 {derived.actionableFocusTask.actionLabel}
@@ -217,15 +241,20 @@ export function SalesOrderDetailPage({
             <PageHeader
                 variant="object-chrome"
                 metadata={
-                    fromQueue ? (
-                        <span>
-                            {fromWorkspace === "W09"
-                                ? "从履约处理打开 · 处理完可点返回，回到列表原位"
-                                : fromWorkspace === "W08"
-                                  ? "从采购单打开 · 处理完可点返回，回到列表原位"
-                                  : "从工作台打开 · 处理完可点返回，回到列表原位"}
+                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-xl font-semibold tracking-tight text-foreground">
+                            销售单
                         </span>
-                    ) : undefined
+                        {fromQueue ? (
+                            <span>
+                                {fromWorkspace === "W09"
+                                    ? "从履约处理打开 · 处理完可点返回，回到列表原位"
+                                    : fromWorkspace === "W08"
+                                      ? "从采购单打开 · 处理完可点返回，回到列表原位"
+                                      : "从工作台打开 · 处理完可点返回，回到列表原位"}
+                            </span>
+                        ) : null}
+                    </span>
                 }
                 actions={
                     <PageActions
@@ -318,6 +347,7 @@ export function SalesOrderDetailPage({
                         onOpenLowMargin={() => setLowMarginOpen(true)}
                         onOpenVoid={() => setVoidOpen(true)}
                         onOpenChangeConfirm={() => setChangeConfirmOpen(true)}
+                        onApprovalResult={handleActionResult}
                     />
                 }
             />
@@ -325,10 +355,6 @@ export function SalesOrderDetailPage({
             <div
                 className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
             >
-                <div className="border-b border-grid px-3 py-2 md:px-4">
-                    <LifecycleRail order={order} />
-                </div>
-
                 <SalesOrderDetailTabs
                     order={order}
                     section={section}
@@ -336,7 +362,6 @@ export function SalesOrderDetailPage({
                     visibleNav={derived.visibleNav}
                     canAccept={derived.canAccept}
                     acceptanceExpanded={derived.acceptanceExpanded}
-                    showApproval={derived.showApproval}
                     selfReturn={derived.selfReturn}
                     workItemId={
                         section === "change-review"

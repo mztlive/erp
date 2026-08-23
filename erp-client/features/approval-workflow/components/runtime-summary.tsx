@@ -1,5 +1,7 @@
 "use client"
 
+import type * as React from "react"
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -17,18 +19,34 @@ import type { ApprovalRuntimeInstance } from "../types"
  *
  * `BLOCKED` 使用独立受阻样式，不得伪装为普通待办。
  */
+function SummaryHeading({
+    compact,
+    children,
+}: {
+    compact?: boolean
+    children: React.ReactNode
+}) {
+    if (compact) {
+        return <h2 className="text-sm font-medium">{children}</h2>
+    }
+    return <CardTitle>{children}</CardTitle>
+}
+
 export function RuntimeSummary({
     instance,
     className,
+    compact = false,
 }: {
     instance?: ApprovalRuntimeInstance
     className?: string
+    /** 对象中心 tab 内使用：标题与概览 text-sm 对齐，避免 CardTitle 偏大。 */
+    compact?: boolean
 }) {
     if (!instance) {
         return (
             <Card size="sm" className={className}>
                 <CardHeader>
-                    <CardTitle>审批摘要</CardTitle>
+                    <SummaryHeading compact={compact}>审批摘要</SummaryHeading>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
                     当前没有可展示的审批进度
@@ -53,7 +71,7 @@ export function RuntimeSummary({
             data-blocked={blocked ? "true" : "false"}
         >
             <CardHeader>
-                <CardTitle>{processLabel}</CardTitle>
+                <SummaryHeading compact={compact}>{processLabel}</SummaryHeading>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
                 <p>审批状态：{displayInstanceStatus(instance.status)}</p>

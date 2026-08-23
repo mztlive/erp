@@ -5,7 +5,7 @@
  * ApiError（@/lib/api），禁止 throw new Error("string")。
  */
 
-import { apiGet } from "@/lib/api"
+import { apiGet, apiPost } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
 import { downloadFileAsset } from "@/features/file-assets/api"
 import {
@@ -34,6 +34,24 @@ import type { SalesOrderNature } from "@/features/sales-orders/types"
  *
  * @param contractId 合同稳定身份
  */
+/**
+ * 撤回尚未最终通过的销售单审批（`POST .../cancel-approval`）。
+ * 服务端按单据乐观锁与运行中实例撤回；前端不依赖详情里的 instance 投影。
+ */
+export async function cancelSalesOrderApproval(input: {
+    salesOrderId: string
+    expectedVersion: number
+    reason: string
+    idempotencyKey: string
+}): Promise<SalesOrderDetailView | null> {
+    await apiPost(`/admin/sales-orders/${input.salesOrderId}/cancel-approval`, {
+        expected_version: input.expectedVersion,
+        reason: input.reason.trim(),
+        idempotency_key: input.idempotencyKey,
+    })
+    return fetchSalesOrderDetail(input.salesOrderId)
+}
+
 export async function downloadSalesOrderContractPdf(
     contractId: string,
 ): Promise<void> {
@@ -169,6 +187,7 @@ export async function fetchSalesOrderDetail(
     const order = mapDetailToListItem(detail, {
         customerName,
         contractNumber,
+        ownerUserId: detail.owner_user_id || "",
         ownerName: detail.owner_user_name || "—",
         customerContact: customerDisplay.customerContact,
         ...extras,

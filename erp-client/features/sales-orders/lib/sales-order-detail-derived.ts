@@ -92,7 +92,6 @@ export function deriveSalesOrderDetailState(
         ((focusTask?.id === "versions" && navSection !== "versions") ||
             (focusTask?.id === "procurement-rejection" &&
                 navSection !== "overview") ||
-            (focusTask?.id === "approval" && !showApproval) ||
             (focusTask?.id === "acceptance" && !acceptanceExpanded))
 
     return {

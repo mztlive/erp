@@ -1,10 +1,25 @@
 "use client"
 
+import type * as React from "react"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 import { displayExecutionStatus, displayRound } from "../display"
 import type { ApprovalHistoryItem } from "../types"
+
+function HistoryHeading({
+    compact,
+    children,
+}: {
+    compact?: boolean
+    children: React.ReactNode
+}) {
+    if (compact) {
+        return <h2 className="text-sm font-medium">{children}</h2>
+    }
+    return <CardTitle>{children}</CardTitle>
+}
 
 /**
  * 按轮次分组、按执行序号排序的审批历史。
@@ -17,18 +32,21 @@ export function ExecutionHistory({
     hasMore = false,
     loadingMore = false,
     onLoadMore,
+    compact = false,
 }: {
     items: readonly ApprovalHistoryItem[]
     hasMore?: boolean
     loadingMore?: boolean
     onLoadMore?: () => void
+    /** 对象中心 tab 内使用：标题与概览 text-sm 对齐。 */
+    compact?: boolean
 }) {
     const rounds = groupByRound(items)
 
     return (
         <Card size="sm">
             <CardHeader>
-                <CardTitle>审批历史</CardTitle>
+                <HistoryHeading compact={compact}>审批历史</HistoryHeading>
             </CardHeader>
             <CardContent className="space-y-4">
                 {rounds.length === 0 ? (

@@ -1,9 +1,24 @@
 "use client"
 
+import type * as React from "react"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 import { displayProcessVersion } from "../display"
 import type { ApprovalDefinitionBinding } from "../types"
+
+function BindingHeading({
+    compact,
+    children,
+}: {
+    compact?: boolean
+    children: React.ReactNode
+}) {
+    if (compact) {
+        return <h2 className="text-sm font-medium">{children}</h2>
+    }
+    return <CardTitle>{children}</CardTitle>
+}
 
 /**
  * 未提交单据上的只读绑定卡。
@@ -13,15 +28,18 @@ import type { ApprovalDefinitionBinding } from "../types"
 export function DefinitionBindingCard({
     definition,
     emptyLabel = "尚未绑定审批流程",
+    compact = false,
 }: {
     definition?: ApprovalDefinitionBinding
     emptyLabel?: string
+    /** 对象中心 tab 内使用：标题与概览 text-sm 对齐。 */
+    compact?: boolean
 }) {
     if (!definition) {
         return (
             <Card size="sm">
                 <CardHeader>
-                    <CardTitle>审批流程</CardTitle>
+                    <BindingHeading compact={compact}>审批流程</BindingHeading>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
                     {emptyLabel}
@@ -33,12 +51,12 @@ export function DefinitionBindingCard({
     return (
         <Card size="sm">
             <CardHeader>
-                <CardTitle>
+                <BindingHeading compact={compact}>
                     {displayProcessVersion({
                         name: definition.name,
                         version: definition.version,
                     })}
-                </CardTitle>
+                </BindingHeading>
             </CardHeader>
             <CardContent>
                 {definition.nodes.length === 0 ? (

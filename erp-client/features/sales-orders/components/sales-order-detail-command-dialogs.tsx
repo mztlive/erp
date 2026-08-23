@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import { SalesOrderCancelApprovalButton } from "@/features/sales-orders/components/sales-order-cancel-approval-button"
 import { VoidSalesOrderDialog } from "@/features/sales-orders/components/void-sales-order-dialog"
+import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
+import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 import type { ActionBlocker } from "@/features/sales-orders/types"
 
 export function SalesOrderDetailSecondaryActions({
@@ -22,6 +25,7 @@ export function SalesOrderDetailSecondaryActions({
     onOpenLowMargin,
     onOpenVoid,
     onOpenChangeConfirm,
+    onApprovalResult,
 }: {
     order: SalesOrderDetailView
     openRejection: boolean
@@ -33,14 +37,34 @@ export function SalesOrderDetailSecondaryActions({
     onOpenLowMargin: () => void
     onOpenVoid: () => void
     onOpenChangeConfirm: () => void
+    onApprovalResult?: (result: SalesOrderDetailActionResult) => void
 }) {
+    const permissions = useSalesOrderDetailPermissions()
+    const lowMarginGate = permissions.editAfterRejection(
+        canRequestLowMargin,
+        "当前不能申请低毛利承接",
+    )
+    const voidGate = permissions.voidOrder(canVoid, "当前不能作废本单")
+    const startChangeGate = permissions.startChange(
+        canStartChange,
+        changeBlocker?.reason ??
+            order.commercialReadOnlyReason ??
+            "当前不能改单",
+    )
+
     return (
         <div className="flex flex-wrap items-center gap-2">
+            <SalesOrderCancelApprovalButton
+                order={order}
+                onResult={onApprovalResult}
+            />
             {openRejection && canRequestLowMargin ? (
                 <Button
                     type="button"
                     size="sm"
                     variant="outline"
+                    disabled={!lowMarginGate.enabled}
+                    title={lowMarginGate.reason}
                     onClick={onOpenLowMargin}
                 >
                     申请低毛利承接
@@ -51,6 +75,8 @@ export function SalesOrderDetailSecondaryActions({
                     type="button"
                     size="sm"
                     variant="outline"
+                    disabled={!voidGate.enabled}
+                    title={voidGate.reason}
                     onClick={onOpenVoid}
                 >
                     <BanIcon data-icon="inline-start" aria-hidden="true" />
@@ -62,14 +88,8 @@ export function SalesOrderDetailSecondaryActions({
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={!canStartChange || changePending}
-                    title={
-                        !canStartChange
-                            ? (changeBlocker?.reason ??
-                              order.commercialReadOnlyReason ??
-                              "当前不能改单")
-                            : undefined
-                    }
+                    disabled={!startChangeGate.enabled || changePending}
+                    title={startChangeGate.reason}
                     onClick={onOpenChangeConfirm}
                 >
                     <FilePenLineIcon

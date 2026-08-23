@@ -62,13 +62,17 @@ export function VoucherSalesOrderApprovalArea({
     if (phase === "draft") {
         return (
             <div className="space-y-3">
-                <DefinitionBindingCard definition={approval?.definition} />
+                <DefinitionBindingCard
+                    definition={approval?.definition}
+                    compact
+                />
                 {documentId ? (
                     <ApprovalActionBar
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={VOUCHER_SALES_ORDER_DOCUMENT_TYPE}
                         documentId={documentId}
+                        hiddenActions={["CANCEL", "CANCEL_APPROVAL"]}
                     />
                 ) : null}
             </div>
@@ -81,7 +85,7 @@ export function VoucherSalesOrderApprovalArea({
 
     return (
         <div className="space-y-3">
-            <RuntimeSummary instance={approval?.instance} />
+            <RuntimeSummary instance={approval?.instance} compact />
             <ExecutionHistory
                 items={historyItems}
                 hasMore={historyQuery.hasNextPage}
@@ -93,6 +97,7 @@ export function VoucherSalesOrderApprovalArea({
                           }
                         : undefined
                 }
+                compact
             />
             <ApprovalActionBar
                 allowedActions={allowedActions}
@@ -104,6 +109,7 @@ export function VoucherSalesOrderApprovalArea({
                 documentType={VOUCHER_SALES_ORDER_DOCUMENT_TYPE}
                 documentId={documentId}
                 afterCancelStatusLabel="草稿"
+                hiddenActions={["CANCEL", "CANCEL_APPROVAL"]}
                 onDecisionApplied={onDecisionApplied}
             />
         </div>

@@ -5,8 +5,10 @@ import * as React from "react"
 import { DocumentHeader, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import { LifecycleRail } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
 import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
 import { sumFixed } from "@/lib/fixed-decimal"
+import { cn } from "@/lib/utils"
 
 function remainingReceivable(gross: string, received: string) {
     try {
@@ -54,26 +56,56 @@ export function SalesOrderIdentityHeader({
                 },
             ]}
             meta={
-                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Badge variant="secondary" className="font-normal">
                         {NATURE_LABEL[order.nature]}
                     </Badge>
-                    <span aria-hidden="true">·</span>
                     <span>
                         负责人{" "}
                         <span className="font-medium text-foreground">
                             {order.ownerName}
                         </span>
                     </span>
-                    <span aria-hidden="true">·</span>
+                    <span className="text-border" aria-hidden="true">
+                        ·
+                    </span>
                     <span>{ORIGIN_LABEL[order.originSystem]}</span>
                 </span>
             }
             primaryAction={primaryAction}
             secondaryActions={secondaryActions}
         >
-            <SalesOrderAmountSummary order={order} />
+            <div className="space-y-3">
+                <LifecycleRail order={order} />
+                <SalesOrderAmountSummary order={order} />
+            </div>
         </DocumentHeader>
+    )
+}
+
+function AmountCell({
+    label,
+    value,
+    hint,
+    className,
+}: {
+    label: string
+    value: React.ReactNode
+    hint?: React.ReactNode
+    className?: string
+}) {
+    return (
+        <div className={cn("min-w-0", className)}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="mt-0.5 text-sm font-semibold tabular-nums">
+                {value}
+                {hint != null ? (
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        {hint}
+                    </span>
+                ) : null}
+            </dd>
+        </div>
     )
 }
 
@@ -85,43 +117,36 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
 
     return (
         <dl
-            className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-4"
+            className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 sm:gap-0 sm:divide-x sm:divide-border"
             aria-label="销售单金额摘要"
         >
-            <div className="min-w-0">
-                <dt className="text-xs text-muted-foreground">
-                    成交金额（含税）
-                </dt>
-                <dd className="mt-0.5 text-sm font-semibold">
+            <AmountCell
+                className="sm:pr-4"
+                label="成交金额（含税）"
+                value={
                     <MoneyValue value={order.amountGross} taxBasis="gross" />
-                </dd>
-            </div>
-            <div className="min-w-0">
-                <dt className="text-xs text-muted-foreground">已回款</dt>
-                <dd className="mt-0.5 text-sm font-semibold">
+                }
+            />
+            <AmountCell
+                className="sm:px-4"
+                label="已回款"
+                value={
                     <MoneyValue value={order.receivedAmount} taxBasis="gross" />
-                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                        {order.collection.label}
-                    </span>
-                </dd>
-            </div>
-            <div className="min-w-0">
-                <dt className="text-xs text-muted-foreground">待回款</dt>
-                <dd className="mt-0.5 text-sm font-semibold">
-                    <MoneyValue value={receivableLeft} taxBasis="gross" />
-                    {order.closeEligibility.receivableSettled ? (
-                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                            已收齐
-                        </span>
-                    ) : null}
-                </dd>
-            </div>
-            <div className="min-w-0">
-                <dt className="text-xs text-muted-foreground">已开票</dt>
-                <dd className="mt-0.5 text-sm font-semibold">
+                }
+                hint={order.collection.label}
+            />
+            <AmountCell
+                className="sm:px-4"
+                label="待回款"
+                value={<MoneyValue value={receivableLeft} taxBasis="gross" />}
+            />
+            <AmountCell
+                className="sm:pl-4"
+                label="已开票"
+                value={
                     <MoneyValue value={order.invoicedAmount} taxBasis="gross" />
-                </dd>
-            </div>
+                }
+            />
         </dl>
     )
 }

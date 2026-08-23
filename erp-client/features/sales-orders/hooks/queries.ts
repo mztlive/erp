@@ -6,6 +6,7 @@ import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import {
     adjustProcurementRejectionDraft,
+    cancelSalesOrderApproval,
     createSalesOrder,
     createSalesOrderExportJob,
     fetchSalesOrderDetail,
@@ -49,6 +50,29 @@ export function useSalesOrderDetailQuery(salesOrderId: string) {
         queryKey: salesOrderKeys.detail(salesOrderId),
         queryFn: () => fetchSalesOrderDetail(salesOrderId),
         enabled: Boolean(salesOrderId),
+    })
+}
+
+export function useCancelSalesOrderApprovalMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: cancelSalesOrderApproval,
+        onSuccess: async (_data, variables) => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.detail(variables.salesOrderId),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: approvalKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: workItemKeys.all,
+                }),
+            ])
+        },
     })
 }
 

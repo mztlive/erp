@@ -4,14 +4,7 @@ import * as React from "react"
 
 import { MoneyValue } from "@/components/business"
 import { welfareScenarioLabel } from "@/lib/business-options"
-import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
-import { SalesOrderApprovalArea } from "@/features/sales-orders/components/sales-order-approval-area"
-import { VoucherSalesOrderApprovalArea } from "@/features/sales-orders/components/voucher-sales-order-approval-area"
-import { salesOrderApprovalPhase } from "@/features/sales-orders/lib/sales-order-approval"
-import { voucherSalesOrderApprovalPhase } from "@/features/sales-orders/lib/voucher-sales-order-approval"
-import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
-import { CloseConditionsCard } from "@/features/sales-orders/components/close-conditions-card"
 import { cn } from "@/lib/utils"
 
 function OverviewField({
@@ -107,76 +100,11 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
     )
 }
 
-export function OverviewPanel({
-    order,
-    workItemId,
-    expectedTaskVersion,
-    workItemAllowedActions,
-    onApprovalResult,
-}: {
-    order: SalesOrderDetailView
-    showApproval: boolean
-    workItemId?: string
-    expectedTaskVersion?: string
-    workItemAllowedActions?: readonly string[]
-    onApprovalResult?: (result: SalesOrderDetailActionResult) => void
-}) {
+export function OverviewPanel({ order }: { order: SalesOrderDetailView }) {
     const isCard = order.nature === "card_voucher"
 
     return (
         <div className="space-y-4">
-            {order.nature === "physical_service" && order.approval ? (
-                <SalesOrderApprovalArea
-                    phase={salesOrderApprovalPhase(
-                        order.approval,
-                        order.primaryStatus.code,
-                    )}
-                    approval={order.approval}
-                    documentId={order.id}
-                    workItemId={workItemId}
-                    expectedTaskVersion={expectedTaskVersion}
-                    workItemAllowedActions={workItemAllowedActions}
-                    onDecisionApplied={(view: ApprovalCommandView) =>
-                        onApprovalResult?.({
-                            status: "succeeded",
-                            title: "审批决定已提交",
-                            description: view.latestRejectionReason
-                                ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                                : "已按当前任务提交决定。",
-                            reference: order.documentNumber,
-                            nextResponsible: view.currentAssigneeName,
-                        })
-                    }
-                />
-            ) : null}
-
-            {order.nature === "card_voucher" && order.approval ? (
-                <VoucherSalesOrderApprovalArea
-                    phase={voucherSalesOrderApprovalPhase(
-                        order.approval,
-                        order.primaryStatus.code,
-                    )}
-                    approval={order.approval}
-                    documentId={order.id}
-                    workItemId={workItemId}
-                    expectedTaskVersion={expectedTaskVersion}
-                    workItemAllowedActions={workItemAllowedActions}
-                    onDecisionApplied={(view: ApprovalCommandView) =>
-                        onApprovalResult?.({
-                            status: "succeeded",
-                            title: "审批决定已提交",
-                            description: view.latestRejectionReason
-                                ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                                : "已按当前任务提交决定。",
-                            reference: order.documentNumber,
-                            nextResponsible: view.currentAssigneeName,
-                        })
-                    }
-                />
-            ) : null}
-
-            <CloseConditionsCard order={order} />
-
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 xl:grid-cols-3">
                 <OverviewField
                     label="关联合同"

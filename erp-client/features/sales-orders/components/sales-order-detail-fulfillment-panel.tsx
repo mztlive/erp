@@ -1,16 +1,13 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import { PackageIcon } from "lucide-react"
 
-import { DocumentSection, surfaceInsetClassName } from "@/components/business"
+import { surfaceInsetClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
 import { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"
-import { SectionLead } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
-import { fulfillmentWorkspaceHref } from "@/features/sales-orders/lib/sales-order-detail-model"
+import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { cn } from "@/lib/utils"
 
 function AcceptanceSummary({
@@ -26,6 +23,11 @@ function AcceptanceSummary({
     onExpand: () => void
     onCollapse: () => void
 }) {
+    const permissions = useSalesOrderDetailPermissions()
+    const acceptGate = permissions.registerAcceptance(
+        canAccept,
+        "当前不能验收，请先完成交付或确认业务条件。",
+    )
     const latest = order.acceptance
 
     if (expanded) {
@@ -64,12 +66,8 @@ function AcceptanceSummary({
                 <Button
                     type="button"
                     size="sm"
-                    disabled={!canAccept}
-                    title={
-                        canAccept
-                            ? undefined
-                            : "当前不能验收，请先完成交付或确认权限。"
-                    }
+                    disabled={!acceptGate.enabled}
+                    title={acceptGate.reason}
                     onClick={onExpand}
                 >
                     登记验收
@@ -97,47 +95,12 @@ export function FulfillmentPanel({
     const isCard = order.nature === "card_voucher"
 
     return (
-        <div className="space-y-3">
-            <SectionLead>
-                {isCard
-                    ? "卡券到期即算交付完成。消费多少不影响本单是否交付完毕。"
-                    : "采购接单和发货在对应工作面完成；客户确认后，在本页登记验收。"}
-            </SectionLead>
-            <DocumentSection
-                title="采购与交付"
-                className="py-3 first:pt-0 last:pb-0"
-                action={
-                    isCard ? undefined : (
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={
-                                <Link
-                                    href={fulfillmentWorkspaceHref(
-                                        order,
-                                        selfReturn,
-                                    )}
-                                />
-                            }
-                        >
-                            <PackageIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            去发货/交付
-                        </Button>
-                    )
-                }
-            >
-                <RelatedLanes
-                    order={order}
-                    selfReturn={selfReturn}
-                    lanes={
-                        isCard ? ["fulfillment"] : ["purchase", "fulfillment"]
-                    }
-                />
-            </DocumentSection>
+        <div className="space-y-4">
+            <RelatedLanes
+                order={order}
+                selfReturn={selfReturn}
+                lanes={isCard ? ["fulfillment"] : ["purchase", "fulfillment"]}
+            />
 
             {isCard ? (
                 <div className={cn(surfaceInsetClassName, "px-3 py-3")}>

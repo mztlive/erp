@@ -53,6 +53,7 @@ export function ApprovalActionBar({
     emergencyWithdraw = false,
     canReadSensitive = true,
     approveWithoutDialog = false,
+    hiddenActions = [],
     onDecisionApplied,
 }: {
     allowedActions: readonly string[]
@@ -69,6 +70,8 @@ export function ApprovalActionBar({
     canReadSensitive?: boolean
     /** 工作台通过不弹窗，一点即提交；驳回仍要原因。 */
     approveWithoutDialog?: boolean
+    /** 由对象中心页头承接的动作，审批区内不再重复渲染。 */
+    hiddenActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
 }) {
     const [dialog, setDialog] = React.useState<DialogKind>(null)
@@ -78,7 +81,10 @@ export function ApprovalActionBar({
         null,
     )
     const submitDecision = useSubmitDecisionMutation()
-    const actions = new Set(allowedActions)
+    const hidden = new Set(hiddenActions)
+    const actions = new Set(
+        allowedActions.filter((action) => !hidden.has(action)),
+    )
     const recoveries = new Set(recoveryOptions)
     const showApprove = actions.has("APPROVE")
     const showReject = actions.has("REJECT")

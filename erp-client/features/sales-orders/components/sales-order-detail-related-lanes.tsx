@@ -5,6 +5,7 @@ import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import {
     canCreatePurchaseFromSalesOrder,
     fulfillmentWorkspaceHref,
@@ -41,12 +42,16 @@ function RelatedLane({
     status,
     href,
     actionLabel,
+    enabled,
+    disabledReason,
 }: {
     lane: keyof typeof RELATED_LANE_COPY
     count: number
     status: string
     href: string
     actionLabel?: string
+    enabled: boolean
+    disabledReason?: string
 }) {
     const copy = RELATED_LANE_COPY[lane]
     return (
@@ -62,14 +67,26 @@ function RelatedLane({
                     {copy.hint} · {status}
                 </div>
             </div>
-            <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                render={<Link href={href} />}
-            >
-                {actionLabel ?? copy.actionLabel}
-            </Button>
+            {enabled ? (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    render={<Link href={href} />}
+                >
+                    {actionLabel ?? copy.actionLabel}
+                </Button>
+            ) : (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled
+                    title={disabledReason}
+                >
+                    {actionLabel ?? copy.actionLabel}
+                </Button>
+            )}
         </li>
     )
 }
@@ -83,9 +100,17 @@ export function RelatedLanes({
     selfReturn: string
     lanes: Array<"purchase" | "fulfillment" | "receipt" | "invoice">
 }) {
+    const permissions = useSalesOrderDetailPermissions()
     const items: React.ReactNode[] = []
+
     if (lanes.includes("purchase")) {
         const createPurchase = canCreatePurchaseFromSalesOrder(order)
+        const gate = createPurchase
+            ? permissions.createPurchase(
+                  true,
+                  "当前不能从本单创建采购单",
+              )
+            : permissions.openPurchase
         items.push(
             <RelatedLane
                 key="purchase"
@@ -94,10 +119,13 @@ export function RelatedLanes({
                 status={order.fulfillment.label}
                 href={purchaseOrdersWorkspaceHref(order, selfReturn)}
                 actionLabel={createPurchase ? "去建单" : undefined}
+                enabled={gate.enabled}
+                disabledReason={gate.reason}
             />,
         )
     }
     if (lanes.includes("fulfillment")) {
+        const gate = permissions.openFulfillment
         items.push(
             <RelatedLane
                 key="fulfillment"
@@ -105,10 +133,13 @@ export function RelatedLanes({
                 count={order.related.fulfillments}
                 status={order.fulfillment.label}
                 href={fulfillmentWorkspaceHref(order, selfReturn)}
+                enabled={gate.enabled}
+                disabledReason={gate.reason}
             />,
         )
     }
     if (lanes.includes("receipt")) {
+        const gate = permissions.openReceivable
         items.push(
             <RelatedLane
                 key="receipt"
@@ -116,10 +147,13 @@ export function RelatedLanes({
                 count={order.related.receipts}
                 status={order.collection.label}
                 href={receivableWorkspaceHref(order, selfReturn, "receipt")}
+                enabled={gate.enabled}
+                disabledReason={gate.reason}
             />,
         )
     }
     if (lanes.includes("invoice")) {
+        const gate = permissions.openReceivable
         items.push(
             <RelatedLane
                 key="invoice"
@@ -127,6 +161,8 @@ export function RelatedLanes({
                 count={order.related.invoices}
                 status={order.invoicing.label}
                 href={receivableWorkspaceHref(order, selfReturn, "invoice")}
+                enabled={gate.enabled}
+                disabledReason={gate.reason}
             />,
         )
     }

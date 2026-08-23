@@ -17,6 +17,7 @@ export type SalesOrderDetailActionResult = {
 
 export type NavSectionId =
     | "overview"
+    | "approval"
     | "fulfillment"
     | "receivable"
     | "collaboration"
@@ -157,6 +158,7 @@ export function resolveNavSection(
         case "versions":
             return "versions"
         case "approval":
+            return "approval"
         case "overview":
         case "commercial":
         case "close":
@@ -194,17 +196,28 @@ export function resolveFocusTask(
             tone: "warning",
         }
     }
-    if (order.nature === "physical_service" && order.approval?.instance) {
+    // 有审批绑定且仍在审核轨（含尚无 instance 投影的审批中）时，优先引导去审批，
+    // 不得被验收等履约动作抢焦点。
+    if (
+        order.nature === "physical_service" &&
+        order.approval &&
+        (order.approval.instance ||
+            REVIEW_CODES.has(order.primaryStatus.code))
+    ) {
         return {
             id: "approval",
             title: "销售单等审批",
-            description:
-                "审批通过后本单才会生效。采购确认是流程中的普通审批节点。",
+            description: "",
             actionLabel: "去审批",
             tone: "info",
         }
     }
-    if (order.nature === "card_voucher" && order.approval?.instance) {
+    if (
+        order.nature === "card_voucher" &&
+        order.approval &&
+        (order.approval.instance ||
+            REVIEW_CODES.has(order.primaryStatus.code))
+    ) {
         return {
             id: "approval",
             title: "卡券销售等审批",
@@ -238,11 +251,10 @@ export function resolveFocusTask(
 export function isActionableFocusTask(
     task: FocusTask | null,
 ): task is FocusTask & { id: WorkSectionId } {
+    // 审批入口已由「审批」tab 承接，不再用「去审批」主按钮跳转。
     return (
         task != null &&
-        (task.id === "procurement-rejection" ||
-            task.id === "approval" ||
-            task.id === "acceptance")
+        (task.id === "procurement-rejection" || task.id === "acceptance")
     )
 }
 
@@ -396,6 +408,12 @@ export function navItemsFor(order: SalesOrderDetailView): Array<{
             label: "概览",
             hint: "约定、明细和下一步",
             show: true,
+        },
+        {
+            id: "approval",
+            label: "审批",
+            hint: "审批摘要与历史",
+            show: Boolean(order.approval),
         },
         {
             id: "fulfillment",

@@ -1,8 +1,12 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+    ObjectSectionTabs,
+    ObjectSectionTabsPanel,
+} from "@/components/business"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import { ApprovalPanel } from "@/features/sales-orders/components/sales-order-detail-approval-panel"
 import {
     CollaborationPanel,
     FulfillmentPanel,
@@ -24,7 +28,6 @@ export function SalesOrderDetailTabs({
     visibleNav,
     canAccept,
     acceptanceExpanded,
-    showApproval,
     selfReturn,
     workItemId,
     expectedTaskVersion,
@@ -43,7 +46,6 @@ export function SalesOrderDetailTabs({
     }>
     canAccept: boolean
     acceptanceExpanded: boolean
-    showApproval: boolean
     selfReturn: string
     workItemId?: string
     expectedTaskVersion?: string
@@ -51,61 +53,61 @@ export function SalesOrderDetailTabs({
     onSelectSection: (next: NavSectionId | WorkSectionId | "versions") => void
     onApprovalResult: (result: SalesOrderDetailActionResult) => void
 }) {
+    const items = visibleNav.map((item) => {
+        const todoOnFulfillment =
+            item.id === "fulfillment" && Boolean(canAccept)
+        const changeOnVersions =
+            item.id === "versions" && Boolean(order.activeChangeOrder)
+        const approvalPending =
+            item.id === "approval" && Boolean(order.approval?.instance)
+
+        return {
+            id: item.id,
+            label: item.label,
+            title: item.hint,
+            badge:
+                todoOnFulfillment || changeOnVersions || approvalPending ? (
+                    <Badge
+                        variant={changeOnVersions ? "warning" : "info"}
+                        className="h-5 px-1.5 text-2xs font-normal"
+                    >
+                        {changeOnVersions
+                            ? "改单中"
+                            : approvalPending
+                              ? "进行中"
+                              : "待办"}
+                    </Badge>
+                ) : undefined,
+        }
+    })
+
     return (
-        <Tabs
-            className="gap-1"
+        <ObjectSectionTabs
             value={navSection}
             onValueChange={(next) => {
                 const target = next as NavSectionId
-                if (target !== navSection || isWorkSection(section))
+                if (target !== navSection || isWorkSection(section)) {
                     onSelectSection(target)
+                }
             }}
+            items={items}
+            listLabel="销售单分区"
         >
-            <TabsList
-                variant="line"
-                className="sticky top-0 z-10 h-11 w-full justify-start gap-1 overflow-visible rounded-none border-b border-grid bg-card/95 px-3 group-data-horizontal/tabs:h-11 backdrop-blur supports-backdrop-filter:bg-card/80"
-            >
-                {visibleNav.map((item) => {
-                    const todoOnFulfillment =
-                        item.id === "fulfillment" && Boolean(canAccept)
-                    const changeOnVersions =
-                        item.id === "versions" &&
-                        Boolean(order.activeChangeOrder)
-                    return (
-                        <TabsTrigger
-                            key={item.id}
-                            value={item.id}
-                            title={item.hint}
-                            className="h-full flex-none px-2 pb-2 leading-5 after:bottom-0"
-                        >
-                            {item.label}
-                            {todoOnFulfillment || changeOnVersions ? (
-                                <Badge
-                                    variant={
-                                        changeOnVersions ? "warning" : "info"
-                                    }
-                                    className="ml-1 h-5 px-1.5 text-2xs font-normal"
-                                >
-                                    {changeOnVersions ? "改单中" : "待办"}
-                                </Badge>
-                            ) : null}
-                        </TabsTrigger>
-                    )
-                })}
-            </TabsList>
+            <ObjectSectionTabsPanel value="overview">
+                <OverviewPanel order={order} />
+            </ObjectSectionTabsPanel>
 
-            <TabsContent value="overview" className="px-3 pt-4 pb-4 md:px-4">
-                <OverviewPanel
+            <ObjectSectionTabsPanel value="approval">
+                <ApprovalPanel
                     order={order}
-                    showApproval={showApproval}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}
                     onApprovalResult={onApprovalResult}
                 />
-            </TabsContent>
+            </ObjectSectionTabsPanel>
 
-            <TabsContent value="fulfillment" className="px-3 pt-4 pb-4 md:px-4">
+            <ObjectSectionTabsPanel value="fulfillment">
                 <FulfillmentPanel
                     order={order}
                     selfReturn={selfReturn}
@@ -114,25 +116,22 @@ export function SalesOrderDetailTabs({
                     onExpandAcceptance={() => onSelectSection("acceptance")}
                     onCollapseAcceptance={() => onSelectSection("fulfillment")}
                 />
-            </TabsContent>
+            </ObjectSectionTabsPanel>
 
-            <TabsContent value="receivable" className="px-3 pt-4 pb-4 md:px-4">
+            <ObjectSectionTabsPanel value="receivable">
                 <ReceivablePanel order={order} selfReturn={selfReturn} />
-            </TabsContent>
+            </ObjectSectionTabsPanel>
 
-            <TabsContent
-                value="collaboration"
-                className="px-3 pt-4 pb-4 md:px-4"
-            >
+            <ObjectSectionTabsPanel value="collaboration">
                 <CollaborationPanel order={order} />
-            </TabsContent>
+            </ObjectSectionTabsPanel>
 
-            <TabsContent value="versions" className="px-3 pt-4 pb-4 md:px-4">
+            <ObjectSectionTabsPanel value="versions">
                 <VersionsPanel
                     order={order}
                     onApprovalResult={onApprovalResult}
                 />
-            </TabsContent>
-        </Tabs>
+            </ObjectSectionTabsPanel>
+        </ObjectSectionTabs>
     )
 }

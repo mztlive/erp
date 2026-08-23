@@ -135,6 +135,8 @@ export type BackendWorkingCopyLine = {
     card_count?: number | null
     transaction_amount?: string | null
     card_form?: string | null
+    /** 实物/服务行履约方式：COMPANY_WAREHOUSE / SUPPLIER_DIRECT / ELECTRONIC_DELIVERY / OFFLINE_SERVICE */
+    fulfillment_mode?: string | null
     fulfillment_due_at?: number | null
 }
 

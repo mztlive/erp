@@ -62,7 +62,10 @@ export function SalesChangeOrderApprovalArea({
     if (phase === "draft") {
         return (
             <div className="space-y-3">
-                <DefinitionBindingCard definition={approval?.definition} />
+                <DefinitionBindingCard
+                    definition={approval?.definition}
+                    compact
+                />
                 {documentId ? (
                     <ApprovalActionBar
                         allowedActions={allowedActions}
@@ -81,7 +84,7 @@ export function SalesChangeOrderApprovalArea({
 
     return (
         <div className="space-y-3">
-            <RuntimeSummary instance={approval?.instance} />
+            <RuntimeSummary instance={approval?.instance} compact />
             <ExecutionHistory
                 items={historyItems}
                 hasMore={historyQuery.hasNextPage}
@@ -93,6 +96,7 @@ export function SalesChangeOrderApprovalArea({
                           }
                         : undefined
                 }
+                compact
             />
             <ApprovalActionBar
                 allowedActions={allowedActions}

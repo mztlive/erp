@@ -47,6 +47,7 @@ function makeSalesOrderListItem(
         taxAmount: "100.00",
         receivedAmount: "0.00",
         invoicedAmount: "0.00",
+        ownerUserId: "u-1",
         ownerName: "张三",
         submittedAt: "2026-01-01 10:00",
         welfareScene: "",

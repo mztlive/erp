@@ -1,10 +1,59 @@
 import { describe, expect, it } from "vitest"
 
-import { mapListItemFromBackend } from "@/features/sales-orders/lib/sales-order-detail-mappers"
+import {
+    mapFulfillmentModeFromBackend,
+    mapListItemFromBackend,
+    mapWorkingCopyLines,
+} from "@/features/sales-orders/lib/sales-order-detail-mappers"
 import {
     canCreatePurchaseFromSalesOrder,
     purchaseOrdersWorkspaceHref,
 } from "@/features/sales-orders/lib/sales-order-detail-model"
+
+describe("mapFulfillmentModeFromBackend", () => {
+    it("maps backend fulfillment codes to Chinese labels", () => {
+        expect(mapFulfillmentModeFromBackend("SUPPLIER_DIRECT")).toBe(
+            "供应商直发",
+        )
+        expect(mapFulfillmentModeFromBackend("COMPANY_WAREHOUSE")).toBe(
+            "公司仓发",
+        )
+        expect(mapFulfillmentModeFromBackend("ELECTRONIC_DELIVERY")).toBe(
+            "电子交付",
+        )
+        expect(mapFulfillmentModeFromBackend("OFFLINE_SERVICE")).toBe(
+            "线下服务",
+        )
+        expect(mapFulfillmentModeFromBackend(null)).toBe("")
+    })
+})
+
+describe("mapWorkingCopyLines", () => {
+    it("maps goods-line fulfillment mode and due date", () => {
+        const lines = mapWorkingCopyLines([
+            {
+                id: "line-1",
+                sales_order_line_id: "sol-1",
+                line_no: 1,
+                line_type: "GOODS_SERVICE",
+                gross_amount: "100.00",
+                net_amount: "88.50",
+                tax_amount: "11.50",
+                sales_tax_rate: "0.130000",
+                item_name_snapshot: "测试商品",
+                quantity: "1",
+                base_unit_code: "件",
+                unit_price_gross: "100.00",
+                fulfillment_mode: "SUPPLIER_DIRECT",
+                fulfillment_due_at: 1_800_000_000,
+            },
+        ])
+
+        expect(lines).toHaveLength(1)
+        expect(lines[0]?.fulfillmentMode).toBe("供应商直发")
+        expect(lines[0]?.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}/)
+    })
+})
 
 describe("mapListItemFromBackend", () => {
     it("maps the authoritative purchase-order count into the related lane", () => {
@@ -87,5 +136,53 @@ describe("mapListItemFromBackend", () => {
         expect(order.receivedAmount).toBe("100.00")
         expect(order.invoicedAmount).toBe("100.00")
         expect(order.allowedActions).not.toContain("REGISTER_ACCEPTANCE")
+    })
+
+    it("does not allow customer acceptance while the order is still pending review", () => {
+        const pending = mapListItemFromBackend({
+            id: "so-pending",
+            order_no: "XS202608230003",
+            business_type: "GOODS_SERVICE",
+            origin_system: "ERP",
+            customer_id: "customer-1",
+            commercial_status: "PENDING_REVIEW",
+            review_status: "IN_APPROVAL",
+            fulfillment_progress: "NOT_STARTED",
+            collection_progress: "NOT_STARTED",
+            invoice_progress: "NOT_STARTED",
+            close_status: "OPEN",
+            version: 1,
+            created_at: 1,
+            updated_at: 1,
+            stage: {
+                code: "in_approval",
+                label: "审批中",
+                tone: "warning",
+            },
+        })
+        expect(pending.allowedActions).not.toContain("REGISTER_ACCEPTANCE")
+
+        const effective = mapListItemFromBackend({
+            id: "so-effective",
+            order_no: "XS202608230004",
+            business_type: "GOODS_SERVICE",
+            origin_system: "ERP",
+            customer_id: "customer-1",
+            commercial_status: "EFFECTIVE",
+            review_status: "APPROVED",
+            fulfillment_progress: "NOT_STARTED",
+            collection_progress: "NOT_STARTED",
+            invoice_progress: "NOT_STARTED",
+            close_status: "OPEN",
+            version: 2,
+            created_at: 1,
+            updated_at: 1,
+            stage: {
+                code: "effective",
+                label: "已生效",
+                tone: "success",
+            },
+        })
+        expect(effective.allowedActions).toContain("REGISTER_ACCEPTANCE")
     })
 })

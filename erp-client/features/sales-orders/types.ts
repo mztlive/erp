@@ -258,6 +258,8 @@ export type SalesOrderListItem = {
     receivedAmount: string
     /** 已开票 */
     invoicedAmount: string
+    /** 负责销售用户 id；撤回未审结审批等「本人」判定用此字段。 */
+    ownerUserId: string
     ownerName: string
     submittedAt: string
     welfareScene: string
