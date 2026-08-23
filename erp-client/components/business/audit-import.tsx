@@ -9,12 +9,6 @@ import {
     LoaderCircleIcon,
 } from "lucide-react"
 
-import {
-    Alert,
-    AlertAction,
-    AlertDescription,
-    AlertTitle,
-} from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import {
     Item,
@@ -722,15 +716,20 @@ export function BatchOperationResult({
                 </Badge>
             </header>
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                <Alert variant="success">
-                    <CircleCheckIcon aria-hidden="true" />
-                    <AlertTitle>成功项</AlertTitle>
-                    <AlertDescription>
+                <section className="rounded-lg border border-border bg-card p-3 text-sm">
+                    <h4 className="flex items-center gap-2 font-medium">
+                        <CircleCheckIcon
+                            className="size-4 text-success"
+                            aria-hidden="true"
+                        />
+                        成功项
+                    </h4>
+                    <div className="mt-2 text-muted-foreground">
                         {succeeded.length > 0 ? (
-                            <ul className="mt-2 space-y-2">
+                            <ul className="space-y-2">
                                 {succeeded.map((item) => (
                                     <li key={item.id}>
-                                        <span className="font-medium">
+                                        <span className="font-medium text-foreground">
                                             {item.label}
                                         </span>
                                         {item.code ? (
@@ -752,17 +751,22 @@ export function BatchOperationResult({
                         ) : (
                             <span>{successEmptyMessage}</span>
                         )}
-                    </AlertDescription>
-                </Alert>
-                <Alert>
-                    <CircleDashedIcon aria-hidden="true" />
-                    <AlertTitle>跳过项</AlertTitle>
-                    <AlertDescription>
+                    </div>
+                </section>
+                <section className="rounded-lg border border-border bg-card p-3 text-sm">
+                    <h4 className="flex items-center gap-2 font-medium">
+                        <CircleDashedIcon
+                            className="size-4 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                        跳过项
+                    </h4>
+                    <div className="mt-2 text-muted-foreground">
                         {skipped.length > 0 ? (
-                            <ul className="mt-2 space-y-2">
+                            <ul className="space-y-2">
                                 {skipped.map((item) => (
                                     <li key={item.id}>
-                                        <span className="font-medium">
+                                        <span className="font-medium text-foreground">
                                             {item.label}
                                         </span>
                                         {item.code ? (
@@ -784,17 +788,27 @@ export function BatchOperationResult({
                         ) : (
                             <span>{skippedEmptyMessage}</span>
                         )}
-                    </AlertDescription>
-                </Alert>
-                <Alert variant={failed.length > 0 ? "destructive" : "default"}>
-                    <CircleXIcon aria-hidden="true" />
-                    <AlertTitle>失败项</AlertTitle>
-                    <AlertDescription>
+                    </div>
+                </section>
+                <section className="rounded-lg border border-border bg-card p-3 text-sm">
+                    <h4 className="flex items-center gap-2 font-medium">
+                        <CircleXIcon
+                            className={cn(
+                                "size-4",
+                                failed.length > 0
+                                    ? "text-destructive"
+                                    : "text-muted-foreground",
+                            )}
+                            aria-hidden="true"
+                        />
+                        失败项
+                    </h4>
+                    <div className="mt-2 text-muted-foreground">
                         {failed.length > 0 ? (
-                            <ul className="mt-2 space-y-2">
+                            <ul className="space-y-2">
                                 {failed.map((item) => (
                                     <li key={item.id}>
-                                        <span className="font-medium">
+                                        <span className="font-medium text-foreground">
                                             {item.label}
                                         </span>
                                         {item.code ? (
@@ -816,11 +830,13 @@ export function BatchOperationResult({
                         ) : (
                             <span>{failureEmptyMessage}</span>
                         )}
-                    </AlertDescription>
+                    </div>
                     {retryAction ? (
-                        <AlertAction>{retryAction}</AlertAction>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {retryAction}
+                        </div>
                     ) : null}
-                </Alert>
+                </section>
             </div>
         </section>
     )

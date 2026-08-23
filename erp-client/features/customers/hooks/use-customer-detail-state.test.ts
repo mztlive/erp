@@ -10,6 +10,14 @@ const navMocks = vi.hoisted(() => ({
     back: vi.fn(),
 }))
 
+const toastMocks = vi.hoisted(() => ({
+    add: vi.fn(),
+}))
+
+vi.mock('@/components/ui/toast', () => ({
+    toast: { add: toastMocks.add },
+}))
+
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
         push: navMocks.push,
@@ -86,6 +94,7 @@ describe('useCustomerDetailState', () => {
         customerMocks.refetch = vi.fn()
         navMocks.replace.mockClear()
         navMocks.push.mockClear()
+        toastMocks.add.mockClear()
     })
 
     it('resolves the active section with overview as fallback', () => {
@@ -209,7 +218,7 @@ describe('useCustomerDetailState', () => {
         expect(result.current.formDirty).toBe(false)
     })
 
-    it('completing editing records the saved notice with the revision number', () => {
+    it('completing editing shows a success toast with the revision number', () => {
         customerMocks.data = makeCustomer()
         const { result } = renderHook(() =>
             useCustomerDetailState('cust-1', 'overview'),
@@ -223,7 +232,12 @@ describe('useCustomerDetailState', () => {
 
         expect(result.current.editing).toBe(false)
         expect(result.current.formDirty).toBe(false)
-        expect(result.current.savedNotice).toEqual({ revisionNo: 5 })
+        expect(toastMocks.add).toHaveBeenCalledWith({
+            title: '客户资料已保存',
+            description: '新版本 v5 已生效，历史单据记录不变。',
+            type: 'success',
+            timeout: 4000,
+        })
     })
 
     it('falls back to the current revision number when none is reported', () => {
@@ -234,19 +248,18 @@ describe('useCustomerDetailState', () => {
 
         act(() => result.current.completeEditing())
 
-        expect(result.current.savedNotice).toEqual({ revisionNo: 2 })
+        expect(toastMocks.add).toHaveBeenCalledWith(
+            expect.objectContaining({
+                description: '新版本 v2 已生效，历史单据记录不变。',
+            }),
+        )
     })
 
-    it('dismisses the saved notice and the pending section', () => {
+    it('dismisses the pending section', () => {
         customerMocks.data = makeCustomer()
         const { result } = renderHook(() =>
             useCustomerDetailState('cust-1', 'overview'),
         )
-
-        act(() => result.current.completeEditing(3))
-        expect(result.current.savedNotice).not.toBeNull()
-        act(() => result.current.dismissSavedNotice())
-        expect(result.current.savedNotice).toBeNull()
 
         act(() => {
             result.current.startEditing()

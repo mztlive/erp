@@ -10,6 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { toast } from "@/components/ui/toast"
 import { CustomerForm } from "@/features/customers/components/customer-form"
 
 /**
@@ -51,8 +52,18 @@ export function CustomerCreateDialog({
                         mode="create"
                         onDirtyChange={setDirty}
                         onCancel={() => onOpenChange(false)}
-                        onSucceeded={(customerId) => {
+                        onSucceeded={(customerId, revisionNo) => {
+                            setDirty(false)
+                            toast.add({
+                                title: "客户已创建",
+                                description: revisionNo
+                                    ? `客户资料版本 v${revisionNo} 已生效，可在客户列表继续查看。`
+                                    : "客户资料已生效，可在客户列表继续查看。",
+                                type: "success",
+                                timeout: 4000,
+                            })
                             onSucceeded?.(customerId)
+                            onOpenChange(false)
                         }}
                     />
                 </DialogContent>

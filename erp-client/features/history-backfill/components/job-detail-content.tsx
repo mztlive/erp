@@ -1,11 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon, TriangleAlertIcon } from "lucide-react"
+import { TriangleAlertIcon } from "lucide-react"
 
 import { PageScaffold } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "@/components/ui/toast"
 import { HistoryBackfillResultBanner as FormalResultBanner } from "@/features/history-backfill/components/history-backfill-result-banner"
 import { JobCommandDialogs } from "@/features/history-backfill/components/job-command-dialogs"
 import { JobDetailHeader } from "@/features/history-backfill/components/job-detail-header"
@@ -62,8 +63,6 @@ export function JobDetailContent({
         string | null
     >(null)
     const [confirmReportOpen, setConfirmReportOpen] = React.useState(false)
-    const [downloadNote, setDownloadNote] = React.useState<string | null>(null)
-
     const job = view.job
     const report: HistoryBackfillReportView | undefined = view.report
 
@@ -115,9 +114,12 @@ export function JobDetailContent({
                 onConfirmReport={() => setConfirmReportOpen(true)}
                 onDownloadReport={() => {
                     if (!report) return
-                    setDownloadNote(
-                        `示例：报告文件生成中 · ${report.downloadLabel} · v${report.reportVersion}`,
-                    )
+                    toast.add({
+                        title: "报告文件生成中",
+                        description: `${report.downloadLabel} · v${report.reportVersion}`,
+                        type: "info",
+                        timeout: 4000,
+                    })
                 }}
             />
 
@@ -161,14 +163,6 @@ export function JobDetailContent({
             ) : null}
 
             <FormalResultBanner result={actionResult} />
-
-            {downloadNote ? (
-                <Alert>
-                    <DownloadIcon />
-                    <AlertTitle>下载结果</AlertTitle>
-                    <AlertDescription>{downloadNote}</AlertDescription>
-                </Alert>
-            ) : null}
 
             <JobProgressPanel job={job} />
 
@@ -242,9 +236,12 @@ export function JobDetailContent({
                     report={report}
                     onDownload={() => {
                         if (!report) return
-                        setDownloadNote(
-                            `${report.downloadLabel} · Schema ${report.schemaVersion} · 规则 ${report.ruleVersion}`,
-                        )
+                        toast.add({
+                            title: "报告下载信息",
+                            description: `${report.downloadLabel} · Schema ${report.schemaVersion} · 规则 ${report.ruleVersion}`,
+                            type: "info",
+                            timeout: 4000,
+                        })
                     }}
                 />
             ) : null}

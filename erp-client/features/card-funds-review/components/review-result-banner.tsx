@@ -1,11 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { TriangleAlertIcon } from "lucide-react"
 
 import { FormalActionResult } from "@/components/business"
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { FormalOutcome } from "@/features/card-funds-review/types"
 import { openWorkspaceLabel } from "@/lib/ui-text"
@@ -25,6 +23,11 @@ export function ReviewResultBanner({
     w05Href: string
     hasTask: boolean
 }) {
+    const followUpConfiguration =
+        lastResult.outcome?.kind === "REJECTED"
+            ? lastResult.outcome.business.followUpConfiguration
+            : undefined
+
     return (
         <>
             <FormalActionResult
@@ -36,7 +39,17 @@ export function ReviewResultBanner({
                 title={lastResult.title}
                 description={lastResult.description}
                 reference={lastResult.reference}
-                facts={buildResultFacts(lastResult.outcome)}
+                facts={[
+                    ...buildResultFacts(lastResult.outcome),
+                    ...(followUpConfiguration
+                        ? [
+                              {
+                                  label: "后继流程未配置",
+                                  value: followUpConfiguration.collaborationMessage,
+                              },
+                          ]
+                        : []),
+                ]}
                 actions={
                     <div className="flex flex-wrap gap-2">
                         <Button
@@ -58,19 +71,6 @@ export function ReviewResultBanner({
                     </div>
                 }
             />
-            {lastResult.outcome?.kind === "REJECTED" &&
-            lastResult.outcome.business.followUpConfiguration ? (
-                <Alert className="mt-3" variant="destructive">
-                    <TriangleAlertIcon aria-hidden="true" />
-                    <AlertTitle>驳回后继流程未配置</AlertTitle>
-                    <AlertDescription>
-                        {
-                            lastResult.outcome.business.followUpConfiguration
-                                .collaborationMessage
-                        }
-                    </AlertDescription>
-                </Alert>
-            ) : null}
         </>
     )
 }

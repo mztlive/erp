@@ -1,10 +1,12 @@
 "use client"
 
-import { CircleAlertIcon, CircleCheckIcon } from "lucide-react"
+import * as React from "react"
+import { CircleAlertIcon } from "lucide-react"
 
 import { getErrorMessage } from "@/lib/api/errors"
 import { errorMessage } from "@/features/sales-orders/lib/sales-order-create-model"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { toast } from "@/components/ui/toast"
 
 export type SalesOrderCreateAlertsProps = {
     /** 当前登录用户信息查询错误；为 null 表示未出错。 */
@@ -22,6 +24,23 @@ export function SalesOrderCreateAlerts({
     createError,
     draftSaved,
 }: SalesOrderCreateAlertsProps) {
+    const announcedDraftRef = React.useRef<string | null>(null)
+
+    React.useEffect(() => {
+        if (!draftSaved) return
+
+        const announcementKey = `${draftSaved.documentNumber}:${draftSaved.savedAt.toISOString()}`
+        if (announcedDraftRef.current === announcementKey) return
+        announcedDraftRef.current = announcementKey
+
+        toast.add({
+            title: "草稿已保存",
+            description: `销售单 ${draftSaved.documentNumber} 已于 ${draftSaved.savedAt.toLocaleTimeString("zh-CN")} 保存为草稿；当前内容仍保留在本页。`,
+            type: "success",
+            timeout: 4000,
+        })
+    }, [draftSaved])
+
     return (
         <>
             {profileError ? (
@@ -57,18 +76,6 @@ export function SalesOrderCreateAlerts({
                     <AlertTitle>销售单未创建</AlertTitle>
                     <AlertDescription>
                         {errorMessage(createError)}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {draftSaved ? (
-                <Alert variant="success">
-                    <CircleCheckIcon aria-hidden="true" />
-                    <AlertTitle>草稿已保存</AlertTitle>
-                    <AlertDescription>
-                        销售单 {draftSaved.documentNumber} 已保存为草稿（
-                        {draftSaved.savedAt.toLocaleTimeString("zh-CN")}
-                        ）。当前内容仍保留在本页，可继续完善后提交；草稿也会出现在销售单列表中。
                     </AlertDescription>
                 </Alert>
             ) : null}
