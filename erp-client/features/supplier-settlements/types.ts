@@ -5,8 +5,6 @@
 
 import type { StatusTone } from "@/components/ui/status-badge"
 import type {
-    AssignmentMode,
-    WorkItemAllowedAction,
     WorkItemProcessingState,
     WorkItemStatus,
 } from "@/features/work-items/types"
@@ -310,11 +308,9 @@ export type SettlementDetailView = {
         businessObjectType: "SUPPLIER_SETTLEMENT_STATEMENT"
         businessObjectId: string
         subjectVersion: string
-        assignmentMode: AssignmentMode
         processingState: WorkItemProcessingState
         ownerUser?: { id: string; displayName: string }
         status: WorkItemStatus
-        allowedTaskActions: readonly WorkItemAllowedAction[]
         actionBlockers: readonly string[]
     }
     workItemBlocker?: ActionBlocker
@@ -397,6 +393,7 @@ export type SubmitReviewInput = {
     subjectHash: string
     refreshCutoffPolicyId: string
     expectedRefreshCutoffPolicyVersion: string
+    reviewerUserId: string
     operationId: string
     idempotencyKey: string
     comment?: string

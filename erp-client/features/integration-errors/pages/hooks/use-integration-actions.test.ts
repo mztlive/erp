@@ -35,14 +35,17 @@ function makeProps(overrides: Partial<ActionProps> = {}): ActionProps {
         focusMode: false,
         autoNext: false,
         lastResult: null,
-        setLastResult: vi.fn<(result: IntegrationFormalResult | null) => void>(),
+        setLastResult:
+            vi.fn<(result: IntegrationFormalResult | null) => void>(),
         setActionError: vi.fn<(error: string | null) => void>(),
         userId: "u1",
         refetch: vi.fn<() => void>(),
-        goToItem: vi.fn<
-            (next: IntegrationResolutionItemView | null | undefined) => void
-        >(),
-        neighbor: vi.fn<(delta: number) => IntegrationResolutionItemView | null>(),
+        goToItem:
+            vi.fn<
+                (next: IntegrationResolutionItemView | null | undefined) => void
+            >(),
+        neighbor:
+            vi.fn<(delta: number) => IntegrationResolutionItemView | null>(),
         ...overrides,
     }
 }
@@ -53,7 +56,9 @@ function renderActions(props: ActionProps) {
     })
 }
 
-const differenceItem = (overrides: Partial<IntegrationResolutionItemView> = {}) =>
+const differenceItem = (
+    overrides: Partial<IntegrationResolutionItemView> = {},
+) =>
     makeItem({
         identity: {
             itemType: "RECONCILIATION_DIFFERENCE",
@@ -111,7 +116,9 @@ afterEach(() => {
 
 describe("useIntegrationActions — responsibilityStatus", () => {
     it("reports blocked for a task without a work item", () => {
-        const { result } = renderActions(makeProps({ item: makeItem({ workItem: undefined }) }))
+        const { result } = renderActions(
+            makeProps({ item: makeItem({ workItem: undefined }) }),
+        )
         expect(result.current.responsibilityStatus).toBe("blocked")
     })
 
@@ -122,129 +129,53 @@ describe("useIntegrationActions — responsibilityStatus", () => {
 
     it("derives status from work item state", () => {
         const completed = renderActions(
-            makeProps({ item: makeItem({ workItem: { ...makeItem().workItem!, status: "COMPLETED" } }) }),
+            makeProps({
+                item: makeItem({
+                    workItem: { ...makeItem().workItem!, status: "COMPLETED" },
+                }),
+            }),
         )
         expect(completed.result.current.responsibilityStatus).toBe("completed")
 
         const closed = renderActions(
-            makeProps({ item: makeItem({ workItem: { ...makeItem().workItem!, status: "CLOSED" } }) }),
+            makeProps({
+                item: makeItem({
+                    workItem: { ...makeItem().workItem!, status: "CLOSED" },
+                }),
+            }),
         )
         expect(closed.result.current.responsibilityStatus).toBe("closed")
 
         const blocked = renderActions(
             makeProps({
                 item: makeItem({
-                    workItem: { ...makeItem().workItem!, processingState: "APPROVAL_BLOCKED" },
+                    workItem: {
+                        ...makeItem().workItem!,
+                        processingState: "APPROVAL_BLOCKED",
+                    },
                 }),
             }),
         )
         expect(blocked.result.current.responsibilityStatus).toBe("blocked")
 
-        const pooled = renderActions(
+        const missingOwner = renderActions(
             makeProps({
                 item: makeItem({
                     workItem: {
                         ...makeItem().workItem!,
-                        assignmentMode: "POOL",
                         ownerUser: undefined,
                     },
                 }),
             }),
         )
-        expect(pooled.result.current.responsibilityStatus).toBe("pool_available")
+        expect(missingOwner.result.current.responsibilityStatus).toBe(
+            "assigned_to_other",
+        )
 
         const other = renderActions(makeProps({ userId: "u2" }))
-        expect(other.result.current.responsibilityStatus).toBe("assigned_to_other")
-    })
-})
-
-describe("useIntegrationActions — start processing", () => {
-    it("submits START_PROCESSING and refreshes on success", async () => {
-        mocks.responsibility.mutateAsync.mockResolvedValue({})
-        const props = makeProps()
-        const { result } = renderActions(props)
-
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-
-        expect(mocks.responsibility.mutateAsync).toHaveBeenCalledWith({
-            kind: "START_PROCESSING",
-            workItemId: "wi_1",
-            expectedTaskVersion: "5",
-            idempotencyKey: expect.stringMatching(/^w29:start-processing:wi_1:/),
-        })
-        expect(props.refetch).toHaveBeenCalledTimes(1)
-        expect(props.setLastResult).toHaveBeenCalledWith(null)
-        // the reset effect clears the error on mount only
-        expect(
-            vi.mocked(props.setActionError).mock.calls.every(
-                (call) => call[0] === null,
-            ),
-        ).toBe(true)
-    })
-
-    it("reports the error message when starting fails", async () => {
-        mocks.responsibility.mutateAsync.mockRejectedValue(new Error("网络中断"))
-        const props = makeProps()
-        const { result } = renderActions(props)
-
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-
-        expect(props.setActionError).toHaveBeenCalledWith("网络中断")
-        expect(props.refetch).not.toHaveBeenCalled()
-    })
-
-    it("does nothing without a work item", async () => {
-        const props = makeProps({ item: makeItem({ workItem: undefined }) })
-        const { result } = renderActions(props)
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-        expect(mocks.responsibility.mutateAsync).not.toHaveBeenCalled()
-    })
-})
-
-describe("useIntegrationActions — release to team", () => {
-    it("requires a comment", async () => {
-        const props = makeProps()
-        const { result } = renderActions(props)
-        await act(async () => {
-            await result.current.handleReleaseToTeam()
-        })
-        expect(props.setActionError).toHaveBeenCalledWith("请先填写退回原因")
-        expect(mocks.responsibility.mutateAsync).not.toHaveBeenCalled()
-    })
-
-    it("submits RELEASE_TO_TEAM with the trimmed comment", async () => {
-        mocks.responsibility.mutateAsync.mockResolvedValue({})
-        const props = makeProps()
-        const { result } = renderActions(props)
-
-        act(() => {
-            result.current.setComment(" 转给其他人 ")
-        })
-        await act(async () => {
-            await result.current.handleReleaseToTeam()
-        })
-
-        expect(mocks.responsibility.mutateAsync).toHaveBeenCalledWith({
-            kind: "RELEASE_TO_TEAM",
-            workItemId: "wi_1",
-            expectedTaskVersion: "5",
-            reason: "转给其他人",
-            idempotencyKey: expect.stringMatching(/^w29:release-to-team:wi_1:/),
-        })
-        expect(props.setLastResult).toHaveBeenCalledWith(
-            expect.objectContaining({
-                status: "succeeded",
-                title: "已退回团队",
-                terminal: false,
-            }),
+        expect(other.result.current.responsibilityStatus).toBe(
+            "assigned_to_other",
         )
-        expect(props.refetch).toHaveBeenCalledTimes(1)
     })
 })
 
@@ -276,8 +207,12 @@ describe("useIntegrationActions — task actions", () => {
                 expectedSubjectVersion: "v3",
                 expectedTaskVersion: "5",
                 kind: "QUERY_ORIGINAL_RESULT",
-                operationId: expect.stringMatching(/^w29:QUERY_ORIGINAL_RESULT:/),
-                idempotencyKey: expect.stringMatching(/^w29:QUERY_ORIGINAL_RESULT:task-1:/),
+                operationId: expect.stringMatching(
+                    /^w29:QUERY_ORIGINAL_RESULT:/,
+                ),
+                idempotencyKey: expect.stringMatching(
+                    /^w29:QUERY_ORIGINAL_RESULT:task-1:/,
+                ),
             }),
         )
         expect(props.setLastResult).toHaveBeenCalledWith(resultValue)
@@ -285,7 +220,9 @@ describe("useIntegrationActions — task actions", () => {
 
     it("requires linked evidence for evidence actions", async () => {
         const props = makeProps({
-            item: makeItem({ allowedActions: [...makeItem().allowedActions, "ADD_EVIDENCE"] }),
+            item: makeItem({
+                allowedActions: [...makeItem().allowedActions, "ADD_EVIDENCE"],
+            }),
         })
         const { result } = renderActions(props)
         await act(async () => {
@@ -367,7 +304,12 @@ describe("useIntegrationActions — close", () => {
     it("auto-advances to the neighbor after a terminal success", async () => {
         mocks.responsibility.mutateAsync.mockResolvedValue({})
         const next = makeItem({
-            identity: { itemType: "ERROR_TASK", id: "task-2", number: "ET-2", subjectHash: "h2" },
+            identity: {
+                itemType: "ERROR_TASK",
+                id: "task-2",
+                number: "ET-2",
+                subjectHash: "h2",
+            },
         })
         const props = makeProps({ autoNext: true })
         vi.mocked(props.neighbor).mockReturnValue(next)
@@ -412,7 +354,11 @@ describe("useIntegrationActions — resolve", () => {
                 reviewerSeparation: "NONE",
             },
             linkedEvidence: [
-                { kind: "EXTERNAL_CASE_RESULT", recordId: "r1", label: "外部案例" },
+                {
+                    kind: "EXTERNAL_CASE_RESULT",
+                    recordId: "r1",
+                    label: "外部案例",
+                },
             ],
         })
 
@@ -430,7 +376,9 @@ describe("useIntegrationActions — resolve", () => {
     })
 
     it("submits the terminal evidence resolution", async () => {
-        mocks.resolve.mutateAsync.mockResolvedValue(makeResult({ terminal: true, stayOnItem: false }))
+        mocks.resolve.mutateAsync.mockResolvedValue(
+            makeResult({ terminal: true, stayOnItem: false }),
+        )
         const props = makeProps({ item: resolvableItem() })
         const { result } = renderActions(props)
 
@@ -447,7 +395,11 @@ describe("useIntegrationActions — resolve", () => {
                 evidencePolicyId: "pol1",
                 evidencePolicyVersion: 2,
                 evidenceRefs: [
-                    { kind: "EXTERNAL_CASE_RESULT", recordId: "r1", label: "外部案例" },
+                    {
+                        kind: "EXTERNAL_CASE_RESULT",
+                        recordId: "r1",
+                        label: "外部案例",
+                    },
                 ],
             }),
         )
@@ -464,7 +416,9 @@ describe("useIntegrationActions — direct reconciliation", () => {
         await act(async () => {
             await result.current.handleDirectTerminal("CONFIRM_NO_ERROR")
         })
-        expect(props.setActionError).toHaveBeenCalledWith("请选择与结论匹配的注册原因")
+        expect(props.setActionError).toHaveBeenCalledWith(
+            "请选择与结论匹配的注册原因",
+        )
         expect(mocks.direct.mutateAsync).not.toHaveBeenCalled()
     })
 
@@ -510,7 +464,11 @@ describe("useIntegrationActions — direct reconciliation", () => {
         mocks.direct.mutateAsync.mockResolvedValue(makeResult())
         const item = differenceItem({
             linkedEvidence: [
-                { kind: "COMPENSATION_RESULT", recordId: "c1", label: "补偿记录" },
+                {
+                    kind: "COMPENSATION_RESULT",
+                    recordId: "c1",
+                    label: "补偿记录",
+                },
             ],
         })
         const props = makeProps({ item })
@@ -525,7 +483,11 @@ describe("useIntegrationActions — direct reconciliation", () => {
                     kind: "NON_TERMINAL_ACTION",
                     action: "LINK_COMPENSATION",
                     evidenceRefs: [
-                        { kind: "COMPENSATION_RESULT", recordId: "c1", label: "补偿记录" },
+                        {
+                            kind: "COMPENSATION_RESULT",
+                            recordId: "c1",
+                            label: "补偿记录",
+                        },
                     ],
                 }),
             }),
@@ -570,7 +532,9 @@ describe("useIntegrationActions — state reset and derived values", () => {
     it("exposes reasonMismatches against the selected reason", () => {
         const { result } = renderActions(makeProps({ item: differenceItem() }))
         expect(result.current.reasonMismatches("CONFIRM_NO_ERROR")).toBe(false)
-        expect(result.current.reasonMismatches("CONFIRM_VALID_DIFFERENCE")).toBe(true)
+        expect(
+            result.current.reasonMismatches("CONFIRM_VALID_DIFFERENCE"),
+        ).toBe(true)
     })
 
     it("aggregates pending mutations into formalPending", () => {

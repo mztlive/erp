@@ -16,7 +16,7 @@ use crate::{
 /// 返回只暴露稳定责任接口的管理端路由。
 ///
 /// # 返回
-/// 返回列表、统计、详情、转交和关闭路由；不暴露领取、开始处理或退回团队。
+/// 返回列表、统计、详情、转交和关闭路由；仅支持指定责任人的任务合同。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(

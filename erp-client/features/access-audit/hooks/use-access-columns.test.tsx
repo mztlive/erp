@@ -5,26 +5,23 @@ import { makeColumnsInput } from './test-data'
 import { useAccessColumns } from './use-access-columns'
 
 describe('useAccessColumns', () => {
-    it('composes the five per-view column sets with stable ids', () => {
+    it('composes the three per-view column sets with stable ids', () => {
         const { result } = renderHook(() =>
             useAccessColumns(makeColumnsInput()),
         )
 
         expect(Object.keys(result.current).sort()).toEqual([
             'auditColumns',
-            'fieldColumns',
             'roleColumns',
-            'scopeColumns',
             'userColumns',
         ])
         expect(result.current.roleColumns.map((c) => c.id)).toContain(
             'identity',
         )
-        expect(result.current.userColumns.map((c) => c.id)).toContain('period')
-        expect(result.current.scopeColumns.map((c) => c.id)).toContain(
-            'subject',
+        expect(result.current.roleColumns.map((c) => c.id)).toContain(
+            'accounts',
         )
-        expect(result.current.fieldColumns.map((c) => c.id)).toContain('caps')
+        expect(result.current.userColumns.map((c) => c.id)).toContain('roles')
         expect(result.current.auditColumns.map((c) => c.id)).toContain('trace')
     })
 
@@ -39,8 +36,6 @@ describe('useAccessColumns', () => {
         rerender({ current: input })
         expect(result.current.roleColumns).toBe(first.roleColumns)
         expect(result.current.userColumns).toBe(first.userColumns)
-        expect(result.current.scopeColumns).toBe(first.scopeColumns)
-        expect(result.current.fieldColumns).toBe(first.fieldColumns)
         expect(result.current.auditColumns).toBe(first.auditColumns)
 
         rerender({ current: makeColumnsInput() })

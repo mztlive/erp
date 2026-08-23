@@ -1062,8 +1062,8 @@ pub enum CompletedWorkItemStatus {
 pub enum FollowUpRequiredRegistration {
     /// 后继任务类型。
     WorkItemType,
-    /// 责任池。
-    OwnerPool,
+    /// 明确责任人路由。
+    OwnerAssignee,
     /// 处理器键。
     HandlerKey,
 }

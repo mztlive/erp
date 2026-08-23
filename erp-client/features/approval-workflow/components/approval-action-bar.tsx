@@ -22,7 +22,6 @@ import type {
 import { buildDecisionRequest } from "../types"
 import { CancelApprovalDialog } from "./cancel-approval-dialog"
 import { DecisionDialog } from "./decision-dialog"
-import { ReassignDialog } from "./reassign-dialog"
 import { ResumeApproverDialog } from "./resume-approver-dialog"
 import { UpgradeBindingDialog } from "./upgrade-binding-dialog"
 
@@ -30,7 +29,6 @@ type DialogKind =
     | "approve"
     | "reject"
     | "resume"
-    | "reassign"
     | "cancel-blocked"
     | "withdraw"
     | "upgrade"
@@ -39,7 +37,7 @@ type DialogKind =
 /**
  * 按服务端 `allowed_actions` 与 `recovery_options` 渲染动作入口。
  *
- * 不展示领取、开始处理、退回团队、通用转交或通用关闭。
+ * 审批任务只展示审批运行时动作，不展示通用任务责任命令。
  */
 export function ApprovalActionBar({
     allowedActions,
@@ -74,9 +72,8 @@ export function ApprovalActionBar({
     onDecisionApplied?: (view: ApprovalCommandView) => void
 }) {
     const [dialog, setDialog] = React.useState<DialogKind>(null)
-    const [approveSlot, setApproveSlot] = React.useState<IdempotencySlot | null>(
-        null,
-    )
+    const [approveSlot, setApproveSlot] =
+        React.useState<IdempotencySlot | null>(null)
     const [approveConflict, setApproveConflict] = React.useState<string | null>(
         null,
     )
@@ -88,9 +85,6 @@ export function ApprovalActionBar({
     const showResume =
         recoveries.has("RESUME_CURRENT_APPROVER") &&
         actions.has("RESUME_CURRENT_APPROVER")
-    const showReassign =
-        recoveries.has("REASSIGN_CURRENT_APPROVER") &&
-        actions.has("REASSIGN_CURRENT_APPROVER")
     const showCancelBlocked =
         recoveries.has("CANCEL_BLOCKED") &&
         actions.has("CANCEL_BLOCKED_APPROVAL")
@@ -105,9 +99,7 @@ export function ApprovalActionBar({
             {showApprove && workItemId && expectedTaskVersion ? (
                 <Button
                     type="button"
-                    disabled={
-                        approveWithoutDialog && submitDecision.isPending
-                    }
+                    disabled={approveWithoutDialog && submitDecision.isPending}
                     onClick={() => {
                         if (!approveWithoutDialog) {
                             setDialog("approve")
@@ -185,15 +177,6 @@ export function ApprovalActionBar({
                     {RECOVERY_ACTION_LABEL.RESUME_CURRENT_APPROVER}
                 </Button>
             ) : null}
-            {showReassign ? (
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setDialog("reassign")}
-                >
-                    {RECOVERY_ACTION_LABEL.REASSIGN_CURRENT_APPROVER}
-                </Button>
-            ) : null}
             {showCancelBlocked ? (
                 <Button
                     type="button"
@@ -258,19 +241,6 @@ export function ApprovalActionBar({
                 />
             ) : null}
             {instance ? (
-                <ReassignDialog
-                    open={dialog === "reassign"}
-                    onOpenChange={(open) => setDialog(open ? "reassign" : null)}
-                    instanceId={instance.id}
-                    definitionAssigneeName={definition?.nodes[0]?.assigneeName}
-                    currentAssigneeName={instance.currentAssigneeName}
-                    expectedInstanceVersion={instance.instanceVersion ?? ""}
-                    expectedExecutionVersion={instance.executionVersion ?? ""}
-                    expectedAssignmentVersion={instance.assignmentVersion ?? ""}
-                    onApplied={onDecisionApplied}
-                />
-            ) : null}
-            {instance ? (
                 <CancelApprovalDialog
                     open={dialog === "withdraw" || dialog === "cancel-blocked"}
                     onOpenChange={(open) => setDialog(open ? dialog : null)}
@@ -316,8 +286,4 @@ export const hasDecisionEntry = (allowedActions: readonly string[]): boolean =>
 export const hasForbiddenWorkItemActions = (
     allowedActions: readonly ApprovalAllowedAction[] | readonly string[],
 ): boolean =>
-    allowedActions.some((action) =>
-        ["START_PROCESSING", "RELEASE_TO_TEAM", "REASSIGN", "CLOSE"].includes(
-            action,
-        ),
-    )
+    allowedActions.some((action) => ["REASSIGN", "CLOSE"].includes(action))

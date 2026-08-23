@@ -7,8 +7,8 @@ import {
     // @ts-expect-error TS5097 -- runtime TypeScript module under node:test
 } from "./navigation-eligibility.ts"
 
-test("workbench no longer treats start-processing as a page action", () => {
-    assert.equal(canOpenWorkItemHandler(["START_PROCESSING"], false), false)
+test("workbench does not treat responsibility commands as page actions", () => {
+    assert.equal(canOpenWorkItemHandler(["REASSIGN"], false), false)
     assert.equal(canOpenWorkItemHandler(["PROCESS"], false), true)
     assert.equal(canOpenWorkItemHandler(["OPEN_DOCUMENT"], false), true)
     assert.equal(canOpenWorkItemHandler(["VIEW"], false), true)

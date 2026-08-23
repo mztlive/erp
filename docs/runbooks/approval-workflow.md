@@ -30,9 +30,9 @@
 | 指标 | 完成条件 / 告警 | 责任 |
 | --- | --- | --- |
 | `BLOCKED` 实例数量 | 任一环境出现新增 `BLOCKED` 必须告警；共享开发环境连续存在超过 30 分钟必须升级 | 运行管理员 |
-| 单个实例最长 `BLOCKED` 持续时间 | 人员失效超过 4 小时仍未恢复或改派必须升级；结构性 blocker 出现即升级 | 运行管理员 |
+| 单个实例最长 `BLOCKED` 持续时间 | 人员失效超过 4 小时仍未恢复必须升级；结构性 blocker 出现即升级 | 运行管理员 |
 | 按 `blocker_code` 分类计数 | 分类必须与合同 §12.2 一致；未知码视为 `INTERNAL_INVARIANT_BROKEN` | 运行管理员 |
-| 决定/恢复/改派/受阻取消 P99 延迟 | 超过 3 秒必须检查 CAS 冲突率与仓储 | 值班 |
+| 决定/恢复/受阻取消 P99 延迟 | 超过 3 秒必须检查 CAS 冲突率与仓储 | 值班 |
 | `409` 版本/幂等冲突率 | 同一实例 5 分钟内超过 10 次必须检查重复提交或时钟/重试 | 值班 |
 | outbox backlog | 待投递超过 50 条必须告警 | 通知值班 |
 | outbox oldest age | 超过当前退避档上限加 10 分钟必须告警 | 通知值班 |
@@ -55,7 +55,7 @@
 
 | 类别 | `blocker_code` | 唯一合法动作 |
 | --- | --- | --- |
-| 人员失效 | `APPROVER_ACCOUNT_INACTIVE`、`APPROVER_EMPLOYMENT_INVALID`、`APPROVER_NOT_ELIGIBLE`、`APPROVER_OUT_OF_DATA_SCOPE`、`APPROVER_CANNOT_READ_SUBJECT`、`SEPARATION_OF_DUTIES_VIOLATION` | 原审批人已合格则 `resume-current-approver`；仍失效则 `reassign-current-approver` |
+| 人员失效 | `APPROVER_ACCOUNT_INACTIVE`、`APPROVER_EMPLOYMENT_INVALID`、`APPROVER_NOT_ELIGIBLE`、`APPROVER_OUT_OF_DATA_SCOPE`、`APPROVER_CANNOT_READ_SUBJECT`、`SEPARATION_OF_DUTIES_VIOLATION` | 原审批人重新合格后只允许 `resume-current-approver`；仍失效则保持受阻并升级处置 |
 | 图或关联损坏 | `DEFINITION_GRAPH_CORRUPTED`、`INSTANCE_LINK_CORRUPTED` | 只允许 `cancel-blocked` |
 | 任务冲突 | `OPEN_TASK_CONFLICT` | 只允许 `cancel-blocked` |
 | 版本损坏 | `SUBJECT_VERSION_CONFLICT` | 只允许 `cancel-blocked` |
@@ -63,7 +63,7 @@
 
 ### 3.3 动作与完成条件
 
-1. 人员失效：运行管理员必须具备该类型 `approval_runtime_admin` 与实例 DataScope。恢复成功后必须出现新 `ACTIVE` 执行和新 `OPEN` 任务，旧任务保持 `CLOSED`。原审批人已恢复时改派必须返回 `APPROVAL_CURRENT_APPROVER_RECOVERED`，客户端只能改调恢复端口。
+1. 人员失效：运行管理员必须具备该类型 `approval_runtime_admin` 与实例 DataScope。原审批人重新合格前必须保持受阻；恢复成功后必须出现新 `ACTIVE` 执行和新 `OPEN` 任务，旧任务保持 `CLOSED`。审批运行时不得转交或改派。
 2. 非人员一致性 blocker：必须填写原因并执行政策绑定的同一 `cancel_action`。成功后执行和实例均为 `CANCELLED`。人员失效调用受阻取消必须返回 `APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED`。
 3. 原提交人只允许在业务资源 `allowed_actions` 允许时撤回；具备类型运行管理权的管理员可填写原因应急撤回。非人员一致性 blocker 不得走普通撤回。
 4. `INTERNAL_INVARIANT_BROKEN`：必须停写该实例、保留日志与 correlation ID、前向修复后部署。不得直接改库，不得手工取消。
@@ -81,7 +81,7 @@
 
 1. 立即停止对该实例的决定写入。
 2. 读取 `recovery-options` 与审计/收据，确认是否已有合法 BLOCKED 或取消事实。
-3. 若能形成合同 §12.2 的结构化 blocker，只允许走对应恢复、改派或受阻取消端口。
+3. 若能形成合同 §12.2 的结构化 blocker，只允许走对应恢复或受阻取消端口。
 4. 若不能形成合法阻塞或取消计划，按 `INTERNAL_INVARIANT_BROKEN` 冻结并前向修复。
 5. 完成条件：断言恢复为第 1—3 条，且审计记录完整。不得 `update` 任务状态或删除多余 WorkItem。
 
@@ -176,7 +176,7 @@ backend/scripts/reset-dev-business-data.sh \
 2. 部署只包含新审批模型的后端与前端。
 3. 创建并验证全部新索引；任一索引失败不得继续发布定义。
 4. 运行 readiness、权限种子、边界扫描和旧符号清零。`APPROVAL_POLICY_NOT_REGISTERED` 必须使 readiness 失败。
-5. 仅先为唯一试点 `StockAdjustment` 创建并发布定义，完成创建、绑定、提交、决定、恢复、改派、取消和通知冒烟。
+5. 仅先为唯一试点 `StockAdjustment` 创建并发布定义，完成创建、绑定、提交、决定、恢复、取消和通知冒烟。
 6. 试点通过后，按 [approval-workflow.md](../dev-plan/approval-workflow.md) §3 对其余 11 个 `PROCESS_REQUIRED` 类型逐个发布定义并完成同一组冒烟：
    `SalesOrder` → `VoucherSalesOrder` → `SalesChangeOrder` → `PurchaseOrder` → `PurchaseChangeOrder` → `CustomerReceipt` → `SupplierPayment` → `CustomerRefund` → `SupplierRefund` → `ReceiptReversal` → `PaymentReversal`。
 7. `NO_APPROVAL` 类型不得发布定义、不得创建审批实例。

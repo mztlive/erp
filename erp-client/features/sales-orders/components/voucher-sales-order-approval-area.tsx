@@ -23,7 +23,7 @@ import {
  * 卡券销售单审批区。
  *
  * 未提交展示绑定卡，提交确认展示固定路线，运行中/终态展示摘要与历史。
- * 动作入口只读 `allowed_actions` 与 `recovery_options`，不恢复卡券专用决定或责任池。
+ * 动作入口只读 `allowed_actions` 与 `recovery_options`，不恢复卡券专用决定。
  */
 export function VoucherSalesOrderApprovalArea({
     phase,

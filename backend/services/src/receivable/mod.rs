@@ -242,8 +242,8 @@ impl ReceivableService {
         if !formal.allowed_actions.contains(&WorkItemAllowedAction::Process) {
             block_card_funds_actions(
                 &mut view,
-                "START_PROCESSING_REQUIRED",
-                "必须先从团队待办建立本人责任，才能执行卡券票款领域动作",
+                "CURRENT_RESPONSIBILITY_REQUIRED",
+                "当前账号不是开放任务的当前责任人",
             );
             return Ok(view);
         }
@@ -1891,7 +1891,7 @@ impl CardFundsReviewReceipt {
                 collaboration_message: REJECT_FOLLOW_UP_MESSAGE.to_string(),
                 required_registration: vec![
                     FollowUpRequiredRegistration::WorkItemType,
-                    FollowUpRequiredRegistration::OwnerPool,
+                    FollowUpRequiredRegistration::OwnerAssignee,
                     FollowUpRequiredRegistration::HandlerKey,
                 ],
             }
@@ -3321,7 +3321,7 @@ mod card_funds_review_tests {
             blocker.required_registration,
             vec![
                 FollowUpRequiredRegistration::WorkItemType,
-                FollowUpRequiredRegistration::OwnerPool,
+                FollowUpRequiredRegistration::OwnerAssignee,
                 FollowUpRequiredRegistration::HandlerKey,
             ]
         );

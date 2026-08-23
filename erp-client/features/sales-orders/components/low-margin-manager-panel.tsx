@@ -44,19 +44,9 @@ export function LowMarginManagerPanel({
                     <p>
                         当前处理人：
                         {confirmation.ownerUser?.displayName ??
-                            "销售领导责任池"}
+                            "责任人信息不可用"}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                        {confirmation.allowedActions.includes(
-                            "START_PROCESSING",
-                        ) ? (
-                            <Button
-                                size="sm"
-                                onClick={() => void actions.startProcessing()}
-                            >
-                                开始处理
-                            </Button>
-                        ) : null}
                         {confirmation.allowedActions.includes("APPROVE") ? (
                             <Button
                                 size="sm"

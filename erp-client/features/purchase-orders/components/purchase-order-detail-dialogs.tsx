@@ -2,7 +2,6 @@
 
 import { FormalActionConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import {
     Dialog,
     DialogClose,
@@ -13,7 +12,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 
-import { responsibilityText } from "@/lib/ui-text"
 import { PurchaseOrderSubmitConfirmDialog } from "@/features/purchase-orders/components/purchase-order-submit-confirm-dialog"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
@@ -26,22 +24,16 @@ export function PurchaseOrderDetailDialogs({
     onSubmitConfirmOpenChange,
     approveConfirmOpen,
     onApproveConfirmOpenChange,
-    releaseConfirmOpen,
-    onReleaseConfirmOpenChange,
     changeConfirmOpen,
     onChangeConfirmOpenChange,
     leaveGuardOpen,
     onLeaveGuardOpenChange,
-    releaseReason,
-    onReleaseReasonChange,
     submitPending,
     savePending,
     reviewPending,
-    responsibilityPending,
     changePending,
     onConfirmSubmit,
     onConfirmApprove,
-    onConfirmRelease,
     onConfirmChange,
     onSaveAndLeave,
     onDiscardAndLeave,
@@ -51,22 +43,16 @@ export function PurchaseOrderDetailDialogs({
     onSubmitConfirmOpenChange: (open: boolean) => void
     approveConfirmOpen: boolean
     onApproveConfirmOpenChange: (open: boolean) => void
-    releaseConfirmOpen: boolean
-    onReleaseConfirmOpenChange: (open: boolean) => void
     changeConfirmOpen: boolean
     onChangeConfirmOpenChange: (open: boolean) => void
     leaveGuardOpen: boolean
     onLeaveGuardOpenChange: (open: boolean) => void
-    releaseReason: string
-    onReleaseReasonChange: (value: string) => void
     submitPending: boolean
     savePending: boolean
     reviewPending: boolean
-    responsibilityPending: boolean
     changePending: boolean
     onConfirmSubmit: () => void
     onConfirmApprove: () => void
-    onConfirmRelease: () => void
     onConfirmChange: () => void
     onSaveAndLeave: () => void
     onDiscardAndLeave: () => void
@@ -102,48 +88,6 @@ export function PurchaseOrderDetailDialogs({
                 pending={reviewPending}
                 onConfirm={onConfirmApprove}
             />
-
-            <Dialog
-                open={releaseConfirmOpen}
-                onOpenChange={onReleaseConfirmOpenChange}
-            >
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {responsibilityText.releaseToTeam}
-                        </DialogTitle>
-                        <DialogDescription>
-                            当前采购审核保持开放，个人责任会被清空并回到团队待处理。请填写原因。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Textarea
-                        value={releaseReason}
-                        onChange={(event) =>
-                            onReleaseReasonChange(event.target.value)
-                        }
-                        placeholder="填写退回团队原因"
-                        aria-label="退回团队原因"
-                    />
-                    <DialogFooter>
-                        <DialogClose
-                            render={<Button type="button" variant="outline" />}
-                        >
-                            取消
-                        </DialogClose>
-                        <Button
-                            type="button"
-                            disabled={
-                                !releaseReason.trim() || responsibilityPending
-                            }
-                            onClick={onConfirmRelease}
-                        >
-                            {responsibilityPending
-                                ? "正在退回…"
-                                : responsibilityText.releaseToTeam}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
 
             <FormalActionConfirmDialog
                 open={changeConfirmOpen}

@@ -39,7 +39,6 @@ const makeWorkItemDto = (
     handler_key: "procurement-confirmation",
     approval_step_instance_id: null,
     status: "OPEN",
-    assignment_mode: "DIRECT",
     assignment_source: "assigned",
     owner_role: "procurement",
     owner_organization_id: "org_1",
@@ -68,7 +67,6 @@ const makePage = (): WorkItemPage => ({
 
 const makeStats = (): WorkItemStats => ({
     assigned: 2,
-    team: 1,
     due_today: 1,
     overdue: 0,
     exception: 0,
@@ -88,10 +86,12 @@ const makeConflictError = (
     responseData: { data: { current_work_item: currentWorkItem } },
 })
 
-const startCommand: WorkItemResponsibilityCommand = {
-    kind: "START_PROCESSING",
+const responsibilityCommand: WorkItemResponsibilityCommand = {
+    kind: "REASSIGN",
     workItemId: "wi_1",
     expectedTaskVersion: "5",
+    targetUserId: "u_2",
+    reason: "调整责任人",
     idempotencyKey: "op_1",
 }
 
@@ -228,11 +228,11 @@ describe("useWorkItemResponsibilityMutation", () => {
 
         let outcome: unknown
         await act(async () => {
-            outcome = await result.current.mutateAsync(startCommand)
+            outcome = await result.current.mutateAsync(responsibilityCommand)
         })
         expect(outcome).toEqual(makeWorkItemDto())
         expect(api.submitWorkItemResponsibility).toHaveBeenCalledWith(
-            startCommand,
+            responsibilityCommand,
             expect.anything(),
         )
         await waitFor(() =>
@@ -257,9 +257,9 @@ describe("useWorkItemResponsibilityMutation", () => {
         )
 
         await act(async () => {
-            await expect(result.current.mutateAsync(startCommand)).rejects.toBe(
-                failure,
-            )
+            await expect(
+                result.current.mutateAsync(responsibilityCommand),
+            ).rejects.toBe(failure)
         })
         await waitFor(() =>
             expect(invalidate).toHaveBeenCalledWith({
@@ -285,9 +285,9 @@ describe("useWorkItemResponsibilityMutation", () => {
         )
 
         await act(async () => {
-            await expect(result.current.mutateAsync(startCommand)).rejects.toBe(
-                failure,
-            )
+            await expect(
+                result.current.mutateAsync(responsibilityCommand),
+            ).rejects.toBe(failure)
         })
         await waitFor(() =>
             expect(invalidate).toHaveBeenCalledWith({
@@ -311,9 +311,9 @@ describe("useWorkItemResponsibilityMutation", () => {
         )
 
         await act(async () => {
-            await expect(result.current.mutateAsync(startCommand)).rejects.toBe(
-                failure,
-            )
+            await expect(
+                result.current.mutateAsync(responsibilityCommand),
+            ).rejects.toBe(failure)
         })
         await waitFor(() =>
             expect(invalidate).toHaveBeenCalledWith({
@@ -330,7 +330,7 @@ describe("synchronizeWorkItemConflict", () => {
         const client = createFreshQueryClient()
         const invalidate = vi.spyOn(client, "invalidateQueries")
 
-        await synchronizeWorkItemConflict(client, startCommand, {
+        await synchronizeWorkItemConflict(client, responsibilityCommand, {
             status: 409,
         })
 
@@ -342,7 +342,7 @@ describe("synchronizeWorkItemConflict", () => {
         const client = createFreshQueryClient()
         const invalidate = vi.spyOn(client, "invalidateQueries")
 
-        await synchronizeWorkItemConflict(client, startCommand, {
+        await synchronizeWorkItemConflict(client, responsibilityCommand, {
             status: 500,
         })
 
@@ -355,7 +355,7 @@ describe("synchronizeWorkItemConflict", () => {
         const client = createFreshQueryClient()
         const invalidate = vi.spyOn(client, "invalidateQueries")
 
-        await synchronizeWorkItemConflict(client, startCommand, {
+        await synchronizeWorkItemConflict(client, responsibilityCommand, {
             status: 409,
         })
 

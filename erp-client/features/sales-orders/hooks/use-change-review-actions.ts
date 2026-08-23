@@ -5,11 +5,7 @@ import { useRouter } from "next/navigation"
 
 import { useSalesChangeReviewDecisionMutation } from "@/features/sales-orders/hooks/queries"
 import type { SalesChangeOrderSummary } from "@/features/sales-orders/types"
-import {
-    mapWorkItemDto,
-    useWorkItemDetailQuery,
-    useWorkItemResponsibilityMutation,
-} from "@/features/work-items"
+import { mapWorkItemDto, useWorkItemDetailQuery } from "@/features/work-items"
 import {
     classifyFormalCommandError,
     FormalCommandKeyLedger,
@@ -44,7 +40,6 @@ export function useSalesChangeReviewActions({
 }: UseSalesChangeReviewActionsProps) {
     const router = useRouter()
     const workItemQuery = useWorkItemDetailQuery(workItemId)
-    const responsibility = useWorkItemResponsibilityMutation()
     const decision = useSalesChangeReviewDecisionMutation()
     const ledger = React.useRef(new FormalCommandKeyLedger()).current
     const [approveOpen, setApproveOpen] = React.useState(false)
@@ -68,12 +63,6 @@ export function useSalesChangeReviewActions({
     const canProcess = Boolean(
         valid && workItem?.allowedActions.includes("PROCESS"),
     )
-    const canStart = Boolean(
-        valid && workItem?.allowedActions.includes("START_PROCESSING"),
-    )
-    const canRelease = Boolean(
-        valid && workItem?.allowedActions.includes("RELEASE_TO_TEAM"),
-    )
     const responsibilityStatus: ResponsibilityStatus = !workItem
         ? "blocked"
         : workItem.status === "COMPLETED"
@@ -82,11 +71,9 @@ export function useSalesChangeReviewActions({
             ? "closed"
             : workItem.processingState === "APPROVAL_BLOCKED"
               ? "blocked"
-              : canStart
-                ? "pool_available"
-                : canProcess
-                  ? "assigned_to_me"
-                  : "assigned_to_other"
+              : canProcess
+                ? "assigned_to_me"
+                : "assigned_to_other"
 
     const submitDecision = async (nextDecision: "APPROVE" | "REJECT") => {
         if (!workItem || !changeOrder || !handlerMatches) return
@@ -140,41 +127,15 @@ export function useSalesChangeReviewActions({
         }
     }
 
-    const startProcessing = async () => {
-        if (!workItem) return
-        await responsibility.mutateAsync({
-            kind: "START_PROCESSING",
-            workItemId: workItem.workItemId,
-            expectedTaskVersion: workItem.taskVersion,
-            idempotencyKey: `w05:${workItem.workItemId}:${workItem.taskVersion}:START`,
-        })
-        await workItemQuery.refetch()
-    }
-
-    const releaseToTeam = async () => {
-        if (!workItem) return
-        await responsibility.mutateAsync({
-            kind: "RELEASE_TO_TEAM",
-            workItemId: workItem.workItemId,
-            expectedTaskVersion: workItem.taskVersion,
-            reason: "当前处理人退回责任池",
-            idempotencyKey: `w05:${workItem.workItemId}:${workItem.taskVersion}:RELEASE`,
-        })
-        await workItemQuery.refetch()
-    }
-
     return {
         router,
         workItemQuery,
-        responsibility,
         decision,
         workItem,
         handlerKey,
         handlerMatches,
         valid,
         canProcess,
-        canStart,
-        canRelease,
         responsibilityStatus,
         approveOpen,
         setApproveOpen,
@@ -183,8 +144,6 @@ export function useSalesChangeReviewActions({
         reason,
         setReason,
         submitDecision,
-        startProcessing,
-        releaseToTeam,
         returnTo,
     }
 }

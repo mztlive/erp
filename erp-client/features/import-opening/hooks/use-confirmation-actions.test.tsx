@@ -1,10 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { act, waitFor } from "@testing-library/react"
+import { act } from "@testing-library/react"
 
-import {
-    completeImportConfirmation,
-    startImportConfirmationProcessing,
-} from "@/features/import-opening/api/legacy-import"
+import { completeImportConfirmation } from "@/features/import-opening/api/legacy-import"
 import { useConfirmationActions } from "@/features/import-opening/hooks/use-confirmation-actions"
 import type {
     ImportBatchView,
@@ -16,7 +13,6 @@ vi.mock("@/features/import-opening/api/legacy-import", () => ({
     fetchImportBatchList: vi.fn(),
     fetchImportBatchDetail: vi.fn(),
     fetchImportIssues: vi.fn(),
-    startImportConfirmationProcessing: vi.fn(),
     completeImportConfirmation: vi.fn(),
     executeImportCommand: vi.fn(),
 }))
@@ -36,22 +32,15 @@ function makeConfirmation(
             taskVersion: "v1",
             subjectVersion: "s1",
             status: "OPEN",
-            assignmentMode: "DIRECT",
             processingState: "READY",
-            allowedActions: [
-                "START_PROCESSING",
-                "CONFIRM_SCOPE",
-                "RETURN_FOR_FIX",
-            ],
+            allowedActions: ["PROCESS", "CONFIRM_SCOPE", "RETURN_FOR_FIX"],
             actionBlockers: [],
         },
         ...overrides,
     }
 }
 
-function makeBatch(
-    overrides?: Partial<ImportBatchView>,
-): ImportBatchView {
+function makeBatch(overrides?: Partial<ImportBatchView>): ImportBatchView {
     return {
         batchId: "b1",
         batchNo: "B-001",
@@ -91,61 +80,6 @@ beforeEach(() => {
 })
 
 describe("useConfirmationActions", () => {
-    it("starts processing with a w18: idempotency key", async () => {
-        vi.mocked(startImportConfirmationProcessing).mockResolvedValue(undefined)
-        const confirmation = makeConfirmation()
-        const { result } = renderHookWithProviders(() =>
-            useConfirmationActions(makeBatch({ confirmations: [confirmation] })),
-        )
-
-        await act(async () => {
-            await result.current.startProcessing(confirmation)
-        })
-
-        expect(startImportConfirmationProcessing).toHaveBeenCalledWith(
-            {
-                workItemId: "w1",
-                expectedTaskVersion: "v1",
-                idempotencyKey: expect.stringMatching(/^w18:/),
-            },
-            expect.anything(),
-        )
-    })
-
-    it("reuses the same idempotency key for the same task payload", async () => {
-        vi.mocked(startImportConfirmationProcessing).mockResolvedValue(undefined)
-        const confirmation = makeConfirmation()
-        const { result } = renderHookWithProviders(() =>
-            useConfirmationActions(makeBatch({ confirmations: [confirmation] })),
-        )
-
-        await act(async () => {
-            await result.current.startProcessing(confirmation)
-        })
-        await act(async () => {
-            await result.current.startProcessing(confirmation)
-        })
-
-        const first = vi.mocked(startImportConfirmationProcessing).mock
-            .calls[0]![0].idempotencyKey
-        const second = vi.mocked(startImportConfirmationProcessing).mock
-            .calls[1]![0].idempotencyKey
-        expect(first).toMatch(/^w18:/)
-        expect(second).toBe(first)
-    })
-
-    it("does nothing when the confirmation has no work item", async () => {
-        const confirmation = makeConfirmation({ workItem: undefined })
-        const { result } = renderHookWithProviders(() =>
-            useConfirmationActions(makeBatch({ confirmations: [confirmation] })),
-        )
-
-        await act(async () => {
-            await result.current.startProcessing(confirmation)
-        })
-        expect(startImportConfirmationProcessing).not.toHaveBeenCalled()
-    })
-
     it("completes a confirmation with the full command payload", async () => {
         vi.mocked(completeImportConfirmation).mockResolvedValue(undefined)
         const confirmation = makeConfirmation()
@@ -178,27 +112,12 @@ describe("useConfirmationActions", () => {
         })
     })
 
-    it("exposes the mutation error to the section", async () => {
-        vi.mocked(startImportConfirmationProcessing).mockRejectedValue(
-            new Error("version mismatch"),
-        )
-        const confirmation = makeConfirmation()
-        const { result } = renderHookWithProviders(() =>
-            useConfirmationActions(makeBatch({ confirmations: [confirmation] })),
-        )
-
-        await act(async () => {
-            await expect(
-                result.current.startProcessing(confirmation),
-            ).rejects.toThrow("version mismatch")
-        })
-        await waitFor(() => expect(result.current.error).toBeInstanceOf(Error))
-    })
-
     it("toggles the confirm/return dialogs via setters", () => {
         const confirmation = makeConfirmation()
         const { result } = renderHookWithProviders(() =>
-            useConfirmationActions(makeBatch({ confirmations: [confirmation] })),
+            useConfirmationActions(
+                makeBatch({ confirmations: [confirmation] }),
+            ),
         )
         expect(result.current.confirming).toBeUndefined()
         expect(result.current.returning).toBeUndefined()

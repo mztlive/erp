@@ -3,7 +3,11 @@
  * 从 requests.ts 拆出，供队列与详情请求函数共用。
  */
 
-import { listWorkItems, mapWorkItemDto, type WorkItemProjection } from "@/features/work-items"
+import {
+    listWorkItems,
+    mapWorkItemDto,
+    type WorkItemProjection,
+} from "@/features/work-items"
 import type { IntegrationResolutionQuery } from "../types"
 
 export function workItemObjectKey(type: string, id: string): string {
@@ -16,11 +20,9 @@ export async function fetchW29WorkItems(
 ): Promise<Map<string, WorkItemProjection>> {
     const scope = history
         ? "history"
-        : owner === "team"
-          ? "team"
-          : owner === "assigned"
-            ? "managed"
-            : "mine"
+        : owner === "assigned"
+          ? "managed"
+          : "mine"
     const page = await listWorkItems({
         scope,
         timezone:

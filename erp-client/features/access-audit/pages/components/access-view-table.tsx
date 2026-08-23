@@ -15,26 +15,19 @@ import type {
     AccessEmptyReason,
     AccessView,
     AuditEventRow,
-    FieldPolicyRow,
     RoleRow,
-    ScopeRow,
     UserRow,
 } from "@/features/access-audit/types"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
-const ACCESS_VIEWS: AccessView[] = ["roles", "users", "scopes", "audit"]
-
-type ViewRows =
-    | readonly RoleRow[]
-    | readonly UserRow[]
-    | readonly ScopeRow[]
-    | readonly FieldPolicyRow[]
-    | readonly AuditEventRow[]
+type ViewRows = readonly RoleRow[] | readonly UserRow[] | readonly AuditEventRow[]
 
 type AccessViewTableProps = {
     view: AccessView
     isAudit: boolean
+    /** 顶部二级导航展示的视图；只有一个时不渲染导航。 */
+    views: readonly AccessView[]
     rows: ViewRows
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
@@ -44,8 +37,6 @@ type AccessViewTableProps = {
     auditCoverageTo?: string
     roleColumns: ColumnDef<RoleRow>[]
     userColumns: ColumnDef<UserRow>[]
-    scopeColumns: ColumnDef<ScopeRow>[]
-    fieldColumns: ColumnDef<FieldPolicyRow>[]
     auditColumns: ColumnDef<AuditEventRow>[]
     onClearFilters?: () => void
     toolbar?: ReactNode
@@ -55,11 +46,14 @@ type AccessViewTableProps = {
     exportBlocked?: boolean
     exportBlocker?: { message: string }
     onExport?: () => void
+    /** 整行点击打开的详情（有效权限 / 审计事件）。 */
+    onRowPreview?: (row: RoleRow | UserRow | AuditEventRow) => void
 }
 
 function AccessViewTable({
     view,
     isAudit,
+    views,
     rows,
     pagination,
     onPaginationChange,
@@ -69,8 +63,6 @@ function AccessViewTable({
     auditCoverageTo,
     roleColumns,
     userColumns,
-    scopeColumns,
-    fieldColumns,
     auditColumns,
     onClearFilters,
     toolbar,
@@ -79,6 +71,7 @@ function AccessViewTable({
     exportBlocked,
     exportBlocker,
     onExport,
+    onRowPreview,
 }: AccessViewTableProps) {
     const pagedRows = rows.slice(
         pagination.pageIndex * pagination.pageSize,
@@ -88,30 +81,47 @@ function AccessViewTable({
         emptyReason && emptyReason !== "FIELD_MASKED"
             ? "当前无列表数据，可调整筛选后重试"
             : isAudit && auditCoverageFrom && auditCoverageTo
-              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(auditCoverageFrom, "full")} ~ ${formatDateTime(auditCoverageTo, "full")} · 无记录不等于动作未发生`
+              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(auditCoverageFrom, "full")} ~ ${formatDateTime(auditCoverageTo, "full")}`
               : `共 ${rows.length} 条`
+    const commonTableProps = {
+        pagination,
+        onPaginationChange,
+        layout: "flush" as const,
+        loading: isFetching,
+        showRefreshingBanner: isFetching,
+        rowCount: rows.length,
+    }
 
     return (
         <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
-            <nav aria-label="权限与审计二级导航">
-                <Tabs
-                    value={view}
-                    onValueChange={(next) => onViewChange(parseView(next))}
-                >
-                    <TabsList
-                        variant="line"
-                        className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b border-grid bg-card px-3 py-1.5"
+            {views.length > 1 ? (
+                <nav aria-label="权限配置二级导航">
+                    <Tabs
+                        value={view}
+                        onValueChange={(next) => onViewChange(parseView(next))}
                     >
-                        {ACCESS_VIEWS.map((item) => (
-                            <TabsTrigger
-                                key={item}
-                                value={item}
-                                className="flex-none"
-                            >
-                                {ACCESS_VIEW_LABEL[item]}
-                            </TabsTrigger>
-                        ))}
-                        <span className="ml-auto flex flex-wrap items-center gap-2 py-0.5">
+                        <TabsList
+                            variant="line"
+                            className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b border-grid bg-card px-3 py-1.5"
+                        >
+                            {views.map((item) => (
+                                <TabsTrigger
+                                    key={item}
+                                    value={item}
+                                    className="flex-none"
+                                >
+                                    {ACCESS_VIEW_LABEL[item]}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
+                </nav>
+            ) : null}
+            {toolbar ? (
+                <>
+                    <div className="flex flex-wrap items-start gap-2 px-3 py-2.5">
+                        <div className="min-w-[16rem] flex-1">{toolbar}</div>
+                        <div className="flex shrink-0 items-center gap-2 pt-0.5">
                             <span
                                 className="text-xs text-muted-foreground"
                                 aria-live="polite"
@@ -123,7 +133,6 @@ function AccessViewTable({
                                     type="button"
                                     variant="outline"
                                     disabled={exportBlocked}
-                                    title={exportBlocker?.message}
                                     onClick={onExport}
                                 >
                                     <DownloadIcon
@@ -133,13 +142,13 @@ function AccessViewTable({
                                     {isAudit ? "导出审计" : "导出配置"}
                                 </Button>
                             ) : null}
-                        </span>
-                    </TabsList>
-                </Tabs>
-            </nav>
-            {toolbar ? (
-                <>
-                    <div className="px-3 py-2.5">{toolbar}</div>
+                        </div>
+                    </div>
+                    {exportBlocked && exportBlocker ? (
+                        <p className="px-3 pb-2 text-xs text-muted-foreground">
+                            导出已禁用：{exportBlocker.message}
+                        </p>
+                    ) : null}
                     <Separator />
                 </>
             ) : null}
@@ -149,23 +158,16 @@ function AccessViewTable({
                 ) : emptyReason && emptyReason !== "FIELD_MASKED" ? (
                     <EmptyByReason
                         reason={emptyReason}
-                        onClearFilters={
-                            emptyReason === "FILTER_NO_RESULT"
-                                ? onClearFilters
-                                : undefined
-                        }
+                        isAudit={isAudit}
+                        onClearFilters={onClearFilters}
                     />
                 ) : view === "roles" ? (
                     <DataTable
+                        {...commonTableProps}
                         columns={roleColumns}
                         data={pagedRows as RoleRow[]}
                         getRowId={(row) => row.id}
-                        rowCount={rows.length}
-                        pagination={pagination}
-                        onPaginationChange={onPaginationChange}
-                        layout="flush"
-                        loading={isFetching}
-                        showRefreshingBanner={isFetching}
+                        onRowPreview={onRowPreview}
                         defaultColumnPinning={{
                             left: ["identity"],
                             right: ["actions"],
@@ -173,63 +175,23 @@ function AccessViewTable({
                     />
                 ) : view === "users" ? (
                     <DataTable
+                        {...commonTableProps}
                         columns={userColumns}
                         data={pagedRows as UserRow[]}
                         getRowId={(row) => row.id}
-                        rowCount={rows.length}
-                        pagination={pagination}
-                        onPaginationChange={onPaginationChange}
-                        layout="flush"
-                        loading={isFetching}
-                        showRefreshingBanner={isFetching}
+                        onRowPreview={onRowPreview}
                         defaultColumnPinning={{
                             left: ["identity"],
                             right: ["actions"],
                         }}
                     />
-                ) : view === "scopes" ? (
-                    <DataTable
-                        columns={scopeColumns}
-                        data={pagedRows as ScopeRow[]}
-                        getRowId={(row) => row.id}
-                        rowCount={rows.length}
-                        pagination={pagination}
-                        onPaginationChange={onPaginationChange}
-                        layout="flush"
-                        loading={isFetching}
-                        showRefreshingBanner={isFetching}
-                        defaultColumnPinning={{
-                            left: ["subject"],
-                            right: ["actions"],
-                        }}
-                    />
-                ) : view === "fields" ? (
-                    <DataTable
-                        columns={fieldColumns}
-                        data={pagedRows as FieldPolicyRow[]}
-                        getRowId={(row) => row.id}
-                        rowCount={rows.length}
-                        pagination={pagination}
-                        onPaginationChange={onPaginationChange}
-                        layout="flush"
-                        loading={isFetching}
-                        showRefreshingBanner={isFetching}
-                        defaultColumnPinning={{
-                            left: ["target"],
-                            right: ["actions"],
-                        }}
-                    />
                 ) : (
                     <DataTable
+                        {...commonTableProps}
                         columns={auditColumns}
                         data={pagedRows as AuditEventRow[]}
                         getRowId={(row) => row.auditEventId}
-                        rowCount={rows.length}
-                        pagination={pagination}
-                        onPaginationChange={onPaginationChange}
-                        layout="flush"
-                        loading={isFetching}
-                        showRefreshingBanner={isFetching}
+                        onRowPreview={onRowPreview}
                         defaultColumnPinning={{
                             left: ["time"],
                             right: ["actions"],

@@ -60,7 +60,7 @@
 | 对象 | 唯一职责 | 禁止职责 |
 | --- | --- | --- |
 | `approval_process_definition` | 保存某个 `DocumentType` 的不可变审批流程版本 | 保存具体单据或运行状态 |
-| `approval_node_definition` | 保存定义版本内的人工审批节点和指定审批人 | 保存审批结果或运行时改派 |
+| `approval_node_definition` | 保存定义版本内的人工审批节点和指定审批人 | 保存审批结果或改变运行时审批人 |
 | `approval_transition_definition` | 保存节点在事件发生后的唯一流向 | 执行业务领域动作 |
 | 业务单据 | 冻结创建时绑定的流程定义版本 | 临时增减节点、换人或选择下一节点 |
 | `approval_process_instance` | 保存单据审批运行状态、当前轮次和当前节点执行 | 代替业务单据保存正式业务状态 |
@@ -107,7 +107,7 @@ bpm          -> entity-core + entity-macros + 外部基础库
 9. 节点每次进入都创建新的执行记录，不覆盖既有历史。
 10. 每个活动节点创建一个指定到人的开放审批任务。
 11. 幂等、乐观锁、事务、权限重验、岗位分离和不可变审计。
-12. 审批人失效时阻塞实例，并允许具备专门权限的管理员受控改派。
+12. 审批人失效时阻塞实例，并在原审批人重新合格后受控恢复。
 13. 为后续工作台提供唯一当前责任、当前轮次、当前节点和流程历史投影。
 
 ### 3.2 明确不交付
@@ -116,7 +116,7 @@ bpm          -> entity-core + entity-macros + 外部基础库
 - 并行网关；
 - 会签、或签；
 - 加签、减签；
-- 普通用户转签、委托；
+- 审批运行时转交、改派、转签或委托；
 - 抄送；
 - 定时器和超时自动流转；
 - 自动服务节点；
@@ -140,7 +140,7 @@ bpm          -> entity-core + entity-macros + 外部基础库
 | `document_type` | 固定 `DocumentType` 枚举值 |
 | `approval_requirement` | `NO_APPROVAL` 或 `PROCESS_REQUIRED` |
 | `definition_admin_permission` | 创建、编辑和发布该类型流程所需的类型级权限 |
-| `runtime_admin_permission` | 管理视图、应急撤回、恢复原审批人、改派和受阻取消所需的类型级权限 |
+| `runtime_admin_permission` | 管理视图、应急撤回、恢复原审批人和受阻取消所需的类型级权限 |
 | `approver_eligibility_policy` | 校验指定用户能否审批该类单据的强类型策略 |
 | `separation_of_duties_policy` | 提交人、经办人和审批人之间的岗位分离规则 |
 | `required_node_purposes` | 发布时必须恰好满足的 ERP 节点用途集合；无必备用途时为空 |
@@ -342,7 +342,7 @@ line_count             行数
 | 定义版本与详情读取 | `approval_process:read` | `PROCESS_REQUIRED` 类型的 `definition_admin_permission` 或 `runtime_admin_permission`；`NO_APPROVAL` 无定义详情 |
 | 定义创建、编辑、发布、退役 | 对应 `approval_process:*` | 该类型 `definition_admin_permission` |
 | 未提交绑定升级 | `approval_instance:upgrade_binding` | 该类型 `definition_admin_permission` + 单据对象读取权 + DataScope |
-| 管理视图、恢复、改派、受阻取消 | `approval_instance:read|resume|reassign|cancel_blocked` | 该类型 `runtime_admin_permission` + 实例对象读取权 + DataScope |
+| 管理视图、恢复、受阻取消 | `approval_instance:read|resume|cancel_blocked` | 该类型 `runtime_admin_permission` + 实例对象读取权 + DataScope |
 | 审批决定 | `approval_instance:decide` | 当前开放任务责任 + 当前审批人资格 + 对象读取权 + DataScope + 岗位分离 |
 | 正常撤回 | `approval_instance:cancel` | 原提交人，或具备该类型 `runtime_admin_permission` 的应急运行管理员；两者都必须具备对象读取权、DataScope 且通过业务撤回规则 |
 | 实例与历史普通读取 | `approval_instance:read` | 本人发起、本人当前责任或业务对象读取权与 DataScope；不得因此获得管理动作 |
@@ -566,14 +566,14 @@ N3 --REJECT--> N1
 | --- | --- |
 | `approval_process_instance_id` / `node_key` | 实例内节点唯一身份 |
 | `definition_assignee_user_id` | 从发布定义复制，永久保留 |
-| `current_assignee_user_id` | 当前及后续轮次进入该节点时使用的责任人 |
-| `assignment_source` | `DEFINITION` 或 `ADMIN_REASSIGN`，见下 |
-| `changed_by` / `changed_at` / `change_reason` | 改派审计；未改派时为空 |
-| `assignment_version` | 改派乐观锁版本 |
+| `current_assignee_user_id` | 从发布定义复制，必须始终等于 `definition_assignee_user_id` |
+| `assignment_source` | 固定为 `DEFINITION` |
+| `changed_by` / `changed_at` / `change_reason` | 必须为空；审批运行时不得改变责任人 |
+| `assignment_version` | 恢复命令使用的乐观锁版本 |
 
 启动实例时必须为定义中的全部节点冻结实例审批人绑定。普通用户不能修改。
 
-实例审批人绑定的 `assignment_source` 只允许 `DEFINITION` 和 `ADMIN_REASSIGN` 两值。节点执行另有独立的来源字段，取值为 `DEFINITION`、`ADMIN_REASSIGN`、`ASSIGNEE_RECOVERY` 三值：普通进入节点时复制实例绑定的来源；管理员改派把实例绑定更新为 `ADMIN_REASSIGN` 并使新执行同值；原审批人恢复时实例绑定及其来源保持不变，仅当次重建的执行记为 `ASSIGNEE_RECOVERY`。两者必须是两个独立枚举，不得共用一个类型，以免实例绑定在类型上能够持有 `ASSIGNEE_RECOVERY`。
+实例审批人绑定的 `assignment_source` 只允许 `DEFINITION`。节点执行另有独立的来源字段，只允许 `DEFINITION` 和 `ASSIGNEE_RECOVERY`：普通进入节点时记为 `DEFINITION`；原审批人恢复时实例绑定及其来源保持不变，仅当次重建的执行记为 `ASSIGNEE_RECOVERY`。两者必须是两个独立枚举，不得共用一个类型，以免实例绑定在类型上能够持有 `ASSIGNEE_RECOVERY`。
 
 ### 8.3 节点执行
 
@@ -586,8 +586,8 @@ N3 --REJECT--> N1
 | `round_no` | 本次执行所属审批轮次 |
 | `execution_no` | 实例内单调递增的执行序号 |
 | `status` | `ACTIVE`、`APPROVED`、`REJECTED`、`CANCELLED`、`BLOCKED`、`SUPERSEDED` |
-| `assignment_source` | `DEFINITION`、`ADMIN_REASSIGN` 或 `ASSIGNEE_RECOVERY` |
-| `replaces_execution_id` / `ended_reason` | 仅被替换链使用；`ended_reason` 取 `ADMIN_REASSIGNED` 或 `ASSIGNEE_RECOVERED` |
+| `assignment_source` | `DEFINITION` 或 `ASSIGNEE_RECOVERY` |
+| `replaces_execution_id` / `ended_reason` | 仅恢复替换链使用；`ended_reason` 固定为 `ASSIGNEE_RECOVERED` |
 | `assignee_user_id` / `assignee_name_snapshot` | 本次进入节点时冻结的实际审批人 |
 | `decision` / `decision_reason` | 正式决定及原因 |
 | `decided_by` / `decided_at` | 决定审计 |
@@ -598,14 +598,14 @@ N3 --REJECT--> N1
 1. 每次流程令牌进入节点必须创建新的执行记录。
 2. 不得预创建未来节点的 `WAITING` 执行记录。
 3. 不得重置或覆盖已结束执行记录。
-4. 同一实例允许同一 `node_key` 在不同轮次出现多条执行记录；同一轮次内也允许因人员恢复或管理员改派出现多条执行记录。
+4. 同一实例允许同一 `node_key` 在不同轮次出现多条执行记录；同一轮次内也允许因人员恢复出现多条执行记录。
 5. 同一实例同时最多一个 `ACTIVE` 或 `BLOCKED` 执行。
-6. `SUPERSEDED` 只能由 `BLOCKED` 转入，且只能由原审批人恢复或管理员改派触发，必须同时写入 `ended_at` 和固定 `ended_reason`。`SUPERSEDED` 不属于当前执行状态，不得重新激活，也不得被计入「同时最多一个 `ACTIVE` 或 `BLOCKED`」约束。
+6. `SUPERSEDED` 只能由 `BLOCKED` 转入，且只能由原审批人恢复触发，必须同时写入 `ended_at` 和固定 `ended_reason`。`SUPERSEDED` 不属于当前执行状态，不得重新激活，也不得被计入「同时最多一个 `ACTIVE` 或 `BLOCKED`」约束。
 
 必须建立：
 
 - `(approval_process_instance_id, execution_no)` 唯一索引；
-- `(approval_process_instance_id, round_no, node_key, execution_no)` 历史索引；不得仅按前三项唯一，否则同轮改派与恢复无法创建新执行；
+- `(approval_process_instance_id, round_no, node_key, execution_no)` 历史索引；不得仅按前三项唯一，否则同轮恢复无法创建新执行；
 - 实例内 `status in [ACTIVE, BLOCKED]` 的部分唯一索引；
 - 按实例、轮次、执行序号查询历史的索引。
 
@@ -709,7 +709,7 @@ N3 --REJECT--> N1
 
 第一节点本人驳回时，也必须结束当前执行并创建下一轮第一节点的新执行，不得复用原执行记录。
 
-## 12. 取消、阻塞、恢复、改派与受阻取消
+## 12. 取消、阻塞、恢复与受阻取消
 
 ### 12.1 取消
 
@@ -725,37 +725,25 @@ N3 --REJECT--> N1
 
 | 类别 | `blocker_code` | 唯一合法恢复方式 |
 | --- | --- | --- |
-| 人员失效 | `APPROVER_ACCOUNT_INACTIVE`、`APPROVER_EMPLOYMENT_INVALID`、`APPROVER_NOT_ELIGIBLE`、`APPROVER_OUT_OF_DATA_SCOPE`、`APPROVER_CANNOT_READ_SUBJECT`、`SEPARATION_OF_DUTIES_VIOLATION` | 原审批人已重新合格时执行第 12.4 节恢复；仍失效时执行第 12.3 节改派 |
-| 图或关联损坏 | `DEFINITION_GRAPH_CORRUPTED`、`INSTANCE_LINK_CORRUPTED` | 只允许第 12.5 节受阻取消；禁止改派或切换定义 |
+| 人员失效 | `APPROVER_ACCOUNT_INACTIVE`、`APPROVER_EMPLOYMENT_INVALID`、`APPROVER_NOT_ELIGIBLE`、`APPROVER_OUT_OF_DATA_SCOPE`、`APPROVER_CANNOT_READ_SUBJECT`、`SEPARATION_OF_DUTIES_VIOLATION` | 原审批人已重新合格时执行第 12.4 节恢复；仍失效时保持受阻并升级处置 |
+| 图或关联损坏 | `DEFINITION_GRAPH_CORRUPTED`、`INSTANCE_LINK_CORRUPTED` | 只允许第 12.5 节受阻取消；禁止切换定义 |
 | 任务冲突 | `OPEN_TASK_CONFLICT` | 只允许第 12.5 节受阻取消；禁止重开或删除任务后继续 |
 | 版本损坏 | `SUBJECT_VERSION_CONFLICT` | 只允许第 12.5 节受阻取消；禁止改写冻结版本 |
 | 内部不变量 | `INTERNAL_INVARIANT_BROKEN` | 无法形成合法取消计划时保持冻结、readiness 失败并前向修复代码；不得直接改库 |
 
-只有人员失效类别允许进入恢复或改派判断。阻塞不得被页面解释为通过、驳回或普通待处理。不得自动回退到角色池或任意管理员。
+只有人员失效类别允许进入恢复判断。阻塞不得被页面解释为通过、驳回或普通待处理。不得自动回退到角色池或任意管理员。
 
-### 12.3 管理员改派
+### 12.3 运行时责任人变更禁止
 
-管理员改派只用于处理实例运行期间的人员失效，不属于流程设计能力。它只接受实例和当前执行均为 `BLOCKED`、且当前 `blocker_code` 属于人员失效类别的情况；正常运行的 `ACTIVE` 节点不得进行管理员酌情换人。调用时必须重新证明原审批人当前仍不满足资格；若原审批人已恢复有效，必须返回 `APPROVAL_CURRENT_APPROVER_RECOVERED`，客户端只能改调第 12.4 节恢复端口。
-
-1. 必须具备该 `DocumentType` 的 `approval_runtime_admin` 类型级权限和实例 DataScope；
-2. 只能改派当前实例中既有节点，不得新增、删除或调整节点；
-3. 目标用户必须满足原节点对应的单据审批资格和岗位分离政策；
-4. 必须填写原因并携带实例、执行、实例审批人绑定的期望版本；旧 `BLOCKED` 执行曾产生任务时还必须携带该已关闭任务的期望版本；
-5. 必须原子更新当前节点的实例审批人绑定、结束旧 `BLOCKED` 执行、保留旧任务责任快照，并创建新的 `ACTIVE` 执行和唯一 `OPEN` 任务；不得覆盖或重开旧任务；
-6. 改派后该节点在本实例后续轮次继续使用新责任人；
-7. 定义中的原始审批人必须永久保留，不得被改写；
-8. 不得影响新创建单据；需要长期换人时必须发布新的流程定义版本；
-9. 改派完成后，符合恢复条件的 `BLOCKED` 实例和执行恢复为运行状态。
-
-改派必须结束旧 `BLOCKED` 执行并创建新执行：旧执行 CAS 为 `SUPERSEDED`，`ended_reason=ADMIN_REASSIGNED`，其已关闭的审批任务保持 `CLOSED`；随后在同一轮次、同一节点下以递增 `execution_no` 创建新的 `ACTIVE` 执行和唯一 `OPEN` 审批任务。旧执行的审批人快照和旧任务的责任快照永久不可改写。
+审批运行时不交付转交、改派、转签或委托能力。系统不得提供候选人查询、动作码、权限项、HTTP 端点、应用端口或页面按钮，也不得通过通用 WorkItem 转交接口改变 `DocumentApproval` 的责任人。人员失效时必须保持 `BLOCKED`，待原审批人重新合格后执行第 12.4 节恢复；需要长期换人时必须发布新的流程定义版本，该版本只影响新创建单据。
 
 ### 12.4 恢复原审批人
 
-当人员失效 blocker 的原当前审批人重新满足全部资格时，唯一合法恢复方式是恢复原审批人，而不是改派。
+当人员失效 blocker 的原当前审批人重新满足全部资格时，唯一合法恢复方式是恢复原审批人。
 
 1. 必须具备该 `DocumentType` 的 `approval_runtime_admin` 类型级权限和实例 DataScope；
 2. 只接受实例和当前执行均为 `BLOCKED`，且当前 `blocker_code` 属于人员失效类别；
-3. 必须校验实例审批人绑定未被改派，且当前审批人与旧 `BLOCKED` 执行的审批人一致；
+3. 必须校验实例审批人绑定未变化，且当前审批人与旧 `BLOCKED` 执行的审批人一致；
 4. 必须重验该审批人的账号、任职、审批权限、对象读取权、DataScope 和岗位分离已全部恢复；任一项仍失效时返回 `APPROVAL_CURRENT_APPROVER_NOT_RECOVERED`；
 5. 旧 `BLOCKED` 执行 CAS 为 `SUPERSEDED`，`ended_reason=ASSIGNEE_RECOVERED`，旧任务保持 `CLOSED`，不得重开；
 6. 在同一轮次、同一节点下以递增 `execution_no` 创建新的 `ACTIVE` 执行和唯一 `OPEN` 审批任务，执行的来源记为 `ASSIGNEE_RECOVERY`；
@@ -833,8 +821,8 @@ owner_user_id IS NOT NULL
 
 1. 同一 `approval_node_execution_id` 在全生命周期（`OPEN`、`COMPLETED`、`CLOSED` 合计）最多关联一个 WorkItem；
 2. 只有 `ACTIVE` 且责任有效的执行才对应 `OPEN` 任务；`BLOCKED` 执行不得有 `OPEN` 任务；
-3. 审批任务只能由审批运行时的决定、恢复、改派和取消端口完成、关闭或换人。仍然存在的通用 `complete`、`close`、`transfer` 对 `DocumentApproval` 必须失败关闭，固定错误码 `APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN`；`claim`、`start_processing`、`release_to_team` 已按第 13.2 节第 5 条从全系统删除，不存在需要针对审批任务单独拒绝的实现；
-4. 人员失效进入 `BLOCKED` 时旧 `OPEN` 任务关闭，关闭原因固定 `APPROVAL_RUNTIME_BLOCKED`；恢复或改派成功后为新执行创建新任务，不得重开旧任务；
+3. 审批任务只能由审批运行时的决定、恢复和取消端口完成或关闭。仍然存在的通用 `complete`、`close`、`reassign` 对 `DocumentApproval` 必须失败关闭，固定错误码 `APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN`；`claim`、`start_processing`、`release_to_team` 已按第 13.2 节第 5 条从全系统删除，不存在需要针对审批任务单独拒绝的实现；
+4. 人员失效进入 `BLOCKED` 时旧 `OPEN` 任务关闭，关闭原因固定 `APPROVAL_RUNTIME_BLOCKED`；恢复成功后为新执行创建新任务，不得重开旧任务；
 5. `VoucherSalesOrder` 接入通用审批后，新写路径不得再创建 `WorkItemType::CardSalesManagerApproval` 或 `CardSalesOperationApproval`，旧卡券决定入口必须失败关闭；P0-D 必须删除两个类型、`card_sales_unique_sales_manager`、`card_sales_operations_pool` 两个处理人解析器和卡券审批 handler key；
 6. `SalesOrder` 接入通用审批后，新写路径不得再创建 `WorkItemType::ProcurementConfirmation` 或 `LowMarginManagerConfirmation`，对应入口必须失败关闭；P0-D 必须删除两个类型及其旧实现，不保留替代任务类型；
 7. `AssignmentSource` 六个现有取值的处置固定为：`StepResolver`、`RecoveryResolver` 随旧审批运行时删除；`SelfStart`、`AdminRelease` 随责任池语义删除；只保留 `SystemRule`、`AdminReassign`，并新增 `ApprovalRuntime`，最终为三值。
@@ -869,7 +857,6 @@ start_approval(...)
 submit_decision(...)
 cancel_approval(...)
 resume_current_approver(...)
-reassign_current_approver(...)
 cancel_blocked_approval(...)
 ```
 
@@ -902,7 +889,7 @@ idempotency_key
 
 ### 14.4 命令幂等
 
-定义写操作、绑定升级、启动、决定、取消、恢复、改派和受阻取消必须共用下列命令收据规则：
+定义写操作、绑定升级、启动、决定、取消、恢复和受阻取消必须共用下列命令收据规则：
 
 1. 收据唯一键固定为 `command_kind + scope_id + idempotency_key`，并保存 canonical payload hash 与不可变结果引用；
 2. 收据不存在时才允许执行命令状态前置校验和业务写入；收据存在且 hash 不同必须返回稳定 `409` 幂等冲突；
@@ -922,16 +909,16 @@ idempotency_key
 5. 单据创建必须重验绑定定义及全部指定人员有效性。
 6. 审批启动必须再次重验全部指定人员有效性。
 7. 审批决定必须重验当前处理人的账号、权限、DataScope、对象读取权和岗位分离。
-8. 管理员改派不得绕过目标用户资格校验。
+8. 审批运行时不得改变当前责任人；长期换人必须发布新定义且只影响新单据。
 9. 服务端必须完成队列和历史的数据范围过滤；前端不得全量读取后隐藏。
 10. 当前审批责任不自动授予业务字段读取权，敏感字段仍按领域权限脱敏。
-11. 所有定义变更、绑定、升级、启动、通过、驳回、取消、阻塞、恢复和改派必须写不可变审计。
+11. 所有定义变更、绑定、升级、启动、通过、驳回、取消、阻塞和恢复必须写不可变审计。
 12. 并发或版本冲突统一返回 `409`；权限不足返回 `403`；配置或输入校验失败使用稳定业务错误码。
 13. 定义发布只校验账户有效、静态审批权限、节点间可静态判断的岗位分离和图不变式。具体单据 DataScope、对象读取权和提交人与审批人的动态隔离在单据创建绑定、启动、每次进入节点和审批决定时校验。本合同不签署「审批人必须具备该 `DocumentType` 全组织范围」的规则，因此不得把无具体资源的发布动作描述为完成了实例级 DataScope 校验。
 
 ### 15.2 动作级权限（已签署）
 
-HTTP Handler 校验的动作级权限固定为下列 12 个值，不得增删：
+HTTP Handler 校验的动作级权限固定为下列 11 个值，不得增删：
 
 ```text
 approval_process:read
@@ -943,7 +930,6 @@ approval_instance:read
 approval_instance:decide
 approval_instance:cancel
 approval_instance:resume
-approval_instance:reassign
 approval_instance:cancel_blocked
 approval_instance:upgrade_binding
 ```
@@ -1093,7 +1079,6 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 | 节点驳回 | 提交人 | `rejected:<execution_id>` |
 | 实例受阻 | 提交人 + 该 `DocumentType` 具备 `approval_runtime_admin` 的用户 | `blocked:<execution_id>` |
 | 原审批人已恢复 | 新执行审批人 + 提交人 | `resumed:<execution_id>` |
-| 已改派 | 新审批人 + 原审批人 + 提交人 | `reassigned:<execution_id>` |
 | 正常取消 | 取消时的当前审批人 + 提交人；应急撤回时再加执行管理员 | `cancelled:<instance_id>:<round_no>` |
 | 受阻取消 | 提交人 + 执行取消的运行管理员 | `blocked_cancelled:<instance_id>` |
 | 最终通过 | 提交人 | `completed:<instance_id>` |
@@ -1160,7 +1145,7 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 4. 建立审批流程管理 Service、HTTP、权限和管理页面。
 5. 改造业务单据实体及创建事务，自动绑定定义版本。
 6. 将步骤实例重构为可重复进入的节点执行。
-7. 建立实例审批人绑定和管理员改派能力。
+7. 建立实例审批人绑定和原审批人恢复能力。
 8. 重写运行时为基于节点、事件和连线的单令牌执行器。
 9. 实现通过和驳回重启事务。
 10. 将全部工作项（审批与非审批）改为创建即指定到人，删除责任池、领取、开始处理和退回团队。
@@ -1194,7 +1179,7 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 - [ ] 重复启动、通过或驳回请求不产生重复实例、执行、任务或轮次。
 - [ ] 两个并发审批决定只有一个成功，另一个返回 `409`。
 - [ ] 当前审批人失效时不回退角色池，实例进入 `BLOCKED`。
-- [ ] 管理员改派只改变实例节点审批人绑定，不改变定义结构，并保留完整审计。
+- [ ] 审批运行时不存在转交、改派、转签或委托的端点、权限、动作码和页面入口；通用 WorkItem 转交对审批任务失败关闭。
 - [ ] 队列查询和所有写动作均执行服务端权限、DataScope、对象读取权和岗位分离校验。
 - [ ] 工作台能直接回答当前轮次、当前节点、当前责任人、最近驳回和下一步，不依赖前端推断。
 - [ ] 旧代码注册流程、审批责任池、团队任务、预建 `WAITING` 步骤和驳回终态路径已从生产实现中清零；`claim`、`start_processing`、`release_to_team` 在 `backend` 与 `erp-client` 中命中为 0（开发重置脚本的固定删除条件除外）。合同、实施计划和 P0-D `deletes` 清单允许以删除或禁止条款引用旧名称，不纳入生产实现零命中。
@@ -1208,8 +1193,8 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 - [ ] `ReviewStatus` 正好三值（`NOT_SUBMITTED`、`IN_APPROVAL`、`APPROVED`），`SalesOrder` 与 `VoucherSalesOrder` 的提交路径完全一致。
 - [ ] W01 与 W02 已合并为唯一工作台：`/workspace/tasks` 重定向到 `/workspace`，页面无「团队待处理」分区，口径胶囊筛选不跳页，详情区可连续提交审批决定；无独立统计卡，待办列表只渲染一份。
 - [ ] 第 4.4.4 节 12 行强类型动作全部实现；所有类型均可在最终通过前由原提交人受控撤回，运行管理员可填写原因应急撤回，受阻取消复用同一 `cancel_action`，最终通过后不得取消。
-- [ ] 恢复原审批人、管理员改派与受阻取消三条路径互斥且按 blocker 类别失败关闭。
+- [ ] 恢复原审批人与受阻取消两条路径互斥且按 blocker 类别失败关闭。
 - [ ] 同一 `approval_node_execution_id` 在全部任务状态合计最多一条 WorkItem。
-- [ ] 第 16.5 节全部 10 类通知事件具备去重键、重试上限和死信处置，事务内只写 outbox。
+- [ ] 第 16.5 节全部 9 类通知事件具备去重键、重试上限和死信处置，事务内只写 outbox。
 - [ ] 不存在全局审批运行开关或第二条运行路径；启用边界仅由已发布定义的存在性表达。
 - [ ] `bpm` 对 ERP 业务层零反向依赖，且审批流程 ID 在生产代码中只有一个定义源。

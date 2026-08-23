@@ -110,10 +110,7 @@ describe("recovery options", () => {
         expect(apiGet).toHaveBeenCalledWith(
             "/admin/approval-instances/inst-1/recovery-options",
         )
-        expect(options.actions).toEqual([
-            "RESUME_CURRENT_APPROVER",
-            "REASSIGN_CURRENT_APPROVER",
-        ])
+        expect(options.actions).toEqual(["RESUME_CURRENT_APPROVER"])
     })
 })
 

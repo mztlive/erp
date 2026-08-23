@@ -713,10 +713,10 @@ impl ProjectionService {
                 business_object_id: Some(delivery.base.id.clone()),
                 error_class,
                 owner_role: Some(error_owner_role(error_class).to_string()),
-                owner_user_id: None,
+                owner_user_id: Some(actor.id().to_string()),
             },
         )?;
-        let work_item = error_work_item(&task)?;
+        let work_item = error_work_item(&task, actor.id())?;
         let at = Instant::now();
         let result = action_result(
             operation_id.to_string(),

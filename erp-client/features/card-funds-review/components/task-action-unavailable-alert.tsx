@@ -9,13 +9,11 @@ import type {
 } from "@/features/card-funds-review/types"
 
 const EXECUTABLE_ACTIONS: readonly WorkItemAction[] = [
-    "START_PROCESSING",
     "APPROVE",
     "REJECT",
     "CONFIRM_ZERO",
     "REGISTER_RECEIPT",
     "REGISTER_INVOICE",
-    "RELEASE_TO_TEAM",
 ]
 
 /** 任务开放但无任何可执行动作时提示仅供查看。 */

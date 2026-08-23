@@ -1861,7 +1861,7 @@ fn import_confirmation_work_item(
             subject_version,
             owner_role: owner_role.to_string(),
             owner_organization_id: IMPORT_CONFIRMATION_ORGANIZATION.to_string(),
-            owner_user_id: Some(owner_user_id.to_string()),
+            owner_user_id: owner_user_id.to_string(),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::Normal,
             due_at: None,
@@ -2221,7 +2221,6 @@ fn work_item_view(item: &WorkItem) -> ImportBusinessConfirmationWorkItemView {
         task_version: item.base.version.to_string(),
         subject_version: item.subject_version.clone(),
         status: item.status,
-        assignment_source_unused: item.assignment_source,
         owner_role: item.owner_role.clone(),
         owner_organization_id: item.owner_organization_id.clone(),
         owner_user_id: item.owner_user_id.clone(),
@@ -2271,7 +2270,6 @@ fn authorized_work_item_view(
         task_version: item.task_version,
         subject_version: item.subject_version,
         status: item.status,
-        assignment_source_unused: item.assignment_source,
         owner_role: item.owner_role,
         owner_organization_id: item.owner_organization_id,
         owner_user_id: item.owner_user_id,
@@ -2305,7 +2303,7 @@ fn work_item_action_code(action: WorkItemAllowedAction) -> &'static str {
         WorkItemAllowedAction::Process => "PROCESS",
         WorkItemAllowedAction::Approve => "APPROVE",
         WorkItemAllowedAction::Reject => "REJECT",
-        WorkItemAllowedAction::Reassign => "RELEASE_TO_TEAM",
+        WorkItemAllowedAction::Reassign => "REASSIGN",
         WorkItemAllowedAction::Close => "CLOSE",
     }
 }

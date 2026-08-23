@@ -235,7 +235,7 @@ export type BackendActiveLowMarginManagerConfirmation = {
     acceptance_reason: string
     evidence_reference_ids: string[]
     owner_user?: { id: string; display_name: string } | null
-    allowed_actions: Array<"START_PROCESSING" | "APPROVE" | "REJECT">
+    allowed_actions: Array<"APPROVE" | "REJECT">
     action_blockers: Array<{ code: string; message: string }>
 }
 

@@ -27,7 +27,7 @@ function renderCell(
 
 async function openActionsMenu(row: UserRow) {
     fireEvent.mouseDown(screen.getByLabelText(`${row.displayName} 更多操作`))
-    await screen.findByText('删除')
+    await screen.findByText('紧急撤权')
 }
 
 describe('useUserColumns', () => {
@@ -39,54 +39,38 @@ describe('useUserColumns', () => {
         expect(columns.map((c) => c.id)).toEqual([
             'identity',
             'roles',
-            'period',
             'scope',
-            'status',
-            'risk',
             'actions',
         ])
         expect(columns.map((c) => c.header)).toEqual([
             '用户',
             '当前角色',
-            '有效期间',
             '数据范围',
-            '账号状态',
-            '风险',
             '操作',
         ])
     })
 
-    it('renders display name, account id, roles and status label', () => {
+    it('renders the login account rather than the internal account id', () => {
         const row = makeUserRow()
         const identity = renderCell('identity', row)
         expect(identity.getByText('王小明')).toBeDefined()
-        expect(identity.getByText('u1')).toBeDefined()
+        expect(identity.getByText('wangxm')).toBeDefined()
+        expect(identity.queryByText('u1')).toBeNull()
         expect(renderCell('roles', row).getByText('管理员')).toBeDefined()
-        expect(renderCell('status', row).getByText('启用')).toBeDefined()
+        expect(renderCell('scope', row).getByText('公司级')).toBeDefined()
     })
 
-    it('shows 长期 in the period cell when no expiry is recorded', () => {
-        const period = renderCell('period', makeUserRow())
-        expect(period.container.textContent).toContain('长期')
-    })
-
-    it('opens the explain sheet and fills the account form from the actions cell', () => {
+    it('opens the role assignment dialog from the actions cell', () => {
         const input = makeColumnsInput()
         const row = makeUserRow()
         const actions = renderCell('actions', row, input)
 
-        fireEvent.click(actions.getByText('有效权限'))
-        expect(input.openExplain).toHaveBeenCalledWith('USER', 'u1')
-
-        fireEvent.click(actions.getByText('编辑'))
-        expect(input.setAccountForm).toHaveBeenCalledWith({
-            mode: 'edit',
-            account: {
-                id: 'u1',
-                account: 'wangxm',
-                name: '王小明',
-                role_ids: ['role-1'],
-            },
+        fireEvent.click(actions.getByText('调整角色'))
+        expect(input.setRoleAssignment).toHaveBeenCalledWith({
+            userId: 'u1',
+            displayName: '王小明',
+            accountName: 'wangxm',
+            roleIds: ['role-1'],
         })
     })
 
@@ -109,26 +93,20 @@ describe('useUserColumns', () => {
         })
     })
 
-    it('hides the revoke entry when the row has no role assignment', async () => {
+    it('hides the whole menu when the row has no role assignment', () => {
         const input = makeColumnsInput()
         const row = makeUserRow({ roleAssignmentId: undefined })
-        renderCell('actions', row, input)
+        const actions = renderCell('actions', row, input)
 
-        await openActionsMenu(row)
-        expect(screen.queryByText('紧急撤权')).toBeNull()
+        expect(actions.queryByLabelText('王小明 更多操作')).toBeNull()
     })
 
-    it('marks account deletion from the dropdown menu', async () => {
+    it('keeps account deletion out of the permission surface', async () => {
         const input = makeColumnsInput()
         const row = makeUserRow()
         renderCell('actions', row, input)
 
         await openActionsMenu(row)
-        fireEvent.click(screen.getByText('删除'))
-
-        expect(input.setDeletingAccount).toHaveBeenCalledWith({
-            id: 'u1',
-            account: 'wangxm',
-        })
+        expect(screen.queryByText('删除账号')).toBeNull()
     })
 })

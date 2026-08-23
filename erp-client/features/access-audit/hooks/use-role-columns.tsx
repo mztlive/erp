@@ -2,28 +2,28 @@
 
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { EyeIcon, MoreHorizontalIcon, Trash2Icon } from "lucide-react"
+import { MoreHorizontalIcon, Trash2Icon } from "lucide-react"
 
-import { BusinessStatusBadge } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { riskLabel } from "@/features/access-audit/lib/risk-labels"
 import type { AccessColumnsInput } from "@/features/access-audit/hooks/access-columns-input"
 import type { RoleRow } from "@/features/access-audit/types"
 
+/**
+ * 角色列表列。
+ *
+ * 权限列给摘要不给编码：一屏能比较「谁的权限更大」，逐条编码留给有效权限面板
+ * （整行点击打开）。后端没有的字段（组织、风险、角色状态）不占列。
+ */
 function useRoleColumns({
-    data,
     router,
     rowFocusRef,
-    openExplain,
-    startChange,
     setDeletingRole,
 }: AccessColumnsInput) {
     return React.useMemo<ColumnDef<RoleRow>[]>(
@@ -32,7 +32,7 @@ function useRoleColumns({
                 id: "identity",
                 header: "角色",
                 cell: ({ row }) => (
-                    <div className="min-w-[10rem]">
+                    <div className="min-w-[8rem]">
                         <div className="font-medium">{row.original.name}</div>
                         <div className="font-mono text-xs text-muted-foreground">
                             {row.original.roleCode}
@@ -41,95 +41,84 @@ function useRoleColumns({
                 ),
             },
             {
-                id: "org",
-                header: "组织",
-                cell: ({ row }) => row.original.organizationLabel,
+                id: "perms",
+                header: "权限覆盖",
+                cell: ({ row }) => {
+                    const role = row.original
+                    if (role.allPermissions) {
+                        return <Badge variant="warning">全部权限</Badge>
+                    }
+                    if (role.permissionCount === 0) {
+                        return (
+                            <span className="text-muted-foreground">
+                                无权限条目
+                            </span>
+                        )
+                    }
+                    return (
+                        <div className="flex min-w-[14rem] flex-wrap items-center gap-1.5">
+                            <span className="text-sm">
+                                共{" "}
+                                <span className="num">
+                                    {role.permissionCount}
+                                </span>{" "}
+                                项
+                            </span>
+                            {role.permissionGroups
+                                .slice(0, 3)
+                                .map((group) => (
+                                    <Badge key={group.name} variant="outline">
+                                        {group.name}
+                                        <span className="num">
+                                            {group.count}
+                                        </span>
+                                    </Badge>
+                                ))}
+                            {role.permissionGroups.length > 3 ? (
+                                <span className="text-xs text-muted-foreground">
+                                    +{role.permissionGroups.length - 3} 个模块
+                                </span>
+                            ) : null}
+                        </div>
+                    )
+                },
             },
             {
-                id: "perms",
-                header: "模块与动作权限",
-                cell: ({ row }) => (
-                    <span className="text-sm text-muted-foreground">
-                        {row.original.permissionSummary}
-                    </span>
-                ),
+                id: "accounts",
+                header: "绑定账号",
+                cell: ({ row }) =>
+                    row.original.boundAccountCount > 0 ? (
+                        <span className="num">
+                            {row.original.boundAccountCount}
+                        </span>
+                    ) : (
+                        <span className="text-muted-foreground">—</span>
+                    ),
             },
             {
                 id: "scope",
                 header: "数据范围",
-                cell: ({ row }) => row.original.dataScopeSummary,
-            },
-            {
-                id: "status",
-                header: "状态",
                 cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        label={row.original.statusLabel}
-                        tone={row.original.statusTone}
-                    />
-                ),
-            },
-            {
-                id: "version",
-                header: "版本",
-                cell: ({ row }) => (
-                    <span className="num text-xs">
-                        v{row.original.permissionVersion.split("-").at(-1)}
+                    <span className="text-sm text-muted-foreground">
+                        {row.original.dataScopeSummary}
                     </span>
                 ),
-            },
-            {
-                id: "risk",
-                header: "风险",
-                cell: ({ row }) =>
-                    row.original.riskFlags.length ? (
-                        <div className="flex flex-wrap gap-1">
-                            {row.original.riskFlags.map((f) => (
-                                <Badge key={f} variant="warning">
-                                    {riskLabel(f)}
-                                </Badge>
-                            ))}
-                        </div>
-                    ) : (
-                        "—"
-                    ),
             },
             {
                 id: "actions",
                 header: "操作",
                 cell: ({ row }) => {
                     const role = row.original
-                    const version =
-                        data?.permissionVersion ?? role.permissionVersion
-                    const canAdjust =
-                        role.status === "enabled" &&
-                        !role.riskFlags.includes("HIGH_PRIVILEGE")
-                    const canExpand = role.riskFlags.includes("HIGH_PRIVILEGE")
-                    const canDisable =
-                        role.status === "enabled" &&
-                        role.riskFlags.includes("PENDING_DISABLE")
 
                     return (
                         <div className="flex items-center justify-end gap-1">
                             <Button
                                 type="button"
                                 size="xs"
-                                variant="ghost"
+                                variant="outline"
                                 ref={(el) => {
                                     rowFocusRef.current.set(role.id, el)
                                 }}
-                                onClick={() => openExplain("ROLE", role.id)}
-                            >
-                                <EyeIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                有效权限
-                            </Button>
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="outline"
                                 onClick={() =>
                                     router.push(`/system/roles/${role.id}/edit`)
                                 }
@@ -153,86 +142,6 @@ function useRoleColumns({
                                     align="end"
                                     className="min-w-40"
                                 >
-                                    {canAdjust ? (
-                                        <DropdownMenuItem
-                                            onClick={() =>
-                                                void startChange({
-                                                    subjectType: "ROLE",
-                                                    subjectId: role.id,
-                                                    action: "UPDATE_ROLE_PERMISSIONS",
-                                                    expectedPermissionVersion:
-                                                        version,
-                                                    reasonCode: "SECURITY_OPS",
-                                                    idempotencyKey: "pending",
-                                                    changeSet: [
-                                                        {
-                                                            targetReference:
-                                                                "W22.publish",
-                                                            operation: "REMOVE",
-                                                        },
-                                                    ],
-                                                })
-                                            }
-                                        >
-                                            调整权限
-                                        </DropdownMenuItem>
-                                    ) : null}
-                                    {canExpand ? (
-                                        <DropdownMenuItem
-                                            onClick={() =>
-                                                void startChange({
-                                                    subjectType: "ROLE",
-                                                    subjectId: role.id,
-                                                    action: "UPDATE_ROLE_PERMISSIONS",
-                                                    expectedPermissionVersion:
-                                                        version,
-                                                    reasonCode: "SECURITY_OPS",
-                                                    idempotencyKey: "pending",
-                                                    changeSet: [
-                                                        {
-                                                            targetReference:
-                                                                "sensitive.field.expand",
-                                                            operation: "ADD",
-                                                            valueReference:
-                                                                "FULL_COMPANY",
-                                                        },
-                                                    ],
-                                                })
-                                            }
-                                        >
-                                            扩权（将阻断）
-                                        </DropdownMenuItem>
-                                    ) : null}
-                                    {canDisable ? (
-                                        <DropdownMenuItem
-                                            onClick={() =>
-                                                void startChange({
-                                                    subjectType: "ROLE",
-                                                    subjectId: role.id,
-                                                    action: "DISABLE_ROLE",
-                                                    expectedPermissionVersion:
-                                                        version,
-                                                    reasonCode: "SECURITY_OPS",
-                                                    idempotencyKey: "pending",
-                                                    changeSet: [
-                                                        {
-                                                            targetReference:
-                                                                "status",
-                                                            operation:
-                                                                "REPLACE",
-                                                            valueReference:
-                                                                "disabled",
-                                                        },
-                                                    ],
-                                                })
-                                            }
-                                        >
-                                            停用
-                                        </DropdownMenuItem>
-                                    ) : null}
-                                    {(canAdjust || canExpand || canDisable) && (
-                                        <DropdownMenuSeparator />
-                                    )}
                                     <DropdownMenuItem
                                         variant="destructive"
                                         onClick={() =>
@@ -252,14 +161,7 @@ function useRoleColumns({
                 },
             },
         ],
-        [
-            openExplain,
-            startChange,
-            router,
-            data?.permissionVersion,
-            rowFocusRef,
-            setDeletingRole,
-        ],
+        [router, rowFocusRef, setDeletingRole],
     )
 }
 

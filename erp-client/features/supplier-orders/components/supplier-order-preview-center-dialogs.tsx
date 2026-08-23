@@ -1,21 +1,8 @@
 "use client"
 
-import { FormalActionConfirmDialog, OptionCombobox } from "@/components/business"
-import {
-    AlertDialog,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { FormalActionConfirmDialog } from "@/components/business"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
-import { RELEASE_REASON_OPTIONS } from "@/features/supplier-orders/types"
 import type { AfterSalesConfirmRequest } from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
-import type { SupplierOrderCenterReleaseForm } from "@/features/supplier-orders/hooks/use-supplier-order-center-forms"
 
 export function SupplierOrderCenterDialogs({
     order,
@@ -25,9 +12,6 @@ export function SupplierOrderCenterDialogs({
     onReplayOpenChange,
     replayPending,
     onReplayConfirm,
-    releaseOpen,
-    onReleaseOpenChange,
-    releaseForm,
     completeOpen,
     onCompleteOpenChange,
     completePending,
@@ -46,15 +30,14 @@ export function SupplierOrderCenterDialogs({
     onReplayOpenChange: (open: boolean) => void
     replayPending: boolean
     onReplayConfirm: () => void | Promise<void>
-    releaseOpen: boolean
-    onReleaseOpenChange: (open: boolean) => void
-    releaseForm: SupplierOrderCenterReleaseForm
     completeOpen: boolean
     onCompleteOpenChange: (open: boolean) => void
     completePending: boolean
     onCompleteConfirm: () => void | Promise<void>
     afterSalesRequest: AfterSalesConfirmRequest | null
-    onAfterSalesRequestChange: (request: AfterSalesConfirmRequest | null) => void
+    onAfterSalesRequestChange: (
+        request: AfterSalesConfirmRequest | null,
+    ) => void
     afterSalesPending: boolean
     onAfterSalesConfirm: () => void | Promise<void>
 }) {
@@ -81,77 +64,6 @@ export function SupplierOrderCenterDialogs({
                 pending={replayPending}
                 onConfirm={onReplayConfirm}
             />
-
-            <AlertDialog open={releaseOpen} onOpenChange={onReleaseOpenChange}>
-                <AlertDialogContent className="sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>退回团队</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            清空当前个人责任并保持正式任务开放；不会写入暂停状态，也不会完成任务。
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <form
-                        className="space-y-3"
-                        onSubmit={(e) => {
-                            e.preventDefault()
-                            void releaseForm.handleSubmit()
-                        }}
-                    >
-                        <div className="space-y-1">
-                            <Label>原因</Label>
-                            <releaseForm.AppField
-                                name="reasonCode"
-                                children={(field) => (
-                                    <OptionCombobox
-                                        value={field.state.value}
-                                        onValueChange={(v) =>
-                                            field.handleChange(
-                                                v ?? field.state.value,
-                                            )
-                                        }
-                                        options={RELEASE_REASON_OPTIONS.map(
-                                            (opt) => ({
-                                                value: opt.value,
-                                                label: opt.label,
-                                            }),
-                                        )}
-                                        className="w-full"
-                                        allowClear={false}
-                                        aria-label="原因"
-                                        placeholder="选择原因"
-                                    />
-                                )}
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <Label>说明（可选）</Label>
-                            <releaseForm.AppField
-                                name="comment"
-                                children={(field) => (
-                                    <Textarea
-                                        value={field.state.value}
-                                        onChange={(e) =>
-                                            field.handleChange(e.target.value)
-                                        }
-                                        rows={2}
-                                    />
-                                )}
-                            />
-                        </div>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel
-                                type="button"
-                                onClick={() => onReleaseOpenChange(false)}
-                            >
-                                取消
-                            </AlertDialogCancel>
-                            <releaseForm.AppForm>
-                                <releaseForm.SubmitButton label="确认退回团队" />
-                            </releaseForm.AppForm>
-                        </AlertDialogFooter>
-                    </form>
-                </AlertDialogContent>
-            </AlertDialog>
 
             <FormalActionConfirmDialog
                 open={completeOpen}
@@ -215,9 +127,7 @@ export function SupplierOrderCenterDialogs({
                 ]}
                 irreversibleEffects={[
                     `将向供应商发起${
-                        afterSalesRequest?.action === "CANCEL"
-                            ? "取消"
-                            : "退款"
+                        afterSalesRequest?.action === "CANCEL" ? "取消" : "退款"
                     }请求`,
                 ]}
                 pending={afterSalesPending}

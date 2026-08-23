@@ -49,15 +49,10 @@ vi.mock("@/features/approval-workflow/queries", async () => {
             mutateAsync: vi.fn(),
             isPending: false,
         }),
-        useReassignApproverMutation: () => ({
-            mutateAsync: vi.fn(),
-            isPending: false,
-        }),
         useCancelBlockedMutation: () => ({
             mutateAsync: vi.fn(),
             isPending: false,
         }),
-        useEligibleReassigneesQuery: () => ({ data: [] }),
     }
 })
 
@@ -124,9 +119,7 @@ describe("SalesChangeOrderApprovalArea", () => {
         expect(screen.queryByRole("button", { name: "选择流程" })).toBeNull()
         expect(screen.queryByRole("button", { name: "通过" })).toBeNull()
         expect(screen.queryByRole("button", { name: "开始处理" })).toBeNull()
-        expect(
-            screen.queryByRole("button", { name: "影响确认" }),
-        ).toBeNull()
+        expect(screen.queryByRole("button", { name: "影响确认" })).toBeNull()
         expect(screen.queryByRole("button", { name: "财务复核" })).toBeNull()
     })
 
@@ -181,14 +174,14 @@ describe("SalesChangeOrderApprovalArea", () => {
             hasForbiddenWorkItemActions(
                 mergeSalesChangeOrderAllowedActions(
                     ["CANCEL"],
-                    ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM", "CLOSE"],
+                    ["APPROVE", "REASSIGN", "CLOSE"],
                 ),
             ),
         ).toBe(false)
         expect(
             mergeSalesChangeOrderAllowedActions(
                 ["CANCEL"],
-                ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM", "CLOSE"],
+                ["APPROVE", "REASSIGN", "CLOSE"],
             ),
         ).toEqual(["CANCEL", "APPROVE"])
     })

@@ -109,7 +109,6 @@ export function mapFormalWorkItem(workItem: WorkItemProjection) {
             | "BUSINESS_EXCEPTION",
         taskVersion: workItem.taskVersion,
         status: workItem.status,
-        assignmentMode: workItem.assignmentMode,
         processingState: workItem.processingState,
         subjectVersion: workItem.subjectVersion,
         ownerUser: workItem.ownerUser,

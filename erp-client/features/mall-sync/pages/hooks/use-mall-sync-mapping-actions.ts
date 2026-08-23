@@ -5,7 +5,6 @@ import * as React from "react"
 import { useAppForm } from "@/components/form"
 import {
     confirmSchema,
-    releaseSchema,
     sourceFixSchema,
 } from "@/features/mall-sync/lib/presentation"
 import {
@@ -14,8 +13,6 @@ import {
     useResolveUnknownReapplyMutation,
     useRequestSourceFixMutation,
 } from "@/features/mall-sync/hooks/queries"
-import { useWorkItemResponsibilityMutation } from "@/features/work-items"
-import { getErrorMessage } from "@/lib/api/errors"
 import type { PatchUrl } from "@/features/mall-sync/pages/hooks/use-mall-sync-url-state"
 import type { MallSyncPageData } from "@/features/mall-sync/pages/hooks/use-mall-sync-page-data"
 import type { MallSyncActionFeedback } from "@/features/mall-sync/pages/hooks/use-mall-sync-action-feedback"
@@ -33,7 +30,6 @@ export function useMallSyncMappingActions(
 
     const confirmMutation = useConfirmMappingMutation()
     const sourceFixMutation = useRequestSourceFixMutation()
-    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const reapplyMutation = useReapplyMutation()
     const resolveReapply = useResolveUnknownReapplyMutation()
 
@@ -42,7 +38,6 @@ export function useMallSyncMappingActions(
     >(null)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [sourceFixOpen, setSourceFixOpen] = React.useState(false)
-    const [releaseOpen, setReleaseOpen] = React.useState(false)
 
     // 切换映射任务时重置候选与动作错误；责任始终从服务端重取。
     React.useEffect(() => {
@@ -78,35 +73,6 @@ export function useMallSyncMappingActions(
             )
         },
     })
-
-    const releaseForm = useAppForm({
-        defaultValues: { reason: "" },
-        validators: { onChange: releaseSchema },
-        onSubmit: async ({ value }) => {
-            await handleReleaseToTeam(value.reason)
-        },
-    })
-
-    async function handleStartProcessing() {
-        if (mappingTask?.ownerRoutingState !== "CONFIGURED") return
-        setActionError(null)
-        const identity = commandIdentity(
-            "start-processing",
-            mappingTask.workItem.workItemId,
-        )
-        try {
-            await responsibilityMutation.mutateAsync({
-                kind: "START_PROCESSING",
-                workItemId: mappingTask.workItem.workItemId,
-                expectedTaskVersion: mappingTask.workItem.taskVersion,
-                idempotencyKey: identity.idempotencyKey,
-            })
-            clearIdentity(identity.key)
-            await pageQuery.refetch()
-        } catch (e) {
-            setActionError(getErrorMessage(e, "开始处理失败"))
-        }
-    }
 
     async function handleConfirm() {
         if (
@@ -227,34 +193,6 @@ export function useMallSyncMappingActions(
         }
     }
 
-    async function handleReleaseToTeam(reason: string) {
-        if (mappingTask?.ownerRoutingState !== "CONFIGURED") return
-        const identity = commandIdentity(
-            "release-to-team",
-            mappingTask.workItem.workItemId,
-        )
-        try {
-            await responsibilityMutation.mutateAsync({
-                kind: "RELEASE_TO_TEAM",
-                workItemId: mappingTask.workItem.workItemId,
-                expectedTaskVersion: mappingTask.workItem.taskVersion,
-                reason,
-                idempotencyKey: identity.idempotencyKey,
-            })
-            clearIdentity(identity.key)
-            setReleaseOpen(false)
-            setResult({
-                status: "succeeded",
-                title: "已退回团队",
-                description:
-                    "当前映射仍待处理，个人责任已释放；可继续浏览下一项。",
-            })
-            await pageQuery.refetch()
-        } catch (error) {
-            setActionError(getErrorMessage(error, "退回团队失败"))
-        }
-    }
-
     async function handleReapply() {
         if (!mappingTask || !firstPhase) return
         const identity = commandIdentity("reapply", mappingTask.mappingTaskId)
@@ -332,19 +270,14 @@ export function useMallSyncMappingActions(
         setConfirmOpen,
         sourceFixOpen,
         setSourceFixOpen,
-        releaseOpen,
-        setReleaseOpen,
         confirmForm,
         sourceFixForm,
-        releaseForm,
         canConfirmMapping,
         confirmPending: confirmMutation.isPending,
-        responsibilityPending: responsibilityMutation.isPending,
+        actionPending: confirmMutation.isPending,
         reapplyPending: reapplyMutation.isPending,
-        handleStartProcessing,
         handleConfirm,
         handleRequestSourceFix,
-        handleReleaseToTeam,
         handleReapply,
         handleResolveUnknownReapply,
     }

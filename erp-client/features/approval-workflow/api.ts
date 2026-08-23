@@ -1,11 +1,10 @@
-import { apiGet, apiPost, type ApiError } from "@/lib/api"
+import { apiGet, apiPost } from "@/lib/api"
 
 import {
     mapCommandViewDto,
     mapDocumentApprovalViewDto,
     mapHistoryItemDto,
     mapInstanceListItemDto,
-    mapReassigneeCandidateDto,
     mapRecoveryOptionsDto,
     type ApprovalCommandView,
     type ApprovalCommandViewDto,
@@ -20,9 +19,6 @@ import {
     type CancelBlockedRequest,
     type DocumentApprovalView,
     type DocumentApprovalViewDto,
-    type ReassignApproverRequest,
-    type ReassigneeCandidate,
-    type ReassigneeCandidateDto,
     type RecoveryOptions,
     type RecoveryOptionsDto,
     type ResumeApproverRequest,
@@ -40,13 +36,6 @@ export type ApprovalInstanceListParams = Readonly<{
 
 export type ApprovalHistoryParams = Readonly<{
     instanceId: string
-    cursor?: string
-    limit?: number
-}>
-
-export type EligibleReassigneesParams = Readonly<{
-    instanceId: string
-    search?: string
     cursor?: string
     limit?: number
 }>
@@ -90,10 +79,6 @@ export const approvalConflictMessage = (error: unknown): string => {
             return error.message
         }
         return "提交失败，请刷新后重试"
-    }
-    const apiError = error as Partial<ApiError>
-    if (apiError.code === "APPROVAL_CURRENT_APPROVER_RECOVERED") {
-        return "原审批人已恢复有效，请改用恢复当前审批人"
     }
     return "责任或版本已变化，请刷新后重新确认"
 }
@@ -187,23 +172,6 @@ export const getRecoveryOptions = (
     ).then(mapRecoveryOptionsDto)
 
 /**
- * 按当前单据与岗位分离搜索改派候选人。
- */
-export const searchEligibleReassignees = async (
-    params: EligibleReassigneesParams,
-): Promise<readonly ReassigneeCandidate[]> => {
-    const items = await apiGet<readonly ReassigneeCandidateDto[]>(
-        `/admin/approval-instances/${encodeURIComponent(params.instanceId)}/eligible-reassignees`,
-        {
-            search: params.search,
-            cursor: params.cursor,
-            limit: params.limit ?? 20,
-        },
-    )
-    return items.map(mapReassigneeCandidateDto)
-}
-
-/**
  * 原审批人重新合格后恢复当前节点，创建新执行和新任务。
  */
 export const resumeCurrentApprover = (
@@ -212,18 +180,6 @@ export const resumeCurrentApprover = (
 ): Promise<ApprovalCommandView> =>
     apiPost<ApprovalCommandViewDto>(
         `/admin/approval-instances/${encodeURIComponent(instanceId)}/resume-current-approver`,
-        request,
-    ).then(mapCommandViewDto)
-
-/**
- * 仅对人员失效 blocker 改派当前审批人。
- */
-export const reassignCurrentApprover = (
-    instanceId: string,
-    request: ReassignApproverRequest,
-): Promise<ApprovalCommandView> =>
-    apiPost<ApprovalCommandViewDto>(
-        `/admin/approval-instances/${encodeURIComponent(instanceId)}/reassign-current-approver`,
         request,
     ).then(mapCommandViewDto)
 

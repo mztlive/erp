@@ -1,4 +1,4 @@
-//! 审批实例、决定、恢复、改派与受阻取消 HTTP 适配层。
+//! 审批实例、决定、恢复与受阻取消 HTTP 适配层。
 //!
 //! 删除 `recover` 与 `RETRY_CURRENT_STEP`。Handler 只做协议适配，不解释 ProcessKind。
 
@@ -29,9 +29,8 @@ use crate::{
 };
 
 use self::http::{
-    CancelBlockedHttpRequest, DecisionValue, EligibleReassigneesQuery, InstanceHistoryQuery,
-    InstanceListQuery, ReassignApproverHttpRequest, ResumeApproverHttpRequest, SubmitDecisionHttpRequest,
-    UpgradeBindingHttpRequest,
+    CancelBlockedHttpRequest, DecisionValue, InstanceHistoryQuery, InstanceListQuery,
+    ResumeApproverHttpRequest, SubmitDecisionHttpRequest, UpgradeBindingHttpRequest,
 };
 
 /// 审批实例 Handler 结果。
@@ -39,7 +38,7 @@ type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
 
 #[permission_macros::permission(
     group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
+    group_desc = "审批运行、决定、恢复与取消",
     desc = "提交当前开放审批任务的通过或驳回",
     resource = "approval_instance",
     action = "decide"
@@ -73,7 +72,7 @@ pub async fn submit_decision(
 
 #[permission_macros::permission(
     group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
+    group_desc = "审批运行、决定、恢复与取消",
     desc = "按固定 view 查询审批实例",
     resource = "approval_instance",
     action = "read"
@@ -108,7 +107,7 @@ pub async fn instance_list(
 
 #[permission_macros::permission(
     group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
+    group_desc = "审批运行、决定、恢复与取消",
     desc = "查询审批实例详情",
     resource = "approval_instance",
     action = "read"
@@ -135,7 +134,7 @@ pub async fn instance_detail(
 
 #[permission_macros::permission(
     group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
+    group_desc = "审批运行、决定、恢复与取消",
     desc = "按轮次读取审批历史",
     resource = "approval_instance",
     action = "read"
@@ -163,7 +162,7 @@ pub async fn instance_history(
 
 #[permission_macros::permission(
     group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
+    group_desc = "审批运行、决定、恢复与取消",
     desc = "查询当前 blocker 的唯一合法恢复方式",
     resource = "approval_instance",
     action = "read"
@@ -189,37 +188,7 @@ pub async fn recovery_options(
 
 #[permission_macros::permission(
     group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
-    desc = "按当前单据与岗位分离搜索改派候选人",
-    resource = "approval_instance",
-    action = "reassign"
-)]
-/// 搜索改派候选人。
-///
-/// 必须按当前业务对象重验资格，不得复用定义期候选列表。
-///
-/// # 错误
-/// 页大小非法时返回 422。
-pub async fn eligible_reassignees(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    headers: HeaderMap,
-    Query(query): Query<EligibleReassigneesQuery>,
-) -> ApprovalResult<serde_json::Value> {
-    let limit = query
-        .normalized_limit()
-        .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
-    let items = runtime_service(&state)
-        .eligible_reassignees(&actor, &id, query.search.as_deref(), limit)
-        .await
-        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
-    ok_json(items)
-}
-
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
+    group_desc = "审批运行、决定、恢复与取消",
     desc = "原审批人重新合格后恢复当前节点",
     resource = "approval_instance",
     action = "resume"
@@ -247,39 +216,7 @@ pub async fn resume_current_approver(
 
 #[permission_macros::permission(
     group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
-    desc = "仅对人员失效 blocker 改派当前审批人",
-    resource = "approval_instance",
-    action = "reassign"
-)]
-/// 改派人员失效 blocker 的当前审批人。
-///
-/// 不得实现为普通管理员转签。
-///
-/// # 错误
-/// 原审批人已恢复或 blocker 不匹配时由服务返回稳定冲突。
-pub async fn reassign_current_approver(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-    Json(request): Json<ReassignApproverHttpRequest>,
-) -> ApprovalResult<serde_json::Value> {
-    let command = reassign_command(id, request, actor.id(), &headers)?;
-    let view = runtime_service(&state)
-        .reassign_current_approver(
-            &actor,
-            &command.approval_process_instance_id,
-            &command.target_user_id,
-        )
-        .await
-        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
-    ok_json(view)
-}
-
-#[permission_macros::permission(
-    group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
+    group_desc = "审批运行、决定、恢复与取消",
     desc = "取消非人员一致性 blocker",
     resource = "approval_instance",
     action = "cancel_blocked"
@@ -307,7 +244,7 @@ pub async fn cancel_blocked(
 
 #[permission_macros::permission(
     group = "审批实例",
-    group_desc = "审批运行、决定、恢复与改派",
+    group_desc = "审批运行、决定、恢复与取消",
     desc = "升级未提交单据的审批定义绑定",
     resource = "approval_instance",
     action = "upgrade_binding"
@@ -401,20 +338,6 @@ struct ValidatedResume {
     actor_id: String,
 }
 
-/// 协议层已注入 actor 的改派命令。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ValidatedReassign {
-    approval_process_instance_id: String,
-    target_user_id: String,
-    reason: String,
-    expected_instance_version: u64,
-    expected_execution_version: u64,
-    expected_assignment_version: u64,
-    expected_task_version: Option<u64>,
-    idempotency_key: String,
-    actor_id: String,
-}
-
 /// 协议层已注入 actor 的受阻取消命令。blocker 由服务端推导。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ValidatedCancelBlocked {
@@ -475,38 +398,6 @@ fn resume_command(
             headers,
         )?,
         expected_closed_task_version: parse_optional_version(
-            request.expected_closed_task_version.as_deref(),
-            "已关闭任务",
-            headers,
-        )?,
-        idempotency_key: request.idempotency_key,
-        actor_id: actor_id.to_string(),
-    })
-}
-
-/// 把改派请求转为协议命令。
-///
-/// # 错误
-/// 原因为空或版本非法时返回协议错误。
-fn reassign_command(
-    instance_id: String,
-    request: ReassignApproverHttpRequest,
-    actor_id: &str,
-    headers: &HeaderMap,
-) -> Result<ValidatedReassign, ApprovalHttpError> {
-    ensure_non_empty_reason(&request.reason, headers)?;
-    Ok(ValidatedReassign {
-        approval_process_instance_id: instance_id,
-        target_user_id: request.target_user_id,
-        reason: request.reason,
-        expected_instance_version: parse_version(&request.expected_instance_version, "审批实例", headers)?,
-        expected_execution_version: parse_version(&request.expected_execution_version, "节点执行", headers)?,
-        expected_assignment_version: parse_version(
-            &request.expected_assignment_version,
-            "审批人绑定",
-            headers,
-        )?,
-        expected_task_version: parse_optional_version(
             request.expected_closed_task_version.as_deref(),
             "已关闭任务",
             headers,

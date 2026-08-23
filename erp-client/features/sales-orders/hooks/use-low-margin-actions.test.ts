@@ -16,26 +16,12 @@ vi.mock("@/features/sales-orders/hooks/queries", () => ({
     },
 }))
 
-const workItemMocks = vi.hoisted(() => ({
-    responsibility: vi.fn(),
-}))
-
-vi.mock("@/features/work-items", () => ({
-    useWorkItemResponsibilityMutation: vi.fn(() => ({
-        mutateAsync: workItemMocks.responsibility,
-        isPending: false,
-    })),
-}))
-
 import type {
     ActiveLowMarginManagerConfirmation,
     SalesOrderListItem,
 } from "@/features/sales-orders/types"
 import { useLowMarginManagerActions } from "@/features/sales-orders/hooks/use-low-margin-actions"
-import {
-    createFreshQueryClient,
-    renderHookWithProviders,
-} from "@/features/test-utils"
+import { renderHookWithProviders } from "@/features/test-utils"
 
 const makeOrder = (): SalesOrderListItem =>
     ({
@@ -53,7 +39,7 @@ const makeConfirmation = (): ActiveLowMarginManagerConfirmation => ({
     acceptanceReason: "毛利偏低但客户重要",
     evidenceReferenceIds: ["ev-1"],
     ownerUser: { id: "u-1", displayName: "销售领导" },
-    allowedActions: ["START_PROCESSING", "APPROVE", "REJECT"],
+    allowedActions: ["APPROVE", "REJECT"],
     actionBlockers: [],
 })
 
@@ -61,7 +47,6 @@ describe("useLowMarginManagerActions", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         apiMocks.completeLowMarginManagerConfirmation.mockReset()
-        workItemMocks.responsibility.mockReset()
     })
 
     const renderActions = (onResult = vi.fn()) => {
@@ -74,36 +59,6 @@ describe("useLowMarginManagerActions", () => {
         )
         return { result, onResult }
     }
-
-    it("starts processing and refreshes the order detail", async () => {
-        workItemMocks.responsibility.mockResolvedValue({})
-        const client = createFreshQueryClient()
-        const invalidateSpy = vi.spyOn(client, "invalidateQueries")
-        const onResult = vi.fn()
-        const { result } = renderHookWithProviders(
-            () =>
-                useLowMarginManagerActions({
-                    order: makeOrder(),
-                    confirmation: makeConfirmation(),
-                    onResult,
-                }),
-            { queryClient: client },
-        )
-
-        await act(async () => {
-            await result.current.startProcessing()
-        })
-
-        expect(workItemMocks.responsibility).toHaveBeenCalledWith({
-            kind: "START_PROCESSING",
-            workItemId: "wi-1",
-            expectedTaskVersion: "3",
-            idempotencyKey: "w05:wi-1:3:START",
-        })
-        expect(invalidateSpy).toHaveBeenCalledWith({
-            queryKey: ["sales-orders", "detail", "so-1"],
-        })
-    })
 
     it("approves and reports the procurement reference", async () => {
         apiMocks.completeLowMarginManagerConfirmation.mockResolvedValue({

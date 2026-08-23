@@ -18,26 +18,23 @@ import {
     type RejectReviewValue,
 } from "./reject-review-dialog"
 
-/** 复核页全部确认弹窗：通过/从 0 起强确认、退回团队、驳回、放弃未保存切换。 */
+/** 复核页全部确认弹窗：通过/从 0 起强确认、驳回、放弃未保存切换。 */
 export function ReviewConfirmDialogs({
     confirmMode,
     setConfirmMode,
     task,
     completePending,
-    releasePending,
     pendingNav,
     setPendingNav,
     neighborId,
     goToWorkItem,
     runApprove,
     submitReject,
-    handleReleaseToTeam,
 }: {
     confirmMode: ConfirmMode
     setConfirmMode: React.Dispatch<React.SetStateAction<ConfirmMode>>
     task: CardFundsReviewItemView | undefined
     completePending: boolean
-    releasePending: boolean
     pendingNav: number | null
     setPendingNav: React.Dispatch<React.SetStateAction<number | null>>
     neighborId: (delta: number) => string | undefined
@@ -47,7 +44,6 @@ export function ReviewConfirmDialogs({
         advance: boolean,
     ) => Promise<void>
     submitReject: (value: RejectReviewValue) => Promise<void>
-    handleReleaseToTeam: () => Promise<void>
 }) {
     return (
         <>
@@ -111,7 +107,10 @@ export function ReviewConfirmDialogs({
                 pending={completePending}
                 onConfirm={async () => {
                     if (confirmMode?.kind === "zero") {
-                        await runApprove("NO_HISTORY_FROM_ZERO", confirmMode.advance)
+                        await runApprove(
+                            "NO_HISTORY_FROM_ZERO",
+                            confirmMode.advance,
+                        )
                     } else if (confirmMode?.kind === "approve") {
                         await runApprove(
                             confirmMode.conclusion,
@@ -119,29 +118,6 @@ export function ReviewConfirmDialogs({
                         )
                     }
                 }}
-            />
-
-            <FormalActionConfirmDialog
-                open={confirmMode?.kind === "release"}
-                onOpenChange={(open) => {
-                    if (!open) setConfirmMode(null)
-                }}
-                title="退回团队继续安排"
-                description="退回后原任务保持开放，只清除当前个人责任；不生成复核记录。"
-                actionLabel="退回团队"
-                confirmLabel="确认退回团队"
-                fromStatus={{ label: "处理中", tone: "info" }}
-                toStatus={{
-                    label: "团队待处理",
-                    tone: "warning",
-                }}
-                effects={[
-                    "原任务保持开放",
-                    "清除当前个人责任",
-                    "不生成复核记录",
-                ]}
-                pending={releasePending}
-                onConfirm={() => void handleReleaseToTeam()}
             />
 
             <RejectReviewDialog

@@ -52,15 +52,10 @@ vi.mock("@/features/approval-workflow/queries", async () => {
             mutateAsync: vi.fn(),
             isPending: false,
         }),
-        useReassignApproverMutation: () => ({
-            mutateAsync: vi.fn(),
-            isPending: false,
-        }),
         useCancelBlockedMutation: () => ({
             mutateAsync: vi.fn(),
             isPending: false,
         }),
-        useEligibleReassigneesQuery: () => ({ data: [] }),
     }
 })
 
@@ -134,10 +129,7 @@ describe("ReceiptReversalApprovalArea", () => {
 
     it("prints the submit confirmation route and fixed reject explanation", () => {
         wrapper(
-            <ReceiptReversalApprovalArea
-                phase="confirm"
-                approval={binding}
-            />,
+            <ReceiptReversalApprovalArea phase="confirm" approval={binding} />,
         )
         expect(screen.getByText("张三 → 李四")).toBeTruthy()
         expect(
@@ -185,14 +177,14 @@ describe("ReceiptReversalApprovalArea", () => {
             hasForbiddenWorkItemActions(
                 mergeReceiptReversalAllowedActions(
                     ["CANCEL"],
-                    ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM", "CLOSE"],
+                    ["APPROVE", "REASSIGN", "CLOSE"],
                 ),
             ),
         ).toBe(false)
         expect(
             mergeReceiptReversalAllowedActions(
                 ["CANCEL"],
-                ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM", "CLOSE"],
+                ["APPROVE", "REASSIGN", "CLOSE"],
             ),
         ).toEqual(["CANCEL", "APPROVE"])
     })

@@ -22,7 +22,6 @@ export const EXECUTION_STATUS_LABEL: Record<string, string> = {
 
 export const RECOVERY_ACTION_LABEL: Record<RecoveryOption, string> = {
     RESUME_CURRENT_APPROVER: "恢复当前审批人",
-    REASSIGN_CURRENT_APPROVER: "改派当前审批人",
     CANCEL_BLOCKED: "取消受阻审批",
 }
 
@@ -38,7 +37,6 @@ export const ALLOWED_ACTION_LABEL: Partial<
     CANCEL_APPROVAL: "撤回审批",
     UPGRADE_BINDING: "更新审批流程版本",
     RESUME_CURRENT_APPROVER: "恢复当前审批人",
-    REASSIGN_CURRENT_APPROVER: "改派当前审批人",
     CANCEL_BLOCKED_APPROVAL: "取消受阻审批",
 }
 
@@ -90,7 +88,7 @@ export const isBlockedStatus = (status?: string | null): boolean =>
     status === "BLOCKED"
 
 /**
- * 人员失效类 blocker。仅这些类别可显示恢复/改派。
+ * 人员失效类 blocker。仅这些类别可显示恢复原审批人。
  */
 export const PERSONNEL_BLOCKER_CODES = new Set([
     "APPROVER_ACCOUNT_INACTIVE",

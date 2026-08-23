@@ -3,8 +3,6 @@
 import type { StatusTone } from "@/components/ui/status-badge"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
-    AssignmentMode,
-    WorkItemAllowedAction,
     WorkItemProcessingState,
     WorkItemStatus,
 } from "@/features/work-items"
@@ -260,12 +258,10 @@ export type PurchaseOrderCenterView = Readonly<{
         taskVersion: string
         subjectVersion: string
         status: WorkItemStatus
-        assignmentMode: AssignmentMode
         ownerRole: string
         ownerOrganizationId: string
         ownerUserId?: string
         processingState: WorkItemProcessingState
-        responsibilityActions: readonly WorkItemAllowedAction[]
         domainAllowedActions: readonly PurchaseReviewDomainAction[]
         actionBlockers: readonly ActionBlocker[]
     }

@@ -28,7 +28,7 @@ pub struct OpenTaskSummary {
     pub owner_user_id: String,
 }
 
-/// 启动、决定、取消、恢复、改派和受阻取消的统一响应。
+/// 审批运行命令的统一响应。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApprovalCommandView {
     /// 实例 ID。

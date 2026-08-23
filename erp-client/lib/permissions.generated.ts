@@ -355,7 +355,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     },
     {
         name: "审批实例",
-        description: "审批运行、决定、恢复与改派",
+        description: "审批运行、决定、恢复与取消",
         permissions: [
             {
                 module: "admin",
@@ -409,32 +409,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "GET",
-                path: "/admin/approval-instances/{id}/eligible-reassignees",
-                description: "按当前单据与岗位分离搜索改派候选人",
-                permission: {
-                    resource: "approval_instance",
-                    action: "reassign",
-                },
-            },
-            {
-                module: "admin",
                 method: "POST",
                 path: "/admin/approval-instances/{id}/resume-current-approver",
                 description: "原审批人重新合格后恢复当前节点",
                 permission: {
                     resource: "approval_instance",
                     action: "resume",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/approval-instances/{id}/reassign-current-approver",
-                description: "仅对人员失效 blocker 改派当前审批人",
-                permission: {
-                    resource: "approval_instance",
-                    action: "reassign",
                 },
             },
             {

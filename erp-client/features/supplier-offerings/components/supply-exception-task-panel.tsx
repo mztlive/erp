@@ -24,15 +24,12 @@ const ACTION_LABELS: Readonly<Partial<Record<WorkItemAllowedAction, string>>> =
     {
         VIEW: "可查看",
         PROCESS: "可核对",
-        START_PROCESSING: "可开始处理",
-        RELEASE_TO_TEAM: "可退回团队",
         REASSIGN: "可转交",
     }
 
 function responsibility(task: SupplierSupplyExceptionWorkItem): string {
     if (task.ownerUser) return task.ownerUser.displayName
-    if (task.assignmentMode === "POOL") return "责任团队待处理"
-    return "尚无个人责任人"
+    return "责任人信息不可用"
 }
 
 function sourceLabel(
@@ -246,8 +243,8 @@ export function SupplyExceptionTaskPanel({
                         </ul>
                     ) : null}
                     <p className="mt-2 text-xs text-muted-foreground">
-                        开始处理、退回团队与转交属于统一待办责任动作；W21
-                        不把它们解释为恢复发布或完成任务。
+                        转交属于统一待办责任动作；W21
+                        不把它解释为恢复发布或完成任务。
                     </p>
                 </div>
             </CardContent>

@@ -125,11 +125,11 @@ describe("mapCustomerRefundApproval", () => {
 })
 
 describe("mergeCustomerRefundAllowedActions", () => {
-    it("unions server facts and drops start-processing or pool actions", () => {
+    it("unions server facts and drops generic WorkItem actions", () => {
         expect(
             mergeCustomerRefundAllowedActions(
                 ["CANCEL"],
-                ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM"],
+                ["APPROVE", "REASSIGN", "CLOSE"],
             ),
         ).toEqual(["CANCEL", "APPROVE"])
     })
@@ -228,7 +228,7 @@ describe("customer accounts page refund proof", () => {
             "PROCESS_REQUIRED",
         )
         expect(CUSTOMER_ACCOUNTS_REFUND_FORBIDDEN_ACTIONS).toEqual(
-            expect.arrayContaining(["选择流程", "开始处理", "退回团队"]),
+            expect.arrayContaining(["选择流程", "转交", "关闭任务"]),
         )
         const pagePath = join(
             dirname(fileURLToPath(import.meta.url)),

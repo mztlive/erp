@@ -65,7 +65,7 @@ describe("processBlocker / canProcess / canView", () => {
         expect(
             canProcess(
                 itemFixture({
-                    allowedActions: ["START_PROCESSING" as never],
+                    allowedActions: ["UNSUPPORTED_ACTION" as never],
                 }),
             ),
         ).toBe(false)

@@ -36,15 +36,12 @@ export function SalesChangeReviewPanel({
     })
     const {
         workItemQuery,
-        responsibility,
         decision,
         workItem,
         handlerKey,
         handlerMatches,
         valid,
         canProcess,
-        canStart,
-        canRelease,
         responsibilityStatus,
         reason,
         setReason,
@@ -87,18 +84,11 @@ export function SalesChangeReviewPanel({
                 responsibilityStatus={responsibilityStatus}
                 processLabel="通过复核"
                 showProcessNext={false}
-                pending={responsibility.isPending || decision.isPending}
+                pending={decision.isPending}
                 processDisabled={!canProcess}
                 onBack={() => actions.router.push(returnTo)}
                 onProcess={() => actions.setApproveOpen(true)}
                 onProcessNext={() => actions.setApproveOpen(true)}
-                onStartProcessing={
-                    canStart
-                        ? async () => {
-                              await actions.startProcessing()
-                          }
-                        : undefined
-                }
             />
             <div className="flex flex-wrap gap-2">
                 <Button
@@ -109,16 +99,6 @@ export function SalesChangeReviewPanel({
                 >
                     驳回复核
                 </Button>
-                {canRelease ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        disabled={responsibility.isPending}
-                        onClick={() => void actions.releaseToTeam()}
-                    >
-                        退回团队
-                    </Button>
-                ) : null}
             </div>
             <FormalActionConfirmDialog
                 open={actions.approveOpen}

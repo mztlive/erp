@@ -193,6 +193,7 @@ export async function submitSettlementReview(
             refresh_cutoff_policy_id: input.refreshCutoffPolicyId,
             expected_refresh_cutoff_policy_version:
                 input.expectedRefreshCutoffPolicyVersion,
+            reviewer_user_id: input.reviewerUserId,
             operation_id: input.operationId,
             idempotency_key: input.idempotencyKey,
             comment: input.comment,

@@ -19,11 +19,10 @@ export function makeItem(
             workItemType: "INTEGRATION_RESULT_UNKNOWN",
             taskVersion: "5",
             status: "OPEN",
-            assignmentMode: "DIRECT",
             processingState: "READY",
             subjectVersion: "v3",
             ownerUser: { id: "u1", displayName: "张三" },
-            allowedActions: ["START_PROCESSING", "RELEASE_TO_TEAM", "CLOSE"],
+            allowedActions: ["CLOSE"],
         },
         businessObject: {
             objectType: "purchase_order",

@@ -113,9 +113,7 @@ function makeDetail(): SettlementDetailView {
     }
 }
 
-function makeOutcome(
-    status: FormalOutcome["status"],
-): FormalOutcome {
+function makeOutcome(status: FormalOutcome["status"]): FormalOutcome {
     return { status, title: "标题", message: "说明" }
 }
 
@@ -162,6 +160,7 @@ const SUBMIT_INPUT: SubmitReviewInput = {
     subjectHash: "subj-1",
     refreshCutoffPolicyId: "pol-1",
     expectedRefreshCutoffPolicyVersion: "p1",
+    reviewerUserId: "reviewer-1",
     operationId: "op-1",
     idempotencyKey: "idem-1",
 }
@@ -202,20 +201,21 @@ describe("useSettlementListQuery", () => {
             { queryClient: client },
         )
 
-        await waitFor(() =>
-            expect(result.current.data).toEqual(LIST_VIEW),
-        )
+        await waitFor(() => expect(result.current.data).toEqual(LIST_VIEW))
         expect(mockedApi.fetchSettlementList).toHaveBeenCalledWith(LIST_INPUT)
-        expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
-            ["supplier-settlements", "list", LIST_INPUT],
-        ])
+        expect(
+            client
+                .getQueryCache()
+                .getAll()
+                .map((q) => q.queryKey),
+        ).toEqual([["supplier-settlements", "list", LIST_INPUT]])
     })
 
     it("exposes the error state on failure", async () => {
         mockedApi.fetchSettlementList.mockRejectedValue(new Error("boom"))
 
-        const { result } = renderHookWithProviders(
-            () => useSettlementListQuery(LIST_INPUT),
+        const { result } = renderHookWithProviders(() =>
+            useSettlementListQuery(LIST_INPUT),
         )
 
         await waitFor(() => expect(result.current.isError).toBe(true))
@@ -244,14 +244,19 @@ describe("useSettlementDetailQuery", () => {
             { queryClient: client },
         )
 
-        await waitFor(() => expect(result.current.data?.statement.id).toBe("st-1"))
+        await waitFor(() =>
+            expect(result.current.data?.statement.id).toBe("st-1"),
+        )
         expect(mockedApi.fetchSettlementDetail).toHaveBeenCalledWith({
             statementId: "st-1",
             workItemId: "wi-1",
         })
-        expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
-            ["supplier-settlements", "detail", "st-1", "wi-1"],
-        ])
+        expect(
+            client
+                .getQueryCache()
+                .getAll()
+                .map((q) => q.queryKey),
+        ).toEqual([["supplier-settlements", "detail", "st-1", "wi-1"]])
     })
 
     it("uses null in the key when no work item id is given", async () => {
@@ -264,9 +269,12 @@ describe("useSettlementDetailQuery", () => {
         )
 
         await waitFor(() => expect(result.current.isSuccess).toBe(true))
-        expect(client.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
-            ["supplier-settlements", "detail", "st-1", null],
-        ])
+        expect(
+            client
+                .getQueryCache()
+                .getAll()
+                .map((q) => q.queryKey),
+        ).toEqual([["supplier-settlements", "detail", "st-1", null]])
     })
 })
 
@@ -276,7 +284,10 @@ describe("settlement mutations", () => {
             makeOutcome("succeeded"),
         )
         const client = createFreshQueryClient()
-        client.setQueryData(["supplier-settlements", "list", LIST_INPUT], LIST_VIEW)
+        client.setQueryData(
+            ["supplier-settlements", "list", LIST_INPUT],
+            LIST_VIEW,
+        )
         const { result } = renderHookWithProviders(
             () => useCreateDraftMutation(),
             { queryClient: client },
@@ -306,7 +317,10 @@ describe("settlement mutations", () => {
     it("createDraft does not invalidate on failure", async () => {
         mockedApi.createSettlementDraft.mockResolvedValue(makeOutcome("failed"))
         const client = createFreshQueryClient()
-        client.setQueryData(["supplier-settlements", "list", LIST_INPUT], LIST_VIEW)
+        client.setQueryData(
+            ["supplier-settlements", "list", LIST_INPUT],
+            LIST_VIEW,
+        )
         const { result } = renderHookWithProviders(
             () => useCreateDraftMutation(),
             { queryClient: client },
@@ -389,7 +403,10 @@ describe("settlement mutations", () => {
             makeOutcome("succeeded"),
         )
         const client = createFreshQueryClient()
-        client.setQueryData(["supplier-settlements", "list", LIST_INPUT], LIST_VIEW)
+        client.setQueryData(
+            ["supplier-settlements", "list", LIST_INPUT],
+            LIST_VIEW,
+        )
         const { result } = renderHookWithProviders(
             () => useReviewDecisionMutation(),
             { queryClient: client },

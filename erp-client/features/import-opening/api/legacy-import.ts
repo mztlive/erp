@@ -125,21 +125,6 @@ export type CompleteImportConfirmationInput = Readonly<{
     idempotencyKey: string
 }>
 
-/** 从团队责任池建立当前用户责任；返回值由详情查询重新取得。 */
-export async function startImportConfirmationProcessing(input: {
-    workItemId: string
-    expectedTaskVersion: string
-    idempotencyKey: string
-}): Promise<void> {
-    await apiPost(
-        `/admin/work-items/${encodeURIComponent(input.workItemId)}/start-processing`,
-        {
-            expected_task_version: input.expectedTaskVersion,
-            idempotency_key: input.idempotencyKey,
-        },
-    )
-}
-
 /** 提交 W18 唯一强类型业务确认命令；领域事实与任务终态由服务端同事务写入。 */
 export async function completeImportConfirmation(
     input: CompleteImportConfirmationInput,

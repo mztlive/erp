@@ -6,6 +6,7 @@
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api"
 import type {
+    AdminAccount,
     AdminRole,
     CreateAdminPayload,
     CreateRolePayload,
@@ -29,6 +30,10 @@ export const fetchAssignableRoles = async (): Promise<AdminRole[]> => {
         return fetchRoles()
     }
 }
+
+/** 管理员账号列表：后端一次返回全部账号。 */
+export const fetchAdmins = (): Promise<AdminAccount[]> =>
+    apiGet<AdminAccount[]>("/admin/admins")
 
 /** 创建管理员账号。 */
 export const createAdmin = (payload: CreateAdminPayload): Promise<void> =>

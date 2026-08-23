@@ -3,20 +3,12 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { getErrorMessage } from "@/lib/api/errors"
-import {
-    classifyFormalCommandError,
-    FormalCommandKeyLedger,
-} from "@/lib/formal-command"
-import { responsibilityText } from "@/lib/ui-text"
+import { FormalCommandKeyLedger } from "@/lib/formal-command"
 import {
     REJECT_REASON_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
-import {
-    useReviewPurchaseOrderMutation,
-} from "@/features/purchase-orders/hooks/queries"
-import { useWorkItemResponsibilityMutation } from "@/features/work-items"
+import { useReviewPurchaseOrderMutation } from "@/features/purchase-orders/hooks/queries"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 
 type UsePurchaseOrderDetailReviewActionsInput = {
@@ -30,7 +22,7 @@ type UsePurchaseOrderDetailReviewActionsInput = {
 }
 
 /**
- * 详情页财务审核动作：通过、驳回、开始处理与退回团队的正式命令编排。
+ * 详情页财务审核动作：通过与驳回的正式领域命令编排。
  */
 export function usePurchaseOrderDetailReviewActions({
     purchaseOrderId,
@@ -41,11 +33,8 @@ export function usePurchaseOrderDetailReviewActions({
 }: UsePurchaseOrderDetailReviewActionsInput) {
     const router = useRouter()
     const reviewMutation = useReviewPurchaseOrderMutation()
-    const responsibilityMutation = useWorkItemResponsibilityMutation()
 
     const [approveConfirmOpen, setApproveConfirmOpen] = React.useState(false)
-    const [releaseConfirmOpen, setReleaseConfirmOpen] = React.useState(false)
-    const [releaseReason, setReleaseReason] = React.useState("")
 
     const documentReference =
         order?.identity.purchaseNo ?? order?.identity.draftLabel
@@ -190,108 +179,11 @@ export function usePurchaseOrderDetailReviewActions({
         }
     }
 
-    async function handleStartProcessing() {
-        const workItem = order?.reviewWorkItem
-        if (!workItem?.responsibilityActions.includes("START_PROCESSING"))
-            return
-        const payload = {
-            kind: "START_PROCESSING" as const,
-            workItemId: workItem.workItemId,
-            expectedTaskVersion: workItem.taskVersion,
-        }
-        const command = commandLedger.acquire(
-            "review-responsibility",
-            `w08:${workItem.workItemId}:${workItem.taskVersion}:start`,
-            payload,
-        )
-        try {
-            await responsibilityMutation.mutateAsync({
-                ...command.payload,
-                idempotencyKey: command.idempotencyKey,
-            })
-            commandLedger.settle("review-responsibility", "succeeded")
-            await refetch()
-        } catch (error) {
-            const settlement = classifyFormalCommandError(error)
-            commandLedger.settle("review-responsibility", settlement)
-            setResult({
-                status: settlement === "unknown" ? "unknown" : "blocked",
-                title: responsibilityText.changed,
-                description: getErrorMessage(
-                    error,
-                    settlement === "unknown"
-                        ? "处理结果待确认，请使用本次操作重试"
-                        : "开始处理失败，请刷新后重试",
-                ),
-                reference:
-                    settlement === "unknown" ? documentReference : undefined,
-            })
-        }
-    }
-
-    async function handleReleaseToTeam() {
-        const workItem = order?.reviewWorkItem
-        const reason = releaseReason.trim()
-        if (
-            !workItem?.responsibilityActions.includes("RELEASE_TO_TEAM") ||
-            !reason
-        )
-            return
-        const payload = {
-            kind: "RELEASE_TO_TEAM" as const,
-            workItemId: workItem.workItemId,
-            expectedTaskVersion: workItem.taskVersion,
-            reason,
-        }
-        const command = commandLedger.acquire(
-            "review-responsibility",
-            `w08:${workItem.workItemId}:${workItem.taskVersion}:release`,
-            payload,
-        )
-        try {
-            await responsibilityMutation.mutateAsync({
-                ...command.payload,
-                idempotencyKey: command.idempotencyKey,
-            })
-            commandLedger.settle("review-responsibility", "succeeded")
-            setReleaseConfirmOpen(false)
-            setReleaseReason("")
-            setResult({
-                status: "succeeded",
-                title: responsibilityText.releaseToTeam,
-                description: "当前审核任务仍为开放状态，已回到团队待处理。",
-            })
-            await refetch()
-        } catch (error) {
-            const settlement = classifyFormalCommandError(error)
-            commandLedger.settle("review-responsibility", settlement)
-            setResult({
-                status: settlement === "unknown" ? "unknown" : "blocked",
-                title: responsibilityText.changed,
-                description: getErrorMessage(
-                    error,
-                    settlement === "unknown"
-                        ? "处理结果待确认，请使用本次操作重试"
-                        : "退回团队失败，请刷新后重试",
-                ),
-                reference:
-                    settlement === "unknown" ? documentReference : undefined,
-            })
-        }
-    }
-
     return {
         approveConfirmOpen,
         setApproveConfirmOpen,
-        releaseConfirmOpen,
-        setReleaseConfirmOpen,
-        releaseReason,
-        setReleaseReason,
         reviewPending: reviewMutation.isPending,
-        responsibilityPending: responsibilityMutation.isPending,
         handleApprove,
         handleReject,
-        handleStartProcessing,
-        handleReleaseToTeam,
     }
 }

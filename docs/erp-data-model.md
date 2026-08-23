@@ -543,7 +543,7 @@ erDiagram
 | `node_key` / `node_name_snapshot` | 冻结节点身份与显示名 |
 | `definition_assignee_participant_id` | 定义中的审批人快照 |
 | `assignee_participant_id` | 本次执行的实际审批人 |
-| `assignment_source` | `DEFINITION` / `ADMIN_REASSIGN` / `ASSIGNEE_RECOVERY` |
+| `assignment_source` | `DEFINITION` / `ASSIGNEE_RECOVERY` |
 | `status` | `ACTIVE` / `APPROVED` / `REJECTED` / `CANCELLED` / `BLOCKED` / `SUPERSEDED` |
 | `decision` / `decision_reason` | `APPROVE` / `REJECT` 及原因；无决定时为空 |
 | `decided_by` / `decided_at` | 决定审计 |
@@ -556,7 +556,7 @@ erDiagram
 - `(approval_process_instance_id, execution_no)` 唯一；
 - `(approval_process_instance_id, round_no, node_key, execution_no)` 为历史索引，不得设为唯一；
 - 每个实例在 `ACTIVE|BLOCKED` 状态合计最多一个当前执行；
-- 同一节点允许跨轮次重复进入，同轮同节点允许因恢复或改派产生后继执行；不得建立 `(instance_id, node_key)` 唯一索引；
+- 同一节点允许跨轮次重复进入，同轮同节点允许因恢复产生后继执行；不得建立 `(instance_id, node_key)` 唯一索引；
 - 执行结束使用 `id + ACTIVE|BLOCKED + expected_execution_version` CAS；已结束执行不可覆盖或重开；
 - 不得预创建后续节点执行或 `WAITING` 记录。
 
@@ -566,12 +566,12 @@ erDiagram
 | --- | --- |
 | `approval_process_instance_id` / `node_key` | 实例与节点唯一键 |
 | `definition_assignee_participant_id` | 启动时冻结的定义审批人 |
-| `current_assignee_participant_id` | 当前有效审批人 |
-| `binding_source` | `DEFINITION` / `ADMIN_REASSIGN` |
+| `current_assignee_participant_id` | 从定义冻结，必须始终等于定义审批人 |
+| `binding_source` | 固定为 `DEFINITION` |
 | `assignment_version` | 分派独立 CAS 版本 |
-| `changed_by` / `changed_at` / `reason` | 改派审计；定义来源时原因可空 |
+| `changed_by` / `changed_at` / `reason` | 必须为空；运行时不得改变审批责任人 |
 
-`(approval_process_instance_id, node_key)` 必须唯一。管理员改派只允许以 `expected_assignment_version` 更新当前审批人；不得修改定义审批人快照。后续轮次进入该节点必须使用当前有效审批人。
+`(approval_process_instance_id, node_key)` 必须唯一。审批运行时不得更新当前审批人；后续轮次进入该节点必须继续使用冻结的定义审批人。长期换人必须发布新定义，且只影响新创建单据。
 
 #### `approval_subject_snapshot`
 
@@ -3656,8 +3656,8 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 4. 驳回不改变业务单据和 `subject_version`，完成当前待办，实例轮次加一并回到入口节点。
    不得提供终止决定。制单人撤回（`Allowed` 类型）回到 `DRAFT` / `NOT_SUBMITTED`。
 5. 必须删除 `work_item` 的开始处理、退回团队和领取。管理员改派非审批任务只改变开放任务责任，不推进审批。
-6. 阻塞恢复必须锁定实例、当前执行、可选已关闭待办和业务对象。人员失效只允许恢复当前审批人或改派当前审批人，
-   两者都创建新执行和新任务，不得重开旧任务或跳节点。
+6. 阻塞恢复必须锁定实例、当前执行、可选已关闭待办和业务对象。人员失效只允许在原审批人重新合格后恢复当前审批人，
+   并创建新执行和新任务，不得重开旧任务、改变责任人或跳节点。
 7. 不提供通用任务完成事务；所有完成入口必须先执行对应领域命令或审批决定。
 8. `bpm` 是无 I/O 的纯引擎；`services::approval` 在同一 MongoDB 事务中应用 `TransitionPlan`。
    完整合同以 `approval-workflow-contract.md` 为准。

@@ -479,6 +479,7 @@ impl SupplierOfferingService {
                     cause.as_str().to_ascii_lowercase(),
                     source_version
                 ),
+                owner_user_id: actor.id().to_string(),
             }
         });
         let publication = PublicationService::new(db.clone(), Arc::new(UnavailableMallConnector));
@@ -612,6 +613,7 @@ impl SupplierOfferingService {
                 cause.as_str().to_ascii_lowercase(),
                 availability.base.version + 1
             ),
+            owner_user_id: actor.id().to_string(),
         });
         let publication = PublicationService::new(db.clone(), Arc::new(UnavailableMallConnector));
         let idempotency_key = req.idempotency_key.clone();

@@ -10,6 +10,10 @@ import {
     DescriptionList,
     DescriptionTerm,
 } from "@/components/ui/description-list"
+import {
+    GROUP_NAME_BY_CODE,
+    PERMISSION_CATALOG,
+} from "@/features/admin/lib/permission-catalog"
 import { useEffectiveAccessQuery } from "@/features/access-audit/hooks/queries"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
@@ -22,6 +26,15 @@ type GrantRow = {
     id: string
     title: string
     detail: string
+    /** 权限编码等技术标识：次要展示，供排查时对照。 */
+    code?: string
+}
+
+/** 授权来源主体类型文案。 */
+function sourceTypeLabel(sourceType: string): string {
+    if (sourceType === "ROLE") return "角色"
+    if (sourceType === "USER") return "用户"
+    return sourceType
 }
 
 function GrantList({
@@ -48,15 +61,61 @@ function GrantList({
             )}
         >
             {items.map((item) => (
-                <li key={item.id} className="px-3 py-2.5">
-                    <div className="text-sm font-medium">{item.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                        {item.detail}
+                <li
+                    key={item.id}
+                    className="flex items-baseline justify-between gap-3 px-3 py-2.5"
+                >
+                    <div className="min-w-0">
+                        <div className="text-sm font-medium">{item.title}</div>
+                        <div className="text-xs text-muted-foreground">
+                            {item.detail}
+                        </div>
                     </div>
+                    {item.code ? (
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                            {item.code}
+                        </span>
+                    ) : null}
                 </li>
             ))}
         </ul>
     )
+}
+
+/** 权限来源按模块分组，便于逐模块核对，而不是读一长串条目。 */
+function groupGrants(
+    grants: readonly {
+        id: string
+        targetLabel: string
+        capability: string
+        sourceType: string
+        sourceLabel: string
+    }[],
+): readonly { name: string; items: GrantRow[] }[] {
+    const sections = new Map<string, GrantRow[]>()
+    for (const grant of grants) {
+        const name = GROUP_NAME_BY_CODE.get(grant.capability) ?? "其它"
+        const row: GrantRow = {
+            id: grant.id,
+            title: grant.targetLabel,
+            detail: `允许 · 来源${sourceTypeLabel(grant.sourceType)} ${grant.sourceLabel}`,
+            code: grant.capability,
+        }
+        const bucket = sections.get(name)
+        if (bucket) bucket.push(row)
+        else sections.set(name, [row])
+    }
+    // 按权限目录顺序输出，目录外的编码（通配等）归到末尾的「其它」
+    const order = new Map(
+        PERMISSION_CATALOG.map((group, index) => [group.name, index] as const),
+    )
+    return [...sections.entries()]
+        .map(([name, items]) => ({ name, items }))
+        .sort(
+            (a, b) =>
+                (order.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
+                (order.get(b.name) ?? Number.MAX_SAFE_INTEGER),
+        )
 }
 
 function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
@@ -105,14 +164,6 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
                     </DescriptionDetails>
                 </DescriptionItem>
                 <DescriptionItem>
-                    <DescriptionTerm>权限版本</DescriptionTerm>
-                    <DescriptionDetails>
-                        <span className="num">
-                            v{query.data.permissionVersion.split("-").at(-1)}
-                        </span>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem className="sm:col-span-2">
                     <DescriptionTerm>计算时间</DescriptionTerm>
                     <DescriptionDetails>
                         {formatDateTime(query.data.calculatedAt, "full")}
@@ -120,16 +171,41 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
                 </DescriptionItem>
             </DescriptionList>
 
-            <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">模块与动作权限来源</h3>
-                <GrantList
-                    empty="无有效模块授权"
-                    items={query.data.moduleAndActionGrants.map((g) => ({
-                        id: g.id,
-                        title: g.targetLabel,
-                        detail: `${g.capability} · 来源 ${g.sourceLabel}（${g.sourceType}）`,
-                    }))}
-                />
+            <section className="flex flex-col gap-3">
+                <h3 className="text-sm font-medium">
+                    模块与动作权限来源
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        共{" "}
+                        <span className="num">
+                            {query.data.moduleAndActionGrants.length}
+                        </span>{" "}
+                        项
+                    </span>
+                </h3>
+                {query.data.moduleAndActionGrants.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        无有效模块授权
+                    </p>
+                ) : (
+                    groupGrants(query.data.moduleAndActionGrants).map(
+                        (section) => (
+                            <div
+                                key={section.name}
+                                className="flex flex-col gap-1.5"
+                            >
+                                <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                                    <span className="font-medium text-foreground">
+                                        {section.name}
+                                    </span>
+                                    <span className="num">
+                                        {section.items.length}
+                                    </span>
+                                </div>
+                                <GrantList items={section.items} />
+                            </div>
+                        ),
+                    )
+                )}
             </section>
 
             <section className="flex flex-col gap-2">
@@ -195,7 +271,8 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
                                     {e.message}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    来源 {e.sourceLabel}（{e.sourceType}）
+                                    来源{sourceTypeLabel(e.sourceType)}{" "}
+                                    {e.sourceLabel}
                                 </p>
                             </li>
                         ))}

@@ -9,18 +9,18 @@ import type {
 /** 可配置的复核任务夹具；默认处于可执行全部动作的开放状态。 */
 export function makeTask(
     overrides: {
-        workItem?: Partial<CardFundsReviewItemView['workItem']>
-        salesOrder?: Partial<CardFundsReviewItemView['salesOrder']>
-        account?: Partial<CardFundsReviewItemView['account']>
-        reviewChain?: Partial<CardFundsReviewItemView['reviewChain']>
+        workItem?: Partial<CardFundsReviewItemView["workItem"]>
+        salesOrder?: Partial<CardFundsReviewItemView["salesOrder"]>
+        account?: Partial<CardFundsReviewItemView["account"]>
+        reviewChain?: Partial<CardFundsReviewItemView["reviewChain"]>
         currentSalesOrderRevisionId?: string
         fundsFactVersion?: string
-        receiptFacts?: CardFundsReviewItemView['receiptFacts']
-        invoiceFacts?: CardFundsReviewItemView['invoiceFacts']
-        difference?: CardFundsReviewItemView['difference']
-        reviewType?: CardFundsReviewItemView['reviewType']
-        fingerprintStatus?: CardFundsReviewItemView['fingerprintStatus']
-        currentEvidence?: CardFundsReviewItemView['currentEvidence']
+        receiptFacts?: CardFundsReviewItemView["receiptFacts"]
+        invoiceFacts?: CardFundsReviewItemView["invoiceFacts"]
+        difference?: CardFundsReviewItemView["difference"]
+        reviewType?: CardFundsReviewItemView["reviewType"]
+        fingerprintStatus?: CardFundsReviewItemView["fingerprintStatus"]
+        currentEvidence?: CardFundsReviewItemView["currentEvidence"]
     } = {},
 ): CardFundsReviewItemView {
     return {
@@ -30,13 +30,10 @@ export function makeTask(
             workItemType: "CARD_FUNDS_REVIEW",
             subjectVersion: "sv_1",
             workItemStatus: "OPEN",
-            assignmentMode: "DIRECT",
             allowedActions: [
-                "START_PROCESSING",
                 "CONFIRM_ZERO",
                 "APPROVE",
                 "REJECT",
-                "RELEASE_TO_TEAM",
                 "REGISTER_RECEIPT",
                 "REGISTER_INVOICE",
             ],
@@ -81,16 +78,16 @@ export function makeTask(
             ...overrides.reviewChain,
         },
         currentSalesOrderRevisionId:
-            overrides.currentSalesOrderRevisionId ?? 'rev_9',
-        fundsFactVersion: overrides.fundsFactVersion ?? 'ffv_1',
+            overrides.currentSalesOrderRevisionId ?? "rev_9",
+        fundsFactVersion: overrides.fundsFactVersion ?? "ffv_1",
         receiptFacts: overrides.receiptFacts ?? [],
         invoiceFacts: overrides.invoiceFacts ?? [],
         difference: overrides.difference,
-        reviewType: overrides.reviewType ?? 'OPENING',
+        reviewType: overrides.reviewType ?? "OPENING",
         fingerprintStatus: overrides.fingerprintStatus ?? {
-            label: '数据版本',
-            tone: 'neutral',
-            detail: 'subject=sv_1',
+            label: "数据版本",
+            tone: "neutral",
+            detail: "subject=sv_1",
         },
         currentEvidence: overrides.currentEvidence ?? {
             evidenceDocumentIds: [],

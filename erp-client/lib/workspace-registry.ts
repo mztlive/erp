@@ -729,8 +729,26 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             label: "系统",
             items: [
                 {
+                    // 权限配置与审计查询的查询口径、时间语义与导出策略都不同，
+                    // 拆成两个入口；两者同属 W19 工作面。
                     routeId: "W19",
+                    label: "权限配置",
                     icon: ShieldCheckIcon,
+                    requiredPermissions: ["role:list", "permission:list"],
+                },
+                {
+                    routeId: "W19",
+                    href: "/system/audit",
+                    label: "审计查询",
+                    icon: HistoryIcon,
+                    requiredPermissions: ["audit_log:list", "audit_event:list"],
+                },
+                {
+                    routeId: "W19",
+                    href: "/system/accounts",
+                    label: "账号管理",
+                    icon: UsersIcon,
+                    requiredPermissions: ["admin:list"],
                 },
                 {
                     routeId: "W24",

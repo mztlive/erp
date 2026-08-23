@@ -3,17 +3,22 @@
 import * as React from "react"
 
 import {
-    BUSINESS_GROUPS,
-    SYSTEM_GROUPS,
     countSelectedByTab,
-    filterGroupsByKeyword,
-    type PermissionGroupOption,
+    filterMatrixByKeyword,
+    matrixGroupsForTab,
+    type PermissionMatrixGroup,
     type PermissionPanelTab,
 } from "@/features/admin/lib/permission-catalog"
 
+export type PermissionGroupProgress = {
+    name: string
+    selected: number
+    total: number
+}
+
 /**
- * 权限面板状态：维度 Tab、组定位、关键词过滤与已选统计。
- * 纯状态层；UI 由 components/roles/permission-panel 渲染。
+ * 权限面板状态：维度 Tab、关键词过滤、分组进度与当前定位组。
+ * 纯状态层；矩阵渲染与滚动由 components/roles/permission-panel 负责。
  */
 export function usePermissionPanel(selected: readonly string[]) {
     const [keyword, setKeyword] = React.useState("")
@@ -21,12 +26,12 @@ export function usePermissionPanel(selected: readonly string[]) {
     const [activeGroup, setActiveGroup] = React.useState<string | null>(null)
 
     const q = keyword.trim().toLowerCase()
-    const sourceGroups: readonly PermissionGroupOption[] =
-        tab === "system" ? SYSTEM_GROUPS : BUSINESS_GROUPS
+    const selectedSet = React.useMemo(() => new Set(selected), [selected])
 
+    const tabGroups = React.useMemo(() => matrixGroupsForTab(tab), [tab])
     const visibleGroups = React.useMemo(
-        () => filterGroupsByKeyword(sourceGroups, q),
-        [q, sourceGroups],
+        () => filterMatrixByKeyword(tabGroups, q),
+        [q, tabGroups],
     )
 
     // 搜索或切换维度后，把当前组定位到第一个仍可见的组
@@ -36,8 +41,19 @@ export function usePermissionPanel(selected: readonly string[]) {
         }
     }, [visibleGroups, activeGroup])
 
-    const currentGroup =
-        visibleGroups.find((group) => group.name === activeGroup) ?? null
+    /** 分组进度按完整目录统计，不随搜索变化，避免「已选数」跟着筛选跳。 */
+    const progressByGroup = React.useMemo<
+        readonly PermissionGroupProgress[]
+    >(
+        () =>
+            tabGroups.map((group) => ({
+                name: group.name,
+                selected: group.codes.filter((code) => selectedSet.has(code))
+                    .length,
+                total: group.codes.length,
+            })),
+        [selectedSet, tabGroups],
+    )
 
     const selectedCountByTab = React.useMemo(
         () => countSelectedByTab(selected),
@@ -51,8 +67,14 @@ export function usePermissionPanel(selected: readonly string[]) {
         setTab,
         activeGroup,
         setActiveGroup,
+        /** 当前维度下经关键词过滤的矩阵组。 */
         visibleGroups,
-        currentGroup,
+        /** 当前维度的完整矩阵组（不受关键词影响）。 */
+        tabGroups,
+        progressByGroup,
         selectedCountByTab,
+        selectedSet,
     }
 }
+
+export type { PermissionMatrixGroup }

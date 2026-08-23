@@ -3,11 +3,7 @@
  * 第一阶段：商城 → ERP 商业记录单向同步；无 ERP 回写商业修改入口。
  */
 
-import type {
-    AssignmentMode,
-    WorkItemAllowedAction,
-    WorkItemStatus,
-} from "@/features/work-items"
+import type { WorkItemStatus } from "@/features/work-items"
 
 export type MallSyncViewName =
     | "overview"
@@ -128,10 +124,8 @@ export type MappingTaskWorkItemView = {
     taskVersion: string
     status: WorkItemStatus
     statusLabel: string
-    assignmentMode: AssignmentMode
     processingState: "READY" | "APPROVAL_BLOCKED"
     ownerUser?: { id: string; displayName: string }
-    allowedActions: readonly WorkItemAllowedAction[]
 }
 
 type MappingCandidate = {

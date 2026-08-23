@@ -22,7 +22,10 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
-import { WORK_ITEM_STATUS_LABEL, WORK_ITEM_TYPE_LABEL } from "@/features/supplier-orders/types"
+import {
+    WORK_ITEM_STATUS_LABEL,
+    WORK_ITEM_TYPE_LABEL,
+} from "@/features/supplier-orders/types"
 import { formatDateTime } from "@/lib/datetime"
 import type { SupplierOrderCenterResult } from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
 
@@ -32,20 +35,14 @@ export function WorkItemProcessPanel({
     responsibilityStatus,
     canCompleteTask,
     pending,
-    releasePending,
-    onStartProcessing,
     onProcess,
-    onRelease,
 }: {
     workItem?: SupplierOrderDetailView["workItem"]
     workItemBlocker?: SupplierOrderDetailView["workItemBlocker"]
     responsibilityStatus: ResponsibilityStatus
     canCompleteTask: boolean
     pending: boolean
-    releasePending: boolean
-    onStartProcessing: () => void
     onProcess: () => void
-    onRelease: () => void
 }) {
     const router = useRouter()
 
@@ -71,22 +68,9 @@ export function WorkItemProcessPanel({
                         showProcessNext={false}
                         pending={pending}
                         onBack={() => router.push("/workspace/tasks")}
-                        onStartProcessing={onStartProcessing}
                         onProcess={onProcess}
                         onProcessNext={() => undefined}
                     />
-                    {responsibilityStatus === "assigned_to_me" &&
-                    workItem.allowedTaskActions.includes("RELEASE_TO_TEAM") ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={releasePending}
-                            onClick={onRelease}
-                        >
-                            退回团队
-                        </Button>
-                    ) : null}
                 </div>
             ) : null}
         </>
@@ -145,7 +129,11 @@ export function StatusAlertsPanel({
                     <span className="num">{order.paymentFactKey}</span> ·
                     支付时间{" "}
                     <span className="num">
-                        {formatDateTime(order.paidAt, "fullIntl", "passthrough")}
+                        {formatDateTime(
+                            order.paidAt,
+                            "fullIntl",
+                            "passthrough",
+                        )}
                     </span>
                 </AlertDescription>
             </Alert>
@@ -205,8 +193,7 @@ export function WorkItemCard({
                     {WORK_ITEM_TYPE_LABEL[workItem.workItemType]}
                 </CardTitle>
                 <CardDescription className="text-xs">
-                    关联订单 {orderNo} · 责任模式{" "}
-                    {workItem.assignmentMode === "POOL" ? "团队池" : "直接分派"}
+                    关联订单 {orderNo}
                     {workItem.ownerUser
                         ? ` · 当前处理人 ${workItem.ownerUser.displayName}`
                         : ""}

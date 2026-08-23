@@ -39,25 +39,21 @@ beforeEach(() => {
 describe("useAccessUrlState", () => {
     it("parses all list and detail URL params and keeps the view fallback", () => {
         currentSearchParams =
-            "view=audit&q=abc&status=enabled&org=o1&risk=HIGH_PRIVILEGE" +
+            "view=audit&q=abc" +
             "&subjectType=USER&subjectId=u1&eventId=ae_1&from=2026-01-01" +
-            "&to=2026-01-02&actorId=a1&action=QUERY_AUDIT&objectType=audit" +
+            "&to=2026-01-02&actorId=a1&action=user_role.assign" +
             "&objectId=o1&result=SUCCESS&traceId=tr_1&workItemId=wi_1"
         const { result } = renderHookWithProviders(() => useAccessUrlState())
 
         expect(result.current.view).toBe("audit")
         expect(result.current.qParam).toBe("abc")
-        expect(result.current.status).toBe("enabled")
-        expect(result.current.org).toBe("o1")
-        expect(result.current.risk).toBe("HIGH_PRIVILEGE")
         expect(result.current.subjectTypeParam).toBe("USER")
         expect(result.current.subjectIdParam).toBe("u1")
         expect(result.current.eventIdParam).toBe("ae_1")
         expect(result.current.fromParam).toBe("2026-01-01")
         expect(result.current.toParam).toBe("2026-01-02")
         expect(result.current.actorId).toBe("a1")
-        expect(result.current.action).toBe("QUERY_AUDIT")
-        expect(result.current.objectType).toBe("audit")
+        expect(result.current.action).toBe("user_role.assign")
         expect(result.current.objectId).toBe("o1")
         expect(result.current.resultFilter).toBe("SUCCESS")
         expect(result.current.traceId).toBe("tr_1")
@@ -69,7 +65,7 @@ describe("useAccessUrlState", () => {
         const { result } = renderHookWithProviders(() => useAccessUrlState())
         expect(result.current.view).toBe("roles")
         expect(result.current.qParam).toBe("")
-        expect(result.current.status).toBeUndefined()
+        expect(result.current.actorId).toBeUndefined()
         expect(result.current.subjectIdParam).toBeUndefined()
     })
 
@@ -78,12 +74,12 @@ describe("useAccessUrlState", () => {
         const { result } = renderHookWithProviders(() => useAccessUrlState())
         act(() => {
             result.current.patchUrl(
-                { q: null, status: "enabled" },
+                { q: null, actorId: "a1" },
                 { replace: true },
             )
         })
         expect(mockReplace).toHaveBeenCalledWith(
-            "/system/access-audit?view=roles&status=enabled",
+            "/system/access-audit?view=roles&actorId=a1",
         )
     })
 })
@@ -94,7 +90,7 @@ describe("useAccessListFilters", () => {
         current: null,
     } as React.RefObject<HTMLInputElement | null>
 
-    const renderFilters = (view: "roles" | "audit" | "scopes" = "audit") =>
+    const renderFilters = (view: "roles" | "audit" = "audit") =>
         renderHookWithProviders(() =>
             useAccessListFilters({ view, patchFilterUrl, searchInputRef }),
         )
@@ -116,20 +112,23 @@ describe("useAccessListFilters", () => {
     })
 
     it("degrades invalid enum values and keeps the panel closed without structured filters", () => {
-        currentSearchParams = "view=roles&status=weird"
-        const { result } = renderFilters("roles")
+        currentSearchParams = "view=audit&result=weird&action=NOT_AN_ACTION"
+        const { result } = renderFilters()
 
-        expect(result.current.applied.status).toBeUndefined()
-        expect(result.current.draft.status).toBe("all")
+        expect(result.current.applied.result).toBeUndefined()
+        expect(result.current.applied.action).toBeUndefined()
+        expect(result.current.draft.result).toBe("all")
+        expect(result.current.draft.action).toBe("all")
         expect(result.current.panelOpen).toBe(false)
         expect(result.current.hasStructuredFilters).toBe(false)
     })
 
-    it("keeps the panel closed for the scopes view when only the subject lock exists", () => {
-        currentSearchParams = "view=scopes&subjectType=USER&subjectId=u1"
-        const { result } = renderFilters("scopes")
+    it("offers no structured filters on the role and account views", () => {
+        currentSearchParams = "view=roles&q=abc&result=SUCCESS"
+        const { result } = renderFilters("roles")
 
         expect(result.current.panelOpen).toBe(false)
+        expect(result.current.hasStructuredFilters).toBe(false)
     })
 
     it("does not patch the URL while editing drafts", () => {
@@ -148,7 +147,6 @@ describe("useAccessListFilters", () => {
         const { result } = renderFilters()
 
         act(() => result.current.updateDraft("q", " 关键词 "))
-        act(() => result.current.updateDraft("status", "enabled"))
         act(() => result.current.updateDraft("result", "DENIED"))
         act(() => result.current.updateDraft("from", "2026-01-01"))
         act(() => result.current.updateDraft("to", "2026-01-02"))
@@ -156,16 +154,12 @@ describe("useAccessListFilters", () => {
         act(() => result.current.applyFilters())
         expect(patchFilterUrl).toHaveBeenCalledWith({
             q: "关键词",
-            org: null,
-            status: "enabled",
-            risk: null,
             from: "2026-01-01",
             to: "2026-01-02",
             action: null,
             result: "DENIED",
             actorId: "张三",
             traceId: null,
-            objectType: null,
             objectId: null,
             page: null,
         })
@@ -193,16 +187,12 @@ describe("useAccessListFilters", () => {
         })
         expect(patchFilterUrl).toHaveBeenCalledWith({
             q: null,
-            org: null,
-            status: null,
-            risk: null,
             from: null,
             to: null,
             action: null,
             result: null,
             actorId: null,
             traceId: null,
-            objectType: null,
             objectId: null,
             page: null,
         })
@@ -210,19 +200,7 @@ describe("useAccessListFilters", () => {
         expect(result.current.panelOpen).toBe(false)
     })
 
-    it("clears the scopes subject lock together with all filters", () => {
-        currentSearchParams = "view=scopes&subjectType=USER&subjectId=u1"
-        const { result } = renderFilters("scopes")
-
-        act(() => {
-            result.current.clearAllFilters()
-        })
-        expect(patchFilterUrl).toHaveBeenCalledWith(
-            expect.objectContaining({ subjectType: null, subjectId: null }),
-        )
-    })
-
-    it("keeps the subject lock when clearing filters outside the scopes view", () => {
+    it("keeps the detail subject params out of filter clearing", () => {
         currentSearchParams = "view=roles&subjectType=ROLE&subjectId=role_1"
         const { result } = renderFilters("roles")
 
@@ -243,16 +221,12 @@ describe("useAccessListFilters", () => {
         })
         act(() => result.current.resetMoreFilters())
         expect(patchFilterUrl).toHaveBeenCalledWith({
-            org: null,
-            status: null,
-            risk: null,
             from: null,
             to: null,
             action: null,
             result: null,
             actorId: null,
             traceId: null,
-            objectType: null,
             objectId: null,
             page: null,
         })

@@ -10,10 +10,6 @@ import type {
     FormalActionResponse,
     SupplierOrderDetailView,
 } from "@/features/supplier-orders/types"
-import type {
-    WorkItemDto,
-    WorkItemResponsibilityCommand,
-} from "@/features/work-items/types"
 import type { CommandIdentity } from "@/features/supplier-orders/hooks/use-supplier-order-center-identity"
 import type { SupplierOrderCenterResult } from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
 
@@ -26,11 +22,6 @@ type SupplierOrderCenterTaskActionsInput = {
     setResult: React.Dispatch<
         React.SetStateAction<SupplierOrderCenterResult | null>
     >
-    responsibilityMutation: UseMutationResult<
-        WorkItemDto,
-        Error,
-        WorkItemResponsibilityCommand
-    >
     completeTaskMutation: UseMutationResult<
         FormalActionResponse<CompleteSupplierOrderTaskResult>,
         Error,
@@ -40,7 +31,7 @@ type SupplierOrderCenterTaskActionsInput = {
     forgetCommandIdentity: (key: string) => void
 }
 
-/** 任务级命令：开始处理与确认完成。 */
+/** 任务级命令：依据已核实的终态结果确认完成。 */
 export function useSupplierOrderCenterTaskActions(
     input: SupplierOrderCenterTaskActionsInput,
 ) {
@@ -49,43 +40,12 @@ export function useSupplierOrderCenterTaskActions(
         completionEvidence,
         refetch,
         setResult,
-        responsibilityMutation,
         completeTaskMutation,
         commandIdentity,
         forgetCommandIdentity,
     } = input
 
     const [completeOpen, setCompleteOpen] = React.useState(false)
-
-    async function handleStartProcessing() {
-        if (!detail?.workItem) return
-        const identity = commandIdentity(
-            "start-processing",
-            detail.workItem.workItemId,
-        )
-        try {
-            const response = await responsibilityMutation.mutateAsync({
-                kind: "START_PROCESSING",
-                workItemId: detail.workItem.workItemId,
-                expectedTaskVersion: detail.workItem.taskVersion,
-                idempotencyKey: identity.idempotencyKey,
-            })
-            forgetCommandIdentity(identity.key)
-            await refetch()
-            setResult({
-                status: "succeeded",
-                title: "已开始处理",
-                description: "正式任务已建立当前用户个人责任。",
-                reference: response.id,
-            })
-        } catch (error) {
-            setResult({
-                status: "rejected",
-                title: "开始处理未完成",
-                description: getErrorMessage(error, "开始处理失败，请刷新任务"),
-            })
-        }
-    }
 
     async function handleCompleteTask() {
         const workItem = detail?.workItem
@@ -155,7 +115,6 @@ export function useSupplierOrderCenterTaskActions(
     return {
         completeOpen,
         setCompleteOpen,
-        handleStartProcessing,
         handleCompleteTask,
     }
 }

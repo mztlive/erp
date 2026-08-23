@@ -12,8 +12,6 @@ export function useIntegrationResponsibilityCommands({
     replacementTaskId,
     responsibilityMutation,
     commandIdentities,
-    refresh,
-    setLastResult,
     setActionError,
     afterResult,
 }: {
@@ -25,64 +23,9 @@ export function useIntegrationResponsibilityCommands({
         isPending: boolean
     }
     commandIdentities: CommandIdentityStore
-    refresh: () => void
-    setLastResult: (result: IntegrationFormalResult | null) => void
     setActionError: (error: string | null) => void
     afterResult: (result: IntegrationFormalResult) => void
 }) {
-    async function handleStartProcessing() {
-        if (!item?.workItem) return
-        const identity = commandIdentities.get(
-            "start-processing",
-            item.workItem.workItemId,
-        )
-        try {
-            await responsibilityMutation.mutateAsync({
-                kind: "START_PROCESSING",
-                workItemId: item.workItem.workItemId,
-                expectedTaskVersion: item.workItem.taskVersion,
-                idempotencyKey: identity.idempotencyKey,
-            })
-            commandIdentities.delete(identity.key)
-            await refresh()
-        } catch (error) {
-            setActionError(getErrorMessage(error, "开始处理失败"))
-        }
-    }
-
-    async function handleReleaseToTeam() {
-        if (!item?.workItem || !comment.trim()) {
-            setActionError("请先填写退回原因")
-            return
-        }
-        const identity = commandIdentities.get(
-            "release-to-team",
-            item.workItem.workItemId,
-        )
-        try {
-            await responsibilityMutation.mutateAsync({
-                kind: "RELEASE_TO_TEAM",
-                workItemId: item.workItem.workItemId,
-                expectedTaskVersion: item.workItem.taskVersion,
-                reason: comment.trim(),
-                idempotencyKey: identity.idempotencyKey,
-            })
-            commandIdentities.delete(identity.key)
-            setLastResult({
-                status: "succeeded",
-                title: "已退回团队",
-                description:
-                    "当前事项仍待处理，个人责任已释放；可继续浏览下一项。",
-                workItemStatus: "OPEN",
-                stayOnItem: false,
-                terminal: false,
-            })
-            await refresh()
-        } catch (error) {
-            setActionError(getErrorMessage(error, "退回团队失败"))
-        }
-    }
-
     async function handleClose(kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED") {
         if (!item?.workItem) return
         if (kind === "CLOSE_DUPLICATE" && !replacementTaskId) {
@@ -122,5 +65,5 @@ export function useIntegrationResponsibilityCommands({
         }
     }
 
-    return { handleStartProcessing, handleReleaseToTeam, handleClose }
+    return { handleClose }
 }

@@ -71,8 +71,6 @@ impl RuntimeInstanceStatusFilter {
 pub enum RuntimeRecoveryAction {
     /// 原审批人恢复后继续。
     ResumeCurrentApprover,
-    /// 改派当前节点。
-    ReassignCurrentApprover,
     /// 受阻取消。
     CancelBlocked,
 }
@@ -106,7 +104,7 @@ pub fn ensure_list_view_status(
 /// * `blocker` - 结构化 blocker
 ///
 /// # 返回
-/// 人员失效返回恢复与改派；其它 blocker 只返回受阻取消；非 BLOCKED 返回空。
+/// 人员失效只允许原审批人恢复后继续；其它 blocker 只返回受阻取消；非 BLOCKED 返回空。
 ///
 /// # 错误
 /// 无。
@@ -121,10 +119,7 @@ pub fn recovery_options_for(
         return vec![RuntimeRecoveryAction::CancelBlocked];
     };
     if code.allows_personnel_reassign() {
-        vec![
-            RuntimeRecoveryAction::ResumeCurrentApprover,
-            RuntimeRecoveryAction::ReassignCurrentApprover,
-        ]
+        vec![RuntimeRecoveryAction::ResumeCurrentApprover]
     } else {
         vec![RuntimeRecoveryAction::CancelBlocked]
     }
@@ -186,16 +181,13 @@ mod tests {
         .is_ok());
     }
 
-    /// 人员失效给恢复/改派；结构 blocker 只给受阻取消。
+    /// 人员失效只给恢复；结构 blocker 只给受阻取消。
     #[test]
     fn recovery_options_follow_blocker_kind() {
         assert!(recovery_options_for(false, Some(ApprovalBlockerCode::ApproverAccountInactive)).is_empty());
         assert_eq!(
             recovery_options_for(true, Some(ApprovalBlockerCode::ApproverAccountInactive)),
-            vec![
-                RuntimeRecoveryAction::ResumeCurrentApprover,
-                RuntimeRecoveryAction::ReassignCurrentApprover
-            ]
+            vec![RuntimeRecoveryAction::ResumeCurrentApprover]
         );
         assert_eq!(
             recovery_options_for(true, Some(ApprovalBlockerCode::OpenTaskConflict)),

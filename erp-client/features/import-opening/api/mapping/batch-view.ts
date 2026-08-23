@@ -10,7 +10,11 @@ import type {
     ImportExecutionAction,
 } from "@/features/import-opening/types"
 import { BATCH_STATUS_LABEL } from "@/features/import-opening/types"
-import type { BackendBatchDetail, BackendBatchListItem, BackendConfirmation } from "./dto"
+import type {
+    BackendBatchDetail,
+    BackendBatchListItem,
+    BackendConfirmation,
+} from "./dto"
 import {
     instantToIso,
     mapBatchStatus,
@@ -104,7 +108,6 @@ export function buildBatchView(
                           taskVersion: task.task_version,
                           subjectVersion: task.subject_version,
                           status: task.status,
-                          assignmentMode: task.assignment_mode,
                           ownerUserId: task.owner_user_id ?? undefined,
                           processingState: task.processing_state,
                           allowedActions,
@@ -253,8 +256,6 @@ function normalizeConfirmationActions(
     const registered = new Set<ImportConfirmationAllowedAction>([
         "VIEW",
         "PROCESS",
-        "START_PROCESSING",
-        "RELEASE_TO_TEAM",
         "REASSIGN",
         "CLOSE",
         "CONFIRM_SCOPE",

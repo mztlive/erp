@@ -44,6 +44,9 @@ pub struct CreateDifferenceRequest {
     /// 右侧不可变证据引用；两侧至少其一。
     #[validate(length(max = 512, message = "证据引用过长"))]
     pub right_fact_reference: Option<String>,
+    /// 创建时明确指定的当前责任人。
+    #[validate(length(min = 1, max = 128, message = "责任人不能为空或过长"))]
+    pub owner_user_id: String,
 }
 
 /// 对账差异列表查询参数（分页参数与筛选字段扁平传递）。

@@ -143,11 +143,11 @@ describe("mapPaymentReversalApproval", () => {
 })
 
 describe("mergePaymentReversalAllowedActions", () => {
-    it("unions server facts and drops start-processing or pool actions", () => {
+    it("unions server facts and drops generic WorkItem actions", () => {
         expect(
             mergePaymentReversalAllowedActions(
                 ["CANCEL"],
-                ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM"],
+                ["APPROVE", "REASSIGN", "CLOSE"],
             ),
         ).toEqual(["CANCEL", "APPROVE"])
     })
@@ -283,13 +283,11 @@ describe("payment reversal pages have no BPM internals", () => {
 
 describe("supplier accounts page payment reversal proof", () => {
     it("declares PROCESS_REQUIRED and forbids choosing a process", () => {
-        expect(
-            SUPPLIER_ACCOUNTS_PAYMENT_REVERSAL_APPROVAL_REQUIREMENT,
-        ).toBe("PROCESS_REQUIRED")
-        expect(
-            SUPPLIER_ACCOUNTS_PAYMENT_REVERSAL_FORBIDDEN_ACTIONS,
-        ).toEqual(
-            expect.arrayContaining(["选择流程", "开始处理", "退回团队"]),
+        expect(SUPPLIER_ACCOUNTS_PAYMENT_REVERSAL_APPROVAL_REQUIREMENT).toBe(
+            "PROCESS_REQUIRED",
+        )
+        expect(SUPPLIER_ACCOUNTS_PAYMENT_REVERSAL_FORBIDDEN_ACTIONS).toEqual(
+            expect.arrayContaining(["选择流程", "转交", "关闭任务"]),
         )
         const pagePath = join(
             dirname(fileURLToPath(import.meta.url)),

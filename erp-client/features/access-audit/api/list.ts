@@ -18,6 +18,7 @@ import type {
 } from "./backend-types"
 import {
     governancePolicies,
+    SCOPE_TYPE_LABEL,
     instantToIso,
     matchText,
     toAuditRow,
@@ -52,7 +53,6 @@ export async function fetchAccessList(
                 page_size: 50,
                 actor_id: query.actorId,
                 action_type: query.action,
-                object_type: query.objectType,
                 object_id: query.objectId,
                 result: query.result as BackendAuditEvent["result"] | undefined,
             }),
@@ -69,9 +69,52 @@ export async function fetchAccessList(
         ...admins.map((a) => [a.id, a.name || a.account] as const),
     ])
 
-    let roleRows = roles.map((r) => toRoleRow(r, permissionVersion))
+    // 数据范围按主体 ID 关联到角色/账号行，账号再并入其角色的范围。
+    const scopeTextBySubject = new Map<string, string[]>()
+    for (const scope of scopesPage.items) {
+        const label =
+            scope.scope_targets.length > 0
+                ? `${SCOPE_TYPE_LABEL[scope.scope_type] ?? scope.scope_type}（${scope.scope_targets.join("、")}）`
+                : (SCOPE_TYPE_LABEL[scope.scope_type] ?? scope.scope_type)
+        const bucket = scopeTextBySubject.get(scope.subject_id)
+        if (bucket) bucket.push(label)
+        else scopeTextBySubject.set(scope.subject_id, [label])
+    }
+    const scopeSummaryFor = (...subjectIds: string[]) => {
+        const labels = [
+            ...new Set(
+                subjectIds.flatMap(
+                    (id) => scopeTextBySubject.get(id) ?? [],
+                ),
+            ),
+        ]
+        return labels.length > 0 ? labels.join(" · ") : "—"
+    }
+    const boundAccountsByRole = new Map<string, number>()
+    for (const admin of admins) {
+        for (const roleId of admin.role_ids) {
+            boundAccountsByRole.set(
+                roleId,
+                (boundAccountsByRole.get(roleId) ?? 0) + 1,
+            )
+        }
+    }
+
+    let roleRows = roles.map((r) =>
+        toRoleRow(
+            r,
+            permissionVersion,
+            boundAccountsByRole.get(r.id) ?? 0,
+            scopeSummaryFor(r.id),
+        ),
+    )
     let userRows = admins.map((a) =>
-        toUserRow(a, roleNameById, permissionVersion),
+        toUserRow(
+            a,
+            roleNameById,
+            permissionVersion,
+            scopeSummaryFor(a.id, ...a.role_ids),
+        ),
     )
     let scopeRows = scopesPage.items.map((s) =>
         toScopeRow(s, labelById, permissionVersion),
@@ -80,39 +123,13 @@ export async function fetchAccessList(
     const fieldPolicies: FieldPolicyRow[] = []
     let auditEvents = auditPage.items.map(toAuditRow)
 
-    if (query.status === "enabled") {
-        roleRows = roleRows.filter((r) => r.status === "enabled")
-        userRows = userRows.filter((u) => u.accountStatus === "enabled")
-    } else if (query.status === "disabled") {
-        roleRows = roleRows.filter((r) => r.status === "disabled")
-        userRows = userRows.filter((u) => u.accountStatus === "disabled")
-    }
-    if (query.risk) {
-        roleRows = roleRows.filter((r) => r.riskFlags.includes(query.risk!))
-        userRows = userRows.filter((u) => u.riskFlags.includes(query.risk!))
-        scopeRows = scopeRows.filter((s) => s.riskFlags.includes(query.risk!))
-    }
-    if (query.org) {
-        roleRows = roleRows.filter((r) =>
-            matchText(r.organizationLabel, query.org),
-        )
-        userRows = userRows.filter((u) =>
-            matchText(u.organizationLabel, query.org),
-        )
-    }
     if (query.q) {
         roleRows = roleRows.filter((r) =>
-            matchText(
-                `${r.name} ${r.roleCode} ${r.permissionSummary}`,
-                query.q,
-            ),
+            matchText(`${r.name} ${r.roleCode} ${r.permissionSummary}`, query.q),
         )
         userRows = userRows.filter((u) =>
-            matchText(`${u.displayName} ${u.userId} ${u.activeRoles}`, query.q),
-        )
-        scopeRows = scopeRows.filter((s) =>
             matchText(
-                `${s.subjectLabel} ${s.scopeTypeLabel} ${s.scopeTargets}`,
+                `${u.displayName} ${u.accountName} ${u.activeRoles}`,
                 query.q,
             ),
         )
@@ -133,11 +150,16 @@ export async function fetchAccessList(
             (e) => e.auditEventId === query.eventId,
         )
     }
+    // from / to 为 YYYY-MM-DD：按日期整天比较，「至」当天包含在内
     if (query.from) {
-        auditEvents = auditEvents.filter((e) => e.recordedAt >= query.from!)
+        auditEvents = auditEvents.filter(
+            (e) => e.recordedAt.slice(0, 10) >= query.from!.slice(0, 10),
+        )
     }
     if (query.to) {
-        auditEvents = auditEvents.filter((e) => e.recordedAt <= query.to!)
+        auditEvents = auditEvents.filter(
+            (e) => e.recordedAt.slice(0, 10) <= query.to!.slice(0, 10),
+        )
     }
 
     const rowsForView =
@@ -154,11 +176,7 @@ export async function fetchAccessList(
     let emptyReason: AccessEmptyReason | undefined
     if (rowsForView.length === 0) {
         emptyReason =
-            query.q ||
-            query.status ||
-            query.risk ||
-            query.actorId ||
-            query.action
+            query.q || query.actorId || query.action || query.result
                 ? "FILTER_NO_RESULT"
                 : "NO_RECORDS_IN_SCOPE"
     }
@@ -173,7 +191,12 @@ export async function fetchAccessList(
         {
             action: "EXPORT_AUDIT",
             code: "AUDIT_ACCESS_POLICY_MISSING",
-            message: "审计访问/导出策略未配置：仅允许保守查询，导出禁用。",
+            message: "审计导出策略未配置，导出暂不可用。",
+        },
+        {
+            action: "EXPORT_CONFIGURATION",
+            code: "AUDIT_ACCESS_POLICY_MISSING",
+            message: "配置导出策略未配置，导出暂不可用。",
         },
         {
             action: "ASSIGN_USER_ROLE",

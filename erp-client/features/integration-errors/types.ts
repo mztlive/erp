@@ -5,7 +5,6 @@
 
 import type { InterfaceErrorClass } from "@/components/business"
 import type {
-    AssignmentMode,
     WorkItemAllowedAction,
     WorkItemProcessingState,
     WorkItemStatus,
@@ -25,7 +24,7 @@ export type IntegrationMode = "all" | "errors"
 
 export type IntegrationEnvironment = "production" | "verification"
 
-export type IntegrationOwnerFilter = "me" | "team" | "assigned"
+export type IntegrationOwnerFilter = "me" | "assigned"
 
 export type FundsImpact = "NONE" | "POTENTIAL" | "POSTED"
 
@@ -163,7 +162,6 @@ export type IntegrationResolutionItemView = {
         workItemType: "INTEGRATION_RESULT_UNKNOWN" | "BUSINESS_EXCEPTION"
         taskVersion: string
         status: WorkItemStatus
-        assignmentMode: AssignmentMode
         processingState: WorkItemProcessingState
         subjectVersion: string
         ownerUser?: { id: string; displayName: string }

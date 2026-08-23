@@ -176,7 +176,7 @@ export type ActiveLowMarginManagerConfirmation = {
     acceptanceReason: string
     evidenceReferenceIds: string[]
     ownerUser?: { id: string; displayName: string }
-    allowedActions: Array<"START_PROCESSING" | "APPROVE" | "REJECT">
+    allowedActions: Array<"APPROVE" | "REJECT">
     actionBlockers: Array<{ code: string; message: string }>
 }
 

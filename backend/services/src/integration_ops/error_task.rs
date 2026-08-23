@@ -42,10 +42,10 @@ impl IntegrationOpsService {
                 business_object_id: req.business_object_id,
                 error_class: req.error_class,
                 owner_role: Some(error_owner_role(req.error_class).to_string()),
-                owner_user_id: None,
+                owner_user_id: Some(req.owner_user_id.clone()),
             },
         )?;
-        let work_item = error_work_item(&task)?;
+        let work_item = error_work_item(&task, &req.owner_user_id)?;
         self.store_error_task(task.clone(), work_item, actor).await?;
         Ok(task.into())
     }

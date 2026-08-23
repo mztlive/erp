@@ -1,4 +1,4 @@
-//! 审批实例、决定、恢复、改派与受阻取消路由。
+//! 审批实例、决定、恢复与受阻取消路由。
 //!
 //! 已删除 `POST /approval-instances/{id}/recover`。定义管理路由经 `#[path]` 合并，
 //! P0-B 接线 `routes/mod.rs` 后应改为独立 merge。
@@ -69,27 +69,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/approval-instances/{id}/eligible-reassignees",
-            with_permission(
-                get(approval_instance::eligible_reassignees),
-                rbac,
-                approval_instance::eligible_reassignees_permission_key(),
-            ),
-        )
-        .route(
             "/approval-instances/{id}/resume-current-approver",
             with_permission(
                 post(approval_instance::resume_current_approver),
                 rbac,
                 approval_instance::resume_current_approver_permission_key(),
-            ),
-        )
-        .route(
-            "/approval-instances/{id}/reassign-current-approver",
-            with_permission(
-                post(approval_instance::reassign_current_approver),
-                rbac,
-                approval_instance::reassign_current_approver_permission_key(),
             ),
         )
         .route(

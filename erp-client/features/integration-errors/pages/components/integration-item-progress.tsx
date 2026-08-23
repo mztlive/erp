@@ -12,7 +12,6 @@ export function IntegrationItemProgress({
     onBack,
     onProcess,
     onProcessNext,
-    onStartProcessing,
 }: {
     item: IntegrationResolutionItemView
     positionIndex: number
@@ -23,7 +22,6 @@ export function IntegrationItemProgress({
     onBack: () => void
     onProcess: () => void
     onProcessNext: () => void
-    onStartProcessing: (() => void) | undefined
 }) {
     return (
         <SequentialProcessBar
@@ -48,7 +46,6 @@ export function IntegrationItemProgress({
             onBack={onBack}
             onProcess={onProcess}
             onProcessNext={onProcessNext}
-            onStartProcessing={onStartProcessing}
         />
     )
 }

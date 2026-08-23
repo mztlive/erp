@@ -1,5 +1,10 @@
 // 后端 DTO → 客户端契约行的纯映射函数，读写路径共用。
 
+import { summarizePermissions } from "@/features/admin/lib/permission-catalog"
+import {
+    auditActionLabel,
+    auditObjectTypeLabel,
+} from "@/features/access-audit/lib/audit-labels"
 import type {
     AccessGovernancePolicyView,
     AuditEventRow,
@@ -90,11 +95,31 @@ function mapAuditResult(
     }
 }
 
-function toRoleRow(role: BackendRole, permissionVersion: string): RoleRow {
-    const summary =
-        role.permissions.length > 0
-            ? role.permissions.slice(0, 6).join(" · ")
-            : "无直接权限条目"
+/**
+ * 角色行。
+ *
+ * 权限列不再打印权限编码：按模块归并成「共 N 项 · 模块 n · 模块 n」，
+ * 编码留给详情面板。数据范围由 data-scopes 结果按主体 ID 关联。
+ *
+ * @param boundAccountCount 绑定该角色的账号数
+ * @param dataScopeSummary 该角色的数据范围摘要；无记录时为「—」
+ */
+function toRoleRow(
+    role: BackendRole,
+    permissionVersion: string,
+    boundAccountCount = 0,
+    dataScopeSummary = "—",
+): RoleRow {
+    const summary = summarizePermissions(role.permissions)
+    const top = summary.groups.slice(0, 3)
+    const summaryText = summary.wildcard
+        ? "全部权限"
+        : summary.total === 0
+          ? "无权限条目"
+          : [
+                `共 ${summary.total} 项`,
+                ...top.map((group) => `${group.name} ${group.count}`),
+            ].join(" · ")
     return {
         id: role.id,
         roleCode: role.id,
@@ -102,8 +127,12 @@ function toRoleRow(role: BackendRole, permissionVersion: string): RoleRow {
         status: "enabled",
         statusLabel: "启用",
         statusTone: "success",
-        permissionSummary: summary,
-        dataScopeSummary: "—",
+        permissionSummary: summaryText,
+        permissionCount: summary.total,
+        permissionGroups: summary.groups,
+        allPermissions: summary.wildcard,
+        boundAccountCount,
+        dataScopeSummary,
         fieldPolicySummary: "—",
         riskFlags: [],
         permissionVersion,
@@ -111,10 +140,16 @@ function toRoleRow(role: BackendRole, permissionVersion: string): RoleRow {
     }
 }
 
+/**
+ * 账号行。
+ *
+ * @param dataScopeSummary 该账号（含其角色）的数据范围摘要；无记录时为「—」
+ */
 function toUserRow(
     admin: BackendAdmin,
     roleNameById: Map<string, string>,
     permissionVersion: string,
+    dataScopeSummary = "—",
 ): UserRow {
     const activeRoles =
         admin.role_ids
@@ -131,7 +166,7 @@ function toUserRow(
         statusLabel: "启用",
         statusTone: "success",
         activeRoles,
-        dataScopeSummary: "—",
+        dataScopeSummary,
         riskFlags: [],
         permissionVersion,
         organizationLabel: "—",
@@ -170,8 +205,9 @@ function toAuditRow(e: BackendAuditEvent): AuditEventRow {
         actorLabel: e.actor_label,
         actorRole: e.actor_role,
         actionType: e.action_type,
-        actionLabel: e.action_type,
+        actionLabel: auditActionLabel(e.action_type),
         objectType: e.object_type,
+        objectTypeLabel: auditObjectTypeLabel(e.object_type),
         objectId: e.object_id ?? "",
         objectLabel: e.object_label ?? e.object_id ?? "—",
         requestId: e.request_id ?? "",

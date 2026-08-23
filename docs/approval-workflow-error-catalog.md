@@ -88,23 +88,20 @@ data=<仅 409 可带 correlation_id 与有权查看的最新版本；403/404/500
 | `APPROVAL_REJECT_REASON_REQUIRED` | 422 | 驳回原因为空或仅空白 | 否 | 否 | 要求填写原因后再提交 | 「驳回必须填写原因」 |
 | `APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT` | 409 | 同幂等键用于不同 canonical payload | 否 | 否 | 停止自动重放；为新意图生成新幂等键并由用户确认 | 「相同幂等键已用于不同请求内容」 |
 
-### 3.4 受阻、恢复、改派与取消
+### 3.4 受阻、恢复与取消
 
 | 错误码 | HTTP | 触发条件 | 可重试 | 提交业务事实 | 前端动作 | 允许暴露 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `APPROVAL_INSTANCE_BLOCKED` | 409 | 当前实例已受阻，不能继续决定；人员失效决定路径必须先提交 BLOCKED 事实 | 否 | **是**（人员失效决定路径已提交 BLOCKED、关闭旧 OPEN 任务并写收据） | 读取 `recovery-options`，只展示返回的唯一动作；不得继续决定或重开旧任务 | 受阻说明、correlation ID、有权查看的最新实例/任务版本；不得暴露账号隐私 |
 | `APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER` | 409 | 实例非 `BLOCKED`，或当前 blocker 不属于人员失效 | 否 | 否 | 按 `recovery-options` 改调唯一合法动作 | 「当前受阻原因不允许恢复原审批人」 |
-| `APPROVAL_CURRENT_APPROVER_NOT_RECOVERED` | 409 | 恢复命令执行时原审批人仍不合格 | 否 | 否 | 保持受阻；需要换人时改调改派 | 「原审批人仍不合格，不能恢复」 |
-| `APPROVAL_CURRENT_APPROVER_RECOVERED` | 409 | 改派时原审批人已经恢复有效 | 否 | 否 | 只能改调恢复端口 | 「原审批人已恢复，只能调用恢复接口」 |
-| `APPROVAL_REASSIGN_TARGET_INELIGIBLE` | 422 | 改派目标不满足账号、任职、资格、读取权、DataScope 或岗位分离 | 否 | 否 | 重新搜索合格候选人；不得手填绕过 | 「改派目标不满足审批资格」；不得暴露具体策略细节 |
-| `APPROVAL_REASSIGN_NOT_ALLOWED_FOR_BLOCKER` | 409 | 实例非 `BLOCKED`，或当前 blocker 不属于人员失效 | 否 | 否 | 按 `recovery-options` 改调；不得当普通转签 | 「当前受阻原因不允许改派」 |
-| `APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED` | 409 | 实例非 `BLOCKED`，或当前 blocker 属于人员失效 | 否 | 否 | 人员失效只能恢复或改派 | 「当前受阻原因不允许受阻取消」 |
+| `APPROVAL_CURRENT_APPROVER_NOT_RECOVERED` | 409 | 恢复命令执行时原审批人仍不合格 | 否 | 否 | 保持受阻并升级处置；待原审批人重新合格后再恢复 | 「原审批人仍不合格，不能恢复」 |
+| `APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED` | 409 | 实例非 `BLOCKED`，或当前 blocker 属于人员失效 | 否 | 否 | 人员失效只能等待原审批人重新合格后恢复 | 「当前受阻原因不允许受阻取消」 |
 
 ### 3.5 通用待办保护
 
 | 错误码 | HTTP | 触发条件 | 可重试 | 提交业务事实 | 前端动作 | 允许暴露 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN` | 409 | 通用 `reassign`/`close`/`complete`/`transfer` 试图修改 `DocumentApproval` 或带 `approval_node_execution_id` 的任务 | 否 | 否 | 改走审批决定、恢复、改派或受阻取消端口 | 「审批任务不能通过通用待办接口修改」 |
+| `APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN` | 409 | 通用 `reassign`/`close`/`complete`/`transfer` 试图修改 `DocumentApproval` 或带 `approval_node_execution_id` 的任务 | 否 | 否 | 改走审批决定、恢复或受阻取消端口 | 「审批任务不能通过通用待办接口修改」 |
 | `WORK_ITEM_VERSION_CONFLICT` | 409 | 非审批任务版本过期 | 是 | 否 | 刷新任务版本后由用户显式重提 | 有权查看的最新任务摘要 |
 | `WORK_ITEM_RESPONSIBILITY_CONFLICT` | 409 | 非审批任务当前责任已变化 | 否 | 否 | 刷新任务；不得继续原责任命令 | 有权查看的最新任务摘要 |
 

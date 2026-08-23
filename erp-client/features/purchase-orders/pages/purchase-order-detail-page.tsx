@@ -20,7 +20,10 @@ import { EditSurface } from "@/features/purchase-orders/components/purchase-orde
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
 import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
 import { PurchaseOrderDetailSections } from "@/features/purchase-orders/components/purchase-order-detail-sections"
-import { usePurchaseOrderCenterQuery, purchaseOrderKeys } from "@/features/purchase-orders/hooks/queries"
+import {
+    usePurchaseOrderCenterQuery,
+    purchaseOrderKeys,
+} from "@/features/purchase-orders/hooks/queries"
 import {
     type PurchaseOrderDetailResult,
     usePurchaseOrderDetailCommandState,
@@ -84,8 +87,7 @@ export function PurchaseOrderDetailPage({
     const queryClient = useQueryClient()
     const handleResult = React.useCallback(
         (next: React.SetStateAction<PurchaseOrderDetailResult | null>) => {
-            const resolved =
-                typeof next === "function" ? next(result) : next
+            const resolved = typeof next === "function" ? next(result) : next
             if (
                 resolved &&
                 (resolved.status === "succeeded" ||
@@ -97,7 +99,7 @@ export function PurchaseOrderDetailPage({
             }
             setResult(resolved)
         },
-        [queryClient, purchaseOrderId, result],
+        [queryClient, purchaseOrderId, result, setResult],
     )
 
     const reviewActions = usePurchaseOrderDetailReviewActions({
@@ -350,9 +352,7 @@ export function PurchaseOrderDetailPage({
                     isChangeOrderTask ? focusedWorkItem?.workItemId : undefined
                 }
                 changeExpectedTaskVersion={
-                    isChangeOrderTask
-                        ? focusedWorkItem?.taskVersion
-                        : undefined
+                    isChangeOrderTask ? focusedWorkItem?.taskVersion : undefined
                 }
                 changeWorkItemAllowedActions={
                     isChangeOrderTask
@@ -368,24 +368,16 @@ export function PurchaseOrderDetailPage({
                 onSubmitConfirmOpenChange={editActions.setSubmitConfirmOpen}
                 approveConfirmOpen={reviewActions.approveConfirmOpen}
                 onApproveConfirmOpenChange={reviewActions.setApproveConfirmOpen}
-                releaseConfirmOpen={reviewActions.releaseConfirmOpen}
-                onReleaseConfirmOpenChange={reviewActions.setReleaseConfirmOpen}
                 changeConfirmOpen={editActions.changeConfirmOpen}
                 onChangeConfirmOpenChange={editActions.setChangeConfirmOpen}
                 leaveGuardOpen={guard.leaveGuardOpen}
                 onLeaveGuardOpenChange={guard.setLeaveGuardOpen}
-                releaseReason={reviewActions.releaseReason}
-                onReleaseReasonChange={reviewActions.setReleaseReason}
                 submitPending={editActions.submitPending}
                 savePending={editActions.savePending}
                 reviewPending={reviewActions.reviewPending}
-                responsibilityPending={reviewActions.responsibilityPending}
                 changePending={editActions.changePending}
                 onConfirmSubmit={() => void editActions.handleSubmit()}
                 onConfirmApprove={() => void reviewActions.handleApprove()}
-                onConfirmRelease={() =>
-                    void reviewActions.handleReleaseToTeam()
-                }
                 onConfirmChange={() => void editActions.handleStartChange()}
                 onSaveAndLeave={() => void guard.saveAndLeave()}
                 onDiscardAndLeave={guard.discardAndLeave}

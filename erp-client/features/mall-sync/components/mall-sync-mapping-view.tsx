@@ -25,13 +25,12 @@ type MallSyncMappingViewProps = {
     mappingIndex: { current: number; total: number }
     responsibilityStatus: ResponsibilityStatus
     canConfirmMapping: boolean
-    responsibilityPending: boolean
+    actionPending: boolean
     reapplyPending: boolean
     onReapply: () => Promise<void>
     onResolveUnknownReapply: () => Promise<void>
     onBackToQueue: () => void
     onConfirm: () => Promise<void>
-    onStartProcessing: () => Promise<void>
 }
 
 function MallSyncMappingView({
@@ -44,13 +43,12 @@ function MallSyncMappingView({
     mappingIndex,
     responsibilityStatus,
     canConfirmMapping,
-    responsibilityPending,
+    actionPending,
     reapplyPending,
     onReapply,
     onResolveUnknownReapply,
     onBackToQueue,
     onConfirm,
-    onStartProcessing,
 }: MallSyncMappingViewProps) {
     return (
         <div className="space-y-4">
@@ -100,13 +98,12 @@ function MallSyncMappingView({
                         mappingIndex={mappingIndex}
                         responsibilityStatus={responsibilityStatus}
                         canConfirmMapping={canConfirmMapping}
-                        responsibilityPending={responsibilityPending}
+                        actionPending={actionPending}
                         reapplyPending={reapplyPending}
                         onReapply={onReapply}
                         onResolveUnknownReapply={onResolveUnknownReapply}
                         onBackToQueue={onBackToQueue}
                         onConfirm={onConfirm}
-                        onStartProcessing={onStartProcessing}
                     />
                 ) : (
                     <BusinessEmptyState

@@ -37,11 +37,7 @@ export function mapReviewTypeFrontend(
 
 export function filterSummary(q: CardFundsReviewQueueQuery): string {
     const parts = [
-        q.scope === "mine"
-            ? "仅我的"
-            : q.scope === "team"
-              ? "团队"
-              : "处理历史",
+        q.scope === "mine" ? "仅我的" : "处理历史",
         q.type === "opening"
             ? "期初"
             : q.type === "delta"

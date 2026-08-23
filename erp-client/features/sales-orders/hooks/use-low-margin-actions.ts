@@ -9,7 +9,6 @@ import type {
     ActiveLowMarginManagerConfirmation,
     SalesOrderListItem,
 } from "@/features/sales-orders/types"
-import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 
 export type LowMarginManagerResult = {
     status: "succeeded" | "blocked" | "rejected" | "unknown"
@@ -32,7 +31,6 @@ export function useLowMarginManagerActions({
     onResult: (result: LowMarginManagerResult) => void
 }) {
     const queryClient = useQueryClient()
-    const responsibility = useWorkItemResponsibilityMutation()
     const decision = useMutation({
         mutationFn: completeLowMarginManagerConfirmation,
         onSuccess: async () => {
@@ -54,18 +52,6 @@ export function useLowMarginManagerActions({
         rejectedProcurementConfirmationId:
             confirmation.rejectedProcurementConfirmationId,
         expectedSalesOrderLockVersion: order.lockVersion,
-    }
-
-    const startProcessing = async () => {
-        await responsibility.mutateAsync({
-            kind: "START_PROCESSING",
-            workItemId: confirmation.workItemId,
-            expectedTaskVersion: confirmation.taskVersion,
-            idempotencyKey: `w05:${confirmation.workItemId}:${confirmation.taskVersion}:START`,
-        })
-        await queryClient.invalidateQueries({
-            queryKey: salesOrderKeys.detail(order.id),
-        })
     }
 
     const confirmApprove = async () => {
@@ -116,8 +102,6 @@ export function useLowMarginManagerActions({
         comment,
         setComment,
         isPending: decision.isPending,
-        isStartPending: responsibility.isPending,
-        startProcessing,
         confirmApprove,
         confirmReject,
     }

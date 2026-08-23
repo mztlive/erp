@@ -11,17 +11,13 @@ export type PurchaseOrderDetailPermissions = {
     canOpenReview: boolean
     canApprove: boolean
     canReject: boolean
-    canStartReview: boolean
-    canReleaseReview: boolean
     canChange: boolean
     canFulfill: boolean
     canPay: boolean
     fulfillBlocker:
         | PurchaseOrderCenterView["actionBlockers"][number]
         | undefined
-    changeBlocker:
-        | PurchaseOrderCenterView["actionBlockers"][number]
-        | undefined
+    changeBlocker: PurchaseOrderCenterView["actionBlockers"][number] | undefined
 }
 
 /**
@@ -38,40 +34,19 @@ export function usePurchaseOrderDetailPermissions(
             commandLedger.peek("review-approve"),
         )
         const rejectResultPending = Boolean(commandLedger.peek("review-reject"))
-        const responsibilityResultPending = Boolean(
-            commandLedger.peek("review-responsibility"),
-        )
         return {
             canEdit: order?.allowedActions.includes("EDIT") ?? false,
             canSubmit: order?.allowedActions.includes("SUBMIT") ?? false,
             canOpenReview: Boolean(reviewWorkItem),
             canApprove: Boolean(
                 reviewWorkItem?.processingState === "READY" &&
-                    reviewWorkItem.domainAllowedActions.includes("APPROVE") &&
-                    !rejectResultPending &&
-                    !responsibilityResultPending,
+                reviewWorkItem.domainAllowedActions.includes("APPROVE") &&
+                !rejectResultPending,
             ),
             canReject: Boolean(
                 reviewWorkItem?.processingState === "READY" &&
-                    reviewWorkItem.domainAllowedActions.includes("REJECT") &&
-                    !approveResultPending &&
-                    !responsibilityResultPending,
-            ),
-            canStartReview: Boolean(
-                reviewWorkItem?.processingState === "READY" &&
-                    reviewWorkItem.responsibilityActions.includes(
-                        "START_PROCESSING",
-                    ) &&
-                    !approveResultPending &&
-                    !rejectResultPending,
-            ),
-            canReleaseReview: Boolean(
-                reviewWorkItem?.processingState === "READY" &&
-                    reviewWorkItem.responsibilityActions.includes(
-                        "RELEASE_TO_TEAM",
-                    ) &&
-                    !approveResultPending &&
-                    !rejectResultPending,
+                reviewWorkItem.domainAllowedActions.includes("REJECT") &&
+                !approveResultPending,
             ),
             canChange: order?.allowedActions.includes("START_CHANGE") ?? false,
             canFulfill: order?.allowedActions.includes("FULFILL") ?? false,

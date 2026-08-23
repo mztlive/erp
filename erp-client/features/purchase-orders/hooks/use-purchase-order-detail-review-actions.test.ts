@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { act } from "@testing-library/react"
 
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
-import { responsibilityText } from "@/lib/ui-text"
 import {
     createFreshQueryClient,
     renderHookWithProviders,
@@ -38,17 +37,6 @@ vi.mock("@/features/purchase-orders/api/purchase-orders", () => ({
     startPurchaseChange: apiMocks.startPurchaseChange,
     submitPurchaseChange: apiMocks.submitPurchaseChange,
     submitPurchaseOrderForReview: apiMocks.submitPurchaseOrderForReview,
-}))
-
-const responsibilityMocks = vi.hoisted(() => ({
-    mutateAsync: vi.fn(),
-}))
-
-vi.mock("@/features/work-items", () => ({
-    useWorkItemResponsibilityMutation: () => ({
-        mutateAsync: responsibilityMocks.mutateAsync,
-        isPending: false,
-    }),
 }))
 
 const navMocks = vi.hoisted(() => ({
@@ -100,11 +88,9 @@ function makeReviewOrder(): PurchaseOrderCenterView {
             taskVersion: "v1",
             subjectVersion: "v3",
             status: "OPEN",
-            assignmentMode: "DIRECT",
             ownerRole: "FINANCE",
             ownerOrganizationId: "org-1",
             processingState: "READY",
-            responsibilityActions: ["START_PROCESSING", "RELEASE_TO_TEAM"],
             domainAllowedActions: ["APPROVE", "REJECT"],
             actionBlockers: [],
         },
@@ -308,150 +294,5 @@ describe("usePurchaseOrderDetailReviewActions", () => {
             }),
         ).rejects.toThrow("原通过操作的结果仍待确认")
         expect(apiMocks.reviewPurchaseOrder).not.toHaveBeenCalled()
-    })
-
-    it("starts processing and refreshes", async () => {
-        responsibilityMocks.mutateAsync.mockResolvedValue(undefined)
-        const order = makeReviewOrder()
-        const refetch = vi.fn(async () => ({ data: order }))
-        const ledger = new FormalCommandKeyLedger()
-        let props: ReviewActionsProps = makeProps({
-            order,
-            refetch,
-            commandLedger: ledger,
-        })
-        const { result } = renderHookWithProviders(
-            () => usePurchaseOrderDetailReviewActions(props),
-            { queryClient: createFreshQueryClient() },
-        )
-
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-
-        expect(responsibilityMocks.mutateAsync).toHaveBeenCalledWith(
-            expect.objectContaining({
-                kind: "START_PROCESSING",
-                workItemId: "wi-1",
-                expectedTaskVersion: "v1",
-                idempotencyKey: expect.any(String),
-            }),
-        )
-        expect(refetch).toHaveBeenCalledTimes(1)
-        expect(ledger.peek("review-responsibility")).toBeUndefined()
-    })
-
-    it("reports a blocked result when starting processing fails definitively", async () => {
-        responsibilityMocks.mutateAsync.mockRejectedValue(
-            Object.assign(new Error("处理权已变化"), {
-                kind: "Http",
-                status: 409,
-            }),
-        )
-        const order = makeReviewOrder()
-        const setResult = vi.fn()
-        const ledger = new FormalCommandKeyLedger()
-        let props: ReviewActionsProps = makeProps({
-            order,
-            setResult,
-            commandLedger: ledger,
-        })
-        const { result } = renderHookWithProviders(
-            () => usePurchaseOrderDetailReviewActions(props),
-            { queryClient: createFreshQueryClient() },
-        )
-
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-
-        expect(setResult).toHaveBeenCalledWith(
-            expect.objectContaining({
-                status: "blocked",
-                title: responsibilityText.changed,
-            }),
-        )
-        expect(ledger.peek("review-responsibility")).toBeUndefined()
-    })
-
-    it("keeps the responsibility command when the outcome is unknown", async () => {
-        responsibilityMocks.mutateAsync.mockRejectedValue(
-            Object.assign(new Error("网络中断"), { kind: "Network" }),
-        )
-        const order = makeReviewOrder()
-        const setResult = vi.fn()
-        const ledger = new FormalCommandKeyLedger()
-        let props: ReviewActionsProps = makeProps({
-            order,
-            setResult,
-            commandLedger: ledger,
-        })
-        const { result } = renderHookWithProviders(
-            () => usePurchaseOrderDetailReviewActions(props),
-            { queryClient: createFreshQueryClient() },
-        )
-
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-
-        expect(setResult).toHaveBeenCalledWith(
-            expect.objectContaining({
-                status: "unknown",
-                title: responsibilityText.changed,
-                reference: "PO-2026-001",
-            }),
-        )
-        expect(ledger.peek("review-responsibility")).toBeDefined()
-    })
-
-    it("releases to the team with a reason and clears the dialog", async () => {
-        responsibilityMocks.mutateAsync.mockResolvedValue(undefined)
-        const order = makeReviewOrder()
-        const setResult = vi.fn()
-        let props: ReviewActionsProps = makeProps({ order, setResult })
-        const { result } = renderHookWithProviders(
-            () => usePurchaseOrderDetailReviewActions(props),
-            { queryClient: createFreshQueryClient() },
-        )
-        act(() => {
-            result.current.setReleaseConfirmOpen(true)
-            result.current.setReleaseReason("原因说明")
-        })
-
-        await act(async () => {
-            await result.current.handleReleaseToTeam()
-        })
-
-        expect(responsibilityMocks.mutateAsync).toHaveBeenCalledWith(
-            expect.objectContaining({
-                kind: "RELEASE_TO_TEAM",
-                workItemId: "wi-1",
-                reason: "原因说明",
-            }),
-        )
-        expect(result.current.releaseConfirmOpen).toBe(false)
-        expect(result.current.releaseReason).toBe("")
-        expect(setResult).toHaveBeenCalledWith(
-            expect.objectContaining({
-                status: "succeeded",
-                title: responsibilityText.releaseToTeam,
-            }),
-        )
-    })
-
-    it("does not release without a reason", async () => {
-        const order = makeReviewOrder()
-        let props: ReviewActionsProps = makeProps({ order })
-        const { result } = renderHookWithProviders(
-            () => usePurchaseOrderDetailReviewActions(props),
-            { queryClient: createFreshQueryClient() },
-        )
-
-        await act(async () => {
-            await result.current.handleReleaseToTeam()
-        })
-
-        expect(responsibilityMocks.mutateAsync).not.toHaveBeenCalled()
     })
 })

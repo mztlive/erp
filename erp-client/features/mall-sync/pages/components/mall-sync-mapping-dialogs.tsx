@@ -13,10 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { SOURCE_FIX_REASON_OPTIONS } from "@/features/mall-sync/types"
-import type {
-    MallSyncReleaseFormApi,
-    MallSyncSourceFixFormApi,
-} from "@/features/mall-sync/pages/hooks/use-mall-sync-page"
+import type { MallSyncSourceFixFormApi } from "@/features/mall-sync/pages/hooks/use-mall-sync-page"
 
 type MallSyncSourceFixDialogProps = {
     open: boolean
@@ -90,65 +87,12 @@ export function MallSyncSourceFixDialog({
                     />
                     <DialogFooter>
                         <DialogClose
-                            render={
-                                <Button type="button" variant="outline" />
-                            }
+                            render={<Button type="button" variant="outline" />}
                         >
                             取消
                         </DialogClose>
                         <form.AppForm>
                             <form.SubmitButton label="记录修复要求" />
-                        </form.AppForm>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
-type MallSyncReleaseDialogProps = {
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    form: MallSyncReleaseFormApi
-}
-
-export function MallSyncReleaseDialog({
-    open,
-    onOpenChange,
-    form,
-}: MallSyncReleaseDialogProps) {
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>退回团队</DialogTitle>
-                    <DialogDescription>
-                        清除当前个人责任，原映射任务保持待处理，不改变映射状态。
-                    </DialogDescription>
-                </DialogHeader>
-                <form
-                    className="space-y-3"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        void form.handleSubmit()
-                    }}
-                >
-                    <form.AppField
-                        name="reason"
-                        children={(field) => (
-                            <field.TextareaField label="退回原因" />
-                        )}
-                    />
-                    <DialogFooter>
-                        <DialogClose
-                            render={
-                                <Button type="button" variant="outline" />
-                            }
-                        >
-                            取消
-                        </DialogClose>
-                        <form.AppForm>
-                            <form.SubmitButton label="确认退回团队" />
                         </form.AppForm>
                     </DialogFooter>
                 </form>

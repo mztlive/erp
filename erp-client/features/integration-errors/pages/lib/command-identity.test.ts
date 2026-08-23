@@ -17,8 +17,8 @@ describe("createCommandIdentityStore", () => {
 
     it("reuses the identity for the same kind and object", () => {
         const store = createCommandIdentityStore()
-        const first = store.get("RELEASE_TO_TEAM", "wi_1")
-        const again = store.get("RELEASE_TO_TEAM", "wi_1")
+        const first = store.get("RESOLVE", "wi_1")
+        const again = store.get("RESOLVE", "wi_1")
         expect(again).toEqual(first)
     })
 

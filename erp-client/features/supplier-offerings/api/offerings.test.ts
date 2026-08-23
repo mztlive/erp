@@ -65,7 +65,6 @@ const validWorkItemDto: WorkItemDto = {
     destination_workspace_id: "W21",
     approval_step_instance_id: null,
     status: "OPEN",
-    assignment_mode: "DIRECT",
     assignment_source: "admin",
     owner_role: "buyer",
     owner_role_label: "采购",
@@ -109,23 +108,20 @@ describe("fetchSupplierOfferings", () => {
 
         await fetchSupplierOfferings({ page: 1, pageSize: 50 })
 
-        expect(mockedApiGet).toHaveBeenCalledWith(
-            "/admin/supplier-offerings",
-            {
-                q: undefined,
-                sku_id: undefined,
-                sku_no: undefined,
-                product_no: undefined,
-                supplier_id: undefined,
-                status: undefined,
-                source_type: undefined,
-                availability_status: undefined,
-                page: 1,
-                page_size: 50,
-                sort_by: "created_at",
-                sort_dir: "desc",
-            },
-        )
+        expect(mockedApiGet).toHaveBeenCalledWith("/admin/supplier-offerings", {
+            q: undefined,
+            sku_id: undefined,
+            sku_no: undefined,
+            product_no: undefined,
+            supplier_id: undefined,
+            status: undefined,
+            source_type: undefined,
+            availability_status: undefined,
+            page: 1,
+            page_size: 50,
+            sort_by: "created_at",
+            sort_dir: "desc",
+        })
     })
 
     it("trims text filters and passes through structured filters", async () => {
@@ -146,20 +142,17 @@ describe("fetchSupplierOfferings", () => {
             pageSize: 20,
         })
 
-        expect(mockedApiGet).toHaveBeenCalledWith(
-            "/admin/supplier-offerings",
-            {
-                q: "abc",
-                sku_id: "sku_1",
-                status: "ACTIVE",
-                source_type: "API",
-                availability_status: "STALE",
-                page: 2,
-                page_size: 20,
-                sort_by: "created_at",
-                sort_dir: "desc",
-            },
-        )
+        expect(mockedApiGet).toHaveBeenCalledWith("/admin/supplier-offerings", {
+            q: "abc",
+            sku_id: "sku_1",
+            status: "ACTIVE",
+            source_type: "API",
+            availability_status: "STALE",
+            page: 2,
+            page_size: 20,
+            sort_by: "created_at",
+            sort_dir: "desc",
+        })
     })
 })
 

@@ -8,7 +8,6 @@
 
 import type { StatusTone } from "@/components/ui/status-badge"
 import type {
-    AssignmentMode,
     WorkItemAllowedAction,
     WorkItemProcessingState,
     WorkItemStatus,
@@ -422,7 +421,6 @@ type WorkItemView = {
     businessObjectType: "SUPPLIER_FULFILLMENT_ORDER"
     businessObjectId: string
     subjectVersion: string
-    assignmentMode: AssignmentMode
     processingState: WorkItemProcessingState
     ownerUser?: { id: string; displayName: string }
     allowedTaskActions: readonly WorkItemAllowedAction[]
@@ -611,10 +609,3 @@ export type NoteInput = {
     comment: string
     idempotencyKey: string
 }
-
-export const RELEASE_REASON_OPTIONS = [
-    { value: "WAITING_SUPPLIER", label: "等待供应商回复" },
-    { value: "WAITING_MALL", label: "等待商城协同" },
-    { value: "NEED_CLARIFICATION", label: "需业务澄清" },
-    { value: "OTHER", label: "其他" },
-] as const

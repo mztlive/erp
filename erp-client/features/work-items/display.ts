@@ -96,7 +96,6 @@ export function displayNextActionHint(input: {
 }
 
 export function queueResponsibilityLabel(input: {
-    assignmentMode: string
     ownerUser?: { id: string; displayName: string }
     viewerUserId?: string
 }): string {

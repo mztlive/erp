@@ -12,28 +12,9 @@ import type {
 /** 责任确认卡片组的本地交互状态与命令提交；写命令统一走 queries 的 mutation。 */
 export function useConfirmationActions(batch: ImportBatchView) {
     const operations = useImportConfirmationOperations()
-    const [confirming, setConfirming] =
-        React.useState<ImportConfirmationView>()
-    const [returning, setReturning] =
-        React.useState<ImportConfirmationView>()
+    const [confirming, setConfirming] = React.useState<ImportConfirmationView>()
+    const [returning, setReturning] = React.useState<ImportConfirmationView>()
     const idempotencyKeys = React.useRef(new Map<string, string>())
-
-    const startProcessing = React.useCallback(
-        async (confirmation: ImportConfirmationView) => {
-            const task = confirmation.workItem
-            if (!task) return
-            operations.resetError()
-            await operations.startProcessing({
-                workItemId: task.workItemId,
-                expectedTaskVersion: task.taskVersion,
-                idempotencyKey: commandIdempotencyKey(
-                    idempotencyKeys.current,
-                    `${task.workItemId}:START_PROCESSING:${task.taskVersion}`,
-                ),
-            })
-        },
-        [operations],
-    )
 
     const complete = React.useCallback(
         async (
@@ -79,9 +60,7 @@ export function useConfirmationActions(batch: ImportBatchView) {
         setConfirming,
         returning,
         setReturning,
-        startProcessing,
         complete,
-        isStarting: operations.isStarting,
         isCompleting: operations.isCompleting,
         error: operations.error,
     }

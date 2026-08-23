@@ -1,4 +1,4 @@
-//! 域 D03 `work_item` 仓储：责任队列查询与责任池原子开始处理。
+//! 域 D03 `work_item` 仓储：指定责任人的人工任务队列查询。
 
 use std::num::NonZeroU32;
 
@@ -6,7 +6,7 @@ use bpm::ApprovalNodeExecutionId;
 use entities::common::time::Instant;
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
-use mongodb::bson::{doc, to_document, Bson, Document};
+use mongodb::bson::{doc, to_document, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
@@ -84,18 +84,12 @@ pub struct WorkItemFilter {
     pub work_item_types: Vec<WorkItemType>,
     /// 允许的状态集合；为空时不筛选。
     pub statuses: Vec<WorkItemStatus>,
-    /// 允许的责任角色集合；为空时不筛选。
-    pub owner_roles: Vec<String>,
     /// 允许的责任组织集合；为空时不筛选。
     pub owner_organization_ids: Vec<String>,
-    /// 角色与组织的已授权组合；组织为 `None` 表示该角色公司级授权。
-    pub responsibility_scopes: Vec<(String, Option<String>)>,
     /// 允许的注册任务类型与权威业务对象类型组合。
     pub object_access_shapes: Option<Vec<(WorkItemType, String)>>,
     /// 当前个人责任人；为空时不筛选。
     pub owner_user_id: Option<String>,
-    /// 是否只查询尚无个人责任人的责任池任务。
-    pub unassigned_only: bool,
     /// 历史参与人；匹配曾负责、完成人或关闭人之一。
     pub history_actor_id: Option<String>,
     /// 具备组织级历史查看权的组织集合；`Some(空)` 表示公司级。
@@ -138,19 +132,13 @@ impl QueryFilter for WorkItemFilter {
             &self.priorities,
             WorkItemPriority::as_str,
         );
-        insert_string_filter(&mut filter, "owner_role", &self.owner_roles);
         insert_string_filter(&mut filter, "owner_organization_id", &self.owner_organization_ids);
-        if self.unassigned_only {
-            filter.insert("owner_user_id", Bson::Null);
-        } else if let Some(owner_user_id) = &self.owner_user_id {
+        if let Some(owner_user_id) = &self.owner_user_id {
             filter.insert("owner_user_id", owner_user_id);
         }
         let mut conjunctions = Vec::new();
         if let Some(shapes) = &self.object_access_shapes {
             conjunctions.push(object_access_shape_filter(shapes));
-        }
-        if !self.responsibility_scopes.is_empty() {
-            conjunctions.push(responsibility_scope_filter(&self.responsibility_scopes));
         }
         if self.history_actor_id.is_some() || self.history_managed_organization_ids.is_some() {
             conjunctions.push(history_scope_filter(
@@ -177,34 +165,6 @@ impl Pagination for WorkItemFilter {
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
-}
-
-/// 责任池原子开始处理的持久化结果。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StartProcessingOutcome {
-    /// 本次请求成功形成个人责任。
-    Started(WorkItem),
-    /// 同一用户的重试；返回当前事实，且不再次递增版本。
-    AlreadyOwned(WorkItem),
-    /// 任务已由其他用户负责。
-    OwnershipConflict(WorkItem),
-    /// 任务仍可开始处理，但请求携带的版本或责任范围已陈旧。
-    VersionConflict(WorkItem),
-    /// 任务不存在、非开放、非责任池或已不具备开始处理形态。
-    NotStartable(Option<WorkItem>),
-}
-
-/// 开始处理 CAS 必须固定的服务端资格快照。
-///
-/// Service 在更新前校验角色、组织、对象参与权与岗位分离，并把校验时看到的
-/// 责任范围装入本类型；Repository 将角色和组织一并放入原子过滤条件，避免
-/// 资格校验后任务责任范围被并发替换。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StartProcessingEligibility<'a> {
-    /// 资格校验时看到的责任角色。
-    pub owner_role: &'a str,
-    /// 资格校验时看到的责任组织。
-    pub owner_organization_id: &'a str,
 }
 
 impl<'a> Repository<'a, WorkItem> {
@@ -258,48 +218,6 @@ impl<'a> Repository<'a, WorkItem> {
         let mut document = filter.to_doc();
         document.insert("id", id);
         mongo_ops::find_one(&self.collection(), document, executor).await
-    }
-
-    /// 以单文档 CAS 原子开始处理责任池任务。
-    ///
-    /// 过滤条件同时固定任务版本、开放状态、`POOL` 模式、尚无个人责任以及资格
-    /// 校验时看到的角色和组织；更新管道以 `$ifNull` 保留首次分派/处理时间。
-    /// CAS 未命中后只读取当前事实以区分同人幂等、他人冲突和版本冲突。
-    ///
-    /// # 错误
-    /// 元数据越界、MongoDB 更新或反序列化失败时返回错误。
-    pub async fn start_processing(
-        &self,
-        id: &str,
-        expected_task_version: u64,
-        eligibility: StartProcessingEligibility<'_>,
-        actor_id: &str,
-        at: Instant,
-        executor: &mut dyn Executor,
-    ) -> Result<StartProcessingOutcome> {
-        let expected_version =
-            i64::try_from(expected_task_version).map_err(|_| Error::EntityMetadataOutOfRange("version"))?;
-        let updated = mongo_ops::find_one_and_update_pipeline(
-            &self.collection(),
-            start_processing_filter(
-                id,
-                expected_version,
-                eligibility.owner_role,
-                eligibility.owner_organization_id,
-            ),
-            start_processing_pipeline(actor_id, at),
-            executor,
-        )
-        .await?;
-        if let Some(item) = updated {
-            return Ok(StartProcessingOutcome::Started(item));
-        }
-        let current = self.find_by_id(id, executor).await?;
-        Ok(classify_start_processing_miss(
-            current,
-            expected_task_version,
-            actor_id,
-        ))
     }
 
     /// 以 `id + OPEN + expected_task_version + approval_node_execution_id` 关闭审批任务。
@@ -387,69 +305,6 @@ fn approval_task_still_open(item: &WorkItem, execution_id: &ApprovalNodeExecutio
     item.status == WorkItemStatus::Open && item.approval_node_execution_id.as_ref() == Some(execution_id)
 }
 
-fn start_processing_filter(
-    id: &str,
-    expected_version: i64,
-    owner_role: &str,
-    owner_organization_id: &str,
-) -> Document {
-    doc! {
-        "id": id,
-        "version": expected_version,
-        "status": WorkItemStatus::Open.as_str(),
-        "owner_role": owner_role,
-        "owner_organization_id": owner_organization_id,
-        "owner_user_id": Bson::Null,
-        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-    }
-}
-
-fn start_processing_pipeline(actor_id: &str, at: Instant) -> Vec<Document> {
-    let timestamp = at.unix_secs();
-    vec![doc! {
-        "$set": {
-            "owner_user_id": actor_id,
-            "responsibility_actor_ids": {
-                "$cond": [
-                    { "$in": [actor_id, "$responsibility_actor_ids"] },
-                    "$responsibility_actor_ids",
-                    { "$concatArrays": ["$responsibility_actor_ids", [actor_id]] },
-                ]
-            },
-            "assignment_source": AssignmentSource::SystemRule.as_str(),
-            "assigned_at": { "$ifNull": ["$assigned_at", timestamp] },
-            "started_at": { "$ifNull": ["$started_at", timestamp] },
-            "current_assignment_at": timestamp,
-            "last_activity_at": timestamp,
-            "version": { "$add": ["$version", 1_i64] },
-            "updated_at": timestamp,
-        }
-    }]
-}
-
-fn classify_start_processing_miss(
-    current: Option<WorkItem>,
-    expected_task_version: u64,
-    actor_id: &str,
-) -> StartProcessingOutcome {
-    let Some(item) = current else {
-        return StartProcessingOutcome::NotStartable(None);
-    };
-    if item.status != WorkItemStatus::Open {
-        return StartProcessingOutcome::NotStartable(Some(item));
-    }
-    if item.owner_user_id.as_deref() == Some(actor_id) {
-        return StartProcessingOutcome::AlreadyOwned(item);
-    }
-    if item.owner_user_id.is_some() {
-        return StartProcessingOutcome::OwnershipConflict(item);
-    }
-    if item.base().version != expected_task_version {
-        return StartProcessingOutcome::VersionConflict(item);
-    }
-    StartProcessingOutcome::NotStartable(Some(item))
-}
-
 fn insert_enum_filter<T: Copy>(
     filter: &mut Document,
     field: &str,
@@ -505,20 +360,6 @@ fn literal_query_filter(query: &str) -> Document {
             { "impact_summary": { "$regex": &literal, "$options": "i" } },
         ]
     }
-}
-
-fn responsibility_scope_filter(scopes: &[(String, Option<String>)]) -> Document {
-    let alternatives = scopes
-        .iter()
-        .map(|(role, organization_id)| {
-            let mut filter = doc! { "owner_role": role };
-            if let Some(organization_id) = organization_id {
-                filter.insert("owner_organization_id", organization_id);
-            }
-            filter
-        })
-        .collect::<Vec<_>>();
-    doc! { "$or": alternatives }
 }
 
 fn object_access_shape_filter(shapes: &[(WorkItemType, String)]) -> Document {
@@ -610,9 +451,7 @@ mod tests {
     use mongodb::bson::{doc, Bson};
 
     use super::{
-        approval_task_still_open, classify_start_processing_miss, sort_doc, start_processing_filter,
-        start_processing_pipeline, work_item_projection, QueryFilter, StartProcessingOutcome, WorkItemFilter,
-        WorkItemRow,
+        approval_task_still_open, sort_doc, work_item_projection, QueryFilter, WorkItemFilter, WorkItemRow,
     };
     use crate::repository::bpm::{approval_task_cas_filter, classify_cas_miss, CasWriteOutcome};
     use bpm::ApprovalNodeExecutionId;
@@ -632,7 +471,7 @@ mod tests {
                 subject_version: "v1".to_string(),
                 owner_role: "sales".to_string(),
                 owner_organization_id: "org-1".to_string(),
-                owner_user_id: Some("alice".to_string()),
+                owner_user_id: "alice".to_string(),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::Normal,
                 due_at: None,
@@ -645,16 +484,15 @@ mod tests {
     }
 
     #[test]
-    fn scope_filter_supports_team_and_history_facts() {
-        let team = WorkItemFilter {
+    fn scope_filter_supports_direct_owner_and_history_facts() {
+        let mine = WorkItemFilter {
             statuses: vec![WorkItemStatus::Open],
             work_item_types: vec![
                 WorkItemType::ImportBusinessConfirmation,
                 WorkItemType::BusinessException,
             ],
-            owner_roles: vec!["sales".to_string(), "operations".to_string()],
+            owner_user_id: Some("alice".to_string()),
             owner_organization_ids: vec!["org-1".to_string()],
-            unassigned_only: true,
             priorities: vec![WorkItemPriority::High, WorkItemPriority::Urgent],
             due_from: Some(Instant::from_unix_secs(100)),
             due_before: Some(Instant::from_unix_secs(200)),
@@ -663,22 +501,18 @@ mod tests {
             ..WorkItemFilter::default()
         }
         .to_doc();
-        assert_eq!(team.get_str("status").unwrap(), "OPEN");
-        assert_eq!(team.get("owner_user_id"), Some(&Bson::Null));
+        assert_eq!(mine.get_str("status").unwrap(), "OPEN");
+        assert_eq!(mine.get_str("owner_user_id").unwrap(), "alice");
         assert_eq!(
-            team.get_document("owner_role").unwrap(),
-            &doc! { "$in": ["sales", "operations"] }
-        );
-        assert_eq!(
-            team.get_document("due_at").unwrap(),
+            mine.get_document("due_at").unwrap(),
             &doc! { "$gte": 100_i64, "$lt": 200_i64 }
         );
         assert_eq!(
-            team.get_document("priority").unwrap(),
+            mine.get_document("priority").unwrap(),
             &doc! { "$in": ["high", "urgent"] }
         );
         assert_eq!(
-            team.get_document("work_item_type").unwrap(),
+            mine.get_document("work_item_type").unwrap(),
             &doc! { "$in": ["IMPORT_BUSINESS_CONFIRMATION", "BUSINESS_EXCEPTION"] }
         );
 
@@ -728,33 +562,6 @@ mod tests {
             .get_str("$regex")
             .unwrap();
         assert_eq!(regex, r"SO\.\[1\]");
-    }
-
-    #[test]
-    fn responsibility_scopes_preserve_role_organization_pairs() {
-        let filter = WorkItemFilter {
-            responsibility_scopes: vec![
-                ("role-sales".to_string(), Some("org-a".to_string())),
-                ("role-procurement".to_string(), Some("org-b".to_string())),
-            ],
-            page: 1,
-            page_size: 20,
-            ..WorkItemFilter::default()
-        }
-        .to_doc();
-
-        let scopes = filter.get_array("$and").unwrap()[0]
-            .as_document()
-            .unwrap()
-            .get_array("$or")
-            .unwrap();
-        assert_eq!(
-            scopes,
-            &vec![
-                Bson::Document(doc! { "owner_role": "role-sales", "owner_organization_id": "org-a" }),
-                Bson::Document(doc! { "owner_role": "role-procurement", "owner_organization_id": "org-b" }),
-            ]
-        );
     }
 
     #[test]
@@ -811,72 +618,6 @@ mod tests {
                 "business_object_type": "purchase_order",
             }] })
         );
-    }
-
-    #[test]
-    fn start_filter_fixes_version_responsibility_and_pool_shape() {
-        let filter = start_processing_filter("wi-1", 7, "sales", "org-1");
-
-        assert_eq!(filter.get_i64("version").unwrap(), 7);
-        assert_eq!(filter.get_str("status").unwrap(), "OPEN");
-        assert_eq!(filter.get_str("owner_role").unwrap(), "sales");
-        assert_eq!(filter.get_str("owner_organization_id").unwrap(), "org-1");
-        assert_eq!(filter.get("owner_user_id"), Some(&Bson::Null));
-    }
-
-    #[test]
-    fn start_pipeline_uses_if_null_and_add() {
-        let pipeline = start_processing_pipeline("alice", Instant::from_unix_secs(123));
-        let set = pipeline[0].get_document("$set").unwrap();
-
-        assert_eq!(set.get_str("owner_user_id").unwrap(), "alice");
-        assert_eq!(
-            set.get_document("responsibility_actor_ids").unwrap(),
-            &doc! {
-                "$cond": [
-                    { "$in": ["alice", "$responsibility_actor_ids"] },
-                    "$responsibility_actor_ids",
-                    { "$concatArrays": ["$responsibility_actor_ids", ["alice"]] },
-                ]
-            }
-        );
-        assert_eq!(set.get_str("assignment_source").unwrap(), "SYSTEM_RULE");
-        assert_eq!(
-            set.get_document("assigned_at").unwrap(),
-            &doc! { "$ifNull": ["$assigned_at", 123_i64] }
-        );
-        assert_eq!(
-            set.get_document("started_at").unwrap(),
-            &doc! { "$ifNull": ["$started_at", 123_i64] }
-        );
-        assert_eq!(
-            set.get_document("version").unwrap(),
-            &doc! { "$add": ["$version", 1_i64] }
-        );
-    }
-
-    #[test]
-    fn missed_start_distinguishes_idempotency_owner_and_version() {
-        let same_actor = assigned_item();
-        assert!(matches!(
-            classify_start_processing_miss(Some(same_actor), 0, "alice"),
-            StartProcessingOutcome::AlreadyOwned(_)
-        ));
-
-        let mut other_actor = assigned_item();
-        other_actor.owner_user_id = Some("bob".to_string());
-        assert!(matches!(
-            classify_start_processing_miss(Some(other_actor), 0, "alice"),
-            StartProcessingOutcome::OwnershipConflict(_)
-        ));
-
-        let mut stale = assigned_item();
-        stale.owner_user_id = None;
-        stale.base_mut().version = 2;
-        assert!(matches!(
-            classify_start_processing_miss(Some(stale), 1, "alice"),
-            StartProcessingOutcome::VersionConflict(_)
-        ));
     }
 
     #[test]

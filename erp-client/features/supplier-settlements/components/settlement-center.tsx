@@ -11,12 +11,8 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrossEntryBanner } from "@/features/supplier-settlements/components/cross-entry-banner"
 import { DifferencesWorkspace } from "@/features/supplier-settlements/components/differences-workspace"
-import {
-    SettlementCenterAudit,
-} from "@/features/supplier-settlements/components/settlement-center-audit"
-import {
-    SettlementCenterBlockersAlert,
-} from "@/features/supplier-settlements/components/settlement-center-blockers"
+import { SettlementCenterAudit } from "@/features/supplier-settlements/components/settlement-center-audit"
+import { SettlementCenterBlockersAlert } from "@/features/supplier-settlements/components/settlement-center-blockers"
 import {
     SettlementConfirmSettlementDialog,
     SettlementEvidenceDialog,
@@ -24,32 +20,18 @@ import {
     SettlementResolveDialog,
     SettlementSubmitReviewDialog,
 } from "@/features/supplier-settlements/components/settlement-center-dialogs"
-import {
-    SettlementCenterDocumentHeader,
-} from "@/features/supplier-settlements/components/settlement-center-document-header"
+import { SettlementCenterDocumentHeader } from "@/features/supplier-settlements/components/settlement-center-document-header"
 import {
     SettlementCenterEmpty,
     SettlementCenterError,
     SettlementCenterLoading,
 } from "@/features/supplier-settlements/components/settlement-center-states"
-import {
-    SettlementCenterItems,
-} from "@/features/supplier-settlements/components/settlement-center-items"
-import {
-    SettlementCenterOverview,
-} from "@/features/supplier-settlements/components/settlement-center-overview"
-import {
-    SettlementCenterPayable,
-} from "@/features/supplier-settlements/components/settlement-center-payable"
-import {
-    SettlementCenterResultPanel,
-} from "@/features/supplier-settlements/components/settlement-center-result"
-import {
-    SettlementCenterReview,
-} from "@/features/supplier-settlements/components/settlement-center-review"
-import {
-    SettlementCenterTotals,
-} from "@/features/supplier-settlements/components/settlement-center-totals"
+import { SettlementCenterItems } from "@/features/supplier-settlements/components/settlement-center-items"
+import { SettlementCenterOverview } from "@/features/supplier-settlements/components/settlement-center-overview"
+import { SettlementCenterPayable } from "@/features/supplier-settlements/components/settlement-center-payable"
+import { SettlementCenterResultPanel } from "@/features/supplier-settlements/components/settlement-center-result"
+import { SettlementCenterReview } from "@/features/supplier-settlements/components/settlement-center-review"
+import { SettlementCenterTotals } from "@/features/supplier-settlements/components/settlement-center-totals"
 import { useSettlementCenterActions } from "@/features/supplier-settlements/hooks/use-settlement-center-actions"
 import { useSettlementResultFocus } from "@/features/supplier-settlements/hooks/use-settlement-result-focus"
 import { useSettlementSectionHotkey } from "@/features/supplier-settlements/hooks/use-settlement-section-hotkey"
@@ -134,14 +116,8 @@ function SettlementCenter({
                         processLabel="确认结算"
                         processDisabled={!actions.allowed.has("CONFIRM")}
                         showProcessNext={false}
-                        pending={
-                            actions.responsibilityMutation.isPending ||
-                            actions.decisionMutation.isPending
-                        }
+                        pending={actions.decisionMutation.isPending}
                         onBack={onBack}
-                        onStartProcessing={() =>
-                            void actions.onStartProcessing()
-                        }
                         onProcess={() => actions.setConfirmOpen(true)}
                         onProcessNext={() => undefined}
                     />
@@ -292,6 +268,8 @@ function SettlementCenter({
                 open={actions.submitOpen}
                 onOpenChange={actions.setSubmitOpen}
                 statement={st}
+                reviewerUserId={actions.reviewerUserId}
+                onReviewerUserIdChange={actions.setReviewerUserId}
                 pending={actions.submitMutation.isPending}
                 onConfirm={async () => {
                     await actions.onSubmitReview()

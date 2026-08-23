@@ -40,11 +40,10 @@ function makeWorkItem(
         task_version: "v1",
         subject_version: "s1",
         status: "OPEN",
-        assignment_mode: "DIRECT",
         owner_role: "sales",
         owner_organization_id: "org1",
         processing_state: "READY",
-        allowed_actions: ["START_PROCESSING", "CONFIRM_SCOPE", "RETURN_FOR_FIX"],
+        allowed_actions: ["PROCESS", "CONFIRM_SCOPE", "RETURN_FOR_FIX"],
         action_blockers: [],
         handler_key: "import_business_confirmation",
         destination_workspace_id: "W18",
@@ -144,12 +143,18 @@ describe("mapRowStatus", () => {
         expect(mapRowStatus({ ...base, mapping_status: "conflict" })).toBe(
             "CONFLICT",
         )
-        expect(mapRowStatus({ ...base, mapping_status: "pending_mapping" })).toBe(
-            "PENDING_MAPPING",
+        expect(
+            mapRowStatus({ ...base, mapping_status: "pending_mapping" }),
+        ).toBe("PENDING_MAPPING")
+        expect(mapRowStatus({ ...base, import_status: "failed" })).toBe(
+            "FAILED",
         )
-        expect(mapRowStatus({ ...base, import_status: "failed" })).toBe("FAILED")
-        expect(mapRowStatus({ ...base, import_status: "skipped" })).toBe("SKIPPED")
-        expect(mapRowStatus({ ...base, parse_status: "invalid" })).toBe("FAILED")
+        expect(mapRowStatus({ ...base, import_status: "skipped" })).toBe(
+            "SKIPPED",
+        )
+        expect(mapRowStatus({ ...base, parse_status: "invalid" })).toBe(
+            "FAILED",
+        )
     })
 
     it("returns null for clean rows", () => {
@@ -184,7 +189,12 @@ describe("toListItem", () => {
 
 describe("buildBatchView", () => {
     it("maps a pending confirmation batch with a registered work item", () => {
-        const view = buildBatchView(baseBatch, [makeConfirmation()], "VALIDATION", { batchId: "b1" })
+        const view = buildBatchView(
+            baseBatch,
+            [makeConfirmation()],
+            "VALIDATION",
+            { batchId: "b1" },
+        )
         expect(view.status).toBe("AWAITING_CONFIRMATION")
         expect(view.stage).toBe("CONFIRM")
         expect(view.trialVersion).toBe("3")
@@ -199,10 +209,10 @@ describe("buildBatchView", () => {
         })
         expect(view.confirmations[0]!.workItem).toMatchObject({
             workItemId: "w1",
-            allowedActions: ["START_PROCESSING", "CONFIRM_SCOPE", "RETURN_FOR_FIX"],
+            allowedActions: ["PROCESS", "CONFIRM_SCOPE", "RETURN_FOR_FIX"],
         })
         expect(view.allowedActions).toEqual([
-            "START_PROCESSING",
+            "PROCESS",
             "CONFIRM_SCOPE",
             "RETURN_FOR_FIX",
         ])
@@ -221,24 +231,31 @@ describe("buildBatchView", () => {
             {
                 action: "CONFIRM_SCOPE",
                 code: "IMPORT_CONFIRMATION_TASK_MISSING",
-                message: "当前试算的责任确认任务不完整，请联系管理员重新生成确认任务。",
+                message:
+                    "当前试算的责任确认任务不完整，请联系管理员重新生成确认任务。",
             },
         ])
     })
 
     it("blocks on a mismatched task entry context", () => {
-        const view = buildBatchView(baseBatch, [makeConfirmation()], "VALIDATION", {
-            batchId: "b1",
-            workItemId: "w9",
-            confirmationScope: "SALES",
-            queueContextId: "q1",
-        })
+        const view = buildBatchView(
+            baseBatch,
+            [makeConfirmation()],
+            "VALIDATION",
+            {
+                batchId: "b1",
+                workItemId: "w9",
+                confirmationScope: "SALES",
+                queueContextId: "q1",
+            },
+        )
         expect(view.status).toBe("CONFIRMATION_BLOCKED")
         expect(view.actionBlockers).toEqual([
             {
                 action: "CONFIRM_SCOPE",
                 code: "IMPORT_CONFIRMATION_CONTEXT_MISMATCH",
-                message: "任务入口与当前批次责任范围不一致，请返回待处理列表重新打开。",
+                message:
+                    "任务入口与当前批次责任范围不一致，请返回待处理列表重新打开。",
             },
         ])
     })

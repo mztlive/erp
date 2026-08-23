@@ -81,7 +81,6 @@ export function IntegrationErrorWorkspace({
                             responsibilityStatus={actions.responsibilityStatus}
                             formalPending={actions.formalPending}
                             focusMode={focusMode}
-                            comment={actions.comment}
                             panelErrorClass={panelErrorClass}
                             headingRef={actions.headingRef}
                             onBack={() => {
@@ -100,17 +99,6 @@ export function IntegrationErrorWorkspace({
                                 actions.focusFirstAction()
                             }}
                             onProcessNext={nextItem}
-                            onStartProcessing={
-                                item.workItem?.allowedActions.includes(
-                                    "START_PROCESSING",
-                                )
-                                    ? () =>
-                                          void actions.handleStartProcessing()
-                                    : undefined
-                            }
-                            onReleaseToTeam={() =>
-                                void actions.handleReleaseToTeam()
-                            }
                             onRefresh={actions.refresh}
                         />
 
@@ -155,14 +143,10 @@ export function IntegrationErrorWorkspace({
                                     } else if (kind === "RESOLVE") {
                                         await actions.handleResolve()
                                     } else {
-                                        await actions.handleDirectTerminal(
-                                            kind,
-                                        )
+                                        await actions.handleDirectTerminal(kind)
                                     }
                                 }}
-                                onClose={() =>
-                                    actions.setTerminalConfirm(null)
-                                }
+                                onClose={() => actions.setTerminalConfirm(null)}
                             />
                         ) : null}
                     </>

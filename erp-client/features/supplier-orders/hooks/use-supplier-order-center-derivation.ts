@@ -13,10 +13,8 @@ export function responsibilityOf(
     if (workItem.workItemStatus === "COMPLETED") return "completed"
     if (workItem.workItemStatus === "CLOSED") return "closed"
     if (workItem.processingState === "APPROVAL_BLOCKED") return "blocked"
-    if (workItem.assignmentMode === "POOL" && !workItem.ownerUser) {
-        return "pool_available"
-    }
-    return workItem.ownerUser?.id === currentUserId
+    if (!workItem.ownerUser?.id || !currentUserId) return "assigned_to_other"
+    return workItem.ownerUser.id === currentUserId
         ? "assigned_to_me"
         : "assigned_to_other"
 }
@@ -90,7 +88,7 @@ export function useSupplierOrderCenterDerivation(input: {
             evidence?.outcome === "VERIFIED_TERMINAL" &&
             Boolean(
                 evidence.verifiedSupplierActionResultId &&
-                    evidence.verifiedResolution,
+                evidence.verifiedResolution,
             )
         )
     }, [detail, responsibilityStatus, completionEvidence])

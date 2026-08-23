@@ -25,8 +25,8 @@ beforeEach(() => {
 describe("commandIdempotencyKey", () => {
     it("reuses the key for the same identity", () => {
         const keys = new Map<string, string>()
-        const first = commandIdempotencyKey(keys, "w1:START_PROCESSING:v1")
-        const second = commandIdempotencyKey(keys, "w1:START_PROCESSING:v1")
+        const first = commandIdempotencyKey(keys, "w1:PROCESS:v1")
+        const second = commandIdempotencyKey(keys, "w1:PROCESS:v1")
         expect(first).toBe("w18:uuid-1")
         expect(second).toBe(first)
         expect(uuidCounter).toBe(1)

@@ -97,7 +97,7 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 - **flush 分页**：`DataTablePagination` 使用 `px-table-cell-inline py-2.5`，与结果卡
   片头和单元格对齐。只有一页时「每页条数 / 共 N 条 / 已全部显示」收在左侧一组，
   不把状态文案甩到最右侧；多页时左侧元信息、右侧翻页。`BusinessTableFrame
-  showHeader` 下分页贴成结果卡页脚（顶部分割线），禁止再额外拉开大空隙；
+showHeader` 下分页贴成结果卡页脚（顶部分割线），禁止再额外拉开大空隙；
 - 页面选择只保存稳定 ID。选择“当前筛选全部结果”时必须调用批量预览 API 冻结选择快照，
   不能把客户端当前页推断为正式批量范围；
 - 正在刷新时保留已有行；轮询/自动刷新页可传 `showRefreshingBanner={false}` 关闭
@@ -201,11 +201,11 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 | ---------------------- | ------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------------ |
 | `PrepaymentGate`       | `copy?: Partial<PrepaymentGateCopy>` | 面向采购/财务的措辞（「先款后货门禁」「付款门禁已满足」） | W09 履约作业传一线口语（「先款条件」「货款已到，可以收货」） |
 | `PrepaymentGate`       | `presentation?: "panel" \| "badge"`  | `panel` 完整卡片                                          | W09 传 `badge`：顶栏结果徽章，悬停展开详情，不打断读单       |
-| `SequentialProcessBar` | `showProcess?: boolean`              | `true`                                                    | W09 只读角色传 `false`，同时隐藏主动作与“开始处理”           |
+| `SequentialProcessBar` | `showProcess?: boolean`              | `true`                                                    | W09 只读角色传 `false`，隐藏当前业务主动作                   |
 | `SequentialProcessBar` | `showProcessNext?: boolean`          | `true`                                                    | 主动作会离开当前页、或没有独立「并下一条」路径时传 `false`   |
 | `SequentialProcessBar` | `statusExtras?: ReactNode`           | 无                                                        | W09 传入先款条件徽章，放在位置/责任状态之后                  |
 
-只读角色不要用“渲染但禁用”表达 —— 禁用态不解释原因，且“开始处理”这类按钮
+只读角色不要用“渲染但禁用”表达 —— 禁用态不解释原因，且业务主动作
 本就不该让只读用户看到。替换成一句说明加一个有用的出口。
 
 文案本身的用词口径见仓库根目录的 `docs/ui-glossary.md`。

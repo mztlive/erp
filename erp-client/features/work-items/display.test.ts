@@ -62,25 +62,19 @@ describe("queueResponsibilityLabel", () => {
     it("uses 由你处理 for the current user", () => {
         expect(
             queueResponsibilityLabel({
-                assignmentMode: "DIRECT",
                 ownerUser: { id: "me", displayName: "周航" },
                 viewerUserId: "me",
             }),
         ).toBe("由你处理")
     })
 
-    it("never shows 当前处理人 or 团队待处理", () => {
+    it("never shows legacy owner placeholders", () => {
         expect(displayOwnerName("当前处理人")).toBe("处理人待确认")
         expect(
             queueResponsibilityLabel({
-                assignmentMode: "POOL",
                 ownerUser: { id: "u1", displayName: "当前处理人" },
             }),
         ).toBe("处理人待确认")
-        expect(
-            queueResponsibilityLabel({
-                assignmentMode: "POOL",
-            }),
-        ).toBe("处理人待确认")
+        expect(queueResponsibilityLabel({})).toBe("处理人待确认")
     })
 })

@@ -23,7 +23,7 @@ export function QueueFilterToolbar({
     setAutoNext,
     replaceUrl,
 }: {
-    scope: "mine" | "team" | "history"
+    scope: "mine" | "history"
     type: "all" | "opening" | "delta"
     due: "all" | "today" | "overdue"
     status: "OPEN" | "COMPLETED" | "CLOSED"
@@ -46,10 +46,6 @@ export function QueueFilterToolbar({
                     {(
                         [
                             { value: "mine" as const, label: "我的待办" },
-                            {
-                                value: "team" as const,
-                                label: "团队待处理",
-                            },
                             {
                                 value: "history" as const,
                                 label: "处理历史",

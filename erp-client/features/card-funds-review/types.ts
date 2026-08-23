@@ -1,6 +1,6 @@
 /** W13 卡券票款复核 · 客户端契约类型（对齐工作面文档 §5/§8）。 */
 
-import type { AssignmentMode, WorkItemStatus } from "@/features/work-items"
+import type { WorkItemStatus } from "@/features/work-items"
 
 export type ReviewType = "OPENING" | "SYNC_DELTA"
 
@@ -8,11 +8,9 @@ export type WorkItemType = "CARD_FUNDS_REVIEW" | "CARD_FUNDS_DELTA_REVIEW"
 
 /** 当前任务允许执行的领域动作（责任动作 + 复核/登记动作）。 */
 export type WorkItemAction =
-    | "START_PROCESSING"
     | "CONFIRM_ZERO"
     | "APPROVE"
     | "REJECT"
-    | "RELEASE_TO_TEAM"
     | "REASSIGN"
     | "REGISTER_RECEIPT"
     | "REGISTER_INVOICE"
@@ -108,7 +106,6 @@ export type CardFundsReviewItemView = Readonly<{
         workItemType: WorkItemType
         subjectVersion: string
         workItemStatus: WorkItemStatus
-        assignmentMode: AssignmentMode
         dueAt?: string
         ownerUser?: { id: string; displayName: string }
         allowedActions: readonly WorkItemAction[]
@@ -171,7 +168,7 @@ export type CardFundsReviewQueueQuery = {
     queueContextId?: string
     currentWorkItemId?: string
     type: "all" | "opening" | "delta"
-    scope: "mine" | "team" | "history"
+    scope: "mine" | "history"
     q?: string
     due?: "all" | "today" | "overdue"
     status?: "OPEN" | "COMPLETED" | "CLOSED"
@@ -269,18 +266,11 @@ export type FormalOutcome =
                   collaborationMessage: string
                   requiredRegistration: readonly (
                       | "WORK_ITEM_TYPE"
-                      | "OWNER_POOL"
+                      | "OWNER_ASSIGNEE"
                       | "HANDLER_KEY"
                   )[]
               }
           }
-      }
-    | {
-          kind: "RELEASED_TO_TEAM"
-          workItemId: string
-          workItemStatus: "OPEN"
-          taskVersion: string
-          reference: string
       }
 
 export type FormalActionResponse =
@@ -341,10 +331,9 @@ export type InvoiceDraft = Readonly<{
     taxAmount: string
 }>
 
-/** 复核结论确认弹窗模式（approve/zero/reject/release 四类）。 */
+/** 复核结论确认弹窗模式。 */
 export type ConfirmMode =
     | { kind: "approve"; conclusion: ApproveConclusion; advance: boolean }
     | { kind: "zero"; advance: boolean }
     | { kind: "reject" }
-    | { kind: "release" }
     | null

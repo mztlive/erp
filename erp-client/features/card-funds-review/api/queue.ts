@@ -15,7 +15,13 @@ import type {
     CardFundsReviewQueueQuery,
     CardFundsReviewQueueView,
 } from "@/features/card-funds-review/types"
-import { filterSummary, instantToIso, mapPriority, mapReviewResultFrontend, mapReviewTypeFrontend } from "./mappers"
+import {
+    filterSummary,
+    instantToIso,
+    mapPriority,
+    mapReviewResultFrontend,
+    mapReviewTypeFrontend,
+} from "./mappers"
 import type { BackendReceivableAccount } from "./dto"
 
 async function loadWorkItems(
@@ -99,12 +105,7 @@ async function projectItem(
             : ("CARD_FUNDS_REVIEW" as const)
 
     const responsibilityActions = projectedWorkItem.allowedActions.filter(
-        (
-            action,
-        ): action is "START_PROCESSING" | "RELEASE_TO_TEAM" | "REASSIGN" =>
-            ["START_PROCESSING", "RELEASE_TO_TEAM", "REASSIGN"].includes(
-                action,
-            ),
+        (action): action is "REASSIGN" => action === "REASSIGN",
     )
     const allowedActions: CardFundsReviewItemView["workItem"]["allowedActions"] =
         [...responsibilityActions, ...(account.allowed_actions ?? [])]
@@ -168,7 +169,6 @@ async function projectItem(
             workItemType,
             subjectVersion: projectedWorkItem.subjectVersion,
             workItemStatus: projectedWorkItem.status,
-            assignmentMode: projectedWorkItem.assignmentMode,
             dueAt: projectedWorkItem.dueAt
                 ? instantToIso(projectedWorkItem.dueAt)
                 : undefined,

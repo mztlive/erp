@@ -33,17 +33,10 @@ export function makeTask(
             workItemType: "INTEGRATION_RESULT_UNKNOWN",
             taskVersion: "5",
             status: "OPEN",
-            assignmentMode: "DIRECT",
             processingState: "READY",
             subjectVersion: "3",
             ownerUser: { id: "user-1", displayName: "张三" },
-            allowedActions: [
-                "START_PROCESSING",
-                "RELEASE_TO_TEAM",
-                "CLOSE",
-                "PROCESS",
-                "VIEW",
-            ],
+            allowedActions: ["CLOSE", "PROCESS", "VIEW"],
         },
         businessObject: {
             objectType: "BUSINESS_OBJECT",

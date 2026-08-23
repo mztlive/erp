@@ -5,6 +5,7 @@
 
 export {
     useAdminMutations,
+    useAdminsQuery,
     useAssignableRolesQuery,
     useRoleMutations,
     useRolesQuery,

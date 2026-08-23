@@ -11,13 +11,6 @@ export function buildResultFacts(
     outcome?: FormalOutcome,
 ): { label: string; value: React.ReactNode }[] {
     if (!outcome) return []
-    if (outcome.kind === "RELEASED_TO_TEAM") {
-        return [
-            { label: "任务状态", value: "开放" },
-            { label: "责任状态", value: "已退回团队" },
-            { label: "任务版本", value: outcome.taskVersion },
-        ]
-    }
     const biz = outcome.business
     const facts = [
         { label: "复核号", value: String(biz.reviewNo) },

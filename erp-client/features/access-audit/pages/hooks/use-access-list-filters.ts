@@ -7,74 +7,53 @@ import {
     auditDateRangeError,
     parseActionFilter,
     parseResultFilter,
-    parseRiskFilter,
-    parseStatusFilter,
     type AccessActionFilterValue,
     type AccessResultFilterValue,
-    type AccessRiskFilterValue,
-    type AccessStatusFilterValue,
 } from "@/features/access-audit/lib/filter-options"
 import type { AccessView } from "@/features/access-audit/types"
 
 /** 可被单独移除的已生效条件。 */
 export type AccessFilterKey =
     | "q"
-    | "org"
-    | "status"
-    | "risk"
     | "time"
     | "action"
     | "result"
     | "actorId"
     | "traceId"
-    | "objectType"
     | "objectId"
-    | "subject"
 
 /** 用户正在编辑、尚未提交的筛选草稿；"all" 表示该字段的「全部」占位。 */
 export type AccessFilterDraft = {
     q: string
-    org: string
-    status: AccessStatusFilterValue | "all"
-    risk: AccessRiskFilterValue | "all"
     from: string
     to: string
     action: AccessActionFilterValue | "all"
     result: AccessResultFilterValue | "all"
     actorId: string
     traceId: string
-    objectType: string
     objectId: string
 }
 
 export const DEFAULT_ACCESS_FILTER_DRAFT: AccessFilterDraft = {
     q: "",
-    org: "all",
-    status: "all",
-    risk: "all",
     from: "",
     to: "",
     action: "all",
     result: "all",
     actorId: "",
     traceId: "",
-    objectType: "",
     objectId: "",
 }
 
 /** 已生效筛选（URL 是唯一事实源）；非法枚举在解析时已降级为缺省。 */
 export type AccessAppliedFilters = {
     q: string
-    org?: string
-    status?: AccessStatusFilterValue
-    risk?: AccessRiskFilterValue
     from?: string
     to?: string
     action?: AccessActionFilterValue
     result?: AccessResultFilterValue
     actorId?: string
     traceId?: string
-    objectType?: string
     objectId?: string
 }
 
@@ -90,38 +69,31 @@ type AccessListFiltersInput = {
 function toDraft(applied: AccessAppliedFilters): AccessFilterDraft {
     return {
         q: applied.q,
-        org: applied.org ?? "all",
-        status: applied.status ?? "all",
-        risk: applied.risk ?? "all",
         from: applied.from ?? "",
         to: applied.to ?? "",
         action: applied.action ?? "all",
         result: applied.result ?? "all",
         actorId: applied.actorId ?? "",
         traceId: applied.traceId ?? "",
-        objectType: applied.objectType ?? "",
         objectId: applied.objectId ?? "",
     }
 }
 
-/** 面板结构化条件是否已生效（不含 q，不含来源锁定主体）。 */
+/** 面板结构化条件是否已生效（不含关键词）。角色 / 用户授权侧没有结构化条件。 */
 function hasStructuredFilters(
     applied: AccessAppliedFilters,
     view: AccessView,
 ): boolean {
-    if (view === "audit") {
-        return Boolean(
-            applied.from ||
-                applied.to ||
-                applied.action ||
-                applied.result ||
-                applied.actorId ||
-                applied.traceId ||
-                applied.objectType ||
-                applied.objectId,
-        )
-    }
-    return Boolean(applied.org || applied.status || applied.risk)
+    if (view !== "audit") return false
+    return Boolean(
+        applied.from ||
+            applied.to ||
+            applied.action ||
+            applied.result ||
+            applied.actorId ||
+            applied.traceId ||
+            applied.objectId,
+    )
 }
 
 /**
@@ -137,30 +109,21 @@ export function useAccessListFilters({
 
     const applied = React.useMemo<AccessAppliedFilters>(() => {
         const q = searchParams.get("q") ?? ""
-        const org = searchParams.get("org")?.trim() || undefined
-        const statusRaw = parseStatusFilter(searchParams.get("status"))
-        const riskRaw = parseRiskFilter(searchParams.get("risk"))
         const from = searchParams.get("from")?.trim() || undefined
         const to = searchParams.get("to")?.trim() || undefined
         const actionRaw = parseActionFilter(searchParams.get("action"))
         const resultRaw = parseResultFilter(searchParams.get("result"))
         const actorId = searchParams.get("actorId")?.trim() || undefined
         const traceId = searchParams.get("traceId")?.trim() || undefined
-        const objectType = searchParams.get("objectType")?.trim() || undefined
         const objectId = searchParams.get("objectId")?.trim() || undefined
         return {
             q,
-            org,
-            // 非法枚举在解析时降级为默认，不进入查询
-            status: statusRaw === "all" ? undefined : statusRaw,
-            risk: riskRaw === "all" ? undefined : riskRaw,
             from,
             to,
             action: actionRaw === "all" ? undefined : actionRaw,
             result: resultRaw === "all" ? undefined : resultRaw,
             actorId,
             traceId,
-            objectType,
             objectId,
         }
     }, [searchParams])
@@ -201,16 +164,12 @@ export function useAccessListFilters({
         }
         patchFilterUrl({
             q: draft.q.trim() || null,
-            org: draft.org === "all" ? null : draft.org,
-            status: draft.status === "all" ? null : draft.status,
-            risk: draft.risk === "all" ? null : draft.risk,
             from: from || null,
             to: to || null,
             action: draft.action === "all" ? null : draft.action,
             result: draft.result === "all" ? null : draft.result,
             actorId: draft.actorId.trim() || null,
             traceId: draft.traceId.trim() || null,
-            objectType: draft.objectType.trim() || null,
             objectId: draft.objectId.trim() || null,
             page: null,
         })
@@ -221,30 +180,22 @@ export function useAccessListFilters({
     const resetMoreFilters = React.useCallback(() => {
         setDraft((current) => ({
             ...current,
-            org: "all",
-            status: "all",
-            risk: "all",
             from: "",
             to: "",
             action: "all",
             result: "all",
             actorId: "",
             traceId: "",
-            objectType: "",
             objectId: "",
         }))
         setFilterError(null)
         patchFilterUrl({
-            org: null,
-            status: null,
-            risk: null,
             from: null,
             to: null,
             action: null,
             result: null,
             actorId: null,
             traceId: null,
-            objectType: null,
             objectId: null,
             page: null,
         })
@@ -257,22 +208,16 @@ export function useAccessListFilters({
         setPanelOpen(false)
         patchFilterUrl({
             q: null,
-            org: null,
-            status: null,
-            risk: null,
             from: null,
             to: null,
             action: null,
             result: null,
             actorId: null,
             traceId: null,
-            objectType: null,
             objectId: null,
-            // 数据范围视图的来源锁定主体是查询消费参数（chip 显性化），一并清除
-            ...(view === "scopes" ? { subjectType: null, subjectId: null } : {}),
             page: null,
         })
-    }, [patchFilterUrl, view])
+    }, [patchFilterUrl])
 
     /** 移除单个已生效条件；时间范围按区间整体移除。 */
     const removeFilter = React.useCallback(
@@ -280,15 +225,6 @@ export function useAccessListFilters({
             switch (key) {
                 case "q":
                     setDraft((current) => ({ ...current, q: "" }))
-                    break
-                case "org":
-                    setDraft((current) => ({ ...current, org: "all" }))
-                    break
-                case "status":
-                    setDraft((current) => ({ ...current, status: "all" }))
-                    break
-                case "risk":
-                    setDraft((current) => ({ ...current, risk: "all" }))
                     break
                 case "time":
                     setDraft((current) => ({ ...current, from: "", to: "" }))
@@ -306,22 +242,14 @@ export function useAccessListFilters({
                 case "traceId":
                     setDraft((current) => ({ ...current, traceId: "" }))
                     break
-                case "objectType":
-                    setDraft((current) => ({ ...current, objectType: "" }))
-                    break
                 case "objectId":
                     setDraft((current) => ({ ...current, objectId: "" }))
-                    break
-                case "subject":
-                    // 来源锁定主体只存在于 URL，由 chip 关闭时一并移除
                     break
             }
             patchFilterUrl(
                 key === "time"
                     ? { from: null, to: null, page: null }
-                    : key === "subject"
-                      ? { subjectType: null, subjectId: null, page: null }
-                      : { [key]: null, page: null },
+                    : { [key]: null, page: null },
             )
         },
         [patchFilterUrl],
@@ -338,16 +266,12 @@ export function useAccessListFilters({
     const appliedSignature = React.useMemo(
         () =>
             [
-                applied.org ?? "",
-                applied.status ?? "",
-                applied.risk ?? "",
                 applied.from ?? "",
                 applied.to ?? "",
                 applied.action ?? "",
                 applied.result ?? "",
                 applied.actorId ?? "",
                 applied.traceId ?? "",
-                applied.objectType ?? "",
                 applied.objectId ?? "",
             ].join("\u0000"),
         [applied],

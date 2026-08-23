@@ -12,16 +12,12 @@ import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
 // ─── 当前责任 ───────────────────────────────────────────────────────────────
 
 export const responsibilityText = {
-    poolAvailable: "团队待处理",
     assignedToMe: "由你处理",
     assignedToOther: "由其他同事处理",
     blocked: "当前不可处理",
     completed: "已完成",
     closed: "已关闭",
-    start: "开始处理",
-    starting: "正在开始处理",
     changed: "处理权已变化，请刷新",
-    releaseToTeam: "退回团队",
     reassign: "转交",
     permissionRevoked: "权限已收回，不能提交",
     permissionRevokedCleared: "权限已收回 · 临时信息已清除",
@@ -42,7 +38,6 @@ export const sequentialText = {
     process: "处理",
     submitting: "正在提交…",
     submittingResult: "正在提交处理结果…",
-    teamPending: "团队待处理",
     minePending: "待我处理",
     decisionSubmitting: "决定正在提交",
 } as const
@@ -206,8 +201,10 @@ export function actionLabelForWorkItemType(
 
 const NEXT_ACTION_HINT_BY_TYPE_LABEL: Record<string, string> = {
     采购二次确认: "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。",
-    低毛利销售审批: "进入销售单后，确认是否按原条件承接；通过后仍需采购再次确认供货。",
-    采购单财务审核: "进入后核对供应商、含税成本、进项税和付款条件，再提交通过或驳回。",
+    低毛利销售审批:
+        "进入销售单后，确认是否按原条件承接；通过后仍需采购再次确认供货。",
+    采购单财务审核:
+        "进入后核对供应商、含税成本、进项税和付款条件，再提交通过或驳回。",
     销售变更履约影响复核: "进入销售单后，核对本次变更对履约的影响并提交结论。",
     销售变更财务复核: "进入销售单后，核对本次变更对金额的影响并提交结论。",
     卡券票款复核: "进入票款复核页后，核对准期初回款与开票事实。",

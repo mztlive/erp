@@ -9,7 +9,6 @@ import type {
     PurchaseType,
 } from "@/features/purchase-orders/types"
 import type {
-    WorkItemAllowedAction,
     WorkItemProcessingState,
     WorkItemStatus,
 } from "@/features/work-items"
@@ -108,12 +107,10 @@ export type BackendCenter = {
         task_version: string | number
         subject_version: string
         status: WorkItemStatus
-        assignment_mode: "DIRECT" | "POOL"
         owner_role: string
         owner_organization_id: string
         owner_user_id?: string | null
         processing_state: WorkItemProcessingState
-        responsibility_actions: readonly WorkItemAllowedAction[]
         domain_allowed_actions: readonly ("APPROVE" | "REJECT")[]
         action_blockers: readonly {
             action: string

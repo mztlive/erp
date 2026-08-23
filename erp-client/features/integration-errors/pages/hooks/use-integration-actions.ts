@@ -96,18 +96,15 @@ export function useIntegrationActions({
     const can = (action: IntegrationActionKind) =>
         Boolean(item?.allowedActions.includes(action))
 
-    const { handleStartProcessing, handleReleaseToTeam, handleClose } =
-        useIntegrationResponsibilityCommands({
-            item,
-            comment,
-            replacementTaskId,
-            responsibilityMutation,
-            commandIdentities: commandIdentities.current,
-            refresh,
-            setLastResult,
-            setActionError,
-            afterResult,
-        })
+    const { handleClose } = useIntegrationResponsibilityCommands({
+        item,
+        comment,
+        replacementTaskId,
+        responsibilityMutation,
+        commandIdentities: commandIdentities.current,
+        setActionError,
+        afterResult,
+    })
 
     const runTaskAction = async (kind: IntegrationTaskActionKind) => {
         if (
@@ -182,7 +179,10 @@ export function useIntegrationActions({
             setActionError("完成凭证尚未齐备，请先从证据入口完成关联")
             return
         }
-        const identity = commandIdentities.current.get("resolve", item.identity.id)
+        const identity = commandIdentities.current.get(
+            "resolve",
+            item.identity.id,
+        )
         try {
             const result = await resolveMutation.mutateAsync({
                 itemType: item.identity.itemType,
@@ -251,8 +251,6 @@ export function useIntegrationActions({
         headingRef,
         actionZoneRef,
         focusFirstAction,
-        handleStartProcessing,
-        handleReleaseToTeam,
         runTaskAction,
         handleClose,
         handleResolve,

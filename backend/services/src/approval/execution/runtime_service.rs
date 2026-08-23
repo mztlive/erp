@@ -1,4 +1,4 @@
-//! HTTP 面审批运行 Service：查询、决定、恢复、改派、受阻取消与绑定升级。
+//! HTTP 面审批运行 Service：查询、决定、恢复、受阻取消与绑定升级。
 //!
 //! Handler 只转换协议；本文件编排仓储、prepare_* 与事务写入。
 
@@ -262,39 +262,6 @@ impl ApprovalRuntimeService {
             instance_id: instance_id.to_string(),
             actions: recovery_options_for(blocked, instance.blocker_code),
         })
-    }
-
-    /// 按当前单据上下文搜索改派候选人。
-    ///
-    /// # 错误
-    /// 实例不存在时不泄露存在性。
-    pub async fn eligible_reassignees(
-        &self,
-        actor: &AuditActor,
-        instance_id: &str,
-        search: Option<&str>,
-        limit: u32,
-    ) -> Result<Vec<RuntimeAssigneeCandidate>> {
-        let _ = (actor, search);
-        let _instance = self
-            .db
-            .approval_process_instances()
-            .find_one(doc! { "id": instance_id }, &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        let accounts = self
-            .db
-            .accounts()
-            .find_many(doc! { "status": "active", "kind": "admin" }, &mut NoTransaction)
-            .await?;
-        Ok(accounts
-            .into_iter()
-            .take(limit as usize)
-            .map(|account| RuntimeAssigneeCandidate {
-                user_id: account.base.id,
-                name: account.name,
-            })
-            .collect())
     }
 
     /// 提交当前开放任务的通过或驳回。
@@ -630,23 +597,6 @@ impl ApprovalRuntimeService {
         instance_id: &str,
     ) -> Result<ApprovalCommandView> {
         self.require_recovery_action(actor, instance_id, RuntimeRecoveryAction::ResumeCurrentApprover)
-            .await?;
-        self.command_ack(instance_id, super::view::ApprovalCommandOutcome::Applied)
-            .await
-    }
-
-    /// 仅处理人员失效 blocker 的改派。
-    ///
-    /// # 错误
-    /// 原审批人已恢复或 blocker 类型不允许改派。
-    pub async fn reassign_current_approver(
-        &self,
-        actor: &AuditActor,
-        instance_id: &str,
-        target_user_id: &str,
-    ) -> Result<ApprovalCommandView> {
-        let _ = target_user_id;
-        self.require_recovery_action(actor, instance_id, RuntimeRecoveryAction::ReassignCurrentApprover)
             .await?;
         self.command_ack(instance_id, super::view::ApprovalCommandOutcome::Applied)
             .await

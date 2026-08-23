@@ -17,7 +17,7 @@ use super::view_mapping::{revision_line_to_view, revision_totals, submission_lin
 use super::PurchaseOrderService;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
-use crate::work_item::{ProcessingState, WorkItemAllowedAction};
+use crate::work_item::ProcessingState;
 
 /// 采购单列表筛选条件类型（经 `PurchaseOrderExt` 关联类型跨 crate 可达）。
 type PurchaseOrderFilter = <mongodb::Database as PurchaseOrderExt>::PurchaseOrderFilter;
@@ -287,7 +287,7 @@ impl PurchaseOrderService {
             ));
         }
         let separation_satisfied = submission.submitted_by.as_deref() != Some(actor_id);
-        let (responsibility_actions, domain_allowed_actions, action_blockers) =
+        let (domain_allowed_actions, action_blockers) =
             review_task_access(&item, actor_id, assignment_eligible, separation_satisfied);
         Ok(Some(PurchaseReviewWorkItemView {
             work_item_id: item.base.id,
@@ -295,13 +295,11 @@ impl PurchaseOrderService {
             task_version: item.base.version,
             subject_version: item.subject_version,
             status: item.status,
-            assignment_source_unused: item.assignment_source,
             owner_role: item.owner_role,
             owner_organization_id: item.owner_organization_id,
             owner_user_id: item.owner_user_id,
             processing_state: ProcessingState::Ready,
             action_blockers,
-            responsibility_actions,
             domain_allowed_actions,
         }))
     }
@@ -521,17 +519,12 @@ fn review_task_access(
     actor_id: &str,
     assignment_eligible: bool,
     separation_satisfied: bool,
-) -> (
-    Vec<WorkItemAllowedAction>,
-    Vec<PurchaseReviewDomainAction>,
-    Vec<PurchaseActionBlockerView>,
-) {
-    if item.status != WorkItemStatus::Open || false {
-        return (Vec::new(), Vec::new(), Vec::new());
+) -> (Vec<PurchaseReviewDomainAction>, Vec<PurchaseActionBlockerView>) {
+    if item.status != WorkItemStatus::Open {
+        return (Vec::new(), Vec::new());
     }
     if !assignment_eligible {
         return (
-            Vec::new(),
             Vec::new(),
             vec![review_blocker(
                 "TASK_RESPONSIBILITY_NOT_ELIGIBLE",
@@ -542,19 +535,14 @@ fn review_task_access(
     if !separation_satisfied {
         return (
             Vec::new(),
-            Vec::new(),
             vec![review_blocker(
                 "SEGREGATION_OF_DUTIES",
                 "采购提交人与财务审核人必须分离。",
             )],
         );
     }
-    if false && item.owner_user_id.is_none() {
-        return (vec![WorkItemAllowedAction::Process], Vec::new(), Vec::new());
-    }
     if item.owner_user_id.as_deref() != Some(actor_id) {
         return (
-            Vec::new(),
             Vec::new(),
             vec![review_blocker(
                 "TASK_OWNED_BY_ANOTHER",
@@ -562,12 +550,7 @@ fn review_task_access(
             )],
         );
     }
-    let mut responsibility_actions = Vec::new();
-    if false {
-        responsibility_actions.push(WorkItemAllowedAction::Reassign);
-    }
     (
-        responsibility_actions,
         vec![
             PurchaseReviewDomainAction::Approve,
             PurchaseReviewDomainAction::Reject,
@@ -603,7 +586,7 @@ mod tests {
                 subject_version: "submission-1".to_string(),
                 owner_role: "role-finance".to_string(),
                 owner_organization_id: "company".to_string(),
-                owner_user_id: Some("reviewer-1".to_string()),
+                owner_user_id: "reviewer-1".to_string(),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::Normal,
                 due_at: None,
@@ -619,10 +602,8 @@ mod tests {
     fn other_actor_cannot_review_owned_task() {
         let task = review_task();
 
-        let (responsibility_actions, domain_actions, blockers) =
-            review_task_access(&task, "other-reviewer", true, true);
+        let (domain_actions, blockers) = review_task_access(&task, "other-reviewer", true, true);
 
-        assert!(responsibility_actions.is_empty());
         assert!(domain_actions.is_empty());
         assert_eq!(blockers[0].code, "TASK_OWNED_BY_ANOTHER");
     }
@@ -631,10 +612,8 @@ mod tests {
     fn current_owner_allows_strong_decisions() {
         let task = review_task();
 
-        let (responsibility_actions, domain_actions, blockers) =
-            review_task_access(&task, "reviewer-1", true, true);
+        let (domain_actions, blockers) = review_task_access(&task, "reviewer-1", true, true);
 
-        assert!(responsibility_actions.is_empty());
         assert_eq!(
             domain_actions,
             vec![
@@ -649,15 +628,11 @@ mod tests {
     fn ineligible_or_submitter_gets_no_review_action() {
         let task = review_task();
 
-        let (responsibility_actions, domain_actions, blockers) =
-            review_task_access(&task, "reviewer-1", false, true);
-        assert!(responsibility_actions.is_empty());
+        let (domain_actions, blockers) = review_task_access(&task, "reviewer-1", false, true);
         assert!(domain_actions.is_empty());
         assert_eq!(blockers[0].code, "TASK_RESPONSIBILITY_NOT_ELIGIBLE");
 
-        let (responsibility_actions, domain_actions, blockers) =
-            review_task_access(&task, "reviewer-1", true, false);
-        assert!(responsibility_actions.is_empty());
+        let (domain_actions, blockers) = review_task_access(&task, "reviewer-1", true, false);
         assert!(domain_actions.is_empty());
         assert_eq!(blockers[0].code, "SEGREGATION_OF_DUTIES");
     }

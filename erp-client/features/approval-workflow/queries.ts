@@ -15,21 +15,17 @@ import {
     getRecoveryOptions,
     listApprovalHistory,
     listApprovalInstances,
-    reassignCurrentApprover,
     resumeCurrentApprover,
-    searchEligibleReassignees,
     submitDecision,
     upgradeUnsubmittedBinding,
     type ApprovalHistoryParams,
     type ApprovalInstanceListParams,
     type CancelDocumentApprovalParams,
-    type EligibleReassigneesParams,
     type UpgradeDocumentBindingParams,
 } from "./api"
 import type {
     ApprovalCommandView,
     CancelBlockedRequest,
-    ReassignApproverRequest,
     ResumeApproverRequest,
 } from "./types"
 
@@ -47,13 +43,6 @@ export const approvalKeys = {
     ) => [...approvalKeys.all, "instances", view, filters] as const,
     recoveryOptions: (instanceId: string) =>
         [...approvalKeys.all, "recovery-options", instanceId] as const,
-    eligibleReassignees: (instanceId: string, search?: string) =>
-        [
-            ...approvalKeys.all,
-            "eligible-reassignees",
-            instanceId,
-            search ?? "",
-        ] as const,
 }
 
 /**
@@ -134,22 +123,6 @@ export const useRecoveryOptionsQuery = (
     })
 
 /**
- * 搜索改派候选人。必须按当前单据重验资格。
- */
-export const useEligibleReassigneesQuery = (
-    params: EligibleReassigneesParams,
-    enabled = true,
-) =>
-    useQuery({
-        queryKey: approvalKeys.eligibleReassignees(
-            params.instanceId,
-            params.search,
-        ),
-        queryFn: () => searchEligibleReassignees(params),
-        enabled: enabled && params.instanceId.trim().length > 0,
-    })
-
-/**
  * 提交通过或驳回。成功后刷新任务、实例和单据缓存。
  */
 export const useSubmitDecisionMutation = () => {
@@ -172,20 +145,6 @@ export const useResumeApproverMutation = (instanceId: string) => {
     return useMutation({
         mutationFn: (request: ResumeApproverRequest) =>
             resumeCurrentApprover(instanceId, request),
-        onSuccess: async () => {
-            await invalidateApprovalCaches(queryClient, { instanceId })
-        },
-    })
-}
-
-/**
- * 改派当前审批人。
- */
-export const useReassignApproverMutation = (instanceId: string) => {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: (request: ReassignApproverRequest) =>
-            reassignCurrentApprover(instanceId, request),
         onSuccess: async () => {
             await invalidateApprovalCaches(queryClient, { instanceId })
         },

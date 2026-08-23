@@ -84,9 +84,7 @@ struct AssignmentAuthorizationSnapshot {
 }
 
 struct FocusedQueueContext<'a> {
-    scope: WorkItemScope,
     page_size: u32,
-    actor: &'a AuditActor,
     access: &'a ActorAccess,
 }
 
@@ -159,7 +157,7 @@ impl WorkItemService {
         let mut filter = self.scope_filter(&query, actor, &access)?;
         apply_due_filter(&mut filter, query.due)?;
         let authorized_page = self
-            .authorized_page_fields(&filter, query.scope, query.page, query.page_size, actor, &access)
+            .authorized_page_fields(&filter, query.page, query.page_size, &access)
             .await?;
         let fields = self
             .focused_fields(
@@ -167,9 +165,7 @@ impl WorkItemService {
                 query.current_work_item_id.as_deref(),
                 &filter,
                 FocusedQueueContext {
-                    scope: query.scope,
                     page_size: query.page_size,
-                    actor,
                     access: &access,
                 },
             )
@@ -193,7 +189,7 @@ impl WorkItemService {
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回个人、团队、今日到期、超期和异常计数及服务端统计时点。
+    /// 返回个人、今日到期、超期和异常计数及服务端统计时点。
     ///
     /// # 错误
     /// 查询参数、权限范围或对象事实读取失败时返回错误。
@@ -215,17 +211,10 @@ impl WorkItemService {
         let assigned = self
             .processable_stats_fields(assigned, WorkItemScope::Mine, actor, &access)
             .await?;
-        let team = self
-            .stats_fields_for_open_scope(&query, WorkItemScope::Team, actor, &access)
-            .await?;
-        let team = self
-            .processable_stats_fields(team, WorkItemScope::Team, actor, &access)
-            .await?;
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds()?;
         Ok(WorkItemStatsView {
             assigned: count_u64(assigned.len()),
-            team: count_u64(team.len()),
             due_today: count_u64(
                 selected
                     .iter()
@@ -281,11 +270,6 @@ impl WorkItemService {
             .find_visible_by_id(current_id, filter, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
-        if context.scope == WorkItemScope::Team
-            && !self.authoritative_team_candidate(context.actor, &current).await?
-        {
-            return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
-        }
         let current = self
             .authorized_fields_for_items(vec![current], context.access)
             .await?;
@@ -301,10 +285,8 @@ impl WorkItemService {
     async fn authorized_page_fields(
         &self,
         filter: &WorkItemFilter,
-        scope: WorkItemScope,
         page: u64,
         page_size: u32,
-        actor: &AuditActor,
         access: &ActorAccess,
     ) -> Result<AuthorizedPage<dto::WorkItemFields>> {
         let mut collector = AuthorizedPageCollector::new(page, page_size)?;
@@ -317,7 +299,7 @@ impl WorkItemService {
             }
             let facts = self.object_facts_for_rows(&rows).await?;
             let fields = authorized_fields(rows, access, &facts);
-            collector.extend(self.team_candidate_fields(fields, scope, actor).await?);
+            collector.extend(fields);
             candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
@@ -359,8 +341,7 @@ impl WorkItemService {
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut filter = self.scope_filter(query, actor, access)?;
         apply_due_filter(&mut filter, query.due)?;
-        self.authorized_stat_fields(filter, query.scope, actor, access)
-            .await
+        self.authorized_stat_fields(filter, access).await
     }
 
     async fn stats_fields_for_open_scope(
@@ -370,9 +351,6 @@ impl WorkItemService {
         actor: &AuditActor,
         access: &ActorAccess,
     ) -> Result<Vec<dto::WorkItemFields>> {
-        if scope == WorkItemScope::Team && access.responsibility_scopes.is_empty() {
-            return Ok(Vec::new());
-        }
         let mut query = query.clone();
         query.scope = scope;
         query.statuses = vec![WorkItemStatus::Open];
@@ -401,8 +379,6 @@ impl WorkItemService {
     async fn authorized_stat_fields(
         &self,
         filter: WorkItemFilter,
-        scope: WorkItemScope,
-        actor: &AuditActor,
         access: &ActorAccess,
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut fields = Vec::new();
@@ -415,56 +391,13 @@ impl WorkItemService {
             }
             let facts = self.object_facts_for_rows(&rows).await?;
             let authorized = authorized_fields(rows, access, &facts);
-            fields.extend(self.team_candidate_fields(authorized, scope, actor).await?);
+            fields.extend(authorized);
             candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
             }
         }
         Ok(fields)
-    }
-
-    /// 团队队列仅保留此刻可按正式责任策略形成本人责任的候选任务。
-    async fn team_candidate_fields(
-        &self,
-        fields: Vec<dto::WorkItemFields>,
-        scope: WorkItemScope,
-        actor: &AuditActor,
-    ) -> Result<Vec<dto::WorkItemFields>> {
-        if scope != WorkItemScope::Team || fields.is_empty() {
-            return Ok(fields);
-        }
-        let ids = fields.iter().map(|field| field.id.clone()).collect::<Vec<_>>();
-        let items = self
-            .db
-            .work_items()
-            .find_many(doc! { "id": { "$in": ids } }, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|item| (item.base.id.clone(), item))
-            .collect::<HashMap<_, _>>();
-        let mut eligible_ids = HashSet::new();
-        for (id, item) in &items {
-            if self.authoritative_team_candidate(actor, item).await? {
-                eligible_ids.insert(id.clone());
-            }
-        }
-        Ok(retain_team_eligible_fields(fields, &eligible_ids))
-    }
-
-    /// 复用开始处理的权威账号、角色、范围、对象参与权与岗位分离快照。
-    async fn authoritative_team_candidate(&self, actor: &AuditActor, item: &WorkItem) -> Result<bool> {
-        if item.status != WorkItemStatus::Open || item.owner_user_id.is_some() {
-            return Ok(false);
-        }
-        match self
-            .assignment_authorization_snapshot(actor, actor.id(), item, false)
-            .await
-        {
-            Ok(_) => Ok(true),
-            Err(error) if is_assignment_candidate_denial(&error) => Ok(false),
-            Err(error) => Err(error),
-        }
     }
 
     /// 为完整任务列表重新读取对象并执行参与权过滤。
@@ -1100,12 +1033,6 @@ impl WorkItemService {
         };
         match query.scope {
             WorkItemScope::Mine => filter.owner_user_id = Some(actor.id().to_string()),
-            WorkItemScope::Team => {
-                ensure_team_access(access)?;
-
-                filter.unassigned_only = true;
-                filter.responsibility_scopes = access.responsibility_scopes.clone();
-            }
             WorkItemScope::Managed => {
                 ensure_managed_access(access)?;
                 filter.owner_organization_ids = organization_filter(access);
@@ -1133,16 +1060,7 @@ impl WorkItemService {
         if scope == WorkItemScope::History || item.status != WorkItemStatus::Open {
             return Ok(ViewAccess::ready(Vec::new()));
         }
-        let team_candidate_eligible = if scope == WorkItemScope::Team && item.owner_user_id.is_none() {
-            match self.load(&item.id).await {
-                Ok(current) => self.authoritative_team_candidate(actor, &current).await?,
-                Err(Error::NotFound(_)) => false,
-                Err(error) => return Err(error),
-            }
-        } else {
-            false
-        };
-        let actions = allowed_actions(item, scope, actor.id(), access, team_candidate_eligible);
+        let actions = allowed_actions(item, scope, actor.id(), access);
         Ok(ViewAccess::ready(actions))
     }
 
@@ -3037,7 +2955,7 @@ fn counts_as_processable_stat(scope: WorkItemScope, access: &ViewAccess) -> bool
         return false;
     }
     match scope {
-        WorkItemScope::Mine | WorkItemScope::Team => access.allowed_actions.iter().any(|action| {
+        WorkItemScope::Mine => access.allowed_actions.iter().any(|action| {
             matches!(
                 action,
                 WorkItemAllowedAction::Process | WorkItemAllowedAction::Approve
@@ -3052,7 +2970,6 @@ fn allowed_actions(
     scope: WorkItemScope,
     actor_id: &str,
     access: &ActorAccess,
-    team_candidate_eligible: bool,
 ) -> Vec<WorkItemAllowedAction> {
     let mut actions = vec![WorkItemAllowedAction::View];
     if item.owner_user_id.as_deref() == Some(actor_id)
@@ -3060,9 +2977,6 @@ fn allowed_actions(
             || item.status != WorkItemStatus::Open)
     {
         actions.push(WorkItemAllowedAction::Process);
-        if false {
-            actions.push(WorkItemAllowedAction::Reassign);
-        }
     }
     // 开放的单据审批任务由审批运行时直接指派给责任人（owner_user_id = 指派
     // 人，owner_role 为语义标签而非角色 ID，无法用责任范围校验）；最终授权由
@@ -3076,9 +2990,6 @@ fn allowed_actions(
         actions.push(WorkItemAllowedAction::Approve);
         actions.push(WorkItemAllowedAction::Reject);
     }
-    if scope == WorkItemScope::Team && item.owner_user_id.is_none() && team_candidate_eligible {
-        actions.push(WorkItemAllowedAction::Process);
-    }
     if access.can_manage && scope == WorkItemScope::Managed {
         actions.push(WorkItemAllowedAction::Reassign);
         if is_w29_fields_closable(item) {
@@ -3086,35 +2997,6 @@ fn allowed_actions(
         }
     }
     actions
-}
-
-fn retain_team_eligible_fields(
-    fields: Vec<dto::WorkItemFields>,
-    eligible_ids: &HashSet<String>,
-) -> Vec<dto::WorkItemFields> {
-    fields
-        .into_iter()
-        .filter(|field| eligible_ids.contains(&field.id))
-        .collect()
-}
-
-fn is_assignment_candidate_denial(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::NotFound(_)
-            | Error::ValidationError(_)
-            | Error::BusinessLogicError(_)
-            | Error::ConflictError(_)
-            | Error::Forbidden(_)
-            | Error::Logic(_)
-    )
-}
-
-fn ensure_team_access(access: &ActorAccess) -> Result<()> {
-    if access.responsibility_scopes.is_empty() {
-        return Err(Error::Forbidden("当前账号没有可证明的团队任务范围".to_string()));
-    }
-    Ok(())
 }
 
 fn ensure_managed_access(access: &ActorAccess) -> Result<()> {
@@ -3250,13 +3132,6 @@ fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result
     }
     if item.is_owned_by(actor_id) {
         return Ok(WorkItemScope::Mine);
-    }
-    if item.status == WorkItemStatus::Open
-        && false
-        && item.owner_user_id.is_none()
-        && covers_responsibility(access, &item.owner_role, &item.owner_organization_id)
-    {
-        return Ok(WorkItemScope::Team);
     }
     if item.status == WorkItemStatus::Open
         && access.can_manage
@@ -3533,11 +3408,10 @@ fn next_candidate_offset(current: u64, batch_len: usize) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_actions, approval_assignment_separated, assignment_separation_policy,
-        audit_command_fingerprint, audited_fact_operator_actors, authorized_fields, authorized_item_fields,
-        business_day_bounds_at, command_audit_message, counts_as_processable_stat, detail_scope,
-        expected_task_version, is_assignment_candidate_denial, is_w29_shape, non_empty_assignment_actors,
-        object_access_shapes, object_policy, retain_team_eligible_fields, stable_digest, w29_close_reason,
+        approval_assignment_separated, assignment_separation_policy, audit_command_fingerprint,
+        audited_fact_operator_actors, authorized_fields, authorized_item_fields, business_day_bounds_at,
+        command_audit_message, counts_as_processable_stat, detail_scope, expected_task_version, is_w29_shape,
+        non_empty_assignment_actors, object_access_shapes, object_policy, stable_digest, w29_close_reason,
         w29_domain_evidence_reference, ActorAccess, AssignmentSeparationPolicy, AuthorizedPage,
         AuthorizedPageCollector, Error, ObjectFact, ObjectFactMap, ObjectKind, ViewAccess,
         AUTHORIZED_SCAN_BATCH_SIZE,
@@ -3633,7 +3507,7 @@ mod tests {
 
                 owner_role: "role-finance".to_string(),
                 owner_organization_id: "company".to_string(),
-                owner_user_id: Some("alice".to_string()),
+                owner_user_id: "alice".to_string(),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::High,
                 due_at: None,
@@ -3792,14 +3666,11 @@ mod tests {
             message: "审批当前受阻".to_string(),
         });
         assert!(!counts_as_processable_stat(WorkItemScope::Mine, &blocked));
-        assert!(!counts_as_processable_stat(WorkItemScope::Team, &blocked));
 
         let mine = ViewAccess::ready(vec![WorkItemAllowedAction::Process]);
-        let team = ViewAccess::ready(vec![WorkItemAllowedAction::Process]);
         assert!(counts_as_processable_stat(WorkItemScope::Mine, &mine));
-        assert!(counts_as_processable_stat(WorkItemScope::Team, &team));
         assert!(!counts_as_processable_stat(WorkItemScope::Managed, &mine));
-        assert!(!counts_as_processable_stat(WorkItemScope::History, &team));
+        assert!(!counts_as_processable_stat(WorkItemScope::History, &mine));
     }
 
     #[test]
@@ -3829,7 +3700,7 @@ mod tests {
 
                 owner_role: "role-sales".to_string(),
                 owner_organization_id: "company".to_string(),
-                owner_user_id: Some("alice".to_string()),
+                owner_user_id: "alice".to_string(),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::Normal,
                 due_at: None,
@@ -3911,85 +3782,6 @@ mod tests {
                 total: 4,
             }
         );
-    }
-
-    #[test]
-    fn team_queue_excludes_sod_conflicts_before_total_and_start_action() {
-        let access = w13_access();
-        let facts = w13_facts();
-        let rows = ["submitter-task", "history-task", "eligible-task"]
-            .into_iter()
-            .map(|id| {
-                let mut row = w13_delta_row();
-                row.id = id.to_string();
-                row
-            })
-            .collect();
-        let fields = authorized_fields(rows, &access, &facts);
-        assert_eq!(fields.len(), 3, "三条候选均具备读取与对象参与权");
-
-        let eligible_ids = fields
-            .iter()
-            .filter(|field| match field.id.as_str() {
-                "submitter-task" => approval_assignment_separated(
-                    access.actor_id.as_str(),
-                    "starter",
-                    access.actor_id.as_str(),
-                    &[],
-                    None,
-                    false,
-                    &[],
-                ),
-                "history-task" => approval_assignment_separated(
-                    access.actor_id.as_str(),
-                    "starter",
-                    "other-submitter",
-                    std::slice::from_ref(&access.actor_id),
-                    None,
-                    false,
-                    &[],
-                ),
-                "eligible-task" => approval_assignment_separated(
-                    access.actor_id.as_str(),
-                    "starter",
-                    "other-submitter",
-                    &[],
-                    None,
-                    false,
-                    &[],
-                ),
-                _ => false,
-            })
-            .map(|field| field.id.clone())
-            .collect::<HashSet<_>>();
-        let denied = fields[0].clone();
-        let eligible = fields[2].clone();
-        let mut collector = AuthorizedPageCollector::new(1, 10).unwrap();
-        collector.extend(retain_team_eligible_fields(fields, &eligible_ids));
-
-        let page = collector.finish();
-        assert_eq!(page.total, 1);
-        assert_eq!(page.items.len(), 1);
-        assert_eq!(page.items[0].id, "eligible-task");
-        assert!(
-            !allowed_actions(&denied, WorkItemScope::Team, &access.actor_id, &access, false)
-                .contains(&WorkItemAllowedAction::Process)
-        );
-        assert!(
-            !allowed_actions(&eligible, WorkItemScope::Team, &access.actor_id, &access, true)
-                .contains(&WorkItemAllowedAction::Process),
-            "任务已指定到人后，团队队列不得再授予开始处理"
-        );
-    }
-
-    #[test]
-    fn missing_authoritative_assignment_facts_fail_closed_as_candidate_denial() {
-        assert!(is_assignment_candidate_denial(&Error::Forbidden(
-            "审批业务对象事实缺失".to_string()
-        )));
-        assert!(is_assignment_candidate_denial(&Error::ConflictError(
-            "审批步骤责任事实缺失".to_string()
-        )));
     }
 
     #[test]

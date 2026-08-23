@@ -198,7 +198,6 @@ function mapFormalWorkItem(item: ReturnType<typeof mapWorkItemDto>) {
         businessObjectType: "SUPPLIER_FULFILLMENT_ORDER" as const,
         businessObjectId: item.businessObjectId,
         subjectVersion: item.subjectVersion,
-        assignmentMode: item.assignmentMode,
         processingState: item.processingState,
         ownerUser: item.ownerUser,
         allowedTaskActions: item.allowedActions,

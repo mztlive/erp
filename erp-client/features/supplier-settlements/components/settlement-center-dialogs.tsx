@@ -1,6 +1,9 @@
 "use client"
 
-import { FormalActionConfirmDialog, OptionCombobox } from "@/components/business"
+import {
+    FormalActionConfirmDialog,
+    OptionCombobox,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -256,12 +259,16 @@ function SettlementSubmitReviewDialog({
     open,
     onOpenChange,
     statement,
+    reviewerUserId,
+    onReviewerUserIdChange,
     pending,
     onConfirm,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     statement: SettlementDetailView["statement"]
+    reviewerUserId: string
+    onReviewerUserIdChange: (reviewerUserId: string) => void
     pending: boolean
     onConfirm: () => Promise<void>
 }) {
@@ -273,13 +280,36 @@ function SettlementSubmitReviewDialog({
             description="将冻结来源更新时间、明细与差异结论，并创建唯一复核待办。"
             actionLabel="提交复核"
             confirmLabel="确认提交"
-            fromStatus={{ label: statement.statusLabel, tone: statement.statusTone }}
+            fromStatus={{
+                label: statement.statusLabel,
+                tone: statement.statusTone,
+            }}
             toStatus={{ label: "待复核", tone: "warning" }}
             lockedFields={[
                 statement.statementNo,
                 "来源数据、明细与差异结论已锁定",
             ]}
             effects={["冻结来源数据与差异结论", "创建结算复核待办"]}
+            formContent={
+                <div className="space-y-1.5">
+                    <Label htmlFor="settlement-reviewer-user-id">
+                        复核人用户 ID
+                    </Label>
+                    <Input
+                        id="settlement-reviewer-user-id"
+                        value={reviewerUserId}
+                        disabled={pending}
+                        onChange={(event) =>
+                            onReviewerUserIdChange(event.target.value)
+                        }
+                        placeholder="请输入明确的复核人用户 ID"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        系统将把复核待办直接分派给该用户。
+                    </p>
+                </div>
+            }
+            confirmDisabled={!reviewerUserId.trim()}
             pending={pending}
             onConfirm={onConfirm}
         />
@@ -309,7 +339,10 @@ function SettlementConfirmSettlementDialog({
             description="同一次提交追加成本差额、形成唯一应付并锁定处理结果。经办人不可确认本单。"
             actionLabel="确认结算"
             confirmLabel="确认结算"
-            fromStatus={{ label: statement.statusLabel, tone: statement.statusTone }}
+            fromStatus={{
+                label: statement.statusLabel,
+                tone: statement.statusTone,
+            }}
             toStatus={{ label: "已确认", tone: "success" }}
             lockedFields={[
                 statement.statementNo,

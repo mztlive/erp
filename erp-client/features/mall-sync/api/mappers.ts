@@ -359,8 +359,7 @@ export function toMappingTask(
                       ? "已关闭"
                       : workItem.owner_user_id
                         ? "处理中"
-                        : "团队待处理",
-            assignmentMode: workItem.assignment_mode,
+                        : "责任人信息不可用",
             processingState: "READY" as const,
             ownerUser: workItem.owner_user_id
                 ? {
@@ -368,7 +367,6 @@ export function toMappingTask(
                       displayName: workItem.owner_user_id,
                   }
                 : undefined,
-            allowedActions: workItem.allowed_actions,
         },
     }
 }

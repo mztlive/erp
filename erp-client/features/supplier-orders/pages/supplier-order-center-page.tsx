@@ -4,12 +4,15 @@ import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
-import { BusinessFailureState, PageScaffold, surfacePanelClassName } from "@/components/business"
+import {
+    BusinessFailureState,
+    PageScaffold,
+    surfacePanelClassName,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import { clearAddressReveal } from "@/features/supplier-orders/api/index"
 import {
     useAddNoteMutation,
@@ -23,18 +26,34 @@ import {
 import { SECTION_LABEL, SECTIONS } from "@/features/supplier-orders/types"
 import { cn } from "@/lib/utils"
 import { SupplierOrderCenterDialogs } from "@/features/supplier-orders/components/supplier-order-preview-center-dialogs"
-import { AftersalesSection, CostsSection } from "@/features/supplier-orders/components/supplier-order-preview-center-aftersales-costs"
+import {
+    AftersalesSection,
+    CostsSection,
+} from "@/features/supplier-orders/components/supplier-order-preview-center-aftersales-costs"
 import { AuditSection } from "@/features/supplier-orders/components/supplier-order-preview-center-audit"
 import { FulfillmentSection } from "@/features/supplier-orders/components/supplier-order-preview-center-fulfillment"
 import { SupplierOrderCenterHeader } from "@/features/supplier-orders/components/supplier-order-preview-center-header"
-import { ItemsSection, OverviewSection } from "@/features/supplier-orders/components/supplier-order-preview-center-overview-items"
-import { ResultPanel, StatusAlertsPanel, WorkItemCard, WorkItemProcessPanel } from "@/features/supplier-orders/components/supplier-order-preview-center-panels"
-import { useSupplierOrderCenterActions, useSupplierOrderCenterResult } from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
+import {
+    ItemsSection,
+    OverviewSection,
+} from "@/features/supplier-orders/components/supplier-order-preview-center-overview-items"
+import {
+    ResultPanel,
+    StatusAlertsPanel,
+    WorkItemCard,
+    WorkItemProcessPanel,
+} from "@/features/supplier-orders/components/supplier-order-preview-center-panels"
+import {
+    useSupplierOrderCenterActions,
+    useSupplierOrderCenterResult,
+} from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
 import { useSupplierOrderCenterOrderActions } from "@/features/supplier-orders/hooks/use-supplier-order-center-order-actions"
 import { useSupplierOrderCenterDerivation } from "@/features/supplier-orders/hooks/use-supplier-order-center-derivation"
-import { useSupplierOrderCenterReleaseForm } from "@/features/supplier-orders/hooks/use-supplier-order-center-forms"
 import { useSupplierOrderCenterCommandIdentity } from "@/features/supplier-orders/hooks/use-supplier-order-center-identity"
-import { resolveSection, useSupplierOrderCenterSection } from "@/features/supplier-orders/hooks/use-supplier-order-center-section"
+import {
+    resolveSection,
+    useSupplierOrderCenterSection,
+} from "@/features/supplier-orders/hooks/use-supplier-order-center-section"
 import { useSupplierOrderCenterTaskActions } from "@/features/supplier-orders/hooks/use-supplier-order-center-task-actions"
 
 export function SupplierOrderCenterPage({
@@ -59,7 +78,6 @@ export function SupplierOrderCenterPage({
         workItemId,
     })
     const profileQuery = useAccountProfileQuery()
-    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const queryResultMutation = useQueryResultMutation()
     const replayMutation = useReplayOrderMutation()
     const completeTaskMutation = useCompleteOrderTaskMutation()
@@ -103,17 +121,7 @@ export function SupplierOrderCenterPage({
         completionEvidence: derivation.completionEvidence,
         refetch: () => query.refetch(),
         setResult,
-        responsibilityMutation,
         completeTaskMutation,
-        commandIdentity: identity.commandIdentity,
-        forgetCommandIdentity: identity.forgetCommandIdentity,
-    })
-
-    const release = useSupplierOrderCenterReleaseForm({
-        detail,
-        setResult,
-        responsibilityMutation,
-        refetch: () => query.refetch(),
         commandIdentity: identity.commandIdentity,
         forgetCommandIdentity: identity.forgetCommandIdentity,
     })
@@ -200,14 +208,8 @@ export function SupplierOrderCenterPage({
                 workItemBlocker={detail.workItemBlocker}
                 responsibilityStatus={derivation.responsibilityStatus}
                 canCompleteTask={derivation.canCompleteTask}
-                pending={
-                    responsibilityMutation.isPending ||
-                    completeTaskMutation.isPending
-                }
-                releasePending={responsibilityMutation.isPending}
-                onStartProcessing={() => void task.handleStartProcessing()}
+                pending={completeTaskMutation.isPending}
                 onProcess={() => task.setCompleteOpen(true)}
-                onRelease={() => release.setReleaseOpen(true)}
             />
 
             <StatusAlertsPanel
@@ -268,9 +270,7 @@ export function SupplierOrderCenterPage({
                             statusHistory={detail.statusHistory}
                             canReveal={derivation.canReveal}
                             revealPending={revealMutation.isPending}
-                            onReveal={() =>
-                                void orderActions.handleReveal()
-                            }
+                            onReveal={() => void orderActions.handleReveal()}
                             onHide={() => {
                                 void clearAddressReveal(supplierOrderId).then(
                                     () => void query.refetch(),
@@ -310,9 +310,6 @@ export function SupplierOrderCenterPage({
                 onReplayOpenChange={actions.setReplayOpen}
                 replayPending={replayMutation.isPending}
                 onReplayConfirm={() => actions.handleReplay()}
-                releaseOpen={release.releaseOpen}
-                onReleaseOpenChange={release.setReleaseOpen}
-                releaseForm={release.releaseForm}
                 completeOpen={task.completeOpen}
                 onCompleteOpenChange={task.setCompleteOpen}
                 completePending={completeTaskMutation.isPending}

@@ -107,11 +107,11 @@ describe("mapSupplierPaymentApproval", () => {
 })
 
 describe("mergeSupplierPaymentAllowedActions", () => {
-    it("unions server facts and drops start-processing or pool actions", () => {
+    it("unions server facts and drops generic WorkItem actions", () => {
         expect(
             mergeSupplierPaymentAllowedActions(
                 ["CANCEL"],
-                ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM"],
+                ["APPROVE", "REASSIGN", "CLOSE"],
             ),
         ).toEqual(["CANCEL", "APPROVE"])
     })

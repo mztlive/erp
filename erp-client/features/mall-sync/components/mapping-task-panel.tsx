@@ -32,13 +32,12 @@ type MappingTaskPanelProps = {
     mappingIndex: { current: number; total: number }
     responsibilityStatus: ResponsibilityStatus
     canConfirmMapping: boolean
-    responsibilityPending: boolean
+    actionPending: boolean
     reapplyPending: boolean
     onReapply: () => Promise<void>
     onResolveUnknownReapply: () => Promise<void>
     onBackToQueue: () => void
     onConfirm: () => Promise<void>
-    onStartProcessing: () => Promise<void>
 }
 
 export function MappingTaskPanel({
@@ -49,13 +48,12 @@ export function MappingTaskPanel({
     mappingIndex,
     responsibilityStatus,
     canConfirmMapping,
-    responsibilityPending,
+    actionPending,
     reapplyPending,
     onReapply,
     onResolveUnknownReapply,
     onBackToQueue,
     onConfirm,
-    onStartProcessing,
 }: MappingTaskPanelProps) {
     return (
         <div className="space-y-3">
@@ -82,8 +80,8 @@ export function MappingTaskPanel({
                                     mappingTask.reapplyOperation.status ===
                                     "UNKNOWN"
                                         ? "destructive"
-                                        : mappingTask.reapplyOperation.status ===
-                                            "SUCCEEDED"
+                                        : mappingTask.reapplyOperation
+                                                .status === "SUCCEEDED"
                                           ? "success"
                                           : "info"
                                 }
@@ -95,10 +93,7 @@ export function MappingTaskPanel({
                     <CardDescription>
                         {mappingTask.externalOrderNo}
                         {mappingTask.ownerRoutingState === "CONFIGURED" ? (
-                            <>
-                                {" "}
-                                · 责任 {mappingTask.ownerRoleLabel}
-                            </>
+                            <> · 责任 {mappingTask.ownerRoleLabel}</>
                         ) : (
                             " · 待责任配置"
                         )}
@@ -224,7 +219,8 @@ export function MappingTaskPanel({
                                 {mappingTask.resolutionHistory.map((h, i) => (
                                     <li key={`${h.handledAt}-${i}`}>
                                         {formatDateTime(h.handledAt, "default")}{" "}
-                                        · {h.action} · {h.result} · {h.handledBy}
+                                        · {h.action} · {h.result} ·{" "}
+                                        {h.handledBy}
                                     </li>
                                 ))}
                             </ul>
@@ -255,7 +251,10 @@ export function MappingTaskPanel({
                                         className="text-primary hover:underline"
                                         href={`/sales/orders/${mappingTask.reapplyOperation.salesOrderId}`}
                                     >
-                                        {mappingTask.reapplyOperation.salesOrderNo}
+                                        {
+                                            mappingTask.reapplyOperation
+                                                .salesOrderNo
+                                        }
                                     </Link>
                                     {mappingTask.reapplyOperation
                                         .receivableResultReference
@@ -316,7 +315,7 @@ export function MappingTaskPanel({
                     // 没有独立的「并打开下一条」路径：两个 handler 同义
                     showProcessNext={false}
                     processDisabled={!canConfirmMapping}
-                    pending={responsibilityPending}
+                    pending={actionPending}
                     onBack={onBackToQueue}
                     onProcess={() => {
                         if (canConfirmMapping) void onConfirm()
@@ -324,13 +323,6 @@ export function MappingTaskPanel({
                     onProcessNext={() => {
                         if (canConfirmMapping) void onConfirm()
                     }}
-                    onStartProcessing={
-                        mappingTask.workItem.allowedActions.includes(
-                            "START_PROCESSING",
-                        )
-                            ? () => void onStartProcessing()
-                            : undefined
-                    }
                 />
             ) : null}
         </div>

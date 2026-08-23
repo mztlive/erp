@@ -15,13 +15,7 @@ import type {
 } from "@/features/supplier-offerings/types"
 
 const SUPPLY_EXCEPTION_ALLOWED_ACTIONS: ReadonlySet<WorkItemAllowedAction> =
-    new Set([
-        "VIEW",
-        "PROCESS",
-        "START_PROCESSING",
-        "RELEASE_TO_TEAM",
-        "REASSIGN",
-    ])
+    new Set(["VIEW", "PROCESS", "REASSIGN"])
 
 /**
  * 读取 W21 供应停止任务，对未注册路由、对象或终态动作失败关闭。

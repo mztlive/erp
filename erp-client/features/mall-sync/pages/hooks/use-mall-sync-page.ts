@@ -25,6 +25,5 @@ export type { UseMallSyncPageInput } from "@/features/mall-sync/pages/hooks/use-
 export type MallSyncPageApi = ReturnType<typeof useMallSyncPage>
 export type MallSyncConfirmFormApi = MallSyncPageApi["confirmForm"]
 export type MallSyncSourceFixFormApi = MallSyncPageApi["sourceFixForm"]
-export type MallSyncReleaseFormApi = MallSyncPageApi["releaseForm"]
 export type MallSyncPullFormApi = MallSyncPageApi["pullForm"]
 export type MallSyncIncrementalFormApi = MallSyncPageApi["incrementalForm"]

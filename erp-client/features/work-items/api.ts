@@ -42,7 +42,6 @@ export type WorkItemStatsParams = Readonly<{
 
 export type WorkItemStats = Readonly<{
     assigned: number
-    team: number
     due_today: number
     overdue: number
     exception: number
@@ -71,8 +70,6 @@ const isWorkItemDto = (value: unknown): value is WorkItemDto => {
         (value.status === "OPEN" ||
             value.status === "COMPLETED" ||
             value.status === "CLOSED") &&
-        (value.assignment_mode === "DIRECT" ||
-            value.assignment_mode === "POOL") &&
         typeof value.assignment_source === "string" &&
         typeof value.owner_role === "string" &&
         typeof value.owner_organization_id === "string" &&
@@ -170,16 +167,6 @@ export function submitWorkItemResponsibility(
     }
 
     switch (command.kind) {
-        case "START_PROCESSING":
-            return apiPost<WorkItemDto>(
-                `/admin/work-items/${id}/start-processing`,
-                common,
-            )
-        case "RELEASE_TO_TEAM":
-            return apiPost<WorkItemDto>(
-                `/admin/work-items/${id}/release-to-team`,
-                { ...common, reason: command.reason },
-            )
         case "REASSIGN":
             return apiPost<WorkItemDto>(`/admin/work-items/${id}/reassign`, {
                 ...common,

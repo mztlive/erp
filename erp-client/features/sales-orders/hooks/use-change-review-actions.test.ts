@@ -27,17 +27,12 @@ vi.mock("@/features/sales-orders/hooks/queries", () => ({
 
 const workItemMocks = vi.hoisted(() => ({
     refetch: vi.fn(),
-    responsibility: vi.fn(),
     useWorkItemDetailQuery: vi.fn(),
     mapWorkItemDto: vi.fn(),
 }))
 
 vi.mock("@/features/work-items", () => ({
     useWorkItemDetailQuery: workItemMocks.useWorkItemDetailQuery,
-    useWorkItemResponsibilityMutation: vi.fn(() => ({
-        mutateAsync: workItemMocks.responsibility,
-        isPending: false,
-    })),
     mapWorkItemDto: workItemMocks.mapWorkItemDto,
 }))
 
@@ -75,7 +70,7 @@ const makeWorkItem = (overrides: Partial<Projection> = {}): Projection => ({
     rootBusinessObjectId: "so-1",
     taskVersion: "3",
     subjectVersion: "sv-1",
-    allowedActions: ["PROCESS", "START_PROCESSING", "RELEASE_TO_TEAM"],
+    allowedActions: ["PROCESS"],
     ...overrides,
 })
 
@@ -83,7 +78,6 @@ describe("useSalesChangeReviewActions", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         queryMocks.submitDecision.mockReset()
-        workItemMocks.responsibility.mockReset()
         workItemMocks.refetch.mockReset()
         workItemMocks.mapWorkItemDto.mockImplementation(
             (dto: Projection) => dto,
@@ -113,9 +107,7 @@ describe("useSalesChangeReviewActions", () => {
         expect(result.current.valid).toBe(true)
         expect(result.current.handlerMatches).toBe(true)
         expect(result.current.canProcess).toBe(true)
-        expect(result.current.canStart).toBe(true)
-        expect(result.current.canRelease).toBe(true)
-        expect(result.current.responsibilityStatus).toBe("pool_available")
+        expect(result.current.responsibilityStatus).toBe("assigned_to_me")
     })
 
     it("flags the face invalid when the work item is missing", () => {
@@ -176,7 +168,6 @@ describe("useSalesChangeReviewActions", () => {
         })
         const { result } = renderActions()
         expect(result.current.canProcess).toBe(true)
-        expect(result.current.canStart).toBe(false)
         expect(result.current.responsibilityStatus).toBe("assigned_to_me")
     })
 
@@ -266,41 +257,6 @@ describe("useSalesChangeReviewActions", () => {
         const second = queryMocks.submitDecision.mock.calls[1][0]
         expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
         expect(onResult).toHaveBeenCalledTimes(2)
-    })
-
-    it("starts processing and refetches the task", async () => {
-        workItemMocks.responsibility.mockResolvedValue({})
-        const { result } = renderActions()
-
-        await act(async () => {
-            await result.current.startProcessing()
-        })
-
-        expect(workItemMocks.responsibility).toHaveBeenCalledWith({
-            kind: "START_PROCESSING",
-            workItemId: "wi-1",
-            expectedTaskVersion: "3",
-            idempotencyKey: "w05:wi-1:3:START",
-        })
-        expect(workItemMocks.refetch).toHaveBeenCalledTimes(1)
-    })
-
-    it("releases the task back to the team and refetches", async () => {
-        workItemMocks.responsibility.mockResolvedValue({})
-        const { result } = renderActions()
-
-        await act(async () => {
-            await result.current.releaseToTeam()
-        })
-
-        expect(workItemMocks.responsibility).toHaveBeenCalledWith({
-            kind: "RELEASE_TO_TEAM",
-            workItemId: "wi-1",
-            expectedTaskVersion: "3",
-            reason: "当前处理人退回责任池",
-            idempotencyKey: "w05:wi-1:3:RELEASE",
-        })
-        expect(workItemMocks.refetch).toHaveBeenCalledTimes(1)
     })
 
     it("exposes the router for the back navigation", () => {

@@ -39,6 +39,7 @@ impl IntegrationOpsService {
                 "差异必须至少提供一侧不可变证据引用".to_string(),
             ));
         }
+        let owner_user_id = req.owner_user_id.clone();
         let difference = ReconciliationDifference::new(
             ReconciliationDifferenceId::new(next_id()),
             ReconciliationDifferenceData {
@@ -49,7 +50,7 @@ impl IntegrationOpsService {
                 right_fact_reference: req.right_fact_reference,
             },
         )?;
-        let work_item = difference_work_item(&difference)?;
+        let work_item = difference_work_item(&difference, &owner_user_id)?;
         self.store_difference(difference.clone(), work_item, actor)
             .await?;
         Ok(difference.into())

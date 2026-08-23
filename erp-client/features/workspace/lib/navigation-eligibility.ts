@@ -1,6 +1,6 @@
 /**
  * 工作台只把服务端动作当作打开单据或页内决定的资格。
- * 不得把领取、开始处理视为本页动作。
+ * 只接受查看、打开对象或正式领域处理动作。
  */
 export function canOpenWorkItemHandler(
     allowedActions: readonly string[],

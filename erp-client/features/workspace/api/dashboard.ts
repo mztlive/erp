@@ -40,7 +40,6 @@ const WORKSPACE_ACTIONS = new Set<WorkspaceActionCode>([
     "APPROVE",
     "REJECT",
     "RESUME_CURRENT_APPROVER",
-    "REASSIGN_CURRENT_APPROVER",
     "CANCEL_BLOCKED_APPROVAL",
 ])
 
@@ -234,7 +233,7 @@ export async function fetchWorkspaceDashboard(
 ): Promise<TodayWorkspaceView> {
     const canManage = profile.permissions.some((permission) =>
         [
-            "approval_instance:reassign",
+            "approval_instance:resume",
             "approval_instance:cancel_blocked",
             "approval_instance:*",
             "*:*",

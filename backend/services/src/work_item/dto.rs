@@ -35,8 +35,6 @@ const WORK_ITEM_TYPES: [WorkItemType; 14] = [
 pub enum WorkItemScope {
     /// 当前用户已负责的开放任务。
     Mine,
-    /// 当前用户有资格开始处理的开放责任池任务。
-    Team,
     /// 主管授权组织内全部开放任务。
     Managed,
     /// 当前用户参与过的已完成或已关闭任务。
@@ -47,11 +45,10 @@ impl WorkItemScope {
     /// 返回稳定范围代码。
     ///
     /// # 返回
-    /// 返回 `mine`、`team`、`managed` 或 `history`。
+    /// 返回 `mine`、`managed` 或 `history`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Mine => "mine",
-            Self::Team => "team",
             Self::Managed => "managed",
             Self::History => "history",
         }
@@ -254,8 +251,6 @@ impl WorkItemStatsParams {
 pub struct WorkItemStatsView {
     /// 已分配给当前用户的开放任务总数。
     pub assigned: u64,
-    /// 当前用户有资格开始处理的团队责任池任务总数。
-    pub team: u64,
     /// 当前选中责任范围内、工作时区今天到期的任务数。
     pub due_today: u64,
     /// 当前选中责任范围内、截止时间早于统计时点的开放任务数。

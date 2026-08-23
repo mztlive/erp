@@ -50,10 +50,6 @@ const sourceFixSchema = z.object({
     requestedEvidence: z.string().trim().min(1, "请填写需要补充的来源证据"),
 })
 
-const releaseSchema = z.object({
-    reason: z.string().trim().min(4, "请填写至少 4 个字的退回原因"),
-})
-
 const pullSchema = z.object({
     externalOrderNo: z.string().trim().min(1, "请填写商城销售单号"),
     reason: z.string().trim().min(4, "请填写至少 4 个字的理由"),
@@ -69,7 +65,6 @@ export {
     incrementalSchema,
     parseView,
     pullSchema,
-    releaseSchema,
     sourceFixSchema,
     VIEW_OBJECT_PARAMS,
     VIEWS,

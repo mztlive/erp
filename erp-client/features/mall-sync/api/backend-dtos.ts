@@ -76,11 +76,7 @@ export type BackendMappingTask = {
         business_object_id: string
         subject_version: string
         status: "OPEN" | "COMPLETED" | "CLOSED"
-        assignment_mode: "DIRECT" | "POOL"
         owner_user_id?: string | null
-        allowed_actions: Array<
-            "START_PROCESSING" | "RELEASE_TO_TEAM" | "REASSIGN"
-        >
     } | null
     external_identity_map_id?: string | null
     source_evidence: Array<{

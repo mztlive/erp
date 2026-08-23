@@ -8,7 +8,6 @@
 export type ApprovalIdempotencyKind =
     | "decision"
     | "resume"
-    | "reassign"
     | "cancel-blocked"
     | "cancel"
     | "upgrade"

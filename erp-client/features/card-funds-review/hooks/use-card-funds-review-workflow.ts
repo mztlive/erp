@@ -2,10 +2,7 @@
 
 import * as React from "react"
 
-import type { UseQueryResult } from "@tanstack/react-query"
-
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
-import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import type {
     CardFundsReviewItemView,
     CardFundsReviewQueueView,
@@ -23,15 +20,13 @@ import { useCardFundsDecisionSubmission } from "./use-card-funds-decision-submis
 import { useCardFundsReviewForms } from "./use-card-funds-review-forms"
 import { useCardFundsReviewKeyboard } from "./use-card-funds-review-keyboard"
 import { useCardFundsRegistration } from "./use-card-funds-registration"
-import { useCardFundsResponsibilityActions } from "./use-card-funds-responsibility-actions"
 
 type ResultState = SharedResultState<FormalOutcome>
 
 type ReplaceUrlFn = (patch: Record<string, string | null | undefined>) => void
 
 /**
- * 复核页核心工作流：队列导航、快捷键、提交结论、退回团队、登记回款/发票、
- * 开始处理。组装各子 hook，页面仅做展示编排。
+ * 复核页核心工作流：队列导航、快捷键、提交结论和登记回款/发票。
  */
 export function useCardFundsReviewWorkflow(args: {
     task: CardFundsReviewItemView | undefined
@@ -42,7 +37,6 @@ export function useCardFundsReviewWorkflow(args: {
     autoNext: boolean
     replaceUrl: ReplaceUrlFn
     setSearchInput: React.Dispatch<React.SetStateAction<string>>
-    queueQuery: Pick<UseQueryResult<CardFundsReviewQueueView>, "refetch">
 }) {
     const {
         task,
@@ -53,11 +47,9 @@ export function useCardFundsReviewWorkflow(args: {
         autoNext,
         replaceUrl,
         setSearchInput,
-        queueQuery,
     } = args
 
     const completeMutation = useCompleteCardFundsMutation()
-    const responsibilityMutation = useWorkItemResponsibilityMutation()
     const registerReceiptMutation = useRegisterReceiptMutation()
     const registerInvoiceMutation = useRegisterInvoiceMutation()
 
@@ -215,19 +207,6 @@ export function useCardFundsReviewWorkflow(args: {
         setActionError,
     })
 
-    const { handleReleaseToTeam, startProcessing } =
-        useCardFundsResponsibilityActions({
-            task,
-            comment,
-            assertAllowed,
-            responsibilityMutation,
-            replaceUrl,
-            queueQuery,
-            setConfirmMode,
-            setLastResult,
-            setActionError,
-        })
-
     const { submitReceipt, submitInvoice } = useCardFundsRegistration({
         task,
         receiptForm,
@@ -281,38 +260,29 @@ export function useCardFundsReviewWorkflow(args: {
     })
 
     const formalPending =
-        completeMutation.isPending ||
-        responsibilityMutation.isPending ||
-        lastResult?.status === "unknown"
+        completeMutation.isPending || lastResult?.status === "unknown"
 
     const responsibilityStatus = task
         ? task.workItem.workItemStatus === "COMPLETED"
             ? ("completed" as const)
             : task.workItem.workItemStatus === "CLOSED"
               ? ("closed" as const)
-              : task.workItem.allowedActions.includes("START_PROCESSING")
-                ? ("pool_available" as const)
-                : task.workItem.allowedActions.some((action) =>
-                        [
-                            "APPROVE",
-                            "REJECT",
-                            "CONFIRM_ZERO",
-                            "RELEASE_TO_TEAM",
-                        ].includes(action),
-                    )
-                  ? ("assigned_to_me" as const)
-                  : task.workItem.actionBlockers.length > 0
-                    ? ("blocked" as const)
-                    : task.workItem.ownerUser
-                      ? ("assigned_to_other" as const)
-                      : ("blocked" as const)
+              : task.workItem.allowedActions.some((action) =>
+                      ["APPROVE", "REJECT", "CONFIRM_ZERO"].includes(action),
+                  )
+                ? ("assigned_to_me" as const)
+                : task.workItem.actionBlockers.length > 0
+                  ? ("blocked" as const)
+                  : task.workItem.ownerUser
+                    ? ("assigned_to_other" as const)
+                    : ("blocked" as const)
         : ("blocked" as const)
 
     const canConfirmZero = Boolean(
         task?.workItem.allowedActions.includes("CONFIRM_ZERO") &&
-            task?.reviewType === "OPENING" &&
-            Number(task.account.settledTotal) === 0 &&
-            Number(task.account.invoicedTotal) === 0,
+        task?.reviewType === "OPENING" &&
+        Number(task.account.settledTotal) === 0 &&
+        Number(task.account.invoicedTotal) === 0,
     )
 
     const allocatedSum = allocLines.reduce(
@@ -355,7 +325,6 @@ export function useCardFundsReviewWorkflow(args: {
         receiptPending: registerReceiptMutation.isPending,
         invoicePending: registerInvoiceMutation.isPending,
         completePending: completeMutation.isPending,
-        releasePending: responsibilityMutation.isPending,
         formalPending,
         responsibilityStatus,
         canConfirmZero,
@@ -367,7 +336,5 @@ export function useCardFundsReviewWorkflow(args: {
         submitInvoice,
         runApprove,
         submitReject,
-        handleReleaseToTeam,
-        startProcessing,
     }
 }

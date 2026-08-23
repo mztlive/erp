@@ -445,8 +445,8 @@ impl SupplierFulfillmentService {
             if !can_process_formal {
                 block_supplier_order_domain_actions(
                     &mut action_blockers,
-                    "START_PROCESSING_REQUIRED",
-                    "必须先从团队待办建立本人责任，才能执行供应商结果调查",
+                    "CURRENT_RESPONSIBILITY_REQUIRED",
+                    "当前账号不是开放任务的当前责任人",
                 );
                 false
             } else {
@@ -2609,7 +2609,7 @@ impl SupplierFulfillmentService {
                                     subject_version: order_for_tx.base.version.to_string(),
                                     owner_role: W26_OWNER_ROLE.to_string(),
                                     owner_organization_id: W26_OWNER_ORGANIZATION.to_string(),
-                                    owner_user_id: None,
+                                    owner_user_id: task_audit_actor.id().to_string(),
                                     assignment_source: AssignmentSource::SystemRule,
                                     priority: WorkItemPriority::High,
                                     due_at: None,

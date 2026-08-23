@@ -9,6 +9,7 @@ import type {
     BackendRole,
     BackendUserRole,
 } from "./backend-types"
+import { permissionLabel } from "@/features/admin/lib/permission-catalog"
 import { governancePolicies, instantToIso, SCOPE_TYPE_LABEL } from "./mappers"
 
 export async function fetchEffectiveAccess(
@@ -38,8 +39,8 @@ export async function fetchEffectiveAccess(
                 id: `perm-${i}`,
                 layer: "MODULE_ACTION" as const,
                 layerLabel: "模块与动作权限",
-                targetLabel: p,
-                capability: "ALLOW",
+                targetLabel: permissionLabel(p),
+                capability: p,
                 sourceType: "ROLE",
                 sourceLabel: role.name,
             })),

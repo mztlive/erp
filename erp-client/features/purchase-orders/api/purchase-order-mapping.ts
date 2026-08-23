@@ -204,8 +204,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                   paidAllocatedAmount:
                       center.payable_summary.paid_allocated_amount,
                   purchaseInvoiceAllocatedAmount:
-                      center.payable_summary
-                          .purchase_invoice_allocated_amount,
+                      center.payable_summary.purchase_invoice_allocated_amount,
               }
             : undefined,
         fulfillmentSummary: {
@@ -249,18 +248,12 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                       taskVersion: String(center.review_work_item.task_version),
                       subjectVersion: center.review_work_item.subject_version,
                       status: center.review_work_item.status,
-                      assignmentMode: center.review_work_item.assignment_mode,
                       ownerRole: center.review_work_item.owner_role,
                       ownerOrganizationId:
                           center.review_work_item.owner_organization_id,
                       ownerUserId:
                           center.review_work_item.owner_user_id ?? undefined,
                       processingState: center.review_work_item.processing_state,
-                      responsibilityActions:
-                          center.review_work_item.processing_state === "READY"
-                              ? (center.review_work_item
-                                    .responsibility_actions ?? [])
-                              : [],
                       domainAllowedActions:
                           center.review_work_item.processing_state === "READY"
                               ? (center.review_work_item

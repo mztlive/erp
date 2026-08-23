@@ -128,25 +128,7 @@ describe("useAccessAuditPage", () => {
         )
     })
 
-    it("passes subject params into the list query only for the scopes view", async () => {
-        currentSearchParams = "view=scopes&subjectType=USER&subjectId=u1"
-        const { view } = renderPageHook()
-
-        expect(view.result.current.explainSubject).toEqual({
-            type: "USER",
-            id: "u1",
-        })
-        await waitFor(() => expect(view.result.current.pageQuery.isSuccess).toBe(true))
-        expect(api.fetchAccessList).toHaveBeenCalledWith(
-            expect.objectContaining({
-                view: "scopes",
-                subjectType: "USER",
-                subjectId: "u1",
-            }),
-        )
-    })
-
-    it("keeps subject params out of the list query for non-scope views", async () => {
+    it("keeps subject params out of the list query and only opens the detail sheet", async () => {
         currentSearchParams = "view=users&subjectType=USER&subjectId=u1"
         const { view } = renderPageHook()
 
@@ -165,7 +147,7 @@ describe("useAccessAuditPage", () => {
     })
 
     it("derives hasActiveFilters from the active view's params", () => {
-        currentSearchParams = "view=users&status=enabled"
+        currentSearchParams = "view=users&q=abc"
         const { view } = renderPageHook()
         expect(view.result.current.hasActiveFilters).toBe(true)
 
@@ -215,24 +197,28 @@ describe("useAccessAuditPage", () => {
         expect(deepLink.view.result.current.panelOpen).toBe(true)
     })
 
-    it("builds applied chips including the scopes subject lock", () => {
-        currentSearchParams = "view=scopes&subjectType=USER&subjectId=u1&status=enabled"
+    it("builds applied chips for every active filter", () => {
+        currentSearchParams =
+            "view=audit&q=abc&actorId=a1&result=DENIED&action=user_role.revoke"
         const { view } = renderPageHook()
 
         const keys = view.result.current.appliedChips.map((chip) => chip.key)
-        expect(keys).toContain("subject")
-        expect(keys).toContain("status")
+        expect(keys).toEqual(["q", "action", "result", "actorId"])
+        expect(
+            view.result.current.appliedChips.find(
+                (chip) => chip.key === "action",
+            )?.label,
+        ).toBe("动作：用户角色 · 撤权")
         expect(view.result.current.hasActiveFilters).toBe(true)
 
         act(() => {
-            view.result.current.removeFilter("subject")
+            view.result.current.removeFilter("result")
         })
         expect(mockReplace).toHaveBeenCalledWith(
-            "/system/access-audit?view=scopes&status=enabled",
+            "/system/access-audit?view=audit&q=abc&actorId=a1&action=user_role.revoke",
             { scroll: false },
         )
     })
-
     it("updates pagination and URL on page change; page 1 removes the param", () => {
         currentSearchParams = "view=roles"
         const { view } = renderPageHook()
@@ -282,14 +268,14 @@ describe("useAccessAuditPage", () => {
     })
 
     it("clears all filters through clearFilters", () => {
-        currentSearchParams = "view=users&q=x&status=enabled&org=o1&risk=HIGH_PRIVILEGE"
+        currentSearchParams = "view=audit&q=x&actorId=a1&result=DENIED"
         const { view } = renderPageHook()
 
         act(() => {
             view.result.current.clearFilters()
         })
         expect(mockReplace).toHaveBeenCalledWith(
-            "/system/access-audit?view=users",
+            "/system/access-audit?view=audit",
             { scroll: false },
         )
         expect(view.result.current.searchDraft).toBe("")

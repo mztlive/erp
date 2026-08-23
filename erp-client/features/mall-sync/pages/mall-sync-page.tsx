@@ -27,10 +27,7 @@ import {
     MallSyncIncrementalDialog,
     MallSyncPullDialog,
 } from "@/features/mall-sync/pages/components/mall-sync-sync-dialogs"
-import {
-    MallSyncReleaseDialog,
-    MallSyncSourceFixDialog,
-} from "@/features/mall-sync/pages/components/mall-sync-mapping-dialogs"
+import { MallSyncSourceFixDialog } from "@/features/mall-sync/pages/components/mall-sync-mapping-dialogs"
 import { MallSyncConfirmMappingForm } from "@/features/mall-sync/pages/components/mall-sync-confirm-mapping-form"
 import { MAPPING_TYPE_LABEL } from "@/features/mall-sync/types"
 
@@ -144,9 +141,7 @@ export function MallSyncPage() {
                         ownership={page.ownership}
                         sealed={page.sealed}
                         view={url.view}
-                        onEnterHistory={() =>
-                            url.patchUrl({ view: "history" })
-                        }
+                        onEnterHistory={() => url.patchUrl({ view: "history" })}
                     />
 
                     <Alert>
@@ -183,9 +178,7 @@ export function MallSyncPage() {
                                 key={m.key}
                                 label={m.label}
                                 value={
-                                    m.count != null
-                                        ? m.count
-                                        : (m.value ?? "—")
+                                    m.count != null ? m.count : (m.value ?? "—")
                                 }
                                 detail={m.detail}
                                 active={url.view === m.targetView}
@@ -254,87 +247,95 @@ export function MallSyncPage() {
                                 page.result.status === "unknown" &&
                                 page.mappingTask?.reapplyOperation?.status ===
                                     "UNKNOWN" ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                onClick={() =>
-                                    void page.handleResolveUnknownReapply()
-                                }
-                            >
-                                查询重新归集处理结果
-                            </Button>
-                        ) : undefined
-                    }
-                />
-            ) : null}
-
-            {page.actionError ? (
-                <Alert variant="destructive">
-                    <AlertTitle>动作失败</AlertTitle>
-                    <AlertDescription>{page.actionError}</AlertDescription>
-                </Alert>
-            ) : null}
-
-            {/* ── 子视图内容 ── */}
-            <MallSyncReadViews
-                view={url.view}
-                context={context}
-                ownership={page.ownership}
-                data={page.data}
-                pageJobs={page.pageJobs}
-                jobColumns={page.jobColumns}
-                snapshotColumns={page.snapshotColumns}
-                diffColumns={page.diffColumns}
-                pagination={page.pagination}
-                onPaginationChange={page.setPagination}
-                retryPending={page.retryPending}
-                onRetryJob={() => page.setRetryConfirmOpen(true)}
-                patchUrl={url.patchUrl}
-                firstPhase={page.firstPhase}
-                sealed={page.sealed}
-                onPullDifference={(externalOrderNo) => {
-                    page.setPullOpen(true)
-                    page.pullForm.setFieldValue(
-                        "externalOrderNo",
-                        externalOrderNo,
-                    )
-                }}
-            />
-
-            {url.view === "mapping" ? (
-                <MallSyncMappingView
-                    data={page.data}
-                    mappingTask={page.mappingTask}
-                    mappingColumns={page.mappingColumns}
-                    selectedCandidateId={page.selectedCandidateId}
-                    onSelectCandidate={page.setSelectedCandidateId}
-                    confirmFormContent={
-                        <MallSyncConfirmMappingForm
-                            mappingTask={page.mappingTask}
-                            form={page.confirmForm}
-                            selectedCandidateId={page.selectedCandidateId}
-                            canConfirmMapping={page.canConfirmMapping}
-                            responsibilityStatus={page.responsibilityStatus}
-                            onOpenSourceFix={() => page.setSourceFixOpen(true)}
-                            onOpenRelease={() => page.setReleaseOpen(true)}
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() =>
+                                            void page.handleResolveUnknownReapply()
+                                        }
+                                    >
+                                        查询重新归集处理结果
+                                    </Button>
+                                ) : undefined
+                            }
                         />
-                    }
-                    mappingIndex={page.mappingIndex}
-                    responsibilityStatus={page.responsibilityStatus}
-                    canConfirmMapping={page.canConfirmMapping}
-                    responsibilityPending={page.responsibilityPending}
-                    reapplyPending={page.reapplyPending}
-                    onReapply={page.handleReapply}
-                    onResolveUnknownReapply={page.handleResolveUnknownReapply}
-                    onBackToQueue={() =>
-                        router.push(
-                            `/workspace/tasks?queueContextId=${encodeURIComponent(url.queueContextId)}`,
-                        )
-                    }
-                    onConfirm={() => page.confirmForm.handleSubmit()}
-                    onStartProcessing={page.handleStartProcessing}
-                />
-            ) : null}
+                    ) : null}
+
+                    {page.actionError ? (
+                        <Alert variant="destructive">
+                            <AlertTitle>动作失败</AlertTitle>
+                            <AlertDescription>
+                                {page.actionError}
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+
+                    {/* ── 子视图内容 ── */}
+                    <MallSyncReadViews
+                        view={url.view}
+                        context={context}
+                        ownership={page.ownership}
+                        data={page.data}
+                        pageJobs={page.pageJobs}
+                        jobColumns={page.jobColumns}
+                        snapshotColumns={page.snapshotColumns}
+                        diffColumns={page.diffColumns}
+                        pagination={page.pagination}
+                        onPaginationChange={page.setPagination}
+                        retryPending={page.retryPending}
+                        onRetryJob={() => page.setRetryConfirmOpen(true)}
+                        patchUrl={url.patchUrl}
+                        firstPhase={page.firstPhase}
+                        sealed={page.sealed}
+                        onPullDifference={(externalOrderNo) => {
+                            page.setPullOpen(true)
+                            page.pullForm.setFieldValue(
+                                "externalOrderNo",
+                                externalOrderNo,
+                            )
+                        }}
+                    />
+
+                    {url.view === "mapping" ? (
+                        <MallSyncMappingView
+                            data={page.data}
+                            mappingTask={page.mappingTask}
+                            mappingColumns={page.mappingColumns}
+                            selectedCandidateId={page.selectedCandidateId}
+                            onSelectCandidate={page.setSelectedCandidateId}
+                            confirmFormContent={
+                                <MallSyncConfirmMappingForm
+                                    mappingTask={page.mappingTask}
+                                    form={page.confirmForm}
+                                    selectedCandidateId={
+                                        page.selectedCandidateId
+                                    }
+                                    canConfirmMapping={page.canConfirmMapping}
+                                    responsibilityStatus={
+                                        page.responsibilityStatus
+                                    }
+                                    onOpenSourceFix={() =>
+                                        page.setSourceFixOpen(true)
+                                    }
+                                />
+                            }
+                            mappingIndex={page.mappingIndex}
+                            responsibilityStatus={page.responsibilityStatus}
+                            canConfirmMapping={page.canConfirmMapping}
+                            actionPending={page.actionPending}
+                            reapplyPending={page.reapplyPending}
+                            onReapply={page.handleReapply}
+                            onResolveUnknownReapply={
+                                page.handleResolveUnknownReapply
+                            }
+                            onBackToQueue={() =>
+                                router.push(
+                                    `/workspace/tasks?queueContextId=${encodeURIComponent(url.queueContextId)}`,
+                                )
+                            }
+                            onConfirm={() => page.confirmForm.handleSubmit()}
+                        />
+                    ) : null}
                 </>
             )}
 
@@ -362,12 +363,6 @@ export function MallSyncPage() {
                 open={page.sourceFixOpen}
                 onOpenChange={page.setSourceFixOpen}
                 form={page.sourceFixForm}
-            />
-
-            <MallSyncReleaseDialog
-                open={page.releaseOpen}
-                onOpenChange={page.setReleaseOpen}
-                form={page.releaseForm}
             />
 
             <FormalActionConfirmDialog

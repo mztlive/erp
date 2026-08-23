@@ -7,7 +7,6 @@ import {
     fetchImportBatchDetail,
     fetchImportBatchList,
     fetchImportIssues,
-    startImportConfirmationProcessing,
 } from "@/features/import-opening/api/legacy-import"
 import {
     importOpeningKeys,
@@ -33,7 +32,6 @@ vi.mock("@/features/import-opening/api/legacy-import", () => ({
     fetchImportBatchList: vi.fn(),
     fetchImportBatchDetail: vi.fn(),
     fetchImportIssues: vi.fn(),
-    startImportConfirmationProcessing: vi.fn(),
     completeImportConfirmation: vi.fn(),
     executeImportCommand: vi.fn(),
 }))
@@ -46,7 +44,12 @@ const listQuery: ImportBatchListQuery = {
 }
 
 const listView: ImportBatchListView = {
-    metrics: { pendingValidate: 1, pendingConfirm: 2, applying: 3, failedOrPartial: 4 },
+    metrics: {
+        pendingValidate: 1,
+        pendingConfirm: 2,
+        applying: 3,
+        failedOrPartial: 4,
+    },
     rows: [],
     totalCount: 0,
     queriedAt: "2026-08-14T00:00:00.000Z",
@@ -100,19 +103,27 @@ describe("useImportBatchListQuery", () => {
             () => useImportBatchListQuery(params),
             { queryClient: client },
         )
-        await waitFor(() => expect(fetchImportBatchList).toHaveBeenCalledTimes(1))
+        await waitFor(() =>
+            expect(fetchImportBatchList).toHaveBeenCalledTimes(1),
+        )
 
         params = { ...listQuery, page: 1 }
         rerender()
-        await waitFor(() => expect(client.getQueryCache().getAll()).toHaveLength(1))
+        await waitFor(() =>
+            expect(client.getQueryCache().getAll()).toHaveLength(1),
+        )
         expect(fetchImportBatchList).toHaveBeenCalledTimes(1)
         expect(
-            client.getQueryCache().find({ queryKey: importOpeningKeys.list(listQuery) }),
+            client
+                .getQueryCache()
+                .find({ queryKey: importOpeningKeys.list(listQuery) }),
         ).toBeDefined()
 
         params = { ...listQuery, page: 2 }
         rerender()
-        await waitFor(() => expect(fetchImportBatchList).toHaveBeenCalledTimes(2))
+        await waitFor(() =>
+            expect(fetchImportBatchList).toHaveBeenCalledTimes(2),
+        )
         expect(fetchImportBatchList).toHaveBeenLastCalledWith({
             ...listQuery,
             page: 2,
@@ -181,40 +192,6 @@ describe("useImportIssuesQuery", () => {
 })
 
 describe("useImportConfirmationOperations", () => {
-    it("wires startProcessing to the api and invalidates detail/list", async () => {
-        vi.mocked(startImportConfirmationProcessing).mockResolvedValue(undefined)
-        const client = createFreshQueryClient()
-        const invalidate = vi.spyOn(client, "invalidateQueries")
-        const { result } = renderHookWithProviders(
-            () => useImportConfirmationOperations(),
-            { queryClient: client },
-        )
-
-        await act(async () => {
-            await result.current.startProcessing({
-                workItemId: "w1",
-                expectedTaskVersion: "v1",
-                idempotencyKey: "k1",
-            })
-        })
-
-        expect(startImportConfirmationProcessing).toHaveBeenCalledWith(
-            {
-                workItemId: "w1",
-                expectedTaskVersion: "v1",
-                idempotencyKey: "k1",
-            },
-            expect.anything(),
-        )
-        expect(invalidate).toHaveBeenCalledTimes(2)
-        expect(invalidate).toHaveBeenCalledWith({
-            queryKey: [...importOpeningKeys.all, "detail"],
-        })
-        expect(invalidate).toHaveBeenCalledWith({
-            queryKey: [...importOpeningKeys.all, "list"],
-        })
-    })
-
     it("wires completeConfirmation to the api", async () => {
         vi.mocked(completeImportConfirmation).mockResolvedValue(undefined)
         const client = createFreshQueryClient()
@@ -242,7 +219,7 @@ describe("useImportConfirmationOperations", () => {
     })
 
     it("exposes the mutation error and clears it via resetError", async () => {
-        vi.mocked(startImportConfirmationProcessing).mockRejectedValue(
+        vi.mocked(completeImportConfirmation).mockRejectedValue(
             new Error("conflict"),
         )
         const { result } = renderHookWithProviders(() =>
@@ -251,9 +228,15 @@ describe("useImportConfirmationOperations", () => {
 
         await act(async () => {
             await expect(
-                result.current.startProcessing({
+                result.current.completeConfirmation({
+                    batchId: "b1",
+                    batchVersion: "1",
+                    trialVersion: "3",
+                    confirmationScope: "SALES",
                     workItemId: "w1",
-                    expectedTaskVersion: "v1",
+                    taskVersion: "v1",
+                    subjectVersion: "s1",
+                    action: "CONFIRM_SCOPE",
                     idempotencyKey: "k1",
                 }),
             ).rejects.toThrow("conflict")

@@ -53,13 +53,15 @@ describe("filterAllowedActions / recovery options", () => {
         expect(
             filterAllowedActions([
                 "APPROVE",
-                "START_PROCESSING",
+                "REASSIGN",
+                "REASSIGN_CURRENT_APPROVER",
                 "RETRY_CURRENT_STEP",
             ]),
         ).toEqual(["APPROVE"])
         expect(
             filterRecoveryOptions([
                 "RESUME_CURRENT_APPROVER",
+                "REASSIGN_CURRENT_APPROVER",
                 "RETRY_CURRENT_STEP",
                 "CANCEL_BLOCKED_APPROVAL",
             ]),

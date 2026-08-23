@@ -201,18 +201,14 @@ function makeMappingTask(
             taskVersion: "5",
             status: "OPEN",
             statusLabel: "待处理",
-            assignmentMode: "DIRECT",
             processingState: "READY",
             ownerUser: { id: "user-1", displayName: "张三" },
-            allowedActions: ["START_PROCESSING", "RELEASE_TO_TEAM"],
         },
         ...overrides,
     } as MappingTaskView
 }
 
-function makeJobRow(
-    overrides: Partial<MallSyncJobRow> = {},
-): MallSyncJobRow {
+function makeJobRow(overrides: Partial<MallSyncJobRow> = {}): MallSyncJobRow {
     return {
         jobId: "job-1",
         jobNo: "J-001",
@@ -456,12 +452,11 @@ describe("useMallSyncPage", () => {
             "assigned_to_other",
         )
 
-        const pool = makeMappingTask()
-        configuredWorkItem(pool).assignmentMode = "POOL"
-        configuredWorkItem(pool).ownerUser = undefined
-        setPageData(makePageData({ selectedMappingTask: pool }))
+        const missingOwner = makeMappingTask()
+        configuredWorkItem(missingOwner).ownerUser = undefined
+        setPageData(makePageData({ selectedMappingTask: missingOwner }))
         expect(renderPage().result.current.responsibilityStatus).toBe(
-            "pool_available",
+            "assigned_to_other",
         )
 
         const completed = makeMappingTask()
@@ -507,52 +502,6 @@ describe("useMallSyncPage", () => {
             second.current.setSelectedCandidateId("obj-1")
         })
         expect(second.current.canConfirmMapping).toBe(false)
-    })
-
-    it("starts processing with a stable idempotency key and refetches", async () => {
-        apiMocks.responsibility.mockRejectedValueOnce(new Error("boom"))
-        apiMocks.responsibility.mockResolvedValueOnce(undefined)
-        setPageData(makePageData())
-        const { result } = renderPage()
-
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-        expect(result.current.actionError).toBe("boom")
-        expect(apiMocks.responsibility).toHaveBeenCalledWith({
-            kind: "START_PROCESSING",
-            workItemId: "wi-1",
-            expectedTaskVersion: "5",
-            idempotencyKey: expect.stringMatching(
-                /^w17:start-processing:wi-1:/,
-            ),
-        })
-
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-        const firstKey = apiMocks.responsibility.mock.calls[0]?.[0]
-            .idempotencyKey as string
-        const secondKey = apiMocks.responsibility.mock.calls[1]?.[0]
-            .idempotencyKey as string
-        // 失败不清除身份，重试沿用同一键；成功后才清除。
-        expect(secondKey).toBe(firstKey)
-        expect(apiMocks.refetch).toHaveBeenCalledTimes(1)
-    })
-
-    it("does not start processing without configured owner routing", async () => {
-        setPageData(
-            makePageData({
-                selectedMappingTask: makeMappingTask({
-                    ownerRoutingState: "MISSING",
-                }),
-            }),
-        )
-        const { result } = renderPage()
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-        expect(apiMocks.responsibility).not.toHaveBeenCalled()
     })
 
     it("confirms the selected candidate and reports success", async () => {
@@ -691,47 +640,9 @@ describe("useMallSyncPage", () => {
             await result.current.sourceFixForm.handleSubmit()
         })
         expect(apiMocks.sourceFix).not.toHaveBeenCalled()
-        expect(result.current.actionError).toBe("当前责任不允许提交来源修复说明")
-    })
-
-    it("releases to team via the release form", async () => {
-        apiMocks.responsibility.mockResolvedValue(undefined)
-        setPageData(makePageData())
-        const { result } = renderPage()
-        act(() => {
-            result.current.releaseForm.setFieldValue("reason", "任务太多")
-        })
-        await act(async () => {
-            await result.current.releaseForm.handleSubmit()
-        })
-        expect(apiMocks.responsibility).toHaveBeenCalledWith(
-            expect.objectContaining({
-                kind: "RELEASE_TO_TEAM",
-                workItemId: "wi-1",
-                reason: "任务太多",
-            }),
+        expect(result.current.actionError).toBe(
+            "当前责任不允许提交来源修复说明",
         )
-        expect(result.current.releaseOpen).toBe(false)
-        expect(result.current.result).toMatchObject({
-            status: "succeeded",
-            title: "已退回团队",
-        })
-    })
-
-    it("reports a release failure", async () => {
-        apiMocks.responsibility.mockRejectedValue(new Error("版本冲突"))
-        setPageData(makePageData())
-        const { result } = renderPage()
-        act(() => {
-            result.current.setReleaseOpen(true)
-        })
-        await act(async () => {
-            await result.current.releaseForm.handleSubmit()
-        })
-        expect(result.current.actionError).toBe("版本冲突")
-        // 失败时不关闭对话框，也不写成功结果
-        expect(result.current.releaseOpen).toBe(true)
-        expect(result.current.result).toBeNull()
     })
 
     it("triggers a single-order pull from the form", async () => {
@@ -755,9 +666,7 @@ describe("useMallSyncPage", () => {
             externalOrderNo: "SO-123",
             reason: "漏单",
             stage: "FIRST_PHASE_MALL_OWNED",
-            idempotencyKey: expect.stringMatching(
-                /^w17:single-order:SO-123:/,
-            ),
+            idempotencyKey: expect.stringMatching(/^w17:single-order:SO-123:/),
         })
         expect(result.current.pullOpen).toBe(false)
         expect(result.current.result).toMatchObject({

@@ -56,7 +56,14 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
             {
                 id: "object",
                 header: "对象",
-                cell: ({ row }) => <span>{row.original.objectLabel}</span>,
+                cell: ({ row }) => (
+                    <div className="min-w-[8rem]">
+                        <div>{row.original.objectLabel}</div>
+                        <div className="text-xs text-muted-foreground">
+                            {row.original.objectTypeLabel}
+                        </div>
+                    </div>
+                ),
             },
             {
                 id: "result",

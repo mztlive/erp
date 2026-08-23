@@ -18,14 +18,6 @@ export const decisionFormSchema = z
 
 export type DecisionFormValues = z.input<typeof decisionFormSchema>
 
-/** 改派表单。目标用户与原因均必填。 */
-export const reassignFormSchema = z.object({
-    targetUserId: z.string().min(1, "请选择改派对象"),
-    reason: z.string().trim().min(1, "请填写改派原因"),
-})
-
-export type ReassignFormValues = z.input<typeof reassignFormSchema>
-
 /** 受阻取消与撤回共用的原因表单。 */
 export const reasonFormSchema = z.object({
     reason: z.string().trim().min(1, "请填写原因"),

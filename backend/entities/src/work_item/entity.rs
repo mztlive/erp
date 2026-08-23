@@ -259,8 +259,8 @@ pub struct WorkItemData {
     pub owner_role: String,
     /// 责任组织。
     pub owner_organization_id: String,
-    /// 当前个人责任人；开放任务必填。
-    pub owner_user_id: Option<String>,
+    /// 当前个人责任人；创建开放任务时必填。
+    pub owner_user_id: String,
     /// 初始责任来源。
     pub assignment_source: AssignmentSource,
     /// 优先级。
@@ -409,7 +409,7 @@ impl WorkItem {
             subject_version: data.subject_version,
             owner_role: data.owner_role,
             owner_organization_id: data.owner_organization_id,
-            owner_user_id: Some(owner_user_id.clone()),
+            owner_user_id: owner_user_id.clone(),
             assignment_source: AssignmentSource::ApprovalRuntime,
             priority: data.priority,
             due_at: data.due_at,
@@ -433,9 +433,7 @@ impl WorkItem {
         if normalized.work_item_type == WorkItemType::DocumentApproval {
             return Err(Error::from("单据审批任务必须使用专用构造路径"));
         }
-        normalized.ensure_assignment_invariant()?;
-        let has_direct_owner = normalized.owner_user_id.is_some();
-        let responsibility_actor_ids = normalized.owner_user_id.iter().cloned().collect();
+        let responsibility_actor_ids = vec![normalized.owner_user_id.clone()];
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             work_item_type: normalized.work_item_type,
@@ -447,12 +445,12 @@ impl WorkItem {
             status: WorkItemStatus::Open,
             owner_role: normalized.owner_role,
             owner_organization_id: normalized.owner_organization_id,
-            owner_user_id: normalized.owner_user_id,
+            owner_user_id: Some(normalized.owner_user_id),
             responsibility_actor_ids,
             assignment_source: normalized.assignment_source,
-            assigned_at: has_direct_owner.then_some(at),
+            assigned_at: Some(at),
             started_at: None,
-            current_assignment_at: has_direct_owner.then_some(at),
+            current_assignment_at: Some(at),
             last_activity_at: None,
             priority: normalized.priority,
             due_at: normalized.due_at,
@@ -677,7 +675,7 @@ struct NormalizedWorkItemData {
     subject_version: String,
     owner_role: String,
     owner_organization_id: String,
-    owner_user_id: Option<String>,
+    owner_user_id: String,
     assignment_source: AssignmentSource,
     priority: WorkItemPriority,
     due_at: Option<Instant>,
@@ -721,23 +719,18 @@ impl TryFrom<WorkItemData> for NormalizedWorkItemData {
                 ORGANIZATION_ID_MAX_LEN,
                 "责任组织过长",
             )?,
-            owner_user_id: normalize_optional_text(data.owner_user_id, "责任人", USER_ID_MAX_LEN)?,
+            owner_user_id: normalize_required_text(
+                data.owner_user_id,
+                "责任人不能为空",
+                USER_ID_MAX_LEN,
+                "责任人过长",
+            )?,
             assignment_source: data.assignment_source,
             priority: data.priority,
             due_at: data.due_at,
             reason_code: normalize_optional_text(data.reason_code, "原因代码", REASON_CODE_MAX_LEN)?,
             impact_summary: normalize_optional_text(data.impact_summary, "影响摘要", IMPACT_SUMMARY_MAX_LEN)?,
         })
-    }
-}
-
-impl NormalizedWorkItemData {
-    fn ensure_assignment_invariant(&self) -> Result<()> {
-        if self.owner_user_id.is_some() {
-            Ok(())
-        } else {
-            Err(Error::from("开放任务必须有唯一个人责任人"))
-        }
     }
 }
 
@@ -756,7 +749,7 @@ mod tests {
             subject_version: " v3 ".to_string(),
             owner_role: " sales ".to_string(),
             owner_organization_id: " org-1 ".to_string(),
-            owner_user_id: Some(" alice ".to_string()),
+            owner_user_id: " alice ".to_string(),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::Normal,
             due_at: Some(Instant::from_unix_secs(1_700_086_400)),
@@ -777,7 +770,7 @@ mod tests {
         assert_eq!(item.owner_user_id.as_deref(), Some("alice"));
         assert_eq!(item.responsibility_actor_ids, vec!["alice".to_string()]);
         let missing = WorkItemData {
-            owner_user_id: None,
+            owner_user_id: "   ".to_string(),
             ..direct_data()
         };
         assert!(WorkItem::new_at(WorkItemId::new("wi-2"), missing, Instant::from_unix_secs(100)).is_err());

@@ -5,7 +5,7 @@ use entities::mall_sync::{
     ReapplyOperationStatus,
 };
 use entities::source_registry::{MallSyncStage, RelationRole};
-use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
+use entities::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -19,13 +19,19 @@ pub(crate) const MASTER_MAPPING_TASK_SORT_FIELDS: &[&str] = &["created_at", "res
 
 /// 映射任务创建请求。
 ///
-/// 责任角色和用户不属于客户端输入；Service 必须按映射类型解析唯一责任路由。
+/// 责任角色由 Service 按映射类型解析；调用方必须明确指定当前责任人。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateMasterMappingTaskRequest {
     /// 待处理快照。
     pub source_snapshot_id: MallSalesOrderSnapshotId,
     /// 映射类型。
     pub mapping_type: MappingTaskType,
+    /// 创建时明确指定的当前责任人。
+    #[validate(
+        custom(function = "non_blank", message = "责任人不能为空"),
+        length(max = 128, message = "责任人ID不能超过128个字符")
+    )]
+    pub owner_user_id: String,
 }
 
 /// 映射任务响应视图。
@@ -97,10 +103,7 @@ pub struct MappingTaskWorkItemView {
     pub business_object_id: String,
     pub subject_version: String,
     pub status: WorkItemStatus,
-    pub assignment_source_unused: AssignmentSource,
     pub owner_user_id: Option<String>,
-    /// 当前 actor 的通用责任动作白名单。
-    pub allowed_actions: Vec<String>,
 }
 
 /// 来源白名单证据字段。

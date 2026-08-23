@@ -47,7 +47,6 @@ export const ENV_LABEL: Record<IntegrationEnvironment | "all", string> = {
 
 export const OWNER_LABEL: Record<IntegrationOwnerFilter, string> = {
     me: "我的任务",
-    team: "团队待处理",
     assigned: "已分派",
 }
 

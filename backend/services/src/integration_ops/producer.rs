@@ -59,11 +59,15 @@ pub(super) fn difference_owner_role(difference_type: &str) -> Result<&'static st
     }
 }
 
-/// 构造错误任务的正式责任池任务。
+/// 构造指定到人的错误处理任务。
+///
+/// # 参数
+/// * `task` - 集成错误事实
+/// * `owner_user_id` - 创建时明确解析的当前责任人
 ///
 /// # 错误
 /// 责任字段或关联字段不满足任务实体不变式时返回错误。
-pub(crate) fn error_work_item(task: &IntegrationErrorTask) -> Result<WorkItem> {
+pub(crate) fn error_work_item(task: &IntegrationErrorTask, owner_user_id: &str) -> Result<WorkItem> {
     WorkItem::new(
         WorkItemId::new(next_id()),
         WorkItemData {
@@ -73,7 +77,7 @@ pub(crate) fn error_work_item(task: &IntegrationErrorTask) -> Result<WorkItem> {
             subject_version: task.base.version.to_string(),
             owner_role: error_owner_role(task.error_class).to_string(),
             owner_organization_id: OWNER_ORGANIZATION.to_string(),
-            owner_user_id: None,
+            owner_user_id: owner_user_id.to_string(),
             assignment_source: AssignmentSource::SystemRule,
             priority: error_priority(task.error_class),
             due_at: None,
@@ -84,11 +88,18 @@ pub(crate) fn error_work_item(task: &IntegrationErrorTask) -> Result<WorkItem> {
     .map_err(Into::into)
 }
 
-/// 构造对账差异的正式责任池任务。
+/// 构造指定到人的对账差异任务。
+///
+/// # 参数
+/// * `difference` - 对账差异事实
+/// * `owner_user_id` - 创建时明确解析的当前责任人
 ///
 /// # 错误
 /// 差异类型未注册责任规则，或任务实体不变式不成立时返回错误。
-pub(super) fn difference_work_item(difference: &ReconciliationDifference) -> Result<WorkItem> {
+pub(super) fn difference_work_item(
+    difference: &ReconciliationDifference,
+    owner_user_id: &str,
+) -> Result<WorkItem> {
     let owner_role = difference_owner_role(&difference.difference_type)?;
     WorkItem::new(
         WorkItemId::new(next_id()),
@@ -99,7 +110,7 @@ pub(super) fn difference_work_item(difference: &ReconciliationDifference) -> Res
             subject_version: "0".to_string(),
             owner_role: owner_role.to_string(),
             owner_organization_id: OWNER_ORGANIZATION.to_string(),
-            owner_user_id: None,
+            owner_user_id: owner_user_id.to_string(),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::High,
             due_at: None,

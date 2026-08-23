@@ -227,13 +227,13 @@ impl IntegrationOpsService {
                         business_object_id: None,
                         error_class,
                         owner_role: Some(error_owner_role(error_class).to_string()),
-                        owner_user_id: None,
+                        owner_user_id: Some(actor.id().to_string()),
                     },
                 )?;
                 if req.attempt_summary.is_some() {
                     task.record_attempt(processed_at, req.attempt_summary)?;
                 }
-                let work_item = error_work_item(&task)?;
+                let work_item = error_work_item(&task, actor.id())?;
                 let audit = actor.clone().resource_log(
                     "inbox_message.failed",
                     "inbox_message",

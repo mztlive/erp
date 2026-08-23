@@ -32,9 +32,7 @@ info:
     | 实例列表/详情/历史 | `approval_instance:read` | 本人发起、本人当前责任或对象读取权与 DataScope；`managed`/`blocked` 另需类型运行管理权 |
     | 恢复选项 | `approval_instance:read` | 该类型运行管理权 + 实例对象读取权 + DataScope；无权不得泄露存在性 |
     | 决定 | `approval_instance:decide` | 当前开放任务责任 + 当前审批人资格 + 对象读取权 + DataScope + 岗位分离 |
-    | 改派候选人 | `approval_instance:reassign` | 该类型运行管理权 + 实例对象读取权 + DataScope |
     | 恢复当前审批人 | `approval_instance:resume` | 该类型运行管理权 + 实例对象读取权 + DataScope |
-    | 改派当前审批人 | `approval_instance:reassign` | 该类型运行管理权 + 实例对象读取权 + DataScope；只接受人员失效 blocker |
     | 受阻取消 | `approval_instance:cancel_blocked` | 该类型运行管理权 + 实例对象读取权 + DataScope；只接受非人员一致性 blocker |
     | 通用待办转交/关闭 | `work_item:reassign` / `work_item:close` | 非审批任务责任校验；`DocumentApproval` 或带 `approval_node_execution_id` 的任务必须 409 |
 
@@ -58,7 +56,7 @@ tags:
   - name: ApprovalProcess
     description: 固定单据类型审批流程定义管理。
   - name: ApprovalInstance
-    description: 审批运行、决定、查询、恢复、改派与受阻取消。
+    description: 审批运行、决定、查询、恢复与受阻取消。
   - name: WorkItem
     description: 通用待办读取与非审批任务保护写接口。
 security:
@@ -122,7 +120,7 @@ paths:
       summary: 按定义期静态规则搜索可选审批人
       description: |
         动作级权限 `approval_process:read`，并再校验该类型定义管理权。
-        只执行定义期静态过滤，不得复用运行期改派候选列表。
+        只执行定义期静态过滤；该候选列表不得用于运行期改变审批责任人。
         `limit` 默认 20、最大 50。
       parameters:
         - $ref: '#/components/parameters/TraceId'
@@ -506,7 +504,8 @@ paths:
       summary: 返回当前 blocker 的唯一合法恢复方式
       description: |
         动作级权限 `approval_instance:read`，并再校验该类型运行管理权、对象读取权和 DataScope。
-        人员失效只允许恢复或改派；非人员一致性 blocker 只允许受阻取消。无权时不得泄露实例存在性。
+        人员失效只允许原审批人重新合格后恢复；非人员一致性 blocker 只允许受阻取消。
+        审批运行时不提供转交或改派。无权时不得泄露实例存在性。
       parameters:
         - $ref: '#/components/parameters/TraceId'
         - $ref: '#/components/parameters/InstanceIdPath'
@@ -523,45 +522,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
-
-  /admin/approval-instances/{id}/eligible-reassignees:
-    get:
-      tags: [ApprovalInstance]
-      operationId: listEligibleReassignees
-      summary: 按当前单据与岗位分离搜索改派候选人
-      description: |
-        动作级权限 `approval_instance:reassign`，并再校验该类型运行管理权、对象读取权和 DataScope。
-        必须按当前实例对应的具体业务对象重验账号、任职、审批资格、对象读取权、DataScope 和岗位分离。
-        不得复用定义期候选列表。`limit` 默认 20、最大 50。无权时不得泄露实例或候选人存在性。
-      parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/InstanceIdPath'
-        - $ref: '#/components/parameters/Search'
-        - $ref: '#/components/parameters/Cursor'
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 50
-            default: 20
-      responses:
-        '200':
-          description: 运行期改派候选人。
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AssigneeCandidateListSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
         '500':
           $ref: '#/components/responses/PolicyNotRegistered'
 
@@ -586,47 +546,6 @@ paths:
       responses:
         '200':
           description: 恢复后的最新实例摘要。
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApprovalCommandSuccessEnvelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
-
-  /admin/approval-instances/{id}/reassign-current-approver:
-    post:
-      tags: [ApprovalInstance]
-      operationId: reassignCurrentApprover
-      summary: 仅对人员失效 blocker 改派当前审批人
-      description: |
-        动作级权限 `approval_instance:reassign`，并再校验该类型运行管理权和实例 DataScope。
-        请求只允许目标用户、非空原因、可空已关闭任务版本、实例/执行/分派版本和幂等键。
-        不得接受 node key、定义 ID、原审批人或恢复动作枚举。不得实现为普通管理员转签。
-        ACTIVE 实例、原审批人已恢复或结构性 blocker 必须返回稳定冲突。
-      parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/InstanceIdPath'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ReassignApproverRequest'
-      responses:
-        '200':
-          description: 改派后的最新实例摘要。
           content:
             application/json:
               schema:
@@ -1081,7 +1000,7 @@ components:
       enum: [CREATE_DRAFT, REPLACE_NODES, PUBLISH, RETIRE]
     RecoveryAction:
       type: string
-      enum: [RESUME_CURRENT_APPROVER, REASSIGN_CURRENT_APPROVER, CANCEL_BLOCKED]
+      enum: [RESUME_CURRENT_APPROVER, CANCEL_BLOCKED]
     CommandOutcome:
       type: string
       enum: [APPLIED, BLOCKED, IDEMPOTENT_REPLAY]
@@ -1174,33 +1093,6 @@ components:
         expected_assignment_version:
           $ref: '#/components/schemas/VersionString'
         expected_closed_task_version:
-          $ref: '#/components/schemas/VersionString'
-        idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
-    ReassignApproverRequest:
-      type: object
-      additionalProperties: false
-      required:
-        - target_user_id
-        - reason
-        - expected_instance_version
-        - expected_execution_version
-        - expected_assignment_version
-        - idempotency_key
-      properties:
-        target_user_id:
-          type: string
-          minLength: 1
-        reason:
-          type: string
-          minLength: 1
-        expected_closed_task_version:
-          $ref: '#/components/schemas/VersionString'
-        expected_instance_version:
-          $ref: '#/components/schemas/VersionString'
-        expected_execution_version:
-          $ref: '#/components/schemas/VersionString'
-        expected_assignment_version:
           $ref: '#/components/schemas/VersionString'
         idempotency_key:
           $ref: '#/components/schemas/IdempotencyKey'
@@ -1756,8 +1648,6 @@ components:
             - APPROVAL_INSTANCE_BLOCKED
             - APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER
             - APPROVAL_CURRENT_APPROVER_NOT_RECOVERED
-            - APPROVAL_CURRENT_APPROVER_RECOVERED
-            - APPROVAL_REASSIGN_NOT_ALLOWED_FOR_BLOCKER
             - APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED
             - APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN
             - APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT

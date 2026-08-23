@@ -2,22 +2,12 @@
 
 import * as React from "react"
 
-import type { AccountDraft } from "@/features/admin/account-form-dialog"
+import type { RoleAssignmentTarget } from "@/features/access-audit/components/role-assignment-dialog"
 import type {
     AccessChangeCommand,
     AccessGovernancePolicyView,
     AccessListView,
 } from "@/features/access-audit/types"
-
-export type AccountFormState = {
-    mode: "create" | "edit"
-    account: AccountDraft | null
-}
-
-export type DeletingAccountState = {
-    id: string
-    account: string
-}
 
 export type DeletingRoleState = {
     id: string
@@ -32,11 +22,8 @@ export type AccessColumnsInput = {
     openExplain: (type: "ROLE" | "USER", id: string) => void
     openEvent: (id: string) => void
     startChange: (command: AccessChangeCommand) => Promise<void>
-    setAccountForm: React.Dispatch<
-        React.SetStateAction<AccountFormState | null>
-    >
-    setDeletingAccount: React.Dispatch<
-        React.SetStateAction<DeletingAccountState | null>
+    setRoleAssignment: React.Dispatch<
+        React.SetStateAction<RoleAssignmentTarget | null>
     >
     setDeletingRole: React.Dispatch<
         React.SetStateAction<DeletingRoleState | null>

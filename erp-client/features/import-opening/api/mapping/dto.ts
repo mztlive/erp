@@ -66,7 +66,6 @@ export type BackendConfirmation = {
         task_version: string
         subject_version: string
         status: "OPEN" | "COMPLETED" | "CLOSED"
-        assignment_mode: "DIRECT" | "POOL"
         owner_role: string
         owner_organization_id: string
         owner_user_id?: string | null

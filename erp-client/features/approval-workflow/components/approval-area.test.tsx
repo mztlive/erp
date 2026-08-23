@@ -130,11 +130,7 @@ describe("ExecutionHistory", () => {
 describe("ApprovalActionBar", () => {
     it("hides generic work-item actions on approval tasks", () => {
         expect(
-            hasForbiddenWorkItemActions([
-                "APPROVE",
-                "REJECT",
-                "START_PROCESSING",
-            ]),
+            hasForbiddenWorkItemActions(["APPROVE", "REJECT", "REASSIGN"]),
         ).toBe(true)
         wrapper(
             <ApprovalActionBar
@@ -153,17 +149,14 @@ describe("ApprovalActionBar", () => {
         expect(screen.queryByRole("button", { name: "关闭" })).toBeNull()
     })
 
-    it("only shows personnel recovery when the server authorizes it", () => {
+    it("only shows resume and ignores a stale approval transfer action", () => {
         wrapper(
             <ApprovalActionBar
                 allowedActions={[
                     "RESUME_CURRENT_APPROVER",
                     "REASSIGN_CURRENT_APPROVER",
                 ]}
-                recoveryOptions={[
-                    "RESUME_CURRENT_APPROVER",
-                    "REASSIGN_CURRENT_APPROVER",
-                ]}
+                recoveryOptions={["RESUME_CURRENT_APPROVER"]}
                 instance={{
                     id: "inst-1",
                     status: "BLOCKED",
@@ -178,8 +171,8 @@ describe("ApprovalActionBar", () => {
             screen.getByRole("button", { name: "恢复当前审批人" }),
         ).toBeTruthy()
         expect(
-            screen.getByRole("button", { name: "改派当前审批人" }),
-        ).toBeTruthy()
+            screen.queryByRole("button", { name: "改派当前审批人" }),
+        ).toBeNull()
         expect(
             screen.queryByRole("button", { name: "取消受阻审批" }),
         ).toBeNull()
@@ -244,9 +237,7 @@ describe("ApprovalActionBar", () => {
         )
         fireEvent.click(screen.getByRole("button", { name: "通过" }))
         expect(screen.queryByRole("dialog")).toBeNull()
-        expect(
-            screen.queryByRole("button", { name: "确认通过" }),
-        ).toBeNull()
+        expect(screen.queryByRole("button", { name: "确认通过" })).toBeNull()
         expect(screen.getByRole("button", { name: "驳回" })).toBeTruthy()
     })
 

@@ -11,7 +11,6 @@ import {
     ListChecksIcon,
     LoaderCircleIcon,
     LockIcon,
-    PlayIcon,
     ShieldAlertIcon,
     ShieldCheckIcon,
     TriangleAlertIcon,
@@ -169,9 +168,12 @@ export type FormalActionConfirmDialogProps = ControllableDialogProps & {
     toStatus: WorkflowStatus
     lockedFields?: readonly React.ReactNode[]
     effects?: readonly React.ReactNode[]
+    /** 需要随正式动作一并提交的显式业务字段。 */
+    formContent?: React.ReactNode
     nextDepartment?: React.ReactNode
     irreversibleEffects?: readonly React.ReactNode[]
     pending?: boolean
+    confirmDisabled?: boolean
     onConfirm: () => void | Promise<void>
     onCancel?: () => void
     onConfirmError?: (error: unknown) => void
@@ -193,9 +195,11 @@ function FormalActionConfirmDialog({
     toStatus,
     lockedFields = [],
     effects = [],
+    formContent,
     nextDepartment,
     irreversibleEffects = [],
     pending = false,
+    confirmDisabled = false,
     onConfirm,
     onCancel,
     onConfirmError,
@@ -271,6 +275,8 @@ function FormalActionConfirmDialog({
                         items={effects}
                     />
 
+                    {formContent}
+
                     {nextDepartment != null ? (
                         <Alert>
                             <UsersRoundIcon aria-hidden="true" />
@@ -311,7 +317,7 @@ function FormalActionConfirmDialog({
                                 ? "destructive"
                                 : "default"
                         }
-                        disabled={isPending}
+                        disabled={isPending || confirmDisabled}
                         onClick={() => void handleConfirm()}
                     >
                         {isPending ? (
@@ -335,7 +341,6 @@ function FormalActionConfirmDialog({
 }
 
 export type ResponsibilityStatus =
-    | "pool_available"
     | "assigned_to_me"
     | "assigned_to_other"
     | "blocked"
@@ -343,11 +348,6 @@ export type ResponsibilityStatus =
     | "closed"
 
 const responsibilityStatusMeta = {
-    pool_available: {
-        label: responsibilityText.poolAvailable,
-        tone: "info",
-        icon: CircleDashedIcon,
-    },
     assigned_to_me: {
         label: responsibilityText.assignedToMe,
         tone: "success",
@@ -401,13 +401,11 @@ export type SequentialProcessBarProps = Omit<
      * 必须传与行为一致的文案（按钮说动作，不说机制）。
      */
     backLabel?: string
-    /** 责任池任务形成个人责任时的动作文案。 */
-    startProcessingLabel?: string
     /** 主动作会离开当前页面（如跳转专用处理器）时置 false，避免两个同义按钮。 */
     showProcessNext?: boolean
     /**
      * 只读角色（如销售/财务查看进度）置 false：
-     * 不渲染业务主动作与“开始处理”。
+     * 不渲染业务主动作。
      */
     showProcess?: boolean
     /**
@@ -418,7 +416,6 @@ export type SequentialProcessBarProps = Omit<
     onBack: () => void
     onProcess: () => void
     onProcessNext: () => void
-    onStartProcessing?: () => void
 }
 
 /** 连续审核/确认页的队列位置、当前责任和处理动作。 */
@@ -434,14 +431,12 @@ function SequentialProcessBar({
     processDisabled = false,
     processNextDisabled,
     backLabel = "返回队列",
-    startProcessingLabel = responsibilityText.start,
     showProcessNext = true,
     showProcess = true,
     statusExtras,
     onBack,
     onProcess,
     onProcessNext,
-    onStartProcessing,
     className,
     ...props
 }: SequentialProcessBarProps) {
@@ -454,11 +449,6 @@ function SequentialProcessBar({
         processNextDisabled !== undefined
             ? !pending && !processNextDisabled
             : canProcess
-    const canStartProcessing =
-        showProcess &&
-        responsibilityStatus === "pool_available" &&
-        onStartProcessing !== undefined
-
     return (
         <section
             data-slot="sequential-process-bar"
@@ -504,31 +494,6 @@ function SequentialProcessBar({
                     />
                     {backLabel}
                 </Button>
-
-                {canStartProcessing ? (
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={pending}
-                        onClick={onStartProcessing}
-                    >
-                        {pending ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : (
-                            <PlayIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                        )}
-                        {pending
-                            ? responsibilityText.starting
-                            : startProcessingLabel}
-                    </Button>
-                ) : null}
 
                 {showProcess ? (
                     <Button

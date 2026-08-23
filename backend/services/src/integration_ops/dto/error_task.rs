@@ -22,6 +22,9 @@ pub struct CreateErrorTaskRequest {
     pub business_object_id: Option<String>,
     /// 错误分类。
     pub error_class: ErrorClass,
+    /// 创建时明确指定的当前责任人。
+    #[validate(length(min = 1, max = 128, message = "责任人不能为空或过长"))]
+    pub owner_user_id: String,
 }
 
 /// 错误任务列表查询参数（分页参数与筛选字段扁平传递）。

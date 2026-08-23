@@ -471,7 +471,6 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "approval_instance:read",
     "approval_instance:cancel",
     "approval_instance:resume",
-    "approval_instance:reassign",
     "approval_instance:cancel_blocked",
     "file_asset:list",
     "file_asset:detail",
@@ -537,7 +536,6 @@ const SYSADMIN_PERMISSIONS: &[&str] = &[
     "approval_instance:decide",
     "approval_instance:cancel",
     "approval_instance:resume",
-    "approval_instance:reassign",
     "approval_instance:cancel_blocked",
     "approval_instance:upgrade_binding",
     "file_asset:list",
@@ -724,12 +722,11 @@ const APPROVAL_HTTP_ACTION_PERMISSIONS: &[&str] = &[
     "approval_instance:decide",
     "approval_instance:cancel",
     "approval_instance:resume",
-    "approval_instance:reassign",
     "approval_instance:cancel_blocked",
     "approval_instance:upgrade_binding",
 ];
 
-/// 将仍保持领取/诊断/恢复种子的角色精确升级到 12 个审批动作权限。
+/// 将仍保持领取/诊断/恢复种子的角色精确升级到 11 个审批动作权限。
 ///
 /// # 错误
 /// 权限解析或 Casbin 写入失败时返回错误。
@@ -1540,7 +1537,6 @@ mod tests {
                     | &"approval_instance:read"
                     | &"approval_instance:cancel"
                     | &"approval_instance:resume"
-                    | &"approval_instance:reassign"
                     | &"approval_instance:cancel_blocked"
             ) {
                 continue;
@@ -1581,7 +1577,7 @@ mod tests {
 
     #[test]
     fn approval_http_permissions_replace_recover_diagnose_and_team_actions() {
-        assert_eq!(APPROVAL_HTTP_ACTION_PERMISSIONS.len(), 12);
+        assert_eq!(APPROVAL_HTTP_ACTION_PERMISSIONS.len(), 11);
         for role in PREDEFINED_ROLES {
             for forbidden in ["approval_instance:recover", "approval_instance:diagnose"] {
                 assert!(

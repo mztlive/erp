@@ -7,6 +7,7 @@ import {
     createRole,
     deleteAdmin,
     deleteRole,
+    fetchAdmins,
     fetchAssignableRoles,
     fetchRoles,
     updateAdmin,
@@ -25,6 +26,14 @@ const adminKeys = {
     admins: () => [...adminKeys.all, "admins"] as const,
     roles: () => [...adminKeys.all, "roles"] as const,
     assignableRoles: () => [...adminKeys.all, "roles", "assignable"] as const,
+}
+
+/** 全部管理员账号（角色页用于统计绑定账号、账号页用于列表）。 */
+export function useAdminsQuery() {
+    return useQuery({
+        queryKey: adminKeys.admins(),
+        queryFn: fetchAdmins,
+    })
 }
 
 /** 全部角色列表（账号页用于展示角色名、角色页用于列表）。 */

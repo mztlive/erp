@@ -14,10 +14,6 @@ pub const DEFAULT_HISTORY_LIMIT: u32 = 50;
 pub const MAX_HISTORY_LIMIT: u32 = 100;
 /// 详情最近执行条数上限。
 pub const DETAIL_HISTORY_LIMIT: u32 = 20;
-/// 改派候选人默认页大小。
-pub const DEFAULT_REASSIGNEE_LIMIT: u32 = 20;
-/// 改派候选人最大页大小。
-pub const MAX_REASSIGNEE_LIMIT: u32 = 50;
 
 /// 实例列表固定视图。
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -202,32 +198,6 @@ impl InstanceHistoryQuery {
     }
 }
 
-/// 改派候选人查询。
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct EligibleReassigneesQuery {
-    /// 检索词。
-    pub search: Option<String>,
-    /// 稳定游标。
-    pub cursor: Option<String>,
-    /// 页大小，默认 20，最大 50。
-    pub limit: Option<u32>,
-}
-
-impl EligibleReassigneesQuery {
-    /// 规范化改派候选人页大小。
-    ///
-    /// # 错误
-    /// 超过上限时返回说明。
-    pub fn normalized_limit(&self) -> Result<u32, String> {
-        let limit = self.limit.unwrap_or(DEFAULT_REASSIGNEE_LIMIT);
-        if (1..=MAX_REASSIGNEE_LIMIT).contains(&limit) {
-            return Ok(limit);
-        }
-        Err(format!("limit 必须在 1 到 {MAX_REASSIGNEE_LIMIT} 之间"))
-    }
-}
-
 /// 决定 HTTP 请求。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -279,26 +249,6 @@ pub struct ResumeApproverHttpRequest {
     pub expected_assignment_version: String,
     /// 可空已关闭任务版本。
     pub expected_closed_task_version: Option<String>,
-    /// 幂等键。
-    pub idempotency_key: String,
-}
-
-/// 改派当前审批人请求。
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct ReassignApproverHttpRequest {
-    /// 目标用户。
-    pub target_user_id: String,
-    /// 非空原因。
-    pub reason: String,
-    /// 可空已关闭任务版本。
-    pub expected_closed_task_version: Option<String>,
-    /// 期望实例版本。
-    pub expected_instance_version: String,
-    /// 期望执行版本。
-    pub expected_execution_version: String,
-    /// 期望绑定版本。
-    pub expected_assignment_version: String,
     /// 幂等键。
     pub idempotency_key: String,
 }
@@ -359,8 +309,8 @@ mod tests {
 
     use super::{
         CancelBlockedHttpRequest, InstanceListCursor, InstanceListQuery, InstanceListView,
-        InstanceStatusFilter, ReassignApproverHttpRequest, ResumeApproverHttpRequest,
-        SubmitDecisionHttpRequest, UpgradeBindingHttpRequest, DETAIL_HISTORY_LIMIT,
+        InstanceStatusFilter, ResumeApproverHttpRequest, SubmitDecisionHttpRequest,
+        UpgradeBindingHttpRequest, DETAIL_HISTORY_LIMIT,
     };
 
     #[test]
@@ -399,23 +349,13 @@ mod tests {
     }
 
     #[test]
-    fn resume_reassign_cancel_upgrade_deny_unknown_fields() {
+    fn resume_cancel_upgrade_deny_unknown_fields() {
         assert!(serde_json::from_value::<ResumeApproverHttpRequest>(json!({
             "expected_instance_version": "1",
             "expected_execution_version": "1",
             "expected_assignment_version": "1",
             "idempotency_key": "k1",
             "target_user_id": "u9"
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<ReassignApproverHttpRequest>(json!({
-            "target_user_id": "u9",
-            "reason": "换人",
-            "expected_instance_version": "1",
-            "expected_execution_version": "1",
-            "expected_assignment_version": "1",
-            "idempotency_key": "k1",
-            "recovery_action": "RETRY_CURRENT_STEP"
         }))
         .is_err());
         assert!(serde_json::from_value::<CancelBlockedHttpRequest>(json!({

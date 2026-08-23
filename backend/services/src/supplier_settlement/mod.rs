@@ -370,7 +370,7 @@ impl SupplierSettlementService {
                 subject_version: statement.subject_hash.clone(),
                 owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
                 owner_organization_id: SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.to_string(),
-                owner_user_id: None,
+                owner_user_id: req.reviewer_user_id.clone(),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::High,
                 due_at: None,
@@ -1138,14 +1138,9 @@ fn settlement_review_access(
     actor_id: &str,
     eligible: bool,
     separation_satisfied: bool,
-) -> (
-    Vec<crate::work_item::WorkItemAllowedAction>,
-    Vec<String>,
-    Vec<dto::SettlementReviewActionBlockerView>,
-) {
+) -> (Vec<String>, Vec<dto::SettlementReviewActionBlockerView>) {
     if !eligible {
         return (
-            Vec::new(),
             Vec::new(),
             vec![review_blocker(
                 "REVIEW_DECISION",
@@ -1157,7 +1152,6 @@ fn settlement_review_access(
     if !separation_satisfied {
         return (
             Vec::new(),
-            Vec::new(),
             vec![review_blocker(
                 "REVIEW_DECISION",
                 "SEGREGATION_OF_DUTIES",
@@ -1165,26 +1159,10 @@ fn settlement_review_access(
             )],
         );
     }
-    if item.owner_user_id.is_none() && false {
-        return (
-            vec![crate::work_item::WorkItemAllowedAction::Process],
-            Vec::new(),
-            Vec::new(),
-        );
-    }
     if item.is_owned_by(actor_id) {
-        let mut responsibility_actions = Vec::new();
-        if false {
-            responsibility_actions.push(crate::work_item::WorkItemAllowedAction::Reassign);
-        }
-        return (
-            responsibility_actions,
-            vec!["REJECT".to_string(), "CONFIRM".to_string()],
-            Vec::new(),
-        );
+        return (vec!["REJECT".to_string(), "CONFIRM".to_string()], Vec::new());
     }
     (
-        Vec::new(),
         Vec::new(),
         vec![review_blocker(
             "REVIEW_DECISION",
@@ -1614,6 +1592,7 @@ fn submit_review_fingerprint(req: &SubmitSettlementReviewRequest) -> String {
         req.subject_hash.clone(),
         req.refresh_cutoff_policy_id.clone(),
         req.expected_refresh_cutoff_policy_version.clone(),
+        req.reviewer_user_id.clone(),
         req.operation_id.clone(),
         req.comment.clone().unwrap_or_default(),
     ])
@@ -1913,7 +1892,7 @@ impl SupplierSettlementService {
         }
         let eligible = true;
         let separation_satisfied = statement.prepared_by != actor.id();
-        let (allowed_actions, domain_actions, action_blockers) =
+        let (domain_actions, action_blockers) =
             settlement_review_access(&item, actor.id(), eligible, separation_satisfied);
         Ok((
             Some(dto::SettlementReviewWorkItemView {
@@ -1923,11 +1902,9 @@ impl SupplierSettlementService {
                 subject_version: item.subject_version,
                 status: item.status,
                 processing_state: dto::SettlementReviewProcessingState::Ready,
-                assignment_source_unused: item.assignment_source,
                 owner_role: item.owner_role,
                 owner_organization_id: item.owner_organization_id,
                 owner_user_id: item.owner_user_id,
-                allowed_actions,
                 action_blockers,
             }),
             Vec::new(),
@@ -2348,7 +2325,7 @@ mod tests {
                 subject_version: statement.subject_hash.clone(),
                 owner_role: SETTLEMENT_REVIEW_OWNER_ROLE.to_string(),
                 owner_organization_id: SETTLEMENT_REVIEW_OWNER_ORGANIZATION_ID.to_string(),
-                owner_user_id: Some("reviewer-1".to_string()),
+                owner_user_id: "reviewer-1".to_string(),
                 assignment_source: AssignmentSource::SystemRule,
                 priority: WorkItemPriority::High,
                 due_at: None,
@@ -2437,23 +2414,18 @@ mod tests {
     fn review_access_is_actor_specific_and_fail_closed() {
         let statement = sample_statement();
         let item = sample_work_item(&statement);
-        let (actions, domain_actions, blockers) =
-            settlement_review_access(&item, "other-reviewer", true, true);
-        assert!(actions.is_empty());
+        let (domain_actions, blockers) = settlement_review_access(&item, "other-reviewer", true, true);
         assert!(domain_actions.is_empty());
         assert_eq!(blockers[0].code, "CURRENT_OWNER_MISMATCH");
 
-        let (actions, domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", true, true);
-        assert!(actions.is_empty());
+        let (domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", true, true);
         assert_eq!(domain_actions, vec!["REJECT", "CONFIRM"]);
         assert!(blockers.is_empty());
 
-        let (actions, domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", false, true);
-        assert!(actions.is_empty());
+        let (domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", false, true);
         assert!(domain_actions.is_empty());
         assert_eq!(blockers[0].code, "ASSIGNMENT_NOT_ELIGIBLE");
-        let (actions, domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", true, false);
-        assert!(actions.is_empty());
+        let (domain_actions, blockers) = settlement_review_access(&item, "reviewer-1", true, false);
         assert!(domain_actions.is_empty());
         assert_eq!(blockers[0].code, "SEGREGATION_OF_DUTIES");
     }

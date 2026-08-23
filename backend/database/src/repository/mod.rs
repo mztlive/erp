@@ -54,4 +54,4 @@ pub use projection::{ProjectionDeliveryEscalation, ProjectionDeliveryFailure};
 pub use publication::{PublicationDeliveryEscalation, PublicationDeliveryFailure};
 pub use supplier::SupplierAccountRow;
 pub use supplier_offering::SupplierOfferingRow;
-pub use work_item::{StartProcessingEligibility, StartProcessingOutcome, WorkItemRow};
+pub use work_item::WorkItemRow;

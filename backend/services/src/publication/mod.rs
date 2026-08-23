@@ -1078,7 +1078,7 @@ impl PublicationService {
                     subject_version: trigger.source_version.trim().to_string(),
                     owner_role: SUPPLIER_EXCEPTION_OWNER_ROLE.to_string(),
                     owner_organization_id: DEFAULT_OWNER_ORGANIZATION.to_string(),
-                    owner_user_id: None,
+                    owner_user_id: trigger.owner_user_id.clone(),
                     assignment_source: AssignmentSource::SystemRule,
                     priority: WorkItemPriority::High,
                     due_at: None,

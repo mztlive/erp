@@ -141,9 +141,7 @@ export function ConfirmSection({
         setConfirming,
         returning,
         setReturning,
-        startProcessing,
         complete,
-        isStarting,
         isCompleting,
         error,
     } = useConfirmationActions(batch)
@@ -159,20 +157,13 @@ export function ConfirmSection({
             ) : null}
 
             {error ? (
-                <BusinessFailureState
-                    title="责任确认未完成"
-                    error={error}
-                />
+                <BusinessFailureState title="责任确认未完成" error={error} />
             ) : null}
 
             <div className="grid gap-3 md:grid-cols-2">
                 {batch.confirmations.map((confirmation) => {
                     const task = confirmation.workItem
                     const actions = task?.allowedActions ?? []
-                    const canStart =
-                        !workItemTypeMissing &&
-                        confirmation.result === "PENDING" &&
-                        actions.includes("START_PROCESSING")
                     const canConfirm =
                         !workItemTypeMissing &&
                         confirmation.result === "PENDING" &&
@@ -204,9 +195,7 @@ export function ConfirmSection({
                                                   : confirmation.result ===
                                                       "INVALIDATED"
                                                     ? "已失效"
-                                                    : canStart
-                                                      ? "团队待处理"
-                                                      : "待确认"
+                                                    : "待确认"
                                         }
                                         tone={
                                             confirmation.result === "CONFIRMED"
@@ -247,22 +236,6 @@ export function ConfirmSection({
                                     </p>
                                 ) : null}
                                 <div className="flex flex-wrap gap-2">
-                                    {canStart ? (
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            disabled={isStarting}
-                                            onClick={() =>
-                                                void startProcessing(
-                                                    confirmation,
-                                                )
-                                            }
-                                        >
-                                            {isStarting
-                                                ? "正在开始"
-                                                : "开始处理"}
-                                        </Button>
-                                    ) : null}
                                     {canConfirm ? (
                                         <>
                                             <Button
@@ -289,7 +262,7 @@ export function ConfirmSection({
                                         </>
                                     ) : null}
                                 </div>
-                                {!canStart && !canConfirm ? (
+                                {!canConfirm ? (
                                     <p className="text-xs text-muted-foreground">
                                         {workItemTypeMissing
                                             ? "当前确认任务不完整，入口已阻断"

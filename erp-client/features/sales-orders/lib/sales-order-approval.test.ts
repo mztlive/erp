@@ -78,7 +78,7 @@ describe("mergeSalesOrderAllowedActions", () => {
         expect(
             mergeSalesOrderAllowedActions(
                 ["CANCEL"],
-                ["APPROVE", "START_PROCESSING"],
+                ["APPROVE", "REASSIGN", "CLOSE"],
             ),
         ).toEqual(["CANCEL", "APPROVE"])
     })

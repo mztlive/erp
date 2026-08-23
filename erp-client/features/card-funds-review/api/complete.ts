@@ -35,7 +35,7 @@ export async function completeCardFundsReview(
                     collaboration_message: string
                     required_registration: readonly (
                         | "WORK_ITEM_TYPE"
-                        | "OWNER_POOL"
+                        | "OWNER_ASSIGNEE"
                         | "HANDLER_KEY"
                     )[]
                 }

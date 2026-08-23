@@ -18,7 +18,6 @@ const makeWorkItemDto = (
     handler_key: "procurement-confirmation",
     approval_step_instance_id: null,
     status: "OPEN",
-    assignment_mode: "DIRECT",
     assignment_source: "assigned",
     owner_role: "procurement",
     owner_organization_id: "org_1",
@@ -161,9 +160,9 @@ describe("listWorkItems", () => {
             page: 1,
             page_size: 100,
         })
-        await api.listWorkItems({ scope: "team", timezone: "UTC" })
+        await api.listWorkItems({ scope: "mine", timezone: "UTC" })
         expect(apiGet).toHaveBeenCalledWith("/admin/work-items", {
-            scope: "team",
+            scope: "mine",
             family: undefined,
             work_item_type: undefined,
             status: undefined,
@@ -185,7 +184,6 @@ describe("getWorkItemStats", () => {
     it("serializes stats filters", async () => {
         vi.mocked(apiGet).mockResolvedValue({
             assigned: 0,
-            team: 0,
             due_today: 0,
             overdue: 0,
             exception: 0,
@@ -221,35 +219,6 @@ describe("submitWorkItemResponsibility", () => {
         expected_task_version: "5",
         idempotency_key: "op_1",
     }
-
-    it("posts START_PROCESSING to the dedicated endpoint", async () => {
-        vi.mocked(apiPost).mockResolvedValue(makeWorkItemDto())
-        await api.submitWorkItemResponsibility({
-            kind: "START_PROCESSING",
-            workItemId: "wi_1",
-            expectedTaskVersion: "5",
-            idempotencyKey: "op_1",
-        })
-        expect(apiPost).toHaveBeenCalledWith(
-            "/admin/work-items/wi_1/start-processing",
-            common,
-        )
-    })
-
-    it("posts RELEASE_TO_TEAM with the reason", async () => {
-        vi.mocked(apiPost).mockResolvedValue(makeWorkItemDto())
-        await api.submitWorkItemResponsibility({
-            kind: "RELEASE_TO_TEAM",
-            workItemId: "wi_1",
-            expectedTaskVersion: "5",
-            reason: "开会去了",
-            idempotencyKey: "op_2",
-        })
-        expect(apiPost).toHaveBeenCalledWith(
-            "/admin/work-items/wi_1/release-to-team",
-            { ...common, idempotency_key: "op_2", reason: "开会去了" },
-        )
-    })
 
     it("posts REASSIGN with target user and reason", async () => {
         vi.mocked(apiPost).mockResolvedValue(makeWorkItemDto())

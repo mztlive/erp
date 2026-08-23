@@ -24,6 +24,6 @@ export const CUSTOMER_ACCOUNTS_RECEIPT_REVERSAL_SERVER_ACTIONS = [
 export const CUSTOMER_ACCOUNTS_RECEIPT_REVERSAL_FORBIDDEN_ACTIONS = [
     "选择流程",
     "换人",
-    "开始处理",
-    "退回团队",
+    "转交",
+    "关闭任务",
 ] as const

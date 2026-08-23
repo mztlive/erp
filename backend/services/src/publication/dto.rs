@@ -437,6 +437,8 @@ pub struct SystemSafetyPauseTrigger {
     pub occurred_at: entities::common::time::Instant,
     /// 调用链幂等键。
     pub idempotency_key: String,
+    /// 供应停止人工后续任务的明确责任人。
+    pub owner_user_id: String,
 }
 
 impl SystemSafetyPauseTrigger {
@@ -458,9 +460,10 @@ impl SystemSafetyPauseTrigger {
         if self.source_object_id.trim().is_empty()
             || self.source_version.trim().is_empty()
             || self.idempotency_key.trim().is_empty()
+            || self.owner_user_id.trim().is_empty()
         {
             return Err(Error::ValidationError(
-                "安全暂停来源对象、来源版本和幂等键均不能为空".to_string(),
+                "安全暂停来源对象、来源版本、幂等键和责任人均不能为空".to_string(),
             ));
         }
         Ok(())
@@ -910,6 +913,7 @@ mod tests {
             source_version: "availability:2".to_string(),
             occurred_at: entities::common::time::Instant::from_unix_secs(1),
             idempotency_key: "event-1".to_string(),
+            owner_user_id: "owner-1".to_string(),
         };
         assert!(unknown.validate_contract().is_err());
 
@@ -920,6 +924,7 @@ mod tests {
             source_version: "availability:2".to_string(),
             occurred_at: entities::common::time::Instant::from_unix_secs(1),
             idempotency_key: "event-1".to_string(),
+            owner_user_id: "owner-1".to_string(),
         };
         assert!(blank.validate_contract().is_err());
     }

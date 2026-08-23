@@ -1,6 +1,6 @@
 "use client"
 
-import { LockIcon, PlusIcon, TriangleAlertIcon } from "lucide-react"
+import { PlusIcon, TriangleAlertIcon, UsersIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -15,27 +15,35 @@ import { Button } from "@/components/ui/button"
 import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
 import { PolicyBanner } from "@/features/access-audit/components/policy-banner"
+import { RoleAssignmentDialog } from "@/features/access-audit/components/role-assignment-dialog"
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
 import { AccessChangeDialog } from "@/features/access-audit/pages/components/access-change-dialog"
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
-import { AccountFormDialog } from "@/features/admin/account-form-dialog"
-import { DeleteAdminDialog } from "@/features/admin/delete-admin-dialog"
 import { DeleteRoleDialog } from "@/features/admin/delete-role-dialog"
+import type { AccessView, RoleRow, UserRow } from "@/features/access-audit/types"
 
+/** 权限配置工作面展示的视图；审计查询已独立成页。 */
+const ACCESS_VIEWS: AccessView[] = ["roles", "users"]
+
+/**
+ * 权限配置：角色权限与用户授权。
+ *
+ * 数据范围不再是并列页签——它是角色/用户的属性，列表给摘要、整行点击看来源。
+ */
 export function AccessAuditPage() {
-    const page = useAccessAuditPage()
+    const page = useAccessAuditPage("access")
 
     if (page.rejectedWorkItemId) {
         return (
             <PageScaffold density="compact">
                 <PageHeader
-                    title="权限与审计"
-                    description="此工作面只处理权限对象配置、解释和审计查询。"
+                    title="权限配置"
+                    description="这里只处理角色权限、用户授权与有效权限解释。"
                 />
                 <FormalActionResult
                     status="blocked"
                     title="权限复核入口未开放"
-                    description="权限复核任务与专用复核命令尚未注册，不能在权限与审计页面代为确认。"
+                    description="权限复核任务与专用复核命令尚未注册，不能在权限配置页面代为确认。"
                     facts={[
                         {
                             label: "阻断原因",
@@ -56,7 +64,7 @@ export function AccessAuditPage() {
                                 )
                             }
                         >
-                            返回权限与审计
+                            返回权限配置
                         </Button>
                     }
                 />
@@ -76,82 +84,24 @@ export function AccessAuditPage() {
 
     const data = page.data
     const view = page.view
-
-    const rows =
-        view === "roles"
-            ? (data?.roles ?? [])
-            : view === "users"
-              ? (data?.users ?? [])
-              : view === "scopes"
-                ? (data?.scopes ?? [])
-                : view === "fields"
-                  ? (data?.fieldPolicies ?? [])
-                  : (data?.auditEvents ?? [])
-
-    const listToolbar = (
-        <AccessListToolbar
-            isAudit={page.isAudit}
-            searchInputRef={page.searchInputRef}
-            searchDraft={page.searchDraft}
-            setSearchDraft={page.setSearchDraft}
-            panelOpen={page.panelOpen}
-            setPanelOpen={page.setPanelOpen}
-            hasStructuredFilters={page.hasStructuredFilters}
-            appliedChips={page.appliedChips}
-            hasChips={page.hasActiveFilters && page.appliedChips.length > 0}
-            removeFilter={page.removeFilter}
-            clearAllFilters={page.clearFilters}
-            resetMoreFilters={page.resetMoreFilters}
-            applyFilters={page.applyFilters}
-            filterError={page.filterError}
-            draft={page.draft}
-            updateDraft={page.updateDraft}
-            orgOptions={page.orgOptions}
-        />
-    )
+    const rows = view === "users" ? (data?.users ?? []) : (data?.roles ?? [])
 
     return (
         <PageScaffold density="compact">
             <PageHeader
-                title="权限与审计"
-                description={
-                    page.isAudit
-                        ? "查询追加式审计事件；无记录不等于动作未发生。"
-                        : "配置角色、用户授权与数据范围，并查看有效权限来源。"
-                }
+                title="权限配置"
+                description="角色决定能做什么，账号绑定角色后立即生效；点击任意一行查看有效权限来源。"
                 metadata={
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <DataFreshness
-                            label={
-                                page.isAudit
-                                    ? "审计更新时间"
-                                    : "权限配置更新时间"
-                            }
-                            state={
-                                page.pageQuery.isFetching ? "syncing" : "fresh"
-                            }
-                            updatedAt={
-                                data
-                                    ? formatDateTime(
-                                          data.calculatedAt,
-                                          "full",
-                                      )
-                                    : "—"
-                            }
-                            dateTime={data?.calculatedAt}
-                        />
-                        {!page.isAudit && data ? (
-                            <span
-                                className="text-xs text-muted-foreground"
-                                aria-live="polite"
-                            >
-                                配置版本{" "}
-                                <span className="num">
-                                    v{data.permissionVersion.split("-").at(-1)}
-                                </span>
-                            </span>
-                        ) : null}
-                    </div>
+                    <DataFreshness
+                        label="配置更新时间"
+                        state={page.pageQuery.isFetching ? "syncing" : "fresh"}
+                        updatedAt={
+                            data
+                                ? formatDateTime(data.calculatedAt, "full")
+                                : "—"
+                        }
+                        dateTime={data?.calculatedAt}
+                    />
                 }
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
@@ -169,34 +119,28 @@ export function AccessAuditPage() {
                                 />
                                 新建角色
                             </Button>
-                        ) : null}
-                        {view === "users" ? (
+                        ) : (
                             <Button
                                 type="button"
                                 size="sm"
+                                variant="outline"
                                 onClick={() =>
-                                    page.setAccountForm({
-                                        mode: "create",
-                                        account: null,
-                                    })
+                                    page.routerPush("/system/accounts")
                                 }
                             >
-                                <PlusIcon
+                                <UsersIcon
                                     className="size-3.5"
                                     aria-hidden="true"
                                 />
-                                新建账号
+                                账号管理
                             </Button>
-                        ) : null}
+                        )}
                     </div>
                 }
             />
 
             {data ? (
-                <PolicyBanner
-                    policies={data.governancePolicies}
-                    view={view}
-                />
+                <PolicyBanner policies={data.governancePolicies} view={view} />
             ) : null}
 
             {page.actionError ? (
@@ -231,17 +175,10 @@ export function AccessAuditPage() {
                 />
             ) : null}
 
-            {data?.fieldMaskNote ? (
-                <Alert variant="info">
-                    <LockIcon aria-hidden="true" />
-                    <AlertTitle>字段打码</AlertTitle>
-                    <AlertDescription>{data.fieldMaskNote}</AlertDescription>
-                </Alert>
-            ) : null}
-
             <AccessViewTable
                 view={view}
-                isAudit={page.isAudit}
+                isAudit={false}
+                views={ACCESS_VIEWS}
                 rows={rows}
                 pagination={page.pagination}
                 onPaginationChange={page.handlePaginationChange}
@@ -249,16 +186,42 @@ export function AccessAuditPage() {
                     page.pageQuery.isFetching && !page.pageQuery.isPending
                 }
                 emptyReason={data?.emptyReason}
-                auditCoverageFrom={data?.auditCoverageFrom}
-                auditCoverageTo={data?.auditCoverageTo}
                 roleColumns={page.roleColumns}
                 userColumns={page.userColumns}
-                scopeColumns={page.scopeColumns}
-                fieldColumns={page.fieldColumns}
                 auditColumns={page.auditColumns}
                 onClearFilters={page.clearFilters}
-                toolbar={listToolbar}
+                toolbar={
+                    <AccessListToolbar
+                        isAudit={false}
+                        searchInputRef={page.searchInputRef}
+                        searchDraft={page.searchDraft}
+                        setSearchDraft={page.setSearchDraft}
+                        panelOpen={page.panelOpen}
+                        setPanelOpen={page.setPanelOpen}
+                        hasStructuredFilters={page.hasStructuredFilters}
+                        appliedChips={page.appliedChips}
+                        hasChips={
+                            page.hasActiveFilters &&
+                            page.appliedChips.length > 0
+                        }
+                        removeFilter={page.removeFilter}
+                        clearAllFilters={page.clearFilters}
+                        resetMoreFilters={page.resetMoreFilters}
+                        applyFilters={page.applyFilters}
+                        filterError={page.filterError}
+                        draft={page.draft}
+                        updateDraft={page.updateDraft}
+                        actionOptions={page.actionOptions}
+                    />
+                }
                 onViewChange={page.switchView}
+                onRowPreview={(row) => {
+                    if ("userId" in row) {
+                        page.openExplain("USER", (row as UserRow).userId)
+                        return
+                    }
+                    page.openExplain("ROLE", (row as RoleRow).id)
+                }}
                 errorState={
                     page.pageQuery.isError && !data ? (
                         <BusinessFailureState
@@ -268,9 +231,7 @@ export function AccessAuditPage() {
                                     type="button"
                                     variant="secondary"
                                     className="rounded-lg shadow-none"
-                                    onClick={() =>
-                                        void page.pageQuery.refetch()
-                                    }
+                                    onClick={() => void page.pageQuery.refetch()}
                                 >
                                     重试
                                 </Button>
@@ -282,6 +243,7 @@ export function AccessAuditPage() {
                 exportBlocker={page.exportBlocker}
                 onExport={page.handleExport}
             />
+
             <AccessPreviewSheets
                 explainSubject={page.explainSubject}
                 eventOpenId={page.eventOpenId}
@@ -291,6 +253,7 @@ export function AccessAuditPage() {
                 closeEvent={page.closeEvent}
                 restoreRowFocus={page.restoreRowFocus}
             />
+
             {/* 影响预览 + 提交 */}
             <AccessChangeDialog
                 open={page.changeOpen}
@@ -309,29 +272,13 @@ export function AccessAuditPage() {
                 onApplyOutcome={page.applyOutcome}
             />
 
-            {/* 账号新建 / 编辑（字段少，弹窗承载；角色走整页表单） */}
-            {page.accountForm ? (
-                <AccountFormDialog
-                    key={
-                        page.accountForm.mode === "edit"
-                            ? (page.accountForm.account?.id ?? "edit")
-                            : "create"
-                    }
-                    mode={page.accountForm.mode}
-                    account={page.accountForm.account}
+            {page.roleAssignment ? (
+                <RoleAssignmentDialog
+                    key={page.roleAssignment.userId}
+                    target={page.roleAssignment}
                     roleOptions={page.assignableRolesQuery.data ?? []}
                     onOpenChange={(open) => {
-                        if (!open) page.setAccountForm(null)
-                    }}
-                />
-            ) : null}
-
-            {page.deletingAccount ? (
-                <DeleteAdminDialog
-                    key={page.deletingAccount.id}
-                    account={page.deletingAccount}
-                    onOpenChange={(open) => {
-                        if (!open) page.setDeletingAccount(null)
+                        if (!open) page.setRoleAssignment(null)
                     }}
                 />
             ) : null}

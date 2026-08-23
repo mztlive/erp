@@ -10,7 +10,7 @@ import type {
 } from "@/features/card-funds-review/types"
 
 export function useCardFundsReviewUrlState(): {
-    scope: "mine" | "team" | "history"
+    scope: "mine" | "history"
     type: "all" | "opening" | "delta"
     status: "OPEN" | "COMPLETED" | "CLOSED"
     due: "all" | "today" | "overdue"
@@ -30,12 +30,8 @@ export function useCardFundsReviewUrlState(): {
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
-    const scope: "mine" | "team" | "history" =
-        searchParams.get("scope") === "team"
-            ? "team"
-            : searchParams.get("scope") === "history"
-              ? "history"
-              : "mine"
+    const scope: "mine" | "history" =
+        searchParams.get("scope") === "history" ? "history" : "mine"
     const typeParam = searchParams.get("type")
     const type: "all" | "opening" | "delta" =
         typeParam === "opening" || typeParam === "delta" ? typeParam : "all"
@@ -133,7 +129,7 @@ export function useCardFundsReviewDefaultUrlSync(args: {
     view: CardFundsReviewQueueView | undefined
     task: CardFundsReviewItemView | undefined
     taskCount: number
-    scope: "mine" | "team" | "history"
+    scope: "mine" | "history"
     type: "all" | "opening" | "delta"
     queueContextId: string
 }): void {

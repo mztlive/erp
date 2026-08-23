@@ -102,7 +102,6 @@ export function CardFundsReviewPage() {
         autoNext,
         replaceUrl,
         setSearchInput,
-        queueQuery,
     })
     const {
         confirmMode,
@@ -134,7 +133,6 @@ export function CardFundsReviewPage() {
         receiptPending,
         invoicePending,
         completePending,
-        releasePending,
         formalPending,
         responsibilityStatus,
         canConfirmZero,
@@ -146,8 +144,6 @@ export function CardFundsReviewPage() {
         submitInvoice,
         runApprove,
         submitReject,
-        handleReleaseToTeam,
-        startProcessing,
     } = workflow
 
     const headingRef = React.useRef<HTMLHeadingElement>(null)
@@ -253,9 +249,6 @@ export function CardFundsReviewPage() {
                         canApprove={task.workItem.allowedActions.includes(
                             "APPROVE",
                         )}
-                        canStartProcessing={task.workItem.allowedActions.includes(
-                            "START_PROCESSING",
-                        )}
                         onBack={() => router.push("/workspace")}
                         onApprove={(advance) =>
                             setConfirmMode({
@@ -269,7 +262,6 @@ export function CardFundsReviewPage() {
                                 "请先填写凭证编号或证据说明；证据将随正式决定一并提交。",
                             )
                         }
-                        onStartProcessing={() => void startProcessing()}
                     />
 
                     {task.workItem.workItemStatus === "OPEN" ? (
@@ -337,9 +329,6 @@ export function CardFundsReviewPage() {
                                 onReject={() =>
                                     setConfirmMode({ kind: "reject" })
                                 }
-                                onRelease={() =>
-                                    setConfirmMode({ kind: "release" })
-                                }
                             />
                         </div>
 
@@ -363,14 +352,12 @@ export function CardFundsReviewPage() {
                 setConfirmMode={setConfirmMode}
                 task={task}
                 completePending={completePending}
-                releasePending={releasePending}
                 pendingNav={pendingNav}
                 setPendingNav={setPendingNav}
                 neighborId={neighborId}
                 goToWorkItem={goToWorkItem}
                 runApprove={runApprove}
                 submitReject={submitReject}
-                handleReleaseToTeam={handleReleaseToTeam}
             />
         </PageScaffold>
     )

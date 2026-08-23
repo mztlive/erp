@@ -8,33 +8,12 @@ import {
     makeMutation,
 } from "./use-supplier-order-center-fixtures"
 import { useSupplierOrderCenterCommandIdentity } from "./use-supplier-order-center-identity"
-import type { WorkItemDto, WorkItemResponsibilityCommand } from "@/features/work-items/types"
 import type {
     CompleteSupplierOrderTaskInput,
     CompleteSupplierOrderTaskResult,
     FormalActionResponse,
     SupplierOrderDetailView,
 } from "@/features/supplier-orders/types"
-
-const makeWorkItemDto = (): WorkItemDto => ({
-    id: "wi1",
-    work_item_type: "integration_result_unknown",
-    handler_key: "supplier-orders",
-    approval_step_instance_id: null,
-    status: "OPEN",
-    assignment_mode: "DIRECT",
-    assignment_source: "assigned",
-    owner_role: "ops",
-    owner_organization_id: "org1",
-    processing_state: "READY",
-    business_object_type: "supplier_fulfillment_order",
-    business_object_id: "o1",
-    root_business_object_id: "o1",
-    subject_version: "v2",
-    task_version: "3",
-    priority: "HIGH",
-    created_at: 1_700_000_000_000,
-})
 
 function renderTaskActions(input: {
     detail: SupplierOrderDetailView | undefined
@@ -44,10 +23,6 @@ function renderTaskActions(input: {
 }) {
     const setResult = vi.fn()
     const refetch = vi.fn()
-    const responsibilityMutation = makeMutation<
-        WorkItemDto,
-        WorkItemResponsibilityCommand
-    >()
     const completeTaskMutation = makeMutation<
         FormalActionResponse<CompleteSupplierOrderTaskResult>,
         CompleteSupplierOrderTaskInput
@@ -59,76 +34,22 @@ function renderTaskActions(input: {
             completionEvidence: input.completionEvidence,
             refetch,
             setResult,
-            responsibilityMutation,
             completeTaskMutation,
             commandIdentity: identity.result.current.commandIdentity,
-            forgetCommandIdentity: identity.result.current.forgetCommandIdentity,
+            forgetCommandIdentity:
+                identity.result.current.forgetCommandIdentity,
         }),
     )
     return {
         result,
         setResult,
         refetch,
-        responsibilityMutation,
         completeTaskMutation,
     }
 }
 
 beforeEach(() => {
     vi.clearAllMocks()
-})
-
-describe("handleStartProcessing", () => {
-    it("establishes responsibility and refetches the detail", async () => {
-        const { result, setResult, refetch, responsibilityMutation } =
-            renderTaskActions({ detail: makeDetail() })
-        responsibilityMutation.mutateAsync.mockResolvedValue(makeWorkItemDto())
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-        const command = responsibilityMutation.mutateAsync.mock
-            .calls[0][0] as WorkItemResponsibilityCommand
-        expect(command.kind).toBe("START_PROCESSING")
-        expect(command.workItemId).toBe("wi1")
-        expect(command.expectedTaskVersion).toBe("3")
-        expect(command.idempotencyKey).toMatch(/^w26:start-processing:/)
-        expect(refetch).toHaveBeenCalledTimes(1)
-        expect(setResult).toHaveBeenCalledWith(
-            expect.objectContaining({
-                status: "succeeded",
-                title: "已开始处理",
-                reference: "wi1",
-            }),
-        )
-    })
-
-    it("does nothing when there is no work item", async () => {
-        const { result, setResult, responsibilityMutation } =
-            renderTaskActions({ detail: makeDetail({ workItem: undefined }) })
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-        expect(responsibilityMutation.mutateAsync).not.toHaveBeenCalled()
-        expect(setResult).not.toHaveBeenCalled()
-    })
-
-    it("maps failures to a rejected result", async () => {
-        const { result, setResult, responsibilityMutation } =
-            renderTaskActions({ detail: makeDetail() })
-        responsibilityMutation.mutateAsync.mockRejectedValue(
-            new Error("处理权已变化"),
-        )
-        await act(async () => {
-            await result.current.handleStartProcessing()
-        })
-        expect(setResult).toHaveBeenCalledWith(
-            expect.objectContaining({
-                status: "rejected",
-                title: "开始处理未完成",
-                description: "处理权已变化",
-            }),
-        )
-    })
 })
 
 describe("handleCompleteTask", () => {

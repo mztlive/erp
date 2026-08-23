@@ -18,13 +18,13 @@ use entities::purchase_order::{
     FulfillmentResponsibility, ProgressStatus, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
     PurchaseType,
 };
-use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
+use entities::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
-use crate::work_item::{ProcessingState, WorkItemAllowedAction};
+use crate::work_item::ProcessingState;
 
 /// 采购单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase_no"];
@@ -317,20 +317,16 @@ pub struct PurchaseReviewWorkItemView {
     pub subject_version: String,
     /// 待办生命周期状态。
     pub status: WorkItemStatus,
-    /// 责任分派模式。
-    pub assignment_source_unused: AssignmentSource,
     /// 责任角色。
     pub owner_role: String,
     /// 责任组织。
     pub owner_organization_id: String,
-    /// 当前个人责任人；责任池未开始处理时为空。
+    /// 当前个人责任人。
     pub owner_user_id: Option<String>,
     /// 当前处理状态；当前非审批步骤待办固定为 `READY`。
     pub processing_state: ProcessingState,
     /// 服务端处理阻断摘要。
     pub action_blockers: Vec<PurchaseActionBlockerView>,
-    /// 仅由通用任务责任协议执行的动作。
-    pub responsibility_actions: Vec<WorkItemAllowedAction>,
     /// 仅由 W08 强类型审核命令执行的领域动作。
     pub domain_allowed_actions: Vec<PurchaseReviewDomainAction>,
 }

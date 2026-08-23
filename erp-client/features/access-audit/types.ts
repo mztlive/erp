@@ -12,9 +12,6 @@ export type AccessEmptyReason =
 export type AccessListQuery = {
     view: AccessView
     q?: string
-    status?: string
-    org?: string
-    risk?: string
     subjectType?: string
     subjectId?: string
     /** 审计筛选 */
@@ -22,7 +19,6 @@ export type AccessListQuery = {
     to?: string
     actorId?: string
     action?: string
-    objectType?: string
     objectId?: string
     result?: string
     traceId?: string
@@ -88,6 +84,12 @@ export type AccessGovernancePolicyView = Readonly<{
     auditAccessPolicy: AuditAccessPolicy
 }>
 
+/** 权限覆盖按模块归并的一项。 */
+export type PermissionGroupCountView = Readonly<{
+    name: string
+    count: number
+}>
+
 export type RoleRow = Readonly<{
     id: string
     roleCode: string
@@ -95,7 +97,16 @@ export type RoleRow = Readonly<{
     status: "enabled" | "disabled"
     statusLabel: string
     statusTone: "success" | "neutral" | "warning" | "destructive" | "info"
+    /** 权限覆盖摘要，如「共 61 项 · 销售单 7 · 客户 7」。 */
     permissionSummary: string
+    /** 目录内权限条数。 */
+    permissionCount: number
+    /** 权限覆盖的模块，按条数降序。 */
+    permissionGroups: readonly PermissionGroupCountView[]
+    /** 通配全权角色（不按条目配置）。 */
+    allPermissions: boolean
+    /** 绑定该角色的账号数。 */
+    boundAccountCount: number
     dataScopeSummary: string
     fieldPolicySummary: string
     riskFlags: readonly string[]
@@ -155,8 +166,11 @@ export type AuditEventRow = Readonly<{
     actorLabel: string
     actorRole: string
     actionType: string
+    /** 动作中文文案（「对象 · 动作」）。 */
     actionLabel: string
     objectType: string
+    /** 对象类型中文名。 */
+    objectTypeLabel: string
     objectId: string
     objectLabel: string
     requestId: string

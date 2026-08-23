@@ -1,43 +1,19 @@
 /**
- * W19 权限与审计 · 筛选字段的固定选项、URL 解析与业务文案。
+ * 审计查询 · 筛选字段的固定选项、URL 解析与业务文案。
  *
- * 解析器只接受页面已声明的枚举值：URL 中的非法值一律降级为默认（"all"），
+ * 解析器只接受页面已声明的取值：URL 中的非法值一律降级为默认（"all"），
  * 不得把未声明的值继续传给列表查询（docs/ui-filter-design.md §5.1 / §6.1）。
+ *
+ * 角色 / 用户授权侧不提供结构化筛选：后端目前没有组织、账号状态与风险标记，
+ * 提供只会筛出空列表，故只保留关键词搜索。
  */
 
-export type AccessStatusFilterValue = "enabled" | "disabled"
-
-export type AccessRiskFilterValue =
-    | "HIGH_PRIVILEGE"
-    | "EMPTY_SCOPE"
-    | "EXPIRING_SOON"
-    | "ACCESS_ADMIN"
+import { auditActionLabel } from "@/features/access-audit/lib/audit-labels"
 
 export type AccessResultFilterValue = "SUCCESS" | "DENIED" | "FAILED" | "UNKNOWN"
 
-export type AccessActionFilterValue =
-    | "UPDATE_ROLE_PERMISSIONS"
-    | "EMERGENCY_REVOKE_USER_ROLE"
-    | "UPDATE_FIELD_POLICY"
-    | "MANAGE_DATA_SCOPE"
-    | "QUERY_AUDIT"
-    | "OPEN_SUPPLIER"
-    | "EXPORT_RECEIVABLE"
-    | "CREATE_ADJUSTMENT"
-    | "VIEW_CUSTOMER_SENSITIVE"
-    | "PERMISSION_VERSION_BUMP"
-
-export const STATUS_FILTER_VALUES: readonly AccessStatusFilterValue[] = [
-    "enabled",
-    "disabled",
-]
-
-export const RISK_FILTER_VALUES: readonly AccessRiskFilterValue[] = [
-    "HIGH_PRIVILEGE",
-    "EMPTY_SCOPE",
-    "EXPIRING_SOON",
-    "ACCESS_ADMIN",
-]
+/** 审计动作取值即后端 action_type（`<对象>.<动作>`），选项由查询结果实时归纳。 */
+export type AccessActionFilterValue = string
 
 export const RESULT_FILTER_VALUES: readonly AccessResultFilterValue[] = [
     "SUCCESS",
@@ -46,44 +22,6 @@ export const RESULT_FILTER_VALUES: readonly AccessResultFilterValue[] = [
     "UNKNOWN",
 ]
 
-export const ACTION_FILTER_VALUES: readonly AccessActionFilterValue[] = [
-    "UPDATE_ROLE_PERMISSIONS",
-    "EMERGENCY_REVOKE_USER_ROLE",
-    "UPDATE_FIELD_POLICY",
-    "MANAGE_DATA_SCOPE",
-    "QUERY_AUDIT",
-    "OPEN_SUPPLIER",
-    "EXPORT_RECEIVABLE",
-    "CREATE_ADJUSTMENT",
-    "VIEW_CUSTOMER_SENSITIVE",
-    "PERMISSION_VERSION_BUMP",
-]
-
-const ACTION_FILTER_LABELS: Record<AccessActionFilterValue, string> = {
-    UPDATE_ROLE_PERMISSIONS: "修改模块权限",
-    EMERGENCY_REVOKE_USER_ROLE: "紧急撤权",
-    UPDATE_FIELD_POLICY: "修改字段策略",
-    MANAGE_DATA_SCOPE: "修改数据范围",
-    QUERY_AUDIT: "查询审计",
-    OPEN_SUPPLIER: "打开供应商",
-    EXPORT_RECEIVABLE: "导出应收明细",
-    CREATE_ADJUSTMENT: "创建库存调整",
-    VIEW_CUSTOMER_SENSITIVE: "短时揭示敏感字段",
-    PERMISSION_VERSION_BUMP: "权限版本推进",
-}
-
-const STATUS_FILTER_LABELS: Record<AccessStatusFilterValue, string> = {
-    enabled: "启用",
-    disabled: "停用",
-}
-
-const RISK_FILTER_LABELS: Record<AccessRiskFilterValue, string> = {
-    HIGH_PRIVILEGE: "高权限",
-    EMPTY_SCOPE: "空数据范围",
-    EXPIRING_SOON: "即将过期",
-    ACCESS_ADMIN: "权限管理",
-}
-
 const RESULT_FILTER_LABELS: Record<AccessResultFilterValue, string> = {
     SUCCESS: "成功",
     DENIED: "拒绝",
@@ -91,39 +29,12 @@ const RESULT_FILTER_LABELS: Record<AccessResultFilterValue, string> = {
     UNKNOWN: "未知",
 }
 
-/** 固定单选（固定枚举行）：状态。 */
-export const STATUS_FILTER_RADIO_OPTIONS = [
-    { value: "all", label: "全部" },
-    ...STATUS_FILTER_VALUES.map((value) => ({
-        value,
-        label: STATUS_FILTER_LABELS[value],
-    })),
-] as const
-
-/** 固定单选（固定枚举行）：权限风险。 */
-export const RISK_FILTER_RADIO_OPTIONS = [
-    { value: "all", label: "全部" },
-    ...RISK_FILTER_VALUES.map((value) => ({
-        value,
-        label: RISK_FILTER_LABELS[value],
-    })),
-] as const
-
 /** 固定单选（固定枚举行）：审计结果。 */
 export const RESULT_FILTER_RADIO_OPTIONS = [
     { value: "all", label: "全部结果" },
     ...RESULT_FILTER_VALUES.map((value) => ({
         value,
         label: RESULT_FILTER_LABELS[value],
-    })),
-] as const
-
-/** 可搜索单选（网格字段）：动作。 */
-export const ACTION_FILTER_OPTIONS = [
-    { value: "all", label: "全部动作" },
-    ...ACTION_FILTER_VALUES.map((value) => ({
-        value,
-        label: ACTION_FILTER_LABELS[value],
     })),
 ] as const
 
@@ -135,34 +46,19 @@ function parseFilterValue<Value extends string>(
     return values.find((value) => value === raw) ?? "all"
 }
 
-export function parseStatusFilter(
-    raw: string | null,
-): AccessStatusFilterValue | "all" {
-    return parseFilterValue(raw, STATUS_FILTER_VALUES)
-}
-
-export function parseRiskFilter(raw: string | null): AccessRiskFilterValue | "all" {
-    return parseFilterValue(raw, RISK_FILTER_VALUES)
-}
-
 export function parseResultFilter(
     raw: string | null,
 ): AccessResultFilterValue | "all" {
     return parseFilterValue(raw, RESULT_FILTER_VALUES)
 }
 
+/** 动作取值形如 `user_role.assign`；不符合该形状的一律降级。 */
 export function parseActionFilter(
     raw: string | null,
 ): AccessActionFilterValue | "all" {
-    return parseFilterValue(raw, ACTION_FILTER_VALUES)
-}
-
-export function statusFilterLabel(value: AccessStatusFilterValue): string {
-    return STATUS_FILTER_LABELS[value]
-}
-
-export function riskFilterLabel(value: AccessRiskFilterValue): string {
-    return RISK_FILTER_LABELS[value]
+    const value = raw?.trim()
+    if (!value) return "all"
+    return /^[a-z0-9_]+\.[a-z0-9_]+$/.test(value) ? value : "all"
 }
 
 export function resultFilterLabel(value: AccessResultFilterValue): string {
@@ -170,7 +66,7 @@ export function resultFilterLabel(value: AccessResultFilterValue): string {
 }
 
 export function actionFilterLabel(value: AccessActionFilterValue): string {
-    return ACTION_FILTER_LABELS[value]
+    return auditActionLabel(value)
 }
 
 /** 审计时间范围校验：提交时执行，失败不写 URL。 */

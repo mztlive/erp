@@ -16,14 +16,10 @@ export type ApprovalAllowedAction =
     | "CANCEL_APPROVAL"
     | "UPGRADE_BINDING"
     | "RESUME_CURRENT_APPROVER"
-    | "REASSIGN_CURRENT_APPROVER"
     | "CANCEL_BLOCKED_APPROVAL"
 
 /** 受阻实例的唯一合法恢复动作。 */
-export type RecoveryOption =
-    | "RESUME_CURRENT_APPROVER"
-    | "REASSIGN_CURRENT_APPROVER"
-    | "CANCEL_BLOCKED"
+export type RecoveryOption = "RESUME_CURRENT_APPROVER" | "CANCEL_BLOCKED"
 
 /** 实例状态。`REJECTED` 不是合同终态。 */
 export type ApprovalInstanceStatus =
@@ -83,17 +79,6 @@ export type ResumeApproverRequest = Readonly<{
     idempotency_key: string
 }>
 
-/** 改派当前审批人请求。 */
-export type ReassignApproverRequest = Readonly<{
-    target_user_id: string
-    reason: string
-    expected_instance_version: string
-    expected_execution_version: string
-    expected_assignment_version: string
-    expected_closed_task_version?: string | null
-    idempotency_key: string
-}>
-
 /** 受阻取消请求。blocker 由服务端推导。 */
 export type CancelBlockedRequest = Readonly<{
     reason: string
@@ -127,7 +112,7 @@ export type OpenTaskSummaryDto = Readonly<{
     owner_user_id: string
 }>
 
-/** 启动/决定/恢复/改派/取消的统一命令响应。 */
+/** 审批运行命令的统一响应。 */
 export type ApprovalCommandViewDto = Readonly<{
     instance_id: string
     instance_status: string
@@ -244,12 +229,6 @@ export type RecoveryOptionsDto = Readonly<{
     actions: readonly string[]
 }>
 
-/** 改派候选人。 */
-export type ReassigneeCandidateDto = Readonly<{
-    user_id: string
-    name: string
-}>
-
 export type OpenTaskSummary = Readonly<{
     workItemId: string
     taskVersion: string
@@ -358,11 +337,6 @@ export type RecoveryOptions = Readonly<{
     actions: readonly RecoveryOption[]
 }>
 
-export type ReassigneeCandidate = Readonly<{
-    userId: string
-    name: string
-}>
-
 const KNOWN_ALLOWED_ACTIONS = new Set<ApprovalAllowedAction>([
     "APPROVE",
     "REJECT",
@@ -373,13 +347,11 @@ const KNOWN_ALLOWED_ACTIONS = new Set<ApprovalAllowedAction>([
     "CANCEL_APPROVAL",
     "UPGRADE_BINDING",
     "RESUME_CURRENT_APPROVER",
-    "REASSIGN_CURRENT_APPROVER",
     "CANCEL_BLOCKED_APPROVAL",
 ])
 
 const KNOWN_RECOVERY_OPTIONS = new Set<RecoveryOption>([
     "RESUME_CURRENT_APPROVER",
-    "REASSIGN_CURRENT_APPROVER",
     "CANCEL_BLOCKED",
 ])
 
@@ -398,7 +370,7 @@ export const filterAllowedActions = (
     )
 
 /**
- * 只保留服务端恢复选项。人员失效给恢复/改派，其它 blocker 只给受阻取消。
+ * 只保留服务端恢复选项。人员失效只给恢复，其它 blocker 只给受阻取消。
  */
 export const filterRecoveryOptions = (
     actions: readonly string[] | undefined,
@@ -568,16 +540,6 @@ export const mapRecoveryOptionsDto = (
 ): RecoveryOptions => ({
     instanceId: dto.instance_id,
     actions: filterRecoveryOptions(dto.actions),
-})
-
-/**
- * 把改派候选人 DTO 转成页面投影。
- */
-export const mapReassigneeCandidateDto = (
-    dto: ReassigneeCandidateDto,
-): ReassigneeCandidate => ({
-    userId: dto.user_id,
-    name: dto.name,
 })
 
 /**

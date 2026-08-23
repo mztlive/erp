@@ -8,7 +8,6 @@ import {
     fetchImportBatchDetail,
     fetchImportBatchList,
     fetchImportIssues,
-    startImportConfirmationProcessing,
     type CompleteImportConfirmationInput,
     type ExecuteImportCommandInput,
 } from "@/features/import-opening/api/legacy-import"
@@ -45,7 +44,7 @@ export function useImportBatchDetailQuery(
     })
 }
 
-/** W18 责任建立与强类型确认写命令。 */
+/** W18 强类型确认写命令。 */
 export function useImportConfirmationOperations() {
     const queryClient = useQueryClient()
     const refresh = async () => {
@@ -58,23 +57,16 @@ export function useImportConfirmationOperations() {
             }),
         ])
     }
-    const start = useMutation({
-        mutationFn: startImportConfirmationProcessing,
-        onSuccess: refresh,
-    })
     const complete = useMutation({
         mutationFn: (input: CompleteImportConfirmationInput) =>
             completeImportConfirmation(input),
         onSuccess: refresh,
     })
     return {
-        startProcessing: start.mutateAsync,
         completeConfirmation: complete.mutateAsync,
-        isStarting: start.isPending,
         isCompleting: complete.isPending,
-        error: start.error ?? complete.error,
+        error: complete.error,
         resetError: () => {
-            start.reset()
             complete.reset()
         },
     }

@@ -1,8 +1,8 @@
 //! 预定义角色的默认数据范围种子。
 //!
-//! 团队待办（`GET /admin/work-items?scope=team`）要求角色具备可证明的数据范围。
-//! 第一期单公司部署下，尚未配置任何范围的预定义岗位补齐公司级范围；管理员已
-//! 配置、收窄或软删除的范围不会被覆盖或重建。
+//! 指定到人的人工任务仍要求责任人具备可证明的数据范围。第一期单公司部署下，
+//! 尚未配置任何范围的预定义岗位补齐公司级范围；管理员已配置、收窄或软删除的
+//! 范围不会被覆盖或重建。
 
 use super::predefined_roles::PREDEFINED_ROLES;
 use super::SharedRbacService;
@@ -61,7 +61,7 @@ mod tests {
     }
 
     #[test]
-    fn team_queue_roles_include_procurement() {
+    fn work_item_roles_include_procurement() {
         assert!(PREDEFINED_ROLES
             .iter()
             .any(|role| role.id == "role-procurement" && role.permissions.contains(&"work_item:list")));

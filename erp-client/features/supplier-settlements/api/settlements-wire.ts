@@ -5,7 +5,6 @@
  */
 
 import type { Page } from "@/lib/api"
-import type { WorkItemAllowedAction } from "@/features/work-items"
 
 // ---------------------------------------------------------------------------
 // Backend wire types
@@ -163,11 +162,9 @@ export type BackendReviewWorkItem = {
     task_version: string | number
     subject_version: string
     status: "OPEN" | "COMPLETED" | "CLOSED"
-    assignment_mode: "DIRECT" | "POOL"
     owner_role: string
     owner_organization_id: string
     owner_user_id?: string | null
-    allowed_actions: WorkItemAllowedAction[]
     action_blockers: BackendReviewActionBlocker[]
 }
 
@@ -202,4 +199,9 @@ export type BackendReviewDecisionResult = {
 }
 
 // wire → 视图映射已拆至 settlements-mappers.ts（此处再导出，保持原有引用路径）。
-export { asStatus, mapFormalReviewTask, toDetail, toListRow } from "./settlements-mappers"
+export {
+    asStatus,
+    mapFormalReviewTask,
+    toDetail,
+    toListRow,
+} from "./settlements-mappers"

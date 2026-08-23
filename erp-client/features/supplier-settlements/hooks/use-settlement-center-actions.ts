@@ -20,7 +20,6 @@ import {
 import { responsibilityOf } from "@/features/supplier-settlements/lib/settlement-responsibility"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import type { DifferenceResolution } from "@/features/supplier-settlements/types"
-import { useWorkItemResponsibilityMutation } from "@/features/work-items"
 import { getErrorMessage } from "@/lib/api/errors"
 
 type CommandIdentity = {
@@ -50,7 +49,6 @@ function useSettlementCenterActions({
     const submitMutation = useSubmitReviewMutation()
     const decisionMutation = useReviewDecisionMutation()
     const profileQuery = useAccountProfileQuery()
-    const responsibilityMutation = useWorkItemResponsibilityMutation()
 
     const [result, setResult] = React.useState<ResultState>(null)
     const [resolveOpen, setResolveOpen] = React.useState(false)
@@ -64,10 +62,9 @@ function useSettlementCenterActions({
     const [evidenceComment, setEvidenceComment] = React.useState("")
     const [evidenceReferenceId, setEvidenceReferenceId] = React.useState("")
     const [rejectReason, setRejectReason] = React.useState("")
+    const [reviewerUserId, setReviewerUserId] = React.useState("")
     const resultRef = React.useRef<HTMLDivElement | null>(null)
-    const commandIdentities = React.useRef(
-        new Map<string, CommandIdentity>(),
-    )
+    const commandIdentities = React.useRef(new Map<string, CommandIdentity>())
 
     const data = detailQuery.data
     const allowed = new Set(data?.allowedActions ?? [])
@@ -206,6 +203,15 @@ function useSettlementCenterActions({
             })
             return
         }
+        const normalizedReviewerUserId = reviewerUserId.trim()
+        if (!normalizedReviewerUserId) {
+            setResult({
+                status: "blocked",
+                title: "请选择复核人",
+                description: "提交复核前必须明确指定本次复核任务的责任人。",
+            })
+            return
+        }
         const identity = idempotencyIdentity("submit-review", st.id)
         const outcome = await submitMutation.mutateAsync({
             statementId: st.id,
@@ -215,6 +221,7 @@ function useSettlementCenterActions({
                 data.reviewSubmissionPolicy.refreshCutoffPolicyId,
             expectedRefreshCutoffPolicyVersion:
                 data.reviewSubmissionPolicy.version,
+            reviewerUserId: normalizedReviewerUserId,
             operationId: identity.operationId,
             idempotencyKey: identity.idempotencyKey,
         })
@@ -292,37 +299,6 @@ function useSettlementCenterActions({
         }
     }
 
-    async function onStartProcessing() {
-        if (!data?.workItem) return
-        const workItem = data.workItem
-        const identity = idempotencyIdentity(
-            "start-processing",
-            workItem.workItemId,
-        )
-        try {
-            const response = await responsibilityMutation.mutateAsync({
-                kind: "START_PROCESSING",
-                workItemId: workItem.workItemId,
-                expectedTaskVersion: workItem.taskVersion,
-                idempotencyKey: identity.idempotencyKey,
-            })
-            commandIdentities.current.delete(identity.key)
-            await detailQuery.refetch()
-            setResult({
-                status: "succeeded",
-                title: "已开始处理复核",
-                description: "正式任务已建立当前用户个人责任。",
-                reference: response.id,
-            })
-        } catch (error) {
-            setResult({
-                status: "rejected",
-                title: "开始处理未完成",
-                description: getErrorMessage(error, "开始处理失败，请刷新任务"),
-            })
-        }
-    }
-
     return {
         detailQuery,
         data,
@@ -336,7 +312,6 @@ function useSettlementCenterActions({
         evidenceMutation,
         submitMutation,
         decisionMutation,
-        responsibilityMutation,
         result,
         resultRef,
         resolveOpen,
@@ -359,13 +334,14 @@ function useSettlementCenterActions({
         setEvidenceReferenceId,
         rejectReason,
         setRejectReason,
+        reviewerUserId,
+        setReviewerUserId,
         onRefresh,
         onResolve,
         onEvidence,
         onSubmitReview,
         onConfirm,
         onReject,
-        onStartProcessing,
     }
 }
 

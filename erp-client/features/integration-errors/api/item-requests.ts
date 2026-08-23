@@ -17,12 +17,12 @@ export async function fetchIntegrationItem(input: {
     itemType: "ERROR_TASK" | "RECONCILIATION_DIFFERENCE"
     id: string
 }): Promise<IntegrationResolutionItemView> {
-    const [mine, team, history] = await Promise.all([
+    const [mine, managed, history] = await Promise.all([
         fetchW29WorkItems("me"),
-        fetchW29WorkItems("team"),
+        fetchW29WorkItems("assigned"),
         fetchW29WorkItems("me", true),
     ])
-    const workItems = new Map([...mine, ...team, ...history])
+    const workItems = new Map([...managed, ...mine, ...history])
     if (input.itemType === "ERROR_TASK") {
         const task = await apiGet<BackendErrorTask>(
             `/admin/integration/error-tasks/${encodeURIComponent(input.id)}`,

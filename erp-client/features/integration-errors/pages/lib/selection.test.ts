@@ -11,9 +11,21 @@ import {
 
 describe("selectQueueSelection", () => {
     it("prefers an ERROR_TASK with the current task id over same-id items", () => {
-        const task = makeItem({ identity: { itemType: "ERROR_TASK", id: "t1", number: "ET-1", subjectHash: "h1" } })
+        const task = makeItem({
+            identity: {
+                itemType: "ERROR_TASK",
+                id: "t1",
+                number: "ET-1",
+                subjectHash: "h1",
+            },
+        })
         const diff = makeItem({
-            identity: { itemType: "RECONCILIATION_DIFFERENCE", id: "t1", number: "RD-1", subjectHash: "h2" },
+            identity: {
+                itemType: "RECONCILIATION_DIFFERENCE",
+                id: "t1",
+                number: "RD-1",
+                subjectHash: "h2",
+            },
         })
         const selected = selectQueueSelection([diff, task], "t1", undefined)
         expect(selected).toBe(task)
@@ -21,7 +33,12 @@ describe("selectQueueSelection", () => {
 
     it("falls back to any item with the same id when no task matches", () => {
         const diff = makeItem({
-            identity: { itemType: "RECONCILIATION_DIFFERENCE", id: "d1", number: "RD-1", subjectHash: "h2" },
+            identity: {
+                itemType: "RECONCILIATION_DIFFERENCE",
+                id: "d1",
+                number: "RD-1",
+                subjectHash: "h2",
+            },
         })
         const selected = selectQueueSelection([diff], "d1", undefined)
         expect(selected).toBe(diff)
@@ -30,7 +47,12 @@ describe("selectQueueSelection", () => {
     it("selects a RECONCILIATION_DIFFERENCE by difference id", () => {
         const task = makeItem()
         const diff = makeItem({
-            identity: { itemType: "RECONCILIATION_DIFFERENCE", id: "d1", number: "RD-1", subjectHash: "h2" },
+            identity: {
+                itemType: "RECONCILIATION_DIFFERENCE",
+                id: "d1",
+                number: "RD-1",
+                subjectHash: "h2",
+            },
         })
         const selected = selectQueueSelection([task, diff], undefined, "d1")
         expect(selected).toBe(diff)
@@ -39,9 +61,16 @@ describe("selectQueueSelection", () => {
     it("returns the first item when no id filter is given", () => {
         const first = makeItem()
         const second = makeItem({
-            identity: { itemType: "ERROR_TASK", id: "task-2", number: "ET-2", subjectHash: "h2" },
+            identity: {
+                itemType: "ERROR_TASK",
+                id: "task-2",
+                number: "ET-2",
+                subjectHash: "h2",
+            },
         })
-        expect(selectQueueSelection([first, second], undefined, undefined)).toBe(first)
+        expect(
+            selectQueueSelection([first, second], undefined, undefined),
+        ).toBe(first)
     })
 
     it("returns undefined for an empty queue", () => {
@@ -68,9 +97,16 @@ describe("resolveDetailTarget", () => {
 
     it("derives the target from the queue selection", () => {
         const queueSelection = makeItem({
-            identity: { itemType: "ERROR_TASK", id: "task-1", number: "ET-1", subjectHash: "h1" },
+            identity: {
+                itemType: "ERROR_TASK",
+                id: "task-1",
+                number: "ET-1",
+                subjectHash: "h1",
+            },
         })
-        expect(resolveDetailTarget(undefined, undefined, queueSelection)).toEqual({
+        expect(
+            resolveDetailTarget(undefined, undefined, queueSelection),
+        ).toEqual({
             itemType: "ERROR_TASK",
             id: "task-1",
         })
@@ -85,42 +121,76 @@ describe("resolveDisplayItem", () => {
     it("returns detail data when it matches the target", () => {
         const queueSelection = makeItem()
         const detailData = makeItem({
-            identity: { itemType: "ERROR_TASK", id: "task-1", number: "ET-1", subjectHash: "h1" },
+            identity: {
+                itemType: "ERROR_TASK",
+                id: "task-1",
+                number: "ET-1",
+                subjectHash: "h1",
+            },
         })
         expect(
-            resolveDisplayItem({ itemType: "ERROR_TASK", id: "task-1" }, detailData, queueSelection),
+            resolveDisplayItem(
+                { itemType: "ERROR_TASK", id: "task-1" },
+                detailData,
+                queueSelection,
+            ),
         ).toBe(detailData)
     })
 
     it("falls back to the queue selection on identity mismatch", () => {
         const queueSelection = makeItem()
         const detailData = makeItem({
-            identity: { itemType: "ERROR_TASK", id: "other", number: "ET-9", subjectHash: "h9" },
+            identity: {
+                itemType: "ERROR_TASK",
+                id: "other",
+                number: "ET-9",
+                subjectHash: "h9",
+            },
         })
         expect(
-            resolveDisplayItem({ itemType: "ERROR_TASK", id: "task-1" }, detailData, queueSelection),
+            resolveDisplayItem(
+                { itemType: "ERROR_TASK", id: "task-1" },
+                detailData,
+                queueSelection,
+            ),
         ).toBe(queueSelection)
     })
 
     it("falls back to the queue selection when detail data is missing", () => {
         const queueSelection = makeItem()
         expect(
-            resolveDisplayItem({ itemType: "ERROR_TASK", id: "task-1" }, null, queueSelection),
+            resolveDisplayItem(
+                { itemType: "ERROR_TASK", id: "task-1" },
+                null,
+                queueSelection,
+            ),
         ).toBe(queueSelection)
     })
 
     it("returns the queue selection when there is no detail target", () => {
         const queueSelection = makeItem()
-        expect(resolveDisplayItem(null, undefined, queueSelection)).toBe(queueSelection)
+        expect(resolveDisplayItem(null, undefined, queueSelection)).toBe(
+            queueSelection,
+        )
     })
 })
 
 describe("derivePosition", () => {
     const second = makeItem({
-        identity: { itemType: "ERROR_TASK", id: "task-2", number: "ET-2", subjectHash: "h2" },
+        identity: {
+            itemType: "ERROR_TASK",
+            id: "task-2",
+            number: "ET-2",
+            subjectHash: "h2",
+        },
     })
     const third = makeItem({
-        identity: { itemType: "ERROR_TASK", id: "task-3", number: "ET-3", subjectHash: "h3" },
+        identity: {
+            itemType: "ERROR_TASK",
+            id: "task-3",
+            number: "ET-3",
+            subjectHash: "h3",
+        },
     })
 
     it("derives list-mode indexes from the display list", () => {
@@ -178,9 +248,9 @@ describe("derivePosition", () => {
 
 describe("deriveResponsibilityStatus", () => {
     it("reports blocked for a task without a work item", () => {
-        expect(deriveResponsibilityStatus(makeItem({ workItem: undefined }), "u1")).toBe(
-            "blocked",
-        )
+        expect(
+            deriveResponsibilityStatus(makeItem({ workItem: undefined }), "u1"),
+        ).toBe("blocked")
     })
 
     it("reports assigned_to_me for a difference without a work item", () => {
@@ -193,14 +263,19 @@ describe("deriveResponsibilityStatus", () => {
             },
             workItem: undefined,
         })
-        expect(deriveResponsibilityStatus(difference, undefined)).toBe("assigned_to_me")
+        expect(deriveResponsibilityStatus(difference, undefined)).toBe(
+            "assigned_to_me",
+        )
     })
 
     it("derives status from work item state", () => {
         const base = makeItem()
         expect(
             deriveResponsibilityStatus(
-                { ...base, workItem: { ...base.workItem!, status: "COMPLETED" } },
+                {
+                    ...base,
+                    workItem: { ...base.workItem!, status: "COMPLETED" },
+                },
                 "u1",
             ),
         ).toBe("completed")
@@ -212,22 +287,33 @@ describe("deriveResponsibilityStatus", () => {
         ).toBe("closed")
         expect(
             deriveResponsibilityStatus(
-                { ...base, workItem: { ...base.workItem!, processingState: "APPROVAL_BLOCKED" } },
+                {
+                    ...base,
+                    workItem: {
+                        ...base.workItem!,
+                        processingState: "APPROVAL_BLOCKED",
+                    },
+                },
                 "u1",
             ),
         ).toBe("blocked")
         expect(
             deriveResponsibilityStatus(
-                { ...base, workItem: { ...base.workItem!, assignmentMode: "POOL", ownerUser: undefined } },
+                {
+                    ...base,
+                    workItem: { ...base.workItem!, ownerUser: undefined },
+                },
                 "u1",
             ),
-        ).toBe("pool_available")
+        ).toBe("assigned_to_other")
     })
 
     it("compares the owner against the current user", () => {
         const base = makeItem()
         expect(deriveResponsibilityStatus(base, "u1")).toBe("assigned_to_me")
         expect(deriveResponsibilityStatus(base, "u2")).toBe("assigned_to_other")
-        expect(deriveResponsibilityStatus(base, undefined)).toBe("assigned_to_other")
+        expect(deriveResponsibilityStatus(base, undefined)).toBe(
+            "assigned_to_other",
+        )
     })
 })

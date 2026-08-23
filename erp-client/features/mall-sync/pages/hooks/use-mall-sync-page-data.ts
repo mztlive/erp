@@ -127,9 +127,6 @@ export function useMallSyncPageData(input: UseMallSyncPageInput) {
         if (workItem.status === "COMPLETED") return "completed"
         if (workItem.status === "CLOSED") return "closed"
         if (workItem.processingState === "APPROVAL_BLOCKED") return "blocked"
-        if (workItem.assignmentMode === "POOL" && !workItem.ownerUser) {
-            return "pool_available"
-        }
         return workItem.ownerUser?.id === profileQuery.data?.userid
             ? "assigned_to_me"
             : "assigned_to_other"

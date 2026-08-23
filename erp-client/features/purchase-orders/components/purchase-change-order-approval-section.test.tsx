@@ -39,15 +39,10 @@ vi.mock("@/features/approval-workflow/queries", async () => {
             mutateAsync: vi.fn(),
             isPending: false,
         }),
-        useReassignApproverMutation: () => ({
-            mutateAsync: vi.fn(),
-            isPending: false,
-        }),
         useCancelBlockedMutation: () => ({
             mutateAsync: vi.fn(),
             isPending: false,
         }),
-        useEligibleReassigneesQuery: () => ({ data: [] }),
     }
 })
 

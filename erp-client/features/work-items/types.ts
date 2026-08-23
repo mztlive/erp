@@ -14,15 +14,11 @@ import {
 
 export type WorkItemStatus = "OPEN" | "COMPLETED" | "CLOSED"
 
-export type AssignmentMode = "DIRECT" | "POOL"
-
-export type WorkItemScope = "mine" | "team" | "managed" | "history"
+export type WorkItemScope = "mine" | "managed" | "history"
 
 export type WorkItemProcessingState = "READY" | "APPROVAL_BLOCKED"
 
 export type WorkItemAllowedAction =
-    | "START_PROCESSING"
-    | "RELEASE_TO_TEAM"
     | "REASSIGN"
     | "CLOSE"
     | "VIEW"
@@ -31,7 +27,6 @@ export type WorkItemAllowedAction =
     | "REJECT"
     | "OPEN_DOCUMENT"
     | "RESUME_CURRENT_APPROVER"
-    | "REASSIGN_CURRENT_APPROVER"
     | "CANCEL_BLOCKED_APPROVAL"
 
 export type WorkItemConflictCode =
@@ -60,7 +55,6 @@ export type WorkItemDto = Readonly<{
     approval_process_instance_id?: string | null
     approval_node_execution_id?: string | null
     status: WorkItemStatus
-    assignment_mode: AssignmentMode
     assignment_source: string
     owner_role: string
     owner_role_label?: string | null
@@ -131,7 +125,6 @@ export type WorkItemProjection = Readonly<{
     approvalProcessInstanceId?: string
     approvalNodeExecutionId?: string
     status: WorkItemStatus
-    assignmentMode: AssignmentMode
     assignmentSource: string
     ownerRole: string
     ownerRoleLabel: string
@@ -197,7 +190,6 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
             dto.approval_process_instance_id ?? undefined,
         approvalNodeExecutionId: dto.approval_node_execution_id ?? undefined,
         status: dto.status,
-        assignmentMode: dto.assignment_mode,
         assignmentSource: dto.assignment_source,
         ownerRole: dto.owner_role,
         // 服务端始终下发中文 label；缺失时回退通用称呼，不把角色码上屏（AGENTS.md §5）。
@@ -254,19 +246,6 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
 
 export type WorkItemResponsibilityCommand =
     | Readonly<{
-          kind: "START_PROCESSING"
-          workItemId: string
-          expectedTaskVersion: string
-          idempotencyKey: string
-      }>
-    | Readonly<{
-          kind: "RELEASE_TO_TEAM"
-          workItemId: string
-          expectedTaskVersion: string
-          reason: string
-          idempotencyKey: string
-      }>
-    | Readonly<{
           kind: "REASSIGN"
           workItemId: string
           expectedTaskVersion: string
@@ -290,7 +269,6 @@ export type ApprovalWorkItemSummaryDto = Readonly<{
     work_item_type: string
     approval_step_instance_id: string | null
     status: WorkItemStatus
-    assignment_mode: AssignmentMode
     owner_role: string
     owner_organization_id: string
     owner_user_id?: string | null
@@ -302,7 +280,6 @@ export type ApprovalWorkItemSummary = Readonly<{
     workItemType: string
     approvalStepInstanceId?: string
     status: WorkItemStatus
-    assignmentMode: AssignmentMode
     ownerRole: string
     ownerOrganizationId: string
     ownerUserId?: string
@@ -318,7 +295,6 @@ export function mapApprovalWorkItemSummaryDto(
         workItemType: dto.work_item_type,
         approvalStepInstanceId: dto.approval_step_instance_id ?? undefined,
         status: dto.status,
-        assignmentMode: dto.assignment_mode,
         ownerRole: dto.owner_role,
         ownerOrganizationId: dto.owner_organization_id,
         ownerUserId: dto.owner_user_id ?? undefined,

@@ -14,11 +14,7 @@ import type { SettlementDetailView } from "@/features/supplier-settlements/types
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
-function SettlementCenterReview({
-    detail,
-}: {
-    detail: SettlementDetailView
-}) {
+function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
     return (
         <Card
             size="sm"
@@ -39,9 +35,7 @@ function SettlementCenterReview({
                             {detail.statement.supplierName}
                             {detail.workItem.ownerUser
                                 ? ` · 当前处理人 ${detail.workItem.ownerUser.displayName}`
-                                : detail.workItem.assignmentMode === "POOL"
-                                  ? " · 团队池待开始处理"
-                                  : " · 尚无个人责任人"}
+                                : " · 当前责任人信息不可用"}
                         </AlertDescription>
                     </Alert>
                 ) : null}

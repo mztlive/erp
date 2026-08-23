@@ -1,0 +1,20 @@
+import { chromium } from "@playwright/test"
+const browser = await chromium.launch({ headless: true })
+const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } })
+const page = await ctx.newPage()
+page.on("console", (m) => console.log(m.type().toUpperCase()+":", m.text().slice(0,300)))
+page.on("pageerror", (e) => console.log("PAGEERROR:", e.message.slice(0,300)))
+await page.goto("http://localhost:3000/login")
+await page.getByPlaceholder("请输入账号").fill("admin")
+await page.getByPlaceholder("请输入密码").fill("123456")
+await page.getByRole("button", { name: "登录" }).click()
+await page.waitForURL((u) => !u.pathname.includes("/login"), { timeout: 30000 })
+await page.waitForTimeout(1500)
+await page.goto("http://localhost:3000/system/roles/role-sales/edit")
+await page.waitForTimeout(6000)
+const html = await page.evaluate(() => {
+  const s = document.querySelector('section[aria-label="审批实例"]')
+  return s ? s.outerHTML.slice(0, 2000) : "no section; sections=" + document.querySelectorAll("section").length
+})
+console.log(html)
+await browser.close()

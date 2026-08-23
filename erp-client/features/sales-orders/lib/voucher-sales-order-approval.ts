@@ -75,7 +75,7 @@ export const readVoucherSalesOrderApprovalResponsibility = (
 })
 
 /**
- * 过滤卡券销售单任务动作，丢弃开始处理、退回团队等已删除的责任池动作。
+ * 过滤卡券销售单任务动作，只保留审批运行时允许的动作。
  *
  * @param actions 单据或任务上的原始动作。
  */

@@ -7,9 +7,7 @@ import { usePurchaseOrderDetailPermissions } from "./use-purchase-order-detail-p
 import { makePurchaseOrderCenter } from "./use-purchase-order-detail-fixtures"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
-type ReviewWorkItem = NonNullable<
-    PurchaseOrderCenterView["reviewWorkItem"]
->
+type ReviewWorkItem = NonNullable<PurchaseOrderCenterView["reviewWorkItem"]>
 
 function makeReviewWorkItem(): ReviewWorkItem {
     return {
@@ -18,11 +16,9 @@ function makeReviewWorkItem(): ReviewWorkItem {
         taskVersion: "v1",
         subjectVersion: "v3",
         status: "OPEN" as const,
-        assignmentMode: "DIRECT" as const,
         ownerRole: "FINANCE",
         ownerOrganizationId: "org-1",
         processingState: "READY" as const,
-        responsibilityActions: ["START_PROCESSING", "RELEASE_TO_TEAM"],
         domainAllowedActions: ["APPROVE", "REJECT"],
         actionBlockers: [],
     }
@@ -41,7 +37,10 @@ afterEach(() => {
 describe("usePurchaseOrderDetailPermissions", () => {
     it("derives false flags for a missing order", () => {
         const { result } = renderHook(() =>
-            usePurchaseOrderDetailPermissions(undefined, new FormalCommandKeyLedger()),
+            usePurchaseOrderDetailPermissions(
+                undefined,
+                new FormalCommandKeyLedger(),
+            ),
         )
         expect(result.current).toEqual({
             canEdit: false,
@@ -49,8 +48,6 @@ describe("usePurchaseOrderDetailPermissions", () => {
             canOpenReview: false,
             canApprove: false,
             canReject: false,
-            canStartReview: false,
-            canReleaseReview: false,
             canChange: false,
             canFulfill: false,
             canPay: false,
@@ -61,10 +58,19 @@ describe("usePurchaseOrderDetailPermissions", () => {
 
     it("maps allowedActions to action flags", () => {
         const order = makePurchaseOrderCenter({
-            allowedActions: ["EDIT", "SUBMIT", "FULFILL", "PAY", "START_CHANGE"],
+            allowedActions: [
+                "EDIT",
+                "SUBMIT",
+                "FULFILL",
+                "PAY",
+                "START_CHANGE",
+            ],
         })
         const { result } = renderHook(() =>
-            usePurchaseOrderDetailPermissions(order, new FormalCommandKeyLedger()),
+            usePurchaseOrderDetailPermissions(
+                order,
+                new FormalCommandKeyLedger(),
+            ),
         )
         expect(result.current.canEdit).toBe(true)
         expect(result.current.canSubmit).toBe(true)
@@ -80,13 +86,14 @@ describe("usePurchaseOrderDetailPermissions", () => {
             reviewWorkItem: makeReviewWorkItem(),
         })
         const { result } = renderHook(() =>
-            usePurchaseOrderDetailPermissions(order, new FormalCommandKeyLedger()),
+            usePurchaseOrderDetailPermissions(
+                order,
+                new FormalCommandKeyLedger(),
+            ),
         )
         expect(result.current.canOpenReview).toBe(true)
         expect(result.current.canApprove).toBe(true)
         expect(result.current.canReject).toBe(true)
-        expect(result.current.canStartReview).toBe(true)
-        expect(result.current.canReleaseReview).toBe(true)
     })
 
     it("does not offer review decisions while a review work item is not ready", () => {
@@ -97,7 +104,10 @@ describe("usePurchaseOrderDetailPermissions", () => {
             },
         })
         const { result } = renderHook(() =>
-            usePurchaseOrderDetailPermissions(order, new FormalCommandKeyLedger()),
+            usePurchaseOrderDetailPermissions(
+                order,
+                new FormalCommandKeyLedger(),
+            ),
         )
         expect(result.current.canApprove).toBe(false)
         expect(result.current.canReject).toBe(false)
@@ -115,8 +125,6 @@ describe("usePurchaseOrderDetailPermissions", () => {
         )
         expect(result.current.canApprove).toBe(true)
         expect(result.current.canReject).toBe(false)
-        expect(result.current.canStartReview).toBe(false)
-        expect(result.current.canReleaseReview).toBe(false)
     })
 
     it("blocks approval while a reject outcome is still unknown", () => {
@@ -137,11 +145,18 @@ describe("usePurchaseOrderDetailPermissions", () => {
         const order = makePurchaseOrderCenter({
             allowedActions: ["FULFILL"],
             actionBlockers: [
-                { action: "FULFILL", code: "PREPAYMENT_GATE", message: "先款未到" },
+                {
+                    action: "FULFILL",
+                    code: "PREPAYMENT_GATE",
+                    message: "先款未到",
+                },
             ],
         })
         const { result } = renderHook(() =>
-            usePurchaseOrderDetailPermissions(order, new FormalCommandKeyLedger()),
+            usePurchaseOrderDetailPermissions(
+                order,
+                new FormalCommandKeyLedger(),
+            ),
         )
         expect(result.current.fulfillBlocker?.code).toBe("PREPAYMENT_GATE")
         expect(result.current.changeBlocker).toBeUndefined()

@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { CardFundsReviewItemView } from "@/features/card-funds-review/types"
 
 /**
- * sticky 结论区：凭证/备注草稿 + 从 0 起 / 复核通过 / 驳回 / 退回团队动作。
+ * sticky 结论区：凭证/备注草稿 + 从 0 起 / 复核通过 / 驳回动作。
  * 通过回调开放确认弹窗，不持有 ConfirmMode 状态。
  */
 export function DecisionPanel({
@@ -37,7 +37,6 @@ export function DecisionPanel({
     onZero,
     onApprove,
     onReject,
-    onRelease,
 }: {
     task: CardFundsReviewItemView
     evidenceDocId: string
@@ -54,7 +53,6 @@ export function DecisionPanel({
     onZero: () => void
     onApprove: (advance: boolean) => void
     onReject: () => void
-    onRelease: () => void
 }) {
     return (
         <Card
@@ -75,9 +73,7 @@ export function DecisionPanel({
                         <Input
                             id="ev-doc"
                             value={evidenceDocId}
-                            disabled={
-                                task.workItem.workItemStatus !== "OPEN"
-                            }
+                            disabled={task.workItem.workItemStatus !== "OPEN"}
                             onChange={(e) => {
                                 onEvidenceDocIdChange(e.target.value)
                             }}
@@ -89,9 +85,7 @@ export function DecisionPanel({
                         <Input
                             id="ev-ref"
                             value={evidenceRef}
-                            disabled={
-                                task.workItem.workItemStatus !== "OPEN"
-                            }
+                            disabled={task.workItem.workItemStatus !== "OPEN"}
                             onChange={(e) => {
                                 onEvidenceRefChange(e.target.value)
                             }}
@@ -118,10 +112,7 @@ export function DecisionPanel({
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     {keyHint ? (
-                        <span
-                            className="text-xs text-destructive"
-                            role="alert"
-                        >
+                        <span className="text-xs text-destructive" role="alert">
                             {keyHint}
                         </span>
                     ) : null}
@@ -169,19 +160,6 @@ export function DecisionPanel({
                     >
                         <XIcon data-icon="inline-start" />
                         驳回
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={
-                            formalPending ||
-                            !task.workItem.allowedActions.includes(
-                                "RELEASE_TO_TEAM",
-                            )
-                        }
-                        onClick={onRelease}
-                    >
-                        退回团队
                     </Button>
                 </div>
             </CardContent>

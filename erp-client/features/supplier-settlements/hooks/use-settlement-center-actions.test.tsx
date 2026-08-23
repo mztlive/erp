@@ -13,19 +13,11 @@ import {
 
 const mocks = vi.hoisted(() => ({
     profileUserid: "u1" as string | undefined,
-    responsibilityMutateAsync: vi.fn(),
 }))
 
 vi.mock("@/features/auth/queries", () => ({
     useAccountProfileQuery: () => ({
         data: mocks.profileUserid ? { userid: mocks.profileUserid } : undefined,
-    }),
-}))
-
-vi.mock("@/features/work-items", () => ({
-    useWorkItemResponsibilityMutation: () => ({
-        mutateAsync: mocks.responsibilityMutateAsync,
-        isPending: false,
     }),
 }))
 
@@ -123,11 +115,9 @@ function makeDetail(
             businessObjectType: "SUPPLIER_SETTLEMENT_STATEMENT",
             businessObjectId: "st-1",
             subjectVersion: "s1",
-            assignmentMode: "DIRECT",
             processingState: "READY",
             ownerUser: { id: "u1", displayName: "复核人" },
             status: "OPEN",
-            allowedTaskActions: ["PROCESS"],
             actionBlockers: [],
         },
         reviewSubmissionPolicy: {
@@ -146,7 +136,9 @@ function makeDetail(
     }
 }
 
-function succeededOutcome(overrides: Partial<FormalOutcome> = {}): FormalOutcome {
+function succeededOutcome(
+    overrides: Partial<FormalOutcome> = {},
+): FormalOutcome {
     return {
         status: "succeeded",
         title: "已完成",
@@ -168,9 +160,7 @@ async function renderActions(detail = makeDetail(), patchUrl = vi.fn()) {
             }),
         { queryClient: createFreshQueryClient() },
     )
-    await waitFor(() =>
-        expect(result.current.detailQuery.isSuccess).toBe(true),
-    )
+    await waitFor(() => expect(result.current.detailQuery.isSuccess).toBe(true))
     return { result, patchUrl }
 }
 
@@ -192,24 +182,23 @@ describe("useSettlementCenterActions", () => {
         expect(result.current.activeDiff?.differenceId).toBe("d-1")
     })
 
-    it("reports assigned_to_other / pool_available / completed correctly", async () => {
+    it("reports assigned_to_other / missing owner / completed correctly", async () => {
         mocks.profileUserid = "u9"
         const other = await renderActions()
         expect(other.result.current.responsibilityStatus).toBe(
             "assigned_to_other",
         )
 
-        const pooled = await renderActions(
+        const missingOwner = await renderActions(
             makeDetail({
                 workItem: {
                     ...makeDetail().workItem!,
-                    assignmentMode: "POOL",
                     ownerUser: undefined,
                 },
             }),
         )
-        expect(pooled.result.current.responsibilityStatus).toBe(
-            "pool_available",
+        expect(missingOwner.result.current.responsibilityStatus).toBe(
+            "assigned_to_other",
         )
 
         const completed = await renderActions(
@@ -245,9 +234,7 @@ describe("useSettlementCenterActions", () => {
     })
 
     it("refreshes the trial with the expected lock version and hash", async () => {
-        mockedApi.refreshSettlementTrial.mockResolvedValue(
-            succeededOutcome(),
-        )
+        mockedApi.refreshSettlementTrial.mockResolvedValue(succeededOutcome())
         const { result } = await renderActions()
 
         await act(async () => {
@@ -351,9 +338,7 @@ describe("useSettlementCenterActions", () => {
     })
 
     it("appends evidence and resets the form on success", async () => {
-        mockedApi.appendDifferenceEvidence.mockResolvedValue(
-            succeededOutcome(),
-        )
+        mockedApi.appendDifferenceEvidence.mockResolvedValue(succeededOutcome())
         const { result } = await renderActions()
         act(() => {
             result.current.setEvidenceOpen(true)
@@ -404,12 +389,11 @@ describe("useSettlementCenterActions", () => {
     })
 
     it("submits review and navigates to the review section on success", async () => {
-        mockedApi.submitSettlementReview.mockResolvedValue(
-            succeededOutcome(),
-        )
+        mockedApi.submitSettlementReview.mockResolvedValue(succeededOutcome())
         const { result, patchUrl } = await renderActions()
         act(() => {
             result.current.setSubmitOpen(true)
+            result.current.setReviewerUserId("reviewer-1")
         })
 
         await act(async () => {
@@ -423,6 +407,7 @@ describe("useSettlementCenterActions", () => {
                 subjectHash: "subj-1",
                 refreshCutoffPolicyId: "pol-1",
                 expectedRefreshCutoffPolicyVersion: "p1",
+                reviewerUserId: "reviewer-1",
             }),
             expect.anything(),
         )
@@ -459,9 +444,7 @@ describe("useSettlementCenterActions", () => {
     })
 
     it("confirms the settlement and navigates to payable on success", async () => {
-        mockedApi.decideSettlementReview.mockResolvedValue(
-            succeededOutcome(),
-        )
+        mockedApi.decideSettlementReview.mockResolvedValue(succeededOutcome())
         const { result, patchUrl } = await renderActions()
         act(() => {
             result.current.setConfirmOpen(true)
@@ -521,44 +504,5 @@ describe("useSettlementCenterActions", () => {
         })
         const lastCall = mockedApi.decideSettlementReview.mock.calls.at(-1)
         expect(lastCall?.[0].reasonCode).toBe("NEEDS_MORE_EVIDENCE")
-    })
-
-    it("starts processing, clears the identity and refetches the detail", async () => {
-        mocks.responsibilityMutateAsync.mockResolvedValue({ id: "resp-1" })
-        const { result } = await renderActions()
-
-        await act(async () => {
-            await result.current.onStartProcessing()
-        })
-
-        expect(mocks.responsibilityMutateAsync).toHaveBeenCalledWith(
-            expect.objectContaining({
-                kind: "START_PROCESSING",
-                workItemId: "wi-1",
-                expectedTaskVersion: "t1",
-            }),
-        )
-        expect(mockedApi.fetchSettlementDetail).toHaveBeenCalledTimes(2)
-        expect(result.current.result).toMatchObject({
-            status: "succeeded",
-            title: "已开始处理复核",
-            reference: "resp-1",
-        })
-    })
-
-    it("reports a rejected result when starting processing fails", async () => {
-        mocks.responsibilityMutateAsync.mockRejectedValue(
-            new Error("网络异常"),
-        )
-        const { result } = await renderActions()
-
-        await act(async () => {
-            await result.current.onStartProcessing()
-        })
-
-        expect(result.current.result).toMatchObject({
-            status: "rejected",
-            title: "开始处理未完成",
-        })
     })
 })

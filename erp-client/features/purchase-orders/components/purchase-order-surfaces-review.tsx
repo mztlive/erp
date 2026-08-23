@@ -35,11 +35,7 @@ export function ReviewSurface({
     pending,
     canApprove,
     canReject,
-    canStartProcessing,
-    canReleaseToTeam,
     onApprove,
-    onStartProcessing,
-    onReleaseToTeam,
     costMasked,
 }: {
     order: NonNullable<ReturnType<typeof usePurchaseOrderCenterQuery>["data"]>
@@ -47,11 +43,7 @@ export function ReviewSurface({
     pending: boolean
     canApprove: boolean
     canReject: boolean
-    canStartProcessing: boolean
-    canReleaseToTeam: boolean
     onApprove: () => void
-    onStartProcessing: () => void
-    onReleaseToTeam: () => void
     costMasked: boolean
 }) {
     return (
@@ -68,19 +60,15 @@ export function ReviewSurface({
                         {order.reviewWorkItem?.processingState ===
                         "APPROVAL_BLOCKED"
                             ? responsibilityText.blocked
-                            : canStartProcessing
-                              ? responsibilityText.poolAvailable
-                              : canApprove || canReject
-                                ? responsibilityText.assignedToMe
-                                : responsibilityText.assignedToOther}
+                            : canApprove || canReject
+                              ? responsibilityText.assignedToMe
+                              : responsibilityText.assignedToOther}
                     </AlertTitle>
                     <AlertDescription>
                         {order.reviewWorkItem?.actionBlockers[0]?.message ??
-                            (canStartProcessing
-                                ? "开始处理成功后才能提交财务决定。"
-                                : canApprove || canReject
-                                  ? "当前责任与提交版本均已确认，可提交允许的审核决定。"
-                                  : "当前页面只读；处理权变化后请刷新。")}
+                            (canApprove || canReject
+                                ? "当前责任与提交版本均已确认，可提交允许的审核决定。"
+                                : "当前页面只读；处理权变化后请刷新。")}
                     </AlertDescription>
                 </Alert>
 
@@ -120,15 +108,6 @@ export function ReviewSurface({
                 <Separator />
 
                 <div className="flex flex-wrap items-end gap-3">
-                    {canStartProcessing ? (
-                        <Button
-                            type="button"
-                            disabled={pending}
-                            onClick={onStartProcessing}
-                        >
-                            {responsibilityText.start}
-                        </Button>
-                    ) : null}
                     <Button
                         type="button"
                         disabled={pending || !canApprove}
@@ -136,16 +115,6 @@ export function ReviewSurface({
                     >
                         通过
                     </Button>
-                    {canReleaseToTeam ? (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={pending}
-                            onClick={onReleaseToTeam}
-                        >
-                            {responsibilityText.releaseToTeam}
-                        </Button>
-                    ) : null}
                 </div>
 
                 <form

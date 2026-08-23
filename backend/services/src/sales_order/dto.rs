@@ -719,8 +719,6 @@ pub enum ProcurementRejectionAllowedAction {
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum LowMarginManagerAllowedAction {
-    /// 从销售领导责任池开始处理。
-    StartProcessing,
     /// 通过低毛利承接。
     Approve,
     /// 驳回低毛利承接。
@@ -758,8 +756,6 @@ pub struct ActiveLowMarginManagerConfirmationView {
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CardSalesApprovalAllowedAction {
-    /// 从运营责任池建立本人责任。
-    StartProcessing,
     /// 提交通过决定。
     Approve,
     /// 提交驳回决定。
@@ -796,8 +792,6 @@ pub struct ActiveCardSalesApprovalView {
     pub processing_state: ProcessingState,
     /// 权限安全的阻塞摘要。
     pub processing_blocker: Option<ProcessingBlockerView>,
-    /// 当前责任模式。
-    pub assignment_source_unused: Option<entities::work_item::AssignmentSource>,
     /// 当前个人责任人安全摘要。
     pub owner_user: Option<WorkItemPartyView>,
     /// 冻结业务版本。

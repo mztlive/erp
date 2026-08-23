@@ -9,17 +9,16 @@ import type { AccessView } from "@/features/access-audit/types"
 /**
  * 权限与审计页面的 URL 查询参数解析与修补。
  * 所有参数与界面控件一一对应（见 AGENTS.md 界面契约）。
+ *
+ * @param forcedView 由路由固定的视图（审计查询独立页）；给出时忽略 `view` 参数。
  */
-function useAccessUrlState() {
+function useAccessUrlState(forcedView?: AccessView) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
-    const view: AccessView = parseView(searchParams.get("view"))
+    const view: AccessView = forcedView ?? parseView(searchParams.get("view"))
     const qParam = searchParams.get("q") ?? ""
-    const status = searchParams.get("status") ?? undefined
-    const org = searchParams.get("org") ?? undefined
-    const risk = searchParams.get("risk") ?? undefined
     const subjectTypeParam = searchParams.get("subjectType") ?? undefined
     const subjectIdParam = searchParams.get("subjectId") ?? undefined
     const eventIdParam = searchParams.get("eventId") ?? undefined
@@ -27,7 +26,6 @@ function useAccessUrlState() {
     const toParam = searchParams.get("to") ?? undefined
     const actorId = searchParams.get("actorId") ?? undefined
     const action = searchParams.get("action") ?? undefined
-    const objectType = searchParams.get("objectType") ?? undefined
     const objectId = searchParams.get("objectId") ?? undefined
     const resultFilter = searchParams.get("result") ?? undefined
     const traceId = searchParams.get("traceId") ?? undefined
@@ -38,7 +36,8 @@ function useAccessUrlState() {
         options?: PatchUrlOptions,
     ) {
         patchSearchParams(
-            { router, pathname, searchParams, view },
+            // 审计查询由路由固定视图，URL 不再回填 view 参数
+            { router, pathname, searchParams, view: forcedView ? undefined : view },
             patch,
             options,
         )
@@ -50,9 +49,6 @@ function useAccessUrlState() {
         searchParams,
         view,
         qParam,
-        status,
-        org,
-        risk,
         subjectTypeParam,
         subjectIdParam,
         eventIdParam,
@@ -60,7 +56,6 @@ function useAccessUrlState() {
         toParam,
         actorId,
         action,
-        objectType,
         objectId,
         resultFilter,
         traceId,

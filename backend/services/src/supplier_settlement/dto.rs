@@ -14,7 +14,7 @@ use entities::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SettlementReviewResult, SettlementStatus,
     SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
-use entities::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
+use entities::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use validator::Validate;
@@ -455,6 +455,12 @@ pub struct SubmitSettlementReviewRequest {
     /// 查询所得刷新截止策略版本。
     #[validate(custom(function = "non_blank", message = "刷新截止策略版本不能为空"))]
     pub expected_refresh_cutoff_policy_version: String,
+    /// 本次复核任务的明确责任人。
+    #[validate(
+        custom(function = "non_blank", message = "复核人不能为空"),
+        length(max = 128, message = "复核人ID不能超过128个字符")
+    )]
+    pub reviewer_user_id: String,
     /// 客户端稳定操作 ID，用于结果查询关联。
     #[validate(length(min = 1, max = 64, message = "操作ID长度必须在1-64之间"))]
     #[validate(custom(function = "safe_command_id", message = "操作ID格式非法"))]
@@ -928,16 +934,12 @@ pub struct SettlementReviewWorkItemView {
     pub status: WorkItemStatus,
     /// 当前正式处理状态。
     pub processing_state: SettlementReviewProcessingState,
-    /// 分派模式。
-    pub assignment_source_unused: AssignmentSource,
     /// 责任角色。
     pub owner_role: String,
     /// 责任组织。
     pub owner_organization_id: String,
     /// 当前个人责任人。
     pub owner_user_id: Option<String>,
-    /// 当前 actor 可执行的通用责任动作；不含 W27 领域决定。
-    pub allowed_actions: Vec<crate::work_item::WorkItemAllowedAction>,
     /// 当前 actor 的领域动作阻断。
     pub action_blockers: Vec<SettlementReviewActionBlockerView>,
 }
@@ -1088,6 +1090,7 @@ mod tests {
             "subject_hash": "a".repeat(64),
             "refresh_cutoff_policy_id": "supplier-settlement-review-cutoff",
             "expected_refresh_cutoff_policy_version": "1",
+            "reviewer_user_id": "reviewer-1",
             "operation_id": "submit:1",
             "idempotency_key": "submit-key-1",
             "comment": "提交复核"

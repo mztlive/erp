@@ -56,8 +56,6 @@ type ConfirmationResult = "PENDING" | "CONFIRMED" | "REJECTED" | "INVALIDATED"
 export type ImportConfirmationAllowedAction =
     | "VIEW"
     | "PROCESS"
-    | "START_PROCESSING"
-    | "RELEASE_TO_TEAM"
     | "REASSIGN"
     | "CLOSE"
     | "CONFIRM_SCOPE"
@@ -240,7 +238,6 @@ export type ImportConfirmationView = Readonly<{
         taskVersion: string
         subjectVersion: string
         status: "OPEN" | "COMPLETED" | "CLOSED"
-        assignmentMode: "DIRECT" | "POOL"
         ownerUserId?: string
         processingState: "READY" | "APPROVAL_BLOCKED"
         allowedActions: readonly ImportConfirmationAllowedAction[]

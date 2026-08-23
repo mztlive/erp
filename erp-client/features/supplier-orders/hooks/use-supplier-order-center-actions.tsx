@@ -17,9 +17,7 @@ import {
     FULFILLMENT_STATUS_LABEL,
     WORK_ITEM_STATUS_LABEL,
 } from "@/features/supplier-orders/types"
-import {
-    responsibilityOf,
-} from "@/features/supplier-orders/hooks/use-supplier-order-center-derivation"
+import { responsibilityOf } from "@/features/supplier-orders/hooks/use-supplier-order-center-derivation"
 import type { CommandIdentity } from "@/features/supplier-orders/hooks/use-supplier-order-center-identity"
 
 export type SupplierOrderCenterResult = {
@@ -38,9 +36,8 @@ export type AfterSalesConfirmRequest = {
 }
 
 export function useSupplierOrderCenterResult() {
-    const [result, setResult] = React.useState<SupplierOrderCenterResult | null>(
-        null,
-    )
+    const [result, setResult] =
+        React.useState<SupplierOrderCenterResult | null>(null)
     const clearResult = React.useCallback(() => setResult(null), [])
     return { result, setResult, clearResult }
 }
@@ -108,7 +105,7 @@ export function useSupplierOrderCenterActions(
             setResult({
                 status: "blocked",
                 title: "当前没有处理权",
-                description: "请先开始处理，或刷新查看当前处理人。",
+                description: "该任务已指定给其他处理人，请刷新查看当前责任人。",
             })
             return
         }
@@ -247,7 +244,7 @@ export function useSupplierOrderCenterActions(
             setResult({
                 status: "blocked",
                 title: "当前没有处理权",
-                description: "请先开始处理，或刷新查看当前处理人。",
+                description: "该任务已指定给其他处理人，请刷新查看当前责任人。",
             })
             return
         }

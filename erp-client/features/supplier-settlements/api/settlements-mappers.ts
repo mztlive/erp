@@ -21,7 +21,6 @@ import type {
     BackendStatement,
 } from "@/features/supplier-settlements/api/settlements-wire"
 
-
 function tsToIso(secs: number | null | undefined): string {
     if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
         return ""
@@ -99,7 +98,6 @@ export function mapFormalReviewTask(
         businessObjectType: "SUPPLIER_SETTLEMENT_STATEMENT" as const,
         businessObjectId: statementId,
         subjectVersion: item.subject_version,
-        assignmentMode: item.assignment_mode,
         processingState: "READY" as const,
         ownerUser: item.owner_user_id
             ? {
@@ -108,7 +106,6 @@ export function mapFormalReviewTask(
               }
             : undefined,
         status: item.status,
-        allowedTaskActions: item.allowed_actions,
         actionBlockers: item.action_blockers.map((blocker) => blocker.message),
     }
 }

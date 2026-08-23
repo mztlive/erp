@@ -26,7 +26,6 @@ export type WorkspaceActionCode =
     | "APPROVE"
     | "REJECT"
     | "RESUME_CURRENT_APPROVER"
-    | "REASSIGN_CURRENT_APPROVER"
     | "CANCEL_BLOCKED_APPROVAL"
 
 export type WorkspaceWorkItem = Readonly<{

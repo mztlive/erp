@@ -14,7 +14,6 @@ type MallSyncConfirmMappingFormProps = {
     canConfirmMapping: boolean
     responsibilityStatus: ResponsibilityStatus
     onOpenSourceFix: () => void
-    onOpenRelease: () => void
 }
 
 export function MallSyncConfirmMappingForm({
@@ -24,7 +23,6 @@ export function MallSyncConfirmMappingForm({
     canConfirmMapping,
     responsibilityStatus,
     onOpenSourceFix,
-    onOpenRelease,
 }: MallSyncConfirmMappingFormProps) {
     if (
         mappingTask?.ownerRoutingState !== "CONFIGURED" ||
@@ -71,20 +69,6 @@ export function MallSyncConfirmMappingForm({
                     <PauseIcon className="size-4" />
                     请求来源修复
                 </Button>
-                {mappingTask.workItem.assignmentMode === "POOL" &&
-                mappingTask.workItem.allowedActions.includes(
-                    "RELEASE_TO_TEAM",
-                ) ? (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={responsibilityStatus !== "assigned_to_me"}
-                        onClick={onOpenRelease}
-                    >
-                        退回团队
-                    </Button>
-                ) : null}
             </div>
             {!selectedCandidateId ? (
                 <p className="text-xs text-muted-foreground">
@@ -96,7 +80,7 @@ export function MallSyncConfirmMappingForm({
                 </p>
             ) : responsibilityStatus !== "assigned_to_me" ? (
                 <p className="text-xs text-muted-foreground">
-                    当前责任人开始处理后才可确认。
+                    当前责任人不匹配，不能确认。
                 </p>
             ) : null}
         </form>

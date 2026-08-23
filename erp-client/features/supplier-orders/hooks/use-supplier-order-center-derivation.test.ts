@@ -17,10 +17,9 @@ const makeWorkItem = (
     businessObjectType: "SUPPLIER_FULFILLMENT_ORDER",
     businessObjectId: "o1",
     subjectVersion: "v2",
-    assignmentMode: "DIRECT",
     processingState: "READY",
     ownerUser: { id: "u1", displayName: "张三" },
-    allowedTaskActions: ["RELEASE_TO_TEAM"],
+    allowedTaskActions: ["PROCESS"],
     actionBlockers: [],
     workItemStatus: "OPEN",
     ...overrides,
@@ -137,12 +136,10 @@ describe("responsibilityOf", () => {
         ).toBe("blocked")
     })
 
-    it("maps ownerless pool work items to pool_available", () => {
-        expect(
-            responsibilityOf(
-                makeWorkItem({ assignmentMode: "POOL", ownerUser: undefined }),
-            ),
-        ).toBe("pool_available")
+    it("maps an ownerless legacy task to assigned_to_other", () => {
+        expect(responsibilityOf(makeWorkItem({ ownerUser: undefined }))).toBe(
+            "assigned_to_other",
+        )
     })
 
     it("distinguishes assigned_to_me from assigned_to_other", () => {

@@ -1656,10 +1656,10 @@ async fn persist_health_failure_task(
             business_object_id: Some(connection.base.id.clone()),
             error_class: error.class,
             owner_role: Some(error_owner_role(error.class).to_string()),
-            owner_user_id: None,
+            owner_user_id: Some(actor.id().to_string()),
         },
     )?;
-    let work_item = error_work_item(&task)?;
+    let work_item = error_work_item(&task, actor.id())?;
     let work_item_audit = actor.clone().resource_log_with_id(
         format!("w20-work-audit-{}", digest(&[&job.base.id])),
         "integration_error_task.work_item.create",

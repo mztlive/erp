@@ -98,7 +98,6 @@ const workItemFixture: SupplierSupplyExceptionWorkItem = {
     handlerKey: "supplier_supply_exception",
     destinationWorkspaceId: "W21",
     status: "OPEN",
-    assignmentMode: "DIRECT",
     assignmentSource: "admin",
     ownerRole: "buyer",
     ownerRoleLabel: "采购",
@@ -183,22 +182,14 @@ describe("useSupplierOfferingsQuery", () => {
             { queryClient },
         )
 
-        await waitFor(() =>
-            expect(result.current.data).toEqual(pageFixture),
-        )
+        await waitFor(() => expect(result.current.data).toEqual(pageFixture))
         expect(mockedFetchList).toHaveBeenCalledWith(listQuery)
         expect(
-            queryClient.getQueryData([
-                "supplier-offerings",
-                "list",
-                listQuery,
-            ]),
+            queryClient.getQueryData(["supplier-offerings", "list", listQuery]),
         ).toEqual(pageFixture)
 
         rerender()
-        await waitFor(() =>
-            expect(result.current.data).toEqual(pageFixture),
-        )
+        await waitFor(() => expect(result.current.data).toEqual(pageFixture))
         expect(mockedFetchList).toHaveBeenCalledTimes(1)
     })
 
@@ -312,7 +303,10 @@ describe("useCreateSupplierOfferingMutation", () => {
             status: "ACTIVE",
         })
         const queryClient = createFreshQueryClient()
-        queryClient.setQueryData(["supplier-offerings", "list", listQuery], pageFixture)
+        queryClient.setQueryData(
+            ["supplier-offerings", "list", listQuery],
+            pageFixture,
+        )
         queryClient.setQueryData(["master-data"], { seeded: true })
 
         const { result } = renderHookWithProviders(
@@ -330,9 +324,9 @@ describe("useCreateSupplierOfferingMutation", () => {
             queryClient.getQueryState(["supplier-offerings", "list", listQuery])
                 ?.isInvalidated,
         ).toBe(true)
-        expect(
-            queryClient.getQueryState(["master-data"])?.isInvalidated,
-        ).toBe(true)
+        expect(queryClient.getQueryState(["master-data"])?.isInvalidated).toBe(
+            true,
+        )
     })
 
     it("keeps the error on the mutation state when creation fails", async () => {
@@ -406,14 +400,10 @@ describe("useUpdateOfferingAvailabilityMutation", () => {
             await result.current.mutation.mutateAsync(availabilityInput)
         })
 
-        expect(mockedUpdateAvailability).toHaveBeenCalledWith(
-            availabilityInput,
-        )
+        expect(mockedUpdateAvailability).toHaveBeenCalledWith(availabilityInput)
         await waitFor(() =>
             expect(result.current.mutation.isSuccess).toBe(true),
         )
-        await waitFor(() =>
-            expect(mockedFetchList).toHaveBeenCalledTimes(2),
-        )
+        await waitFor(() => expect(mockedFetchList).toHaveBeenCalledTimes(2))
     })
 })

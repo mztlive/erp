@@ -229,7 +229,7 @@ pub async fn work_item_list(
 /// 查询与正式待办列表复用授权快照的统计。
 ///
 /// # 返回
-/// 返回个人、团队、到期、超期、异常计数及服务端统计时点。
+/// 返回个人、到期、超期、异常计数及服务端统计时点。
 pub async fn work_item_stats(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

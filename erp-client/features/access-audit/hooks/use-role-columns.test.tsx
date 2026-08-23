@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import type { CellContext } from '@tanstack/react-table'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import type { RoleRow } from '../types'
 import { makeColumnsInput, makeRoleRow } from './test-data'
@@ -38,80 +38,84 @@ describe('useRoleColumns', () => {
         const columns = result.current
         expect(columns.map((c) => c.id)).toEqual([
             'identity',
-            'org',
             'perms',
+            'accounts',
             'scope',
-            'status',
-            'version',
-            'risk',
             'actions',
         ])
         expect(columns.map((c) => c.header)).toEqual([
             '角色',
-            '组织',
-            '模块与动作权限',
+            '权限覆盖',
+            '绑定账号',
             '数据范围',
-            '状态',
-            '版本',
-            '风险',
             '操作',
         ])
     })
 
-    it('renders name, code, permission summary and status label', () => {
+    it('renders name, code and a per-module permission summary', () => {
         const row = makeRoleRow()
         const identity = renderCell('identity', row)
         expect(identity.getByText('管理员')).toBeDefined()
         expect(identity.getByText('role_code_1')).toBeDefined()
 
+        const perms = renderCell('perms', row)
+        expect(perms.getByText('12')).toBeDefined()
+        expect(perms.getByText(/系统审计/)).toBeDefined()
+        expect(perms.getByText(/角色管理/)).toBeDefined()
+    })
+
+    it('calls out wildcard and empty permission sets instead of printing codes', () => {
         expect(
-            renderCell('perms', row).getByText('查看审计 · 修改角色'),
+            renderCell(
+                'perms',
+                makeRoleRow({ allPermissions: true, permissionCount: 0 }),
+            ).getByText('全部权限'),
         ).toBeDefined()
-        expect(renderCell('status', row).getByText('启用')).toBeDefined()
-        expect(renderCell('version', row).getByText('vlive')).toBeDefined()
+
+        expect(
+            renderCell(
+                'perms',
+                makeRoleRow({ permissionCount: 0, permissionGroups: [] }),
+            ).getByText('无权限条目'),
+        ).toBeDefined()
     })
 
-    it('renders risk badges for flagged roles and a dash otherwise', () => {
-        const flagged = renderCell(
-            'risk',
-            makeRoleRow({ riskFlags: ['HIGH_PRIVILEGE', 'EMPTY_SCOPE'] }),
+    it('shows how many modules are hidden beyond the first three', () => {
+        const perms = renderCell(
+            'perms',
+            makeRoleRow({
+                permissionGroups: [
+                    { name: '客户', count: 4 },
+                    { name: '销售单', count: 3 },
+                    { name: '合同', count: 2 },
+                    { name: '库存', count: 1 },
+                    { name: '采购单', count: 1 },
+                ],
+            }),
         )
-        expect(flagged.getByText('高权限')).toBeDefined()
-        expect(flagged.getByText('空数据范围')).toBeDefined()
-
-        expect(renderCell('risk', makeRoleRow()).getByText('—')).toBeDefined()
+        expect(perms.getByText('+2 个模块')).toBeDefined()
     })
 
-    it('opens the effective-access sheet and routes to edit from the actions cell', () => {
+    it('renders bound account count and a dash when nothing is bound', () => {
+        expect(renderCell('accounts', makeRoleRow()).getByText('3')).toBeDefined()
+        expect(
+            renderCell(
+                'accounts',
+                makeRoleRow({ boundAccountCount: 0 }),
+            ).getByText('—'),
+        ).toBeDefined()
+    })
+
+    it('routes to the role form from the actions cell', () => {
         const input = makeColumnsInput()
         const row = makeRoleRow()
         const actions = renderCell('actions', row, input)
-
-        fireEvent.click(actions.getByText('有效权限'))
-        expect(input.openExplain).toHaveBeenCalledWith('ROLE', 'role-1')
 
         fireEvent.click(actions.getByText('编辑'))
         expect(input.router.push).toHaveBeenCalledWith(
             '/system/roles/role-1/edit',
         )
         expect(actions.getByLabelText('管理员 更多操作')).toBeDefined()
-    })
-
-    it('starts an adjust-permissions change from the dropdown menu', async () => {
-        const input = makeColumnsInput()
-        const row = makeRoleRow()
-        renderCell('actions', row, input)
-
-        await openActionsMenu(row)
-        fireEvent.click(screen.getByText('调整权限'))
-
-        expect(input.startChange).toHaveBeenCalledTimes(1)
-        expect(vi.mocked(input.startChange).mock.calls[0][0]).toMatchObject({
-            subjectType: 'ROLE',
-            subjectId: 'role-1',
-            action: 'UPDATE_ROLE_PERMISSIONS',
-            expectedPermissionVersion: 'pv-live',
-        })
     })
 
     it('marks deletion from the dropdown menu with the role identity', async () => {
@@ -128,16 +132,14 @@ describe('useRoleColumns', () => {
         })
     })
 
-    it('keeps the risk-flagged role from showing the adjust entry', async () => {
+    it('does not offer change commands that the backend always blocks', async () => {
         const input = makeColumnsInput()
-        renderCell(
-            'actions',
-            makeRoleRow({ riskFlags: ['HIGH_PRIVILEGE'] }),
-            input,
-        )
+        renderCell('actions', makeRoleRow(), input)
 
         await openActionsMenu(makeRoleRow())
         expect(screen.queryByText('调整权限')).toBeNull()
-        expect(screen.getByText('扩权（将阻断）')).toBeDefined()
+        expect(screen.queryByText('扩权（将阻断）')).toBeNull()
+        expect(screen.queryByText('停用')).toBeNull()
+        expect(input.startChange).not.toHaveBeenCalled()
     })
 })

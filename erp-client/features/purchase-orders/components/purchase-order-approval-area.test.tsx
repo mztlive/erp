@@ -52,15 +52,10 @@ vi.mock("@/features/approval-workflow/queries", async () => {
             mutateAsync: vi.fn(),
             isPending: false,
         }),
-        useReassignApproverMutation: () => ({
-            mutateAsync: vi.fn(),
-            isPending: false,
-        }),
         useCancelBlockedMutation: () => ({
             mutateAsync: vi.fn(),
             isPending: false,
         }),
-        useEligibleReassigneesQuery: () => ({ data: [] }),
     }
 })
 
@@ -180,14 +175,14 @@ describe("PurchaseOrderApprovalArea", () => {
             hasForbiddenWorkItemActions(
                 mergePurchaseOrderAllowedActions(
                     ["CANCEL"],
-                    ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM", "CLOSE"],
+                    ["APPROVE", "REASSIGN", "CLOSE"],
                 ),
             ),
         ).toBe(false)
         expect(
             mergePurchaseOrderAllowedActions(
                 ["CANCEL"],
-                ["APPROVE", "START_PROCESSING", "RELEASE_TO_TEAM", "CLOSE"],
+                ["APPROVE", "REASSIGN", "CLOSE"],
             ),
         ).toEqual(["CANCEL", "APPROVE"])
     })

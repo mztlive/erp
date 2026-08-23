@@ -82,7 +82,7 @@ pub fn converge_eligibility(
 /// * `code` - 结构化阻塞码
 ///
 /// # 返回
-/// 允许恢复或改派时返回 `true`。
+/// 原审批人恢复后允许继续时返回 `true`。
 pub fn is_personnel_blocker(code: ApprovalBlockerCode) -> bool {
     code.allows_personnel_reassign()
 }

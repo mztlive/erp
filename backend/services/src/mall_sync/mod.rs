@@ -1299,27 +1299,15 @@ impl MallSyncService {
             }
         }
 
-        let projected_work_item = work_item.as_ref().map(|item| {
-            let mut work_item_actions = Vec::new();
-            if stage_active && eligible && item.status == WorkItemStatus::Open {
-                if false && item.owner_user_id.is_none() {
-                    work_item_actions.push("START_PROCESSING".to_string());
-                } else if item.is_owned_by(actor.id()) {
-                    work_item_actions.push("RELEASE_TO_TEAM".to_string());
-                }
-            }
-            MappingTaskWorkItemView {
-                work_item_id: item.base.id.clone(),
-                task_version: item.base.version.to_string(),
-                work_item_type: item.work_item_type,
-                business_object_type: item.business_object_type.clone(),
-                business_object_id: item.business_object_id.clone(),
-                subject_version: item.subject_version.clone(),
-                status: item.status,
-                assignment_source_unused: item.assignment_source,
-                owner_user_id: item.owner_user_id.clone(),
-                allowed_actions: work_item_actions,
-            }
+        let projected_work_item = work_item.as_ref().map(|item| MappingTaskWorkItemView {
+            work_item_id: item.base.id.clone(),
+            task_version: item.base.version.to_string(),
+            work_item_type: item.work_item_type,
+            business_object_type: item.business_object_type.clone(),
+            business_object_id: item.business_object_id.clone(),
+            subject_version: item.subject_version.clone(),
+            status: item.status,
+            owner_user_id: item.owner_user_id.clone(),
         });
         let owner_role = routing_configured
             .then(|| work_item.as_ref().map(|item| item.owner_role.clone()))
@@ -1736,6 +1724,7 @@ impl MallSyncService {
         actor: &AuditActor,
     ) -> Result<MasterMappingTaskView> {
         req.validate()?;
+        let owner_user_id = req.owner_user_id.trim().to_string();
         let snapshot = self
             .db
             .mall_sales_order_snapshots()
@@ -1763,7 +1752,7 @@ impl MallSyncService {
                 source_snapshot_id: req.source_snapshot_id,
                 mapping_type: req.mapping_type,
                 owner_role: owner_role.clone(),
-                owner_user_id: None,
+                owner_user_id: Some(owner_user_id.clone()),
             },
         )?;
         let audit = actor.clone().resource_log(
@@ -1773,7 +1762,7 @@ impl MallSyncService {
         )?;
 
         let work_item = owner_role
-            .map(|owner_role| mapping_work_item(&task, owner_role))
+            .map(|owner_role| mapping_work_item(&task, owner_role, &owner_user_id))
             .transpose()?;
         let work_item_id = work_item.as_ref().map(|item| item.base.id.clone());
         let db = self.db.clone();
@@ -3308,7 +3297,7 @@ fn mapping_owner_role(mapping_type: entities::mall_sync::MappingTaskType) -> Opt
 }
 
 /// 为已确定责任角色的映射差异构造唯一正式任务。
-fn mapping_work_item(task: &MasterMappingTask, owner_role: String) -> Result<WorkItem> {
+fn mapping_work_item(task: &MasterMappingTask, owner_role: String, owner_user_id: &str) -> Result<WorkItem> {
     let sla_seconds = match task.mapping_type {
         MappingTaskType::VoucherCategory | MappingTaskType::UniqueLineItem => 4 * 60 * 60,
         MappingTaskType::Customer
@@ -3325,7 +3314,7 @@ fn mapping_work_item(task: &MasterMappingTask, owner_role: String) -> Result<Wor
             subject_version: task.base.version.to_string(),
             owner_role,
             owner_organization_id: "company".to_string(),
-            owner_user_id: None,
+            owner_user_id: owner_user_id.to_string(),
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::Normal,
             due_at: Some(Instant::from_unix_secs(
