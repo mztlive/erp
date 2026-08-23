@@ -936,6 +936,10 @@ fn seconds(value: Option<entities::common::time::Instant>) -> Option<u64> {
     value.and_then(|instant| u64::try_from(instant.unix_secs()).ok())
 }
 
+/// 把责任角色码翻译成界面文案。
+///
+/// 组织角色与审批责任角色（`approval/policy.rs` 的 `owner_role`）都会落到 `owner_role`
+/// 字段。未覆盖的码不得原样上屏——界面禁止展示实现标识符，回退到通用「责任人」。
 fn role_label(role: &str) -> String {
     match role {
         "role-sales" | "sales" => "销售",
@@ -944,7 +948,20 @@ fn role_label(role: &str) -> String {
         "role-operations" | "operations" => "运营",
         "role-finance" | "finance" => "财务",
         "role-management" | "management" => "管理层",
-        _ => role,
+        "sales_order_approver" => "销售单审批人",
+        "voucher_sales_order_approver" => "卡券销售单审批人",
+        "sales_change_order_approver" => "销售变更单审批人",
+        "purchase_order_approver" => "采购单审批人",
+        "purchase_change_order_approver" => "采购变更单审批人",
+        "stock_adjustment_approver" => "库存调整单审批人",
+        "customer_receipt_approver" => "回款复核人",
+        "supplier_payment_approver" => "供应商付款审批人",
+        "customer_refund_approver" => "客户退款审批人",
+        "supplier_refund_approver" => "供应商退款审批人",
+        "receipt_reversal_approver" => "回款冲正审批人",
+        "payment_reversal_approver" => "付款冲正审批人",
+        "approver" => "审批人",
+        _ => "责任人",
     }
     .to_string()
 }

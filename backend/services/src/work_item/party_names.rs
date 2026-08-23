@@ -1,15 +1,21 @@
-//! 为任务投影补齐处理人真实姓名。
+//! 为任务投影补齐处理人与提交人真实姓名。
 //!
 //! 队列页不得把「当前处理人」这种占位词上屏；姓名按账号主数据批量解析。
+//! 简报里的「提交人」段由各 `*_brief.rs` 写入账号 ID（见 `sales_order_brief.rs`
+//! 的 `submitted_by`），同样在这里解析；解析不到就整段摘掉——界面禁止展示账号 ID。
 
 use std::collections::HashMap;
 
 use database::{AccessControlExt, Executor, NoTransaction};
 use mongodb::bson::doc;
 
+use super::dto::WorkItemSummarySection;
 use super::presentation::resolve_owner_display_name;
 use super::{WorkItemService, WorkItemView};
 use crate::errors::Result;
+
+/// 简报里提交人段的标签，与 `brief.rs` 写入端保持一致。
+const SUBMITTER_LABEL: &str = "提交人";
 
 impl WorkItemService {
     /// 把投影中的处理人占位名替换为账号姓名。
@@ -42,16 +48,16 @@ impl WorkItemService {
         executor: &mut dyn Executor,
         items: &mut [WorkItemView],
     ) -> Result<()> {
-        let owner_ids = owner_ids_for_lookup(items);
-        if owner_ids.is_empty() {
+        let account_ids = account_ids_for_lookup(items);
+        if account_ids.is_empty() {
             return Ok(());
         }
-        let names = self.load_account_names(&owner_ids, executor).await?;
+        let names = self.load_account_names(&account_ids, executor).await?;
         for item in items {
-            let Some(owner) = item.owner_user.as_mut() else {
-                continue;
-            };
-            owner.display_name = resolve_owner_display_name(&owner.id, &names);
+            if let Some(owner) = item.owner_user.as_mut() {
+                owner.display_name = resolve_owner_display_name(&owner.id, &names);
+            }
+            apply_submitter_name(&mut item.summary_sections, &names);
         }
         Ok(())
     }
@@ -83,29 +89,100 @@ impl WorkItemService {
     }
 }
 
-/// 收集需要查姓名的处理人 ID。
+/// 收集需要查姓名的账号 ID：处理人与简报提交人。
 ///
 /// # 参数
 /// * `items` - 任务投影
 ///
 /// # 返回
-/// 返回去重后的账号 ID；无处理人时为空。
+/// 返回去重后的账号 ID；无处理人也无待解析提交人时为空。
 ///
 /// # 错误
 /// 无。
-fn owner_ids_for_lookup(items: &[WorkItemView]) -> Vec<String> {
+fn account_ids_for_lookup(items: &[WorkItemView]) -> Vec<String> {
     let mut ids = items
         .iter()
-        .filter_map(|item| item.owner_user.as_ref().map(|owner| owner.id.clone()))
+        .flat_map(|item| {
+            let owner = item.owner_user.as_ref().map(|owner| owner.id.clone());
+            let submitter = submitter_section(&item.summary_sections)
+                .map(|section| section.value.clone())
+                .filter(|value| is_account_id(value));
+            owner.into_iter().chain(submitter)
+        })
         .collect::<Vec<_>>();
     ids.sort();
     ids.dedup();
     ids
 }
 
+/// 找到简报里的提交人段。
+///
+/// # 参数
+/// * `sections` - 简报键值段
+///
+/// # 返回
+/// 存在「提交人」段时返回该段。
+///
+/// # 错误
+/// 无。
+fn submitter_section(sections: &[WorkItemSummarySection]) -> Option<&WorkItemSummarySection> {
+    sections.iter().find(|section| section.label == SUBMITTER_LABEL)
+}
+
+/// 把简报提交人 ID 换成姓名；换不出姓名就摘掉该段。
+///
+/// # 参数
+/// * `sections` - 简报键值段
+/// * `names` - 账号 ID 到姓名
+///
+/// # 返回
+/// 无。已经是姓名的段保持原样。
+///
+/// # 错误
+/// 无。
+fn apply_submitter_name(sections: &mut Vec<WorkItemSummarySection>, names: &HashMap<String, String>) {
+    let Some(index) = sections
+        .iter()
+        .position(|section| section.label == SUBMITTER_LABEL)
+    else {
+        return;
+    };
+    if !is_account_id(&sections[index].value) {
+        return;
+    }
+    match names
+        .get(&sections[index].value)
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
+        Some(name) => sections[index].value = name.to_string(),
+        None => {
+            sections.remove(index);
+        }
+    }
+}
+
+/// 判断取值是否为账号稳定 ID：24 位 ObjectId 或本系统 32 位 hex。
+///
+/// # 参数
+/// * `value` - 简报段取值
+///
+/// # 返回
+/// 是账号 ID 时返回 `true`。
+///
+/// # 错误
+/// 无。
+fn is_account_id(value: &str) -> bool {
+    let value = value.trim();
+    matches!(value.len(), 24 | 32) && value.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::owner_ids_for_lookup;
+    use std::collections::HashMap;
+
+    use super::{account_ids_for_lookup, apply_submitter_name, is_account_id, WorkItemSummarySection};
     use crate::work_item::dto::WorkItemPartyView;
 
     #[test]
@@ -117,9 +194,60 @@ mod tests {
             dummy_view(None),
         ];
         assert_eq!(
-            owner_ids_for_lookup(&items),
+            account_ids_for_lookup(&items),
             vec!["u1".to_string(), "u2".to_string()]
         );
+    }
+
+    const SUBMITTER_ID: &str = "7e9e521afce041b79218edb9a246e974";
+
+    #[test]
+    fn submitter_ids_join_the_same_account_lookup() {
+        let mut item = dummy_view(Some("u1"));
+        item.summary_sections = vec![section("提交人", SUBMITTER_ID)];
+        assert_eq!(
+            account_ids_for_lookup(&[item]),
+            vec![SUBMITTER_ID.to_string(), "u1".to_string()]
+        );
+    }
+
+    #[test]
+    fn resolved_submitter_ids_become_names() {
+        let mut sections = vec![section("客户", "北方商贸"), section("提交人", SUBMITTER_ID)];
+        let names = HashMap::from([(SUBMITTER_ID.to_string(), "周航".to_string())]);
+        apply_submitter_name(&mut sections, &names);
+        assert_eq!(sections[1].value, "周航");
+    }
+
+    #[test]
+    fn unresolved_submitter_ids_are_dropped_rather_than_shown() {
+        let mut sections = vec![section("客户", "北方商贸"), section("提交人", SUBMITTER_ID)];
+        apply_submitter_name(&mut sections, &HashMap::new());
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].label, "客户");
+    }
+
+    #[test]
+    fn submitter_names_already_resolved_are_left_alone() {
+        let mut sections = vec![section("提交人", "周航")];
+        apply_submitter_name(&mut sections, &HashMap::new());
+        assert_eq!(sections[0].value, "周航");
+    }
+
+    #[test]
+    fn account_ids_are_hex_of_object_id_or_system_length() {
+        assert!(is_account_id(SUBMITTER_ID));
+        assert!(is_account_id("507f1f77bcf86cd799439011"));
+        assert!(!is_account_id("周航"));
+        assert!(!is_account_id("HT-7456920203"));
+    }
+
+    fn section(label: &str, value: &str) -> WorkItemSummarySection {
+        WorkItemSummarySection {
+            label: label.to_string(),
+            value: value.to_string(),
+            numeric: None,
+        }
     }
 
     fn dummy_view(owner_id: Option<&str>) -> crate::work_item::WorkItemView {

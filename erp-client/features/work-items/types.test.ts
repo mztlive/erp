@@ -108,7 +108,7 @@ describe("mapWorkItemDto", () => {
         expect(projection.destinationWorkspaceId).toBeUndefined()
         expect(projection.routeContext).toBeUndefined()
         expect(projection.approvalStepInstanceId).toBeUndefined()
-        expect(projection.ownerRoleLabel).toBe("procurement")
+        expect(projection.ownerRoleLabel).toBe("责任人")
         expect(projection.ownerOrganization).toEqual({
             id: "org_1",
             displayName: "责任组织",

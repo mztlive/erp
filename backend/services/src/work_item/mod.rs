@@ -3026,16 +3026,25 @@ impl ViewAccess {
     }
 }
 
+/// 判断任务是否计入「当前真的能推进」的指标。
+///
+/// 单据审批任务由审批运行时直接指派，只会拿到 `Approve`/`Reject`——`allowed_actions`
+/// 的 `Process` 分支要求 `owner_role` 能过责任范围校验，而审批任务的 `owner_role`
+/// 是语义标签（`sales_order_approver`）不是角色 ID，永远过不了。只认 `Process` 会让
+/// 待办列表有条目、「待我处理」却是 0。
 fn counts_as_processable_stat(scope: WorkItemScope, access: &ViewAccess) -> bool {
     if access.processing_state != ProcessingState::Ready {
         return false;
     }
-    let required_action = match scope {
-        WorkItemScope::Mine => WorkItemAllowedAction::Process,
-        WorkItemScope::Team => WorkItemAllowedAction::Process,
-        WorkItemScope::Managed | WorkItemScope::History => return false,
-    };
-    access.allowed_actions.contains(&required_action)
+    match scope {
+        WorkItemScope::Mine | WorkItemScope::Team => access.allowed_actions.iter().any(|action| {
+            matches!(
+                action,
+                WorkItemAllowedAction::Process | WorkItemAllowedAction::Approve
+            )
+        }),
+        WorkItemScope::Managed | WorkItemScope::History => false,
+    }
 }
 
 fn allowed_actions(
@@ -3791,6 +3800,21 @@ mod tests {
         assert!(counts_as_processable_stat(WorkItemScope::Team, &team));
         assert!(!counts_as_processable_stat(WorkItemScope::Managed, &mine));
         assert!(!counts_as_processable_stat(WorkItemScope::History, &team));
+    }
+
+    #[test]
+    fn approval_tasks_count_even_though_they_never_get_process() {
+        // 单据审批任务的动作集只有 View/Approve/Reject，仍必须计入「待我处理」，
+        // 否则列表有条目而指标是 0。
+        let approval = ViewAccess::ready(vec![
+            WorkItemAllowedAction::View,
+            WorkItemAllowedAction::Approve,
+            WorkItemAllowedAction::Reject,
+        ]);
+        assert!(counts_as_processable_stat(WorkItemScope::Mine, &approval));
+
+        let view_only = ViewAccess::ready(vec![WorkItemAllowedAction::View]);
+        assert!(!counts_as_processable_stat(WorkItemScope::Mine, &view_only));
     }
 
     #[test]

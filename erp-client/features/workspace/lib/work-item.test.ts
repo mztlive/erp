@@ -6,7 +6,6 @@ import {
     canView,
     isBlockedWorkItem,
     processBlocker,
-    responsiblePartyLabel,
 } from "./work-item"
 
 function itemFixture(
@@ -45,17 +44,6 @@ function itemFixture(
         ...overrides,
     }
 }
-
-describe("responsiblePartyLabel", () => {
-    it("prefers the named owner and never says 团队待处理", () => {
-        expect(responsiblePartyLabel(itemFixture())).toBe("销售 · 张三")
-        expect(
-            responsiblePartyLabel(
-                itemFixture({ ownerUserLabel: "处理人待确认" }),
-            ),
-        ).not.toContain("团队待处理")
-    })
-})
 
 describe("processBlocker / canProcess / canView", () => {
     it("reads server blockers and view actions", () => {

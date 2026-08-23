@@ -164,9 +164,9 @@ export function WorkspaceHomePage() {
 
     return (
         <PageScaffold className="min-h-0">
+            {/* 计数只在左列标题出现一次，页头不再重复同一句。 */}
             <PageHeader
                 title="我的工作台"
-                description={`当前共 ${view.total} 项`}
                 metadata={
                     <DataFreshness
                         updatedAt={workItemsFreshness.updatedAtLabel}

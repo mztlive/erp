@@ -200,7 +200,8 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         assignmentMode: dto.assignment_mode,
         assignmentSource: dto.assignment_source,
         ownerRole: dto.owner_role,
-        ownerRoleLabel: dto.owner_role_label ?? dto.owner_role,
+        // 服务端始终下发中文 label；缺失时回退通用称呼，不把角色码上屏（AGENTS.md §5）。
+        ownerRoleLabel: dto.owner_role_label ?? "责任人",
         ownerOrganization: {
             id: ownerOrganization.id,
             displayName: ownerOrganization.display_name,

@@ -1,14 +1,6 @@
 import { canOpenWorkItemHandler } from "@/features/workspace/lib/navigation-eligibility"
 import type { WorkspaceWorkItem } from "@/features/workspace/types"
 
-/** 任务行的责任方展示。禁止写「团队待处理」。 */
-export function responsiblePartyLabel(item: WorkspaceWorkItem): string {
-    if (item.ownerUserLabel) {
-        return `${item.ownerRoleLabel} · ${item.ownerUserLabel}`
-    }
-    return `${item.ownerRoleLabel} · ${item.ownerOrganizationLabel}`
-}
-
 /** 首个阻止打开单据的提示。 */
 export function processBlocker(item: WorkspaceWorkItem): string | undefined {
     return item.actionBlockers.find(
