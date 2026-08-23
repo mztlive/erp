@@ -30,6 +30,7 @@ export interface CustomerReceivablesUrlState {
     reviewStatus: Exclude<ReceivableReviewStatusFilter, "all"> | undefined
     focusId: string | undefined
     salesOrderId: string | undefined
+    registerMode: "receipt" | "invoice" | undefined
     receivableAccountId: string | undefined
     returnTo: string | undefined
     from: string | undefined
@@ -112,6 +113,11 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
             : reviewStatusDraftFromUrl
     const focusId = searchParams.get("focusId") ?? undefined
     const salesOrderId = searchParams.get("salesOrderId") ?? undefined
+    const registerParam = searchParams.get("register")
+    const registerMode =
+        registerParam === "invoice" || registerParam === "receipt"
+            ? registerParam
+            : undefined
     const receivableAccountId =
         searchParams.get("receivableAccountId") ?? undefined
     const returnTo = searchParams.get("returnTo") ?? undefined
@@ -381,6 +387,7 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
         reviewStatus,
         focusId,
         salesOrderId,
+        registerMode,
         receivableAccountId,
         returnTo,
         from,

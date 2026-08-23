@@ -4,7 +4,7 @@ import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 
 /**
- * 列表行键盘导航：`/` 聚焦搜索框，`j/k` 或方向键移动聚焦行，`Enter` 打开详情，
+ * 列表行键盘导航：`/` 聚焦搜索框，`j/k` 或方向键移动聚焦行，`Enter` 打开纸质投影，
  * `Escape` 关闭纸质预览并把焦点还给原行。筛选条件或行数变化时聚焦回到第一行。
  */
 export function useSalesOrdersListKeyboardNav(options: {
@@ -82,7 +82,7 @@ export function useSalesOrdersListKeyboardNav(options: {
             } else if (event.key === "Enter") {
                 event.preventDefault()
                 const row = items[focusedIndex]
-                if (row) onRowNavigate(row.id)
+                if (row) onPaperChange(row.id)
             } else if (event.key === "Escape" && paperId) {
                 event.preventDefault()
                 const id = paperId

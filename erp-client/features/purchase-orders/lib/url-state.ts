@@ -12,6 +12,7 @@ export type PurchaseOrdersUrlState = {
     pageSize: number
     sort?: string
     basisId?: string
+    salesOrderId?: string
 }
 
 const STATUS_VALUES: readonly PurchaseOrderStatusFilter[] = [
@@ -41,6 +42,7 @@ const codec = createUrlStateCodec<PurchaseOrdersUrlState>([
     { key: "pageSize", type: "number", defaultValue: 20, min: 1, max: 100 },
     { key: "sort", type: "string" },
     { key: "basisId", type: "string" },
+    { key: "salesOrderId", type: "string" },
 ])
 
 export const parsePurchaseOrdersSearchParams = codec.parse

@@ -56,8 +56,7 @@ pub(crate) async fn update_sales_order_money_progress(
         (true, false) | (false, true) => CloseStatus::Closeable,
         (false, false) => CloseStatus::NotSatisfied,
     };
-    let fulfillment_changed =
-        fulfillment.is_some_and(|progress| order.fulfillment_progress != progress);
+    let fulfillment_changed = fulfillment.is_some_and(|progress| order.fulfillment_progress != progress);
     if !fulfillment_changed
         && order.collection_progress == collection
         && order.invoice_progress == invoice
@@ -190,17 +189,17 @@ mod tests {
         let open = CollectionProgress::NotCollected;
         let done = FulfillmentProgress::Completed;
         let pending = FulfillmentProgress::NotStarted;
-        assert_eq!(
-            close_for(done, settled),
-            CloseStatus::Closed
-        );
+        assert_eq!(close_for(done, settled), CloseStatus::Closed);
         assert_eq!(close_for(done, open), CloseStatus::Closeable);
         assert_eq!(close_for(pending, settled), CloseStatus::Closeable);
         assert_eq!(close_for(pending, open), CloseStatus::NotSatisfied);
     }
 
     fn close_for(fulfillment: FulfillmentProgress, collection: CollectionProgress) -> CloseStatus {
-        match (fulfillment == FulfillmentProgress::Completed, collection == CollectionProgress::Settled) {
+        match (
+            fulfillment == FulfillmentProgress::Completed,
+            collection == CollectionProgress::Settled,
+        ) {
             (true, true) => CloseStatus::Closed,
             (true, false) | (false, true) => CloseStatus::Closeable,
             (false, false) => CloseStatus::NotSatisfied,

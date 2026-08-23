@@ -28,7 +28,7 @@ export function VoucherCategorySearchCombobox({
     const { rows, loading, emptyLabel: resolvedEmptyLabel } =
         useRemoteSearchCombobox({
             list: query,
-            selectedItem,
+            selectedItem: selectedItem as never,
             idOf: (item) => item.productId,
             emptyLabel,
             fallbackError: "卡券类目加载失败，请重试",

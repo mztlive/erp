@@ -5,7 +5,7 @@ import { PageScaffold } from "@/components/business"
 import { WorkspaceHomePage as WorkspaceHome } from "@/features/workspace/pages/workspace-home-page"
 
 export const metadata: Metadata = {
-    title: "今日工作台",
+    title: "我的工作台",
 }
 
 function WorkspaceHomeFallback() {

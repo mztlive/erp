@@ -39,6 +39,7 @@ export function usePurchaseOrdersListFilters(
         listQueryInput,
         metricKey,
         basisFromUrl,
+        salesOrderFromUrl,
     } = usePurchaseOrdersListUrl()
 
     const hasStructuredFilters = statusFilter !== "all"
@@ -141,6 +142,7 @@ export function usePurchaseOrdersListFilters(
         sortDir,
         listQueryInput,
         basisFromUrl,
+        salesOrderFromUrl,
         // 草稿与 UI 态
         searchDraft,
         setSearchDraft,

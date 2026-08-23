@@ -114,6 +114,12 @@ export function SalesOrderCreateLineSkuEditor({
                                         `lineItems[${rowIndex}].unit`,
                                         product?.baseUnit ?? "",
                                     )
+                                    if (product?.salesVisiblePriceGross) {
+                                        form.setFieldValue(
+                                            `lineItems[${rowIndex}].unitPriceGross`,
+                                            product.salesVisiblePriceGross,
+                                        )
+                                    }
                                 }}
                                 excludeProductKind="VOUCHER"
                                 selectedItem={

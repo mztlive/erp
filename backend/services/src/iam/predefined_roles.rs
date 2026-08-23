@@ -1285,9 +1285,7 @@ mod tests {
             let permissions = parse_permissions(role.permissions).unwrap();
             for permission in required {
                 let parsed = Permission::parse(permission).unwrap();
-                let covered = permissions
-                    .iter()
-                    .any(|seeded| seeded.covers(&parsed));
+                let covered = permissions.iter().any(|seeded| seeded.covers(&parsed));
                 assert_eq!(
                     covered,
                     read_roles.contains(&role.id),
@@ -1296,9 +1294,7 @@ mod tests {
                 );
             }
             assert!(
-                !role
-                    .permissions
-                    .contains(&"purchase_change_order:approve"),
+                !role.permissions.contains(&"purchase_change_order:approve"),
                 "{} 不应配置采购变更 approve（决定走 approval_instance:decide）",
                 role.id
             );
@@ -1310,18 +1306,12 @@ mod tests {
         // 库存调整由财务复核（仓储可创建并代行）；管理层可打开任务详情。
         // 决定本身走 approval_instance:decide，无需 approve/reject 资源动作。
         let required = ["stock_adjustment:list", "stock_adjustment:detail"];
-        let read_roles = [
-            "role-warehouse",
-            "role-finance",
-            "role-management",
-        ];
+        let read_roles = ["role-warehouse", "role-finance", "role-management"];
         for role in PREDEFINED_ROLES {
             let permissions = parse_permissions(role.permissions).unwrap();
             for permission in required {
                 let parsed = Permission::parse(permission).unwrap();
-                let covered = permissions
-                    .iter()
-                    .any(|seeded| seeded.covers(&parsed));
+                let covered = permissions.iter().any(|seeded| seeded.covers(&parsed));
                 assert_eq!(
                     covered,
                     read_roles.contains(&role.id),

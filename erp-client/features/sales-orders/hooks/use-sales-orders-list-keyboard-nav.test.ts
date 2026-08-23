@@ -152,14 +152,14 @@ describe("useSalesOrdersListKeyboardNav", () => {
     })
 
     it("Enter 打开当前聚焦行", () => {
-        const onRowNavigate = vi.fn()
+        const onPaperChange = vi.fn()
         renderHook(() =>
             useSalesOrdersListKeyboardNav({
                 items,
                 url: makeUrl(),
                 paperId: null,
-                onPaperChange: vi.fn(),
-                onRowNavigate,
+                onPaperChange,
+                onRowNavigate: vi.fn(),
             }),
         )
 
@@ -170,7 +170,7 @@ describe("useSalesOrdersListKeyboardNav", () => {
             pressKey("Enter")
         })
 
-        expect(onRowNavigate).toHaveBeenCalledWith("so-b")
+        expect(onPaperChange).toHaveBeenCalledWith("so-b")
     })
 
     it("列表为空时导航键无效", () => {

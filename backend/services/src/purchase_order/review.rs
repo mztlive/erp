@@ -10,10 +10,9 @@ use database::{
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
 use entities::fulfillment::{
-    Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId,
-    FulfillmentResult, PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine,
-    PurchaseReceiptLineData, PurchaseReceiptLineId, QualityResult, ServiceFulfillment,
-    ServiceFulfillmentData, ServiceFulfillmentId,
+    Delivery, DeliveryData, DeliveryId, DeliveryLine, DeliveryLineData, DeliveryLineId, FulfillmentResult,
+    PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData,
+    PurchaseReceiptLineId, QualityResult, ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentId,
 };
 use entities::ids::{
     CostEntryId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseReceiptId,
@@ -333,8 +332,7 @@ async fn persist_formalized_order(
                 }
                 // 采购生效必须形成「采购行→销售行」分配（§6.6）：入库预占沿
                 // 分配关系回到原销售明细，仓发/履约草稿依赖预占。
-                let allocations =
-                    create_sales_allocations(&db, &revision_lines, session).await?;
+                let allocations = create_sales_allocations(&db, &revision_lines, session).await?;
                 // 入仓采购单生效后自动生成采购入库草稿：履约工作面（W09）按
                 // DRAFT 采购入库单投影「入库」待办，仓储确认后过账入库。
                 if fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
@@ -342,14 +340,8 @@ async fn persist_formalized_order(
                 } else if fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
                     // 供应商直发同样需要履约待办：按 DRAFT 发货单（直发类型）
                     // 投影「代发」待办，采购在履约工作面登记物流后过账发货。
-                    create_delivery_draft_for_order(
-                        &db,
-                        &order_mut,
-                        &revision_lines,
-                        &allocations,
-                        session,
-                    )
-                    .await?;
+                    create_delivery_draft_for_order(&db, &order_mut, &revision_lines, &allocations, session)
+                        .await?;
                 } else if fulfillment_responsibility == FulfillmentResponsibility::Service {
                     // 线下服务同样需要履约待办：按 DRAFT 服务履约记录投影
                     // 「服务」待办，采购在履约工作面登记服务事实后确认完成。
@@ -415,10 +407,9 @@ async fn create_sales_allocations(
         let Some(confirmation_line_id) = &line.procurement_confirmation_line_id else {
             continue;
         };
-        let Some(sales_revision_line) = sales_revision_lines
-            .iter()
-            .find(|sales_line| sales_line.sales_order_line_id.to_string() == confirmation_line_id.to_string())
-        else {
+        let Some(sales_revision_line) = sales_revision_lines.iter().find(|sales_line| {
+            sales_line.sales_order_line_id.to_string() == confirmation_line_id.to_string()
+        }) else {
             return Err(Error::BusinessLogicError(
                 "采购明细缺少对应的销售版本行，无法形成销售分配".to_string(),
             ));

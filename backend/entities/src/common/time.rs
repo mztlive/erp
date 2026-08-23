@@ -42,8 +42,7 @@ impl BusinessDate {
     /// 新建的数据。
     pub fn today() -> Self {
         const BUSINESS_UTC_OFFSET_SECS: i32 = 8 * 3600;
-        let business_tz = FixedOffset::east_opt(BUSINESS_UTC_OFFSET_SECS)
-            .expect("+08:00 固定偏移量必然合法");
+        let business_tz = FixedOffset::east_opt(BUSINESS_UTC_OFFSET_SECS).expect("+08:00 固定偏移量必然合法");
         Self(Utc::now().with_timezone(&business_tz).date_naive())
     }
 

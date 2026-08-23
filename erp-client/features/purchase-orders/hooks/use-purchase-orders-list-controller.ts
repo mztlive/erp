@@ -41,6 +41,7 @@ export function usePurchaseOrdersListController() {
         statusFilter,
         metricKey,
         basisFromUrl,
+        salesOrderFromUrl,
     } = filters
 
     const [createOpen, setCreateOpen] = React.useState(false)
@@ -48,7 +49,7 @@ export function usePurchaseOrdersListController() {
     const listQuery = usePurchaseOrdersQuery(listQueryInput)
     const exportQuery = usePurchaseOrderExportDataQuery(listQueryInput)
     const basesQuery = useCreationBasesQuery({
-        enabled: createOpen || Boolean(basisFromUrl),
+        enabled: createOpen || Boolean(basisFromUrl) || Boolean(salesOrderFromUrl),
     })
     const createMutation = useCreateFromBasisMutation()
 
@@ -134,17 +135,18 @@ export function usePurchaseOrdersListController() {
         })
     }, [exportQuery])
 
-    const openBases = React.useMemo(
-        () => basesQuery.data?.filter((b) => !b.consumed) ?? [],
-        [basesQuery.data],
-    )
+    const openBases = React.useMemo(() => {
+        const open = basesQuery.data?.filter((b) => !b.consumed) ?? []
+        if (!salesOrderFromUrl) return open
+        return open.filter((b) => b.salesOrderId === salesOrderFromUrl)
+    }, [basesQuery.data, salesOrderFromUrl])
 
     React.useEffect(() => {
-        if (!basisFromUrl) return
-        // 已生效销售单携带创建依据：打开建单 Dialog，不要求 work_item
-        setSelectedBasisId(basisFromUrl)
+        if (!basisFromUrl && !salesOrderFromUrl) return
+        // 已生效销售单携带创建依据或销售单：打开建单 Dialog
         setCreateOpen(true)
-    }, [basisFromUrl])
+        if (basisFromUrl) setSelectedBasisId(basisFromUrl)
+    }, [basisFromUrl, salesOrderFromUrl])
 
     React.useEffect(() => {
         if (!createOpen || selectedBasisId || basisFromUrl) return

@@ -204,10 +204,7 @@ async function approveInWorkspace(page: Page, guardText?: string): Promise<void>
     const approve = detail.getByRole("button", { name: "通过", exact: true })
     await expect(approve).toBeVisible({ timeout: 20_000 })
     await approve.click()
-    const dialog = dialogOn(page)
-    await expect(dialog).toBeVisible({ timeout: 10_000 })
-    await dialog.getByRole("button", { name: "提交决定" }).click()
-    await expect(dialog).not.toBeVisible({ timeout: 20_000 })
+    await expect(target).toHaveCount(0, { timeout: 20_000 })
 }
 
 /** W09 履约工作面（lane=warehouse，autoNext=0 保证按钮文案为"确认入库/确认发货"）。 */
@@ -262,10 +259,15 @@ async function ensureWarehouse(request: APIRequestContext): Promise<void> {
 async function openAllocationSession(page: Page, registerButton: string): Promise<void> {
     await clickButton(page, registerButton)
     const picker = dialogOn(page)
-    await expect(picker).toBeVisible({ timeout: 10_000 })
-    await pickFirstComboboxOption(page, "请选择往来主体")
-    await clickDialogButton(page, "打开核销工作区")
-    await expect(page.getByText(/^核销 · /).first()).toBeVisible({ timeout: 20_000 })
+    const sessionTitle = page.getByText(/^核销 · /).first()
+    try {
+        await picker.waitFor({ state: "visible", timeout: 3_000 })
+        await pickFirstComboboxOption(page, "请选择往来主体")
+        await clickDialogButton(page, "打开核销工作区")
+    } catch {
+        // 往来主体已能唯一确定时跳过选择弹窗，直接进入核销工作区。
+    }
+    await expect(sessionTitle).toBeVisible({ timeout: 20_000 })
 }
 
 test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }) => {
@@ -293,7 +295,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     await fillByLabel(salesPage, "统一社会信用代码", CREDIT_CODE)
     await pickComboboxOption(salesPage, salesPage.getByLabel("默认付款条件"), "货到 15 天")
     await clickButton(salesPage, "创建客户")
-    // 成功后弹窗短暂停留后关闭并进入客户详情
+    await clickButton(salesPage, "打开客户")
     await expect(salesPage).toHaveURL(/\/sales\/customers\/[0-9a-f]{24,32}/, {
         timeout: 20_000,
     })
@@ -419,10 +421,9 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     // 若沿用 purchaseOrderId 筛选会被队列过滤掉（见 queue.ts matchOperation）
     await gotoPage(whPage, `/fulfillment?lane=warehouse&salesOrderId=${salesOrderId}&autoNext=0`)
     // 仓发必填承运方与物流单号（验收/对账需要），先填好再确认发货。
-    // 承运方是 OptionCombobox（固定枚举），必须点选选项才会写回草稿（见 fulfillment-ship-form.tsx）
     const shipCard = whPage.getByText(/^公司仓发 · /).first()
     await expect(shipCard).toBeVisible({ timeout: 30_000 })
-    await pickComboboxOption(whPage, whPage.locator("#ship-carrier"), "京东物流")
+    await whPage.getByRole("button", { name: "京东物流", exact: true }).click()
     await fillByLabel(whPage, "物流单号", `E2E${Date.now()}`)
     await postFulfillmentOperation(whPage, "公司仓发", "确认发货", "已发货")
 
@@ -442,8 +443,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     })
     await acceptanceDialog.getByRole("button", { name: "确认验收" }).click()
     await expect(salesPage.getByText("客户验收已登记")).toBeVisible({ timeout: 20_000 })
-    // 里程碑：履约已完成
-    await salesPage.reload()
+    await salesPage.getByRole("button", { name: "回到履约" }).click()
     await expect(salesPage.getByText("已完成").first()).toBeVisible({ timeout: 20_000 })
 
     // ── W11 客户回款登记并核销 → 销售领导复核 → 过账 ─────────────────────────
@@ -500,7 +500,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     await salesPage.getByRole("tab", { name: "票款" }).click()
     // 票款区车道：回款 1 笔 · 已结清；开票 1 笔 · 已完成
     await expect(salesPage.getByText(/· 已结清/).first()).toBeVisible()
-    await expect(salesPage.getByText(/· 已完成/).first()).toBeVisible()
+    await expect(salesPage.getByText(/· 已开齐/).first()).toBeVisible()
     // 发票台账出现本票
     await switchAccount("finance")
     await gotoPage(financePage, "/finance/customer-accounts?view=sales_invoice")

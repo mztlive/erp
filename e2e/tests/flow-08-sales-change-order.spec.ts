@@ -122,11 +122,7 @@ async function approveFirstWorkspaceTask(page: Page): Promise<void> {
     const approve = page.getByRole("button", { name: "通过", exact: true }).first()
     await expect(approve).toBeVisible({ timeout: 20_000 })
     await approve.click()
-    const dialog = lastDialog(page)
-    await expect(dialog).toBeVisible({ timeout: 20_000 })
-    await dialog.getByRole("button", { name: "提交决定", exact: true }).click()
-    await expect(dialog).not.toBeVisible({ timeout: 20_000 })
-    // 审批完成后工作台回到空态（无下一项待办）
+    await expect(page.getByRole("dialog")).toHaveCount(0)
     await expect(page.getByText("当前没有待处理事项").first()).toBeVisible({ timeout: 20_000 })
 }
 

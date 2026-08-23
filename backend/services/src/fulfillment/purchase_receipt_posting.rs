@@ -7,13 +7,12 @@ use database::{
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
 use entities::fulfillment::{
-    Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState, DeliveryType,
-    PurchaseReceipt, PurchaseReceiptLine, PurchaseReceiptState,
+    Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryState, DeliveryType, PurchaseReceipt,
+    PurchaseReceiptLine, PurchaseReceiptState,
 };
 use entities::ids::{
-    DeliveryId, DeliveryLineId, PurchaseOrderId, PurchaseReceiptId, SalesOrderLineId,
-    SalesOrderId, SalesOrderRevisionLineId, StockBalanceId, StockMovementId,
-    StockReservationEntryId, StockReservationId,
+    DeliveryId, DeliveryLineId, PurchaseOrderId, PurchaseReceiptId, SalesOrderId, SalesOrderLineId,
+    SalesOrderRevisionLineId, StockBalanceId, StockMovementId, StockReservationEntryId, StockReservationId,
 };
 use entities::inventory::{
     MovementDirection, MovementType, ReservationEntryType, ReservationStatus, StockBalance, StockBalanceData,
@@ -548,13 +547,13 @@ async fn create_warehouse_ship_drafts(
     if receipt_lines.is_empty() {
         return Ok(());
     }
-    let receipt_line_ids: Vec<String> = receipt_lines
-        .iter()
-        .map(|line| line.base.id.clone())
-        .collect();
+    let receipt_line_ids: Vec<String> = receipt_lines.iter().map(|line| line.base.id.clone()).collect();
     let reservations = db
         .stock_reservations()
-        .find_many(doc! { "source_receipt_line_id": { "$in": receipt_line_ids } }, session)
+        .find_many(
+            doc! { "source_receipt_line_id": { "$in": receipt_line_ids } },
+            session,
+        )
         .await?;
     if reservations.is_empty() {
         return Ok(());

@@ -15,10 +15,11 @@ export function useAutoAllocationSession(args: {
     counterpartyPartyId: string | undefined
     customerId: string | undefined
     salesOrderId: string | undefined
+    registerMode: "receipt" | "invoice" | undefined
     receivableAccountId: string | undefined
     createSession: {
         mutateAsync: (input: {
-            mode: "receipt"
+            mode: "receipt" | "invoice"
             counterpartyPartyId: string
             salesOrderId?: string
             receivableAccountId?: string
@@ -37,6 +38,7 @@ export function useAutoAllocationSession(args: {
         counterpartyPartyId,
         customerId,
         salesOrderId,
+        registerMode,
         receivableAccountId,
         createSession,
         patchUrl,
@@ -58,7 +60,7 @@ export function useAutoAllocationSession(args: {
         void (async () => {
             try {
                 const session = await createSession.mutateAsync({
-                    mode: "receipt",
+                    mode: registerMode === "invoice" ? "invoice" : "receipt",
                     counterpartyPartyId: party,
                     salesOrderId,
                     receivableAccountId,

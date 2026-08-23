@@ -190,7 +190,7 @@ async function approveOnDetail(
 ): Promise<void> {
     await page.goto(`${detailUrl}?workItemId=${encodeURIComponent(workItemId)}`)
     await page.getByRole("button", { name: "通过", exact: true }).click()
-    await clickDialogButton(page, "提交决定")
+    await clickDialogButton(page, "确认通过")
     await expectVisible(page, "审批决定已提交")
 }
 

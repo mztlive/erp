@@ -325,7 +325,7 @@ describe("useFulfillmentOperationsController", () => {
         await waitFor(() =>
             expect(result.current.queueQuery.isPending).toBe(false),
         )
-        expect(result.current.autoNext).toBe(true)
+        expect(result.current.autoNext).toBe(false)
 
         act(() => {
             result.current.setAutoNext(false)

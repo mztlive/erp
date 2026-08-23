@@ -26,15 +26,35 @@ export function ContractListResults({
                     description={actionResult.description}
                     facts={actionResult.facts}
                     actions={
-                        actionResult.nextHref ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                render={<Link href={actionResult.nextHref} />}
-                            >
-                                查看详情
-                            </Button>
-                        ) : null
+                        <>
+                            {actionResult.nextHref ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    render={
+                                        <Link href={actionResult.nextHref} />
+                                    }
+                                >
+                                    查看详情
+                                </Button>
+                            ) : null}
+                            {actionResult.createSalesOrderHref ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    render={
+                                        <Link
+                                            href={
+                                                actionResult.createSalesOrderHref
+                                            }
+                                        />
+                                    }
+                                >
+                                    新建销售单
+                                </Button>
+                            ) : null}
+                        </>
                     }
                 />
             ) : null}

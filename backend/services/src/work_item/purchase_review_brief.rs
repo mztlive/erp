@@ -58,49 +58,6 @@ impl WorkItemService {
         Ok(())
     }
 
-    /// 采购变更审批任务的对象事实：任务对象是变更单本身（`business_object_id` 为变更单 ID）。
-    ///
-    /// 变更单审批（财务复核）走通用 DocumentApproval 工作面，事实装载与销售变更同构；
-    /// 无独立注册类型时任务会在授权投影中被静默丢弃。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入变更单最小标题。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    pub(super) async fn load_purchase_change_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::PurchaseChangeOrder);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for change in self
-            .db
-            .purchase_change_orders()
-            .find_many(doc! { "id": { "$in": ids } }, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::PurchaseChangeOrder, change.base.id.clone()),
-                ObjectFact::new(
-                    change.base.id.clone(),
-                    format!("采购变更单 {}", change.purchase_order_id),
-                    change.stable.created_by,
-                ),
-            );
-        }
-        Ok(())
-    }
-
     /// 按对象键批量读取采购单。
     ///
     /// # 参数

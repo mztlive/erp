@@ -27,6 +27,9 @@ vi.mock("@/features/approval-workflow/components/approval-action-bar", () => ({
 vi.mock("@/features/approval-workflow/queries", () => ({
     useRecoveryOptionsQuery: () => ({ data: { actions: [] } }),
 }))
+vi.mock("@/features/workspace/hooks/use-workspace-document-facts", () => ({
+    useWorkspaceDocumentFacts: () => ({ facts: null, isPending: false }),
+}))
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
     usePathname: () => "/workspace",

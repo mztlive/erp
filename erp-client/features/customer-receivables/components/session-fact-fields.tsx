@@ -94,6 +94,9 @@ export function SessionFactFields({
                             />
                         )}
                     />
+                    <p className="text-xs text-muted-foreground">
+                        不含税金额和税额按 13% 预填，可改。
+                    </p>
                     <form.AppField
                         name="grossAmount"
                         children={(field) => (

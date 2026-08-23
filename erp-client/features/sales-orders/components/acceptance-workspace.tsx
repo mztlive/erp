@@ -233,7 +233,18 @@ export function AcceptanceWorkspace({
             <AcceptanceFormalResult
                 formalResult={formalResult}
                 resultRef={resultRef}
-                onDismiss={() => setFormalResult(null)}
+                onDismiss={() => {
+                    setFormalResult(null)
+                    const params = new URLSearchParams(window.location.search)
+                    params.set("section", "fulfillment")
+                    params.delete("mode")
+                    const qs = params.toString()
+                    router.replace(
+                        qs
+                            ? `/sales/orders/${salesOrderId}?${qs}`
+                            : `/sales/orders/${salesOrderId}?section=fulfillment`,
+                    )
+                }}
                 onRetry={() => {
                     setFormalResult(null)
                     setConfirmOpen(true)

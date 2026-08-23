@@ -103,8 +103,13 @@ impl FulfillmentService {
                     acceptance.mark_posted()?;
                     db.customer_acceptances().update(&mut acceptance, session).await?;
                     // 验收通过即履约完成（§4.3.1）：按净已验收汇总刷新销售单履约进度
-                    update_sales_order_fulfillment_progress(&db, session, &acceptance.sales_order_id, actor.id().to_string())
-                        .await?;
+                    update_sales_order_fulfillment_progress(
+                        &db,
+                        session,
+                        &acceptance.sales_order_id,
+                        actor.id().to_string(),
+                    )
+                    .await?;
                     let audit = actor.resource_log(
                         "customer_acceptance.post",
                         "customer_acceptance",
@@ -252,8 +257,13 @@ impl FulfillmentService {
                     original.reverse(reverse_acceptance.base.id.clone().into())?;
                     db.customer_acceptances().update(&mut original, session).await?;
                     // 冲正后净已验收减少：同步刷新销售单履约进度（可能从已完成回退）
-                    update_sales_order_fulfillment_progress(&db, session, &original.sales_order_id, actor.id().to_string())
-                        .await?;
+                    update_sales_order_fulfillment_progress(
+                        &db,
+                        session,
+                        &original.sales_order_id,
+                        actor.id().to_string(),
+                    )
+                    .await?;
                     let audit = actor.resource_log(
                         "customer_acceptance.reverse",
                         "customer_acceptance",

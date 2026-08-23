@@ -73,6 +73,15 @@ export function useAcceptanceMutations({
                             value: `${result.remainingEligibleCount} 批`,
                         },
                         {
+                            label: "履约轨",
+                            value:
+                                result.remainingEligibleCount === 0
+                                    ? "待验收已清零"
+                                    : result.remainingEligibleQuantityLabel
+                                      ? `仍待验收 ${result.remainingEligibleCount} 批 · ${result.remainingEligibleQuantityLabel}`
+                                      : `仍待验收 ${result.remainingEligibleCount} 批`,
+                        },
+                        {
                             label: "下一步",
                             value:
                                 overall === "PASS"

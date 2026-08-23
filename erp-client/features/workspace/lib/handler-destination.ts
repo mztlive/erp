@@ -178,6 +178,50 @@ export type HandlerNavigationInput = Readonly<{
     routeContext?: Readonly<{ confirmationScope?: string }>
 }>
 
+/**
+ * 通用单据审批的打开单据地址。工作面由服务端 destination 决定，不走已废止的确认队列。
+ *
+ * @param item 工作台当前任务导航上下文。
+ * @returns 受控单据路径；工作面未知或缺对象身份时关闭。
+ */
+function buildDocumentApprovalHref(
+    item: HandlerNavigationInput,
+): string | null {
+    const businessObjectId = requiredValue(item.businessObjectId)
+    const workItemId = requiredValue(item.workItemId)
+    if (!businessObjectId || !workItemId) return null
+
+    const params = new URLSearchParams({
+        from: "workspace",
+        workItemId,
+    })
+    const queueContextId = requiredValue(item.queueContextId)
+    if (queueContextId) params.set("queueContextId", queueContextId)
+
+    switch (item.destinationWorkspaceId) {
+        case "W05":
+            params.set("section", "approval")
+            return withParams(
+                `/sales/orders/${encodeURIComponent(businessObjectId)}`,
+                params,
+            )
+        case "W08":
+            params.set("mode", "review")
+            return withParams(
+                `/procurement/orders/${encodeURIComponent(businessObjectId)}`,
+                params,
+            )
+        case "W11":
+            params.set("view", "receipt")
+            params.set("previewKind", "receipt")
+            params.set("previewId", businessObjectId)
+            params.set("currentWorkItemId", workItemId)
+            return withParams("/finance/customer-accounts", params)
+        default:
+            return null
+    }
+}
+
 function requiredValue(value?: string): string | null {
     const normalized = value?.trim()
     return normalized ? normalized : null
@@ -201,6 +245,10 @@ function withParams(path: string, params: URLSearchParams): string {
  * 目标工作面重新查询。任一必需上下文缺失或 handler/工作面不匹配时失败关闭。
  */
 export function buildHandlerHref(item: HandlerNavigationInput): string | null {
+    if (item.handlerKey === "document_approval") {
+        return buildDocumentApprovalHref(item)
+    }
+
     const registration = getHandlerRegistration(item.handlerKey)
     if (
         !registration ||

@@ -109,14 +109,7 @@ async function approveFromWorkspace(
     const approveButton = detail.getByRole("button", { name: "通过" }).first()
     await expect(approveButton).toBeVisible({ timeout: 20_000 })
     await approveButton.click()
-    const decisionDialog = page.getByRole("dialog").last()
-    const submitButton = decisionDialog.getByRole("button", {
-        name: "提交决定",
-    })
-    await expect(submitButton).toBeVisible({ timeout: 20_000 })
-    await submitButton.click()
-    await expect(decisionDialog).not.toBeVisible({ timeout: 20_000 }).catch(() => {})
-    // 审批完成后任务应从待办列表消失
+    await expect(page.getByRole("dialog")).toHaveCount(0)
     await expect(task).toHaveCount(0, { timeout: 20_000 })
 }
 

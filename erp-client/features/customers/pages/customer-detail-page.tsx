@@ -108,7 +108,7 @@ export function CustomerDetailPage({
     }
 
     const isDisabled = customer.status === "disabled"
-    const uploadContractHref = `/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}`
+    const uploadContractHref = `/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}&upload=1`
     const createSalesOrderHref = `/sales/orders?mode=create&customerId=${encodeURIComponent(customer.customerId)}`
 
     const contractBlocked = !can(customer, "UPLOAD_CONTRACT_PDF")

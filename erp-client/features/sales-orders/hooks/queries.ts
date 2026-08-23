@@ -48,6 +48,7 @@ export function useSalesOrderDetailQuery(salesOrderId: string) {
     return useQuery({
         queryKey: salesOrderKeys.detail(salesOrderId),
         queryFn: () => fetchSalesOrderDetail(salesOrderId),
+        enabled: Boolean(salesOrderId),
     })
 }
 

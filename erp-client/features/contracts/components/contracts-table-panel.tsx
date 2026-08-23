@@ -37,6 +37,7 @@ type ContractsTablePanelProps = {
     onRetry: () => void
     onOpenUpload: () => void
     onPreview: (contractId: string) => void
+    highlightedContractId?: string
 }
 
 /**
@@ -52,6 +53,7 @@ export function ContractsTablePanel({
     onRetry,
     onOpenUpload,
     onPreview,
+    highlightedContractId,
 }: ContractsTablePanelProps) {
     const {
         searchDraft,
@@ -312,6 +314,7 @@ export function ContractsTablePanel({
                         }}
                         onRowPreview={(row) => onPreview(row.contractId)}
                         onRowOpen={(row) => onPreview(row.contractId)}
+                        highlightedRowId={highlightedContractId}
                     />
                 )
             }

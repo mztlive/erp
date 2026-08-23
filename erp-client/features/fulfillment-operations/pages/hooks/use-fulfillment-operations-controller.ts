@@ -83,7 +83,9 @@ export function useFulfillmentOperationsController({
         : 0
     const completed = Boolean(view) && operations.length === 0
 
-    const [sessionAutoNext, setSessionAutoNext] = React.useState(true)
+    const [sessionAutoNext, setSessionAutoNext] = React.useState(
+        () => roleValue !== "warehouse",
+    )
     const autoNext =
         autoNextExplicit === "0"
             ? false
@@ -331,6 +333,20 @@ export function useFulfillmentOperationsController({
         [replaceUrl],
     )
 
+    const goToWarehouseShip = React.useCallback(
+        (salesOrderId: string) => {
+            setDirty(false)
+            replaceUrl({
+                purchaseOrderId: null,
+                salesOrderId,
+                currentOperationId: null,
+                type: "warehouse_ship",
+                autoNext: "0",
+            })
+        },
+        [replaceUrl],
+    )
+
     const currentUrl = `${pathname}?${searchParams.toString()}`
 
     return {
@@ -373,5 +389,6 @@ export function useFulfillmentOperationsController({
         clearAllFilters,
         handlePatch,
         setAutoNext,
+        goToWarehouseShip,
     }
 }

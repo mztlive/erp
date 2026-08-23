@@ -14,6 +14,8 @@ export type ContractActionResult = {
     description: string
     facts?: Array<{ label: string; value: string }>
     nextHref?: string
+    createSalesOrderHref?: string
+    highlightedContractId?: string
 }
 
 /** 列表页动作结果：上传归档反馈 + 导出任务反馈。 */
@@ -47,9 +49,10 @@ export function useContractListActions({
                         label: "上传时间",
                         value: result.uploadedAt.slice(0, 19).replace("T", " "),
                     },
-                    { label: "下一步", value: "查看详情核对或新建销售单" },
                 ],
                 nextHref: `/sales/contracts/${result.contractId}`,
+                createSalesOrderHref: `/sales/orders?mode=create&contractId=${encodeURIComponent(result.contractId)}`,
+                highlightedContractId: result.contractId,
             })
         },
         [],

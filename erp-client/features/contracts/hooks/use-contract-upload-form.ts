@@ -79,7 +79,6 @@ export function useContractUploadForm({
     initialCustomerId = "",
     onSuccess,
 }: UseContractUploadFormOptions) {
-    const customerQuery = useCustomerCenterQuery(initialCustomerId)
     const accountProfile = useAccountProfileQuery()
     const canReadAllCustomers = hasPermission(
         accountProfile.data?.permissions,
@@ -127,6 +126,13 @@ export function useContractUploadForm({
         },
     })
 
+    const selectedCustomerId = useSelector(
+        form.store,
+        (state) => state.values.customerId,
+    )
+    const customerQuery = useCustomerCenterQuery(
+        selectedCustomerId || initialCustomerId,
+    )
     const dirty = useSelector(form.store, (state) => state.isDirty)
 
     React.useEffect(() => {
@@ -144,20 +150,24 @@ export function useContractUploadForm({
             uploadMutation.reset()
             return
         }
-        form.reset()
-        // 日期默认今天 / 明年同日，避免硬编码日期随时间失真。
         const today = new Date()
         const pad = (n: number) => String(n).padStart(2, "0")
         const todayText = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
         const nextYear = new Date(today)
         nextYear.setFullYear(today.getFullYear() + 1)
         const nextYearText = `${nextYear.getFullYear()}-${pad(nextYear.getMonth() + 1)}-${pad(nextYear.getDate())}`
-        form.setFieldValue("signedAt", todayText)
-        form.setFieldValue("validFrom", todayText)
-        form.setFieldValue("validTo", nextYearText)
-        if (initialCustomerId) {
-            form.setFieldValue("customerId", initialCustomerId)
-        }
+        form.reset({
+            pdfFile: null,
+            contractNo: "",
+            customerId: initialCustomerId,
+            customerName: "",
+            settlementPartyId: "",
+            settlementPartyName: "",
+            paymentTerms: "CONTRACT",
+            signedAt: todayText,
+            validFrom: todayText,
+            validTo: nextYearText,
+        })
         // eslint-disable-next-line react-hooks/exhaustive-deps -- only seed when dialog opens
     }, [open, initialCustomerId])
 
@@ -177,6 +187,22 @@ export function useContractUploadForm({
                 customer.currentRevision.legalName,
             )
         }
+        if (!values.settlementPartyId && customer.partyId) {
+            form.setFieldValue("settlementPartyId", customer.partyId)
+            form.setFieldValue(
+                "settlementPartyName",
+                customer.currentRevision.legalName,
+            )
+        }
+        if (
+            values.paymentTerms === "CONTRACT" &&
+            customer.currentRevision.defaultPaymentTerm
+        ) {
+            form.setFieldValue(
+                "paymentTerms",
+                customer.currentRevision.defaultPaymentTerm,
+            )
+        }
     }, [customerQuery.data, form, open])
 
     return {
@@ -184,6 +210,7 @@ export function useContractUploadForm({
         dirty,
         uploadMutation,
         canReadAllCustomers,
+        customerPartyId: customerQuery.data?.partyId ?? "",
         discardOpen,
         setDiscardOpen,
     }

@@ -38,6 +38,11 @@ export type FulfillmentQueueFilters = {
     salesOrderId?: string
     purchaseOrderId?: string
     currentOperationId?: string
+    /**
+     * 按采购单筛选时，反查到的来源销售单。
+     * 仓发草稿不挂采购单，要用这个身份才能和入库出现在同一队列。
+     */
+    linkedSalesOrderId?: string
 }
 
 function filterSummary(
@@ -95,11 +100,17 @@ function matchOperation(
     ) {
         return false
     }
-    if (
-        filters.purchaseOrderId &&
-        operation.source.purchaseOrderId !== filters.purchaseOrderId
-    ) {
-        return false
+    if (filters.purchaseOrderId) {
+        const samePurchaseOrder =
+            operation.source.purchaseOrderId === filters.purchaseOrderId
+        const warehouseShipForLinkedSales =
+            operation.operationType === "WAREHOUSE_SHIP" &&
+            Boolean(operation.source.salesOrderId) &&
+            Boolean(filters.linkedSalesOrderId) &&
+            operation.source.salesOrderId === filters.linkedSalesOrderId
+        if (!samePurchaseOrder && !warehouseShipForLinkedSales) {
+            return false
+        }
     }
     if (filters.q) {
         const q = filters.q.trim().toUpperCase()
@@ -125,6 +136,28 @@ function matchOperation(
     return true
 }
 
+/**
+ * 按采购单反查来源销售单。仓发草稿只挂销售单，入库按采购单筛时要用这个身份衔接。
+ *
+ * @param filters 当前队列筛选。
+ * @returns 已有销售单筛选、采购单上的销售单，或无法解析时的 undefined。
+ */
+async function resolveLinkedSalesOrderId(
+    filters: FulfillmentQueueFilters,
+): Promise<string | undefined> {
+    if (filters.salesOrderId) return filters.salesOrderId
+    if (!filters.purchaseOrderId) return undefined
+    try {
+        const purchaseOrder = await apiGet<{ sales_order_id?: string }>(
+            `/admin/purchase-orders/${encodeURIComponent(filters.purchaseOrderId)}`,
+        )
+        const salesOrderId = purchaseOrder.sales_order_id?.trim()
+        return salesOrderId || undefined
+    } catch {
+        return undefined
+    }
+}
+
 export async function fetchFulfillmentQueue(
     filters: FulfillmentQueueFilters,
 ): Promise<FulfillmentQueueView> {
@@ -136,7 +169,7 @@ export async function fetchFulfillmentQueue(
 
     if (requestedOutOfRole.length > 0) {
         return {
-            preferences: { autoNextDefault: true },
+            preferences: { autoNextDefault: filters.role !== "warehouse" },
             context: {
                 position: 0,
                 total: 0,
@@ -162,6 +195,11 @@ export async function fetchFulfillmentQueue(
     // Load draft documents for types visible to role
     const want = new Set(role.types)
     const operations: FulfillmentOperation[] = []
+    const linkedSalesOrderId = await resolveLinkedSalesOrderId(filters)
+    const queueFilters: FulfillmentQueueFilters = {
+        ...filters,
+        linkedSalesOrderId,
+    }
 
     const loaders: Promise<void>[] = []
 
@@ -195,7 +233,7 @@ export async function fetchFulfillmentQueue(
                 page: 1,
                 page_size: 100,
                 status: "DRAFT",
-                sales_order_id: filters.salesOrderId,
+                sales_order_id: linkedSalesOrderId ?? filters.salesOrderId,
                 sort_by: "created_at",
                 sort_dir: "desc",
             })
@@ -260,6 +298,26 @@ export async function fetchFulfillmentQueue(
 
     await Promise.all(loaders)
 
+    if (linkedSalesOrderId) {
+        for (let index = 0; index < operations.length; index += 1) {
+            const operation = operations[index]
+            if (
+                operation.operationType === "RECEIPT" &&
+                !operation.source.salesOrderId
+            ) {
+                operations[index] = {
+                    ...operation,
+                    source: {
+                        ...operation.source,
+                        salesOrderId: linkedSalesOrderId,
+                        salesOrderNo:
+                            operation.source.salesOrderNo || linkedSalesOrderId,
+                    },
+                }
+            }
+        }
+    }
+
     // warehouse options from warehouses API
     let warehouseOptions: FulfillmentQueueView["context"]["warehouseOptions"] =
         []
@@ -295,7 +353,9 @@ export async function fetchFulfillmentQueue(
         visible: true,
     }))
 
-    let filtered = inScope.filter((t) => matchOperation(t, filters, role.types))
+    let filtered = inScope.filter((t) =>
+        matchOperation(t, queueFilters, role.types),
+    )
     filtered = [...filtered].sort((a, b) => {
         if (a.overdue !== b.overdue) return a.overdue ? -1 : 1
         if (a.priority !== b.priority) return b.priority - a.priority
@@ -329,7 +389,7 @@ export async function fetchFulfillmentQueue(
               : undefined
 
     return {
-        preferences: { autoNextDefault: true },
+        preferences: { autoNextDefault: filters.role !== "warehouse" },
         context: {
             position: filtered.length === 0 ? 0 : position + 1,
             total: filtered.length,

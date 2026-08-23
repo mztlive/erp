@@ -139,8 +139,8 @@ describe('useContractUploadForm', () => {
         expect(result.current.form.state.values.signedAt).toBe(todayText)
         expect(result.current.form.state.values.validFrom).toBe(todayText)
         expect(result.current.form.state.values.validTo).toBe(nextYearText)
-        // 打开即写入默认日期，表单进入脏状态（未提交离开需确认）。
-        expect(result.current.dirty).toBe(true)
+        // 默认日期随 reset 写入，不算用户修改，关窗不必二次确认。
+        expect(result.current.dirty).toBe(false)
     })
 
     it('seeds the preselected customer into the form once when opened', () => {

@@ -151,7 +151,7 @@ export function SalesOrdersListTable(props: {
                 left: ["document"],
                 right: ["actions"],
             }}
-            onRowPreview={(row) => onRowNavigate(row.id)}
+            onRowPreview={(row) => openPaperPreview(row.id)}
             onRowOpen={(row) => onRowNavigate(row.id)}
         />
     )

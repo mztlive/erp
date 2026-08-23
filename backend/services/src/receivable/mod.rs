@@ -16,8 +16,8 @@
 //! 销售单存在；D18 拥有 `invoice` 实体与仓储，D19 经 `invoices()` 复用。
 
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, FileAssetExt, NoTransaction, PayableExt,
-    ReceivableExt, SalesOrderExt, Transactional, WorkItemExt,
+    AccessControlExt, DocumentRegistryExt, Executor, FileAssetExt, NoTransaction, PayableExt, ReceivableExt,
+    SalesOrderExt, Transactional, WorkItemExt,
 };
 use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
@@ -1772,10 +1772,7 @@ impl ReceivableService {
                 let rows = self
                     .db
                     .purchase_invoice_allocations()
-                    .find_allocations_by_invoices(
-                        &[invoice.base.id.clone().into()],
-                        &mut NoTransaction,
-                    )
+                    .find_allocations_by_invoices(&[invoice.base.id.clone().into()], &mut NoTransaction)
                     .await?;
                 let mut net = zero_amount();
                 let views = rows
@@ -1784,9 +1781,7 @@ impl ReceivableService {
                         // 进项/销项分配动作枚举跨域不共享（见 A-G7），此处显式转换。
                         let action = match allocation.allocation_action {
                             entities::payable::AllocationAction::Apply => AllocationAction::Apply,
-                            entities::payable::AllocationAction::Reverse => {
-                                AllocationAction::Reverse
-                            }
+                            entities::payable::AllocationAction::Reverse => AllocationAction::Reverse,
                         };
                         match action {
                             AllocationAction::Apply => {
@@ -1817,10 +1812,7 @@ impl ReceivableService {
                 let allocations = self
                     .db
                     .sales_invoice_allocations()
-                    .find_allocations_by_invoices(
-                        &[invoice.base.id.clone().into()],
-                        &mut NoTransaction,
-                    )
+                    .find_allocations_by_invoices(&[invoice.base.id.clone().into()], &mut NoTransaction)
                     .await?;
                 sales_allocation_view(&allocations)
             }

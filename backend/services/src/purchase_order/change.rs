@@ -485,9 +485,7 @@ impl PurchaseOrderService {
         // 生效版本中心视图不携带销售提交行引用（版本行只保留采购二次确认分行），
         // 变更目标行必须沿采购确认行回查原采购提交行补齐销售分配（§6.6），
         // 否则变更提交行校验「商品/服务行必须引用销售提交行」会失败。
-        let enriched_lines = self
-            .enrich_change_lines_with_sales_allocation(&req.lines)
-            .await?;
+        let enriched_lines = self.enrich_change_lines_with_sales_allocation(&req.lines).await?;
         let lines = self
             .build_change_submission_lines(&submission.base.id.clone(), &enriched_lines)
             .await?;

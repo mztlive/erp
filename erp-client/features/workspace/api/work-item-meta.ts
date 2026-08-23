@@ -23,6 +23,10 @@ export const TYPE_META: Record<
         family: WorkspaceFamilyFilter
     }
 > = {
+    DOCUMENT_APPROVAL: {
+        label: "单据审批",
+        family: "approval",
+    },
     PROCUREMENT_CONFIRMATION: {
         label: "采购二次确认",
         family: "fulfillment",
@@ -91,6 +95,41 @@ export const TYPE_META: Record<
         label: "业务异常",
         family: "exception",
     },
+}
+
+const DOCUMENT_APPROVAL_LABEL: Record<string, string> = {
+    SalesOrder: "销售单审批",
+    VoucherSalesOrder: "卡券销售单审批",
+    PurchaseOrder: "采购单审批",
+    CustomerReceipt: "回款复核",
+    CustomerRefund: "客户退款审批",
+    ReceiptReversal: "回款冲正审批",
+    sales_order: "销售单审批",
+    voucher_sales_order: "卡券销售单审批",
+    purchase_order: "采购单审批",
+    customer_receipt: "回款复核",
+    customer_refund: "客户退款审批",
+    receipt_reversal: "回款冲正审批",
+}
+
+/**
+ * 工作台列表用的任务类型文案。通用单据审批按对象种类细分，避免全部显示 DOCUMENT_APPROVAL。
+ *
+ * @param workItemType 任务类型码。
+ * @param businessObjectType 业务对象种类。
+ * @returns 列表第一行类型标签。
+ */
+export function workspaceTypeLabel(
+    workItemType: string,
+    businessObjectType: string,
+): string {
+    if (workItemType === "DOCUMENT_APPROVAL") {
+        return (
+            DOCUMENT_APPROVAL_LABEL[businessObjectType] ??
+            TYPE_META.DOCUMENT_APPROVAL.label
+        )
+    }
+    return TYPE_META[workItemType]?.label ?? workItemType
 }
 
 export const PRIORITY_RANK: Record<string, number> = {

@@ -21,6 +21,7 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { entitySelectorKeys } from "@/features/entity-selectors"
 import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders"
 import {
+    calculateTotals,
     createEmptyLine,
     validateSalesOrderForm,
 } from "@/features/sales-orders/lib/sales-order-create-model"
@@ -370,6 +371,17 @@ export function SalesOrderCreateForm({
                     onOpenChange={submission.setSubmitConfirmOpen}
                     approval={submission.approval}
                     pending={submission.isSubmitting}
+                    snapshot={{
+                        customerName: form.state.values.customerName,
+                        contractLabel: form.state.values.contractRevisionLabel,
+                        amountGross: calculateTotals(
+                            form.state.values.lineItems,
+                            form.state.values.taxRatePercent,
+                        ).gross,
+                        lineCount: form.state.values.lineItems.filter(
+                            (line) => line.sku.trim() || line.name.trim(),
+                        ).length,
+                    }}
                     onConfirm={() => {
                         submission.setSubmitConfirmOpen(false)
                         void submission.handleSubmit(form.state.values, form)

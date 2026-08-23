@@ -11,6 +11,7 @@ import { VoucherSalesOrderApprovalArea } from "@/features/sales-orders/component
 import { salesOrderApprovalPhase } from "@/features/sales-orders/lib/sales-order-approval"
 import { voucherSalesOrderApprovalPhase } from "@/features/sales-orders/lib/voucher-sales-order-approval"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
+import { CloseConditionsCard } from "@/features/sales-orders/components/close-conditions-card"
 import { cn } from "@/lib/utils"
 
 function OverviewField({
@@ -173,6 +174,8 @@ export function OverviewPanel({
                     }
                 />
             ) : null}
+
+            <CloseConditionsCard order={order} />
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 xl:grid-cols-3">
                 <OverviewField

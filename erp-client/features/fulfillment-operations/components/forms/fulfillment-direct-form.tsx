@@ -1,7 +1,7 @@
 "use client"
 
-import { OptionCombobox } from "@/components/business"
 import { DateTimeLocalPicker } from "@/components/ui/date-picker"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CARRIER_OPTIONS } from "@/lib/business-options"
@@ -38,18 +38,37 @@ export function FulfillmentDirectForm({
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                    <Label htmlFor="direct-carrier">承运方</Label>
-                    <OptionCombobox
+                    <Label htmlFor="direct-carrier">承运方（必填）</Label>
+                    <div
                         id="direct-carrier"
-                        value={draft.carrier || null}
-                        disabled={disabled}
-                        options={CARRIER_OPTIONS}
-                        allowClear={false}
-                        placeholder="选择承运方"
-                        onValueChange={(v) =>
-                            onChange({ ...draft, carrier: v ?? "" })
-                        }
-                    />
+                        tabIndex={-1}
+                        role="radiogroup"
+                        aria-label="承运方"
+                        className="flex flex-wrap gap-2 outline-none"
+                    >
+                        {CARRIER_OPTIONS.map((option) => (
+                            <Button
+                                key={option.value}
+                                type="button"
+                                size="sm"
+                                variant={
+                                    draft.carrier === option.value
+                                        ? "default"
+                                        : "outline"
+                                }
+                                disabled={disabled}
+                                aria-pressed={draft.carrier === option.value}
+                                onClick={() =>
+                                    onChange({
+                                        ...draft,
+                                        carrier: option.value,
+                                    })
+                                }
+                            >
+                                {option.label}
+                            </Button>
+                        ))}
+                    </div>
                 </div>
                 <div className="space-y-1.5">
                     <Label htmlFor="direct-tracking">物流单号</Label>

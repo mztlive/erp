@@ -175,7 +175,7 @@ describe("FulfillmentDirectForm", () => {
             />,
         )
         expect(screen.getByText("供应商直发")).toBeTruthy()
-        expect(screen.getByText("承运方")).toBeTruthy()
+        expect(screen.getByText("承运方（必填）")).toBeTruthy()
         expectNoApprovalUi()
     })
 })

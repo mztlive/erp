@@ -30,7 +30,7 @@ export function ContractsListPage() {
 
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [paperId, setPaperId] = React.useState<string | null>(null)
-    const [uploadOpen, setUploadOpen] = React.useState(Boolean(customerId))
+    const [uploadOpen, setUploadOpen] = React.useState(list.upload === "1")
 
     const previewRow = React.useMemo(
         () =>
@@ -135,6 +135,9 @@ export function ContractsListPage() {
                 }}
                 onOpenUpload={() => setUploadOpen(true)}
                 onPreview={setPreviewId}
+                highlightedContractId={
+                    actions.actionResult?.highlightedContractId
+                }
             />
 
             <ContractPreviewSheet

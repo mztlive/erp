@@ -1,5 +1,8 @@
 "use client"
 
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+
 import { FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { CustomerMutationResult } from "@/features/customers/types"
@@ -17,6 +20,7 @@ export function CustomerFormResultPanel({
     isQueryingIdempotency: boolean
     onQueryFinalResult: (idempotencyKey: string) => void
 }) {
+    const router = useRouter()
     return (
         <>
             {result?.outcome === "succeeded" ? (
@@ -47,6 +51,35 @@ export function CustomerFormResultPanel({
                                   },
                                   { label: "时间", value: result.occurredAt },
                               ]
+                    }
+                    actions={
+                        mode === "create" ? (
+                            <>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() =>
+                                        router.push(
+                                            `/sales/customers/${result.customerId}`,
+                                        )
+                                    }
+                                >
+                                    打开客户
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    render={
+                                        <Link
+                                            href={`/sales/contracts?customerId=${encodeURIComponent(result.customerId)}&upload=1`}
+                                        />
+                                    }
+                                >
+                                    上传合同 PDF
+                                </Button>
+                            </>
+                        ) : undefined
                     }
                 />
             ) : null}

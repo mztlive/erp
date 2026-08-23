@@ -22,8 +22,12 @@ export function SettlementPartySearchCombobox({
     emptyLabel,
     value,
     onValueChange,
+    restrictToPartyId,
     ...props
-}: SettlementPartySearchComboboxProps) {
+}: SettlementPartySearchComboboxProps & {
+    /** 已选客户对应主体；空搜索时只列出该主体，输入关键词后仍可搜全部。 */
+    restrictToPartyId?: string
+}) {
     const search = useSearchInput()
     const query = usePartySelectorQuery({ query: search.input, purpose }, value)
     const { rows, loading, emptyLabel: resolvedEmptyLabel } =
@@ -35,19 +39,27 @@ export function SettlementPartySearchCombobox({
             emptyLabel,
             fallbackError: "结算主体加载失败，请重试",
         })
+    const parties =
+        restrictToPartyId && !search.input.trim()
+            ? rows.filter((item) => item.partyId === restrictToPartyId)
+            : rows
     return (
         <SettlementPartyCombobox
             {...props}
             value={value}
-            parties={rows}
+            parties={parties}
             onValueChange={(id) => {
                 onValueChange(id)
-                onItemChange?.(rows.find((item) => item.partyId === id))
+                onItemChange?.(parties.find((item) => item.partyId === id))
             }}
             onSearchChange={search.onSearchChange}
             filterMode="remote"
             loading={loading}
-            emptyLabel={resolvedEmptyLabel}
+            emptyLabel={
+                restrictToPartyId && !search.input.trim() && parties.length === 0
+                    ? "请先选择客户"
+                    : resolvedEmptyLabel
+            }
         />
     )
 }

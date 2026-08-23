@@ -162,10 +162,7 @@ async function approveByDocumentNo(page: Page, docNo: string): Promise<void> {
 async function approveCurrentTask(page: Page): Promise<void> {
     const detail = page.locator('section[aria-label="当前任务"]')
     await detail.getByRole("button", { name: "通过" }).click()
-    const dialog = page.getByRole("dialog")
-    await expect(dialog).toBeVisible({ timeout: 10_000 })
-    await dialog.getByRole("button", { name: "提交决定" }).click()
-    await expect(dialog).not.toBeVisible({ timeout: 20_000 }).catch(() => {})
+    await expect(page.getByRole("dialog")).toHaveCount(0)
 }
 
 /**

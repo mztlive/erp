@@ -76,8 +76,8 @@ export function PurchaseOrdersCreateDialog({
                 <DialogHeader>
                     <DialogTitle>从采购创建依据建单</DialogTitle>
                     <DialogDescription>
-                        仅使用采购二次确认产生的创建依据，无需额外建单任务。
-                        同一依据上的拆单维度已固定，不可跨销售单或跨供应商合并。
+                        销售单生效后，系统按已确认的供应商、类型、履约和付款条件生成创建依据。
+                        一张依据对应一张采购草稿，不能空白建单，也不能跨销售单或跨供应商合并。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
@@ -101,7 +101,7 @@ export function PurchaseOrdersCreateDialog({
                         </div>
                     ) : openBases.length === 0 && !basisFromUrl ? (
                         <p className="text-sm text-muted-foreground">
-                            当前没有可消费的创建依据。请先在采购二次确认完成确认。
+                            当前没有可消费的创建依据。请先完成销售单的采购确认审批，再从已生效销售单「去建单」。
                         </p>
                     ) : (
                         <label className="grid gap-1.5 text-sm">

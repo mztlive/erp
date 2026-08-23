@@ -236,7 +236,9 @@ pub(super) struct EligibilityGroupSources<'a> {
 ///
 /// # 关键业务约束
 /// 事实/分配入参由数据模型 §6.7 固定为三类来源，字段不可压缩。
-pub(super) fn build_eligibility_groups(sources: EligibilityGroupSources<'_>) -> Vec<AcceptanceSalesLineGroupView> {
+pub(super) fn build_eligibility_groups(
+    sources: EligibilityGroupSources<'_>,
+) -> Vec<AcceptanceSalesLineGroupView> {
     let EligibilityGroupSources {
         revision_lines,
         goods_service_lines,

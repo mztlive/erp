@@ -18,6 +18,8 @@ export type FulfillmentResultPanelProps = {
     currentUrl: string
     onResolveUnknown: () => void
     onNext: () => void
+    /** 入库完成后切到同一销售单的待仓发。 */
+    onContinueWarehouseShip?: (salesOrderId: string) => void
 }
 
 /**
@@ -33,6 +35,7 @@ export function FulfillmentResultPanel({
     currentUrl,
     onResolveUnknown,
     onNext,
+    onContinueWarehouseShip,
 }: FulfillmentResultPanelProps) {
     if (!lastResult) return null
 
@@ -70,6 +73,23 @@ export function FulfillmentResultPanel({
                             onClick={() => void onResolveUnknown()}
                         >
                             查询最终结果
+                        </Button>
+                    ) : null}
+                    {lastResult.outcome?.kind === "POSTED" &&
+                    lastResult.outcome.operationType === "RECEIPT" &&
+                    lastResult.outcome.salesOrderId &&
+                    onContinueWarehouseShip ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={() =>
+                                onContinueWarehouseShip(
+                                    lastResult.outcome!.salesOrderId,
+                                )
+                            }
+                        >
+                            本单待仓发
+                            <ArrowRightIcon data-icon="inline-end" />
                         </Button>
                     ) : null}
                     {lastResult.outcome?.kind === "POSTED" &&

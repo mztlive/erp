@@ -40,6 +40,7 @@ export function usePurchaseOrdersListUrl() {
     const listReturnHref = React.useMemo(() => {
         const sp = new URLSearchParams(searchParams.toString())
         sp.delete("basisId")
+        sp.delete("salesOrderId")
         const qs = sp.toString()
         return qs ? `${pathname}?${qs}` : pathname
     }, [pathname, searchParams])
@@ -83,5 +84,6 @@ export function usePurchaseOrdersListUrl() {
         statusFilter: url.status,
         metricKey: url.metric,
         basisFromUrl: url.basisId ?? null,
+        salesOrderFromUrl: url.salesOrderId ?? null,
     }
 }

@@ -271,6 +271,7 @@ export function FulfillmentOperationsPage() {
                                 controller.operations[0]?.operationId
                             if (next) controller.goToOperation(next)
                         }}
+                        onContinueWarehouseShip={controller.goToWarehouseShip}
                     />
                 </div>
             ) : null}

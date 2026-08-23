@@ -37,7 +37,6 @@ mod start_approval;
 mod status;
 
 pub use self::adapter::sales_order_object_readable;
-pub(crate) use self::progress::update_sales_order_money_progress;
 pub use self::dto::{
     ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CancelSalesOrderApprovalRequest,
     CardSalesApprovalAllowedAction, CloseEligibilityView, CreateSalesOrderRequest, DocumentApprovalView,
@@ -47,6 +46,7 @@ pub use self::dto::{
     SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
     VoidSalesOrderRequest, WorkingCopyView,
 };
+pub(crate) use self::progress::update_sales_order_money_progress;
 
 /// 销售单服务。
 ///

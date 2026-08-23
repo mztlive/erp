@@ -153,6 +153,12 @@ describe("useAcceptanceMutations", () => {
             status: "succeeded",
             title: "客户验收已登记",
             reference: "YS-1",
+            facts: expect.arrayContaining([
+                {
+                    label: "履约轨",
+                    value: "仍待验收 3 批 · 约 12 件",
+                },
+            ]),
         })
         expect(invalidateSpy).toHaveBeenCalledWith({
             queryKey: salesOrderKeys.acceptanceRoot("so_1"),
@@ -181,6 +187,10 @@ describe("useAcceptanceMutations", () => {
         const facts = hook.result.current.formalResult?.facts ?? []
         expect(facts[0]).toEqual({ label: "总体结果", value: "短少" })
         expect(facts[2]).toEqual({
+            label: "履约轨",
+            value: "待验收已清零",
+        })
+        expect(facts[3]).toEqual({
             label: "下一步",
             value: "销售协同处理验收异常",
         })

@@ -279,6 +279,7 @@ export function CustomerForm({
                                 label="默认付款条件"
                                 options={PAYMENT_TERM_OPTIONS}
                                 placeholder="录单提示"
+                                allowClear={false}
                             />
                         )}
                     />

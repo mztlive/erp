@@ -17,9 +17,7 @@ use entities::ids::{
     SalesOrderId, SalesOrderLineId, SalesOrderWorkingCopyId,
 };
 use entities::money::Amount;
-use entities::sales_order::{
-    SalesOrderWorkingCopyLineData, WorkingCopyStatus, WorkingPurpose,
-};
+use entities::sales_order::{SalesOrderWorkingCopyLineData, WorkingCopyStatus, WorkingPurpose};
 use entities::sales_review::{
     SalesChangeOrder, SalesChangeOrderData, SalesChangeOrderStatus, SalesChangeSubmission,
     SalesChangeSubmissionData, SalesChangeSubmissionLine, SalesChangeSubmissionLineData,
@@ -703,7 +701,10 @@ fn build_change_working_copy_lines(
     working_copy_id: &SalesOrderWorkingCopyId,
     stable_lines: &[entities::sales_order::SalesOrderLine],
     lines: &[SalesChangeLineRequest],
-) -> Result<(Vec<SalesOrderWorkingCopyLineData>, Vec<entities::sales_order::SalesOrderWorkingCopyLine>)> {
+) -> Result<(
+    Vec<SalesOrderWorkingCopyLineData>,
+    Vec<entities::sales_order::SalesOrderWorkingCopyLine>,
+)> {
     let mut datas = Vec::with_capacity(lines.len());
     for line in lines {
         let stable_id = stable_lines

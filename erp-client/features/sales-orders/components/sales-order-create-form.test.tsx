@@ -162,6 +162,7 @@ const completeHeader = {
     nature: "physical_service" as const,
     ownerUserId: "u-1",
     ownerName: "张三",
+    fulfillmentMode: "公司仓发",
     welfareScene: "ANNUAL_GIFT_BAG",
     paymentTerms: "POSTPAY_NET30",
     fulfillmentDeadline: "2026-09-30",

@@ -11,9 +11,9 @@ use std::{
 use chrono::{Datelike, FixedOffset, TimeZone, Utc};
 use database::{
     AccessControlExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt, LegacyImportExt,
-    MallSyncExt, MongoCasbinAdapter, NoTransaction, PayableExt, PurchaseOrderExt, ReceivableExt,
-    ReturnsExt, SalesOrderExt, SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt,
-    SupplierSettlementExt, Transactional, WorkItemExt,
+    MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt,
+    SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt, Transactional,
+    WorkItemExt,
 };
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use entities::{
@@ -37,11 +37,15 @@ use crate::{
 };
 
 mod brief;
+mod change_order_brief;
 mod dto;
+mod funds_document_brief;
+mod inventory_settlement_brief;
 mod party_names;
 mod presentation;
 mod procurement_brief;
 mod purchase_review_brief;
+mod sales_order_brief;
 
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -538,369 +542,18 @@ impl WorkItemService {
         Ok(facts)
     }
 
-    async fn load_sales_order_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::SalesOrder);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for order in self
-            .db
-            .sales_orders()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::SalesOrder, order.base.id.clone()),
-                ObjectFact::new(
-                    order.base.id.clone(),
-                    format!("销售单 {}", order.order_no),
-                    order.stable.created_by,
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    /// 销售变更审批任务的对象事实：任务对象是变更单本身（`business_object_id` 为变更单 ID）。
-    async fn load_sales_change_review_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::SalesChangeOrder);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for change in self
-            .db
-            .sales_change_orders()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::SalesChangeOrder, change.base.id.clone()),
-                ObjectFact::new(
-                    change.base.id.clone(),
-                    format!("销售变更单 {}", change.sales_order_id),
-                    change.stable.created_by,
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    async fn load_receivable_account_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::ReceivableAccount);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for account in self
-            .db
-            .receivable_accounts()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::ReceivableAccount, account.base.id.clone()),
-                ObjectFact::new(
-                    account.sales_order_id.to_string(),
-                    format!("卡券应收子账 {}", account.account_seq),
-                    account.stable.created_by,
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    /// 回款审批任务的对象事实：任务对象是回款单本身（`business_object_id` 为回款单 ID）。
-    ///
-    /// 回款单实体不记录创建人，创建操作人从 `customer_receipt.create` 审计事实取，
-    /// 缺失时为空参与权（创建人无管理权限时不得仅凭创建事实看到任务）。
-    async fn load_customer_receipt_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::CustomerReceipt);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let receipts = self
-            .db
-            .customer_receipts()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?;
-        if receipts.is_empty() {
-            return Ok(());
-        }
-        let audits = self
-            .db
-            .audit_logs()
-            .find_many(
-                doc! {
-                    "resource_type": "customer_receipt",
-                    "resource_id": { "$in": ids },
-                    "action": "customer_receipt.create",
-                    "success": true,
-                },
-                executor,
-            )
-            .await?;
-        let mut created_by = HashMap::new();
-        for audit in audits {
-            if let Some(resource_id) = audit.resource_id.as_deref() {
-                created_by
-                    .entry(resource_id.to_string())
-                    .or_insert_with(|| audit.actor_id.clone());
-            }
-        }
-        for receipt in receipts {
-            facts.insert(
-                (ObjectKind::CustomerReceipt, receipt.base.id.clone()),
-                ObjectFact::new(
-                    receipt.base.id.clone(),
-                    format!("回款单 {}", receipt.receipt_no),
-                    created_by.get(&receipt.base.id).cloned().unwrap_or_default(),
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    /// 从创建审计回填单据创建人（资金单据实体不落创建人字段）。
+    /// 装载库存、结算、导入、集成和供应侧对象事实。
     ///
     /// # 参数
-    /// * `resource_type` - 审计资源类型（与单据类型一致）
-    /// * `ids` - 单据 ID 集合
-    /// * `executor` - 事务执行器
+    /// * `keys` - 本批任务引用的对象键
+    /// * `facts` - 输出的对象事实表
+    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 返回单据 ID → 创建人 ID 映射；无审计时返回空映射。
-    async fn load_created_by_from_audit(
-        &self,
-        resource_type: &str,
-        ids: &HashSet<String>,
-        executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, String>> {
-        if ids.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let audits = self
-            .db
-            .audit_logs()
-            .find_many(
-                doc! {
-                    "resource_type": resource_type,
-                    "resource_id": { "$in": ids.iter().cloned().collect::<Vec<_>>() },
-                    "action": format!("{resource_type}.create"),
-                    "success": true,
-                },
-                executor,
-            )
-            .await?;
-        let mut created_by = HashMap::new();
-        for audit in audits {
-            if let Some(resource_id) = audit.resource_id.as_deref() {
-                created_by
-                    .entry(resource_id.to_string())
-                    .or_insert_with(|| audit.actor_id.clone());
-            }
-        }
-        Ok(created_by)
-    }
-
-    /// 客户退款审批任务的对象事实：任务对象是退款单本身（`business_object_id` 为退款单 ID）。
-    async fn load_customer_refund_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::CustomerRefund);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let refunds = self
-            .db
-            .customer_refunds()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "customer_refund",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
-        for refund in refunds {
-            facts.insert(
-                (ObjectKind::CustomerRefund, refund.base.id.clone()),
-                ObjectFact::new(
-                    refund.base.id.clone(),
-                    format!("客户退款 {}", refund.refund_no),
-                    created_by.get(&refund.base.id).cloned().unwrap_or_default(),
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    /// 回款冲正审批任务的对象事实：任务对象是冲正单本身（`business_object_id` 为冲正单 ID）。
-    async fn load_receipt_reversal_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::ReceiptReversal);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let reversals = self
-            .db
-            .receipt_reversals()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "receipt_reversal",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
-        for reversal in reversals {
-            facts.insert(
-                (ObjectKind::ReceiptReversal, reversal.base.id.clone()),
-                ObjectFact::new(
-                    reversal.base.id.clone(),
-                    format!("回款冲正 {}", reversal.reversal_no),
-                    created_by.get(&reversal.base.id).cloned().unwrap_or_default(),
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    /// 供应商付款审批任务的对象事实：任务对象是付款单本身（`business_object_id` 为付款单 ID）。
-    async fn load_supplier_payment_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::SupplierPayment);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let payments = self
-            .db
-            .supplier_payments()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "supplier_payment",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
-        for payment in payments {
-            facts.insert(
-                (ObjectKind::SupplierPayment, payment.base.id.clone()),
-                ObjectFact::new(
-                    payment.base.id.clone(),
-                    format!("供应商付款 {}", payment.payment_no),
-                    created_by.get(&payment.base.id).cloned().unwrap_or_default(),
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    /// 供应商退款审批任务的对象事实：任务对象是退款单本身（`business_object_id` 为退款单 ID）。
-    async fn load_supplier_refund_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::SupplierRefund);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let refunds = self
-            .db
-            .supplier_refunds()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "supplier_refund",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
-        for refund in refunds {
-            facts.insert(
-                (ObjectKind::SupplierRefund, refund.base.id.clone()),
-                ObjectFact::new(
-                    refund.base.id.clone(),
-                    format!("供应商退款 {}", refund.refund_no),
-                    created_by.get(&refund.base.id).cloned().unwrap_or_default(),
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    /// 付款冲正审批任务的对象事实：任务对象是冲正单本身（`business_object_id` 为冲正单 ID）。
-    async fn load_payment_reversal_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::PaymentReversal);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        let reversals = self
-            .db
-            .payment_reversals()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?;
-        let created_by = self
-            .load_created_by_from_audit(
-                "payment_reversal",
-                &ids.iter().cloned().collect::<HashSet<_>>(),
-                executor,
-            )
-            .await?;
-        for reversal in reversals {
-            facts.insert(
-                (ObjectKind::PaymentReversal, reversal.base.id.clone()),
-                ObjectFact::new(
-                    reversal.base.id.clone(),
-                    format!("付款冲正 {}", reversal.reversal_no),
-                    created_by.get(&reversal.base.id).cloned().unwrap_or_default(),
-                ),
-            );
-        }
-        Ok(())
-    }
-
+    /// 成功时写入已注册独立对象的事实。
+    ///
+    /// # 错误
+    /// 仓储查询失败时返回错误。
     async fn load_independent_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -917,62 +570,6 @@ impl WorkItemService {
         self.load_supplier_fulfillment_order_facts(keys, facts, executor)
             .await?;
         self.load_supplier_offering_facts(keys, facts, executor).await
-    }
-
-    async fn load_stock_adjustment_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::StockAdjustment);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for adjustment in self
-            .db
-            .stock_adjustments()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::StockAdjustment, adjustment.base.id.clone()),
-                ObjectFact::new(
-                    adjustment.base.id.clone(),
-                    format!("库存调整单 {}", adjustment.adjustment_no),
-                    adjustment.prepared_by,
-                ),
-            );
-        }
-        Ok(())
-    }
-
-    async fn load_supplier_settlement_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let ids = object_ids(keys, ObjectKind::SupplierSettlement);
-        if ids.is_empty() {
-            return Ok(());
-        }
-        for statement in self
-            .db
-            .supplier_settlement_statements()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::SupplierSettlement, statement.base.id.clone()),
-                ObjectFact::new(
-                    statement.base.id.clone(),
-                    format!("供应商结算单 {}", statement.statement_no),
-                    statement.prepared_by,
-                ),
-            );
-        }
-        Ok(())
     }
 
     async fn load_legacy_import_batch_facts(

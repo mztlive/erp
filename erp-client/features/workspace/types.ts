@@ -71,6 +71,18 @@ export type WorkspaceWorkItem = Readonly<{
     family: WorkspaceFamilyFilter
     approvalProcessInstanceId?: string
     approvalNodeExecutionId?: string
+    rootBusinessObjectId?: string
+    summarySections?: readonly Readonly<{
+        label: string
+        value: string
+        numeric?: boolean
+    }>[]
+    briefLines?: readonly Readonly<{
+        title: string
+        quantity?: string
+        dueLabel?: string
+    }>[]
+    briefMoreCount?: number
     approval?: {
         instanceId: string
         currentRoundNo: number

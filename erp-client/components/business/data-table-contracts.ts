@@ -98,6 +98,8 @@ export type DataTableProps<TData> = {
     onRowPreview?: (row: TData) => void
     /** 聚焦行后按 Enter 优先打开详情；鼠标入口应由业务列提供明确按钮或链接。 */
     onRowOpen?: (row: TData) => void
+    /** 刚产生的业务行，用于归档/创建后把视线落到新事实。 */
+    highlightedRowId?: string
     className?: string
 }
 

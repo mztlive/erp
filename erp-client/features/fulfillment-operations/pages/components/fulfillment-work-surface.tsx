@@ -105,9 +105,9 @@ export function FulfillmentWorkSurface({
                 total={total}
                 responsibilityStatus={responsibilityStatus}
                 responsibilityStatusLabel={responsibilityStatusLabel}
-                showProcess={canExecute}
+                showProcess={false}
                 processLabel={OPERATION_ACTION_LABEL[operation.operationType]}
-                // 没有独立的「并下一项」路径：两个 handler 同义，第二个按钮名不副实
+                // 正式确认只留卡片底栏一颗主按钮，避免与连续处理条文案打架
                 showProcessNext={false}
                 processDisabled={formalPending || !canPost}
                 statusExtras={

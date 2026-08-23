@@ -49,7 +49,7 @@ export function AcceptanceFormalResult({
                             variant="outline"
                             onClick={onDismiss}
                         >
-                            继续验收
+                            回到履约
                         </Button>
                     )
                 }

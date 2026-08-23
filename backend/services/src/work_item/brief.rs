@@ -3,7 +3,8 @@
 //! 队列只展示只读业务内容，不承载确认/审批表单。采购二次确认提供客户、金额
 //! 与前几行明细；采购财务审核通过 `extra_sections` 补充供应商、税额和付款条件。
 
-use entities::common::time::BusinessDate;
+use chrono::{Datelike, FixedOffset};
+use entities::common::time::{BusinessDate, Instant};
 use entities::money::Quantity;
 
 /// 简报最多展开的销售明细行数。
@@ -123,7 +124,25 @@ fn has_section(sections: &[BriefSection], label: &str) -> bool {
     sections.iter().any(|section| section.label == label)
 }
 
-fn push_section(sections: &mut Vec<BriefSection>, label: &str, value: Option<&str>, numeric: bool) {
+/// 向简报追加非空键值段。
+///
+/// # 参数
+/// * `sections` - 已组装的键值段
+/// * `label` - 标签
+/// * `value` - 待写入的值
+/// * `numeric` - 是否按数字对齐
+///
+/// # 返回
+/// 无。空值不上屏。
+///
+/// # 错误
+/// 无。
+pub(crate) fn push_section(
+    sections: &mut Vec<BriefSection>,
+    label: &str,
+    value: Option<&str>,
+    numeric: bool,
+) {
     let Some(value) = value.map(str::trim).filter(|text| !text.is_empty()) else {
         return;
     };
@@ -132,6 +151,41 @@ fn push_section(sections: &mut Vec<BriefSection>, label: &str, value: Option<&st
         value: value.to_string(),
         numeric,
     });
+}
+
+/// 去掉首尾空白后保留非空文本。
+///
+/// # 参数
+/// * `value` - 原始文本
+///
+/// # 返回
+/// 空白返回 `None`。
+///
+/// # 错误
+/// 无。
+pub(crate) fn non_empty(value: &str) -> Option<String> {
+    let text = value.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// 把非空片段拼成列表一行摘要。
+///
+/// # 参数
+/// * `parts` - 已按展示顺序排好的片段
+///
+/// # 返回
+/// 返回用间隔符连接的摘要；全空时返回空串。
+///
+/// # 错误
+/// 无。
+pub(crate) fn join_list_summary(parts: impl IntoIterator<Item = Option<String>>) -> String {
+    parts
+        .into_iter()
+        .flatten()
+        .map(|part| part.trim().to_string())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// 用商品名称和规格拼简报行标题。
@@ -192,6 +246,50 @@ pub(crate) fn format_business_due_label(due: BusinessDate) -> String {
     format!("{month}/{day} 交")
 }
 
+/// 业务时区：东八区。工作台简报日期按此转换，不直接上 UTC。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回固定东八区偏移。
+///
+/// # 错误
+/// 无。偏移常量合法。
+fn shanghai_offset() -> FixedOffset {
+    FixedOffset::east_opt(8 * 3600).expect("东八区偏移必须合法")
+}
+
+/// 把时刻格式化为队列交期文案。
+///
+/// # 参数
+/// * `due` - UTC 时刻
+///
+/// # 返回
+/// 返回东八区日历的 `8/20 交`。
+///
+/// # 错误
+/// 无。
+pub(crate) fn format_instant_due_label(due: Instant) -> String {
+    let local = due.as_utc().with_timezone(&shanghai_offset());
+    format!("{}/{} 交", local.month(), local.day())
+}
+
+/// 把时刻格式化为业务日期。
+///
+/// # 参数
+/// * `at` - UTC 时刻
+///
+/// # 返回
+/// 返回东八区 `YYYY-MM-DD`。
+///
+/// # 错误
+/// 无。
+pub(crate) fn format_instant_date(at: Instant) -> String {
+    let local = at.as_utc().with_timezone(&shanghai_offset());
+    format!("{}-{:02}-{:02}", local.year(), local.month(), local.day())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,5 +309,18 @@ mod tests {
             Some("低毛利通过后再确认")
         );
         assert_eq!(submission_origin_label(Some("other")), None);
+    }
+
+    #[test]
+    fn instant_labels_use_shanghai_calendar() {
+        let noon_utc = Instant::from_unix_secs(1_787_457_600);
+        assert_eq!(format_instant_date(noon_utc), "2026-08-23");
+        assert_eq!(format_instant_due_label(noon_utc), "8/23 交");
+        assert_eq!(
+            join_list_summary([Some("甲".into()), None, Some("¥1".into())]),
+            "甲 · ¥1"
+        );
+        assert_eq!(non_empty("  ").as_deref(), None);
+        assert_eq!(non_empty(" 客户 ").as_deref(), Some("客户"));
     }
 }

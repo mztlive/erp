@@ -46,6 +46,7 @@ export function ContractUploadDialog({
         dirty,
         uploadMutation,
         canReadAllCustomers,
+        customerPartyId,
         discardOpen,
         setDiscardOpen,
     } = useContractUploadForm({
@@ -189,6 +190,10 @@ export function ContractUploadDialog({
                                                     <SettlementPartySearchCombobox
                                                         value={
                                                             field.state.value ||
+                                                            undefined
+                                                        }
+                                                        restrictToPartyId={
+                                                            customerPartyId ||
                                                             undefined
                                                         }
                                                         onValueChange={(id) => {

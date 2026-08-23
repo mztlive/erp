@@ -101,7 +101,7 @@ function mapInvoicing(code: string): ProgressTrack {
         case "PARTIALLY_INVOICED":
             return { label: "部分开票", tone: "warning" }
         case "COMPLETED":
-            return { label: "已完成", tone: "success" }
+            return { label: "已开齐", tone: "success" }
         default:
             return { label: "未开", tone: "neutral" }
     }

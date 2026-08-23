@@ -229,6 +229,7 @@ export function CustomerReceivablesPage() {
         counterpartyPartyId: urlState.counterpartyPartyId,
         customerId: urlState.customerId,
         salesOrderId: urlState.salesOrderId,
+        registerMode: urlState.registerMode,
         receivableAccountId: urlState.receivableAccountId,
         createSession,
         patchUrl: urlState.patchUrl,
@@ -266,8 +267,22 @@ export function CustomerReceivablesPage() {
     }
 
     function openRegister(mode: AllocationMode) {
+        const uniqueParty =
+            urlState.counterpartyPartyId ??
+            (data?.counterparties.length === 1
+                ? data.counterparties[0]?.counterpartyPartyId
+                : undefined) ??
+            data?.receivables.find(
+                (row) =>
+                    row.salesOrderId === urlState.salesOrderId ||
+                    row.salesOrderNo === urlState.qParam,
+            )?.counterpartyPartyId
+        if (uniqueParty) {
+            void startSession(mode, uniqueParty)
+            return
+        }
         setPartyPickerMode(mode)
-        setSelectedPartyId(urlState.counterpartyPartyId ?? "")
+        setSelectedPartyId("")
         setPartyPickerOpen(true)
     }
 

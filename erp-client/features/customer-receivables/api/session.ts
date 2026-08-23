@@ -162,7 +162,11 @@ export async function createAllocationSession(
                 return p.label.includes(input.receivableAccountId)
             }
             if (input.salesOrderId) {
-                return p.salesOrderNo === input.salesOrderId
+                return (
+                    p.salesOrderNo === input.salesOrderId ||
+                    p.label.includes(input.salesOrderId) ||
+                    p.targetId === input.salesOrderId
+                )
             }
             return false
         })

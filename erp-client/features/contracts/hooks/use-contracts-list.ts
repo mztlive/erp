@@ -61,6 +61,7 @@ export function useContractsList(
         customerId,
         settlementPartyId,
         owner,
+        upload,
     } = url
 
     // Draft：本地受控，变化不请求
@@ -389,6 +390,7 @@ export function useContractsList(
         customerId,
         settlementPartyId,
         owner,
+        upload,
         hasStructuredFilters,
         searchDraft,
         setSearchDraft,

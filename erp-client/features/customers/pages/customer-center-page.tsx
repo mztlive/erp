@@ -189,9 +189,8 @@ export function CustomerCenterPage() {
             <CustomerCreateDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-                onSucceeded={(customerId) => {
-                    setCreateOpen(false)
-                    router.push(`/sales/customers/${customerId}`)
+                onSucceeded={() => {
+                    // 结果卡由用户选择打开客户或上传合同；不自动跳走。
                 }}
             />
         </PageScaffold>

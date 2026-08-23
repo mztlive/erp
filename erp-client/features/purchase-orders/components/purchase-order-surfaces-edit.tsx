@@ -3,7 +3,6 @@
 import * as React from "react"
 
 import {
-    OptionCombobox,
     surfaceInsetClassName,
     surfacePanelClassName,
 } from "@/components/business"
@@ -18,7 +17,6 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import {
     Table,
     TableBody,
@@ -34,7 +32,6 @@ import {
 } from "@/features/purchase-orders/lib/purchase-order-validation"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
-    PAYMENT_TERM_OPTIONS,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
 import { cn } from "@/lib/utils"
@@ -69,6 +66,7 @@ export function EditSurface({
     onSubmitOpen: () => void
 }) {
     return (
+        <div className="space-y-4">
         <Card className={surfacePanelClassName}>
             <CardHeader className="border-b border-grid">
                 <CardTitle>
@@ -78,11 +76,7 @@ export function EditSurface({
                 </CardTitle>
                 <CardDescription>
                     来源销售 {order.header.salesOrderNo}
-                    {order.header.creationBasisId
-                        ? ` · 来自采购二次确认（销售单 ${order.header.salesOrderNo}）`
-                        : ""}
-                    。⌘S 保存 · ⌘↵
-                    打开提交确认。拆单维度（供应商、类型、付款条件、履约责任）已固定，不能修改。
+                    。供应商、类型、履约责任、付款条件和交期来自创建依据，本卡只读。
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
@@ -126,49 +120,29 @@ export function EditSurface({
                         </div>
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
-                        <Label htmlFor="payment-term">付款条件</Label>
-                        <draftForm.AppField name="paymentTermCode">
-                            {(field) => (
-                                <OptionCombobox
-                                    id="payment-term"
-                                    className="w-full"
-                                    value={String(field.state.value ?? "")}
-                                    onValueChange={(v) =>
-                                        field.handleChange(
-                                            v ??
-                                                String(field.state.value ?? ""),
-                                        )
-                                    }
-                                    options={
-                                        PAYMENT_TERM_OPTIONS.some(
-                                            (option) =>
-                                                option.label ===
-                                                order.header.paymentTermLabel,
-                                        )
-                                            ? [...PAYMENT_TERM_OPTIONS]
-                                            : [
-                                                  {
-                                                      value: order.header
-                                                          .paymentTermCode,
-                                                      label: order.header
-                                                          .paymentTermLabel,
-                                                  },
-                                                  ...PAYMENT_TERM_OPTIONS,
-                                              ]
-                                    }
-                                    allowClear={false}
-                                    aria-label="付款条件"
-                                    placeholder="付款条件"
-                                />
+                        <Label>付款条件（只读）</Label>
+                        <div
+                            className={cn(
+                                surfaceInsetClassName,
+                                "px-3 py-2 text-sm",
                             )}
-                        </draftForm.AppField>
+                        >
+                            {order.header.paymentTermLabel}
+                        </div>
                     </div>
                 </div>
+            </CardContent>
+        </Card>
 
-                <Separator />
-
+        <Card className={surfacePanelClassName}>
+            <CardHeader className="border-b border-grid">
+                <CardTitle>本单可调</CardTitle>
+                <CardDescription>
+                    可改数量、含税单价和税率。⌘S 保存 · ⌘↵ 打开提交确认。
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-4">
                 <div className="space-y-2">
-                    <h3 className="text-sm font-semibold">明细（系统计算）</h3>
                     <div className="overflow-hidden rounded-lg ring-1 ring-foreground/[0.04]">
                         <Table data-density="compact">
                             <TableHeader>
@@ -179,6 +153,7 @@ export function EditSurface({
                                         含税单价
                                     </TableHead>
                                     <TableHead data-align="end">税率</TableHead>
+                                    <TableHead>交期（只读）</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -357,11 +332,13 @@ export function EditSurface({
                                                         line.inputTaxRate,
                                                 ) ? (
                                                     <span className="block text-tiny text-destructive">
-                                                        税率须为 0-1 的小数（如
-                                                        0.13）
+                                                        税率须为 0–100 的百分数
                                                     </span>
                                                 ) : null}
                                             </>
+                                        </TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {line.expectedDeliveryDate ?? "—"}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -389,5 +366,6 @@ export function EditSurface({
                 </div>
             </CardContent>
         </Card>
+        </div>
     )
 }

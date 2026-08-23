@@ -10,7 +10,10 @@ use database::repository::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
     ApprovalInstanceSummary,
 };
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, NoTransaction, PurchaseOrderExt, Transactional, WorkItemExt};
+use database::{
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, NoTransaction, PurchaseOrderExt, Transactional,
+    WorkItemExt,
+};
 use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::WorkItemId;
@@ -464,10 +467,7 @@ impl ApprovalRuntimeService {
                 let current = self
                     .db
                     .bpm_workflow()
-                    .find_current_execution(
-                        &ApprovalProcessInstanceId::new(&instance_id),
-                        &mut NoTransaction,
-                    )
+                    .find_current_execution(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
                     .await?;
                 let instance = self
                     .db
@@ -579,9 +579,8 @@ impl ApprovalRuntimeService {
             .await?
         {
             Some(account) if account.is_kind(entities::AccountKind::Admin) && account.can_login() => {
-                let permission = entities::Permission::parse(STATIC_APPROVE_PERMISSION).map_err(
-                    |error| Error::Internal(format!("静态审批权限不变量损坏: {error}")),
-                )?;
+                let permission = entities::Permission::parse(STATIC_APPROVE_PERMISSION)
+                    .map_err(|error| Error::Internal(format!("静态审批权限不变量损坏: {error}")))?;
                 if self
                     .rbac
                     .enforce(&subject(account.kind, &account.base.id), &permission)
@@ -812,10 +811,7 @@ fn hidden_not_found() -> Error {
 ///
 /// # 错误
 /// 未找到、版本冲突或状态已变时返回冲突。
-fn require_cas_applied<T>(
-    outcome: database::repository::bpm::CasWriteOutcome<T>,
-    label: &str,
-) -> Result<()> {
+fn require_cas_applied<T>(outcome: database::repository::bpm::CasWriteOutcome<T>, label: &str) -> Result<()> {
     match outcome {
         database::repository::bpm::CasWriteOutcome::Applied(_) => Ok(()),
         _ => Err(Error::ConflictError(format!(
@@ -943,10 +939,7 @@ fn list_projection_from_writes(
 }
 
 /// 视图中的首个新建开放任务摘要。
-fn first_open_task(
-    writes: &PlannedWrites,
-    new_task_ids: &[String],
-) -> Option<OpenTaskSummary> {
+fn first_open_task(writes: &PlannedWrites, new_task_ids: &[String]) -> Option<OpenTaskSummary> {
     let intent = writes.create_tasks.first()?;
     let task_id = new_task_ids.first()?;
     let TaskIntent::HumanTaskRequested { assignee, .. } = intent else {
@@ -1158,11 +1151,7 @@ async fn create_open_tasks(
             WorkItemId::new(new_task_ids.get(index).cloned().unwrap_or_else(next_id)),
             DocumentApprovalWorkItemData {
                 approval_node_execution_id: execution_id.clone(),
-                business_object_type: writes
-                    .instance
-                    .subject
-                    .subject_kind()
-                    .to_string(),
+                business_object_type: writes.instance.subject.subject_kind().to_string(),
                 business_object_id: business_object_id.to_string(),
                 subject_version: subject_version.to_string(),
                 owner_role: owner_role.to_string(),

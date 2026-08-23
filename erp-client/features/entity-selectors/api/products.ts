@@ -15,12 +15,15 @@ type SellableSkuDto = Readonly<{
     base_unit_code?: string | null
     base_unit_name?: string | null
     supplier_count: number
+    sales_visible_price_gross?: string | null
 }>
 
 function productItem(row: SellableSkuDto): ProductComboboxItem & {
     revisionId: string
+    salesVisiblePriceGross?: string
 } {
     const baseUnit = row.base_unit_name ?? row.base_unit_code ?? undefined
+    const salesVisiblePriceGross = row.sales_visible_price_gross?.trim()
     return {
         productId: row.sku_id,
         revisionId: row.sku_revision_id,
@@ -29,6 +32,7 @@ function productItem(row: SellableSkuDto): ProductComboboxItem & {
         statusLabel: "可销售",
         statusTone: "success",
         baseUnit,
+        salesVisiblePriceGross: salesVisiblePriceGross || undefined,
         description: [
             row.specification?.trim(),
             baseUnit ? `单位 ${baseUnit}` : null,

@@ -122,10 +122,7 @@ async function approveInWorkbench(page: Page): Promise<void> {
     await expect(task).toBeVisible({ timeout: 30_000 })
     await task.click()
     await page.getByRole("button", { name: "通过" }).first().click()
-    const dialog = page.locator('[role="dialog"]').last()
-    await expect(dialog).toBeVisible({ timeout: 20_000 })
-    await dialog.getByRole("button", { name: "提交决定" }).click()
-    await expect(dialog).not.toBeVisible({ timeout: 20_000 }).catch(() => {})
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0)
 }
 
 // ---------------------------------------------------------------------------

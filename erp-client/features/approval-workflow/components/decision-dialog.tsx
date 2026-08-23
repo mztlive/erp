@@ -126,52 +126,29 @@ export function DecisionDialog({
                         void form.handleSubmit()
                     }}
                 >
-                    <form.AppField
-                        name="decision"
-                        children={(field) => (
-                            <fieldset className="space-y-2">
-                                <legend className="text-sm font-medium">
-                                    决定
-                                </legend>
-                                <div className="flex gap-2">
-                                    <Button
-                                        type="button"
-                                        variant={
-                                            field.state.value === "APPROVE"
-                                                ? "default"
-                                                : "outline"
-                                        }
-                                        disabled={
-                                            !canApprove ||
-                                            submitDecision.isPending
-                                        }
-                                        onClick={() =>
-                                            field.handleChange("APPROVE")
-                                        }
-                                    >
-                                        通过
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant={
-                                            field.state.value === "REJECT"
-                                                ? "destructive"
-                                                : "outline"
-                                        }
-                                        disabled={
-                                            !canReject ||
-                                            submitDecision.isPending
-                                        }
-                                        onClick={() =>
-                                            field.handleChange("REJECT")
-                                        }
-                                    >
-                                        驳回
-                                    </Button>
-                                </div>
-                            </fieldset>
-                        )}
-                    />
+                    {defaultDecision === "REJECT" ? (
+                        <form.AppField
+                            name="decision"
+                            children={(field) => (
+                                <input
+                                    type="hidden"
+                                    value={field.state.value}
+                                    readOnly
+                                />
+                            )}
+                        />
+                    ) : (
+                        <form.AppField
+                            name="decision"
+                            children={(field) => (
+                                <input
+                                    type="hidden"
+                                    value={field.state.value}
+                                    readOnly
+                                />
+                            )}
+                        />
+                    )}
                     <form.AppField
                         name="reason"
                         children={(field) => (
@@ -200,8 +177,18 @@ export function DecisionDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
-                                label="提交决定"
-                                disabled={submitDecision.isPending}
+                                label={
+                                    defaultDecision === "REJECT"
+                                        ? "确认驳回"
+                                        : "确认通过"
+                                }
+                                disabled={
+                                    submitDecision.isPending ||
+                                    (defaultDecision === "APPROVE" &&
+                                        !canApprove) ||
+                                    (defaultDecision === "REJECT" &&
+                                        !canReject)
+                                }
                             />
                         </form.AppForm>
                     </DialogFooter>

@@ -87,7 +87,7 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::SupplierSettlementReview => "进入结算页后，核对供应商结算并提交复核结论。",
         WorkItemType::IntegrationResultUnknown => "进入接口错误中心后，确认本次集成结果。",
         WorkItemType::BusinessException => "进入对应页面后，处理本次业务异常。",
-        WorkItemType::DocumentApproval => "进入单据后，完成当前审批节点。",
+        WorkItemType::DocumentApproval => "核对本页事实后，确认通过或驳回。",
     }
     .to_string()
 }
@@ -199,7 +199,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview => {
             "不复核则票款与开票事实不能确认"
         }
-        WorkItemType::DocumentApproval => "不审批则卡券销售不能生效",
+        WorkItemType::DocumentApproval => "不审批则单据不能生效",
         WorkItemType::OwnershipMigrationSalesConfirmation
         | WorkItemType::OwnershipMigrationFinanceConfirmation => "不确认则客户归属不能完成迁移",
         WorkItemType::InventoryAdjustmentReview => "不复核则库存调整不能入账",
@@ -361,5 +361,13 @@ mod tests {
         assert!(next_action_hint(WorkItemType::ImportBusinessConfirmation).contains("逐行确认可供数量"));
         assert!(next_action_hint(WorkItemType::PurchaseOrderReview).contains("核对供应商、含税成本、进项税"));
         assert!(!next_action_hint(WorkItemType::PurchaseOrderReview).contains("打开业务对象"));
+        assert_eq!(
+            next_action_hint(WorkItemType::DocumentApproval),
+            "核对本页事实后，确认通过或驳回。"
+        );
+        assert_eq!(
+            default_impact_summary(WorkItemType::DocumentApproval),
+            "不审批则单据不能生效"
+        );
     }
 }

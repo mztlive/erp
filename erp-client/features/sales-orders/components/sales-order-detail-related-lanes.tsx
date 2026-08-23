@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import {
+    canCreatePurchaseFromSalesOrder,
     fulfillmentWorkspaceHref,
     purchaseOrdersWorkspaceHref,
     receivableWorkspaceHref,
@@ -39,11 +40,13 @@ function RelatedLane({
     count,
     status,
     href,
+    actionLabel,
 }: {
     lane: keyof typeof RELATED_LANE_COPY
     count: number
     status: string
     href: string
+    actionLabel?: string
 }) {
     const copy = RELATED_LANE_COPY[lane]
     return (
@@ -65,7 +68,7 @@ function RelatedLane({
                 variant="secondary"
                 render={<Link href={href} />}
             >
-                {copy.actionLabel}
+                {actionLabel ?? copy.actionLabel}
             </Button>
         </li>
     )
@@ -82,6 +85,7 @@ export function RelatedLanes({
 }) {
     const items: React.ReactNode[] = []
     if (lanes.includes("purchase")) {
+        const createPurchase = canCreatePurchaseFromSalesOrder(order)
         items.push(
             <RelatedLane
                 key="purchase"
@@ -89,6 +93,7 @@ export function RelatedLanes({
                 count={order.related.purchaseOrders}
                 status={order.fulfillment.label}
                 href={purchaseOrdersWorkspaceHref(order, selfReturn)}
+                actionLabel={createPurchase ? "去建单" : undefined}
             />,
         )
     }
@@ -110,7 +115,7 @@ export function RelatedLanes({
                 lane="receipt"
                 count={order.related.receipts}
                 status={order.collection.label}
-                href={receivableWorkspaceHref(order, selfReturn)}
+                href={receivableWorkspaceHref(order, selfReturn, "receipt")}
             />,
         )
     }
@@ -121,7 +126,7 @@ export function RelatedLanes({
                 lane="invoice"
                 count={order.related.invoices}
                 status={order.invoicing.label}
-                href={receivableWorkspaceHref(order, selfReturn)}
+                href={receivableWorkspaceHref(order, selfReturn, "invoice")}
             />,
         )
     }

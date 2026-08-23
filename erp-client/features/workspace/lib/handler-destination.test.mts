@@ -166,6 +166,32 @@ test("W18 requires and carries its registered confirmation scope", () => {
     )
 })
 
+test("document_approval opens the destination document without requiring queueContextId", () => {
+    const sales = parsedHref(
+        buildHandlerHref({
+            businessObjectId: "object / 42",
+            workItemId: "wi-42",
+            handlerKey: "document_approval",
+            destinationWorkspaceId: "W05",
+        }),
+    )
+    assert.equal(sales.pathname, "/sales/orders/object%20%2F%2042")
+    assert.equal(sales.searchParams.get("section"), "approval")
+    assert.equal(sales.searchParams.get("from"), "workspace")
+    assert.equal(sales.searchParams.get("workItemId"), "wi-42")
+
+    const receipt = parsedHref(
+        buildHandlerHref({
+            businessObjectId: "object / 42",
+            workItemId: "wi-42",
+            handlerKey: "document_approval",
+            destinationWorkspaceId: "W11",
+        }),
+    )
+    assert.equal(receipt.pathname, "/finance/customer-accounts")
+    assert.equal(receipt.searchParams.get("previewId"), "object / 42")
+})
+
 test("unknown, mismatched, and incomplete handlers fail closed", () => {
     assert.equal(
         buildHandlerHref({

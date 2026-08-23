@@ -167,10 +167,9 @@ function DatePicker({
                     selected={selected}
                     disabled={disabledDates}
                     onSelect={(next) => {
-                        onValueChange?.(
-                            next ? formatDateValue(next) : undefined,
-                        )
-                        if (next) setOpen(false)
+                        if (!next) return
+                        onValueChange?.(formatDateValue(next))
+                        setOpen(false)
                     }}
                 />
             </PopoverContent>
@@ -353,7 +352,15 @@ function DateTimePicker({
                     selected={selected}
                     disabled={disabledDates}
                     onSelect={(next) => {
-                        if (next) update({ date: formatDateValue(next) })
+                        if (!next) return
+                        const now = new Date()
+                        const pad = (n: number) => String(n).padStart(2, "0")
+                        update({
+                            date: formatDateValue(next),
+                            time:
+                                value?.time ||
+                                `${pad(now.getHours())}:${pad(now.getMinutes())}:00`,
+                        })
                     }}
                 />
                 <div className="flex items-center gap-2 border-t p-3">
@@ -363,7 +370,7 @@ function DateTimePicker({
                     />
                     <Input
                         type="time"
-                        step={1}
+                        step={60}
                         value={normalizeTimeValue(value?.time)}
                         onChange={(event) =>
                             update({ time: event.target.value })

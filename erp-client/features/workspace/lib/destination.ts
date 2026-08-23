@@ -38,6 +38,7 @@ export function buildDocumentHref(item: WorkspaceWorkItem): string | null {
         handlerKey: item.handlerKey,
         destinationWorkspaceId: item.destinationWorkspaceId,
         businessObjectId: item.businessObjectId,
+        rootBusinessObjectId: item.rootBusinessObjectId,
         workItemId: item.workItemId,
         queueContextId: item.queueContextId,
         routeContext: item.routeContext,

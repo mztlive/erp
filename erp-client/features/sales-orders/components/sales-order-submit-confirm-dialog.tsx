@@ -13,12 +13,19 @@ export function SalesOrderSubmitConfirmDialog({
     open,
     pending,
     approval,
+    snapshot,
     onOpenChange,
     onConfirm,
 }: {
     open: boolean
     pending: boolean
     approval?: DocumentApprovalView
+    snapshot?: {
+        customerName: string
+        contractLabel: string
+        amountGross: string
+        lineCount: number
+    }
     onOpenChange: (open: boolean) => void
     onConfirm: () => void
 }) {
@@ -33,6 +40,14 @@ export function SalesOrderSubmitConfirmDialog({
             description={
                 <div className="space-y-3">
                     <p>确认后启动审批。任一层驳回后将从第一节点开始下一轮。</p>
+                    {snapshot ? (
+                        <ul className="space-y-1 text-sm">
+                            <li>客户：{snapshot.customerName || "—"}</li>
+                            <li>合同：{snapshot.contractLabel || "—"}</li>
+                            <li>含税合计：{snapshot.amountGross || "—"}</li>
+                            <li>明细行数：{snapshot.lineCount}</li>
+                        </ul>
+                    ) : null}
                     <SalesOrderApprovalArea
                         phase="confirm"
                         approval={approval}

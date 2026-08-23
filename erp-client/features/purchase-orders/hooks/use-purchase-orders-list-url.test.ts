@@ -29,6 +29,7 @@ describe("usePurchaseOrdersListUrl", () => {
             pageSize: 20,
             sort: undefined,
             basisId: undefined,
+            salesOrderId: undefined,
         })
         expect(result.current.listQueryInput).toEqual({
             q: undefined,

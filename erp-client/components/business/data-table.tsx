@@ -189,11 +189,19 @@ function DataTable<TData>({
     pageSizeOptions = [20, 50, 100],
     onRowPreview,
     onRowOpen,
+    highlightedRowId,
     className,
 }: DataTableProps<TData>) {
     const rowRefs = React.useRef(new Map<string, HTMLTableRowElement>())
     const tableSurfaceRef = React.useRef<HTMLDivElement>(null)
     const resizeSessionRef = React.useRef<ColumnResizeSession | null>(null)
+
+    React.useEffect(() => {
+        if (!highlightedRowId) return
+        rowRefs.current
+            .get(highlightedRowId)
+            ?.scrollIntoView({ block: "nearest" })
+    }, [highlightedRowId, data])
 
     const [sorting, setSorting] = useControlledTableState({
         value: controlledSorting,
@@ -870,12 +878,17 @@ function DataTable<TData>({
                                             ? "selected"
                                             : undefined
                                     }
-                                    tabIndex={interactive ? 0 : undefined}
-                                    className={
-                                        interactive
-                                            ? "cursor-pointer"
+                                    data-highlighted={
+                                        highlightedRowId === row.id
+                                            ? "true"
                                             : undefined
                                     }
+                                    tabIndex={interactive ? 0 : undefined}
+                                    className={cn(
+                                        interactive && "cursor-pointer",
+                                        highlightedRowId === row.id &&
+                                            "bg-muted",
+                                    )}
                                     onClick={(event) => {
                                         if (
                                             isInteractiveRowTarget(event.target)

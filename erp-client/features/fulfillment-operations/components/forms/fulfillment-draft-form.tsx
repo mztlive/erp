@@ -13,7 +13,7 @@ import type {
  */
 export const FIRST_INPUT_ID: Record<FulfillmentOperationType, string> = {
     RECEIPT: "receipt-recv-0",
-    WAREHOUSE_SHIP: "ship-tracking",
+    WAREHOUSE_SHIP: "ship-carrier",
     SUPPLIER_DIRECT: "direct-tracking",
     ELECTRONIC: "el-qty-0",
     SERVICE: "service-note",

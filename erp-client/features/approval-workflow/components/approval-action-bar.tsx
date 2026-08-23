@@ -4,7 +4,14 @@ import * as React from "react"
 
 import { Button } from "@/components/ui/button"
 
+import { approvalConflictMessage, isApprovalConflict } from "../api"
 import { RECOVERY_ACTION_LABEL } from "../display"
+import {
+    decisionIntentFingerprint,
+    slotForIntent,
+    type IdempotencySlot,
+} from "../idempotency"
+import { useSubmitDecisionMutation } from "../queries"
 import type {
     ApprovalAllowedAction,
     ApprovalCommandView,
@@ -12,6 +19,7 @@ import type {
     ApprovalRuntimeInstance,
     RecoveryOption,
 } from "../types"
+import { buildDecisionRequest } from "../types"
 import { CancelApprovalDialog } from "./cancel-approval-dialog"
 import { DecisionDialog } from "./decision-dialog"
 import { ReassignDialog } from "./reassign-dialog"
@@ -46,6 +54,7 @@ export function ApprovalActionBar({
     afterCancelStatusLabel = "未提交",
     emergencyWithdraw = false,
     canReadSensitive = true,
+    approveWithoutDialog = false,
     onDecisionApplied,
 }: {
     allowedActions: readonly string[]
@@ -60,9 +69,18 @@ export function ApprovalActionBar({
     afterCancelStatusLabel?: string
     emergencyWithdraw?: boolean
     canReadSensitive?: boolean
+    /** 工作台通过不弹窗，一点即提交；驳回仍要原因。 */
+    approveWithoutDialog?: boolean
     onDecisionApplied?: (view: ApprovalCommandView) => void
 }) {
     const [dialog, setDialog] = React.useState<DialogKind>(null)
+    const [approveSlot, setApproveSlot] = React.useState<IdempotencySlot | null>(
+        null,
+    )
+    const [approveConflict, setApproveConflict] = React.useState<string | null>(
+        null,
+    )
+    const submitDecision = useSubmitDecisionMutation()
     const actions = new Set(allowedActions)
     const recoveries = new Set(recoveryOptions)
     const showApprove = actions.has("APPROVE")
@@ -85,8 +103,54 @@ export function ApprovalActionBar({
     return (
         <div className="flex flex-wrap gap-2">
             {showApprove && workItemId && expectedTaskVersion ? (
-                <Button type="button" onClick={() => setDialog("approve")}>
-                    通过
+                <Button
+                    type="button"
+                    disabled={
+                        approveWithoutDialog && submitDecision.isPending
+                    }
+                    onClick={() => {
+                        if (!approveWithoutDialog) {
+                            setDialog("approve")
+                            return
+                        }
+                        const fingerprint = decisionIntentFingerprint(
+                            "APPROVE",
+                            "",
+                        )
+                        const nextSlot = slotForIntent(
+                            approveSlot,
+                            "decision",
+                            workItemId,
+                            fingerprint,
+                        )
+                        setApproveSlot(nextSlot)
+                        void submitDecision
+                            .mutateAsync(
+                                buildDecisionRequest({
+                                    workItemId,
+                                    decision: "APPROVE",
+                                    expectedTaskVersion,
+                                    idempotencyKey: nextSlot.key,
+                                }),
+                            )
+                            .then((view) => {
+                                setApproveConflict(null)
+                                onDecisionApplied?.(view)
+                            })
+                            .catch((error: unknown) => {
+                                if (isApprovalConflict(error)) {
+                                    setApproveConflict(
+                                        approvalConflictMessage(error),
+                                    )
+                                    return
+                                }
+                                throw error
+                            })
+                    }}
+                >
+                    {approveWithoutDialog && submitDecision.isPending
+                        ? "通过中…"
+                        : "通过"}
                 </Button>
             ) : null}
             {showReject && workItemId && expectedTaskVersion ? (
@@ -162,10 +226,18 @@ export function ApprovalActionBar({
                     当前账号无权查看部分业务字段
                 </p>
             ) : null}
+            {approveConflict ? (
+                <p className="w-full text-sm text-destructive">
+                    {approveConflict}
+                </p>
+            ) : null}
 
             {workItemId && expectedTaskVersion ? (
                 <DecisionDialog
-                    open={dialog === "approve" || dialog === "reject"}
+                    open={
+                        dialog === "reject" ||
+                        (!approveWithoutDialog && dialog === "approve")
+                    }
                     onOpenChange={(open) => setDialog(open ? dialog : null)}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}

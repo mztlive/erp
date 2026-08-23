@@ -15,7 +15,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, CatalogExt, FulfillmentExt, InventoryExt, NoTransaction, Transactional, WarehouseExt};
+use database::{
+    AccessControlExt, CatalogExt, FulfillmentExt, InventoryExt, NoTransaction, Transactional, WarehouseExt,
+};
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
 use entities::ids::{StockAdjustmentId, StockAdjustmentLineId, StockMovementId, StockReservationEntryId};
@@ -639,33 +641,24 @@ impl InventoryService {
                     if !line_updates.is_empty() {
                         let existing = db
                             .inventory()
-                            .adjustment_lines_by_adjustment_ids(
-                                std::slice::from_ref(&adjustment_id),
-                                session,
-                            )
+                            .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), session)
                             .await?;
-                        let existing_ids: std::collections::HashSet<&str> = existing
-                            .iter()
-                            .map(|line| line.base.id.as_str())
-                            .collect();
+                        let existing_ids: std::collections::HashSet<&str> =
+                            existing.iter().map(|line| line.base.id.as_str()).collect();
                         for line_update in &line_updates {
                             if !existing_ids.contains(line_update.line_id.as_str()) {
-                                return Err(Error::ValidationError(
-                                    "明细行不属于该调整单".to_string(),
-                                ));
+                                return Err(Error::ValidationError("明细行不属于该调整单".to_string()));
                             }
-                            let quantity = Quantity::from_str(&line_update.quantity)
-                                .map_err(Error::Logic)?;
+                            let quantity = Quantity::from_str(&line_update.quantity).map_err(Error::Logic)?;
                             if quantity <= Quantity::from_str("0").map_err(Error::Logic)? {
-                                return Err(Error::ValidationError(
-                                    "调整数量必须为正数".to_string(),
-                                ));
+                                return Err(Error::ValidationError("调整数量必须为正数".to_string()));
                             }
                             if line_update.direction.is_some() {
                                 let expected = match adjustment.reason_type {
                                     AdjustmentReasonType::StockGain => MovementDirection::Increase,
-                                    AdjustmentReasonType::StockLoss
-                                    | AdjustmentReasonType::Damage => MovementDirection::Decrease,
+                                    AdjustmentReasonType::StockLoss | AdjustmentReasonType::Damage => {
+                                        MovementDirection::Decrease
+                                    }
                                 };
                                 if line_update.direction != Some(expected) {
                                     return Err(Error::ValidationError(format!(
@@ -685,9 +678,7 @@ impl InventoryService {
                                 )
                                 .await?
                             {
-                                return Err(Error::NotFound(
-                                    "调整明细不存在".to_string(),
-                                ));
+                                return Err(Error::NotFound("调整明细不存在".to_string()));
                             }
                         }
                     }

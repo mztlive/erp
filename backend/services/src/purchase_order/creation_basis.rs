@@ -41,8 +41,7 @@ use validator::Validate;
 
 use super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
 use super::dto::{
-    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView,
-    CreationBasisView,
+    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView, CreationBasisView,
 };
 use super::shared::zero_amount;
 use super::PurchaseOrderService;
@@ -128,10 +127,7 @@ impl PurchaseOrderService {
         }
 
         // 同一拆单维度已存在草稿/待审单时幂等复用
-        if let Some(existing) = self
-            .find_existing_draft(&sales_order_id, &supplier_id)
-            .await?
-        {
+        if let Some(existing) = self.find_existing_draft(&sales_order_id, &supplier_id).await? {
             return Ok(existing);
         }
 
@@ -178,10 +174,7 @@ impl PurchaseOrderService {
         let orders = self
             .db
             .sales_orders()
-            .find_many(
-                doc! { "commercial_status": "EFFECTIVE" },
-                &mut NoTransaction,
-            )
+            .find_many(doc! { "commercial_status": "EFFECTIVE" }, &mut NoTransaction)
             .await?;
         let mut candidates = Vec::new();
         for order in orders {
@@ -240,10 +233,7 @@ impl PurchaseOrderService {
     }
 
     /// 取提交的 GOODS_SERVICE 明细（数量非空且为正）。
-    async fn basis_lines_of_submission(
-        &self,
-        submission: &SalesOrderSubmission,
-    ) -> Result<Vec<BasisLine>> {
+    async fn basis_lines_of_submission(&self, submission: &SalesOrderSubmission) -> Result<Vec<BasisLine>> {
         let submission_lines = self
             .db
             .sales_order_submission_lines()
@@ -271,10 +261,7 @@ impl PurchaseOrderService {
     }
 
     /// 取销售单最近一次已通过提交（同一销售单可能存在多轮提交/变更）。
-    async fn latest_approved_submission(
-        &self,
-        order: &SalesOrder,
-    ) -> Result<Option<SalesOrderSubmission>> {
+    async fn latest_approved_submission(&self, order: &SalesOrder) -> Result<Option<SalesOrderSubmission>> {
         let submissions = self
             .db
             .sales_order_submissions()
@@ -361,9 +348,7 @@ impl PurchaseOrderService {
             let Some(revision) = revision else {
                 continue;
             };
-            if revision.valid_from > today
-                || revision.valid_to.is_some_and(|valid_to| valid_to < today)
-            {
+            if revision.valid_from > today || revision.valid_to.is_some_and(|valid_to| valid_to < today) {
                 continue;
             }
             let availability = self
@@ -451,11 +436,7 @@ impl PurchaseOrderService {
     }
 
     /// 取某供应商对该明细的合格供给（用于成本/税率；视作与依据推导一致）。
-    async fn supply_for_line(
-        &self,
-        supplier_id: &SupplierAccountId,
-        line: &BasisLine,
-    ) -> Result<LineSupply> {
+    async fn supply_for_line(&self, supplier_id: &SupplierAccountId, line: &BasisLine) -> Result<LineSupply> {
         let supplies = self.qualified_supplies(line).await?;
         supplies
             .into_iter()
@@ -494,10 +475,7 @@ impl PurchaseOrderService {
     }
 
     /// 解析供应商付款条件代码（D09 商务结算版本快照，缺省 `NET-30`）。
-    async fn resolve_payment_term_code(
-        &self,
-        supplier_id: &SupplierAccountId,
-    ) -> Result<String> {
+    async fn resolve_payment_term_code(&self, supplier_id: &SupplierAccountId) -> Result<String> {
         let supplier = self
             .db
             .supplier_accounts()
@@ -652,7 +630,8 @@ async fn persist_split_group(
             *net,
             *tax,
             *input_tax_rate,
-        )?);    }
+        )?);
+    }
     order.current_submission_id = Some(submission.base.id.clone());
     write_prepared_draft(db, rbac, &order, &submission, &submission_lines, actor, session).await?;
     Ok(CreatedPurchaseDraft {
@@ -781,11 +760,10 @@ async fn write_prepared_draft(
     actor: &AuditActor,
     session: &mut ClientSession,
 ) -> Result<()> {
-    let audit = actor.clone().resource_log(
-        "purchase_order.create",
-        "purchase_order",
-        order.base.id.clone(),
-    )?;
+    let audit =
+        actor
+            .clone()
+            .resource_log("purchase_order.create", "purchase_order", order.base.id.clone())?;
     let sales_order = db
         .sales_orders()
         .find_by_id(&order.sales_order_id, session)
@@ -802,8 +780,8 @@ async fn write_prepared_draft(
             creator_id: actor.id().to_string(),
         },
     };
-    let binding = bind_published_definition_on_document_create(db, rbac, &bind_command, actor, session)
-        .await?;
+    let binding =
+        bind_published_definition_on_document_create(db, rbac, &bind_command, actor, session).await?;
     let binding = binding.ok_or_else(|| Error::Internal("采购单必须绑定已发布定义".to_string()))?;
     let mut document = new_registered_document(&order.base.id, DocumentType::PurchaseOrder, "")?;
     attach_published_binding(&mut document, binding)?;
@@ -852,9 +830,7 @@ async fn qualified_supply_for_line(
         let Some(revision) = revision else {
             continue;
         };
-        if revision.valid_from > today
-            || revision.valid_to.is_some_and(|valid_to| valid_to < today)
-        {
+        if revision.valid_from > today || revision.valid_to.is_some_and(|valid_to| valid_to < today) {
             continue;
         }
         let availability = db

@@ -53,6 +53,7 @@ function setup(overrides: Partial<Parameters<typeof useAutoAllocationSession>[0]
         counterpartyPartyId: 'p1',
         customerId: undefined,
         salesOrderId: 'so_1',
+        registerMode: undefined,
         receivableAccountId: 'ra_1',
         createSession: { mutateAsync },
         patchUrl,

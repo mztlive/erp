@@ -148,14 +148,25 @@ export function useFulfillmentActions({
                 setActionError(response.message)
                 return
             }
+            const outcome = {
+                ...response.outcome,
+                salesOrderId:
+                    response.outcome.salesOrderId ||
+                    operation.source.salesOrderId,
+                salesOrderNo:
+                    response.outcome.salesOrderNo ||
+                    operation.source.salesOrderNo,
+            }
             setLastResult({
                 status: "succeeded",
                 title: OPERATION_DONE_LABEL[response.outcome.operationType],
                 description: autoNext
                     ? "已记下来了，马上打开下一条。"
-                    : "已记下来了。可以先核对一下库存变化再继续。",
+                    : operation.operationType === "RECEIPT"
+                      ? "已记下来了。合格的货已入库并按销售单留好，可以继续本单仓发。"
+                      : "已记下来了。可以先核对一下库存变化再继续。",
                 reference: response.outcome.factNo,
-                outcome: response.outcome,
+                outcome,
                 stayOnItem: !autoNext,
             })
             if (autoNext) {

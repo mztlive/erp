@@ -211,6 +211,15 @@ export function useAllocationSession({
             setActionError("跨主体目标不能分配，请选择同主体目标。")
             return
         }
+        const alreadyAllocated = allocations.reduce(
+            (sum, line) => sum + parseAmt(line.amount),
+            0,
+        )
+        const remaining = Math.max(0, parseAmt(factAmountStr) - alreadyAllocated)
+        const fill =
+            remaining > 0
+                ? money(Math.min(parseAmt(target.openAmount), remaining))
+                : ""
         setAllocations((prev) => [
             ...prev,
             {
@@ -220,7 +229,7 @@ export function useAllocationSession({
                 label: target.label,
                 salesOrderNo: target.salesOrderNo,
                 openAmount: target.openAmount,
-                amount: "",
+                amount: fill,
                 baselineVersion: target.baselineVersion,
             },
         ])

@@ -1,6 +1,6 @@
 import type { ReactElement } from "react"
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
@@ -13,6 +13,17 @@ import { ExecutionHistory, groupByRound } from "./execution-history"
 import { RuntimeSummary } from "./runtime-summary"
 import { SubmissionRouteConfirmation } from "./submission-route-confirmation"
 import type { ApprovalDefinitionBinding, ApprovalHistoryItem } from "../types"
+
+vi.mock("../queries", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("../queries")>()
+    return {
+        ...actual,
+        useSubmitDecisionMutation: () => ({
+            mutateAsync: vi.fn().mockResolvedValue({ instanceId: "inst-1" }),
+            isPending: false,
+        }),
+    }
+})
 
 afterEach(() => {
     cleanup()
@@ -220,6 +231,23 @@ describe("ApprovalActionBar", () => {
         expect(
             screen.queryByRole("button", { name: "恢复当前审批人" }),
         ).toBeNull()
+    })
+
+    it("submits approve without opening a dialog when asked", () => {
+        wrapper(
+            <ApprovalActionBar
+                allowedActions={["APPROVE", "REJECT"]}
+                workItemId="wi-1"
+                expectedTaskVersion="3"
+                approveWithoutDialog
+            />,
+        )
+        fireEvent.click(screen.getByRole("button", { name: "通过" }))
+        expect(screen.queryByRole("dialog")).toBeNull()
+        expect(
+            screen.queryByRole("button", { name: "确认通过" }),
+        ).toBeNull()
+        expect(screen.getByRole("button", { name: "驳回" })).toBeTruthy()
     })
 
     it("does not leak masked business fields when the viewer cannot read them", () => {

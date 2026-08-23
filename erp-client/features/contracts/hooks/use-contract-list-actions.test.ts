@@ -68,9 +68,10 @@ describe('useContractListActions', () => {
                 { label: '修订', value: 'v2' },
                 { label: '文件', value: 'signed.pdf' },
                 { label: '上传时间', value: '2026-06-01 08:30:00' },
-                { label: '下一步', value: '查看详情核对或新建销售单' },
             ],
             nextHref: '/sales/contracts/ct-9',
+            createSalesOrderHref: '/sales/orders?mode=create&contractId=ct-9',
+            highlightedContractId: 'ct-9',
         })
         expect(result.current.exportJob).toBeNull()
     })

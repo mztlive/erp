@@ -17,6 +17,7 @@ import { useSalesOrdersListChips } from "@/features/sales-orders/hooks/use-sales
 import { useSalesOrdersListExport } from "@/features/sales-orders/hooks/use-sales-orders-list-export"
 import { useSalesOrdersListFilters } from "@/features/sales-orders/hooks/use-sales-orders-list-filters"
 import { useSalesOrdersListQuery } from "@/features/sales-orders/hooks/use-sales-orders-list-query"
+import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
 import { useSalesOrdersListUrlState } from "@/features/sales-orders/hooks/use-sales-orders-list-url-state"
 import {
     salesOrdersListFilterDescription,
@@ -136,10 +137,12 @@ export function SalesOrdersListPage() {
         [pushUrl],
     )
 
-    const paperOrder = React.useMemo(
+    const paperListOrder = React.useMemo(
         () => items.find((item) => item.id === paperId) ?? null,
         [items, paperId],
     )
+    const paperDetailQuery = useSalesOrderDetailQuery(paperId ?? "")
+    const paperOrder = paperDetailQuery.data ?? paperListOrder
 
     return (
         <PageScaffold density="compact">

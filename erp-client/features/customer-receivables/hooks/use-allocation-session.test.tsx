@@ -122,7 +122,7 @@ describe('useAllocationSession', () => {
         expect(result.current.allocations).toHaveLength(1)
         expect(result.current.allocations[0]).toMatchObject({
             targetId: 'e1',
-            amount: '',
+            amount: '60.00',
         })
 
         act(() => result.current.addFromPool(target()))

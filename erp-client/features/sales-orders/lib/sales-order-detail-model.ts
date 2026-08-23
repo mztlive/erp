@@ -331,8 +331,17 @@ export function buildSelfHref(
 export function receivableWorkspaceHref(
     order: SalesOrderListItem,
     selfReturn: string,
+    mode: "receipt" | "invoice" = "receipt",
 ) {
-    return `/finance/customer-accounts?view=receivable&salesOrderId=${encodeURIComponent(order.id)}&q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${encodeURIComponent(selfReturn)}`
+    const params = new URLSearchParams({
+        view: "receivable",
+        salesOrderId: order.id,
+        q: order.documentNumber,
+        from: "W05",
+        returnTo: selfReturn,
+        register: mode,
+    })
+    return `/finance/customer-accounts?${params.toString()}`
 }
 
 export function fulfillmentWorkspaceHref(
@@ -342,11 +351,39 @@ export function fulfillmentWorkspaceHref(
     return `/fulfillment?scope=mine&salesOrderId=${encodeURIComponent(order.id)}&from=W05&returnTo=${encodeURIComponent(selfReturn)}`
 }
 
+export function canCreatePurchaseFromSalesOrder(
+    order: SalesOrderListItem,
+): boolean {
+    if (order.nature !== "physical_service") return false
+    if (order.related.purchaseOrders > 0) return false
+    if (
+        order.primaryStatus.code === "draft" ||
+        order.primaryStatus.code === "voided"
+    ) {
+        return false
+    }
+    if (
+        isPendingReviewStage(order.primaryStatus.code) ||
+        order.primaryStatus.code === "in_approval"
+    ) {
+        return false
+    }
+    return true
+}
+
 export function purchaseOrdersWorkspaceHref(
     order: SalesOrderListItem,
     selfReturn: string,
 ) {
-    return `/procurement/orders?q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${encodeURIComponent(selfReturn)}`
+    const params = new URLSearchParams()
+    if (canCreatePurchaseFromSalesOrder(order)) {
+        params.set("salesOrderId", order.id)
+    } else {
+        params.set("q", order.documentNumber)
+    }
+    params.set("from", "W05")
+    params.set("returnTo", selfReturn)
+    return `/procurement/orders?${params.toString()}`
 }
 
 export function navItemsFor(order: SalesOrderDetailView): Array<{

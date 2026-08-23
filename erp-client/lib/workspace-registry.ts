@@ -10,7 +10,6 @@ import {
     HistoryIcon,
     LayoutDashboardIcon,
     Link2Icon,
-    ListTodoIcon,
     PackageIcon,
     PackageSearchIcon,
     PlugIcon,
@@ -518,12 +517,8 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             items: [
                 {
                     routeId: "W01",
+                    label: "我的工作台",
                     icon: LayoutDashboardIcon,
-                },
-                {
-                    routeId: "W02",
-                    label: "待我处理",
-                    icon: ListTodoIcon,
                     badge: "todo-count",
                     requiredPermissions: ["work_item:list"],
                 },

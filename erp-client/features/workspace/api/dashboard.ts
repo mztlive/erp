@@ -22,7 +22,12 @@ import type {
     WorkspaceMetric,
     WorkspaceWorkItem,
 } from "../types"
-import { PRIORITY_RANK, STATUS_LABEL, TYPE_META } from "./work-item-meta"
+import {
+    PRIORITY_RANK,
+    STATUS_LABEL,
+    TYPE_META,
+    workspaceTypeLabel,
+} from "./work-item-meta"
 
 const WORKSPACE_IDS = new Set<string>(
     WORKSPACE_ROUTES.map((workspace) => workspace.id),
@@ -121,7 +126,7 @@ export function mapWorkspaceWorkItem(
 ): WorkspaceWorkItem {
     const task = mapWorkItemDto(dto)
     const meta = TYPE_META[dto.work_item_type] ?? {
-        label: dto.work_item_type,
+        label: workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
         family: "exception" as WorkspaceFamilyFilter,
     }
     const statusMeta = STATUS_LABEL[task.status]
@@ -136,14 +141,18 @@ export function mapWorkspaceWorkItem(
         workItemId: task.workItemId,
         taskVersion: task.taskVersion,
         workItemType: task.workItemType,
-        workItemTypeLabel: meta.label,
+        workItemTypeLabel: workspaceTypeLabel(
+            dto.work_item_type,
+            dto.business_object_type,
+        ),
         businessObjectType: task.businessObjectType,
         businessObjectId: task.businessObjectId,
         subjectVersion: task.subjectVersion,
-        stableNumber: task.businessObjectId,
+        stableNumber:
+            dto.business_object_label?.trim() || task.businessObjectId,
         objectTitle:
             dto.business_object_label ??
-            `${meta.label} · ${task.businessObjectId}`,
+            `${workspaceTypeLabel(dto.work_item_type, dto.business_object_type)} · ${task.businessObjectId}`,
         counterpartyName: task.counterpartyLabel,
         listSummary: task.listSummary,
         status: task.status,
@@ -176,6 +185,10 @@ export function mapWorkspaceWorkItem(
         family: meta.family,
         approvalProcessInstanceId: task.approvalProcessInstanceId,
         approvalNodeExecutionId: task.approvalNodeExecutionId,
+        rootBusinessObjectId: task.rootBusinessObjectId,
+        summarySections: task.summarySections,
+        briefLines: task.briefLines,
+        briefMoreCount: task.briefMoreCount,
     }
 }
 

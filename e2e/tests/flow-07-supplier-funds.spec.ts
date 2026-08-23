@@ -189,11 +189,7 @@ async function approveTask(page: Page, businessObjectId: string): Promise<void> 
     const approve = page.getByRole("button", { name: "通过", exact: true })
     await expect(approve).toBeVisible({ timeout: 20_000 })
     await approve.click()
-    const dlg = await lastDialog(page)
-    await expect(dlg).toBeVisible({ timeout: 20_000 })
-    await dlg.getByRole("button", { name: "提交决定" }).click()
-    await expect(dlg).not.toBeVisible({ timeout: 20_000 })
-    // 决定提交后任务从待办列表消失（工作台自动刷新）
+    await expect(page.getByRole("dialog")).toHaveCount(0)
     await expect(task).not.toBeVisible({ timeout: 30_000 })
 }
 
