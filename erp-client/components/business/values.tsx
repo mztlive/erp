@@ -416,7 +416,7 @@ function MoneyValue({
             data-tax-basis={taxBasis}
             data-unavailable={isUnavailable || undefined}
             className={cn(
-                "inline-flex min-w-0 flex-wrap items-baseline gap-2 font-medium",
+                "inline-flex min-w-0 flex-nowrap items-baseline gap-2 font-medium",
                 className,
             )}
             {...props}
