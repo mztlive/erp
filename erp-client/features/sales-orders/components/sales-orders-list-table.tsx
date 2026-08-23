@@ -31,11 +31,8 @@ export function SalesOrdersListTable(props: {
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
     onRowNavigate: (id: string) => void
-    paperId: string | null
-    onPaperChange: (id: string | null) => void
     downloadingContractId: string | null
     downloadContract: (order: SalesOrderListItem) => void
-    openPaperPreview: (id: string) => void
 }) {
     const {
         items,
@@ -52,39 +49,23 @@ export function SalesOrdersListTable(props: {
         pagination,
         onPaginationChange,
         onRowNavigate,
-        paperId,
-        onPaperChange,
         downloadingContractId,
         downloadContract,
-        openPaperPreview,
     } = props
 
-    const { focusedIndex, rowRefs } = useSalesOrdersListKeyboardNav({
+    useSalesOrdersListKeyboardNav({
         items,
         url,
-        paperId,
-        onPaperChange,
         onRowNavigate,
     })
 
     const columns = React.useMemo(
         () =>
             buildSalesOrdersListColumns({
-                items,
-                focusedIndex,
-                rowRefs,
                 downloadingContractId,
                 downloadContract,
-                openPaperPreview,
             }),
-        [
-            downloadingContractId,
-            downloadContract,
-            focusedIndex,
-            items,
-            openPaperPreview,
-            rowRefs,
-        ],
+        [downloadingContractId, downloadContract],
     )
 
     if (isError) {
@@ -147,11 +128,7 @@ export function SalesOrdersListTable(props: {
             onPaginationChange={onPaginationChange}
             loading={loading}
             layout="flush"
-            defaultColumnPinning={{
-                left: ["document"],
-                right: ["actions"],
-            }}
-            onRowPreview={(row) => openPaperPreview(row.id)}
+            defaultColumnPinning={{ left: ["document"] }}
             onRowOpen={(row) => onRowNavigate(row.id)}
         />
     )

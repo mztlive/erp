@@ -480,6 +480,7 @@ pub(super) fn submission_view(
             .contract_snapshot
             .as_ref()
             .map(|s| s.contract_no.clone()),
+        contract_revision_id: submission.contract_revision_id.as_ref().map(ToString::to_string),
         settlement_party_name: submission
             .settlement_party_snapshot
             .as_ref()

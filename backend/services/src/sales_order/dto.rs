@@ -431,6 +431,10 @@ pub struct SalesOrderView {
     pub created_at: u64,
     /// 更新时间（秒级时间戳）。
     pub updated_at: u64,
+    /// 负责销售账号。
+    pub owner_user_id: String,
+    /// 负责销售姓名；账号已删除时为空。
+    pub owner_user_name: Option<String>,
     /// 当前阶段摘要（服务端权威计算，替代前端字符串拼接）。
     pub stage: SalesOrderStageSummary,
 }
@@ -614,6 +618,8 @@ pub struct SubmissionView {
     pub customer_name: String,
     /// 合同编号快照。
     pub contract_no: Option<String>,
+    /// 提交时锁定的合同修订。
+    pub contract_revision_id: Option<String>,
     /// 结算主体名称快照。
     pub settlement_party_name: Option<String>,
     /// 付款条件代码。

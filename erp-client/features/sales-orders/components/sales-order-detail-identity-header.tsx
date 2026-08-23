@@ -36,7 +36,11 @@ export function SalesOrderIdentityHeader({
             density="compact"
             title={order.customerName}
             documentNumber={order.documentNumber}
-            version={order.version}
+            version={
+                order.currentRevisionNo == null
+                    ? "尚未生效"
+                    : `v${order.currentRevisionNo}`
+            }
             primaryStatus={order.primaryStatus}
             statuses={[
                 {

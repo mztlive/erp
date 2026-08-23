@@ -14,6 +14,7 @@ export {
     mapChangeOrder,
     mapDetailToListItem,
     mapOpenProcurementRejection,
+    pickSalesOrderCommercialSource,
     mapRejectedProcurement,
 } from "@/features/sales-orders/lib/sales-order-detail-projection-mappers"
 

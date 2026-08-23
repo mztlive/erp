@@ -14,6 +14,8 @@ const STAGE_OWNER_ROLE_LABEL: Record<string, string> = {
     procurement: "采购",
     sales_leader: "销售领导",
     operations: "运营",
+    sales_order_approver: "销售单审批",
+    voucher_sales_order_approver: "卡券销售单审批",
 }
 
 /** 账号稳定身份：24 位 ObjectId 或本系统 32 位 hex，页面不得当做人名展示。 */
@@ -39,6 +41,7 @@ const PENDING_REVIEW_STAGE_CODES = [
     "awaiting_sales",
     "awaiting_sales_lead",
     "awaiting_ops",
+    "in_approval",
 ]
 
 export function isPendingReviewStage(code: string) {
@@ -92,5 +95,3 @@ export const PROCUREMENT_REJECT_REASON_LABEL: Record<string, string> = {
     ITEM_UNAVAILABLE: "商品/服务无法采购",
     TERMS_UNCLEAR: "商业条件不清晰",
 }
-
-

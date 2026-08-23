@@ -25,6 +25,7 @@ import {
     mapChangeOrder,
     mapDetailToListItem,
     mapNature,
+    pickSalesOrderCommercialSource,
     throwValidation,
 } from "@/features/sales-orders/api/mappers"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
@@ -151,6 +152,56 @@ async function loadCustomerDisplay(customerId: string): Promise<{
     }
 }
 
+async function loadContractDisplay(
+    contractId: string | null | undefined,
+    contractRevisionId: string | null | undefined,
+): Promise<{
+    contractNumber?: string
+    contractRevisionLabel?: string
+    customerName?: string
+}> {
+    if (!contractId) return {}
+    try {
+        const contract = await apiGet<BackendContractDetail>(
+            `/admin/contracts/${contractId}`,
+        )
+        const revision =
+            contract.revisions.find((item) => item.id === contractRevisionId) ??
+            contract.revisions.find(
+                (item) => item.id === contract.current_revision_id,
+            )
+        return {
+            contractNumber: contract.contract_no,
+            contractRevisionLabel: revision
+                ? `${contract.contract_no}@v${revision.revision_no}`
+                : contract.contract_no,
+            customerName: revision?.customer_name,
+        }
+    } catch {
+        return {}
+    }
+}
+
+async function loadTargetMallName(
+    targetMallId: string | null | undefined,
+): Promise<string | undefined> {
+    if (!targetMallId) return undefined
+    try {
+        const page = await apiGet<
+            PageView<{ id: string; name: string; system_type: string }>
+        >("/admin/source-systems", {
+            system_type: "MALL",
+            page: 1,
+            page_size: 100,
+            sort_by: "name",
+            sort_dir: "asc",
+        })
+        return page.items.find((item) => item.id === targetMallId)?.name
+    } catch {
+        return undefined
+    }
+}
+
 export async function fetchSalesOrderDetail(
     id: string,
 ): Promise<SalesOrderDetailView | null> {
@@ -165,31 +216,28 @@ export async function fetchSalesOrderDetail(
         throw err
     }
 
-    const customerDisplay = await loadCustomerDisplay(detail.customer_id)
-    let contractNumber = ""
-    let customerName = customerDisplay.customerName || detail.customer_id
-    if (detail.contract_id) {
-        try {
-            const contract = await apiGet<BackendContractDetail>(
-                `/admin/contracts/${detail.contract_id}`,
-            )
-            contractNumber = contract.contract_no
-            const rev = contract.revisions.find(
-                (r) => r.id === contract.current_revision_id,
-            )
-            if (rev?.customer_name) customerName = rev.customer_name
-        } catch {
-            // 合同域缺口时保留 id 展示
-        }
-    }
-
-    const extras = await loadDetailExtras(id, mapNature(detail.business_type))
+    const commercialSource = pickSalesOrderCommercialSource(detail)
+    const [customerDisplay, contractDisplay, extras, targetMallName] =
+        await Promise.all([
+            loadCustomerDisplay(detail.customer_id),
+            loadContractDisplay(
+                detail.contract_id,
+                commercialSource?.contract_revision_id,
+            ),
+            loadDetailExtras(id, mapNature(detail.business_type)),
+            loadTargetMallName(commercialSource?.target_mall_id),
+        ])
     const order = mapDetailToListItem(detail, {
-        customerName,
-        contractNumber,
+        customerName:
+            contractDisplay.customerName ||
+            customerDisplay.customerName ||
+            detail.customer_id,
+        contractNumber: contractDisplay.contractNumber,
+        contractRevisionLabel: contractDisplay.contractRevisionLabel,
         ownerUserId: detail.owner_user_id || "",
         ownerName: detail.owner_user_name || "—",
         customerContact: customerDisplay.customerContact,
+        targetMallName,
         ...extras,
     })
 

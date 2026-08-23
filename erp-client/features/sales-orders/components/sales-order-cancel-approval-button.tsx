@@ -1,8 +1,18 @@
 "use client"
 
 import * as React from "react"
+import { LoaderCircleIcon } from "lucide-react"
 
-import { FormalActionConfirmDialog } from "@/components/business"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -31,6 +41,7 @@ export function SalesOrderCancelApprovalButton({
     const [open, setOpen] = React.useState(false)
     const [reason, setReason] = React.useState("")
     const [idempotencyKey, setIdempotencyKey] = React.useState("")
+    const [confirmError, setConfirmError] = React.useState<string | null>(null)
     const profileQuery = useAccountProfileQuery()
     const permissions = useSalesOrderDetailPermissions()
     const cancelMutation = useCancelSalesOrderApprovalMutation()
@@ -60,6 +71,7 @@ export function SalesOrderCancelApprovalButton({
                 title={gate.reason}
                 onClick={() => {
                     setReason("")
+                    setConfirmError(null)
                     setIdempotencyKey(
                         `sales-cancel-approval:${order.id}:${crypto.randomUUID()}`,
                     )
@@ -68,57 +80,93 @@ export function SalesOrderCancelApprovalButton({
             >
                 撤回审批
             </Button>
-            <FormalActionConfirmDialog
-                open={open}
-                onOpenChange={setOpen}
-                title="撤回审批"
-                actionLabel="撤回审批"
-                confirmLabel="确认撤回"
-                fromStatus={{ label: order.primaryStatus.label, tone: "warning" }}
-                toStatus={{ label: "草稿", tone: "neutral" }}
-                description={
-                    <Textarea
-                        value={reason}
-                        onChange={(event) => setReason(event.target.value)}
-                        placeholder="请填写撤回原因"
-                        rows={3}
-                    />
-                }
-                lockedFields={["销售单号", "负责销售"]}
-                effects={["审批实例作废", "销售单回到可编辑草稿", "可修改后再次提交"]}
-                pending={cancelMutation.isPending}
-                confirmDisabled={!reason.trim()}
-                onConfirm={async () => {
-                    try {
-                        await cancelMutation.mutateAsync({
-                            salesOrderId: order.id,
-                            expectedVersion: order.lockVersion || order.version,
-                            reason: reason.trim(),
-                            idempotencyKey,
-                        })
-                        setOpen(false)
-                        onResult?.({
-                            status: "succeeded",
-                            title: "审批已撤回",
-                            description:
-                                "已撤回当前审批，单据回到可编辑草稿。",
-                            reference: order.documentNumber,
-                        })
-                    } catch (error) {
-                        const failure = getErrorPresentation(
-                            error,
-                            "撤回审批未完成，请刷新后重试。",
-                        )
-                        onResult?.({
-                            status: "blocked",
-                            title: failure.title,
-                            description: failure.description,
-                            reference: order.documentNumber,
-                        })
-                        throw error
-                    }
-                }}
-            />
+            <AlertDialog open={open} onOpenChange={setOpen}>
+                <AlertDialogContent className="sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>撤回审批</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            撤回后，销售单将回到草稿。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-2">
+                        <label
+                            htmlFor={`sales-order-cancel-reason-${order.id}`}
+                            className="text-sm font-medium"
+                        >
+                            撤回原因
+                        </label>
+                        <Textarea
+                            id={`sales-order-cancel-reason-${order.id}`}
+                            value={reason}
+                            onChange={(event) => setReason(event.target.value)}
+                            placeholder="请输入撤回原因"
+                            rows={3}
+                            disabled={cancelMutation.isPending}
+                        />
+                        {confirmError ? (
+                            <p
+                                className="text-sm text-destructive"
+                                role="alert"
+                            >
+                                {confirmError}
+                            </p>
+                        ) : null}
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={cancelMutation.isPending}>
+                            取消
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={
+                                cancelMutation.isPending || !reason.trim()
+                            }
+                            onClick={() => {
+                                setConfirmError(null)
+                                void cancelMutation
+                                    .mutateAsync({
+                                        salesOrderId: order.id,
+                                        expectedVersion:
+                                            order.lockVersion || order.version,
+                                        reason: reason.trim(),
+                                        idempotencyKey,
+                                    })
+                                    .then(() => {
+                                        setOpen(false)
+                                        onResult?.({
+                                            status: "succeeded",
+                                            title: "审批已撤回",
+                                            description:
+                                                "已撤回当前审批，单据回到可编辑草稿。",
+                                            reference: order.documentNumber,
+                                        })
+                                    })
+                                    .catch((error: unknown) => {
+                                        const failure = getErrorPresentation(
+                                            error,
+                                            "撤回审批未完成，请刷新后重试。",
+                                        )
+                                        setConfirmError(failure.description)
+                                        onResult?.({
+                                            status: "blocked",
+                                            title: failure.title,
+                                            description: failure.description,
+                                            reference: order.documentNumber,
+                                        })
+                                    })
+                            }}
+                        >
+                            {cancelMutation.isPending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : null}
+                            {cancelMutation.isPending ? "撤回中" : "确认撤回"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     )
 }

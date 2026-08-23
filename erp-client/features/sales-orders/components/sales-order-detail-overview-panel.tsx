@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import { MoneyValue } from "@/components/business"
-import { welfareScenarioLabel } from "@/lib/business-options"
+import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { cn } from "@/lib/utils"
 
@@ -30,22 +30,47 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
     const isCard = order.nature === "card_voucher"
     return (
         <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table
+                className={cn(
+                    "w-full text-sm",
+                    isCard ? "min-w-[62rem]" : "min-w-[54rem]",
+                )}
+            >
                 <thead className="bg-muted/50 text-left">
                     <tr>
-                        <th className="px-3 py-1.5 font-medium">项目</th>
-                        <th className="px-3 py-1.5 font-medium">数量</th>
+                        <th className="whitespace-nowrap px-3 py-1.5 font-medium">
+                            项目
+                        </th>
+                        <th className="whitespace-nowrap px-3 py-1.5 font-medium">
+                            数量 / 单位
+                        </th>
+                        <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
+                            含税单价
+                        </th>
                         {isCard ? (
-                            <th className="px-3 py-1.5 font-medium">
-                                面额 / 形态
-                            </th>
+                            <>
+                                <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
+                                    面值
+                                </th>
+                                <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
+                                    配赠
+                                </th>
+                                <th className="whitespace-nowrap px-3 py-1.5 font-medium">
+                                    卡形态
+                                </th>
+                            </>
                         ) : (
-                            <th className="px-3 py-1.5 font-medium">
-                                交付方式
-                            </th>
+                            <>
+                                <th className="whitespace-nowrap px-3 py-1.5 font-medium">
+                                    履约方式
+                                </th>
+                                <th className="whitespace-nowrap px-3 py-1.5 font-medium">
+                                    交付日期
+                                </th>
+                            </>
                         )}
-                        <th className="px-3 py-1.5 font-medium text-right">
-                            含税金额
+                        <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
+                            含税小计
                         </th>
                     </tr>
                 </thead>
@@ -63,34 +88,41 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                             <td className="num px-3 py-1.5">
                                 {line.quantity} {line.unit}
                             </td>
+                            <td className="px-3 py-1.5 text-right">
+                                <MoneyValue value={line.unitPriceGross} />
+                            </td>
                             {isCard ? (
-                                <td className="px-3 py-1.5 text-sm">
-                                    {line.faceValue ? (
-                                        <MoneyValue value={line.faceValue} />
-                                    ) : (
-                                        "—"
-                                    )}
-                                    {line.cardForm ? (
-                                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                                            {line.cardForm}
-                                        </span>
-                                    ) : null}
-                                </td>
+                                <>
+                                    <td className="px-3 py-1.5 text-right text-sm">
+                                        {line.faceValue ? (
+                                            <MoneyValue
+                                                value={line.faceValue}
+                                            />
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </td>
+                                    <td className="num px-3 py-1.5 text-right text-sm">
+                                        {line.giftRate
+                                            ? `${line.giftRate}%`
+                                            : "—"}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-sm">
+                                        {line.cardForm || "—"}
+                                    </td>
+                                </>
                             ) : (
-                                <td className="px-3 py-1.5 text-sm text-muted-foreground">
-                                    <div>{line.fulfillmentMode ?? "—"}</div>
-                                    {line.dueDate ? (
-                                        <div className="num mt-0.5 text-xs">
-                                            {line.dueDate}
-                                        </div>
-                                    ) : null}
-                                </td>
+                                <>
+                                    <td className="px-3 py-1.5 text-sm text-muted-foreground">
+                                        {line.fulfillmentMode || "—"}
+                                    </td>
+                                    <td className="num px-3 py-1.5 text-sm text-muted-foreground">
+                                        {line.dueDate || "—"}
+                                    </td>
+                                </>
                             )}
                             <td className="px-3 py-1.5 text-right">
-                                <MoneyValue
-                                    value={line.amountGross}
-                                    taxBasis="gross"
-                                />
+                                <MoneyValue value={line.amountGross} />
                             </td>
                         </tr>
                     ))}
@@ -105,22 +137,52 @@ export function OverviewPanel({ order }: { order: SalesOrderDetailView }) {
 
     return (
         <div className="space-y-4">
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 xl:grid-cols-3">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
                 <OverviewField
                     label="关联合同"
                     value={order.contractRevisionLabel || "—"}
                 />
                 <OverviewField
+                    label="结算主体"
+                    value={order.settlementEntity || "—"}
+                />
+                <OverviewField
                     label="福利场景"
-                    value={welfareScenarioLabel(order.welfareScene)}
+                    value={welfareScenarioLabel(order.welfareScene) || "—"}
                 />
                 <OverviewField
                     label="付款条件"
-                    value={order.paymentTerms || "—"}
+                    value={paymentTermLabel(order.paymentTerms) || "—"}
                 />
+                {isCard ? (
+                    <>
+                        <OverviewField
+                            label="履约期限（到期交付）"
+                            value={order.fulfillmentDeadline || "—"}
+                            numeric
+                        />
+                        <OverviewField
+                            label="目标商城"
+                            value={order.targetMallName || "—"}
+                        />
+                        <OverviewField
+                            label="应收到期日"
+                            value={order.receivableDueDate || "—"}
+                            numeric
+                        />
+                    </>
+                ) : (
+                    <OverviewField
+                        label="履约期限摘要"
+                        value={order.fulfillmentDeadline || "—"}
+                        numeric
+                    />
+                )}
                 <OverviewField
-                    label={isCard ? "履约期限（到期交付）" : "履约期限"}
-                    value={order.fulfillmentDeadline || "—"}
+                    label="税率"
+                    value={
+                        order.taxRatePercent ? `${order.taxRatePercent}%` : "—"
+                    }
                     numeric
                 />
                 <OverviewField
@@ -128,10 +190,23 @@ export function OverviewPanel({ order }: { order: SalesOrderDetailView }) {
                     value={order.customerContact ?? "—"}
                 />
                 <OverviewField
-                    label="当前版本"
-                    value={`v${order.version}`}
+                    label="当前销售版本"
+                    value={
+                        order.currentRevisionNo == null
+                            ? "尚未生效"
+                            : `v${order.currentRevisionNo}`
+                    }
                     numeric
                 />
+            </dl>
+
+            <dl>
+                <div className="min-w-0">
+                    <dt className="text-xs text-muted-foreground">内部说明</dt>
+                    <dd className="mt-0.5 whitespace-pre-wrap break-words text-sm">
+                        {order.remark?.trim() || "—"}
+                    </dd>
+                </div>
             </dl>
 
             <div>

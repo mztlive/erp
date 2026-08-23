@@ -19,6 +19,7 @@ import type {
     SalesOrderOrigin,
     SalesOrderRevisionSnapshot,
 } from "@/features/sales-orders/types"
+import { deriveVoucherGiftPreview } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { ApiError } from "@/lib/api/errors"
 
 const validationError = (message: string): ApiError => ({
@@ -160,10 +161,16 @@ export function mapWorkingCopyLines(
     if (!lines?.length) return []
     return lines.map((line) => {
         const isVoucher = line.line_type === "VOUCHER"
+        const specSnapshot = line.spec_snapshot?.trim()
+        const skuId = line.sku_id?.trim()
         const item: SalesOrderLineItem = {
             id: line.sales_order_line_id || line.id,
             name: line.item_name_snapshot,
-            sku: line.spec_snapshot || line.sku_id || undefined,
+            // 当前建单会把稳定 SKU id 同时写进 spec_snapshot；详情不得回显内部 id。
+            sku:
+                specSnapshot && specSnapshot !== skuId
+                    ? specSnapshot
+                    : undefined,
             quantity: isVoucher
                 ? String(line.card_count ?? line.quantity ?? "0")
                 : (line.quantity ?? "0"),
@@ -176,6 +183,12 @@ export function mapWorkingCopyLines(
         }
         if (isVoucher) {
             item.faceValue = line.face_value ?? undefined
+            const gift = deriveVoucherGiftPreview(
+                line.face_value ?? "",
+                line.unit_price_gross ?? "",
+                String(line.card_count ?? line.quantity ?? ""),
+            )
+            item.giftRate = gift?.giftRatePercent
             item.cardForm =
                 line.card_form === "PHYSICAL"
                     ? "实体卡"
@@ -265,6 +278,7 @@ export function mapListItemFromBackend(
     extras?: {
         customerName?: string
         contractNumber?: string
+        contractRevisionLabel?: string
         contractCompanyName?: string
         amountGross?: string
         amountNet?: string
@@ -275,8 +289,11 @@ export function mapListItemFromBackend(
         ownerUserId?: string
         ownerName?: string
         paymentTerms?: string
+        taxRatePercent?: string
         welfareScene?: string
         fulfillmentDeadline?: string
+        targetMallName?: string
+        receivableDueDate?: string
         remark?: string
         settlementEntity?: string
         revisions?: SalesOrderRevisionSnapshot[]
@@ -287,7 +304,7 @@ export function mapListItemFromBackend(
         customerContact?: string
         closeEligibility?: BackendCloseEligibility
         startSalesChange?: { allowed: boolean; blocker?: string | null }
-        currentRevisionNo?: number
+        currentRevisionNo?: number | null
         purchaseOrderCount?: number
     },
 ): SalesOrderListItem {
@@ -334,9 +351,8 @@ export function mapListItemFromBackend(
         contractNumber: extras?.contractNumber ?? "",
         contractCompanyName:
             extras?.contractCompanyName ?? extras?.customerName ?? "",
-        contractRevisionLabel: extras?.contractNumber
-            ? `${extras.contractNumber}`
-            : "",
+        contractRevisionLabel:
+            extras?.contractRevisionLabel ?? extras?.contractNumber ?? "",
         nature,
         originSystem,
         primaryStatus,
@@ -348,19 +364,21 @@ export function mapListItemFromBackend(
         taxAmount: extras?.taxAmount ?? "0.00",
         receivedAmount: extras?.receivedAmount ?? "0.00",
         invoicedAmount: extras?.invoicedAmount ?? "0.00",
-        ownerUserId: extras?.ownerUserId ?? "",
-        ownerName: extras?.ownerName ?? "",
+        ownerUserId: extras?.ownerUserId ?? row.owner_user_id ?? "",
+        ownerName: extras?.ownerName ?? row.owner_user_name?.trim() ?? "",
         submittedAt: formatInstant(row.created_at),
         welfareScene: extras?.welfareScene ?? "",
         remark: extras?.remark,
         version: Number(row.version) || 1,
         lockVersion: Number(row.version) || 1,
-        currentRevisionNo:
-            extras?.currentRevisionNo ?? (Number(row.version) || 1),
+        currentRevisionNo: extras?.currentRevisionNo ?? null,
         settlementEntity: extras?.settlementEntity ?? "",
         sellerEntity: "",
         paymentTerms: extras?.paymentTerms ?? "",
+        taxRatePercent: extras?.taxRatePercent ?? "",
         fulfillmentDeadline: extras?.fulfillmentDeadline ?? "",
+        targetMallName: extras?.targetMallName,
+        receivableDueDate: extras?.receivableDueDate,
         customerContact: extras?.customerContact,
         lineItems: extras?.lineItems ?? [],
         related: {

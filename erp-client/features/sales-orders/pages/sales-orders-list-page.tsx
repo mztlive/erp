@@ -8,7 +8,6 @@ import { BusinessTableFrame, PageScaffold } from "@/components/business"
 import { toast } from "@/components/ui/toast"
 import { getErrorMessage } from "@/lib/api/errors"
 import { downloadSalesOrderContractPdf } from "@/features/sales-orders/api/sales-orders"
-import { SalesOrderPaperDialog } from "@/features/sales-orders/components/sales-order-paper-dialog"
 import { SalesOrdersListFilterBar } from "@/features/sales-orders/components/sales-orders-list-filter-bar"
 import { SalesOrdersListFilterPanel } from "@/features/sales-orders/components/sales-orders-list-filter-panel"
 import { SalesOrdersListHeader } from "@/features/sales-orders/components/sales-orders-list-header"
@@ -17,7 +16,6 @@ import { useSalesOrdersListChips } from "@/features/sales-orders/hooks/use-sales
 import { useSalesOrdersListExport } from "@/features/sales-orders/hooks/use-sales-orders-list-export"
 import { useSalesOrdersListFilters } from "@/features/sales-orders/hooks/use-sales-orders-list-filters"
 import { useSalesOrdersListQuery } from "@/features/sales-orders/hooks/use-sales-orders-list-query"
-import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
 import { useSalesOrdersListUrlState } from "@/features/sales-orders/hooks/use-sales-orders-list-url-state"
 import {
     salesOrdersListFilterDescription,
@@ -62,14 +60,9 @@ export function SalesOrdersListPage() {
     )
     const chips = useSalesOrdersListChips(url, items, removeFilter)
 
-    const [paperId, setPaperId] = React.useState<string | null>(null)
     const [downloadingContractId, setDownloadingContractId] = React.useState<
         string | null
     >(null)
-
-    const openPaperPreview = React.useCallback((id: string) => {
-        setPaperId(id)
-    }, [])
 
     const handleRowNavigate = React.useCallback(
         (id: string) => {
@@ -136,13 +129,6 @@ export function SalesOrdersListPage() {
         },
         [pushUrl],
     )
-
-    const paperListOrder = React.useMemo(
-        () => items.find((item) => item.id === paperId) ?? null,
-        [items, paperId],
-    )
-    const paperDetailQuery = useSalesOrderDetailQuery(paperId ?? "")
-    const paperOrder = paperDetailQuery.data ?? paperListOrder
 
     return (
         <PageScaffold density="compact">
@@ -224,21 +210,10 @@ export function SalesOrdersListPage() {
                         pagination={pagination}
                         onPaginationChange={handlePaginationChange}
                         onRowNavigate={handleRowNavigate}
-                        paperId={paperId}
-                        onPaperChange={setPaperId}
                         downloadingContractId={downloadingContractId}
                         downloadContract={downloadContract}
-                        openPaperPreview={openPaperPreview}
                     />
                 }
-            />
-
-            <SalesOrderPaperDialog
-                order={paperOrder}
-                open={paperOrder != null}
-                onOpenChange={(open) => {
-                    if (!open) setPaperId(null)
-                }}
             />
         </PageScaffold>
     )

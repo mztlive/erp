@@ -4,19 +4,16 @@ import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 
 /**
- * 列表行键盘导航：`/` 聚焦搜索框，`j/k` 或方向键移动聚焦行，`Enter` 打开纸质投影，
- * `Escape` 关闭纸质预览并把焦点还给原行。筛选条件或行数变化时聚焦回到第一行。
+ * 列表行键盘导航：`/` 聚焦搜索框，`j/k` 或方向键移动聚焦行，`Enter` 打开详情。
+ * 筛选条件或行数变化时聚焦回到第一行。
  */
 export function useSalesOrdersListKeyboardNav(options: {
     items: SalesOrderListItem[]
     url: SalesOrdersUrlState
-    paperId: string | null
-    onPaperChange: (id: string | null) => void
     onRowNavigate: (id: string) => void
 }) {
-    const { items, url, paperId, onPaperChange, onRowNavigate } = options
+    const { items, url, onRowNavigate } = options
     const [focusedIndex, setFocusedIndex] = React.useState(0)
-    const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
 
     React.useEffect(() => {
         setFocusedIndex(0)
@@ -82,19 +79,12 @@ export function useSalesOrdersListKeyboardNav(options: {
             } else if (event.key === "Enter") {
                 event.preventDefault()
                 const row = items[focusedIndex]
-                if (row) onPaperChange(row.id)
-            } else if (event.key === "Escape" && paperId) {
-                event.preventDefault()
-                const id = paperId
-                onPaperChange(null)
-                requestAnimationFrame(() => {
-                    rowRefs.current.get(id)?.focus()
-                })
+                if (row) onRowNavigate(row.id)
             }
         }
         window.addEventListener("keydown", onKeyDown)
         return () => window.removeEventListener("keydown", onKeyDown)
-    }, [focusedIndex, items, onPaperChange, onRowNavigate, paperId])
+    }, [focusedIndex, items, onRowNavigate])
 
-    return { focusedIndex, rowRefs }
+    return { focusedIndex }
 }

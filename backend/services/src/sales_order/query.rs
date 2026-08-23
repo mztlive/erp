@@ -4,14 +4,16 @@ use std::collections::{HashMap, HashSet};
 
 use database::{
     AccessControlExt, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt,
+    WorkItemExt,
 };
 use entities::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use entities::sales_order::{
-    CommercialStatus, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy, WorkingPurpose,
+    BusinessType, CommercialStatus, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
+    WorkingPurpose,
 };
 use validator::Validate;
 
-use super::adapter::document_approval_view;
+use super::adapter::{document_approval_view, document_type_for_sales_create};
 use super::dto;
 use super::dto::{
     ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, OpenProcurementRejectionView,
@@ -33,6 +35,23 @@ use crate::{
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
 type SalesOrderFilter = <mongodb::Database as SalesOrderExt>::SalesOrderFilter;
+
+/// 判断审核轨是否应存在开放审批任务。
+///
+/// # 参数
+/// * `review_status` - 销售单审核轨状态
+///
+/// # 返回
+/// 在统一审批或兼容的历史待审阶段返回 `true`；草稿、已通过和已驳回返回 `false`。
+///
+/// # 错误
+/// 无。
+fn stage_has_active_review_task(review_status: ReviewStatus) -> bool {
+    !matches!(
+        review_status,
+        ReviewStatus::NotSubmitted | ReviewStatus::Approved | ReviewStatus::Rejected
+    )
+}
 
 impl SalesOrderService {
     /// 分页查询销售单列表。
@@ -84,7 +103,16 @@ impl SalesOrderService {
                 &page
                     .items
                     .iter()
-                    .map(|row| (row.id.clone(), row.review_status))
+                    .map(|row| (row.id.clone(), row.business_type, row.review_status))
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
+        let owner_names = self
+            .resolve_account_names_batch(
+                &page
+                    .items
+                    .iter()
+                    .map(|row| row.created_by.clone())
                     .collect::<Vec<_>>(),
             )
             .await?;
@@ -115,8 +143,10 @@ impl SalesOrderService {
                     label = "待销售处理";
                     tone = "warning";
                 }
-                let (owner_role, owner_user_id, owner_user_name, due_at) =
+                let (owner_role, stage_owner_user_id, stage_owner_user_name, due_at) =
                     owners.get(&row.id).cloned().unwrap_or_default();
+                let owner_user_id = row.created_by.clone();
+                let owner_user_name = owner_names.get(&owner_user_id).cloned();
                 SalesOrderView {
                     id: row.id,
                     order_no: row.order_no,
@@ -135,13 +165,15 @@ impl SalesOrderService {
                     version: row.version,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
+                    owner_user_id,
+                    owner_user_name,
                     stage: dto::SalesOrderStageSummary {
                         code,
                         label,
                         tone,
                         owner_role,
-                        owner_user_id,
-                        owner_user_name,
+                        owner_user_id: stage_owner_user_id,
+                        owner_user_name: stage_owner_user_name,
                         due_at,
                     },
                 }
@@ -283,7 +315,7 @@ impl SalesOrderService {
         let (stage_owner_role, stage_owner_user_id, stage_due_at) = self
             .resolve_stage_owner(
                 &SalesOrderId::new(order.base.id.clone()),
-                submission_ids.first(),
+                order.business_type,
                 order.review_status,
             )
             .await?;
@@ -563,53 +595,159 @@ impl SalesOrderService {
         Ok(HashSet::new())
     }
 
-    /// 解析当前审核轨阶段的责任角色/责任人/时限（详情页专用）。
-    ///
-    /// 按 `review_status` 找到对应的采购确认/审批记录，再按
-    /// `(business_object_type, business_object_id)` 查找命中的有效待办
-    /// （`WorkItemExt::list_active_by_object`）。找不到对应记录或待办时（例如
-    /// 尚未提交、已生效、或低毛利路径已删除时会
-    /// 创建对应记录）返回全 `None`，不视为错误。
+    /// 解析当前审核轨阶段的责任角色、责任人和时限（详情页专用）。
     ///
     /// # 参数
-    /// * `review_status` - 销售单当前审核轨阶段
-    /// * `latest_submission_id` - 最新一次提交；尚未提交过时为 `None`
+    /// * `sales_order_id` - 销售单稳定身份
+    /// * `business_type` - 业务性质，用于确定审批任务对象类型
+    /// * `review_status` - 当前审核轨状态
     ///
     /// # 返回
-    /// 返回 `(责任角色, 责任人账号, 时限)`。
+    /// 返回 `(责任角色, 责任人账号, 时限)`；非在途状态或无开放审批任务时均为空。
     ///
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
     async fn resolve_stage_owner(
         &self,
-        _sales_order_id: &SalesOrderId,
-        _latest_submission_id: Option<&SalesOrderSubmissionId>,
-        _review_status: ReviewStatus,
+        sales_order_id: &SalesOrderId,
+        business_type: BusinessType,
+        review_status: ReviewStatus,
     ) -> Result<(Option<String>, Option<String>, Option<u64>)> {
-        Ok((None, None, None))
+        if !stage_has_active_review_task(review_status) {
+            return Ok((None, None, None));
+        }
+        let object_type = document_type_for_sales_create(business_type).as_str().to_string();
+        let tasks = self
+            .db
+            .work_items()
+            .list_active_approval_by_objects(&[(object_type, sales_order_id.to_string())], &mut NoTransaction)
+            .await?;
+        let Some(task) = tasks.into_iter().next() else {
+            return Ok((None, None, None));
+        };
+        Ok((
+            Some(task.owner_role),
+            task.owner_user_id,
+            task.due_at.map(|due_at| due_at.unix_secs() as u64),
+        ))
     }
 
-    /// 批量解析本页销售单的当前阶段责任人/时限（列表专用，避免逐行查询）。
-    ///
-    /// 按 `sales_order_id` 直接查命中的采购确认/审批记录（不像
-    /// [`Self::resolve_stage_owner`] 那样先定位最新提交——同一销售单同时只会
-    /// 有一条在途确认/审批记录，列表场景不需要精确到"最新提交"这一层），
-    /// 再批量查对应 work_item、批量解析涉及账号姓名。整页固定 3 次查询，不随
-    /// 页大小线性增长。
+    /// 批量解析本页销售单的当前阶段责任人和时限。
     ///
     /// # 参数
-    /// * `rows` - 本页销售单 `(id, review_status)`
+    /// * `rows` - 本页销售单 `(id, 业务性质, 审核轨状态)` 集合
     ///
     /// # 返回
-    /// 返回按销售单 id 索引的 `(责任角色, 责任人账号, 责任人姓名, 时限)`；
-    /// 审核轨不在途或无命中待办的订单不出现在返回的 map 中。
+    /// 返回按销售单 ID 索引的 `(责任角色, 责任人账号, 责任人姓名, 时限)`；
+    /// 非在途状态或无开放审批任务的销售单不进入结果。
     ///
     /// # 错误
-    /// 数据库查询失败时返回仓储错误。
+    /// 工作项或账号批量查询失败时返回仓储错误。
     async fn resolve_stage_owners_batch(
         &self,
-        _rows: &[(String, ReviewStatus)],
+        rows: &[(String, BusinessType, ReviewStatus)],
     ) -> Result<HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>> {
-        Ok(HashMap::new())
+        let business_objects = rows
+            .iter()
+            .filter(|(_, _, review_status)| stage_has_active_review_task(*review_status))
+            .map(|(id, business_type, _)| {
+                (
+                    document_type_for_sales_create(*business_type)
+                        .as_str()
+                        .to_string(),
+                    id.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let tasks = self
+            .db
+            .work_items()
+            .list_active_approval_by_objects(&business_objects, &mut NoTransaction)
+            .await?;
+        let owner_names = self
+            .resolve_account_names_batch(
+                &tasks
+                    .iter()
+                    .filter_map(|task| task.owner_user_id.clone())
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
+        Ok(tasks
+            .into_iter()
+            .map(|task| {
+                let owner_name = task
+                    .owner_user_id
+                    .as_ref()
+                    .and_then(|owner_id| owner_names.get(owner_id).cloned());
+                (
+                    task.business_object_id,
+                    (
+                        Some(task.owner_role),
+                        task.owner_user_id,
+                        owner_name,
+                        task.due_at.map(|due_at| due_at.unix_secs() as u64),
+                    ),
+                )
+            })
+            .collect())
+    }
+
+    /// 批量解析账号展示姓名。
+    ///
+    /// # 参数
+    /// * `account_ids` - 账号 ID 集合，允许重复或为空
+    ///
+    /// # 返回
+    /// 返回按账号 ID 索引的展示姓名；已删除或不存在的账号不会进入结果。
+    ///
+    /// # 错误
+    /// 账号仓储查询失败时返回仓储错误。
+    async fn resolve_account_names_batch(&self, account_ids: &[String]) -> Result<HashMap<String, String>> {
+        let unique_ids = account_ids
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let accounts = self
+            .db
+            .accounts()
+            .list_by_ids(&unique_ids, &mut NoTransaction)
+            .await?;
+        Ok(accounts
+            .into_iter()
+            .map(|account| (account.base.id, account.name))
+            .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use entities::sales_order::ReviewStatus;
+
+    use super::stage_has_active_review_task;
+
+    #[test]
+    fn unified_and_legacy_pending_reviews_require_open_tasks() {
+        for status in [
+            ReviewStatus::InApproval,
+            ReviewStatus::PendingProcurementConfirmation,
+            ReviewStatus::PendingLowMarginSuperior,
+            ReviewStatus::PendingSalesLeader,
+            ReviewStatus::PendingOperations,
+        ] {
+            assert!(stage_has_active_review_task(status));
+        }
+    }
+
+    #[test]
+    fn terminal_review_states_do_not_require_open_tasks() {
+        for status in [
+            ReviewStatus::NotSubmitted,
+            ReviewStatus::Approved,
+            ReviewStatus::Rejected,
+        ] {
+            assert!(!stage_has_active_review_task(status));
+        }
     }
 }

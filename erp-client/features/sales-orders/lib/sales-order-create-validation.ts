@@ -88,7 +88,7 @@ const createSalesOrderSchema = z
                 "请选择有效的福利场景",
             ),
         paymentTerms: z.string().trim().min(1, "请选择付款条件"),
-        fulfillmentDeadline: z.string().min(1, "请选择履约期限"),
+        fulfillmentDeadline: z.string(),
         targetMallId: z.string(),
         receivableDueDate: z.string(),
         taxRatePercent: decimalInput("税率", 6).refine(
@@ -142,6 +142,16 @@ const createSalesOrderSchema = z
                 code: "custom",
                 path: ["targetMallId"],
                 message: "请选择目标商城",
+            })
+        }
+        if (
+            value.nature === "card_voucher" &&
+            !value.fulfillmentDeadline.trim()
+        ) {
+            context.addIssue({
+                code: "custom",
+                path: ["fulfillmentDeadline"],
+                message: "请选择履约期限",
             })
         }
         if (

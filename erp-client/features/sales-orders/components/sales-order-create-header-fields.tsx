@@ -115,14 +115,6 @@ export function SalesOrderCreateHeaderFields({
                     />
                 )}
             </form.AppField>
-            <form.AppField
-                name="fulfillmentDeadline"
-                validators={{
-                    onBlur: z.string().min(1, "请选择履约期限"),
-                }}
-            >
-                {(field) => <field.DateField label="履约期限" />}
-            </form.AppField>
             <form.Subscribe selector={(state) => state.values.nature}>
                 {(nature) =>
                     nature === "physical_service" ? (
@@ -160,6 +152,16 @@ export function SalesOrderCreateHeaderFields({
                     nature === "card_voucher" ? (
                         <>
                             <form.AppField
+                                name="fulfillmentDeadline"
+                                validators={{
+                                    onBlur: z.string().min(1, "请选择履约期限"),
+                                }}
+                            >
+                                {(field) => (
+                                    <field.DateField label="履约期限" />
+                                )}
+                            </form.AppField>
+                            <form.AppField
                                 name="targetMallId"
                                 validators={{
                                     onBlur: z
@@ -194,7 +196,7 @@ export function SalesOrderCreateHeaderFields({
                                                     field.handleChange(id ?? "")
                                                 }
                                                 onBlur={field.handleBlur}
-                                                placeholder="选择执行投影目标商城"
+                                                placeholder="选择目标商城"
                                                 emptyLabel="暂无启用中的商城"
                                             />
                                             {isInvalid ? (

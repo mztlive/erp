@@ -111,6 +111,8 @@ export type BackendSalesOrderView = {
     version: number
     created_at: number
     updated_at: number
+    owner_user_id?: string
+    owner_user_name?: string | null
     stage: BackendStageSummary
 }
 
@@ -152,6 +154,7 @@ export type BackendWorkingCopy = {
     business_type: string
     customer_name?: string
     contract_no?: string | null
+    contract_revision_id?: string | null
     settlement_party_name?: string | null
     payment_term_code?: string
     payment_term_name?: string
@@ -176,6 +179,7 @@ export type BackendSubmission = {
     business_type: string
     customer_name?: string
     contract_no?: string | null
+    contract_revision_id?: string | null
     settlement_party_name?: string | null
     payment_term_code?: string
     payment_term_name?: string

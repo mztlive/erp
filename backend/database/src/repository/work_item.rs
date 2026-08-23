@@ -220,6 +220,49 @@ impl<'a> Repository<'a, WorkItem> {
         mongo_ops::find_one(&self.collection(), document, executor).await
     }
 
+    /// 批量查询多个业务对象当前开放的审批任务。
+    ///
+    /// 查询使用业务对象类型与 ID 的精确组合，避免不同单据类型之间形成交叉命中；
+    /// 只返回 `DOCUMENT_APPROVAL + OPEN` 任务。
+    ///
+    /// # 参数
+    /// * `business_objects` - `(业务对象类型, 业务对象 ID)` 集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按创建时间升序排列的开放审批任务；输入为空时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_active_approval_by_objects(
+        &self,
+        business_objects: &[(String, String)],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        if business_objects.is_empty() {
+            return Ok(Vec::new());
+        }
+        let object_filters = business_objects
+            .iter()
+            .map(|(object_type, object_id)| {
+                doc! {
+                    "business_object_type": object_type,
+                    "business_object_id": object_id,
+                }
+            })
+            .collect::<Vec<_>>();
+        self.find_many_sorted(
+            doc! {
+                "work_item_type": WorkItemType::DocumentApproval.as_str(),
+                "status": WorkItemStatus::Open.as_str(),
+                "$or": object_filters,
+            },
+            doc! { "created_at": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 以 `id + OPEN + expected_task_version + approval_node_execution_id` 关闭审批任务。
     ///
     /// 改派和人员恢复不得更新旧 `CLOSED` 任务，只能为新执行插入新任务。

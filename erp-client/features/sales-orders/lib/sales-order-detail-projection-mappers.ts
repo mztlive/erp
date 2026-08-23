@@ -4,6 +4,8 @@ import type {
     BackendProcurementConfirmation,
     BackendSalesChangeOrder,
     BackendSalesOrderDetail,
+    BackendSubmission,
+    BackendWorkingCopy,
     BackendWorkingCopyLine,
 } from "@/features/sales-orders/api/contracts"
 import type {
@@ -52,6 +54,33 @@ function resolveFulfillmentDeadline(
     return `${dates[0]} ~ ${dates[dates.length - 1]}`
 }
 
+/** 将后端小数税率转换为建单页使用的百分数展示；缺失或非法值保持为空。 */
+function taxRatePercent(rate: string | null | undefined): string {
+    if (!rate?.trim()) return ""
+    const value = Number(rate)
+    if (!Number.isFinite(value)) return ""
+    return (value * 100).toFixed(2)
+}
+
+function latestSubmission(
+    detail: BackendSalesOrderDetail,
+): BackendSubmission | undefined {
+    return [...(detail.submissions ?? [])].sort(
+        (a, b) => (b.submission_no ?? 0) - (a.submission_no ?? 0),
+    )[0]
+}
+
+/**
+ * 选择详情当前应展示的商业快照：可编辑工作副本优先，否则取最新提交。
+ * 合同精确修订和目标商城等附属显示必须复用同一来源，避免字段跨版本拼接。
+ */
+export function pickSalesOrderCommercialSource(
+    detail: BackendSalesOrderDetail,
+): BackendWorkingCopy | BackendSubmission | undefined {
+    if (detail.working_copy?.lines?.length) return detail.working_copy
+    return latestSubmission(detail)
+}
+
 /**
  * 详情商业内容优先：可编辑草稿 → 最新提交快照。
  * 提交后 working_copy 为空时必须从 submission 回填明细与表头。
@@ -66,59 +95,39 @@ function pickCommercialContent(detail: BackendSalesOrderDetail): {
     contractNo?: string
     settlementPartyName?: string
     paymentTerms: string
+    taxRatePercent: string
     welfareScene: string
     fulfillmentDeadline: string
+    receivableDueDate?: string
     remark?: string
 } {
-    const wc = detail.working_copy
-    const submissions = [...(detail.submissions ?? [])].sort(
-        (a, b) => (b.submission_no ?? 0) - (a.submission_no ?? 0),
-    )
-    const latestSubmission = submissions[0]
-
-    if (wc?.lines?.length) {
-        return {
-            lines: wc.lines,
-            amountGross: wc.gross_amount,
-            amountNet: wc.net_amount,
-            taxAmount: wc.tax_amount,
-            ownerUserId:
-                wc.editor_user_id || latestSubmission?.submitted_by || "",
-            customerName: wc.customer_name || undefined,
-            contractNo: wc.contract_no || undefined,
-            settlementPartyName: wc.settlement_party_name || undefined,
-            paymentTerms: wc.payment_term_name || wc.payment_term_code || "",
-            welfareScene: wc.project_name || "",
-            fulfillmentDeadline: resolveFulfillmentDeadline(
-                wc.voucher_expiry_at,
-                wc.lines,
-            ),
-            remark: wc.business_remark || undefined,
-        }
-    }
-
-    if (latestSubmission) {
-        const lines = latestSubmission.lines ?? []
+    const source = pickSalesOrderCommercialSource(detail)
+    const submitted = latestSubmission(detail)
+    if (source) {
+        const lines = source.lines ?? []
+        const ownerUserId =
+            "editor_user_id" in source
+                ? source.editor_user_id || submitted?.submitted_by || ""
+                : source.submitted_by || ""
         return {
             lines,
-            amountGross: latestSubmission.gross_amount,
-            amountNet: latestSubmission.net_amount,
-            taxAmount: latestSubmission.tax_amount,
-            ownerUserId: latestSubmission.submitted_by || "",
-            customerName: latestSubmission.customer_name || undefined,
-            contractNo: latestSubmission.contract_no || undefined,
-            settlementPartyName:
-                latestSubmission.settlement_party_name || undefined,
+            amountGross: source.gross_amount,
+            amountNet: source.net_amount,
+            taxAmount: source.tax_amount,
+            ownerUserId,
+            customerName: source.customer_name || undefined,
+            contractNo: source.contract_no || undefined,
+            settlementPartyName: source.settlement_party_name || undefined,
             paymentTerms:
-                latestSubmission.payment_term_name ||
-                latestSubmission.payment_term_code ||
-                "",
-            welfareScene: latestSubmission.project_name || "",
+                source.payment_term_name || source.payment_term_code || "",
+            taxRatePercent: taxRatePercent(lines[0]?.sales_tax_rate),
+            welfareScene: source.project_name || "",
             fulfillmentDeadline: resolveFulfillmentDeadline(
-                latestSubmission.voucher_expiry_at,
+                source.voucher_expiry_at,
                 lines,
             ),
-            remark: latestSubmission.business_remark || undefined,
+            receivableDueDate: source.receivable_due_date || undefined,
+            remark: source.business_remark || undefined,
         }
     }
 
@@ -126,6 +135,7 @@ function pickCommercialContent(detail: BackendSalesOrderDetail): {
         lines: [],
         ownerUserId: "",
         paymentTerms: "",
+        taxRatePercent: "",
         welfareScene: "",
         fulfillmentDeadline: "",
     }
@@ -136,6 +146,8 @@ export function mapDetailToListItem(
     extras?: {
         customerName?: string
         contractNumber?: string
+        contractRevisionLabel?: string
+        targetMallName?: string
         ownerUserId?: string
         ownerName?: string
         procurementRejection?: ProcurementRejectionResolution | null
@@ -157,12 +169,13 @@ export function mapDetailToListItem(
         mapActiveLowMarginManagerConfirmation(
             detail.active_low_margin_manager_confirmation,
         )
-    // 当前版本号取 `current_revision_id` 对应 revision_no（与实体乐观锁 version 不同）。
-    const currentRevisionNo = detail.revisions?.length
-        ? (detail.revisions.find((r) => r.id === detail.current_revision_id)
-              ?.revision_no ??
-          Math.max(...detail.revisions.map((r) => r.revision_no)))
-        : Number(detail.version) || 1
+    // 正式销售版本只认 `current_revision_id` 指向的不可变修订。
+    // 实体乐观锁 `version` 会随保存、提交和状态流转递增，绝不能作为业务版本兜底。
+    const currentRevisionNo = detail.current_revision_id
+        ? (detail.revisions?.find(
+              (revision) => revision.id === detail.current_revision_id,
+          )?.revision_no ?? null)
+        : null
     return mapListItemFromBackend(
         {
             id: detail.id,
@@ -185,13 +198,18 @@ export function mapDetailToListItem(
         },
         {
             customerName:
-                extras?.customerName ||
                 commercial.customerName ||
+                extras?.customerName ||
                 detail.customer_id,
             contractNumber:
-                extras?.contractNumber || commercial.contractNo || "",
+                commercial.contractNo || extras?.contractNumber || "",
+            contractRevisionLabel:
+                extras?.contractRevisionLabel ||
+                commercial.contractNo ||
+                extras?.contractNumber ||
+                "",
             contractCompanyName:
-                extras?.customerName || commercial.customerName || "",
+                commercial.customerName || extras?.customerName || "",
             amountGross: commercial.amountGross,
             amountNet: commercial.amountNet,
             taxAmount: commercial.taxAmount,
@@ -202,8 +220,11 @@ export function mapDetailToListItem(
             ownerName: extras?.ownerName || "",
             customerContact: extras?.customerContact,
             paymentTerms: commercial.paymentTerms,
+            taxRatePercent: commercial.taxRatePercent,
             welfareScene: commercial.welfareScene,
             fulfillmentDeadline: commercial.fulfillmentDeadline,
+            targetMallName: extras?.targetMallName,
+            receivableDueDate: commercial.receivableDueDate,
             remark: commercial.remark,
             revisions: mapRevisions(detail.revisions),
             procurementRejection,

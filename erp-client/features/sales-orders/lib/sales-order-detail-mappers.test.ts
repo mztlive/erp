@@ -53,6 +53,33 @@ describe("mapWorkingCopyLines", () => {
         expect(lines[0]?.fulfillmentMode).toBe("供应商直发")
         expect(lines[0]?.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}/)
     })
+
+    it("derives voucher gift rate and does not expose a stable internal sku id", () => {
+        const lines = mapWorkingCopyLines([
+            {
+                id: "line-2",
+                sales_order_line_id: "sol-2",
+                line_no: 1,
+                line_type: "VOUCHER",
+                gross_amount: "180.00",
+                net_amount: "169.81",
+                tax_amount: "10.19",
+                sales_tax_rate: "0.060000",
+                item_name_snapshot: "节日卡券",
+                spec_snapshot: "sku_internal_1",
+                sku_id: "sku_internal_1",
+                card_count: 2,
+                unit_price_gross: "90.00",
+                face_value: "100.00",
+                card_form: "ELECTRONIC",
+            },
+        ])
+
+        expect(lines[0]?.sku).toBeUndefined()
+        expect(lines[0]?.unitPriceGross).toBe("90.00")
+        expect(lines[0]?.giftRate).toBe("11.11")
+        expect(lines[0]?.cardForm).toBe("电子卡")
+    })
 })
 
 describe("mapListItemFromBackend", () => {
@@ -73,6 +100,8 @@ describe("mapListItemFromBackend", () => {
                 version: 1,
                 created_at: 1,
                 updated_at: 1,
+                owner_user_id: "u-sales",
+                owner_user_name: "张三",
                 stage: {
                     code: "effective",
                     label: "已生效",
@@ -82,6 +111,8 @@ describe("mapListItemFromBackend", () => {
             { purchaseOrderCount: 2 },
         )
 
+        expect(order.ownerUserId).toBe("u-sales")
+        expect(order.ownerName).toBe("张三")
         expect(order.related.purchaseOrders).toBe(2)
         expect(canCreatePurchaseFromSalesOrder(order)).toBe(false)
         expect(purchaseOrdersWorkspaceHref(order, "/sales/orders/so-1")).toBe(

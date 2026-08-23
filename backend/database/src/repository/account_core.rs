@@ -66,6 +66,24 @@ impl<'a> Repository<'a, AccountCore> {
         mongo_ops::find_one(&self.collection(), doc! { "id": id }, executor).await
     }
 
+    /// 按账号 ID 集合批量查询统一账号。
+    ///
+    /// # 参数
+    /// * `ids` - 账号 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回全部匹配且未软删除的账号记录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn list_by_ids(&self, ids: &[String], executor: &mut dyn Executor) -> Result<Vec<AccountCore>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
     /// 根据账号类型查询账号集合。
     ///
     /// # 参数

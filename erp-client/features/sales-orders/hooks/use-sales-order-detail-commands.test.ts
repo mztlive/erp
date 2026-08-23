@@ -38,7 +38,8 @@ function makeOrder(
     return {
         id: "so-1",
         documentNumber: "XS-1",
-        version: 3,
+        version: 9,
+        currentRevisionNo: 3,
         nature: "physical_service",
         ...overrides,
     } as unknown as SalesOrderDetailView

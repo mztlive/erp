@@ -266,13 +266,19 @@ export type SalesOrderListItem = {
     remark?: string
     version: number
     lockVersion: number
-    /** 当前生效版本的版本号（`current_revision_id` 对应 revision_no；与实体乐观锁 `version` 不同）。 */
-    currentRevisionNo: number
+    /** 当前生效版本号；尚未形成正式版本时为 `null`，不得用实体乐观锁 `version` 代替。 */
+    currentRevisionNo: number | null
     settlementEntity: string
     sellerEntity: string
     paymentTerms: string
+    /** 建单时统一填写的销项税率百分数，如 13.00。 */
+    taxRatePercent?: string
     /** 表头履约期限（卡券全单；实物为摘要文案） */
     fulfillmentDeadline: string
+    /** 卡券执行目标商城展示名；非卡券或无法解析时为空。 */
+    targetMallName?: string
+    /** 卡券最终通过后形成应收所使用的到期日。 */
+    receivableDueDate?: string
     customerContact?: string
     lineItems: readonly SalesOrderLineItem[]
     related: SalesOrderRelatedSummary

@@ -6,7 +6,7 @@ import type { SalesOrderRevisionSnapshot } from "@/features/sales-orders/types"
 
 type RevisionHistoryCardProps = {
     revisions: readonly SalesOrderRevisionSnapshot[]
-    currentVersion: number
+    currentVersion: number | null
     contractRevisionLabel: string
 }
 
@@ -24,16 +24,22 @@ export function RevisionHistoryCard({
         <div className="space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                    <h2 className="text-sm font-medium">历史版本</h2>
+                    <h2 className="text-sm font-medium">版本记录</h2>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                         关联合同 {contractRevisionLabel || "—"}
-                        。改单生效后旧版本仍保留，方便对照当时卖了什么、多少钱。
+                        。销售单生效后形成 v1，后续改单生效时保留旧版本。
                     </p>
                 </div>
-                <Badge variant="secondary">当前 v{currentVersion}</Badge>
+                {currentVersion == null ? (
+                    <Badge variant="outline">尚未生效</Badge>
+                ) : (
+                    <Badge variant="secondary">当前 v{currentVersion}</Badge>
+                )}
             </div>
             {ordered.length === 0 ? (
-                <p className="text-sm text-muted-foreground">暂无历史版本</p>
+                <p className="text-sm text-muted-foreground">
+                    销售单尚未生效，暂无正式版本。
+                </p>
             ) : (
                 <ol className="space-y-3" aria-label="销售版本时间线">
                     {ordered.map((rev) => {

@@ -1,4 +1,4 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
+import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { parseSalesOrdersSearchParams } from "@/features/sales-orders/lib/url-state"
@@ -105,8 +105,6 @@ describe("useSalesOrdersListKeyboardNav", () => {
             useSalesOrdersListKeyboardNav({
                 items,
                 url: makeUrl(),
-                paperId: null,
-                onPaperChange: vi.fn(),
                 onRowNavigate,
             }),
         )
@@ -129,8 +127,6 @@ describe("useSalesOrdersListKeyboardNav", () => {
             useSalesOrdersListKeyboardNav({
                 items,
                 url: makeUrl(),
-                paperId: null,
-                onPaperChange: vi.fn(),
                 onRowNavigate: vi.fn(),
             }),
         )
@@ -152,15 +148,13 @@ describe("useSalesOrdersListKeyboardNav", () => {
         expect(result.current.focusedIndex).toBe(0)
     })
 
-    it("Enter 打开当前聚焦行", () => {
-        const onPaperChange = vi.fn()
+    it("Enter 打开当前聚焦行详情", () => {
+        const onRowNavigate = vi.fn()
         renderHook(() =>
             useSalesOrdersListKeyboardNav({
                 items,
                 url: makeUrl(),
-                paperId: null,
-                onPaperChange,
-                onRowNavigate: vi.fn(),
+                onRowNavigate,
             }),
         )
 
@@ -171,7 +165,7 @@ describe("useSalesOrdersListKeyboardNav", () => {
             pressKey("Enter")
         })
 
-        expect(onPaperChange).toHaveBeenCalledWith("so-b")
+        expect(onRowNavigate).toHaveBeenCalledWith("so-b")
     })
 
     it("列表为空时导航键无效", () => {
@@ -180,8 +174,6 @@ describe("useSalesOrdersListKeyboardNav", () => {
             useSalesOrdersListKeyboardNav({
                 items: [],
                 url: makeUrl(),
-                paperId: null,
-                onPaperChange: vi.fn(),
                 onRowNavigate,
             }),
         )
@@ -201,8 +193,6 @@ describe("useSalesOrdersListKeyboardNav", () => {
             useSalesOrdersListKeyboardNav({
                 items,
                 url: makeUrl(),
-                paperId: null,
-                onPaperChange: vi.fn(),
                 onRowNavigate: vi.fn(),
             }),
         )
@@ -223,8 +213,6 @@ describe("useSalesOrdersListKeyboardNav", () => {
             useSalesOrdersListKeyboardNav({
                 items,
                 url: makeUrl(),
-                paperId: null,
-                onPaperChange: vi.fn(),
                 onRowNavigate: vi.fn(),
             }),
         )
@@ -243,8 +231,6 @@ describe("useSalesOrdersListKeyboardNav", () => {
             useSalesOrdersListKeyboardNav({
                 items,
                 url: makeUrl(),
-                paperId: null,
-                onPaperChange: vi.fn(),
                 onRowNavigate,
             }),
         )
@@ -261,37 +247,12 @@ describe("useSalesOrdersListKeyboardNav", () => {
         input.remove()
     })
 
-    it("Escape 关闭纸质预览并把焦点还给原行", async () => {
-        const onPaperChange = vi.fn()
-        const { result } = renderHook(() =>
-            useSalesOrdersListKeyboardNav({
-                items,
-                url: makeUrl(),
-                paperId: "so-a",
-                onPaperChange,
-                onRowNavigate: vi.fn(),
-            }),
-        )
-        const rowEl = document.createElement("div")
-        const focus = vi.spyOn(rowEl, "focus")
-        result.current.rowRefs.current.set("so-a", rowEl)
-
-        act(() => {
-            pressKey("Escape")
-        })
-
-        expect(onPaperChange).toHaveBeenCalledWith(null)
-        await waitFor(() => expect(focus).toHaveBeenCalledTimes(1))
-    })
-
     it("筛选或分页变化时聚焦回到第一行", () => {
         const { result, rerender } = renderHook(
             ({ url }: { url: ReturnType<typeof makeUrl> }) =>
                 useSalesOrdersListKeyboardNav({
                     items,
                     url,
-                    paperId: null,
-                    onPaperChange: vi.fn(),
                     onRowNavigate: vi.fn(),
                 }),
             { initialProps: { url: makeUrl() } },

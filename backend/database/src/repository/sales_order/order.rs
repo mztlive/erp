@@ -51,6 +51,8 @@ pub struct SalesOrderRow {
     pub created_at: u64,
     /// 更新时间（秒级时间戳）。
     pub updated_at: u64,
+    /// 负责销售账号；ERP 建单负责人固定为建单人。
+    pub created_by: String,
 }
 
 /// 销售单列表筛选条件。
@@ -272,6 +274,7 @@ fn sales_order_projection() -> Document {
         "version": 1,
         "created_at": 1,
         "updated_at": 1,
+        "created_by": 1,
     }
 }
 
@@ -333,6 +336,11 @@ mod tests {
             1_700_000_000
         );
         assert_eq!(document.get_str("created_by").unwrap(), "user-1");
+    }
+
+    #[test]
+    fn sales_order_projection_includes_responsible_sales_account() {
+        assert_eq!(sales_order_projection().get_i32("created_by").unwrap(), 1);
     }
 
     #[test]

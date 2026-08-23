@@ -85,7 +85,11 @@ function SalesOrderPaperDocument({ order }: { order: SalesOrderListItem }) {
             subtitle={NATURE_LABEL[order.nature]}
             documentNumber={order.documentNumber}
             status={order.primaryStatus}
-            version={order.version}
+            version={
+                order.currentRevisionNo == null
+                    ? "尚未生效"
+                    : `v${order.currentRevisionNo}`
+            }
             parties={[
                 {
                     id: "seller",

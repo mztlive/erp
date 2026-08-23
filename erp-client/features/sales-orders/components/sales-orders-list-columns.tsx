@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import Link from "next/link"
 import { Loader2Icon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -21,25 +20,14 @@ import {
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
 export type SalesOrdersListColumnsContext = {
-    items: SalesOrderListItem[]
-    focusedIndex: number
-    rowRefs: React.MutableRefObject<Map<string, HTMLElement>>
     downloadingContractId: string | null
     downloadContract: (order: SalesOrderListItem) => void
-    openPaperPreview: (id: string) => void
 }
 
 export function buildSalesOrdersListColumns(
     context: SalesOrdersListColumnsContext,
 ): ColumnDef<SalesOrderListItem>[] {
-    const {
-        items,
-        focusedIndex,
-        rowRefs,
-        downloadingContractId,
-        downloadContract,
-        openPaperPreview,
-    } = context
+    const { downloadingContractId, downloadContract } = context
 
     return [
         {
@@ -48,31 +36,18 @@ export function buildSalesOrdersListColumns(
             header: "销售单",
             meta: { label: "销售单", width: "reference" },
             cell: ({ row }) => (
-                <div
-                    className="flex min-w-0 items-center gap-2"
-                    ref={(el) => {
-                        if (el) rowRefs.current.set(row.original.id, el)
-                        else rowRefs.current.delete(row.original.id)
-                    }}
-                    tabIndex={
-                        items[focusedIndex]?.id === row.original.id ? 0 : -1
-                    }
-                    data-focused={
-                        items[focusedIndex]?.id === row.original.id
-                            ? "true"
-                            : undefined
-                    }
-                >
+                <div className="flex min-w-0 items-center gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center gap-2">
                             <Button
-                                type="button"
                                 variant="link"
                                 size="xs"
                                 className="num px-0"
-                                aria-label={`预览 ${row.original.documentNumber}`}
-                                onClick={() =>
-                                    openPaperPreview(row.original.id)
+                                aria-label={`查看销售单 ${row.original.documentNumber}`}
+                                render={
+                                    <Link
+                                        href={`/sales/orders/${row.original.id}`}
+                                    />
                                 }
                             >
                                 {row.original.documentNumber}
@@ -203,6 +178,9 @@ export function buildSalesOrdersListColumns(
             accessorKey: "ownerName",
             header: "负责人",
             meta: { label: "负责人", width: "default" },
+            cell: ({ row }) => (
+                <span className="text-sm">{row.original.ownerName || "—"}</span>
+            ),
         },
         {
             id: "currentOwner",
@@ -240,26 +218,6 @@ export function buildSalesOrdersListColumns(
                 <span className="num text-sm text-muted-foreground">
                     {row.original.submittedAt}
                 </span>
-            ),
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default", align: "end" },
-            enableSorting: false,
-            cell: ({ row }) => (
-                <div className="flex justify-end gap-1">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        render={
-                            <Link href={`/sales/orders/${row.original.id}`} />
-                        }
-                    >
-                        查看详情
-                    </Button>
-                </div>
             ),
         },
     ]

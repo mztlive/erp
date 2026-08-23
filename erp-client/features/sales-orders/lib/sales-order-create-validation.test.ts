@@ -104,6 +104,37 @@ describe("validateSalesOrderForm", () => {
         expect(validateSalesOrderForm(makeValues(), "SUBMIT")).toBeUndefined()
     })
 
+    it("records fulfillment due dates at the correct granularity", () => {
+        expect(
+            validateSalesOrderForm(
+                makeValues({ fulfillmentDeadline: "" }),
+                "SUBMIT",
+            ),
+        ).toBeUndefined()
+
+        const cardLine = {
+            ...makeValues().lineItems[0],
+            sku: "voucher-category-1",
+            unit: "张",
+            faceValue: "100.00",
+            cardForm: "电子卡",
+            fulfillmentMode: "",
+        }
+        const card = validateSalesOrderForm(
+            makeValues({
+                nature: "card_voucher",
+                fulfillmentDeadline: "",
+                targetMallId: "mall-1",
+                receivableDueDate: "2026-09-30",
+                lineItems: [cardLine],
+            }),
+            "SUBMIT",
+        )
+        expect(card?.fields.fulfillmentDeadline[0].message).toBe(
+            "请选择履约期限",
+        )
+    })
+
     it("validates card vouchers with exactly one line, mall and due date", () => {
         const cardLine = {
             ...makeValues().lineItems[0],

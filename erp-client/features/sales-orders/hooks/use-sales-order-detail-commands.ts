@@ -219,7 +219,7 @@ export function useSalesOrderDetailStartChange() {
             if (!command) {
                 const payload = await prepareStartSalesChangeOrder({
                     salesOrderId: order.id,
-                    baseRevisionNo: order.version,
+                    baseRevisionNo: order.currentRevisionNo ?? 0,
                     nature: order.nature,
                 })
                 command = commandLedger.acquire(
