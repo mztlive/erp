@@ -351,8 +351,22 @@ impl CustomerService {
         let account = self.load_customer(id).await?;
         let (party_no, legal_name) = self.party_identity(&account.party_id).await;
         let owner_user_id = self.current_owner_user_id(&account.base.id).await?;
+        let owner_user_name = match owner_user_id.as_deref() {
+            Some(user_id) => self
+                .db
+                .accounts()
+                .find_by_id(user_id, &mut NoTransaction)
+                .await?
+                .map(|account| account.name),
+            None => None,
+        };
+        let mut view: CustomerView = account.into();
+        view.party_no = party_no.clone();
+        view.legal_name = legal_name.clone();
+        view.owner_user_id = owner_user_id.clone();
+        view.owner_user_name = owner_user_name;
         Ok(CustomerDetailView {
-            account: account.into(),
+            account: view,
             party_no,
             legal_name,
             owner_user_id,

@@ -8,12 +8,20 @@ import type {
     UploadContractPdfResult,
 } from '@/features/contracts/types'
 import { renderHookWithProviders } from '@/features/test-utils'
+import { toast } from '@/components/ui/toast'
 
 vi.mock('@/features/contracts/hooks/queries', () => ({
     useCreateContractExportJobMutation: vi.fn(),
 }))
 
+vi.mock('@/components/ui/toast', () => ({
+    toast: {
+        add: vi.fn(),
+    },
+}))
+
 const mockedMutationHook = vi.mocked(useCreateContractExportJobMutation)
+const mockedToastAdd = vi.mocked(toast.add)
 
 const uploadResult: UploadContractPdfResult = {
     contractId: 'ct-9',
@@ -44,7 +52,7 @@ describe('useContractListActions', () => {
         } as unknown as ReturnType<typeof useCreateContractExportJobMutation>)
     })
 
-    it('records the upload result with facts and a detail link', () => {
+    it('shows a toast and highlights the contract after upload success', () => {
         const { result } = renderHookWithProviders(
             () =>
                 useContractListActions({
@@ -58,21 +66,14 @@ describe('useContractListActions', () => {
             result.current.handleUploadSuccess(uploadResult)
         })
 
-        expect(result.current.actionResult).toEqual({
-            status: 'succeeded',
+        expect(mockedToastAdd).toHaveBeenCalledWith({
             title: '合同 PDF 已归档',
-            description:
-                '已形成可追溯的合同版本，可直接选择用于新建销售单。',
-            facts: [
-                { label: '合同号', value: 'CT-9' },
-                { label: '修订', value: 'v2' },
-                { label: '文件', value: 'signed.pdf' },
-                { label: '上传时间', value: '2026-06-01 08:30:00' },
-            ],
-            nextHref: '/sales/contracts/ct-9',
-            createSalesOrderHref: '/sales/orders?mode=create&contractId=ct-9',
-            highlightedContractId: 'ct-9',
+            description: 'CT-9 · v2 已可引用建单',
+            type: 'success',
+            timeout: 4000,
         })
+        expect(result.current.highlightedContractId).toBe('ct-9')
+        expect(result.current.actionResult).toBeNull()
         expect(result.current.exportJob).toBeNull()
     })
 

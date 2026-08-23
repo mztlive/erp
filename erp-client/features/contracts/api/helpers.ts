@@ -145,7 +145,8 @@ export async function loadCustomerBrief(customerId: string): Promise<{
             customerNo: c.customer_no,
             displayName: c.legal_name?.trim() || c.customer_no,
             partyId: c.party_id,
-            ownerLabel: c.owner_user_id ?? "—",
+            ownerLabel:
+                c.owner_user_name?.trim() || c.owner_user_id?.trim() || "—",
         }
     } catch {
         return null

@@ -41,6 +41,7 @@ export type BackendCustomerDetail = {
     legal_name?: string | null
     party_no?: string | null
     owner_user_id?: string | null
+    owner_user_name?: string | null
     version: number
     created_at: number
 }

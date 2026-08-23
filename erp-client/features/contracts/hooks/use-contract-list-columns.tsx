@@ -9,13 +9,7 @@ import { Button } from "@/components/ui/button"
 import type { ContractListRow } from "@/features/contracts/types"
 import { contractOwnerLabel } from "@/features/contracts/types"
 
-export function useContractListColumns({
-    onPreview,
-    onPaper,
-}: {
-    onPreview: (contractId: string) => void
-    onPaper: (contractId: string) => void
-}) {
+export function useContractListColumns() {
     return React.useMemo<ColumnDef<ContractListRow>[]>(
         () => [
             {
@@ -127,68 +121,7 @@ export function useContractListColumns({
                     </span>
                 ),
             },
-            {
-                id: "actions",
-                header: "操作",
-                meta: { label: "操作", width: "default", align: "end" },
-                enableSorting: false,
-                cell: ({ row }) => {
-                    const canPrint =
-                        row.original.allowedActions.includes("PRINT")
-                    const printBlocker = row.original.actionBlockers.find(
-                        (b) => b.action === "PRINT",
-                    )
-                    return (
-                        <div
-                            className="flex justify-end gap-1"
-                            onClick={(event) => event.stopPropagation()}
-                            onKeyDown={(event) => event.stopPropagation()}
-                        >
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                onClick={() =>
-                                    onPreview(row.original.contractId)
-                                }
-                            >
-                                预览
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                render={
-                                    <Link
-                                        href={`/sales/contracts/${row.original.contractId}`}
-                                    />
-                                }
-                            >
-                                打开
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                disabled={!canPrint}
-                                title={
-                                    !canPrint
-                                        ? (printBlocker?.message ??
-                                          "当前不可打印")
-                                        : "纸质预览"
-                                }
-                                onClick={() => {
-                                    if (canPrint)
-                                        onPaper(row.original.contractId)
-                                }}
-                            >
-                                打印
-                            </Button>
-                        </div>
-                    )
-                },
-            },
         ],
-        [onPreview, onPaper],
+        [],
     )
 }

@@ -23,7 +23,7 @@ type ContractPreviewSheetProps = {
     onShowPaper: (contractId: string) => void
 }
 
-/** 列表行预览半屏：身份摘要 + 详情面板 + 打开/打印动作。 */
+/** 列表行预览半屏：单栏摘要 + 打开详情 / 新建销售单 / 纸质预览。 */
 export function ContractPreviewSheet({
     row,
     detail,
@@ -31,6 +31,17 @@ export function ContractPreviewSheet({
     onOpenChange,
     onShowPaper,
 }: ContractPreviewSheetProps) {
+    const canCreateSo =
+        row?.allowedActions.includes("CREATE_SALES_ORDER") ?? false
+    const soBlocker = row?.actionBlockers.find(
+        (b) => b.action === "CREATE_SALES_ORDER",
+    )
+    const createSalesOrderHref = row
+        ? `/sales/orders?mode=create&customerId=${encodeURIComponent(
+              row.customer.customerId,
+          )}&contractId=${encodeURIComponent(row.contractId)}`
+        : null
+
     return (
         <QuickPreviewSheet
             open={row != null}
@@ -90,6 +101,7 @@ export function ContractPreviewSheet({
                         </Button>
                         <Button
                             type="button"
+                            variant="outline"
                             render={
                                 <Link
                                     href={`/sales/contracts/${row.contractId}`}
@@ -98,6 +110,24 @@ export function ContractPreviewSheet({
                         >
                             查看详情
                         </Button>
+                        {canCreateSo && createSalesOrderHref ? (
+                            <Button
+                                type="button"
+                                render={<Link href={createSalesOrderHref} />}
+                            >
+                                新建销售单
+                            </Button>
+                        ) : (
+                            <Button
+                                type="button"
+                                disabled
+                                title={
+                                    soBlocker?.message ?? "当前不可新建销售单"
+                                }
+                            >
+                                新建销售单
+                            </Button>
+                        )}
                     </>
                 ) : null
             }

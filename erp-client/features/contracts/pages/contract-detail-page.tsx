@@ -2,13 +2,19 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 import {
     BusinessFailureState,
+    ObjectSectionTabs,
+    ObjectSectionTabsPanel,
+    PageActions,
     PageHeader,
     PageScaffold,
+    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { ContractPaperDialog } from "@/features/contracts/components/contract-paper-dialog"
 import { ContractDetailAttachments } from "@/features/contracts/components/contract-detail-attachments"
 import { ContractDetailHeader } from "@/features/contracts/components/contract-detail-header"
@@ -17,7 +23,12 @@ import { ContractDetailSalesOrders } from "@/features/contracts/components/contr
 import { ContractDetailSettlement } from "@/features/contracts/components/contract-detail-settlement"
 import { ContractDetailVersions } from "@/features/contracts/components/contract-detail-versions"
 import { useContractCenterQuery } from "@/features/contracts/hooks/queries"
-import { resolveSection } from "@/features/contracts/lib/contract-detail-helpers"
+import {
+    CONTRACT_SECTION_NAV,
+    contractSectionHref,
+    resolveSection,
+    type ContractDetailSectionId,
+} from "@/features/contracts/lib/contract-detail-helpers"
 
 export function ContractDetailPage({
     contractId,
@@ -26,10 +37,21 @@ export function ContractDetailPage({
     contractId: string
     section?: string
 }) {
+    const router = useRouter()
     const query = useContractCenterQuery(contractId)
 
     const activeSection = resolveSection(section)
     const [paperOpen, setPaperOpen] = React.useState(false)
+
+    const handleSectionChange = React.useCallback(
+        (next: string) => {
+            const sectionId = resolveSection(next)
+            router.replace(contractSectionHref(contractId, sectionId), {
+                scroll: false,
+            })
+        },
+        [contractId, router],
+    )
 
     const contract = query.data
 
@@ -79,31 +101,64 @@ export function ContractDetailPage({
 
     return (
         <PageScaffold>
+            <PageHeader
+                title="合同详情"
+                actions={
+                    <PageActions
+                        actions={[
+                            {
+                                actionKey: "back",
+                                label: "返回列表",
+                                variant: "outline",
+                                render: <Link href="/sales/contracts" />,
+                            },
+                        ]}
+                    />
+                }
+            />
+
             <ContractDetailHeader
                 contract={contract}
-                activeSection={activeSection}
                 onPaperOpen={() => setPaperOpen(true)}
             />
 
-            {activeSection === "overview" ? (
-                <ContractDetailOverview contract={contract} />
-            ) : null}
+            <div
+                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            >
+                <ObjectSectionTabs
+                    value={activeSection}
+                    onValueChange={handleSectionChange}
+                    items={CONTRACT_SECTION_NAV}
+                    listLabel="合同分区"
+                >
+                    <ObjectSectionTabsPanel value="overview">
+                        <ContractDetailOverview
+                            contract={contract}
+                            onOpenSalesOrders={() =>
+                                handleSectionChange(
+                                    "sales-orders" satisfies ContractDetailSectionId,
+                                )
+                            }
+                        />
+                    </ObjectSectionTabsPanel>
 
-            {activeSection === "settlement" ? (
-                <ContractDetailSettlement contract={contract} />
-            ) : null}
+                    <ObjectSectionTabsPanel value="settlement">
+                        <ContractDetailSettlement contract={contract} />
+                    </ObjectSectionTabsPanel>
 
-            {activeSection === "attachments" ? (
-                <ContractDetailAttachments contract={contract} />
-            ) : null}
+                    <ObjectSectionTabsPanel value="attachments">
+                        <ContractDetailAttachments contract={contract} />
+                    </ObjectSectionTabsPanel>
 
-            {activeSection === "sales-orders" ? (
-                <ContractDetailSalesOrders contract={contract} />
-            ) : null}
+                    <ObjectSectionTabsPanel value="sales-orders">
+                        <ContractDetailSalesOrders contract={contract} />
+                    </ObjectSectionTabsPanel>
 
-            {activeSection === "versions" ? (
-                <ContractDetailVersions contract={contract} />
-            ) : null}
+                    <ObjectSectionTabsPanel value="versions">
+                        <ContractDetailVersions contract={contract} />
+                    </ObjectSectionTabsPanel>
+                </ObjectSectionTabs>
+            </div>
 
             <ContractPaperDialog
                 contract={contract}

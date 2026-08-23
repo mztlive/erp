@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { toast } from "@/components/ui/toast"
 import { useCreateContractExportJobMutation } from "@/features/contracts/hooks/queries"
 import type {
     ContractExportJob,
@@ -15,10 +16,9 @@ export type ContractActionResult = {
     facts?: Array<{ label: string; value: string }>
     nextHref?: string
     createSalesOrderHref?: string
-    highlightedContractId?: string
 }
 
-/** 列表页动作结果：上传归档反馈 + 导出任务反馈。 */
+/** 列表页动作结果：上传用短暂 Toast；导出保留页内 FormalActionResult。 */
 export function useContractListActions({
     filteredCount,
     filterSnapshotLabel,
@@ -31,29 +31,22 @@ export function useContractListActions({
     )
     const [actionResult, setActionResult] =
         React.useState<ContractActionResult | null>(null)
+    const [highlightedContractId, setHighlightedContractId] = React.useState<
+        string | null
+    >(null)
 
     const exportMutation = useCreateContractExportJobMutation()
 
     const handleUploadSuccess = React.useCallback(
         (result: UploadContractPdfResult) => {
-            setActionResult({
-                status: "succeeded",
+            toast.add({
                 title: "合同 PDF 已归档",
-                description:
-                    "已形成可追溯的合同版本，可直接选择用于新建销售单。",
-                facts: [
-                    { label: "合同号", value: result.contractNo },
-                    { label: "修订", value: `v${result.revisionNo}` },
-                    { label: "文件", value: result.fileName },
-                    {
-                        label: "上传时间",
-                        value: result.uploadedAt.slice(0, 19).replace("T", " "),
-                    },
-                ],
-                nextHref: `/sales/contracts/${result.contractId}`,
-                createSalesOrderHref: `/sales/orders?mode=create&contractId=${encodeURIComponent(result.contractId)}`,
-                highlightedContractId: result.contractId,
+                description: `${result.contractNo} · v${result.revisionNo} 已可引用建单`,
+                type: "success",
+                timeout: 4000,
             })
+            setHighlightedContractId(result.contractId)
+            setActionResult(null)
         },
         [],
     )
@@ -81,6 +74,7 @@ export function useContractListActions({
     return {
         exportJob,
         actionResult,
+        highlightedContractId,
         exportPending: exportMutation.isPending,
         handleUploadSuccess,
         handleExport,

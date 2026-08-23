@@ -1,9 +1,6 @@
 "use client"
 
-import Link from "next/link"
-
 import { FormalActionResult } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import type { ContractActionResult } from "@/features/contracts/hooks/use-contract-list-actions"
 import type { ContractExportJob } from "@/features/contracts/types"
 
@@ -12,7 +9,7 @@ type ContractListResultsProps = {
     exportJob: ContractExportJob | null
 }
 
-/** 列表页动作结果条：上传归档反馈 + 导出反馈。 */
+/** 列表页导出反馈条；上传成功改为短暂 Toast，不在此占用页顶。 */
 export function ContractListResults({
     actionResult,
     exportJob,
@@ -25,41 +22,10 @@ export function ContractListResults({
                     title={actionResult.title}
                     description={actionResult.description}
                     facts={actionResult.facts}
-                    actions={
-                        <>
-                            {actionResult.nextHref ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    render={
-                                        <Link href={actionResult.nextHref} />
-                                    }
-                                >
-                                    查看详情
-                                </Button>
-                            ) : null}
-                            {actionResult.createSalesOrderHref ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    render={
-                                        <Link
-                                            href={
-                                                actionResult.createSalesOrderHref
-                                            }
-                                        />
-                                    }
-                                >
-                                    新建销售单
-                                </Button>
-                            ) : null}
-                        </>
-                    }
                 />
             ) : null}
 
-            {exportJob ? (
+            {exportJob && !actionResult ? (
                 <FormalActionResult
                     status="succeeded"
                     title="合同导出完成"

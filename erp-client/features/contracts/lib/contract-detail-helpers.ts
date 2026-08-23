@@ -7,16 +7,28 @@ export type ContractDetailSectionId =
     | "sales-orders"
     | "versions"
 
+export const CONTRACT_SECTION_NAV: readonly {
+    id: ContractDetailSectionId
+    label: string
+}[] = [
+    { id: "overview", label: "概览" },
+    { id: "settlement", label: "结算与开票" },
+    { id: "attachments", label: "附件" },
+    { id: "sales-orders", label: "关联销售单" },
+    { id: "versions", label: "版本与审计" },
+]
+
 export function resolveSection(section?: string): ContractDetailSectionId {
-    if (
-        section === "settlement" ||
-        section === "attachments" ||
-        section === "sales-orders" ||
-        section === "versions"
-    ) {
-        return section
-    }
-    return "overview"
+    const found = CONTRACT_SECTION_NAV.find((item) => item.id === section)
+    return found?.id ?? "overview"
+}
+
+export function contractSectionHref(
+    contractId: string,
+    section: ContractDetailSectionId,
+): string {
+    const base = `/sales/contracts/${contractId}`
+    return section === "overview" ? base : `${base}?section=${section}`
 }
 
 /** 30 日内将到期：与列表页同口径（仍生效 + 有效期止在 30 天内）。 */

@@ -10,7 +10,6 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { ContractListResults } from "@/features/contracts/components/contract-list-results"
-import { ContractMetricStrip } from "@/features/contracts/components/contract-metric-strip"
 import { ContractPaperDialog } from "@/features/contracts/components/contract-paper-dialog"
 import { ContractPreviewSheet } from "@/features/contracts/components/contract-preview-sheet"
 import { ContractUploadDialog } from "@/features/contracts/components/contract-upload-dialog"
@@ -48,10 +47,7 @@ export function ContractsListPage() {
         filterSnapshotLabel: list.filterSnapshotLabel,
     })
 
-    const columns = useContractListColumns({
-        onPreview: setPreviewId,
-        onPaper: setPaperId,
-    })
+    const columns = useContractListColumns()
 
     return (
         <PageScaffold density="compact">
@@ -118,12 +114,6 @@ export function ContractsListPage() {
                 exportJob={actions.exportJob}
             />
 
-            <ContractMetricStrip
-                metrics={list.metrics}
-                active={list.metric}
-                onChange={list.handleMetricChange}
-            />
-
             <ContractsTablePanel
                 list={list}
                 columns={columns}
@@ -135,9 +125,7 @@ export function ContractsListPage() {
                 }}
                 onOpenUpload={() => setUploadOpen(true)}
                 onPreview={setPreviewId}
-                highlightedContractId={
-                    actions.actionResult?.highlightedContractId
-                }
+                highlightedContractId={actions.highlightedContractId ?? undefined}
             />
 
             <ContractPreviewSheet

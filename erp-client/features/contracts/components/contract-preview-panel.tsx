@@ -1,24 +1,12 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+
 import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
 import type {
     ContractCenterView,
     ContractListRow,
@@ -35,8 +23,8 @@ type ContractPreviewPanelProps = {
 }
 
 /**
- * detail 半屏：左右分栏读完客户、结算/开票、有效期、附件与关联销售摘要。
- * 不负责编辑、版本 diff 或纸质投影。
+ * 列表预览半屏正文：单栏分块（基本信息 / 结算开票 / 附件 / 关联销售单）。
+ * 不负责页脚动作与纸质投影。
  */
 export function ContractPreviewPanel({
     row,
@@ -48,21 +36,31 @@ export function ContractPreviewPanel({
     const invoice = rev?.invoiceRequirementSnapshot
 
     return (
-        <div
-            data-slot="contract-detail-preview"
-            className="flex min-h-0 flex-1 flex-col lg:flex-row"
-        >
-            <ScrollArea className="min-h-0 max-h-[40vh] border-b border-border lg:max-h-none lg:w-[min(20rem,38%)] lg:shrink-0 lg:border-r lg:border-b-0">
-                <div className="space-y-4 p-4 md:p-5">
-                    <section className="space-y-2" aria-label="签订与有效期">
-                        <SectionTitle>签订 / 有效期</SectionTitle>
-                        <DescriptionList columns="one" className="gap-y-2.5">
-                            <CompactField
+        <ScrollArea className="min-h-0 flex-1">
+            <div
+                data-slot="contract-detail-preview"
+                className="flex flex-col gap-5 p-4 md:p-5"
+            >
+                <section className="space-y-3" aria-label="基本信息">
+                    <SectionTitle>基本信息</SectionTitle>
+                    <div className="rounded-xl border border-border bg-card p-3">
+                        <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-2 text-sm">
+                            <Fact label="客户" value={row.customer.displayName} />
+                            <Fact
+                                label="客户编号"
+                                value={row.customer.customerNo}
+                                numeric
+                            />
+                            <Fact
+                                label="负责人"
+                                value={contractOwnerLabel(row.ownerLabel)}
+                            />
+                            <Fact
                                 label="签订日"
                                 value={row.signedAt ?? rev?.signedAt ?? "—"}
                                 numeric
                             />
-                            <CompactField
+                            <Fact
                                 label="有效期"
                                 value={
                                     <span className="num">
@@ -75,50 +73,85 @@ export function ContractPreviewPanel({
                                     </span>
                                 }
                             />
-                            <CompactField
+                            <Fact
                                 label="当前版本"
                                 value={`v${row.revisionNo}`}
                                 numeric
                             />
-                        </DescriptionList>
-                    </section>
+                        </dl>
+                    </div>
+                </section>
 
-                    <Separator />
+                <section className="space-y-3" aria-label="结算与开票">
+                    <SectionTitle>结算与开票</SectionTitle>
+                    <div className="rounded-xl border border-border bg-card p-3">
+                        {detailLoading && !detail ? (
+                            <p className="text-sm text-muted-foreground">
+                                加载条款摘要…
+                            </p>
+                        ) : (
+                            <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-2 text-sm">
+                                <Fact
+                                    label="结算主体"
+                                    value={
+                                        rev?.settlementParty.displayName ??
+                                        row.settlementParty.displayName
+                                    }
+                                />
+                                <Fact
+                                    label="付款条件"
+                                    value={payment?.label ?? "—"}
+                                />
+                                <Fact
+                                    label="付款说明"
+                                    value={payment?.description ?? "—"}
+                                />
+                                <Fact
+                                    label="开票要求"
+                                    value={
+                                        invoice
+                                            ? `${invoice.titleType} · ${invoice.contentSummary}`
+                                            : "—"
+                                    }
+                                />
+                                {invoice?.remark ? (
+                                    <Fact
+                                        label="开票备注"
+                                        value={invoice.remark}
+                                    />
+                                ) : null}
+                            </dl>
+                        )}
+                        <p className="mt-3 text-tiny leading-relaxed text-muted-foreground">
+                            本页不汇总合同金额；金额以各销售单为准。
+                        </p>
+                    </div>
+                </section>
 
-                    <section className="space-y-2" aria-label="客户与负责人">
-                        <SectionTitle>客户与负责人</SectionTitle>
-                        <DescriptionList columns="one" className="gap-y-2.5">
-                            <CompactField
-                                label="客户"
-                                value={row.customer.displayName}
-                            />
-                            <CompactField
-                                label="客户编号"
-                                value={row.customer.customerNo}
-                                numeric
-                            />
-                            <CompactField
-                                label="负责人"
-                                value={contractOwnerLabel(row.ownerLabel)}
-                            />
-                        </DescriptionList>
-                    </section>
-
-                    <Separator />
-
-                    <section className="space-y-2" aria-label="附件摘要">
+                <section className="space-y-3" aria-label="附件">
+                    <div className="flex items-center justify-between gap-2">
                         <SectionTitle>附件</SectionTitle>
-                        {detailLoading ? (
-                            <p className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
+                            {detail
+                                ? `${detail.attachments.length} 个`
+                                : detailLoading
+                                  ? "加载中"
+                                  : "—"}
+                            {rev ? ` · 版本 v${rev.revisionNo}` : null}
+                        </span>
+                    </div>
+                    <div className="rounded-xl border border-border bg-card p-3">
+                        {detailLoading && !detail ? (
+                            <p className="text-sm text-muted-foreground">
                                 附件加载中…
                             </p>
                         ) : detail ? (
                             detail.attachments.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-sm text-muted-foreground">
                                     暂无附件
                                 </p>
                             ) : (
-                                <ul className="space-y-1.5 text-sm">
+                                <ul className="space-y-2 text-sm">
                                     {detail.attachments.map((file) => (
                                         <li
                                             key={file.id}
@@ -151,158 +184,72 @@ export function ContractPreviewPanel({
                                 </ul>
                             )
                         ) : (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                                 附件分区暂不可用
                             </p>
                         )}
-                        <p className="text-tiny text-muted-foreground">
-                            附件数 {detail?.attachments.length ?? "—"}
-                            {rev ? ` · 版本 v${rev.revisionNo}` : null}
-                        </p>
-                    </section>
-                </div>
-            </ScrollArea>
+                    </div>
+                </section>
 
-            <ScrollArea className="min-h-0 flex-1">
-                <div className="flex flex-col gap-4 p-4 md:p-5">
-                    <section className="space-y-2" aria-label="结算与开票">
-                        <SectionTitle>结算主体与付款 / 开票</SectionTitle>
-                        {detailLoading && !detail ? (
-                            <p className="text-sm text-muted-foreground">
-                                加载条款摘要…
-                            </p>
-                        ) : (
-                            <DescriptionList
-                                columns="one"
-                                className="gap-y-2.5 sm:max-w-xl"
-                            >
-                                <CompactField
-                                    label="结算主体"
-                                    value={
-                                        rev?.settlementParty.displayName ??
-                                        row.settlementParty.displayName
-                                    }
-                                />
-                                <CompactField
-                                    label="付款条件"
-                                    value={payment?.label ?? "—"}
-                                />
-                                <CompactField
-                                    label="付款说明"
-                                    value={payment?.description ?? "—"}
-                                />
-                                <CompactField
-                                    label="开票要求"
-                                    value={
-                                        invoice
-                                            ? `${invoice.titleType} · ${invoice.contentSummary}`
-                                            : "—"
-                                    }
-                                />
-                                {invoice?.remark ? (
-                                    <CompactField
-                                        label="开票备注"
-                                        value={invoice.remark}
-                                    />
-                                ) : null}
-                            </DescriptionList>
-                        )}
-                        <p className="text-tiny leading-relaxed text-muted-foreground">
-                            本页不汇总合同金额；金额以各销售单为准。
-                        </p>
-                    </section>
+                <Separator />
 
-                    <Separator />
-
-                    <section className="space-y-2" aria-label="关联销售单">
-                        <div className="flex items-center justify-between gap-2">
-                            <SectionTitle>关联销售单与业务进度</SectionTitle>
-                            <span className="text-xs text-muted-foreground">
-                                共 {row.salesOrderCount} 张 · 进行中{" "}
-                                {row.activeSalesOrderCount}
-                            </span>
-                        </div>
+                <section className="space-y-3" aria-label="关联销售单">
+                    <div className="flex items-center justify-between gap-2">
+                        <SectionTitle>关联销售单</SectionTitle>
+                        <span className="text-xs text-muted-foreground">
+                            共 {row.salesOrderCount} 张 · 进行中{" "}
+                            {row.activeSalesOrderCount}
+                        </span>
+                    </div>
+                    <div className="rounded-xl border border-border bg-card p-3">
                         {detailLoading && !detail ? (
                             <p className="text-sm text-muted-foreground">
                                 加载关联单据…
                             </p>
                         ) : detail && detail.relatedSalesOrders.length > 0 ? (
-                            <div className="space-y-2">
-                                <div className="overflow-hidden rounded-lg border border-border">
-                                    <Table data-density="compact">
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>销售单</TableHead>
-                                                <TableHead className="hidden sm:table-cell">
-                                                    性质
-                                                </TableHead>
-                                                <TableHead>状态</TableHead>
-                                                <TableHead className="hidden md:table-cell">
-                                                    合同版本
-                                                </TableHead>
-                                                <TableHead data-align="end">
-                                                    含税金额
-                                                </TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {detail.relatedSalesOrders.map(
-                                                (so) => (
-                                                    <TableRow
-                                                        key={so.salesOrderId}
+                            <div className="space-y-3">
+                                <ul className="space-y-3">
+                                    {detail.relatedSalesOrders.map((so) => (
+                                        <li
+                                            key={so.salesOrderId}
+                                            className="flex items-start justify-between gap-3 border-b border-border/60 pb-3 last:border-b-0 last:pb-0"
+                                        >
+                                            <div className="min-w-0 space-y-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <Link
+                                                        href={`/sales/orders/${so.salesOrderId}`}
+                                                        className="num text-sm font-medium text-primary hover:underline"
                                                     >
-                                                        <TableCell>
-                                                            <div className="num font-medium">
-                                                                {
-                                                                    so.documentNumber
-                                                                }
-                                                            </div>
-                                                            <div className="text-tiny text-muted-foreground">
-                                                                履约{" "}
-                                                                {
-                                                                    so.fulfillmentLabel
-                                                                }{" "}
-                                                                · 回款{" "}
-                                                                {
-                                                                    so.collectionLabel
-                                                                }{" "}
-                                                                · 开票{" "}
-                                                                {
-                                                                    so.invoicingLabel
-                                                                }
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="hidden sm:table-cell">
-                                                            {so.natureLabel}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {
-                                                                so.primaryStatus
-                                                                    .label
-                                                            }
-                                                        </TableCell>
-                                                        <TableCell className="num hidden md:table-cell">
-                                                            v
-                                                            {
-                                                                so.contractRevisionNo
-                                                            }
-                                                        </TableCell>
-                                                        <TableCell data-align="end">
-                                                            <MoneyValue
-                                                                value={
-                                                                    so.amountGross
-                                                                }
-                                                                taxBasis="gross"
-                                                            />
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ),
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
+                                                        {so.documentNumber}
+                                                    </Link>
+                                                    <Badge variant="secondary">
+                                                        {so.natureLabel}
+                                                    </Badge>
+                                                    <Badge variant="outline">
+                                                        {
+                                                            so.primaryStatus
+                                                                .label
+                                                        }
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-tiny text-muted-foreground">
+                                                    合同 v{so.contractRevisionNo}{" "}
+                                                    · 履约 {so.fulfillmentLabel}{" "}
+                                                    · 回款 {so.collectionLabel}{" "}
+                                                    · 开票 {so.invoicingLabel}
+                                                </p>
+                                            </div>
+                                            <div className="shrink-0 text-right">
+                                                <MoneyValue
+                                                    value={so.amountGross}
+                                                    taxBasis="gross"
+                                                />
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
                                 <p className="text-tiny text-muted-foreground">
-                                    关联销售单含税金额合计：{" "}
+                                    关联销售单含税合计：{" "}
                                     <span className="num font-medium">
                                         <MoneyValue
                                             value={sumFixed(
@@ -319,11 +266,11 @@ export function ContractPreviewPanel({
                             </div>
                         ) : (
                             <p className="text-sm text-muted-foreground">
-                                当前合同尚无关联销售单。
+                                当前合同尚无关联销售单。可在下方直接新建销售单。
                             </p>
                         )}
                         {detail?.relatedSalesOrdersAsOf ? (
-                            <p className="text-tiny text-muted-foreground">
+                            <p className="mt-2 text-tiny text-muted-foreground">
                                 关联销售统计截至{" "}
                                 <span className="num">
                                     {formatAsOf(detail.relatedSalesOrdersAsOf)}
@@ -331,10 +278,10 @@ export function ContractPreviewPanel({
                                 。
                             </p>
                         ) : null}
-                    </section>
-                </div>
-            </ScrollArea>
-        </div>
+                    </div>
+                </section>
+            </div>
+        </ScrollArea>
     )
 }
 
@@ -346,7 +293,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     )
 }
 
-function CompactField({
+function Fact({
     label,
     value,
     numeric,
@@ -356,11 +303,11 @@ function CompactField({
     numeric?: boolean
 }) {
     return (
-        <DescriptionItem>
-            <DescriptionTerm>{label}</DescriptionTerm>
-            <DescriptionDetails className={cn(numeric && "num")}>
+        <>
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className={cn(numeric && "num", "min-w-0 break-words")}>
                 {value}
-            </DescriptionDetails>
-        </DescriptionItem>
+            </dd>
+        </>
     )
 }

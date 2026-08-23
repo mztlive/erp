@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import {
+    CONTRACT_SECTION_NAV,
+    contractSectionHref,
     isExpiringWithin30Days,
     resolveSection,
 } from '@/features/contracts/lib/contract-detail-helpers'
@@ -62,6 +64,25 @@ describe('resolveSection', () => {
         expect(resolveSection('overview')).toBe('overview')
         expect(resolveSection(undefined)).toBe('overview')
         expect(resolveSection('bogus')).toBe('overview')
+    })
+
+    it('exposes stable section nav labels', () => {
+        expect(CONTRACT_SECTION_NAV.map((item) => item.id)).toEqual([
+            'overview',
+            'settlement',
+            'attachments',
+            'sales-orders',
+            'versions',
+        ])
+    })
+
+    it('builds section hrefs without query for overview', () => {
+        expect(contractSectionHref('ct-1', 'overview')).toBe(
+            '/sales/contracts/ct-1',
+        )
+        expect(contractSectionHref('ct-1', 'settlement')).toBe(
+            '/sales/contracts/ct-1?section=settlement',
+        )
     })
 })
 
