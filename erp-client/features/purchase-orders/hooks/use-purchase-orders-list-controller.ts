@@ -42,6 +42,7 @@ export function usePurchaseOrdersListController() {
         metricKey,
         basisFromUrl,
         salesOrderFromUrl,
+        createFromSales,
     } = filters
 
     const [createOpen, setCreateOpen] = React.useState(false)
@@ -49,7 +50,7 @@ export function usePurchaseOrdersListController() {
     const listQuery = usePurchaseOrdersQuery(listQueryInput)
     const exportQuery = usePurchaseOrderExportDataQuery(listQueryInput)
     const basesQuery = useCreationBasesQuery({
-        enabled: createOpen || Boolean(basisFromUrl) || Boolean(salesOrderFromUrl),
+        enabled: createOpen || Boolean(basisFromUrl) || createFromSales,
     })
     const createMutation = useCreateFromBasisMutation()
 
@@ -142,31 +143,34 @@ export function usePurchaseOrdersListController() {
     }, [basesQuery.data, salesOrderFromUrl])
 
     React.useEffect(() => {
-        if (!basisFromUrl && !salesOrderFromUrl) return
-        // 已生效销售单携带创建依据或销售单：打开建单 Dialog
+        if (!basisFromUrl && !createFromSales) return
+        // 显式建单动作或指定创建依据时打开 Dialog；关系筛选本身只展示列表。
         setCreateOpen(true)
         if (basisFromUrl) setSelectedBasisId(basisFromUrl)
-    }, [basisFromUrl, salesOrderFromUrl])
+    }, [basisFromUrl, createFromSales])
 
     React.useEffect(() => {
-        if (!createOpen || selectedBasisId || basisFromUrl) return
+        if (!createOpen || basisFromUrl) return
+        if (openBases.some((basis) => basis.basisId === selectedBasisId)) {
+            return
+        }
         const first = openBases[0]?.basisId
-        if (first) setSelectedBasisId(first)
+        setSelectedBasisId(first ?? "")
     }, [basisFromUrl, createOpen, openBases, selectedBasisId])
 
     const handleCreate = async () => {
-        if (!selectedBasisId) return
         const basis = openBases.find((b) => b.basisId === selectedBasisId)
+        if (!basis) return
         const result = await createMutation.mutateAsync({
-            basisId: selectedBasisId,
-            idempotencyKey: `create-basis-${selectedBasisId}-${Date.now()}`,
+            basisId: basis.basisId,
+            idempotencyKey: `create-basis-${basis.basisId}-${Date.now()}`,
         })
         if (result.status === "succeeded") {
             setCreateOpen(false)
             setActionResult({
                 status: "succeeded",
                 title: "已创建采购草稿",
-                description: `${result.data.draftLabel} · 已绑定审批流程，尚未形成待办。已使用采购二次确认创建依据（销售单 ${basis?.salesOrderNo ?? "—"} · ${basis?.supplierName ?? "—"}）。`,
+                description: `${result.data.draftLabel} · 已绑定审批流程，尚未形成待办。已按采购创建依据带入销售单 ${basis?.salesOrderNo ?? "—"} 与供应商 ${basis?.supplierName ?? "—"}。`,
                 reference: result.reference,
             })
             router.push(
@@ -221,6 +225,7 @@ export function usePurchaseOrdersListController() {
         metricKey,
         effectiveMetric,
         basisFromUrl,
+        salesOrderFromUrl,
         // 交互状态
         focusedIndex,
         setFocusedIndex,

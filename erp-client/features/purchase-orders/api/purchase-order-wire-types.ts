@@ -24,6 +24,7 @@ export type BackendListItem = {
     id: string
     purchase_no: string
     sales_order_id: string
+    sales_order_no: string
     supplier_id: string
     supplier_name: string
     purchase_type: PurchaseType | string
@@ -71,6 +72,7 @@ export type BackendCenter = {
     review_status: string
     version: number
     sales_order_id: string
+    sales_order_no: string
     supplier_id: string
     supplier_name: string
     purchase_type: PurchaseType | string
@@ -130,6 +132,7 @@ export type BackendCenter = {
 export type BackendBasisLine = {
     procurement_confirmation_line_id: string
     sales_order_submission_line_id: string
+    sales_line_no: number
     supplier_id: string
     confirmed_quantity: string
     latest_cost_gross: string
@@ -137,13 +140,17 @@ export type BackendBasisLine = {
     expected_delivery_date: string
     product_name?: string | null
     specification?: string | null
+    unit?: string | null
     gross_amount: string
 }
 
 export type BackendBasis = {
     basis_id: string
     sales_order_id: string
-    sales_order_no?: string | null
+    sales_order_no: string
+    customer_name: string
+    contract_no?: string | null
+    sales_owner_name?: string | null
     submission_id: string
     supplier_id: string
     supplier_name: string

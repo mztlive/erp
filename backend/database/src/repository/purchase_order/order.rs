@@ -143,6 +143,54 @@ impl<'a> Repository<'a, PurchaseOrder> {
             total: total as i64,
         })
     }
+
+    /// 统计销售单关联的有效采购单。
+    ///
+    /// 统计口径与采购创建依据一致：草稿、审批中、生效、部分执行和已完成均视为
+    /// 已建采购；作废单不阻断重新建单，也不计入销售单的有效采购关联数。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除且非作废的关联采购单数量。
+    ///
+    /// # 错误
+    /// 当 MongoDB 计数失败时返回错误。
+    pub async fn count_active_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<u64> {
+        mongo_ops::count_documents(
+            &self.collection(),
+            active_purchase_order_filter(sales_order_id),
+            executor,
+        )
+        .await
+    }
+}
+
+/// 构造销售单有效采购关联的统一统计条件。
+///
+/// # 参数
+/// * `sales_order_id` - 来源销售单稳定身份
+///
+/// # 返回
+/// 返回排除软删除与作废采购单的 MongoDB 条件。
+fn active_purchase_order_filter(sales_order_id: &SalesOrderId) -> Document {
+    doc! {
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "sales_order_id": sales_order_id.to_string(),
+        "status": { "$in": [
+            PurchaseOrderStatus::Draft.as_str(),
+            PurchaseOrderStatus::InApproval.as_str(),
+            PurchaseOrderStatus::Effective.as_str(),
+            PurchaseOrderStatus::PartiallyExecuted.as_str(),
+            PurchaseOrderStatus::Completed.as_str(),
+        ]},
+    }
 }
 
 /// 采购单列表投影字段。
@@ -172,8 +220,8 @@ fn purchase_order_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{PurchaseOrderFilter, QueryFilter};
-    use entities::ids::SupplierAccountId;
+    use super::{active_purchase_order_filter, PurchaseOrderFilter, QueryFilter};
+    use entities::ids::{SalesOrderId, SupplierAccountId};
     use entities::purchase_order::PurchaseOrderStatus;
     use mongodb::bson::doc;
 
@@ -212,6 +260,33 @@ mod tests {
         let document = super::purchase_order_projection();
         assert_eq!(document.get_i32("payment_term_code").unwrap(), 1);
         assert_eq!(document.get_i32("created_by").unwrap(), 1);
+    }
+
+    #[test]
+    fn active_relation_filter_excludes_voided_purchase_orders() {
+        let document = active_purchase_order_filter(&SalesOrderId::new("so-1"));
+        let statuses = document
+            .get_document("status")
+            .unwrap()
+            .get_array("$in")
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(document.get_str("sales_order_id").unwrap(), "so-1");
+        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
+        assert_eq!(
+            statuses,
+            vec![
+                "DRAFT",
+                "IN_APPROVAL",
+                "EFFECTIVE",
+                "PARTIALLY_EXECUTED",
+                "COMPLETED",
+            ]
+        );
+        assert!(!statuses.contains(&"VOIDED"));
     }
 
     #[test]

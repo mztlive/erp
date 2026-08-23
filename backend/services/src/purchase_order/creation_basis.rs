@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use chrono::{Datelike, Utc};
+use chrono::{Datelike, FixedOffset};
 use database::{
     AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, PartyExt, PurchaseOrderExt,
     SalesOrderExt, SupplierExt, SupplierOfferingExt, Transactional,
@@ -80,14 +80,23 @@ impl PurchaseOrderService {
     /// * `RepositoryError` - 数据库查询失败
     pub async fn creation_basis_list(&self) -> Result<Vec<CreationBasisView>> {
         let candidates = self.basis_candidates().await?;
+        let owner_ids = candidates
+            .iter()
+            .map(|candidate| candidate.submission.submitted_by.clone())
+            .collect::<Vec<_>>();
+        let owner_names = self.resolve_account_names(&owner_ids).await?;
         let mut views = Vec::new();
         for candidate in candidates {
+            let sales_owner_name = owner_names.get(&candidate.submission.submitted_by).cloned();
             let supplier_lines = self.eligible_supplier_lines(&candidate).await?;
             for (supplier_id, lines) in supplier_lines {
                 if lines.is_empty() {
                     continue;
                 }
-                views.push(self.build_basis_view(&candidate, &supplier_id, &lines).await?);
+                views.push(
+                    self.build_basis_view(&candidate, &supplier_id, &lines, sales_owner_name.clone())
+                        .await?,
+                );
             }
         }
         Ok(views)
@@ -278,26 +287,14 @@ impl PurchaseOrderService {
             .max_by_key(|submission| submission.base.created_at))
     }
 
-    /// 销售单是否已存在非终态采购单（草稿/审批中/生效/部分执行/已完成）。
+    /// 销售单是否已存在未作废采购单（草稿/审批中/生效/部分执行/已完成）。
     async fn has_purchase_order(&self, sales_order_id: &SalesOrderId) -> Result<bool> {
-        let existing = self
+        let count = self
             .db
             .purchase_orders()
-            .find_one(
-                doc! {
-                    "sales_order_id": sales_order_id.to_string(),
-                    "status": { "$in": [
-                        PurchaseOrderStatus::Draft.as_str(),
-                        PurchaseOrderStatus::InApproval.as_str(),
-                        PurchaseOrderStatus::Effective.as_str(),
-                        PurchaseOrderStatus::PartiallyExecuted.as_str(),
-                        PurchaseOrderStatus::Completed.as_str(),
-                    ]},
-                },
-                &mut NoTransaction,
-            )
+            .count_active_by_sales_order(sales_order_id, &mut NoTransaction)
             .await?;
-        Ok(existing.is_some())
+        Ok(count > 0)
     }
 
     /// 按合格供给供应商分组候选明细（供应商可覆盖至少一条明细才进入依据）。
@@ -386,6 +383,7 @@ impl PurchaseOrderService {
         candidate: &BasisCandidate,
         supplier_id: &SupplierAccountId,
         lines: &[BasisLine],
+        sales_owner_name: Option<String>,
     ) -> Result<CreationBasisView> {
         let supplier_name = self
             .resolve_supplier_name(supplier_id)
@@ -410,6 +408,7 @@ impl PurchaseOrderService {
             line_views.push(CreationBasisLineView {
                 procurement_confirmation_line_id: line.submission_line.sales_order_line_id.to_string(),
                 sales_order_submission_line_id: line.submission_line.base.id.clone(),
+                sales_line_no: line.submission_line.line_no,
                 supplier_id: supplier_id.to_string(),
                 confirmed_quantity: line.remaining_quantity.to_string(),
                 latest_cost_gross: cost.to_string(),
@@ -417,6 +416,11 @@ impl PurchaseOrderService {
                 expected_delivery_date: business_date_of(due_at)?.to_string(),
                 product_name: Some(line.submission_line.item_name_snapshot.clone()),
                 specification: line.submission_line.spec_snapshot.clone(),
+                unit: line
+                    .submission_line
+                    .unit_snapshot
+                    .clone()
+                    .or_else(|| line.submission_line.base_unit_code.clone()),
                 gross_amount: gross.to_string(),
             });
         }
@@ -424,6 +428,13 @@ impl PurchaseOrderService {
             basis_id: format!("{}:{}", candidate.order.base.id, supplier_id),
             sales_order_id: candidate.order.base.id.clone(),
             sales_order_no: candidate.order.order_no.clone(),
+            customer_name: candidate.submission.customer_snapshot.customer_name.clone(),
+            contract_no: candidate
+                .submission
+                .contract_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.contract_no.clone()),
+            sales_owner_name,
             submission_id: candidate.submission.base.id.clone(),
             supplier_id: supplier_id.to_string(),
             supplier_name,
@@ -892,9 +903,9 @@ fn fulfillment_from_mode(mode: FulfillmentMode) -> FulfillmentResponsibility {
 
 /// 销售明细履约期限（Instant）转业务日期。
 fn business_date_of(instant: Instant) -> Result<BusinessDate> {
-    let naive = chrono::DateTime::<Utc>::from_timestamp(instant.unix_secs(), 0)
-        .ok_or_else(|| Error::Internal("履约期限时间戳非法".to_string()))?
-        .date_naive();
+    let business_tz = FixedOffset::east_opt(8 * 60 * 60)
+        .ok_or_else(|| Error::Internal("无法形成 Asia/Shanghai 时区".to_string()))?;
+    let naive = instant.as_utc().with_timezone(&business_tz).date_naive();
     BusinessDate::from_ymd(naive.year(), naive.month(), naive.day())
         .ok_or_else(|| Error::Internal("履约期限日期非法".to_string()))
 }
@@ -937,4 +948,22 @@ async fn resolve_payment_term_code(
     Ok(revision
         .map(|revision| revision.payment_term_snapshot)
         .unwrap_or_else(|| "NET-30".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::business_date_of;
+    use entities::common::time::Instant;
+
+    /// 上海零点对应前一日 UTC 时，仍须还原为输入的业务自然日。
+    #[test]
+    fn business_date_uses_shanghai_timezone() {
+        let unix_secs = chrono::DateTime::parse_from_rfc3339("2026-08-23T00:00:00+08:00")
+            .expect("测试时间合法")
+            .timestamp();
+
+        let date = business_date_of(Instant::from_unix_secs(unix_secs)).expect("业务日期合法");
+
+        assert_eq!(date.to_string(), "2026-08-23");
+    }
 }

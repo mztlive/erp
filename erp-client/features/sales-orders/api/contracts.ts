@@ -259,6 +259,9 @@ export type BackendSalesOrderDetail = {
     created_at: number
     owner_user_id: string
     owner_user_name?: string | null
+    purchase_order_count: number
+    settled_total: string
+    invoiced_total: string
     lines: Array<{ id: string; line_no: number; line_status: string }>
     working_copy?: BackendWorkingCopy | null
     submissions: BackendSubmission[]

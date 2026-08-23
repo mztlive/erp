@@ -851,6 +851,12 @@ pub struct SalesOrderDetailView {
     pub owner_user_id: String,
     /// 当前销售单负责人姓名。
     pub owner_user_name: Option<String>,
+    /// 当前关联的未作废采购单数量。
+    pub purchase_order_count: u64,
+    /// 应收子账已核销含税合计。
+    pub settled_total: Amount,
+    /// 应收子账净已开票含税合计。
+    pub invoiced_total: Amount,
     /// 稳定明细行。
     pub lines: Vec<SalesOrderLineView>,
     /// 有效草稿（首次提交目的）。

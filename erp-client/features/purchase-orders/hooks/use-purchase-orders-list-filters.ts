@@ -40,6 +40,7 @@ export function usePurchaseOrdersListFilters(
         metricKey,
         basisFromUrl,
         salesOrderFromUrl,
+        createFromSales,
     } = usePurchaseOrdersListUrl()
 
     const hasStructuredFilters = statusFilter !== "all"
@@ -107,27 +108,26 @@ export function usePurchaseOrdersListFilters(
         pushUrl({ q: undefined, status: "all", metric: "all", page: 1 })
     }, [pushUrl])
 
-    const appliedChips = React.useMemo<readonly PurchaseOrderAppliedChip[]>(
-        () => {
-            const chips: PurchaseOrderAppliedChip[] = []
-            const q = url.q?.trim()
-            if (q) chips.push({ key: "q", label: `搜索：${q}` })
-            if (statusFilter !== "all") {
-                chips.push({
-                    key: "status",
-                    label: `状态：${PO_STATUS_FILTER_LABEL[statusFilter]}`,
-                })
-            }
-            if (effectiveMetric !== "all") {
-                chips.push({
-                    key: "metric",
-                    label: `指标：${PO_METRIC_LABEL[url.metric]}`,
-                })
-            }
-            return chips
-        },
-        [effectiveMetric, statusFilter, url.metric, url.q],
-    )
+    const appliedChips = React.useMemo<
+        readonly PurchaseOrderAppliedChip[]
+    >(() => {
+        const chips: PurchaseOrderAppliedChip[] = []
+        const q = url.q?.trim()
+        if (q) chips.push({ key: "q", label: `搜索：${q}` })
+        if (statusFilter !== "all") {
+            chips.push({
+                key: "status",
+                label: `状态：${PO_STATUS_FILTER_LABEL[statusFilter]}`,
+            })
+        }
+        if (effectiveMetric !== "all") {
+            chips.push({
+                key: "metric",
+                label: `指标：${PO_METRIC_LABEL[url.metric]}`,
+            })
+        }
+        return chips
+    }, [effectiveMetric, statusFilter, url.metric, url.q])
 
     return {
         // URL 派生值：查询 / 导出 / 摘要只读 Applied
@@ -143,6 +143,7 @@ export function usePurchaseOrdersListFilters(
         listQueryInput,
         basisFromUrl,
         salesOrderFromUrl,
+        createFromSales,
         // 草稿与 UI 态
         searchDraft,
         setSearchDraft,

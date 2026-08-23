@@ -192,6 +192,8 @@ export function mapRevisions(
 
 function defaultAllowedActions(
     commercial: string,
+    fulfillment: string,
+    close: string,
     hasRejection: boolean,
     /**
      * 能否发起销售变更单——后端权威判定（`sales_order_detail` 的
@@ -217,7 +219,11 @@ function defaultAllowedActions(
         })
     }
 
-    if (commercial === "EFFECTIVE" || commercial === "PENDING_REVIEW") {
+    if (
+        (commercial === "EFFECTIVE" || commercial === "PENDING_REVIEW") &&
+        fulfillment !== "COMPLETED" &&
+        close !== "CLOSED"
+    ) {
         allowed.push("REGISTER_ACCEPTANCE")
     }
 
@@ -237,6 +243,8 @@ export function mapListItemFromBackend(
         amountGross?: string
         amountNet?: string
         taxAmount?: string
+        receivedAmount?: string
+        invoicedAmount?: string
         lineItems?: SalesOrderLineItem[]
         ownerName?: string
         paymentTerms?: string
@@ -253,6 +261,7 @@ export function mapListItemFromBackend(
         closeEligibility?: BackendCloseEligibility
         startSalesChange?: { allowed: boolean; blocker?: string | null }
         currentRevisionNo?: number
+        purchaseOrderCount?: number
     },
 ): SalesOrderListItem {
     const nature = mapNature(row.business_type)
@@ -277,6 +286,8 @@ export function mapListItemFromBackend(
     const hasRejection = Boolean(extras?.procurementRejection)
     const { allowed, blockers } = defaultAllowedActions(
         row.commercial_status,
+        row.fulfillment_progress,
+        row.close_status,
         hasRejection,
         extras?.startSalesChange,
     )
@@ -308,8 +319,8 @@ export function mapListItemFromBackend(
         amountGross: extras?.amountGross ?? "0.00",
         amountNet: extras?.amountNet ?? "0.00",
         taxAmount: extras?.taxAmount ?? "0.00",
-        receivedAmount: "0.00",
-        invoicedAmount: "0.00",
+        receivedAmount: extras?.receivedAmount ?? "0.00",
+        invoicedAmount: extras?.invoicedAmount ?? "0.00",
         ownerName: extras?.ownerName ?? "",
         submittedAt: formatInstant(row.created_at),
         welfareScene: extras?.welfareScene ?? "",
@@ -325,7 +336,7 @@ export function mapListItemFromBackend(
         customerContact: extras?.customerContact,
         lineItems: extras?.lineItems ?? [],
         related: {
-            purchaseOrders: 0,
+            purchaseOrders: extras?.purchaseOrderCount ?? 0,
             fulfillments: 0,
             receipts: 0,
             invoices: 0,

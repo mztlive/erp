@@ -238,6 +238,7 @@ export function PurchaseOrdersListPage() {
                 basesFailed={ctrl.basesQuery.isError}
                 onRetryBases={() => void ctrl.basesQuery.refetch()}
                 basisFromUrl={ctrl.basisFromUrl}
+                salesOrderFromUrl={ctrl.salesOrderFromUrl}
                 selectedBasisId={ctrl.selectedBasisId}
                 onSelectedBasisIdChange={ctrl.setSelectedBasisId}
                 createPending={ctrl.createMutation.isPending}

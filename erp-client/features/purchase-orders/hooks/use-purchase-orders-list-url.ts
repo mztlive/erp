@@ -35,12 +35,12 @@ export function usePurchaseOrdersListUrl() {
         [pathname, router, url],
     )
 
-    // 跨单据跳转的返回目标：当前列表（保留筛选）。basisId 只服务于建单 Dialog，
-    // 带回去会在返回时误弹建单框，故剔除。
+    // 跨单据跳转的返回目标：保留销售单关系筛选；basisId/action 只服务于
+    // 建单 Dialog，带回去会在返回时误弹建单框，故剔除。
     const listReturnHref = React.useMemo(() => {
         const sp = new URLSearchParams(searchParams.toString())
         sp.delete("basisId")
-        sp.delete("salesOrderId")
+        sp.delete("action")
         const qs = sp.toString()
         return qs ? `${pathname}?${qs}` : pathname
     }, [pathname, searchParams])
@@ -61,6 +61,7 @@ export function usePurchaseOrdersListUrl() {
     const listQueryInput = React.useMemo<PurchaseOrderListQuery>(
         () => ({
             q: url.q,
+            salesOrderId: url.salesOrderId,
             status: url.status,
             metric: effectiveMetric,
             page: url.page,
@@ -85,5 +86,6 @@ export function usePurchaseOrdersListUrl() {
         metricKey: url.metric,
         basisFromUrl: url.basisId ?? null,
         salesOrderFromUrl: url.salesOrderId ?? null,
+        createFromSales: url.action === "create",
     }
 }

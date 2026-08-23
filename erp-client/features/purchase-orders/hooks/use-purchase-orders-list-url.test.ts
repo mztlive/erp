@@ -96,10 +96,9 @@ describe("usePurchaseOrdersListUrl", () => {
         act(() => {
             result.current.pushUrl({ q: undefined, status: "all", page: 1 })
         })
-        expect(mockRouter.replace).toHaveBeenCalledWith(
-            "/procurement/orders",
-            { scroll: false },
-        )
+        expect(mockRouter.replace).toHaveBeenCalledWith("/procurement/orders", {
+            scroll: false,
+        })
     })
 
     it("listReturnHref 保留筛选但剔除 basisId", () => {
@@ -118,5 +117,18 @@ describe("usePurchaseOrdersListUrl", () => {
         )
         const { result } = renderHook(() => usePurchaseOrdersListUrl())
         expect(result.current.basisFromUrl).toBe("bas_9")
+    })
+
+    it("销售单深链形成关系筛选，并只在显式 create 动作时请求建单", () => {
+        mockUseSearchParams.mockReturnValue(
+            new URLSearchParams("salesOrderId=so_9&action=create&from=W05"),
+        )
+        const { result } = renderHook(() => usePurchaseOrdersListUrl())
+
+        expect(result.current.listQueryInput.salesOrderId).toBe("so_9")
+        expect(result.current.createFromSales).toBe(true)
+        expect(result.current.listReturnHref).toBe(
+            "/procurement/orders?salesOrderId=so_9&from=W05",
+        )
     })
 })

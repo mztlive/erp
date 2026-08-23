@@ -2,7 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt};
+use database::{
+    AccessControlExt, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt,
+};
 use entities::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use entities::sales_order::{
     CommercialStatus, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy, WorkingPurpose,
@@ -251,6 +253,11 @@ impl SalesOrderService {
         );
 
         let owner_user_name = self.account_name(&owner_user_id).await?;
+        let purchase_order_count = self
+            .db
+            .purchase_orders()
+            .count_active_by_sales_order(&order_id, &mut NoTransaction)
+            .await?;
 
         let open_procurement_rejection = self
             .resolve_open_procurement_rejection(&order_id, order.commercial_status, actor)
@@ -303,15 +310,16 @@ impl SalesOrderService {
             .receivable_accounts()
             .find_many(mongodb::bson::doc! { "sales_order_id": id }, &mut NoTransaction)
             .await?;
-        let (settled_total, gross_total) =
-            receivable_accounts
-                .iter()
-                .fold((zero_amount(), zero_amount()), |(settled, gross), account| {
-                    (
-                        settled.checked_add(account.settled_total),
-                        gross.checked_add(account.gross_total),
-                    )
-                });
+        let (settled_total, invoiced_total, gross_total) = receivable_accounts.iter().fold(
+            (zero_amount(), zero_amount(), zero_amount()),
+            |(settled, invoiced, gross), account| {
+                (
+                    settled.checked_add(account.settled_total),
+                    invoiced.checked_add(account.invoiced_total),
+                    gross.checked_add(account.gross_total),
+                )
+            },
+        );
         let close_eligibility = compute_close_eligibility(CloseEligibilityInputs {
             business_type: order.business_type,
             commercial: order.commercial_status,
@@ -374,6 +382,9 @@ impl SalesOrderService {
             created_at: order.base.created_at,
             owner_user_id,
             owner_user_name,
+            purchase_order_count,
+            settled_total,
+            invoiced_total,
             lines: stable_lines
                 .into_iter()
                 .map(|line| SalesOrderLineView {

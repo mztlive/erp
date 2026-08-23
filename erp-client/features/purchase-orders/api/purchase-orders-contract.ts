@@ -6,6 +6,7 @@ import type {
 
 export type PurchaseOrderListQuery = {
     q?: string
+    salesOrderId?: string
     status?: PurchaseOrderStatusFilter
     metric?: PurchaseOrderMetricFilter
     page?: number

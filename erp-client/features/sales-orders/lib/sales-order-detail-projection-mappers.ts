@@ -129,13 +129,11 @@ export function mapDetailToListItem(
             detail.active_low_margin_manager_confirmation,
         )
     // 当前版本号取 `current_revision_id` 对应 revision_no（与实体乐观锁 version 不同）。
-    const currentRevisionNo =
-        detail.revisions?.length
-            ? (detail.revisions.find(
-                  (r) => r.id === detail.current_revision_id,
-              )?.revision_no ??
-              Math.max(...detail.revisions.map((r) => r.revision_no)))
-            : Number(detail.version) || 1
+    const currentRevisionNo = detail.revisions?.length
+        ? (detail.revisions.find((r) => r.id === detail.current_revision_id)
+              ?.revision_no ??
+          Math.max(...detail.revisions.map((r) => r.revision_no)))
+        : Number(detail.version) || 1
     return mapListItemFromBackend(
         {
             id: detail.id,
@@ -168,6 +166,8 @@ export function mapDetailToListItem(
             amountGross: commercial.amountGross,
             amountNet: commercial.amountNet,
             taxAmount: commercial.taxAmount,
+            receivedAmount: detail.settled_total,
+            invoicedAmount: detail.invoiced_total,
             lineItems: mapWorkingCopyLines(commercial.lines),
             ownerName: extras?.ownerName || "",
             customerContact: extras?.customerContact,
@@ -191,6 +191,7 @@ export function mapDetailToListItem(
                 blocker: detail.change_order_blocker,
             },
             currentRevisionNo,
+            purchaseOrderCount: detail.purchase_order_count,
         },
     )
 }

@@ -55,8 +55,7 @@ export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
         reviewStatus,
         reviewLabel: REVIEW_STATUS_LABEL[reviewStatus],
         salesOrderId: row.sales_order_id,
-        // 缺口：D15 列表不返回 sales_order_no
-        salesOrderNo: row.sales_order_id,
+        salesOrderNo: row.sales_order_no,
         supplierId: row.supplier_id,
         supplierName: row.supplier_name,
         purchaseType: mapPurchaseType(String(row.purchase_type)),
@@ -109,7 +108,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         itemName:
             line.product_name ??
             (line.line_type === "LOGISTICS_FEE" ? "物流费用" : "采购明细"),
-        itemSku: line.sku_id ?? undefined,
+        itemSku: line.specification ?? undefined,
         quantity: line.quantity ?? undefined,
         unit: line.base_unit_code ?? undefined,
         unitCostGross: line.unit_cost_gross ?? "0",
@@ -120,7 +119,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         expectedDeliveryDate: line.expected_delivery_date ?? undefined,
         logisticsFeeReason: undefined,
         salesAllocationLabel: line.sales_order_submission_line_id
-            ? `销售行 ${line.sales_order_submission_line_id.slice(0, 8)}`
+            ? "已关联销售明细"
             : undefined,
     }))
 
@@ -151,7 +150,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         },
         header: {
             salesOrderId: center.sales_order_id,
-            salesOrderNo: center.sales_order_id,
+            salesOrderNo: center.sales_order_no,
             supplierId: center.supplier_id,
             supplierSnapshot: center.supplier_name,
             purchaseType: mapPurchaseType(String(center.purchase_type)),
@@ -193,9 +192,9 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             },
             costMasked: false,
         },
-        allocations: (center.allocations ?? []).map((a) => ({
+        allocations: (center.allocations ?? []).map((a, index) => ({
             lineId: a.purchase_order_revision_line_id,
-            salesOrderLineLabel: a.sales_order_revision_line_id,
+            salesOrderLineLabel: `销售分配 ${index + 1}`,
             allocatedQuantity: a.allocated_quantity,
         })),
         payableSummary: center.payable_summary
@@ -292,7 +291,10 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
     return {
         basisId: basis.basis_id,
         salesOrderId: basis.sales_order_id,
-        salesOrderNo: basis.sales_order_no ?? basis.sales_order_id,
+        salesOrderNo: basis.sales_order_no,
+        customerName: basis.customer_name,
+        contractNumber: basis.contract_no ?? undefined,
+        salesOwnerName: basis.sales_owner_name ?? undefined,
         salesSubmissionId: basis.submission_id,
         salesSubmissionNo: 0,
         supplierId: basis.supplier_id,
@@ -311,11 +313,11 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
             itemName: line.product_name ?? "确认分行",
             itemSku: line.specification ?? undefined,
             quantity: String(line.confirmed_quantity ?? "0"),
-            unit: "",
+            unit: line.unit ?? "",
             unitCostGross: String(line.latest_cost_gross ?? "0"),
             inputTaxRate: String(line.input_tax_rate ?? "0"),
             expectedDeliveryDate: line.expected_delivery_date ?? "",
-            salesAllocationLabel: line.sales_order_submission_line_id,
+            salesAllocationLabel: `销售明细 ${line.sales_line_no}`,
         })),
         estimatedGross: basis.estimated_gross ?? "0",
         consumed: false,

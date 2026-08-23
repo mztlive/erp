@@ -72,6 +72,9 @@ describe("salesOrderDocumentFacts", () => {
             version: 1,
             created_at: 1,
             owner_user_id: "u1",
+            purchase_order_count: 0,
+            settled_total: "0",
+            invoiced_total: "0",
             lines: [],
             submissions: [
                 {

@@ -62,6 +62,7 @@ export async function fetchPurchaseOrders(
         "/admin/purchase-orders",
         {
             q: query.q,
+            sales_order_id: query.salesOrderId,
             status,
             page,
             page_size: pageSize,

@@ -643,6 +643,7 @@ function DataTable<TData>({
             data-slot="data-table"
             data-layout={layout}
             className={cn(
+                "[--row-hover:oklch(0.98_0_0)] dark:[--row-hover:oklch(0.245_0_0)]",
                 // inset：外层统一内边距。
                 // flush：表格独立圆角描边；分页在表外。结果卡片（showHeader）
                 // 会把 gap 收成 0，让分页贴成卡内页脚。

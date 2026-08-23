@@ -16,9 +16,11 @@
 //! - `(purchase_order_id, status, posted_at)` 查询索引（采购提交以 `submitted_at`
 //!   承担冻结/过账时间轴，见 `purchase_order_submissions` 说明）。
 //!
-//! `purchase_no` 是身份类字段，采用**全局唯一索引**（与 accounts 的 code 处理一致）：
-//! 软删除后仍保留单号，避免复用破坏单据追溯与恢复语义。提交/版本/分配是
-//! 事实或修订类集合，不做软删除，无需在唯一索引上考虑删除态。
+//! `purchase_no` 是身份类字段，首次提交前为空；仅非空正式号进入全局唯一索引，
+//! 允许多张未编号草稿并存。软删除后正式号仍参与唯一约束，避免复用破坏单据
+//! 追溯与恢复语义。提交/版本/分配是事实或修订类集合，不做软删除。
+
+use futures_util::TryStreamExt;
 
 use mongodb::{
     bson::{doc, Document},
@@ -66,6 +68,7 @@ pub(crate) const PURCHASE_CHANGE_SUBMISSION_LINES: &str =
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
+    reconcile_purchase_order_no_index(db).await?;
     create_indexes(db, PURCHASE_ORDERS, purchase_order_indexes()).await?;
     create_indexes(
         db,
@@ -108,6 +111,28 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
+/// 将旧的全量采购单号唯一索引升级为仅约束非空正式号的部分唯一索引。
+///
+/// 草稿的 `purchase_no` 固定为空字符串；旧索引会让第二张草稿触发重复键。
+/// 仅在同名索引契约不匹配时删除，随后由 `create_indexes` 重建目标索引。
+async fn reconcile_purchase_order_no_index(db: &Database) -> Result<()> {
+    let collection_names = db.list_collection_names().await?;
+    if !collection_names.iter().any(|name| name == PURCHASE_ORDERS) {
+        return Ok(());
+    }
+
+    let collection = db.collection::<Document>(PURCHASE_ORDERS);
+    let mut indexes = collection.list_indexes().await?;
+    while let Some(index) = indexes.try_next().await? {
+        let name = index.options.as_ref().and_then(|options| options.name.as_deref());
+        if name == Some("uk_purchase_orders_purchase_no") && !is_current_purchase_no_index(&index) {
+            collection.drop_index("uk_purchase_orders_purchase_no").await?;
+            break;
+        }
+    }
+    Ok(())
+}
+
 /// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection)
@@ -118,13 +143,17 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 
 /// 返回 `purchase_order` 的单号约束与列表查询索引。
 ///
-/// `purchase_no` 全局唯一（软删除后仍保留单号）；`supplier_id + status` 与
-/// `sales_order_id + status` 是 §6.6 查询索引的前缀形态（`expected_date` 不在
-/// 采购主表实体字段内，W08 中「最近预计交期」由版本行服务端汇总派生，
-/// 无法直接建索引，见 P2 报告）。
+/// 非空 `purchase_no` 全局唯一（草稿空号不进入索引，软删除正式号仍保留）；
+/// `supplier_id + status` 与 `sales_order_id + status` 是 §6.6 查询索引的前缀形态
+/// （`expected_date` 不在采购主表实体字段内，W08 中「最近预计交期」由版本行
+/// 服务端汇总派生，无法直接建索引，见 P2 报告）。
 fn purchase_order_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index("uk_purchase_orders_purchase_no", doc! { "purchase_no": 1 }),
+        unique_partial_index(
+            "uk_purchase_orders_purchase_no",
+            doc! { "purchase_no": 1 },
+            formal_purchase_no_filter(),
+        ),
         named_index(
             "idx_purchase_orders_supplier_status",
             doc! { "supplier_id": 1, "status": 1 },
@@ -134,6 +163,21 @@ fn purchase_order_indexes() -> Vec<IndexModel> {
             doc! { "sales_order_id": 1, "status": 1 },
         ),
     ]
+}
+
+/// 正式采购号唯一约束的命中条件；空字符串草稿不参与唯一性。
+fn formal_purchase_no_filter() -> Document {
+    doc! { "purchase_no": { "$type": "string", "$gt": "" } }
+}
+
+/// 判断服务端已有索引是否符合当前采购号约束。
+fn is_current_purchase_no_index(index: &IndexModel) -> bool {
+    let Some(options) = index.options.as_ref() else {
+        return false;
+    };
+    index.keys == doc! { "purchase_no": 1 }
+        && options.unique == Some(true)
+        && options.partial_filter_expression.as_ref() == Some(&formal_purchase_no_filter())
 }
 
 /// 返回 `purchase_order_submission` 的提交序号约束与审核队列索引。
@@ -242,13 +286,28 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
         .build()
 }
 
+/// 构建命名部分唯一索引。
+fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
+    IndexModel::builder()
+        .keys(keys)
+        .options(
+            IndexOptions::builder()
+                .name(name.into())
+                .unique(true)
+                .partial_filter_expression(filter)
+                .build(),
+        )
+        .build()
+}
+
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        purchase_change_submission_indexes, purchase_line_sales_allocation_indexes, purchase_order_indexes,
-        purchase_order_revision_indexes, purchase_order_submission_indexes, unique_index,
+        formal_purchase_no_filter, is_current_purchase_no_index, purchase_change_submission_indexes,
+        purchase_line_sales_allocation_indexes, purchase_order_indexes, purchase_order_revision_indexes,
+        purchase_order_submission_indexes, unique_index,
     };
 
     #[test]
@@ -264,6 +323,14 @@ mod tests {
             .unwrap();
         assert_eq!(no_index.keys, doc! { "purchase_no": 1 });
         assert_eq!(no_index.options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(
+            no_index.options.as_ref().unwrap().partial_filter_expression,
+            Some(formal_purchase_no_filter())
+        );
+        assert!(is_current_purchase_no_index(no_index));
+
+        let legacy = unique_index("uk_purchase_orders_purchase_no", doc! { "purchase_no": 1 });
+        assert!(!is_current_purchase_no_index(&legacy));
 
         assert!(indexes
             .iter()

@@ -271,6 +271,9 @@ export type PurchaseCreationBasis = Readonly<{
     basisId: string
     salesOrderId: string
     salesOrderNo: string
+    customerName: string
+    contractNumber?: string
+    salesOwnerName?: string
     salesSubmissionId: string
     salesSubmissionNo: number
     supplierId: string

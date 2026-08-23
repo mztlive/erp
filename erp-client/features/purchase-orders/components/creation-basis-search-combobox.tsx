@@ -17,6 +17,7 @@ export type CreationBasisSearchComboboxProps = Omit<
     OptionComboboxProps,
     "options" | "loading"
 > & {
+    items?: readonly PurchaseCreationBasis[]
     onItemChange?: (basis?: PurchaseCreationBasis) => void
 }
 
@@ -25,13 +26,14 @@ export function CreationBasisSearchCombobox({
     value,
     onValueChange,
     onItemChange,
+    items,
     emptyLabel,
     ...props
 }: CreationBasisSearchComboboxProps) {
-    const query = useCreationBasesQuery()
+    const query = useCreationBasesQuery({ enabled: items == null })
     const rows = React.useMemo(
-        () => (query.data ?? []).filter((basis) => !basis.consumed),
-        [query.data],
+        () => (items ?? query.data ?? []).filter((basis) => !basis.consumed),
+        [items, query.data],
     )
     const onItemChangeRef = React.useRef(onItemChange)
     onItemChangeRef.current = onItemChange
@@ -57,9 +59,9 @@ export function CreationBasisSearchCombobox({
                 label: `${basis.salesOrderNo} · ${basis.supplierName} · ${PURCHASE_TYPE_LABEL[basis.purchaseType]} · 估 ${basis.estimatedGross}`,
                 keywords: `${basis.salesOrderId} ${basis.supplierId}`,
             }))}
-            loading={query.isFetching}
+            loading={items == null && query.isFetching}
             emptyLabel={
-                query.isError
+                items == null && query.isError
                     ? getErrorMessage(
                           query.error,
                           "采购创建依据加载失败，请重试",

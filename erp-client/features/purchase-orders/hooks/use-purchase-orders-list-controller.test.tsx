@@ -93,11 +93,14 @@ function makeListResult(
     }
 }
 
-function makeBasis(): PurchaseCreationBasis {
+function makeBasis(
+    overrides: Partial<PurchaseCreationBasis> = {},
+): PurchaseCreationBasis {
     return {
         basisId: "bas_1",
         salesOrderId: "so_1",
         salesOrderNo: "SO-1",
+        customerName: "客户甲",
         salesSubmissionId: "sub_1",
         salesSubmissionNo: 0,
         supplierId: "sup_1",
@@ -109,6 +112,7 @@ function makeBasis(): PurchaseCreationBasis {
         lines: [],
         estimatedGross: "100",
         consumed: false,
+        ...overrides,
     }
 }
 
@@ -189,22 +193,17 @@ describe("usePurchaseOrdersListController", () => {
     })
 
     it("应用筛选时清除同维度的指标粗筛", async () => {
-        mockUseSearchParams.mockReturnValue(
-            new URLSearchParams("metric=draft"),
-        )
+        mockUseSearchParams.mockReturnValue(new URLSearchParams("metric=draft"))
         const { result } = renderController()
         await waitFor(() => expect(mockedFetchList).toHaveBeenCalled())
-        expect(result.current.filters.appliedChips[0]?.label).toBe(
-            "指标：草稿",
-        )
+        expect(result.current.filters.appliedChips[0]?.label).toBe("指标：草稿")
 
         act(() => {
             result.current.filters.applyFilters()
         })
-        expect(mockRouter.replace).toHaveBeenCalledWith(
-            "/procurement/orders",
-            { scroll: false },
-        )
+        expect(mockRouter.replace).toHaveBeenCalledWith("/procurement/orders", {
+            scroll: false,
+        })
     })
 
     it("清除筛选输出最小 URL 且保留排序与导航上下文", async () => {
@@ -410,6 +409,41 @@ describe("usePurchaseOrdersListController", () => {
         const { result } = renderController()
         await waitFor(() => expect(result.current.createOpen).toBe(true))
         expect(result.current.selectedBasisId).toBe("bas_9")
+    })
+
+    it("销售单关系筛选不误开建单框，显式 create 动作才打开", async () => {
+        mockUseSearchParams.mockReturnValue(
+            new URLSearchParams("salesOrderId=so_1"),
+        )
+        const relationOnly = renderController()
+        await waitFor(() =>
+            expect(mockedFetchList).toHaveBeenCalledWith(
+                expect.objectContaining({ salesOrderId: "so_1" }),
+            ),
+        )
+        expect(relationOnly.result.current.createOpen).toBe(false)
+        relationOnly.unmount()
+
+        mockedFetchBases.mockResolvedValue([
+            makeBasis(),
+            makeBasis({
+                basisId: "bas_2",
+                salesOrderId: "so_2",
+                salesOrderNo: "SO-2",
+            }),
+        ])
+        mockUseSearchParams.mockReturnValue(
+            new URLSearchParams("salesOrderId=so_1&action=create"),
+        )
+        const createLink = renderController()
+        await waitFor(() =>
+            expect(createLink.result.current.createOpen).toBe(true),
+        )
+        await waitFor(() =>
+            expect(createLink.result.current.openBases).toEqual([
+                expect.objectContaining({ basisId: "bas_1" }),
+            ]),
+        )
     })
 
     it("筛选条件变化时焦点行重置为 0", async () => {

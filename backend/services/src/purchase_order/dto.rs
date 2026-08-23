@@ -7,8 +7,8 @@
 //! 与 `erp-client/features/purchase-orders/api.ts` 的差异（契约变更）：
 //! - 列表状态枚举沿用实体代码（`PENDING_FINANCE_REVIEW`/`PARTIALLY_EXECUTED`/
 //!   `VOIDED`），前端 mock 使用 `PENDING_REVIEW`/`PARTIAL`/`VOID`；
-//! - 列表/详情不返回 `sales_order_no`（销售单号属 D13，不在 D15 跨域依赖清单，
-//!   前端以 `sales_order_id` 标识来源）；
+//! - 列表/详情同时返回 `sales_order_id` 与 `sales_order_no`：前者只用于路由，
+//!   后者是用户可见的跨单据业务引用，禁止把内部 ID 当单号展示；
 //! - 草稿 `purchase_no` 为空，首次提交事务分配不可复用正式号；
 //! - 表单类写操作（创建/保存/提交/审核）统一返回稳定业务结果，不再返回
 //!   `FormalActionResponse` 信封（由 HTTP 统一信封承载）。
@@ -193,6 +193,8 @@ pub struct PurchaseOrderListItemView {
     pub purchase_no: String,
     /// 来源实物及服务销售单。
     pub sales_order_id: String,
+    /// 来源销售单业务单号。
+    pub sales_order_no: String,
     /// 唯一供应商。
     pub supplier_id: String,
     /// 供应商名称（D07 主体修订快照）。
@@ -367,6 +369,8 @@ pub struct PurchaseOrderCenterView {
     pub version: u64,
     /// 来源销售单。
     pub sales_order_id: String,
+    /// 来源销售单业务单号。
+    pub sales_order_no: String,
     /// 供应商。
     pub supplier_id: String,
     /// 供应商名称快照。
@@ -546,6 +550,8 @@ pub struct CreationBasisLineView {
     pub procurement_confirmation_line_id: String,
     /// 被确认的销售提交行。
     pub sales_order_submission_line_id: String,
+    /// 销售提交内的业务行号。
+    pub sales_line_no: u32,
     /// 确认供应商。
     pub supplier_id: String,
     /// 确认可供数量。
@@ -560,6 +566,8 @@ pub struct CreationBasisLineView {
     pub product_name: Option<String>,
     /// 规格快照。
     pub specification: Option<String>,
+    /// 销售单位快照。
+    pub unit: Option<String>,
     /// 含税行金额（按确认数量与成本逐行舍入）。
     pub gross_amount: String,
 }
@@ -573,6 +581,12 @@ pub struct CreationBasisView {
     pub sales_order_id: String,
     /// 销售单号。
     pub sales_order_no: String,
+    /// 销售提交冻结的客户名称。
+    pub customer_name: String,
+    /// 销售提交冻结的合同编号；无合同时为空。
+    pub contract_no: Option<String>,
+    /// 销售提交责任人展示名；账号档案缺失时为空。
+    pub sales_owner_name: Option<String>,
     /// 被确认的销售提交。
     pub submission_id: String,
     /// 供应商。

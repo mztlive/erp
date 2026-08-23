@@ -21,6 +21,7 @@ function makeBackendListItem(
         id: "po_1",
         purchase_no: "PO-1",
         sales_order_id: "so_1",
+        sales_order_no: "XS202608230001",
         supplier_id: "sup_1",
         supplier_name: "供应商A",
         purchase_type: "PHYSICAL",
@@ -53,6 +54,7 @@ describe("fetchPurchaseOrders", () => {
 
         const result = await fetchPurchaseOrders({
             q: "钢",
+            salesOrderId: "so_1",
             status: "DRAFT",
             metric: "all",
             page: 1,
@@ -62,6 +64,7 @@ describe("fetchPurchaseOrders", () => {
         expect(mockedApiGet).toHaveBeenCalledTimes(1)
         expect(mockedApiGet).toHaveBeenCalledWith("/admin/purchase-orders", {
             q: "钢",
+            sales_order_id: "so_1",
             status: "DRAFT",
             page: 1,
             page_size: 20,
@@ -70,6 +73,7 @@ describe("fetchPurchaseOrders", () => {
         })
         expect(result.rows).toHaveLength(1)
         expect(result.rows[0]?.purchaseOrderId).toBe("po_1")
+        expect(result.rows[0]?.salesOrderNo).toBe("XS202608230001")
         expect(result.rows[0]?.paymentTermLabel).toBe("—")
         expect(result.rows[0]?.ownerName).toBe("—")
         expect(result.total).toBe(1)
@@ -109,6 +113,7 @@ describe("fetchPurchaseOrderCenter", () => {
             review_status: "NONE",
             version: 1,
             sales_order_id: "so_1",
+            sales_order_no: "XS202608230001",
             supplier_id: "sup_1",
             supplier_name: "供应商A",
             purchase_type: "PHYSICAL",
@@ -118,7 +123,21 @@ describe("fetchPurchaseOrderCenter", () => {
             invoice_progress: "NONE",
             fulfillment_progress: "NONE",
             content_source: "DRAFT",
-            lines: [],
+            lines: [
+                {
+                    line_id: "po-line-1",
+                    line_no: 1,
+                    line_type: "ITEM_SERVICE",
+                    sku_id: "internal-sku-id",
+                    product_name: "测试商品",
+                    specification: "标准规格",
+                    sales_order_submission_line_id:
+                        "internal-sales-submission-line-id",
+                    gross_amount: "10",
+                    net_amount: "9",
+                    tax_amount: "1",
+                },
+            ],
             totals: { gross: "0", net: "0", tax: "0" },
             allocations: [],
             changes: [],
@@ -147,6 +166,17 @@ describe("fetchPurchaseOrderCenter", () => {
             expect.arrayContaining(["SUBMIT", "UPGRADE_BINDING"]),
         )
         expect(center?.identity.statusLabel).toBe("草稿")
+        expect(center?.header.salesOrderNo).toBe("XS202608230001")
+        expect(center?.currentContent.lines[0]).toMatchObject({
+            itemSku: "标准规格",
+            salesAllocationLabel: "已关联销售明细",
+        })
+        expect(JSON.stringify(center?.currentContent.lines[0])).not.toContain(
+            "internal-sales-submission-line-id",
+        )
+        expect(JSON.stringify(center?.currentContent.lines[0])).not.toContain(
+            "internal-sku-id",
+        )
     })
 
     it("maps IN_APPROVAL to the runtime review status without inventing assignees", async () => {
@@ -157,6 +187,7 @@ describe("fetchPurchaseOrderCenter", () => {
             review_status: "PENDING",
             version: 2,
             sales_order_id: "so_1",
+            sales_order_no: "XS202608230001",
             supplier_id: "sup_1",
             supplier_name: "供应商A",
             purchase_type: "PHYSICAL",
@@ -254,6 +285,7 @@ describe("fetchPurchaseOrderCenter", () => {
                 review_status: "APPROVED",
                 version: 3,
                 sales_order_id: "so_1",
+                sales_order_no: "XS202608230001",
                 supplier_id: "sup_1",
                 supplier_name: "供应商A",
                 purchase_type: "PHYSICAL",
@@ -299,11 +331,31 @@ describe("fetchCreationBases", () => {
             {
                 basis_id: "bas_1",
                 sales_order_id: "so_1",
+                sales_order_no: "XS202608230001",
+                customer_name: "客户甲",
+                contract_no: "HT-2026-001",
+                sales_owner_name: "张三",
                 submission_id: "sub_1",
                 supplier_id: "sup_1",
                 supplier_name: "供应商A",
                 payment_term_code: "POSTPAY_NET30",
-                lines: [],
+                lines: [
+                    {
+                        procurement_confirmation_line_id: "sales-line-1",
+                        sales_order_submission_line_id:
+                            "internal-submission-line-id",
+                        sales_line_no: 1,
+                        supplier_id: "sup_1",
+                        confirmed_quantity: "2",
+                        latest_cost_gross: "40",
+                        input_tax_rate: "0.13",
+                        expected_delivery_date: "2026-08-25",
+                        product_name: "测试商品",
+                        specification: "标准规格",
+                        unit: "件",
+                        gross_amount: "80",
+                    },
+                ],
                 estimated_gross: "100",
             },
         ])
@@ -315,5 +367,21 @@ describe("fetchCreationBases", () => {
         )
         expect(result).toHaveLength(1)
         expect(result[0]?.basisId).toBe("bas_1")
+        expect(result[0]).toMatchObject({
+            salesOrderNo: "XS202608230001",
+            customerName: "客户甲",
+            contractNumber: "HT-2026-001",
+            salesOwnerName: "张三",
+        })
+        expect(result[0]?.lines[0]).toMatchObject({
+            itemName: "测试商品",
+            itemSku: "标准规格",
+            quantity: "2",
+            unit: "件",
+            salesAllocationLabel: "销售明细 1",
+        })
+        expect(result[0]?.lines[0]?.salesAllocationLabel).not.toContain(
+            "internal-submission-line-id",
+        )
     })
 })

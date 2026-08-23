@@ -38,6 +38,7 @@ import type {
     PurchaseOrderCenterView,
     PurchaseOrderListItem,
 } from "@/features/purchase-orders/types"
+import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
 import {
     createFreshQueryClient,
     renderHookWithProviders,
@@ -129,6 +130,7 @@ function makeBasis(): PurchaseCreationBasis {
         basisId: "bas_1",
         salesOrderId: "so_1",
         salesOrderNo: "SO-1",
+        customerName: "客户甲",
         salesSubmissionId: "sub_1",
         salesSubmissionNo: 0,
         supplierId: "sup_1",
@@ -582,7 +584,10 @@ describe("useSubmitPurchaseChangeMutation", () => {
         await act(async () => {
             await result.current.mutateAsync(input)
         })
-        expect(mockedSubmitChange).toHaveBeenCalledWith(input, expect.anything())
+        expect(mockedSubmitChange).toHaveBeenCalledWith(
+            input,
+            expect.anything(),
+        )
         await waitFor(() => expect(invalidate).toHaveBeenCalled())
         expect(invalidate).toHaveBeenCalledWith({
             queryKey: purchaseOrderKeys.all,
@@ -623,7 +628,7 @@ describe("useStartPurchaseChangeMutation", () => {
 describe("useCreateFromBasisMutation", () => {
     const input = { basisId: "bas_1", idempotencyKey: "create-1" }
 
-    it("成功时失效全部采购单缓存", async () => {
+    it("成功时失效采购单与销售单关联计数缓存", async () => {
         mockedCreate.mockResolvedValue({
             status: "succeeded",
             data: {
@@ -645,6 +650,9 @@ describe("useCreateFromBasisMutation", () => {
         await waitFor(() => expect(invalidate).toHaveBeenCalled())
         expect(invalidate).toHaveBeenCalledWith({
             queryKey: purchaseOrderKeys.all,
+        })
+        expect(invalidate).toHaveBeenCalledWith({
+            queryKey: salesOrderKeys.all,
         })
     })
 

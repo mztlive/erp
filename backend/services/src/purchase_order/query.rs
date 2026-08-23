@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PayableExt, PurchaseOrderExt, WorkItemExt};
+use database::{AccessControlExt, NoTransaction, PayableExt, PurchaseOrderExt, SalesOrderExt, WorkItemExt};
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use validator::Validate;
@@ -62,6 +62,12 @@ impl PurchaseOrderService {
         let supplier_ids: Vec<&entities::ids::SupplierAccountId> =
             page.items.iter().map(|row| &row.supplier_id).collect();
         let supplier_names = self.resolve_supplier_names(&supplier_ids).await?;
+        let sales_order_ids: Vec<String> = page
+            .items
+            .iter()
+            .map(|row| row.sales_order_id.to_string())
+            .collect();
+        let sales_order_numbers = self.resolve_sales_order_numbers(&sales_order_ids).await?;
         let owner_ids: Vec<String> = page.items.iter().map(|row| row.created_by.clone()).collect();
         let owner_names = self.resolve_account_names(&owner_ids).await?;
         let pointer_ids: Vec<String> = page
@@ -77,7 +83,12 @@ impl PurchaseOrderService {
         let items = page
             .items
             .into_iter()
-            .map(|row| {
+            .map(|row| -> Result<PurchaseOrderListItemView> {
+                let sales_order_id = row.sales_order_id.to_string();
+                let sales_order_no = sales_order_numbers
+                    .get(&sales_order_id)
+                    .cloned()
+                    .ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))?;
                 let supplier_name = supplier_names
                     .get(&row.supplier_id.to_string())
                     .cloned()
@@ -90,10 +101,11 @@ impl PurchaseOrderService {
                     .as_ref()
                     .and_then(|id| totals.get(id).cloned())
                     .unwrap_or_default();
-                PurchaseOrderListItemView {
+                Ok(PurchaseOrderListItemView {
                     id: row.id,
                     purchase_no: row.purchase_no,
-                    sales_order_id: row.sales_order_id.to_string(),
+                    sales_order_id,
+                    sales_order_no,
                     supplier_id: row.supplier_id.to_string(),
                     supplier_name,
                     purchase_type: row.purchase_type,
@@ -111,9 +123,9 @@ impl PurchaseOrderService {
                     current_revision_id: row.current_revision_id,
                     version: row.version,
                     created_at: row.created_at,
-                }
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(PageView {
             items,
@@ -146,6 +158,12 @@ impl PurchaseOrderService {
             .resolve_supplier_name(&order.supplier_id)
             .await?
             .unwrap_or_else(|| order.supplier_id.to_string());
+        let sales_order_id = order.sales_order_id.to_string();
+        let sales_order_no = self
+            .resolve_sales_order_numbers(std::slice::from_ref(&sales_order_id))
+            .await?
+            .remove(&sales_order_id)
+            .ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))?;
 
         let (content_source, lines, totals) = self.resolve_current_content(&order).await?;
         let allocations = self.resolve_allocations(&order).await?;
@@ -210,7 +228,8 @@ impl PurchaseOrderService {
             status: order.stable.status,
             review_status: order.review_status,
             version: order.base.version,
-            sales_order_id: order.sales_order_id.to_string(),
+            sales_order_id,
+            sales_order_no,
             supplier_id: order.supplier_id.to_string(),
             supplier_name,
             purchase_type: order.purchase_type,
@@ -316,7 +335,10 @@ impl PurchaseOrderService {
     ///
     /// # 错误
     /// * `RepositoryError` - 数据库查询失败
-    async fn resolve_account_names(&self, account_ids: &[String]) -> Result<HashMap<String, String>> {
+    pub(super) async fn resolve_account_names(
+        &self,
+        account_ids: &[String],
+    ) -> Result<HashMap<String, String>> {
         let mut unique = Vec::new();
         let mut seen = HashSet::new();
         for account_id in account_ids {
@@ -341,6 +363,48 @@ impl PurchaseOrderService {
             .into_iter()
             .map(|account| (account.base.id, account.name))
             .collect())
+    }
+
+    /// 批量解析采购单来源销售单的业务单号。
+    ///
+    /// 内部 ID 只作为路由与关联键；任何缺失的来源销售单都视为数据完整性错误，
+    /// 不得回退为把 ID 当作业务单号返回。
+    ///
+    /// # 参数
+    /// * `sales_order_ids` - 销售单稳定身份字符串，可重复
+    ///
+    /// # 返回
+    /// 返回销售单 ID → 业务单号映射。
+    ///
+    /// # 错误
+    /// * `RepositoryError` - 数据库查询失败
+    /// * `Internal` - 采购单引用的销售单不存在
+    async fn resolve_sales_order_numbers(
+        &self,
+        sales_order_ids: &[String],
+    ) -> Result<HashMap<String, String>> {
+        let unique = sales_order_ids
+            .iter()
+            .map(|id| id.trim())
+            .filter(|id| !id.is_empty())
+            .map(str::to_string)
+            .collect::<HashSet<_>>();
+        if unique.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let ids = unique.iter().cloned().collect::<Vec<_>>();
+        let numbers = self
+            .db
+            .sales_orders()
+            .find_many(mongodb::bson::doc! { "id": { "$in": ids } }, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(|order| (order.base.id, order.order_no))
+            .collect::<HashMap<_, _>>();
+        if unique.iter().any(|id| !numbers.contains_key(id)) {
+            return Err(Error::Internal("采购单关联的销售单不存在".to_string()));
+        }
+        Ok(numbers)
     }
 
     /// 批量解析供应商名称（D07 主体修订快照）。

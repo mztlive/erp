@@ -18,6 +18,7 @@ import {
     submitPurchaseOrderForReview,
 } from "@/features/purchase-orders/api/purchase-orders"
 import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
+import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 
 export const purchaseOrderKeys = {
@@ -195,7 +196,10 @@ export function useCreateFromBasisMutation() {
         mutationFn: createPurchaseOrderFromBasis,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
-            await invalidatePurchaseOrderApprovalCaches(queryClient)
+            await Promise.all([
+                invalidatePurchaseOrderApprovalCaches(queryClient),
+                queryClient.invalidateQueries({ queryKey: salesOrderKeys.all }),
+            ])
         },
     })
 }
