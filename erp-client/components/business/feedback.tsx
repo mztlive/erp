@@ -41,7 +41,6 @@ import {
     GuardedBusinessAction,
 } from "@/components/business/feedback-states"
 import type {
-    AlertVariant,
     AsyncSectionStateProps,
     AsyncSectionStatus,
     BusinessEmptyStateKind,
@@ -262,7 +261,6 @@ type FormalResultPreset = {
     description: string
     label: string
     icon: LucideIcon
-    variant: AlertVariant
     tone: StatusTone
 }
 
@@ -275,7 +273,6 @@ const formalResultPresets: Record<
         description: "结果已经形成，并可在关联单据与审计记录中追溯。",
         label: "已完成",
         icon: CircleCheckIcon,
-        variant: "success",
         tone: "success",
     },
     rejected: {
@@ -283,7 +280,6 @@ const formalResultPresets: Record<
         description: "本次操作未形成目标结果，请根据原因继续处理。",
         label: "未通过",
         icon: CircleXIcon,
-        variant: "destructive",
         tone: "destructive",
     },
     blocked: {
@@ -291,7 +287,6 @@ const formalResultPresets: Record<
         description: "当前前置条件尚未满足，本次操作未形成处理结果。",
         label: "已阻断",
         icon: TriangleAlertIcon,
-        variant: "warning",
         tone: "warning",
     },
     processing: {
@@ -299,7 +294,6 @@ const formalResultPresets: Record<
         description: "结果尚未确定，可安全离开并在后台任务中继续查看。",
         label: "处理中",
         icon: LoaderCircleIcon,
-        variant: "info",
         tone: "info",
     },
     unknown: {
@@ -307,7 +301,6 @@ const formalResultPresets: Record<
         description: "不得按成功处理，请等待核对或进入异常处理流程。",
         label: "结果未知",
         icon: TriangleAlertIcon,
-        variant: "warning",
         tone: "warning",
     },
 }
@@ -328,25 +321,32 @@ function FormalActionResult({
         status === "rejected" || status === "blocked" ? "alert" : "status"
 
     return (
-        <Alert
+        <section
             data-slot="formal-action-result"
             data-status={status}
-            variant={preset.variant}
             role={role}
             aria-live="polite"
             tabIndex={-1}
-            className={className}
+            className={cn(
+                "rounded-lg border border-border bg-card px-4 py-3 text-sm text-card-foreground shadow-xs",
+                className,
+            )}
         >
-            <Icon aria-hidden="true" />
-            <AlertTitle className="flex flex-wrap items-center gap-2">
-                <span>{title ?? preset.title}</span>
-                <StatusBadge tone={preset.tone} label={preset.label} />
-            </AlertTitle>
-            <AlertDescription>
-                <div className="flex flex-col gap-3">
-                    <p>{description ?? preset.description}</p>
+            <div className="flex items-start gap-3">
+                <Icon
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1 space-y-3">
+                    <header className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-medium">{title ?? preset.title}</h3>
+                        <StatusBadge tone={preset.tone} label={preset.label} />
+                    </header>
+                    <p className="text-muted-foreground">
+                        {description ?? preset.description}
+                    </p>
                     {reference ? (
-                        <p className="text-xs">
+                        <p className="text-xs text-muted-foreground">
                             {referenceLabel}：
                             <span className="num font-mono">{reference}</span>
                         </p>
@@ -356,9 +356,9 @@ function FormalActionResult({
                             {facts.map((fact) => (
                                 <div
                                     key={fact.label}
-                                    className="flex flex-col gap-0.5"
+                                    className="flex flex-col gap-0.5 rounded-md bg-muted/40 px-3 py-2"
                                 >
-                                    <dt className="text-xs font-medium">
+                                    <dt className="text-xs font-medium text-muted-foreground">
                                         {fact.label}
                                     </dt>
                                     <dd className="text-foreground">
@@ -372,8 +372,8 @@ function FormalActionResult({
                         <div className="flex flex-wrap gap-2">{actions}</div>
                     ) : null}
                 </div>
-            </AlertDescription>
-        </Alert>
+            </div>
+        </section>
     )
 }
 

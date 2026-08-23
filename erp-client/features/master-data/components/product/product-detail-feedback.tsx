@@ -101,13 +101,22 @@ function ProductDetailFeedback({
                     ...values,
                     fields,
                 }) ? (
-                <Alert variant="success">
-                    <CheckCircle2Icon aria-hidden />
-                    <AlertTitle>填写检查通过</AlertTitle>
-                    <AlertDescription>
-                        必填项完整，保存时仍以系统校验结果为准。
-                    </AlertDescription>
-                </Alert>
+                <div
+                    className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
+                    role="status"
+                    aria-live="polite"
+                >
+                    <CheckCircle2Icon
+                        className="mt-0.5 size-4 shrink-0 text-success"
+                        aria-hidden
+                    />
+                    <div>
+                        <p className="font-medium">填写检查通过</p>
+                        <p className="text-muted-foreground">
+                            必填项完整，保存时仍以系统校验结果为准。
+                        </p>
+                    </div>
+                </div>
             ) : null}
         </>
     )

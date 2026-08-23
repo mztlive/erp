@@ -52,7 +52,6 @@ export function CustomerDetailPage({
         customer,
         activeSection,
         editing,
-        savedNotice,
         handleSectionChange,
     } = state
     const [assignmentDialog, setAssignmentDialog] = React.useState<{
@@ -218,14 +217,12 @@ export function CustomerDetailPage({
                             customer={customer}
                             refetch={() => void query.refetch()}
                             editing={editing}
-                            savedNotice={savedNotice}
                             onEditClick={state.startEditing}
                             onFormDirtyChange={state.setFormDirty}
                             onFormCancel={state.cancelEditing}
                             onFormSucceeded={(_customerId, revisionNo) =>
                                 state.completeEditing(revisionNo)
                             }
-                            onDismissSavedNotice={state.dismissSavedNotice}
                         />
                     </TabsContent>
 

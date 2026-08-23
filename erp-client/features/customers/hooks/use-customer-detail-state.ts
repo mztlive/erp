@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
+import { toast } from "@/components/ui/toast"
 import { useCustomerCenterQuery } from "@/features/customers/hooks/queries"
 import type { CustomerSectionId } from "@/features/customers/types"
 import { resolveSection } from "@/features/customers/pages/customer-detail-helpers"
@@ -22,10 +23,6 @@ export function useCustomerDetailState(
     const [formDirty, setFormDirty] = React.useState(false)
     const [pendingSection, setPendingSection] =
         React.useState<CustomerSectionId | null>(null)
-    const [savedNotice, setSavedNotice] = React.useState<{
-        revisionNo: number
-    } | null>(null)
-
     const customer = query.data
 
     const selectSection = React.useCallback(
@@ -59,19 +56,22 @@ export function useCustomerDetailState(
         setFormDirty(false)
     }, [])
 
-    /** 保存成功：退出编辑并记录新版本提示。 */
+    /** 保存成功：退出编辑并通过短暂 Toast 告知新版本。 */
     const completeEditing = React.useCallback(
         (revisionNo?: number) => {
             setEditing(false)
             setFormDirty(false)
-            setSavedNotice({
-                revisionNo: revisionNo ?? customer?.currentRevision.revisionNo ?? 0,
+            const savedRevisionNo =
+                revisionNo ?? customer?.currentRevision.revisionNo ?? 0
+            toast.add({
+                title: "客户资料已保存",
+                description: `新版本 v${savedRevisionNo} 已生效，历史单据记录不变。`,
+                type: "success",
+                timeout: 4000,
             })
         },
         [customer],
     )
-
-    const dismissSavedNotice = React.useCallback(() => setSavedNotice(null), [])
 
     const dismissPendingSection = React.useCallback(
         () => setPendingSection(null),
@@ -100,8 +100,6 @@ export function useCustomerDetailState(
         formDirty,
         setFormDirty,
         handleSectionChange,
-        savedNotice,
-        dismissSavedNotice,
         pendingSection,
         dismissPendingSection,
         discardPendingAndSwitch,

@@ -10,7 +10,6 @@ import {
     MetricStrip,
     MoneyValue,
 } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { paymentTermLabel } from "@/lib/business-options"
 import { CustomerForm } from "@/features/customers/components/customer-form"
@@ -106,22 +105,18 @@ export function CustomerDetailOverviewTab({
     customer,
     refetch,
     editing,
-    savedNotice,
     onEditClick,
     onFormDirtyChange,
     onFormCancel,
     onFormSucceeded,
-    onDismissSavedNotice,
 }: {
     customer: CustomerCenterView
     refetch: () => void
     editing: boolean
-    savedNotice: { revisionNo: number } | null
     onEditClick: () => void
     onFormDirtyChange: (isDirty: boolean) => void
     onFormCancel: () => void
     onFormSucceeded: (customerId: string, revisionNo?: number) => void
-    onDismissSavedNotice: () => void
 }) {
     const editBlocked = !can(customer, "EDIT_CUSTOMER")
 
@@ -138,25 +133,6 @@ export function CustomerDetailOverviewTab({
                 />
             ) : (
                 <>
-                    {savedNotice ? (
-                        <Alert variant="success">
-                            <AlertTitle>客户资料已保存</AlertTitle>
-                            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-                                <span>
-                                    新版本 v{savedNotice.revisionNo}{" "}
-                                    已生效，历史单据记录不变。
-                                </span>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={onDismissSavedNotice}
-                                >
-                                    知道了
-                                </Button>
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
                     <DocumentSection
                         title="主体身份与客户角色"
                         description="当前基础资料版本，不覆盖历史单据记录"
