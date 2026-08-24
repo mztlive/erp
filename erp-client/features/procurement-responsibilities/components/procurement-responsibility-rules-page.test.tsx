@@ -1,6 +1,19 @@
 import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+if (typeof globalThis.ResizeObserver === "undefined") {
+    class ResizeObserverStub {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    }
+    globalThis.ResizeObserver =
+        ResizeObserverStub as unknown as typeof ResizeObserver
+}
+if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {}
+}
+
 const state = vi.hoisted(() => ({
     permissions: [
         "procurement_responsibility:list",
@@ -87,6 +100,8 @@ describe("ProcurementResponsibilityRulesPage", () => {
         expect(
             screen.getByTestId("procurement-responsibility-create"),
         ).toBeTruthy()
+        expect(screen.queryByRole("button", { name: "编辑" })).toBeNull()
+        expect(screen.queryByRole("columnheader", { name: "操作" })).toBeNull()
     })
 
     it("keeps the list read-only without manage permission", () => {

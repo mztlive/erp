@@ -1,0 +1,234 @@
+/* 登录品牌区装饰动画。仅作用于 .login-stage，不影响工作台。 */
+
+.login-stage-art {
+    color: currentColor;
+}
+
+.login-stage-art .login-grid {
+    transform-origin: 50% 42%;
+    animation: login-grid-drift 28s linear infinite;
+}
+
+.login-stage-art .login-ring {
+    transform-origin: 480px 500px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+}
+
+.login-stage-art .login-ring-a {
+    animation: login-spin 42s linear infinite;
+}
+
+.login-stage-art .login-ring-b {
+    animation: login-spin-rev 56s linear infinite;
+}
+
+.login-stage-art .login-ring-c {
+    animation: login-spin 72s linear infinite;
+}
+
+.login-stage-art .login-flow {
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    animation: login-dash 8s linear infinite;
+}
+
+.login-stage-art .login-flow-slow {
+    animation-duration: 14s;
+    animation-direction: reverse;
+}
+
+.login-stage-art .login-scan {
+    animation: login-scan 5.5s ease-in-out infinite;
+}
+
+.login-stage-art .login-float-a {
+    transform-origin: 480px 430px;
+    animation: login-float 7s ease-in-out infinite;
+}
+
+.login-stage-art .login-float-b {
+    transform-origin: 210px 360px;
+    animation: login-float 8.5s ease-in-out infinite;
+    animation-delay: -2s;
+}
+
+.login-stage-art .login-float-c {
+    transform-origin: 750px 360px;
+    animation: login-float 9s ease-in-out infinite;
+    animation-delay: -4.2s;
+}
+
+.login-stage-art .login-float-d {
+    transform-origin: 250px 740px;
+    animation: login-float 8s ease-in-out infinite;
+    animation-delay: -1.4s;
+}
+
+.login-stage-art .login-float-e {
+    transform-origin: 720px 740px;
+    animation: login-float 7.4s ease-in-out infinite;
+    animation-delay: -3.1s;
+}
+
+.login-stage-art .login-orb {
+    animation: login-orb 10s ease-in-out infinite;
+}
+
+.login-stage-art .login-orb-b {
+    animation-delay: -3s;
+    animation-duration: 13s;
+}
+
+.login-stage-art .login-pulse {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: login-pulse 2.8s ease-in-out infinite;
+}
+
+.login-stage-art .login-pulse-delay {
+    animation-delay: -1.2s;
+}
+
+.login-stage-art .login-cloud {
+    animation: login-cloud 16s ease-in-out infinite;
+}
+
+.login-stage-art .login-packet {
+    offset-rotate: 0deg;
+    animation: login-travel 9s linear infinite;
+}
+
+.login-stage-art .login-packet-a {
+    offset-path: path("M 480 500 C 360 430 280 400 210 360");
+    animation-duration: 6.5s;
+}
+
+.login-stage-art .login-packet-b {
+    offset-path: path("M 480 500 C 600 430 680 400 750 360");
+    animation-duration: 7.2s;
+    animation-delay: -2s;
+}
+
+.login-stage-art .login-packet-c {
+    offset-path: path("M 480 500 C 380 600 300 690 250 740");
+    animation-duration: 8s;
+    animation-delay: -3.4s;
+}
+
+.login-stage-art .login-packet-d {
+    offset-path: path("M 480 500 C 580 600 660 690 720 740");
+    animation-duration: 7.6s;
+    animation-delay: -1.1s;
+}
+
+.login-stage-art .login-packet-e {
+    offset-path: path("M 210 360 C 320 250 640 250 750 360");
+    animation-duration: 11s;
+    animation-delay: -5s;
+}
+
+@keyframes login-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes login-spin-rev {
+    to {
+        transform: rotate(-360deg);
+    }
+}
+
+@keyframes login-dash {
+    to {
+        stroke-dashoffset: -280;
+    }
+}
+
+@keyframes login-float {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+    50% {
+        transform: translate3d(0, -10px, 0);
+    }
+}
+
+@keyframes login-orb {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+        transform: translate3d(10px, -14px, 0) scale(1.06);
+    }
+}
+
+@keyframes login-pulse {
+    0%,
+    100% {
+        opacity: 0.45;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.35);
+    }
+}
+
+@keyframes login-cloud {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+    50% {
+        transform: translate3d(14px, 6px, 0);
+    }
+}
+
+@keyframes login-travel {
+    from {
+        offset-distance: 0%;
+    }
+    to {
+        offset-distance: 100%;
+    }
+}
+
+@keyframes login-scan {
+    0%,
+    100% {
+        transform: translateY(0);
+        opacity: 0;
+    }
+    18% {
+        opacity: 0.28;
+    }
+    82% {
+        opacity: 0.28;
+    }
+    50% {
+        transform: translateY(168px);
+        opacity: 0.35;
+    }
+}
+
+@keyframes login-grid-drift {
+    from {
+        transform: translate3d(0, 0, 0);
+    }
+    to {
+        transform: translate3d(0, 40px, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-stage-art * {
+        animation: none !important;
+    }
+}
