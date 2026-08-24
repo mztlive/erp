@@ -137,7 +137,9 @@ const apiFetch = async <T>(
         }
         throw createApiError({
             kind: "Validation",
-            message: envelope.errorMessage || "请求未通过业务校验",
+            message:
+                envelope.errorMessage ||
+                "请求未通过业务校验，请检查填写内容后重试。",
             status: envelope.status,
             code: envelope.code,
             requestId: envelope.requestId,

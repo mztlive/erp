@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@/lib/api"
+import { apiGet, apiPost, getErrorMessage } from "@/lib/api"
 
 import {
     mapCommandViewDto,
@@ -75,10 +75,7 @@ export const isApprovalConflict = (error: unknown): boolean => {
  */
 export const approvalConflictMessage = (error: unknown): string => {
     if (!isApprovalConflict(error)) {
-        if (isRecord(error) && typeof error.message === "string") {
-            return error.message
-        }
-        return "提交失败，请刷新后重试"
+        return getErrorMessage(error, "提交失败，请刷新后重试。")
     }
     return "责任或版本已变化，请刷新后重新确认"
 }

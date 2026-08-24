@@ -11,7 +11,11 @@ import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import type { BrandFields, MasterDataMutationResult } from "@/features/master-data/types"
+import type {
+    BrandFields,
+    MasterDataMutationResult,
+} from "@/features/master-data/types"
+import { getErrorMessage } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
 
 export function newIdempotencyKey(prefix: string): string {
@@ -92,7 +96,7 @@ export function DateField({
             />
             {error ? (
                 <p className="text-xs text-destructive" role="alert">
-                    {String(error)}
+                    {getErrorMessage(error, "日期未通过检查，请重新选择。")}
                 </p>
             ) : null}
         </div>

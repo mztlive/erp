@@ -1,4 +1,4 @@
-import type { ApiError } from "@/lib/api"
+import { getErrorMessage, type ApiError } from "@/lib/api"
 
 /** 判断未知异常是否为统一 API 错误。 */
 export function isApiError(error: unknown): error is ApiError {
@@ -12,8 +12,5 @@ export function isApiError(error: unknown): error is ApiError {
 
 /** 提取服务端稳定错误消息。 */
 export function apiErrorMessage(error: ApiError): string {
-    const data = error.responseData as { errorMessage?: string } | undefined
-    return data?.errorMessage && data.errorMessage !== "OK"
-        ? data.errorMessage
-        : error.message
+    return getErrorMessage(error, "操作未完成，请稍后重试。")
 }
