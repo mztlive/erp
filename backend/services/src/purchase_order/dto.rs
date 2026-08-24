@@ -266,7 +266,11 @@ pub struct PurchaseOrderLineView {
     pub tax_amount: String,
     /// 预计交期（`YYYY-MM-DD`）。
     pub expected_delivery_date: Option<String>,
-    /// 商品行对应的销售提交行。
+    /// 商品行对应的销售稳定行。
+    pub sales_order_line_id: Option<String>,
+    /// 商品行对应的销售当前版本行。
+    pub sales_order_revision_line_id: Option<String>,
+    /// 商品行对应的历史销售提交行。
     pub sales_order_submission_line_id: Option<String>,
     /// 商品行对应的分配数量。
     pub allocated_quantity: Option<String>,
@@ -543,18 +547,26 @@ pub struct TotalsView {
     pub tax: String,
 }
 
-/// 采购创建依据行视图（W07 已确认分行 + 销售提交行归属）。
+/// 采购创建依据行视图（销售当前版本行 + 当前采购剩余量）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisLineView {
-    /// 采购二次确认分行。
-    pub procurement_confirmation_line_id: String,
-    /// 被确认的销售提交行。
-    pub sales_order_submission_line_id: String,
-    /// 销售提交内的业务行号。
+    /// 销售稳定行身份。
+    pub sales_order_line_id: String,
+    /// 销售当前版本行身份。
+    pub sales_order_revision_line_id: String,
+    /// 销售当前版本内的业务行号。
     pub sales_line_no: u32,
     /// 确认供应商。
     pub supplier_id: String,
-    /// 确认可供数量。
+    /// 销售当前版本目标数量。
+    pub sales_quantity: String,
+    /// 当前采购覆盖数量。
+    pub covered_quantity: String,
+    /// 当前采购剩余数量。
+    pub remaining_quantity: String,
+    /// 本供应商当前最大可创建数量，等于 `min(remaining, available)`。
+    pub max_create_quantity: String,
+    /// 兼容展示字段，值等于 `max_create_quantity`。
     pub confirmed_quantity: String,
     /// 最新含税成本。
     pub latest_cost_gross: String,
@@ -575,20 +587,20 @@ pub struct CreationBasisLineView {
 /// 采购创建依据视图（已生效销售单 × 合格供给供应商，§7.4 选源建单入口）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisView {
-    /// 创建依据（`{sales_order_id}:{supplier_id}`）。
+    /// 精确创建依据（销售当前版本、供应商、采购类型、付款条件、履约责任及剩余量指纹）。
     pub basis_id: String,
     /// 被确认的销售单。
     pub sales_order_id: String,
     /// 销售单号。
     pub sales_order_no: String,
-    /// 销售提交冻结的客户名称。
+    /// 销售当前版本冻结的客户名称。
     pub customer_name: String,
-    /// 销售提交冻结的合同编号；无合同时为空。
+    /// 销售当前版本冻结的合同编号；无合同时为空。
     pub contract_no: Option<String>,
-    /// 销售提交责任人展示名；账号档案缺失时为空。
+    /// 销售单负责人展示名；账号档案缺失时为空。
     pub sales_owner_name: Option<String>,
-    /// 被确认的销售提交。
-    pub submission_id: String,
+    /// 目标销售当前版本。
+    pub sales_order_revision_id: String,
     /// 供应商。
     pub supplier_id: String,
     /// 供应商名称。
@@ -605,8 +617,21 @@ pub struct CreationBasisView {
     pub estimated_gross: String,
 }
 
-/// 依据创建采购单请求（客户端形状 `{basisId, idempotencyKey}` 的扩展：拆单维度必填）。
+/// 依据建单的单行本次数量。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CreatePurchaseOrderLineRequest {
+    /// 销售稳定行身份。
+    #[validate(custom(function = "non_blank", message = "销售行不能为空"))]
+    pub sales_order_line_id: String,
+    /// 本次创建数量；事务内必须大于零且不超过最新可创建数量。
+    #[validate(custom(function = "non_blank", message = "本次数量不能为空"))]
+    pub quantity: String,
+}
+
+/// 依据创建采购单请求（精确拆单维度 + 逐行本次数量）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreatePurchaseOrderFromBasisRequest {
     /// 采购创建依据（已通过的采购确认）。
     #[validate(custom(function = "non_blank", message = "创建依据不能为空"))]
@@ -616,7 +641,10 @@ pub struct CreatePurchaseOrderFromBasisRequest {
     /// 付款条件（受控码表代码）。
     #[validate(custom(function = "non_blank", message = "付款条件不能为空"))]
     pub payment_term_code: String,
-    /// 幂等键（同一依据重复创建返回同一采购单）。
+    /// 本次采购明细；允许只创建依据中的部分行或部分数量。
+    #[validate(length(min = 1, max = 200, message = "本次采购明细必须在1-200行之间"), nested)]
+    pub lines: Vec<CreatePurchaseOrderLineRequest>,
+    /// 幂等键（同一命令重复创建返回同一采购单）。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     pub idempotency_key: String,
 }
@@ -676,7 +704,11 @@ pub struct SavePurchaseOrderLine {
     pub input_tax_rate: Option<String>,
     /// 预计交期（`YYYY-MM-DD`）。
     pub expected_delivery_date: Option<String>,
-    /// 商品行对应的销售提交行。
+    /// 商品行对应的销售稳定行。
+    pub sales_order_line_id: Option<String>,
+    /// 商品行对应的销售当前版本行。
+    pub sales_order_revision_line_id: Option<String>,
+    /// 商品行对应的历史销售提交行。
     pub sales_order_submission_line_id: Option<String>,
     /// 商品行对应的分配数量。
     pub allocated_quantity: Option<String>,
@@ -1026,6 +1058,7 @@ mod tests {
             "basis_id": "   ",
             "purchase_type": "PHYSICAL",
             "payment_term_code": "NET-30",
+            "lines": [{ "sales_order_line_id": "sol-1", "quantity": "1" }],
             "idempotency_key": "k-1",
         }))
         .unwrap();

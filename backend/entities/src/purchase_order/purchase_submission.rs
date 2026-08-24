@@ -13,7 +13,8 @@ use crate::common::time::{BusinessDate, Instant};
 use crate::errors::{Error, Result};
 use crate::ids::{
     ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
-    SalesOrderSubmissionLineId, SkuId, SkuRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+    SalesOrderLineId, SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
+    SupplierAccountId, SupplierCommercialProfileRevisionId,
 };
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
@@ -398,7 +399,11 @@ pub struct PurchaseOrderSubmissionLineData {
     pub input_tax_rate: Option<Rate>,
     /// 预计交期。
     pub expected_delivery_date: Option<BusinessDate>,
-    /// 商品行对应的销售提交行。
+    /// 商品行对应的销售稳定行。
+    pub sales_order_line_id: Option<SalesOrderLineId>,
+    /// 商品行对应的销售当前版本行。
+    pub sales_order_revision_line_id: Option<SalesOrderRevisionLineId>,
+    /// 商品行对应的历史销售提交行；仅保留旧流程追溯。
     pub sales_order_submission_line_id: Option<SalesOrderSubmissionLineId>,
     /// 商品行对应的分配数量。
     pub allocated_quantity: Option<Quantity>,
@@ -456,8 +461,8 @@ impl PurchaseLineDataRef for PurchaseOrderSubmissionLineData {
     fn ensure_allocation(&self) -> Result<()> {
         match self.line_type {
             PurchaseLineType::ItemService => {
-                if self.sales_order_submission_line_id.is_none() {
-                    return Err(Error::from("商品/服务行必须引用销售提交行"));
+                if self.sales_order_line_id.is_none() || self.sales_order_revision_line_id.is_none() {
+                    return Err(Error::from("商品/服务行必须引用销售稳定行与当前版本行"));
                 }
                 let quantity = self.allocated_quantity.ok_or("商品/服务行必须填写分配数量")?;
                 if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
@@ -465,7 +470,11 @@ impl PurchaseLineDataRef for PurchaseOrderSubmissionLineData {
                 }
             }
             PurchaseLineType::LogisticsFee => {
-                if self.sales_order_submission_line_id.is_some() || self.allocated_quantity.is_some() {
+                if self.sales_order_line_id.is_some()
+                    || self.sales_order_revision_line_id.is_some()
+                    || self.sales_order_submission_line_id.is_some()
+                    || self.allocated_quantity.is_some()
+                {
                     return Err(Error::from("物流费用行不得携带销售分配"));
                 }
             }
@@ -511,7 +520,11 @@ pub struct PurchaseOrderSubmissionLine {
     pub input_tax_rate: Option<Rate>,
     /// 预计交期。
     pub expected_delivery_date: Option<BusinessDate>,
-    /// 商品行对应的销售提交行。
+    /// 商品行对应的销售稳定行。
+    pub sales_order_line_id: Option<SalesOrderLineId>,
+    /// 商品行对应的销售当前版本行。
+    pub sales_order_revision_line_id: Option<SalesOrderRevisionLineId>,
+    /// 商品行对应的历史销售提交行；仅保留旧流程追溯。
     pub sales_order_submission_line_id: Option<SalesOrderSubmissionLineId>,
     /// 商品行对应的分配数量。
     pub allocated_quantity: Option<Quantity>,
@@ -554,6 +567,8 @@ impl PurchaseOrderSubmissionLine {
             tax_amount: data.tax_amount,
             input_tax_rate: data.input_tax_rate,
             expected_delivery_date: data.expected_delivery_date,
+            sales_order_line_id: data.sales_order_line_id,
+            sales_order_revision_line_id: data.sales_order_revision_line_id,
             sales_order_submission_line_id: data.sales_order_submission_line_id,
             allocated_quantity: data.allocated_quantity,
         })
@@ -608,8 +623,8 @@ mod tests {
     use crate::common::time::{BusinessDate, Instant};
     use crate::ids::{
         ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderSubmissionId,
-        PurchaseOrderSubmissionLineId, SalesOrderSubmissionLineId, SkuId, SupplierAccountId,
-        SupplierCommercialProfileRevisionId,
+        PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
+        SalesOrderSubmissionLineId, SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
     };
     use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
     use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
@@ -663,6 +678,8 @@ mod tests {
             tax_amount: tax,
             input_tax_rate: Some(Rate::from_str("0.130000").unwrap()),
             expected_delivery_date: Some(BusinessDate::from_ymd(2026, 8, 6).unwrap()),
+            sales_order_line_id: Some(SalesOrderLineId::new("sol-1")),
+            sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
             sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("ssl-1")),
             allocated_quantity: Some(Quantity::from_str("3.000000").unwrap()),
         }
@@ -806,6 +823,8 @@ mod tests {
             tax_amount: tax,
             input_tax_rate: Some(Rate::from_str("0.130000").unwrap()),
             expected_delivery_date: None,
+            sales_order_line_id: None,
+            sales_order_revision_line_id: None,
             sales_order_submission_line_id: None,
             allocated_quantity: None,
             ..goods_line_data()
@@ -818,9 +837,9 @@ mod tests {
 
     #[test]
     fn submission_line_rejects_failures() {
-        // 商品行缺少销售提交行
+        // 商品行缺少销售当前版本行
         let no_allocation = PurchaseOrderSubmissionLineData {
-            sales_order_submission_line_id: None,
+            sales_order_revision_line_id: None,
             ..goods_line_data()
         };
         assert!(

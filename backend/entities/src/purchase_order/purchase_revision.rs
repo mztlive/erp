@@ -13,7 +13,7 @@ use crate::common::time::{BusinessDate, Instant};
 use crate::errors::{Error, Result};
 use crate::ids::{
     ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
-    SkuId, SkuRevisionId, SupplierCommercialProfileRevisionId,
+    SalesOrderLineId, SalesOrderRevisionLineId, SkuId, SkuRevisionId, SupplierCommercialProfileRevisionId,
 };
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
@@ -142,6 +142,12 @@ pub struct PurchaseOrderRevisionLineData {
     pub input_tax_rate: Option<Rate>,
     /// 预计交期。
     pub expected_delivery_date: Option<BusinessDate>,
+    /// 商品行对应的销售稳定行。
+    pub sales_order_line_id: Option<SalesOrderLineId>,
+    /// 商品行对应的销售当前版本行。
+    pub sales_order_revision_line_id: Option<SalesOrderRevisionLineId>,
+    /// 商品行正式分配数量。
+    pub allocated_quantity: Option<Quantity>,
 }
 
 /// 采购版本行实体（数据模型 §6.6/§4.4 结构化快照）。
@@ -181,6 +187,12 @@ pub struct PurchaseOrderRevisionLine {
     pub input_tax_rate: Option<Rate>,
     /// 预计交期。
     pub expected_delivery_date: Option<BusinessDate>,
+    /// 商品行对应的销售稳定行。
+    pub sales_order_line_id: Option<SalesOrderLineId>,
+    /// 商品行对应的销售当前版本行。
+    pub sales_order_revision_line_id: Option<SalesOrderRevisionLineId>,
+    /// 商品行正式分配数量。
+    pub allocated_quantity: Option<Quantity>,
 }
 
 impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
@@ -231,6 +243,29 @@ impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
     fn input_tax_rate(&self) -> Option<Rate> {
         self.input_tax_rate
     }
+
+    fn ensure_allocation(&self) -> Result<()> {
+        match self.line_type {
+            PurchaseLineType::ItemService => {
+                if self.sales_order_line_id.is_none() || self.sales_order_revision_line_id.is_none() {
+                    return Err(Error::from("商品/服务版本行必须引用销售稳定行与当前版本行"));
+                }
+                let quantity = self.allocated_quantity.ok_or("商品/服务版本行必须填写分配数量")?;
+                if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+                    return Err(Error::from("商品/服务版本行分配数量必须为正"));
+                }
+            }
+            PurchaseLineType::LogisticsFee => {
+                if self.sales_order_line_id.is_some()
+                    || self.sales_order_revision_line_id.is_some()
+                    || self.allocated_quantity.is_some()
+                {
+                    return Err(Error::from("物流费用版本行不得携带销售分配"));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl PurchaseOrderRevisionLine {
@@ -269,6 +304,9 @@ impl PurchaseOrderRevisionLine {
             tax_amount: data.tax_amount,
             input_tax_rate: data.input_tax_rate,
             expected_delivery_date: data.expected_delivery_date,
+            sales_order_line_id: data.sales_order_line_id,
+            sales_order_revision_line_id: data.sales_order_revision_line_id,
+            allocated_quantity: data.allocated_quantity,
         })
     }
 }
@@ -336,7 +374,7 @@ mod tests {
     use crate::common::time::{BusinessDate, Instant};
     use crate::ids::{
         ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
-        SkuId, SupplierCommercialProfileRevisionId,
+        SalesOrderLineId, SalesOrderRevisionLineId, SkuId, SupplierCommercialProfileRevisionId,
     };
     use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
     use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
@@ -388,6 +426,9 @@ mod tests {
             tax_amount: tax,
             input_tax_rate: Some(Rate::from_str("0.130000").unwrap()),
             expected_delivery_date: Some(BusinessDate::from_ymd(2026, 8, 6).unwrap()),
+            sales_order_line_id: Some(SalesOrderLineId::new("sol-1")),
+            sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
+            allocated_quantity: Some(Quantity::from_str("3.000000").unwrap()),
         }
     }
 
@@ -471,6 +512,9 @@ mod tests {
             tax_amount: tax,
             input_tax_rate: Some(Rate::from_str("0.130000").unwrap()),
             expected_delivery_date: None,
+            sales_order_line_id: None,
+            sales_order_revision_line_id: None,
+            allocated_quantity: None,
             ..line_data()
         };
         let line = PurchaseOrderRevisionLine::new(PurchaseOrderRevisionLineId::new("porl-5"), data).unwrap();

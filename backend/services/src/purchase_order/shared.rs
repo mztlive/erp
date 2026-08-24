@@ -110,6 +110,14 @@ impl PurchaseOrderService {
                         .as_deref()
                         .map(parse_business_date)
                         .transpose()?,
+                    sales_order_line_id: line
+                        .sales_order_line_id
+                        .as_ref()
+                        .map(|value| entities::ids::SalesOrderLineId::new(value.clone())),
+                    sales_order_revision_line_id: line
+                        .sales_order_revision_line_id
+                        .as_ref()
+                        .map(|value| entities::ids::SalesOrderRevisionLineId::new(value.clone())),
                     sales_order_submission_line_id: line
                         .sales_order_submission_line_id
                         .as_ref()
@@ -164,6 +172,14 @@ impl PurchaseOrderService {
                         .as_deref()
                         .map(parse_business_date)
                         .transpose()?,
+                    sales_order_line_id: line
+                        .sales_order_line_id
+                        .as_ref()
+                        .map(|value| entities::ids::SalesOrderLineId::new(value.clone())),
+                    sales_order_revision_line_id: line
+                        .sales_order_revision_line_id
+                        .as_ref()
+                        .map(|value| entities::ids::SalesOrderRevisionLineId::new(value.clone())),
                     sales_order_submission_line_id: line
                         .sales_order_submission_line_id
                         .as_ref()

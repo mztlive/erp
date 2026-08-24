@@ -144,6 +144,30 @@ impl<'a> Repository<'a, PurchaseOrder> {
         })
     }
 
+    /// 查询销售单当前采购覆盖所需的采购单。
+    ///
+    /// 只返回未删除且状态为草稿、旧待财务、审批中、生效、部分执行或已完成的
+    /// 采购单；作废采购单不占用销售数量。调用方必须继续沿每张采购单的当前提交
+    /// 或当前版本指针读取数量，禁止累计历史提交或历史版本。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回参与当前采购覆盖计算的采购单。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_covering_by_sales_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrder>> {
+        self.find_many(active_purchase_order_filter(sales_order_id), executor)
+            .await
+    }
+
     /// 统计销售单关联的有效采购单。
     ///
     /// 统计口径与采购创建依据一致：草稿、审批中、生效、部分执行和已完成均视为
@@ -185,6 +209,7 @@ fn active_purchase_order_filter(sales_order_id: &SalesOrderId) -> Document {
         "sales_order_id": sales_order_id.to_string(),
         "status": { "$in": [
             PurchaseOrderStatus::Draft.as_str(),
+            PurchaseOrderStatus::PendingFinanceReview.as_str(),
             PurchaseOrderStatus::InApproval.as_str(),
             PurchaseOrderStatus::Effective.as_str(),
             PurchaseOrderStatus::PartiallyExecuted.as_str(),
@@ -280,6 +305,7 @@ mod tests {
             statuses,
             vec![
                 "DRAFT",
+                "PENDING_FINANCE_REVIEW",
                 "IN_APPROVAL",
                 "EFFECTIVE",
                 "PARTIALLY_EXECUTED",

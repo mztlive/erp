@@ -709,6 +709,9 @@ mod tests {
                 tax_amount: entities::money::Amount::from_str("13.00").unwrap(),
                 input_tax_rate: Some(entities::money::Rate::from_str("0.130000").unwrap()),
                 expected_delivery_date: None,
+                sales_order_line_id: Some(entities::ids::SalesOrderLineId::new("sol-1")),
+                sales_order_revision_line_id: Some(entities::ids::SalesOrderRevisionLineId::new("sorl-1")),
+                allocated_quantity: Some(Quantity::from_str("10").unwrap()),
             },
         )
         .unwrap()];

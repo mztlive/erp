@@ -232,6 +232,8 @@ mod tests {
             PurchaseOrderData {
                 purchase_no: "PO-1".to_string(),
                 sales_order_id: SalesOrderId::new("so-1"),
+                sales_order_revision_id: entities::ids::SalesOrderRevisionId::new("sor-1"),
+                creation_basis_id: "basis-1".to_string(),
                 supplier_id: SupplierAccountId::new("sup-1"),
                 purchase_type: PurchaseType::Physical,
                 payment_term_code: "NET-30".to_string(),

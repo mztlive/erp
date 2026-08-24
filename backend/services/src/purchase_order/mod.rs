@@ -22,11 +22,13 @@
 use mongodb::Database;
 
 mod adapter;
+mod allocation_maintenance;
 mod cancel_approval;
 mod change;
 mod change_adapter;
 mod change_cancel;
 mod change_start;
+pub(crate) mod coverage;
 mod creation_basis;
 mod draft_edit;
 mod dto;
@@ -42,16 +44,16 @@ pub use self::adapter::purchase_order_object_readable;
 pub use self::change_adapter::purchase_change_order_object_readable;
 pub use self::dto::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
-    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView, CreationBasisView,
-    DocumentApprovalView, EffectPurchaseChangeRequest, PageView, PurchaseActionBlockerView,
-    PurchaseChangeEffectResult, PurchaseChangeOrderListParams, PurchaseChangeOrderView,
-    PurchaseChangeSubmitResult, PurchaseOrderCenterView, PurchaseOrderLineView, PurchaseOrderListItemView,
-    PurchaseOrderListParams, PurchaseOrderReviewDecisionCommand, PurchaseOrderReviewDecisionResult,
-    PurchaseReviewDomainAction, PurchaseReviewResult, PurchaseReviewWorkItemView,
-    PurchaseSalesAllocationView, ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest,
-    SavePurchaseOrderDraftResult, SavePurchaseOrderLine, StartPurchaseChangeRequest,
-    StartPurchaseChangeResult, SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest,
-    SubmitPurchaseOrderResult, TotalsView,
+    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
+    CreationBasisLineView, CreationBasisView, DocumentApprovalView, EffectPurchaseChangeRequest, PageView,
+    PurchaseActionBlockerView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
+    PurchaseChangeOrderView, PurchaseChangeSubmitResult, PurchaseOrderCenterView, PurchaseOrderLineView,
+    PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderReviewDecisionCommand,
+    PurchaseOrderReviewDecisionResult, PurchaseReviewDomainAction, PurchaseReviewResult,
+    PurchaseReviewWorkItemView, PurchaseSalesAllocationView, ReviewPurchaseOrderCommand,
+    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
+    StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
+    SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, TotalsView,
 };
 
 use crate::errors::{Error, Result};

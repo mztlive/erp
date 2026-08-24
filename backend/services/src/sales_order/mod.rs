@@ -44,8 +44,8 @@ pub use self::dto::{
     LowMarginManagerAllowedAction, OpenProcurementRejectionView, PageView, ProcurementRejectionAllowedAction,
     RevisionView, SalesOrderCreateIntent, SalesOrderDetailView, SalesOrderDraftLineRequest,
     SalesOrderDraftRequest, SalesOrderLineView, SalesOrderListParams, SalesOrderStageSummary, SalesOrderView,
-    SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
-    VoidSalesOrderRequest, WorkingCopyView,
+    SalesOrderWorkingCopyLineView, SalesProcurementCoverageView, SaveWorkingCopyRequest, SubmissionView,
+    SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 pub(crate) use self::progress::update_sales_order_money_progress;
 

@@ -34,8 +34,13 @@ pub(super) fn revision_line_to_view(
         net_amount: line.net_amount.to_string(),
         tax_amount: line.tax_amount.to_string(),
         expected_delivery_date: line.expected_delivery_date.map(|d| d.to_string()),
+        sales_order_line_id: line.sales_order_line_id.as_ref().map(ToString::to_string),
+        sales_order_revision_line_id: line
+            .sales_order_revision_line_id
+            .as_ref()
+            .map(ToString::to_string),
         sales_order_submission_line_id: None,
-        allocated_quantity: None,
+        allocated_quantity: line.allocated_quantity.map(|q| q.to_string()),
     }
 }
 
@@ -69,6 +74,11 @@ pub(super) fn submission_line_to_view(
         net_amount: line.net_amount.to_string(),
         tax_amount: line.tax_amount.to_string(),
         expected_delivery_date: line.expected_delivery_date.map(|d| d.to_string()),
+        sales_order_line_id: line.sales_order_line_id.as_ref().map(ToString::to_string),
+        sales_order_revision_line_id: line
+            .sales_order_revision_line_id
+            .as_ref()
+            .map(ToString::to_string),
         sales_order_submission_line_id: line
             .sales_order_submission_line_id
             .as_ref()

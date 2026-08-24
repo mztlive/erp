@@ -19,6 +19,7 @@
 
 mod amount_validation;
 mod entity;
+mod procurement;
 pub mod revision;
 pub mod snapshot;
 pub mod submission;
@@ -33,6 +34,7 @@ pub use entity::{
     CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, LineStatus,
     ReviewStatus, SalesOrder, SalesOrderData, SalesOrderLine, SalesOrderLineData, SalesOrderUpdate,
 };
+pub use procurement::ProcurementCoverageSummary;
 pub use revision::{
     RevisionSource, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
     SalesOrderRevision, SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,

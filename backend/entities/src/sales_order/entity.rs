@@ -395,6 +395,9 @@ pub struct SalesOrder {
     pub effective_at: Option<Instant>,
     /// ERP 关闭时间。
     pub closed_at: Option<Instant>,
+    /// 采购创建串行化版本；每次成功占用采购剩余量前递增。
+    #[serde(default)]
+    pub procurement_guard_version: u64,
 }
 
 impl PartialEq for SalesOrder {
@@ -421,6 +424,7 @@ impl PartialEq for SalesOrder {
             && self.source_status_code == other.source_status_code
             && self.effective_at == other.effective_at
             && self.closed_at == other.closed_at
+            && self.procurement_guard_version == other.procurement_guard_version
     }
 }
 
@@ -476,7 +480,30 @@ impl SalesOrder {
             source_status_code,
             effective_at: None,
             closed_at: None,
+            procurement_guard_version: 0,
         })
+    }
+
+    /// 递增采购创建串行化版本。
+    ///
+    /// # 参数
+    /// * `updated_by` - 本次采购占用命令的执行人
+    ///
+    /// # 返回
+    /// 返回递增后的采购串行化版本。
+    ///
+    /// # 错误
+    /// 版本达到 `u64::MAX` 时返回领域错误。
+    ///
+    /// # 关键业务约束
+    /// 调用方必须在 MongoDB 事务内通过销售单乐观锁写回，再重算采购剩余数量。
+    pub fn advance_procurement_guard(&mut self, updated_by: impl Into<String>) -> Result<u64> {
+        self.procurement_guard_version = self
+            .procurement_guard_version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("采购串行化版本溢出"))?;
+        self.stable.touch(updated_by);
+        Ok(self.procurement_guard_version)
     }
 
     /// 更新销售单。
@@ -824,6 +851,16 @@ mod tests {
         assert_eq!(order.stable.created_by, "admin-1");
         assert!(order.effective_at.is_none());
         assert!(order.closed_at.is_none());
+    }
+
+    #[test]
+    fn procurement_guard_advances_monotonically() {
+        let mut order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
+
+        assert_eq!(order.advance_procurement_guard("buyer-1").unwrap(), 1);
+        assert_eq!(order.advance_procurement_guard("buyer-2").unwrap(), 2);
+        assert_eq!(order.procurement_guard_version, 2);
+        assert_eq!(order.stable.updated_by, "buyer-2");
     }
 
     #[test]

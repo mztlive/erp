@@ -154,6 +154,21 @@ fn purchase_order_indexes() -> Vec<IndexModel> {
             doc! { "purchase_no": 1 },
             formal_purchase_no_filter(),
         ),
+        unique_index(
+            "uk_purchase_orders_creation_basis",
+            doc! { "creation_basis_id": 1 },
+        ),
+        named_index(
+            "idx_purchase_orders_creation_scope",
+            doc! {
+                "sales_order_revision_id": 1,
+                "supplier_id": 1,
+                "purchase_type": 1,
+                "payment_term_code": 1,
+                "fulfillment_responsibility": 1,
+                "status": 1,
+            },
+        ),
         named_index(
             "idx_purchase_orders_supplier_status",
             doc! { "supplier_id": 1, "status": 1 },
@@ -332,6 +347,22 @@ mod tests {
         let legacy = unique_index("uk_purchase_orders_purchase_no", doc! { "purchase_no": 1 });
         assert!(!is_current_purchase_no_index(&legacy));
 
+        assert!(indexes.iter().any(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                == Some("uk_purchase_orders_creation_basis")
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+        assert!(indexes.iter().any(|index| {
+            index.keys
+                == doc! {
+                    "sales_order_revision_id": 1,
+                    "supplier_id": 1,
+                    "purchase_type": 1,
+                    "payment_term_code": 1,
+                    "fulfillment_responsibility": 1,
+                    "status": 1,
+                }
+        }));
         assert!(indexes
             .iter()
             .any(|index| index.keys == doc! { "supplier_id": 1, "status": 1 }));

@@ -307,6 +307,8 @@ impl PurchaseOrderService {
                     tax_amount: line.tax_amount,
                     input_tax_rate: line.input_tax_rate,
                     expected_delivery_date: line.expected_delivery_date,
+                    sales_order_line_id: line.sales_order_line_id.clone(),
+                    sales_order_revision_line_id: line.sales_order_revision_line_id.clone(),
                     sales_order_submission_line_id: line.sales_order_submission_line_id.clone(),
                     allocated_quantity: line.allocated_quantity,
                 },

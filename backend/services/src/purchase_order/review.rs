@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use database::{
     AccessControlExt, CostExt, Executor, FulfillmentExt, NoTransaction, PayableExt, PurchaseOrderExt,
-    SalesOrderExt, Transactional, WarehouseExt,
+    Transactional, WarehouseExt,
 };
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
@@ -20,14 +20,14 @@ use entities::ids::{
 };
 use entities::money::Quantity;
 use entities::purchase_order::{
-    FulfillmentResponsibility, PurchaseLineSalesAllocation, PurchaseLineSalesAllocationData,
-    PurchaseLineType, PurchaseOrder, PurchaseOrderReviewDecision, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionLine, SubmissionStatus,
+    FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderReviewDecision,
+    PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus,
 };
 use entities::warehouse::EnableStatus;
 use entities::work_item::WorkItemStatus;
 use id_generator::next_id;
 
+use super::allocation_maintenance::{persist_current_sales_allocations, prepare_current_sales_allocations};
 use super::dto::{PurchaseReviewResult, ReviewPurchaseOrderCommand};
 use super::shared::{zero_amount, zero_rate};
 use super::PurchaseOrderService;
@@ -289,7 +289,7 @@ async fn persist_formalized_order(
         submission,
         submission_lines,
         revision,
-        revision_lines,
+        mut revision_lines,
         payable,
         cost_entries,
     } = persist;
@@ -306,9 +306,12 @@ async fn persist_formalized_order(
         .with_transaction(move |session| {
             Box::pin(async move {
                 ensure_purchase_review_sources(&db, &order, &submission, &submission_lines, session).await?;
+                let allocations =
+                    prepare_current_sales_allocations(&db, &order, &mut revision_lines, session).await?;
                 db.purchase_order()
                     .create_effective_revision(&revision, &revision_lines, session)
                     .await?;
+                persist_current_sales_allocations(&db, &allocations, session).await?;
                 let mut order_mut = order;
                 order_mut.formalize_approved(&actor_id)?;
                 order_mut.stable.current_revision_id = Some(revision.base.id.clone());
@@ -330,9 +333,6 @@ async fn persist_formalized_order(
                         .create_cost_entry_with_allocations(entry, Vec::new(), session)
                         .await?;
                 }
-                // 采购生效必须形成「采购行→销售行」分配（§6.6）：入库预占沿
-                // 分配关系回到原销售明细，仓发/履约草稿依赖预占。
-                let allocations = create_sales_allocations(&db, &revision_lines, session).await?;
                 // 入仓采购单生效后自动生成采购入库草稿：履约工作面（W09）按
                 // DRAFT 采购入库单投影「入库」待办，仓储确认后过账入库。
                 if fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
@@ -340,8 +340,14 @@ async fn persist_formalized_order(
                 } else if fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
                     // 供应商直发同样需要履约待办：按 DRAFT 发货单（直发类型）
                     // 投影「代发」待办，采购在履约工作面登记物流后过账发货。
-                    create_delivery_draft_for_order(&db, &order_mut, &revision_lines, &allocations, session)
-                        .await?;
+                    create_delivery_draft_for_order(
+                        &db,
+                        &order_mut,
+                        &revision_lines,
+                        &allocations.by_purchase_line,
+                        session,
+                    )
+                    .await?;
                 } else if fulfillment_responsibility == FulfillmentResponsibility::Service {
                     // 线下服务同样需要履约待办：按 DRAFT 服务履约记录投影
                     // 「服务」待办，采购在履约工作面登记服务事实后确认完成。
@@ -349,7 +355,7 @@ async fn persist_formalized_order(
                         &db,
                         &order_mut,
                         &revision_lines,
-                        &allocations,
+                        &allocations.by_purchase_line,
                         &actor_id,
                         session,
                     )
@@ -360,85 +366,6 @@ async fn persist_formalized_order(
             })
         })
         .await
-}
-
-/// 为生效采购单创建「采购行→销售行」分配（§6.6）。
-///
-/// 采购版本行通过 `procurement_confirmation_line_id` 引用销售稳定明细
-/// （建单时以销售提交行/明细身份填充），据此反查销售版本行形成分配；
-/// 入库预占沿本分配回到原销售明细。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `revision_lines` - 采购生效版本行
-/// * `executor` - 数据访问执行器，必须位于事务中
-///
-/// # 返回
-/// 返回「采购版本行 id → 分配 id」映射（供应商直发草稿按行引用分配）。
-///
-/// # 错误
-/// 销售版本行缺失或写入失败时返回错误。
-async fn create_sales_allocations(
-    db: &mongodb::Database,
-    revision_lines: &[entities::purchase_order::PurchaseOrderRevisionLine],
-    executor: &mut dyn Executor,
-) -> Result<HashMap<String, PurchaseLineSalesAllocationId>> {
-    let mut allocations = HashMap::new();
-    let sales_order_line_ids: Vec<String> = revision_lines
-        .iter()
-        .filter(|line| line.line_type == PurchaseLineType::ItemService)
-        .filter_map(|line| line.procurement_confirmation_line_id.clone())
-        .map(|id| id.to_string())
-        .collect();
-    if sales_order_line_ids.is_empty() {
-        return Ok(allocations);
-    }
-    let sales_revision_lines = db
-        .sales_order_revision_lines()
-        .find_many(
-            mongodb::bson::doc! { "sales_order_line_id": { "$in": sales_order_line_ids } },
-            executor,
-        )
-        .await?;
-    for line in revision_lines {
-        if line.line_type != PurchaseLineType::ItemService {
-            continue;
-        }
-        let Some(confirmation_line_id) = &line.procurement_confirmation_line_id else {
-            continue;
-        };
-        let Some(sales_revision_line) = sales_revision_lines.iter().find(|sales_line| {
-            sales_line.sales_order_line_id.to_string() == confirmation_line_id.to_string()
-        }) else {
-            return Err(Error::BusinessLogicError(
-                "采购明细缺少对应的销售版本行，无法形成销售分配".to_string(),
-            ));
-        };
-        let quantity = line
-            .quantity
-            .ok_or_else(|| Error::BusinessLogicError("采购明细缺少数量，无法形成销售分配".to_string()))?;
-        let allocation_id = PurchaseLineSalesAllocationId::new(next_id());
-        let allocation = PurchaseLineSalesAllocation::new(
-            allocation_id.clone(),
-            PurchaseLineSalesAllocationData {
-                purchase_order_revision_line_id: entities::ids::PurchaseOrderRevisionLineId::new(
-                    line.base.id.clone(),
-                ),
-                sales_order_revision_line_id: entities::ids::SalesOrderRevisionLineId::new(
-                    sales_revision_line.base.id.clone(),
-                ),
-                allocated_quantity: quantity,
-                allocated_cost_gross: line.gross_amount,
-                allocated_cost_net: line.net_amount,
-            },
-        )
-        .map_err(Error::Logic)?;
-        db.purchase_line_sales_allocations()
-            .create(&allocation, executor)
-            .await?;
-        allocations.insert(line.base.id.to_string(), allocation_id);
-    }
-    Ok(allocations)
 }
 
 /// 为生效采购单创建采购入库草稿（默认取最早启用的仓库；行按版本行全额合格）。

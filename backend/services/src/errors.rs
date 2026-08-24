@@ -73,6 +73,7 @@ fn duplicate_key_conflict_message(error: &database::Error) -> String {
         Some("uk_supplier_accounts_party") => "该主体已绑定供应商角色".to_string(),
         Some("uk_supplier_accounts_supplier_no") => "供应商编号已存在".to_string(),
         Some("uk_supplier_offerings_supplier_sku") => "该供应商 SKU 已登记供给".to_string(),
+        Some("uk_purchase_orders_creation_basis") => "该采购创建依据已生成采购单".to_string(),
         Some("uk_customer_accounts_party") => "该主体已绑定客户角色".to_string(),
         Some("uk_customer_accounts_customer_no") => "客户编号已存在".to_string(),
         Some("uk_procurement_confirmation_lines_confirmation_line")

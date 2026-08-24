@@ -11,12 +11,13 @@ use entities::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId};
 use entities::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeSubmission,
     PurchaseChangeSubmissionData, PurchaseOrder, PurchaseOrderRevision, PurchaseOrderStatus,
-    PurchaseOrderSubmissionLine, SubmissionStatus,
+    SubmissionStatus,
 };
 use id_generator::next_id;
 use mongodb::ClientSession;
 use validator::Validate;
 
+use super::allocation_maintenance::{persist_current_sales_allocations, prepare_current_sales_allocations};
 use super::change_adapter::{
     build_purchase_change_snapshot, document_approval_view, execute_purchase_change_domain_action,
     purchase_change_order_adapter, purchase_change_order_object_readable, purchase_change_order_subject_ref,
@@ -482,10 +483,9 @@ impl PurchaseOrderService {
         let submission = self
             .build_change_submission(change, order, &base_revision, &supplier_name, req)
             .await?;
-        // 生效版本中心视图不携带销售提交行引用（版本行只保留采购二次确认分行），
-        // 变更目标行必须沿采购确认行回查原采购提交行补齐销售分配（§6.6），
-        // 否则变更提交行校验「商品/服务行必须引用销售提交行」会失败。
-        let enriched_lines = self.enrich_change_lines_with_sales_allocation(&req.lines).await?;
+        let enriched_lines = self
+            .enrich_change_lines_with_current_sales_revision(order, &req.lines)
+            .await?;
         let lines = self
             .build_change_submission_lines(&submission.base.id.clone(), &enriched_lines)
             .await?;
@@ -499,74 +499,49 @@ impl PurchaseOrderService {
         })
     }
 
-    /// 变更目标行补齐销售分配引用（生效版本中心视图不携带）。
-    ///
-    /// 版本行只保留 `procurement_confirmation_line_id`（即原销售稳定明细），
-    /// 沿它在历史采购提交行中回查 `sales_order_submission_line_id` 与分配数量，
-    /// 使变更提交行满足「商品/服务行必须引用销售提交行」的实体校验。
+    /// 将采购变更目标行绑定到来源销售单当前版本行。
     ///
     /// # 参数
-    /// * `lines` - 变更目标行请求
+    /// * `order` - 原采购单，用于定位来源销售单
+    /// * `lines` - 变更目标完整行请求
     ///
     /// # 返回
-    /// 返回补齐销售引用后的目标行请求。
+    /// 返回稳定销售行与销售当前版本行均已刷新的目标行。
     ///
     /// # 错误
-    /// 数据库查询失败时返回错误。
-    async fn enrich_change_lines_with_sales_allocation(
+    /// 来源销售单、当前销售版本或稳定销售行缺失，以及仓储查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 不再沿历史采购提交反查销售提交行；分配数量固定等于变更后的采购数量。
+    async fn enrich_change_lines_with_current_sales_revision(
         &self,
+        order: &PurchaseOrder,
         lines: &[SavePurchaseOrderLine],
     ) -> Result<Vec<SavePurchaseOrderLine>> {
-        let missing: Vec<String> = lines
-            .iter()
-            .filter(|line| {
-                line.line_type == entities::purchase_order::PurchaseLineType::ItemService
-                    && line.sales_order_submission_line_id.is_none()
-            })
-            .filter_map(|line| line.procurement_confirmation_line_id.clone())
-            .collect();
-        if missing.is_empty() {
-            return Ok(lines.to_vec());
-        }
-        let originals = self
+        let sales_order = self
             .db
-            .purchase_order_submission_lines()
-            .find_many(
-                mongodb::bson::doc! {
-                    "procurement_confirmation_line_id": { "$in": missing },
-                    "sales_order_submission_line_id": { "$ne": null },
-                },
+            .sales_orders()
+            .find_by_id(&order.sales_order_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+        let revision_id = sales_order
+            .stable
+            .current_revision_id
+            .as_ref()
+            .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前版本".to_string()))?;
+        let revision_lines = self
+            .db
+            .sales_order_revision_lines()
+            .list_lines_by_revision(
+                &entities::ids::SalesOrderRevisionId::new(revision_id.clone()),
                 &mut NoTransaction,
             )
             .await?;
-        let mut by_confirmation: std::collections::HashMap<String, &PurchaseOrderSubmissionLine> =
-            std::collections::HashMap::new();
-        for original in &originals {
-            if let Some(confirmation_id) = &original.procurement_confirmation_line_id {
-                by_confirmation
-                    .entry(confirmation_id.to_string())
-                    .or_insert(original);
-            }
-        }
-        let mut enriched = lines.to_vec();
-        for line in &mut enriched {
-            if line.line_type != entities::purchase_order::PurchaseLineType::ItemService
-                || line.sales_order_submission_line_id.is_some()
-            {
-                continue;
-            }
-            let Some(confirmation_id) = &line.procurement_confirmation_line_id else {
-                continue;
-            };
-            if let Some(original) = by_confirmation.get(confirmation_id) {
-                line.sales_order_submission_line_id = original
-                    .sales_order_submission_line_id
-                    .as_ref()
-                    .map(ToString::to_string);
-                line.allocated_quantity = original.allocated_quantity.map(|quantity| quantity.to_string());
-            }
-        }
-        Ok(enriched)
+        let by_stable_id = revision_lines
+            .into_iter()
+            .map(|line| (line.sales_order_line_id.to_string(), line))
+            .collect::<std::collections::HashMap<_, _>>();
+        enrich_change_lines(lines, &by_stable_id)
     }
 
     /// 从绑定读取定义并持久化启动事实。
@@ -863,6 +838,54 @@ impl PurchaseOrderService {
     }
 }
 
+/// 使用销售当前版本稳定行映射刷新采购变更请求行。
+///
+/// # 参数
+/// * `lines` - 采购变更目标行
+/// * `sales_lines` - 稳定销售行到当前销售版本行的映射
+///
+/// # 返回
+/// 返回当前版本销售关联和分配数量已规范化的行。
+///
+/// # 错误
+/// 商品行缺少稳定销售行、数量或当前销售版本对应行时返回一致性错误。
+///
+/// # 关键业务约束
+/// 商品行 `allocated_quantity` 恒等于变更后的 `quantity`，物流行清空销售关联。
+fn enrich_change_lines(
+    lines: &[SavePurchaseOrderLine],
+    sales_lines: &std::collections::HashMap<String, entities::sales_order::SalesOrderRevisionLine>,
+) -> Result<Vec<SavePurchaseOrderLine>> {
+    let mut enriched = lines.to_vec();
+    for line in &mut enriched {
+        if line.line_type == entities::purchase_order::PurchaseLineType::LogisticsFee {
+            line.sales_order_line_id = None;
+            line.sales_order_revision_line_id = None;
+            line.sales_order_submission_line_id = None;
+            line.allocated_quantity = None;
+            continue;
+        }
+        let stable_id = line
+            .sales_order_line_id
+            .clone()
+            .or_else(|| line.procurement_confirmation_line_id.clone())
+            .ok_or_else(|| Error::BusinessLogicError("采购变更商品行缺少销售稳定行".to_string()))?;
+        let sales_line = sales_lines.get(&stable_id).ok_or_else(|| {
+            Error::BusinessLogicError("采购变更商品行在销售当前版本中没有对应稳定行".to_string())
+        })?;
+        let quantity = line
+            .quantity
+            .clone()
+            .ok_or_else(|| Error::BusinessLogicError("采购变更商品行缺少数量".to_string()))?;
+        line.procurement_confirmation_line_id = Some(stable_id.clone());
+        line.sales_order_line_id = Some(stable_id);
+        line.sales_order_revision_line_id = Some(sales_line.base.id.clone());
+        line.sales_order_submission_line_id = None;
+        line.allocated_quantity = Some(quantity);
+    }
+    Ok(enriched)
+}
+
 /// 采购变更启动所需的单据、提交与适配器。
 ///
 /// # 用途
@@ -1119,12 +1142,14 @@ async fn persist_effective_writes(
         mut change,
         mut submission,
         revision,
-        revision_lines,
+        mut revision_lines,
         delta,
     } = write;
+    let allocations = prepare_current_sales_allocations(db, &order, &mut revision_lines, session).await?;
     db.purchase_order()
         .create_effective_revision(&revision, &revision_lines, session)
         .await?;
+    persist_current_sales_allocations(db, &allocations, session).await?;
     order.stable.current_revision_id = Some(revision.base.id.clone());
     db.purchase_orders().update(&mut order, session).await?;
     if let Some((account, entry)) = &delta.0 {

@@ -460,6 +460,8 @@ mod tests {
             PurchaseOrderData {
                 purchase_no: String::new(),
                 sales_order_id: SalesOrderId::new("so-1"),
+                sales_order_revision_id: entities::ids::SalesOrderRevisionId::new("sor-1"),
+                creation_basis_id: "basis-1".to_string(),
                 supplier_id: SupplierAccountId::new("sup-1"),
                 purchase_type: PurchaseType::Physical,
                 payment_term_code: "NET-30".into(),
@@ -529,6 +531,8 @@ mod tests {
                 tax_amount: Amount::from_str("0").expect("金额合法"),
                 input_tax_rate: Some(Rate::from_str("0").expect("税率合法")),
                 expected_delivery_date: None,
+                sales_order_line_id: Some(entities::ids::SalesOrderLineId::new("sol-1")),
+                sales_order_revision_line_id: Some(entities::ids::SalesOrderRevisionLineId::new("sorl-1")),
                 sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("sosl-1")),
                 allocated_quantity: Some(Quantity::from_str("2").expect("数量合法")),
             },

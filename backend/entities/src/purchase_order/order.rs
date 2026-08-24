@@ -8,7 +8,7 @@ use entity_macros::Entity;
 use crate::common::stable::StableBase;
 use crate::common::state::{ensure_transition, DocumentState};
 use crate::errors::{Error, Result};
-use crate::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
+use crate::ids::{PurchaseOrderId, SalesOrderId, SalesOrderRevisionId, SupplierAccountId};
 use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
@@ -16,6 +16,8 @@ use crate::validation::{normalize_optional_text, normalize_required_text};
 const PURCHASE_NO_MAX_LEN: usize = 64;
 /// 付款条件代码最大长度。
 const PAYMENT_TERM_MAX_LEN: usize = 64;
+/// 精确采购创建依据最大长度。
+const CREATION_BASIS_ID_MAX_LEN: usize = 192;
 
 /// 采购单状态（数据模型 §6.6/§7.4，审批合同 §4.4.2 已收敛）。
 ///
@@ -175,6 +177,10 @@ pub struct PurchaseOrderData {
     pub purchase_no: String,
     /// 来源实物及服务销售单。
     pub sales_order_id: SalesOrderId,
+    /// 建单时的销售当前版本。
+    pub sales_order_revision_id: SalesOrderRevisionId,
+    /// 精确创建依据；一条依据只允许创建一张采购单。
+    pub creation_basis_id: String,
     /// 唯一供应商。
     pub supplier_id: SupplierAccountId,
     /// 采购类型。
@@ -212,6 +218,10 @@ pub struct PurchaseOrder {
     pub purchase_no: String,
     /// 来源实物及服务销售单。
     pub sales_order_id: SalesOrderId,
+    /// 建单时的销售当前版本。
+    pub sales_order_revision_id: SalesOrderRevisionId,
+    /// 精确创建依据；一条依据只允许创建一张采购单。
+    pub creation_basis_id: String,
     /// 唯一供应商。
     pub supplier_id: SupplierAccountId,
     /// 采购类型。
@@ -245,6 +255,8 @@ impl PartialEq for PurchaseOrder {
             && self.stable.updated_by == other.stable.updated_by
             && self.purchase_no == other.purchase_no
             && self.sales_order_id == other.sales_order_id
+            && self.sales_order_revision_id == other.sales_order_revision_id
+            && self.creation_basis_id == other.creation_basis_id
             && self.supplier_id == other.supplier_id
             && self.purchase_type == other.purchase_type
             && self.payment_term_code == other.payment_term_code
@@ -285,11 +297,19 @@ impl PurchaseOrder {
             PAYMENT_TERM_MAX_LEN,
             "付款条件过长",
         )?;
+        let creation_basis_id = normalize_required_text(
+            data.creation_basis_id,
+            "采购创建依据不能为空",
+            CREATION_BASIS_ID_MAX_LEN,
+            "采购创建依据过长",
+        )?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(PurchaseOrderStatus::Draft, created_by),
             purchase_no,
             sales_order_id: data.sales_order_id,
+            sales_order_revision_id: data.sales_order_revision_id,
+            creation_basis_id,
             supplier_id: data.supplier_id,
             purchase_type: data.purchase_type,
             payment_term_code,
@@ -537,13 +557,15 @@ mod tests {
         PurchaseReviewStatus,
     };
     use crate::common::state::ensure_transition;
-    use crate::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
+    use crate::ids::{PurchaseOrderId, SalesOrderId, SalesOrderRevisionId, SupplierAccountId};
     use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 
     fn order_data() -> PurchaseOrderData {
         PurchaseOrderData {
             purchase_no: " PO-2026-0001 ".to_string(),
             sales_order_id: SalesOrderId::new("so-1"),
+            sales_order_revision_id: SalesOrderRevisionId::new("sor-1"),
+            creation_basis_id: "basis-1".to_string(),
             supplier_id: SupplierAccountId::new("sup-1"),
             purchase_type: PurchaseType::Physical,
             payment_term_code: " NET-30 ".to_string(),
