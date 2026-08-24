@@ -24,6 +24,7 @@ struct ApprovalHttpErrorInner {
     code: &'static str,
     message: String,
     correlation_id: String,
+    retryable: bool,
     data: Option<Value>,
 }
 
@@ -37,6 +38,7 @@ impl ApprovalHttpError {
         code: &'static str,
         message: String,
         correlation_id: String,
+        retryable: bool,
         data: Option<Value>,
     ) -> Self {
         Self(Box::new(ApprovalHttpErrorInner {
@@ -44,6 +46,7 @@ impl ApprovalHttpError {
             code,
             message,
             correlation_id,
+            retryable,
             data,
         }))
     }
@@ -67,6 +70,7 @@ impl ApprovalHttpError {
             code,
             message_of(code).to_string(),
             correlation_id,
+            retryable_of(code),
             if hide_details { None } else { data },
         )
     }
@@ -99,28 +103,11 @@ impl ApprovalHttpError {
     /// # 返回
     /// 返回保留原状态语义的审批错误。
     pub fn from_http(error: HttpError, correlation_id: String) -> Self {
-        let (status, code) = match &error {
-            HttpError::BadRequest(_) | HttpError::Validation(_) => {
-                (StatusCode::BAD_REQUEST, "INVALID_REQUEST")
-            }
-            HttpError::NotFound(_) => (StatusCode::NOT_FOUND, "NOT_FOUND"),
-            HttpError::Conflict(_) => (StatusCode::CONFLICT, "CONFLICT"),
-            HttpError::Unprocessable(_) | HttpError::Logic(_) => {
-                (StatusCode::UNPROCESSABLE_ENTITY, "BUSINESS_RULE_BLOCKED")
-            }
-            HttpError::Forbidden(_) => (StatusCode::FORBIDDEN, "PERMISSION_DENIED"),
-            HttpError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "UNAUTHENTICATED"),
-            HttpError::Internal(_) | HttpError::Repository(_) | HttpError::OutcomeUnknown(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR")
-            }
-            HttpError::RateLimited(_) => (StatusCode::TOO_MANY_REQUESTS, "RATE_LIMITED"),
-        };
-        let message = if status == StatusCode::INTERNAL_SERVER_ERROR {
-            "系统内部错误".to_string()
-        } else {
-            error.to_string()
-        };
-        Self::new(status, code, message, correlation_id, None)
+        let status = error.http_status();
+        let code = error.error_code();
+        let message = error.user_message();
+        let retryable = error.retryable();
+        Self::new(status, code, message, correlation_id, retryable, None)
     }
 
     /// 构造 422 协议校验错误。
@@ -132,13 +119,7 @@ impl ApprovalHttpError {
     /// # 返回
     /// 返回不泄露内部结构的 422。
     pub fn unprocessable(message: impl Into<String>, headers: &HeaderMap) -> Self {
-        Self::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "BUSINESS_RULE_BLOCKED",
-            message.into(),
-            correlation_id(headers),
-            None,
-        )
+        Self::from_http(HttpError::Unprocessable(message.into()), correlation_id(headers))
     }
 
     /// 构造 400 请求错误。
@@ -150,13 +131,7 @@ impl ApprovalHttpError {
     /// # 返回
     /// 返回 400。
     pub fn bad_request(message: impl Into<String>, headers: &HeaderMap) -> Self {
-        Self::new(
-            StatusCode::BAD_REQUEST,
-            "INVALID_REQUEST",
-            message.into(),
-            correlation_id(headers),
-            None,
-        )
+        Self::from_http(HttpError::BadRequest(message.into()), correlation_id(headers))
     }
 
     /// 将 `DecisionOutcome::Blocked` 映射为 409。
@@ -226,6 +201,8 @@ impl IntoResponse for ApprovalHttpError {
             status: inner.status.as_u16(),
             message: inner.message,
             code: Some(inner.code.to_string()),
+            field_errors: None,
+            retryable: Some(inner.retryable),
             data,
             success: false,
         }
@@ -253,18 +230,18 @@ pub fn correlation_id(headers: &HeaderMap) -> String {
 ///
 /// # 参数
 /// * `value` - 客户端提交的版本
-/// * `label` - 字段中文名
+/// * `_label` - 字段中文名（仅保留调用方语义，不返回给用户）
 /// * `headers` - 请求头
 ///
 /// # 错误
 /// 非正整数字符串时返回 400。
-pub fn parse_version(value: &str, label: &str, headers: &HeaderMap) -> Result<u64, ApprovalHttpError> {
+pub fn parse_version(value: &str, _label: &str, headers: &HeaderMap) -> Result<u64, ApprovalHttpError> {
     let version = value
         .parse::<u64>()
-        .map_err(|_| ApprovalHttpError::bad_request(format!("{label}期望版本必须是正整数字符串"), headers))?;
+        .map_err(|_| ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers))?;
     if version == 0 {
         return Err(ApprovalHttpError::bad_request(
-            format!("{label}期望版本必须是正整数字符串"),
+            "页面数据已失效，请刷新后重试",
             headers,
         ));
     }
@@ -312,7 +289,9 @@ fn status_of(code: &str) -> StatusCode {
     match code {
         "APPROVAL_POLICY_NOT_REGISTERED" => StatusCode::INTERNAL_SERVER_ERROR,
         "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR" => StatusCode::FORBIDDEN,
-        "APPROVAL_DEFINITION_INVALID" | "APPROVAL_REJECT_REASON_REQUIRED" => StatusCode::UNPROCESSABLE_ENTITY,
+        "APPROVAL_DEFINITION_INVALID"
+        | "APPROVAL_REJECT_REASON_REQUIRED"
+        | "APPROVAL_REASSIGN_TARGET_INELIGIBLE" => StatusCode::UNPROCESSABLE_ENTITY,
         _ if code.starts_with("APPROVAL_") => StatusCode::CONFLICT,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
@@ -320,29 +299,43 @@ fn status_of(code: &str) -> StatusCode {
 
 fn message_of(code: &str) -> &'static str {
     match code {
-        "APPROVAL_POLICY_NOT_REGISTERED" => "系统内部错误",
-        "APPROVAL_PROCESS_NOT_CONFIGURED" => "该单据类型尚未配置可绑定的已发布审批流程",
-        "APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE" => "当前没有可复制的已发布定义",
-        "APPROVAL_DEFINITION_NOT_DRAFT" => "只能修改草稿定义",
-        "APPROVAL_DEFINITION_VERSION_CONFLICT" => "定义锁版本已过期，请刷新后重试",
-        "APPROVAL_DEFINITION_INVALID" => "审批流程定义校验失败",
-        "APPROVAL_DEFINITION_BINDING_CORRUPTED" => "单据审批绑定缺失或不一致",
-        "APPROVAL_ALREADY_STARTED" => "该提交版本已有未结束的审批实例",
-        "APPROVAL_TASK_NOT_OPEN" => "审批任务已完成或关闭",
-        "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR" => "当前账号没有执行此操作的权限",
-        "APPROVAL_TASK_VERSION_CONFLICT" => "任务版本已过期，请按最新状态重试",
-        "APPROVAL_INSTANCE_VERSION_CONFLICT" => "审批实例已被其他请求更新",
-        "APPROVAL_EXECUTION_VERSION_CONFLICT" => "当前节点执行已被其他请求更新",
-        "APPROVAL_SUBJECT_VERSION_CONFLICT" => "单据提交版本不一致",
-        "APPROVAL_REJECT_REASON_REQUIRED" => "驳回必须填写原因",
-        "APPROVAL_INSTANCE_BLOCKED" => "当前审批实例已受阻，不能继续决定",
-        "APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER" => "当前受阻原因不允许恢复原审批人",
-        "APPROVAL_CURRENT_APPROVER_NOT_RECOVERED" => "原审批人仍不合格，不能恢复",
-        "APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED" => "当前受阻原因不允许受阻取消",
-        "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN" => "审批任务不能通过通用待办接口修改",
-        "APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT" => "相同幂等键已用于不同请求内容",
-        _ => "系统内部错误",
+        "APPROVAL_POLICY_NOT_REGISTERED" => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员",
+        "APPROVAL_PROCESS_NOT_CONFIGURED" => "该单据类型尚未配置可用的审批流程，请联系管理员发布流程后重试",
+        "APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE" => "当前没有可复制的已发布审批流程，请先发布流程后再创建草稿",
+        "APPROVAL_DEFINITION_NOT_DRAFT" => "只能修改草稿流程，请复制为新草稿后再修改",
+        "APPROVAL_DEFINITION_VERSION_CONFLICT" => "审批流程已被他人更新，请刷新后重试",
+        "APPROVAL_DEFINITION_INVALID" => "审批流程内容不符合要求，请修改后重试",
+        "APPROVAL_DEFINITION_BINDING_CORRUPTED" => "单据审批关系异常，请联系支持人员处理",
+        "APPROVAL_ALREADY_STARTED" => "该版本已有未完成的审批，请先查看当前审批进度",
+        "APPROVAL_TASK_NOT_OPEN" => "审批任务已完成或关闭，请刷新后查看当前状态",
+        "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR" => "当前账号没有执行此操作的权限，请联系管理员或有权限的同事",
+        "APPROVAL_TASK_VERSION_CONFLICT" => "审批任务状态已变化，请刷新后重试",
+        "APPROVAL_INSTANCE_VERSION_CONFLICT" => "审批进度已变化，请刷新后重试",
+        "APPROVAL_EXECUTION_VERSION_CONFLICT" => "当前审批步骤已变化，请刷新后重试",
+        "APPROVAL_SUBJECT_VERSION_CONFLICT" => "单据内容已更新，请刷新后重试",
+        "APPROVAL_REJECT_REASON_REQUIRED" => "请填写驳回原因后再提交",
+        "APPROVAL_INSTANCE_BLOCKED" => "当前审批已暂停，请先处理暂停原因",
+        "APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER" => "当前暂停原因不允许恢复原审批人，请改用其他可用处理方式",
+        "APPROVAL_CURRENT_APPROVER_NOT_RECOVERED" => "原审批人仍不具备审批资格，请先恢复资格或改派",
+        "APPROVAL_CURRENT_APPROVER_RECOVERED" => "原审批人已恢复资格，无需改派，请刷新后继续审批",
+        "APPROVAL_REASSIGN_TARGET_INELIGIBLE" => "改派目标不具备审批资格，请重新选择审批人",
+        "APPROVAL_REASSIGN_NOT_ALLOWED_FOR_BLOCKER" => "当前暂停原因不允许改派，请改用恢复或取消",
+        "APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED" => "当前暂停原因不允许取消审批，请改用恢复或改派",
+        "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN" => "请在审批任务页面处理该任务",
+        "APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT" => "该任务号已用于其他请求，请关闭弹窗后重新发起操作",
+        _ => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员",
     }
+}
+
+fn retryable_of(code: &str) -> bool {
+    matches!(
+        code,
+        "APPROVAL_DEFINITION_VERSION_CONFLICT"
+            | "APPROVAL_TASK_VERSION_CONFLICT"
+            | "APPROVAL_INSTANCE_VERSION_CONFLICT"
+            | "APPROVAL_EXECUTION_VERSION_CONFLICT"
+            | "APPROVAL_SUBJECT_VERSION_CONFLICT"
+    )
 }
 
 const STABLE_CODES: &[&str] = &[
@@ -364,6 +357,9 @@ const STABLE_CODES: &[&str] = &[
     "APPROVAL_INSTANCE_BLOCKED",
     "APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER",
     "APPROVAL_CURRENT_APPROVER_NOT_RECOVERED",
+    "APPROVAL_CURRENT_APPROVER_RECOVERED",
+    "APPROVAL_REASSIGN_TARGET_INELIGIBLE",
+    "APPROVAL_REASSIGN_NOT_ALLOWED_FOR_BLOCKER",
     "APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED",
     "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN",
     "APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT",
@@ -412,6 +408,7 @@ mod tests {
             axum::http::StatusCode::INTERNAL_SERVER_ERROR
         );
         assert!(!STABLE_CODES.is_empty());
+        assert_eq!(STABLE_CODES, services::approval_codes::ALL);
     }
 
     #[test]
@@ -476,6 +473,9 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("json");
         assert_eq!(body["code"], "APPROVAL_POLICY_NOT_REGISTERED");
-        assert_eq!(body["errorMessage"], "系统内部错误");
+        assert_eq!(
+            body["errorMessage"],
+            "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员"
+        );
     }
 }

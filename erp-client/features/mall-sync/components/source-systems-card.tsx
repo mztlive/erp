@@ -17,6 +17,7 @@ import {
     SOURCE_SYSTEM_TYPE_LABEL,
 } from "@/features/mall-sync/types"
 import { isAuthenticated } from "@/lib/api/session"
+import { getErrorMessage } from "@/lib/api/errors"
 
 /**
  * 来源系统卡片（真实 useQuery 取数并渲染）。
@@ -57,8 +58,10 @@ export function SourceSystemsCard() {
                         <Alert variant="destructive">
                             <AlertTitle>未能获取来源数据</AlertTitle>
                             <AlertDescription>
-                                {(sourceSystemsQuery.error as Error)?.message ??
-                                    "请重试"}
+                                {getErrorMessage(
+                                    sourceSystemsQuery.error,
+                                    "来源数据暂时无法加载，请重试。",
+                                )}
                             </AlertDescription>
                         </Alert>
                         <Button

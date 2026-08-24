@@ -5,6 +5,7 @@ import {
     WAREHOUSE_WRITE_MESSAGE,
 } from "@/features/master-data/lib/data"
 import { isApiError } from "@/features/master-data/api/presentation"
+import { getErrorMessage } from "@/lib/api/errors"
 import type {
     MasterDataMutationResult,
     ProductKind,
@@ -42,7 +43,10 @@ export function mapMutationError(
         return {
             outcome: "blocked",
             code: "VALIDATION",
-            message: error.message || "请求未通过业务校验",
+            message: getErrorMessage(
+                error,
+                "请求未通过业务校验，请检查后重试。",
+            ),
         }
     }
     // Let network/auth/5xx propagate for Query error state

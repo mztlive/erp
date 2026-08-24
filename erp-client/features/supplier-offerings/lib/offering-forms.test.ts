@@ -49,9 +49,12 @@ describe("percentageFromRate", () => {
 })
 
 describe("errorMessage", () => {
-    it("reads the message from Error instances and message-like objects", () => {
-        expect(errorMessage(new Error("boom"), "fallback")).toBe("boom")
-        expect(errorMessage({ message: "wrapped" }, "fallback")).toBe("wrapped")
+    it("keeps readable Chinese and replaces technical messages", () => {
+        expect(errorMessage(new Error("保存失败，请稍后重试"), "fallback")).toBe(
+            "保存失败，请稍后重试",
+        )
+        expect(errorMessage(new Error("boom"), "fallback")).toBe("fallback")
+        expect(errorMessage({ message: "wrapped" }, "fallback")).toBe("fallback")
     })
 
     it("falls back for non-object errors", () => {

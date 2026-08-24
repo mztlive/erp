@@ -135,6 +135,7 @@ export async function retryFailedJob(input: {
         status: "succeeded",
         jobId: job.id,
         jobNo: job.id.slice(0, 12).toUpperCase(),
-        message: "已按原作业类型/范围创建新重试作业；水位不回退。",
+        message:
+            "已按原作业类型和范围创建重试作业；历史处理进度保持不变。",
     }
 }

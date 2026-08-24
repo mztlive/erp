@@ -50,7 +50,7 @@ describe('useCardBusinessRefresh', () => {
             await result.current.handleRefresh()
         })
         expect(result.current.refreshing).toBe(false)
-        expect(result.current.refreshFailed).toBe('network down')
+        expect(result.current.refreshFailed).toBe('刷新失败，已保留上次成功数据。')
     })
 
     it('uses the fallback message for errors without a readable message', async () => {
@@ -72,7 +72,7 @@ describe('useCardBusinessRefresh', () => {
         await act(async () => {
             await result.current.handleRefresh()
         })
-        expect(result.current.refreshFailed).toBe('first failure')
+        expect(result.current.refreshFailed).toBe('刷新失败，已保留上次成功数据。')
         await act(async () => {
             await result.current.handleRefresh()
         })

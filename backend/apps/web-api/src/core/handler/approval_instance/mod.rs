@@ -441,7 +441,7 @@ fn cancel_blocked_command(
 /// 空白原因返回 422。
 fn ensure_non_empty_reason(reason: &str, headers: &HeaderMap) -> Result<(), ApprovalHttpError> {
     if reason.trim().is_empty() {
-        return Err(ApprovalHttpError::unprocessable("原因不能为空", headers));
+        return Err(ApprovalHttpError::unprocessable("请填写原因后再提交", headers));
     }
     Ok(())
 }

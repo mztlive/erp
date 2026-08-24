@@ -160,7 +160,7 @@ export function ImportExecutionActions({
             <CardContent className="space-y-3 pt-4">
                 {error ? (
                     <BusinessFailureState
-                        title="导入执行命令未完成"
+                        title="导入操作未完成"
                         error={error}
                     />
                 ) : null}

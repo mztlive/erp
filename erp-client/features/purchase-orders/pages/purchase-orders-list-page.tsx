@@ -237,6 +237,7 @@ export function PurchaseOrdersListPage() {
                 basesFailed={
                     ctrl.basesQuery.isError || ctrl.basesQuery.isRefetchError
                 }
+                basesError={ctrl.basesQuery.error}
                 onRetryBases={() => void ctrl.basesQuery.refetch()}
                 basisFromUrl={ctrl.basisFromUrl}
                 salesOrderFromUrl={ctrl.salesOrderFromUrl}

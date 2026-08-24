@@ -7,13 +7,14 @@
 /* ==========================================================================
    ERP 商务主题 — shadcn Neutral 表面 + 语义状态色
    --------------------------------------------------------------------------
-   布局：浅色画布 + 白侧栏/白页头壳 + 白卡片浮起。
-   表面对齐 shadcn/ui Neutral：
-     background 浅底 · sidebar / card / 页头 纯白 · primary 近黑 · accent 浅灰
-   侧栏选中：浅灰底 + 近黑字 + 左侧竖标；悬停比选中更淡一档。
+   布局：深色侧栏 + 浅灰画布 + 白卡片/白页头浮起。
+   侧栏用近黑（对齐登录页品牌舞台 bg-foreground），让工作台与登录页同一套语气；
+   内容侧对齐 shadcn/ui Neutral：
+     background 浅灰画布 · card / 页头 纯白 · primary 近黑 · accent 浅灰
+   侧栏选中：深灰底 + 近白字 + 左侧近白竖标；悬停比选中更淡一档。
    单据状态色仍用独立色相（成功绿 / 警告金 / 信息蓝 / 危险红），不灰度化。
 
-   层级靠发丝 border / grid 和字重，不靠大块灰底。
+   内容区层级靠发丝 border / grid、画布与卡片的明度差和字重，不靠大块灰底。
 
    尺寸令牌来自 docs/erp-ui-design.md 第 2.1 / 2.2 节。
    ========================================================================== */
@@ -172,8 +173,8 @@
     /* 12px 基线，对齐浅底白卡工作面 */
     --radius: 0.75rem;
 
-    /* 浅画布：比纯白壳（侧栏/页头/卡片）略沉，但比旧底更亮，避免发灰 */
-    --background: oklch(0.99 0 0);
+    /* 浅灰画布：明确沉于白卡片/白页头一档，让工作面浮得起来 */
+    --background: oklch(0.976 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
@@ -182,13 +183,13 @@
 
     --primary: oklch(0.205 0 0);
     --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
+    --secondary: oklch(0.958 0 0);
     --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
+    --muted: oklch(0.958 0 0);
     /* 略深于 shadcn 默认 0.556，保证高密度次要文案可读 */
     --muted-foreground: oklch(0.45 0 0);
 
-    --accent: oklch(0.97 0 0);
+    --accent: oklch(0.958 0 0);
     --accent-foreground: oklch(0.205 0 0);
 
     /* 状态色：仅用于徽章 / Alert / 进度，不当页面主色 */
@@ -218,14 +219,14 @@
 
     --neutral-soft: oklch(0.985 0 0);
     --neutral-soft-foreground: oklch(0.45 0 0);
-    --neutral-border: oklch(0.922 0 0);
+    --neutral-border: oklch(0.902 0 0);
 
-    --border: oklch(0.922 0 0);
+    --border: oklch(0.902 0 0);
     --overlay: oklch(0 0 0 / 45%);
-    --input: oklch(0.922 0 0);
+    --input: oklch(0.898 0 0);
     --ring: oklch(0.708 0 0);
 
-    --surface-sunken: oklch(0.985 0 0);
+    --surface-sunken: oklch(0.968 0 0);
     /* 表单控件静止态背景：与 card 同色，靠 border 提示可编辑，避免和 --muted
      disabled 态灰度太接近而被误读成「已禁用」 */
     --surface-control: oklch(1 0 0);
@@ -235,7 +236,7 @@
     --row-selected: oklch(0.945 0 0);
     --row-striped: oklch(0.985 0 0);
     /* 行线浅于 --border，避免和卡片轮廓同重 */
-    --grid: oklch(0.94 0 0);
+    --grid: oklch(0.928 0 0);
 
     --chart-1: oklch(0.5987 0.2194 259);
     --chart-2: oklch(0.7444 0.1724 58.5);
@@ -243,13 +244,13 @@
     --chart-4: oklch(0.8016 0.1651 76);
     --chart-5: oklch(0.4942 0.2284 295.6);
 
-    --sidebar: oklch(1 0 0);
-    --sidebar-foreground: oklch(0.4 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.955 0 0);
-    --sidebar-accent-foreground: oklch(0.145 0 0);
-    --sidebar-border: oklch(0.922 0 0);
+    --sidebar: oklch(0.185 0 0);
+    --sidebar-foreground: oklch(0.72 0 0);
+    --sidebar-primary: oklch(0.985 0 0);
+    --sidebar-primary-foreground: oklch(0.185 0 0);
+    --sidebar-accent: oklch(0.285 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.708 0 0);
 }
 

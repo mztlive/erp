@@ -49,16 +49,8 @@ export const uploadSchema = z
         }
     })
 
-export function uploadErrorMessage(error: unknown): string {
-    const message = getErrorMessage(error, "上传失败，请使用原任务号重试。")
-    if (message === "CONTRACT_NO_EXISTS") {
-        return "该合同编号已存在，请打开已有合同核对；重复编号不能新建合同。"
-    }
-    if (message === "CONTRACT_VALIDITY_INVALID") {
-        return "有效期止不能早于有效期起。"
-    }
-    return message
-}
+export const uploadErrorMessage = (error: unknown): string =>
+    getErrorMessage(error, "上传失败，请使用原任务号重试。")
 
 export type UseContractUploadFormOptions = {
     open: boolean

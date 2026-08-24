@@ -15,6 +15,10 @@ export interface ApiError {
     status?: number
     /** 稳定错误码；后端未返回时保持为空。 */
     code?: string
+    /** 字段级校验说明；键为接口字段名，值为可直接展示的业务提示。 */
+    fieldErrors?: Readonly<Record<string, string>>
+    /** 是否可以安全地直接重试原操作。 */
+    retryable?: boolean
     /** 请求编号；用于联系支持人员定位服务端日志。 */
     requestId?: string
     /** 响应原始数据（信封对象或文本），便于适配层定位问题。 */
@@ -35,6 +39,8 @@ export class ApiErrorException extends Error implements ApiError {
     readonly kind: ApiErrorKind
     readonly status?: number
     readonly code?: string
+    readonly fieldErrors?: Readonly<Record<string, string>>
+    readonly retryable?: boolean
     readonly requestId?: string
     readonly responseData?: unknown
     override readonly cause?: unknown
@@ -45,6 +51,8 @@ export class ApiErrorException extends Error implements ApiError {
         this.kind = input.kind
         this.status = input.status
         this.code = input.code
+        this.fieldErrors = input.fieldErrors
+        this.retryable = input.retryable
         this.requestId = input.requestId
         this.responseData = input.responseData
         this.cause = input.cause
@@ -64,8 +72,11 @@ const isApiError = (error: unknown): error is ApiError =>
     typeof error.message === "string"
 
 type ErrorEnvelope = {
+    status?: unknown
     errorMessage?: unknown
     code?: unknown
+    fieldErrors?: unknown
+    retryable?: unknown
     requestId?: unknown
     request_id?: unknown
     success?: unknown
@@ -81,8 +92,21 @@ const nonEmptyString = (value: unknown): string | undefined =>
         ? value.trim()
         : undefined
 
+const asFieldErrors = (
+    value: unknown,
+): Readonly<Record<string, string>> | undefined => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return undefined
+    }
+    const entries = Object.entries(value).flatMap(([field, message]) => {
+        const readable = nonEmptyString(message)
+        return readable ? [[field, readable] as const] : []
+    })
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
 const TECHNICAL_MESSAGE_PATTERN =
-    /(?:\[object Object\]|(?:Type|Reference|Syntax|Network)Error|\bat\s+\S+\s*\(|https?:\/\/|\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/|\b[A-Z][A-Z0-9_]{2,}\b|work_item|idempotency|lockVersion|stack trace|数据库|服务端|客户端|堆栈|唯一索引|内部错误|JSON|SQL|Mongo)/i
+    /(?:\[object Object\]|(?:Type|Reference|Syntax|Network|Validation)Error|Validation error|\bat\s+\S+\s*\(|https?:\/\/|\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/|\b(?!(?:SKU|ERP|PDF|CSV)\b)[A-Z][A-Z0-9_]{2,}\b|\b(?:id|payload|canonical|handler|blocker|view|status|dto|enum|rbac)\b|work_item|idempotency|lockVersion|stack trace|数据库|服务端|客户端|前端|后端|堆栈|唯一索引|内部错误|状态机接口|接口未交付|接口|事务|幂等|投影|水位|快照|指纹|锁版本|JSON|SQL|Mongo)/i
 
 /** 判断原始原因能否直接给业务用户阅读，拦截英文和实现细节。 */
 const userReadableMessage = (value: unknown): string | undefined => {
@@ -94,20 +118,54 @@ const userReadableMessage = (value: unknown): string | undefined => {
 
 const envelopeDetails = (responseData: unknown) => {
     const envelope = asEnvelope(responseData)
+    const isErrorEnvelope = envelope?.success === false
     return {
-        backendMessage: nonEmptyString(envelope?.errorMessage),
+        backendMessage: isErrorEnvelope
+            ? nonEmptyString(envelope?.errorMessage)
+            : undefined,
         code: nonEmptyString(envelope?.code),
+        fieldErrors: asFieldErrors(envelope?.fieldErrors),
+        retryable:
+            typeof envelope?.retryable === "boolean"
+                ? envelope.retryable
+                : undefined,
         requestId:
             nonEmptyString(envelope?.requestId) ??
             nonEmptyString(envelope?.request_id),
     }
 }
 
+/** 为旧版或非标准响应提供不泄露实现细节的兼容说明。 */
+const fallbackMessage = (status: number): string => {
+    if (status === 400 || status === 422) {
+        return "提交内容不符合要求，请检查后重试。"
+    }
+    if (status === 403) {
+        return "当前账号没有执行此操作的权限，请联系管理员或有权限的同事。"
+    }
+    if (status === 404) {
+        return "没有找到所需资料，请刷新后重新选择。"
+    }
+    if (status === 409) {
+        return "当前资料状态不允许继续操作，请刷新后核对。"
+    }
+    if (status === 429) return "请求过于频繁，请稍后重试。"
+    if (status >= 500) {
+        return "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员。"
+    }
+    return "请求未完成，请稍后重试。"
+}
+
+/** 兼容尚未返回 retryable 的旧版接口。 */
+const defaultRetryable = (status: number): boolean =>
+    status === 408 || status === 429 || status >= 500
+
 /** 网络层失败（断网、连接拒绝、超时或取消）。 */
 export const fromFetchError = (cause: unknown): ApiError =>
     createApiError({
         kind: "Network",
         message: "网络连接失败或请求超时，请检查网络后重试。",
+        retryable: true,
         cause,
     })
 
@@ -120,47 +178,38 @@ export const fromFetchError = (cause: unknown): ApiError =>
 export const fromHttpResponse = (
     status: number,
     responseData?: unknown,
+    responseRequestId?: string,
 ): ApiError => {
-    const { backendMessage, code, requestId } = envelopeDetails(responseData)
-    const readableBackendMessage = userReadableMessage(backendMessage)
-    const permissionMessage = !readableBackendMessage
-        ? "当前账号没有执行此操作的权限，请联系管理员或有权限的同事。"
-        : readableBackendMessage
-    const message =
-        status === 403
-            ? permissionMessage
-            : readableBackendMessage ||
-              (status === 400 || status === 422
-                  ? "请求未通过业务校验，请检查填写内容。"
-                  : status === 404
-                    ? "请求的资料不存在或已被移除。"
-                    : status === 409
-                      ? "数据已被其他操作更新，请刷新后重试。"
-                      : status === 429
-                        ? "请求过于频繁，请稍后重试。"
-                        : status >= 500
-                          ? "系统暂时无法完成请求，请稍后重试；如仍失败，请联系支持人员。"
-                          : "请求未完成，请稍后重试。")
+    const { backendMessage, code, fieldErrors, retryable, requestId } =
+        envelopeDetails(responseData)
+    const message = backendMessage ?? fallbackMessage(status)
 
     return createApiError({
         kind: status === 400 || status === 422 ? "Validation" : "Http",
         message,
         status,
         code,
-        requestId,
+        fieldErrors,
+        retryable: retryable ?? defaultRetryable(status),
+        requestId: requestId ?? responseRequestId,
         responseData,
     })
 }
 
 /** 鉴权失败（HTTP 401 或业务信封 status 401）。 */
-export const fromAuth = (status: number, responseData?: unknown): ApiError => {
+export const fromAuth = (
+    status: number,
+    responseData?: unknown,
+    responseRequestId?: string,
+): ApiError => {
     const { code, requestId } = envelopeDetails(responseData)
     return createApiError({
         kind: "Auth",
         message: "登录状态已失效，请重新登录。",
         status,
         code,
-        requestId,
+        retryable: false,
+        requestId: requestId ?? responseRequestId,
         responseData,
     })
 }
@@ -170,6 +219,7 @@ export const fromParse = (cause: unknown, responseData?: unknown): ApiError =>
     createApiError({
         kind: "Parse",
         message: "系统返回的数据无法读取，请稍后重试。",
+        retryable: true,
         responseData,
         cause,
     })
@@ -188,18 +238,29 @@ export interface ErrorPresentation {
     title: string
     description: string
     code?: string
+    fieldErrors?: Readonly<Record<string, string>>
     requestId?: string
     retryable: boolean
 }
 
-const presentationFromApiError = (error: ApiError): ErrorPresentation => {
+const presentationFromApiError = (
+    error: ApiError,
+    fallback: string,
+): ErrorPresentation => {
     const status = error.status
+    const description =
+        userReadableMessage(error.message) ??
+        (typeof status === "number" ? fallbackMessage(status) : fallback)
+    const retryable =
+        error.retryable ??
+        (typeof status === "number" ? defaultRetryable(status) : false)
     if (status === 401 || error.kind === "Auth") {
         return {
             kind: "permission",
             title: "登录状态已失效",
             description: "请重新登录后继续操作。",
             code: error.code,
+            fieldErrors: error.fieldErrors,
             requestId: error.requestId,
             retryable: false,
         }
@@ -208,10 +269,9 @@ const presentationFromApiError = (error: ApiError): ErrorPresentation => {
         return {
             kind: "permission",
             title: "权限不足",
-            description:
-                userReadableMessage(error.message) ??
-                "当前账号没有执行此操作的权限，请联系管理员或有权限的同事。",
+            description,
             code: error.code,
+            fieldErrors: error.fieldErrors,
             requestId: error.requestId,
             retryable: false,
         }
@@ -219,61 +279,56 @@ const presentationFromApiError = (error: ApiError): ErrorPresentation => {
     if (status === 409) {
         return {
             kind: "conflict",
-            title: "数据已发生变化",
-            description:
-                userReadableMessage(error.message) ??
-                "数据已被其他操作更新，请刷新后重试。",
+            title: "操作暂不能继续",
+            description,
             code: error.code,
+            fieldErrors: error.fieldErrors,
             requestId: error.requestId,
-            retryable: true,
+            retryable,
         }
     }
     if (status === 400 || status === 422 || error.kind === "Validation") {
         return {
             kind: "validation",
-            title: "提交内容未通过检查",
-            description:
-                userReadableMessage(error.message) ??
-                "请检查填写内容，修正后重新提交。",
+            title: "提交内容需要调整",
+            description,
             code: error.code,
+            fieldErrors: error.fieldErrors,
             requestId: error.requestId,
-            retryable: false,
+            retryable,
         }
     }
     if (status === 404) {
         return {
             kind: "business",
             title: "资料不可用",
-            description:
-                userReadableMessage(error.message) ??
-                "请求的资料不存在或已被移除，请返回上一页重新选择。",
+            description,
             code: error.code,
+            fieldErrors: error.fieldErrors,
             requestId: error.requestId,
-            retryable: false,
+            retryable,
         }
     }
     if (status === 429) {
         return {
             kind: "system",
             title: "操作过于频繁",
-            description:
-                userReadableMessage(error.message) ??
-                "请求次数过多，请稍后重试。",
+            description,
             code: error.code,
+            fieldErrors: error.fieldErrors,
             requestId: error.requestId,
-            retryable: true,
+            retryable,
         }
     }
     return {
         kind: "system",
         title:
             error.kind === "Network" ? "网络连接失败" : "系统暂时无法完成操作",
-        description:
-            userReadableMessage(error.message) ??
-            "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员。",
+        description,
         code: error.code,
+        fieldErrors: error.fieldErrors,
         requestId: error.requestId,
-        retryable: true,
+        retryable,
     }
 }
 
@@ -282,7 +337,7 @@ export const getErrorPresentation = (
     error: unknown,
     fallback = "操作未完成，请稍后重试。",
 ): ErrorPresentation => {
-    if (isApiError(error)) return presentationFromApiError(error)
+    if (isApiError(error)) return presentationFromApiError(error, fallback)
     if (error instanceof Error) {
         const description = userReadableMessage(error.message)
         if (!description) {

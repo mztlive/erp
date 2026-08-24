@@ -27,7 +27,7 @@ pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result
     let trace_id = extract_or_generate_trace_id(request.headers());
 
     let trace_value: HeaderValue = trace_id.parse().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    request.headers_mut().insert(TRACE_ID_HEADER, trace_value);
+    request.headers_mut().insert(TRACE_ID_HEADER, trace_value.clone());
 
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -46,9 +46,11 @@ pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result
 
     let _enter = span.enter();
 
-    let response = next.run(request).await;
+    let mut response = next.run(request).await;
     let status = response.status();
     let latency = start_time.elapsed();
+
+    response.headers_mut().insert(TRACE_ID_HEADER, trace_value);
 
     span.record("status_code", status.as_u16());
     span.record("latency_ms", latency.as_millis());
@@ -83,10 +85,17 @@ fn extract_or_generate_trace_id(headers: &HeaderMap) -> String {
 
 #[cfg(test)]
 mod tests {
-    use axum::http::{HeaderMap, HeaderValue};
+    use axum::{
+        body::Body,
+        http::{HeaderMap, HeaderValue, Request},
+        middleware,
+        routing::get,
+        Router,
+    };
+    use tower::ServiceExt;
     use uuid::Uuid;
 
-    use super::{extract_or_generate_trace_id, TRACE_ID_HEADER};
+    use super::{extract_or_generate_trace_id, trace_middleware, TRACE_ID_HEADER};
 
     #[test]
     fn trace_id_preserves_valid_request_header() {
@@ -112,5 +121,24 @@ mod tests {
         let trace_id = extract_or_generate_trace_id(&headers);
 
         assert!(Uuid::parse_str(&trace_id).is_ok());
+    }
+
+    #[tokio::test]
+    async fn trace_id_is_returned_in_response_header() {
+        let app = Router::new()
+            .route("/", get(|| async { "ok" }))
+            .layer(middleware::from_fn(trace_middleware));
+        let request = Request::builder()
+            .uri("/")
+            .header(TRACE_ID_HEADER, "client-trace-id")
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should complete");
+
+        assert_eq!(
+            response.headers().get(TRACE_ID_HEADER).unwrap(),
+            "client-trace-id"
+        );
     }
 }

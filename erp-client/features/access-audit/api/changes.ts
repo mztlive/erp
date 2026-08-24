@@ -136,6 +136,7 @@ export async function submitAccessChange(
     return {
         outcome: "REJECTED",
         code: "UNSUPPORTED_COMMAND",
-        message: `当前命令 ${command.action} 未映射到后端 HTTP 写路径。`,
+        message:
+            "当前操作暂不可用，请刷新后重试；如仍不可用，请联系管理员。",
     }
 }

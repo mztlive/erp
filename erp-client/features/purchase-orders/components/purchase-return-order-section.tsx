@@ -1,10 +1,10 @@
 "use client"
 
 import {
+    BusinessFailureState,
     BusinessStatusBadge,
     surfaceInsetClassName,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { usePurchaseReturnOrdersQuery } from "@/features/purchase-orders/hooks/use-purchase-return-orders-query"
 import type { PurchaseReturnOrderRow } from "@/features/purchase-orders/types"
@@ -72,19 +72,12 @@ export function PurchaseReturnOrderRelatedSection({
                 </p>
             ) : null}
             {query.isError ? (
-                <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                        采购退货暂无法加载，请稍后重试。
-                    </p>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void query.refetch()}
-                    >
-                        重新加载
-                    </Button>
-                </div>
+                <BusinessFailureState
+                    title="采购退货暂无法加载"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                    retryLabel="重新加载"
+                />
             ) : null}
             {query.isSuccess ? (
                 <PurchaseReturnOrderSection returns={query.data} />

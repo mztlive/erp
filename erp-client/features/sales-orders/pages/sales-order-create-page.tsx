@@ -2,7 +2,11 @@
 
 import Link from "next/link"
 
-import { PageHeader, PageScaffold } from "@/components/business"
+import {
+    BusinessFailureState,
+    PageHeader,
+    PageScaffold,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SalesOrderCreateForm } from "@/features/sales-orders/components/sales-order-create-form"
 import { useSalesOrderDraftResumeQuery } from "@/features/sales-orders/hooks/queries"
@@ -48,7 +52,32 @@ export function SalesOrderCreatePage({
                 </PageScaffold>
             )
         }
-        if (resumeQuery.isError || !resumeQuery.data) {
+        if (resumeQuery.isError) {
+            return (
+                <PageScaffold>
+                    <PageHeader title="草稿加载失败" />
+                    <BusinessFailureState
+                        error={resumeQuery.error}
+                        onRetry={() => void resumeQuery.refetch()}
+                        retryLabel="重新加载"
+                        details={
+                            <Button
+                                type="button"
+                                variant="outline"
+                                render={
+                                    <Link
+                                        href={`/sales/orders/${initialSalesOrderId}`}
+                                    />
+                                }
+                            >
+                                返回销售单详情
+                            </Button>
+                        }
+                    />
+                </PageScaffold>
+            )
+        }
+        if (!resumeQuery.data) {
             return (
                 <PageScaffold>
                     <PageHeader

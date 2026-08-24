@@ -53,6 +53,7 @@ export function useAcceptanceMutations({
     })
 
     const postMutation = useMutation({
+        meta: { suppressErrorToast: true },
         mutationFn: postCustomerAcceptanceWorkspace,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {

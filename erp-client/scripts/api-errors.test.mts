@@ -22,6 +22,7 @@ test("403 is a real Error with a user-readable permission reason", () => {
         description:
             "当前账号没有执行此操作的权限，请联系管理员或有权限的同事。",
         code: undefined,
+        fieldErrors: undefined,
         requestId: undefined,
         retryable: false,
     })
@@ -32,6 +33,7 @@ test("specific backend validation reason is preserved", () => {
         status: 422,
         errorMessage: "至少需要一条商品明细",
         code: "PRODUCT_LINE_REQUIRED",
+        fieldErrors: undefined,
         requestId: "req-1",
         success: false,
     })
@@ -39,12 +41,53 @@ test("specific backend validation reason is preserved", () => {
     assert.ok(error instanceof Error)
     assert.deepEqual(getErrorPresentation(error), {
         kind: "validation",
-        title: "提交内容未通过检查",
+        title: "提交内容需要调整",
         description: "至少需要一条商品明细",
         code: "PRODUCT_LINE_REQUIRED",
+        fieldErrors: undefined,
         requestId: "req-1",
         retryable: false,
     })
+})
+
+test("backend owns the business message and retry contract", () => {
+    const error = fromHttpResponse(
+        409,
+        {
+            status: 409,
+            errorMessage: "主体编号已存在，请核对当前资料后再操作。",
+            code: "PARTY_NO_EXISTS",
+            fieldErrors: { partyNo: "主体编号已存在" },
+            retryable: false,
+            success: false,
+        },
+        "trace-1",
+    )
+
+    assert.deepEqual(getErrorPresentation(error), {
+        kind: "conflict",
+        title: "操作暂不能继续",
+        description: "主体编号已存在，请核对当前资料后再操作。",
+        code: "PARTY_NO_EXISTS",
+        fieldErrors: { partyNo: "主体编号已存在" },
+        requestId: "trace-1",
+        retryable: false,
+    })
+})
+
+test("known business abbreviations remain readable", () => {
+    const error = fromHttpResponse(422, {
+        status: 422,
+        errorMessage: "SKU 已停用，请重新选择。",
+        code: "SKU_DISABLED",
+        retryable: false,
+        success: false,
+    })
+
+    assert.equal(
+        getErrorPresentation(error).description,
+        "SKU 已停用，请重新选择。",
+    )
 })
 
 test("network failures provide a retryable next step", () => {
@@ -61,13 +104,14 @@ test("technical backend messages are replaced with an actionable explanation", (
     const error = fromHttpResponse(500, {
         errorMessage: "MongoServerError: E11000 duplicate key",
         requestId: "req-technical",
+        success: false,
     })
     const presentation = getErrorPresentation(error)
 
     assert.equal(presentation.title, "系统暂时无法完成操作")
     assert.equal(
         presentation.description,
-        "系统暂时无法完成请求，请稍后重试；如仍失败，请联系支持人员。",
+        "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员。",
     )
     assert.equal(presentation.requestId, "req-technical")
     assert.equal(presentation.retryable, true)

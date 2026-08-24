@@ -410,11 +410,11 @@ function PageScaffold({
                 // 不设 min-h-0，长页仍按内容增高，由壳层 overflow-auto 滚动。
                 "mx-auto flex w-full max-w-shell flex-1 flex-col",
                 density === "compact"
-                    ? "gap-3 p-3 md:px-5 md:py-4"
+                    ? "gap-3 p-4 md:px-6 md:py-5"
                     : "gap-4 p-page-block px-page-inline md:px-page-inline-lg md:py-page-block-lg",
                 // 页头吸顶时铺满脚手架内边距，避免滚动时两侧露底。
                 density === "compact"
-                    ? "[&>[data-slot=page-header]]:-mx-3 [&>[data-slot=page-header]]:-mt-3 [&>[data-slot=page-header]]:px-3 [&>[data-slot=page-header]]:pt-3 [&>[data-slot=page-header]]:pb-2.5 md:[&>[data-slot=page-header]]:-mx-5 md:[&>[data-slot=page-header]]:-mt-4 md:[&>[data-slot=page-header]]:px-5 md:[&>[data-slot=page-header]]:pt-4 md:[&>[data-slot=page-header]]:pb-3"
+                    ? "[&>[data-slot=page-header]]:-mx-4 [&>[data-slot=page-header]]:-mt-4 [&>[data-slot=page-header]]:px-4 [&>[data-slot=page-header]]:pt-4 [&>[data-slot=page-header]]:pb-3 md:[&>[data-slot=page-header]]:-mx-6 md:[&>[data-slot=page-header]]:-mt-5 md:[&>[data-slot=page-header]]:px-6 md:[&>[data-slot=page-header]]:pt-5 md:[&>[data-slot=page-header]]:pb-3.5"
                     : "[&>[data-slot=page-header]]:-mx-page-inline [&>[data-slot=page-header]]:-mt-page-block [&>[data-slot=page-header]]:px-page-inline [&>[data-slot=page-header]]:pt-page-block [&>[data-slot=page-header]]:pb-3 md:[&>[data-slot=page-header]]:-mx-page-inline-lg md:[&>[data-slot=page-header]]:-mt-page-block-lg md:[&>[data-slot=page-header]]:px-page-inline-lg md:[&>[data-slot=page-header]]:pt-page-block-lg md:[&>[data-slot=page-header]]:pb-4",
                 // 页头到工作面的距离必须明显大于内容块之间的距离，
                 // 否则页头说明会和工具栏黏成一团，读不出层级。

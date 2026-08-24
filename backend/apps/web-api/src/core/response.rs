@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T> {
@@ -12,6 +13,10 @@ pub struct ApiResponse<T> {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
+    #[serde(rename = "fieldErrors", skip_serializing_if = "Option::is_none")]
+    pub field_errors: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retryable: Option<bool>,
     pub data: Option<T>,
     pub success: bool,
 }
@@ -40,6 +45,8 @@ impl ApiResponse<()> {
             status: 200,
             message: "OK".to_string(),
             code: None,
+            field_errors: None,
+            retryable: None,
             data: None,
             success: true,
         }
@@ -54,6 +61,8 @@ impl ApiResponse<()> {
             status: 401,
             message: "登录状态已失效，请重新登录".to_string(),
             code: Some("UNAUTHENTICATED".to_string()),
+            field_errors: None,
+            retryable: Some(false),
             data: None,
             success: false,
         }
@@ -66,8 +75,10 @@ impl ApiResponse<()> {
     pub fn system_error() -> Self {
         Self {
             status: 500,
-            message: "系统内部错误".to_string(),
+            message: "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
             code: Some("INTERNAL_ERROR".to_string()),
+            field_errors: None,
+            retryable: Some(true),
             data: None,
             success: false,
         }
@@ -80,8 +91,10 @@ impl ApiResponse<()> {
     pub fn permission_denied() -> Self {
         Self {
             status: 403,
-            message: "当前账号没有执行此操作的权限".to_string(),
+            message: "当前账号没有执行此操作的权限，请联系管理员或有权限的同事".to_string(),
             code: Some("PERMISSION_DENIED".to_string()),
+            field_errors: None,
+            retryable: Some(false),
             data: None,
             success: false,
         }
@@ -101,6 +114,8 @@ impl<T> ApiResponse<T> {
             status: 200,
             message: "OK".to_string(),
             code: None,
+            field_errors: None,
+            retryable: None,
             data: Some(data),
             success: true,
         }
@@ -151,8 +166,9 @@ mod tests {
             body,
             json!({
                 "status": 403,
-                "errorMessage": "当前账号没有执行此操作的权限",
+                "errorMessage": "当前账号没有执行此操作的权限，请联系管理员或有权限的同事",
                 "code": "PERMISSION_DENIED",
+                "retryable": false,
                 "data": null,
                 "success": false
             })

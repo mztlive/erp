@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { getErrorMessage } from "@/lib/api/errors"
 
 const decimal = z
     .string()
@@ -85,8 +86,5 @@ export function percentageFromRate(value?: string | null): string {
     return String(Number(value) * 100)
 }
 
-export function errorMessage(error: unknown, fallback: string): string {
-    return error && typeof error === "object" && "message" in error
-        ? String(error.message)
-        : fallback
-}
+export const errorMessage = (error: unknown, fallback: string): string =>
+    getErrorMessage(error, fallback)

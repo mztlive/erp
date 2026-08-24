@@ -135,7 +135,7 @@ describe("useLoginSubmit", () => {
                 .catch(() => undefined)
         })
         expect(result.current.formError).toBe(
-            "无法连接服务器，请确认后端已启动",
+            "网络连接失败，请检查网络后重试。",
         )
 
         await act(async () => {

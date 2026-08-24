@@ -105,7 +105,8 @@ function commandOutcome(
         return {
             status: "unknown",
             title: "处理结果待确认",
-            message: "不得乐观改变连接状态；请使用原操作身份查询最终结果。",
+            message:
+                "操作结果尚未确认，请保留当前页面并查询最新状态后再决定是否重试。",
             operationId: result.operation_id,
             idempotencyKey,
         }
@@ -115,7 +116,8 @@ function commandOutcome(
             status: "rejected",
             code: "COMMAND_REJECTED",
             title: "操作被拒绝",
-            message: "服务端业务前置条件未满足。",
+            message:
+                "当前业务条件不允许执行该操作，请核对连接状态和必填配置后重试。",
             reference: result.operation_id,
         }
     }
@@ -162,7 +164,7 @@ export async function bindEndpointReference(input: {
     })
     return commandOutcome(result, input.idempotencyKey, {
         title: "地址引用已绑定",
-        message: "服务端已确认并绑定地址配置引用。",
+        message: "地址配置引用已绑定，可继续检查连接状态。",
     })
 }
 
@@ -201,7 +203,7 @@ export async function updateCapabilities(input: {
     return {
         status: "succeeded",
         title: "能力配置已更新",
-        message: "服务端已提交能力版本并返回权威连接版本。",
+        message: "能力配置已更新，请按最新连接状态继续操作。",
         reference: result.operation_id,
         connectionVersion: String(result.connection_version),
         auditEventId: result.audit_event_id,
@@ -282,6 +284,7 @@ export async function enableConnection(input: {
     })
     return commandOutcome(result, input.idempotencyKey, {
         title: "连接已启用",
-        message: "服务端已在同一事务重验采购业务确认、技术健康与关联影响。",
+        message:
+            "连接已启用，采购业务确认、连接健康和关联影响均已重新核对。",
     })
 }

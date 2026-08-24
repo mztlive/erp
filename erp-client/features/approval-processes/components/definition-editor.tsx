@@ -90,12 +90,6 @@ export function DefinitionEditor({
                 const message = definitionErrorMessage(error)
                 setSubmitError(message)
                 setSaveState("failed")
-                toast.add({
-                    title: "保存失败",
-                    description: message,
-                    type: "error",
-                    timeout: 6000,
-                })
                 if (isDefinitionVersionConflict(error)) {
                     onLockVersionChange(lockVersion)
                 }

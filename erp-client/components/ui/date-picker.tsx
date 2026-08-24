@@ -93,6 +93,7 @@ function formatDatetimeLocalValue(value?: ZonedDateTimeValue) {
 }
 
 function DatePicker({
+    id,
     value,
     onValueChange,
     placeholder = "选择日期",
@@ -103,6 +104,7 @@ function DatePicker({
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
 }: {
+    id?: string
     value?: string
     onValueChange?: (value?: string) => void
     placeholder?: string
@@ -122,6 +124,7 @@ function DatePicker({
                 <PopoverTrigger
                     render={
                         <Button
+                            id={id}
                             type="button"
                             variant="outline"
                             size="lg"
@@ -270,6 +273,7 @@ function DateRangePicker({
 }
 
 function DateTimePicker({
+    id,
     value,
     onValueChange,
     timeZone = "Asia/Shanghai",
@@ -279,7 +283,9 @@ function DateTimePicker({
     clearable = true,
     className,
     "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
 }: {
+    id?: string
     value?: ZonedDateTimeValue
     onValueChange?: (value?: ZonedDateTimeValue) => void
     timeZone?: string
@@ -289,6 +295,7 @@ function DateTimePicker({
     clearable?: boolean
     className?: string
     "aria-invalid"?: boolean
+    "aria-describedby"?: string
 }) {
     const [open, setOpen] = React.useState(false)
     const selected = parseDateValue(value?.date)
@@ -313,12 +320,14 @@ function DateTimePicker({
                 <PopoverTrigger
                     render={
                         <Button
+                            id={id}
                             type="button"
                             variant="outline"
                             size="lg"
                             className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
+                            aria-describedby={ariaDescribedby}
                             aria-label={label}
                         />
                     }
@@ -400,6 +409,7 @@ function DateTimePicker({
  * (`YYYY-MM-DDTHH:mm` / `YYYY-MM-DDTHH:mm:ss`).
  */
 function DateTimeLocalPicker({
+    id,
     value,
     onValueChange,
     timeZone = "Asia/Shanghai",
@@ -409,7 +419,9 @@ function DateTimeLocalPicker({
     clearable = true,
     className,
     "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
 }: {
+    id?: string
     value?: string
     onValueChange?: (value?: string) => void
     timeZone?: string
@@ -419,9 +431,11 @@ function DateTimeLocalPicker({
     clearable?: boolean
     className?: string
     "aria-invalid"?: boolean
+    "aria-describedby"?: string
 }) {
     return (
         <DateTimePicker
+            id={id}
             value={parseDatetimeLocalValue(value, timeZone)}
             onValueChange={(next) =>
                 onValueChange?.(
@@ -435,6 +449,7 @@ function DateTimeLocalPicker({
             clearable={clearable}
             className={className}
             aria-invalid={ariaInvalid}
+            aria-describedby={ariaDescribedby}
         />
     )
 }

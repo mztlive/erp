@@ -146,7 +146,7 @@ describe("useRemoteSearchCombobox", () => {
                 fallbackError: "加载失败，请重试",
             }),
         )
-        expect(withMessage.result.current.emptyLabel).toBe("boom")
+        expect(withMessage.result.current.emptyLabel).toBe("加载失败，请重试")
 
         const withoutMessage = renderHook(() =>
             useRemoteSearchCombobox({

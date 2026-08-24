@@ -31,7 +31,7 @@ export function OpaqueReferenceSearchCombobox({
             emptyLabel={
                 query.isError
                     ? getErrorMessage(query.error, "引用目录加载失败，请重试")
-                    : (emptyLabel ?? "后端尚未提供可选择的不透明引用目录")
+                    : (emptyLabel ?? "暂时没有可选择的引用资料")
             }
         />
     )

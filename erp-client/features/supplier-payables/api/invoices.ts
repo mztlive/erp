@@ -36,7 +36,7 @@ export async function submitInvoice(
                 status: "failed",
                 title: "继续核销不可用",
                 description:
-                    "进项发票继续分配端点未提供（仅支持登记过账一次）。请使用新票或联系后端补齐。",
+                    "当前发票不能继续追加核销。请登记新发票，或联系管理员处理。",
                 errorCode: "BACKEND_GAP",
                 existingDocumentId: input.existingInvoiceId,
             }

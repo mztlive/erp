@@ -276,7 +276,7 @@ export function toListItem(
             connection.action_blockers[0]?.message ??
             (status === "ENABLED"
                 ? "连接已启用"
-                : "等待服务端开放下一治理动作"),
+                : "当前暂无可执行操作，请联系管理员确认连接配置"),
         allowedActions: connection.allowed_actions,
         actionBlockers: connection.action_blockers.map(mapBlocker),
     }
@@ -382,7 +382,7 @@ export function toCenter(
             detail.action_blockers[0]?.message ??
             (status === "ENABLED"
                 ? "连接已启用"
-                : "等待服务端开放下一治理动作"),
+                : "当前暂无可执行操作，请联系管理员确认连接配置"),
     }
 }
 

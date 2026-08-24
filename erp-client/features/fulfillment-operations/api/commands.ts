@@ -4,6 +4,7 @@
  */
 
 import { apiGet, apiPost, apiPut } from "@/lib/api"
+import { getErrorMessage } from "@/lib/api/errors"
 import type {
     FormalActionResponse,
     PostFulfillmentOperationCommand,
@@ -123,7 +124,7 @@ export async function postFulfillmentOperation(
                     status: "failed",
                     code: "BACKEND_GAP",
                     message:
-                        "未找到入库草稿。请从采购上下文创建入库单后再确认（队列投影与创建链路待后端补齐）。",
+                        "未找到可确认的入库草稿。请返回采购单创建入库单后再确认。",
                 }
             }
 
@@ -270,14 +271,13 @@ export async function postFulfillmentOperation(
         }
     } catch (error) {
         if (isApiError(error)) {
-            if (
-                error.status === 500 &&
-                typeof error.message === "string" &&
-                error.message.includes("暂无法确认")
-            ) {
+            if (error.code === "OUTCOME_UNKNOWN") {
                 return {
                     status: "unknown",
-                    message: error.message,
+                    message: getErrorMessage(
+                        error,
+                        "操作结果暂无法确认，请先查询当前状态。",
+                    ),
                     idempotencyKey: input.idempotencyKey,
                 }
             }
@@ -290,8 +290,8 @@ export async function postFulfillmentOperation(
             }
             return {
                 status: "failed",
-                code: String(error.status ?? "ERROR"),
-                message: error.message,
+                code: String(error.code ?? error.status ?? "ERROR"),
+                message: getErrorMessage(error),
             }
         }
         throw error
@@ -355,7 +355,10 @@ export async function resolveUnknownFulfillmentResult(
                     `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
                 )
                 const delivery = stripDeliveryApprovalField(d.delivery)
-                if (delivery.status === "SHIPPED" || delivery.status === "SIGNED") {
+                if (
+                    delivery.status === "SHIPPED" ||
+                    delivery.status === "SIGNED"
+                ) {
                     return {
                         status: "succeeded",
                         outcome: {

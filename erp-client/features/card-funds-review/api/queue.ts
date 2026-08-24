@@ -79,13 +79,13 @@ async function projectItem(
     const account = await loadAccount(accountId, wi.workItemId)
     if (!account) {
         throw new Error(
-            `任务 ${wi.workItemId} 绑定的应收子账 ${accountId} 不存在；已禁止隐藏任务或继续复核`,
+            "该复核任务关联的应收账户不存在，请刷新任务列表；如仍存在，请联系支持人员。",
         )
     }
 
     if (!account.work_item) {
         throw new Error(
-            `应收子账 ${accountId} 未返回 actor-specific 正式任务；已禁止从队列待办推导领域动作`,
+            "该应收账户暂时无法复核，请刷新后重试；如仍失败，请联系支持人员。",
         )
     }
     const projectedWorkItem = mapWorkItemDto(account.work_item)
@@ -93,11 +93,13 @@ async function projectItem(
         projectedWorkItem.workItemId !== wi.workItemId ||
         projectedWorkItem.businessObjectId !== accountId
     ) {
-        throw new Error("服务端返回的 W13 正式任务与队列身份不一致")
+        throw new Error("任务资料已发生变化，请刷新任务列表后重试。")
     }
     const reviewType = account.active_review_type
     if (!reviewType) {
-        throw new Error("服务端未返回 W13 复核类型")
+        throw new Error(
+            "任务缺少复核信息，请刷新后重试；如仍失败，请联系支持人员。",
+        )
     }
     const workItemType =
         reviewType === "SYNC_DELTA"

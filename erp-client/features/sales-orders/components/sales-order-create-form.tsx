@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
 import { toast } from "@/components/ui/toast"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
+import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
 import { useContractCenterQuery } from "@/features/contracts/queries"
@@ -112,15 +113,37 @@ export function SalesOrderCreateForm({
     const natureLocked = purpose !== "create"
     const [pendingNature, setPendingNature] =
         React.useState<SalesOrderNature | null>(null)
-    const procurementResponsibilityRef = React.useRef({ allResolved: false })
+    const procurementResponsibilityRef = React.useRef<{
+        allResolved: boolean
+        error?: unknown
+        isFetching: boolean
+    }>({ allResolved: false, isFetching: true })
     const blocksSalesOrderSubmit = React.useCallback(
         (value: { nature: SalesOrderNature }) => {
-            if (
-                value.nature !== "physical_service" ||
-                procurementResponsibilityRef.current.allResolved
-            ) {
-                return false
+            if (value.nature !== "physical_service") return false
+            const responsibility = procurementResponsibilityRef.current
+            if (responsibility.error) {
+                toast.add({
+                    title: "无法核对采购负责人",
+                    description: getErrorMessage(
+                        responsibility.error,
+                        "采购负责人暂时无法核对，请稍后重试。",
+                    ),
+                    type: "error",
+                    timeout: 5000,
+                })
+                return true
             }
+            if (responsibility.isFetching) {
+                toast.add({
+                    title: "正在核对采购负责人",
+                    description: "请等待核对完成后再提交销售单。",
+                    type: "warning",
+                    timeout: 4000,
+                })
+                return true
+            }
+            if (responsibility.allResolved) return false
             toast.add({
                 title: "暂不能提交销售单",
                 description: "暂未确定采购负责人，请联系管理员维护采购责任规则",
@@ -162,6 +185,8 @@ export function SalesOrderCreateForm({
         useSalesLineProcurementResponsibilities({ nature, lines: lineItems })
     procurementResponsibilityRef.current = {
         allResolved: procurementResponsibilityQuery.allResolved,
+        error: procurementResponsibilityQuery.error,
+        isFetching: procurementResponsibilityQuery.isFetching,
     }
     useSalesOrderCreateUnloadGuard(dirty)
 

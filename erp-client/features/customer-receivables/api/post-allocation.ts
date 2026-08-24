@@ -1,6 +1,7 @@
 /** Post allocation (draft session → formal receipt/invoice allocations). */
 
 import { apiGet, apiPost } from "@/lib/api"
+import { getErrorMessage } from "@/lib/api/errors"
 
 import type {
     AllocationSessionView,
@@ -322,21 +323,22 @@ export async function postAllocation(
         postIdempotency.set(input.idempotencyKey, result)
         return result
     } catch (err) {
-        const message =
-            err && typeof err === "object" && "message" in err
-                ? String((err as { message: unknown }).message)
-                : "提交失败"
+        const message = getErrorMessage(err, "提交失败，请稍后重试。")
+        const errorCode =
+            err && typeof err === "object" && "code" in err
+                ? String((err as { code?: string }).code ?? "HTTP_ERROR")
+                : "HTTP_ERROR"
         const code =
             err && typeof err === "object" && "status" in err
                 ? String((err as { status?: number }).status ?? "HTTP_ERROR")
-                : "HTTP_ERROR"
+                : errorCode
         const failed: PostAllocationResult = {
             status: "failed",
             code,
             message,
         }
         // Do not cache non-idempotent validation failures under success key
-        if (code === "409" || message.includes("已存在")) {
+        if (code === "409" || errorCode === "CONFLICT") {
             postIdempotency.set(input.idempotencyKey, failed)
         }
         return failed

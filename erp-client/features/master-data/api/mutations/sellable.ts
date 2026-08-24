@@ -18,7 +18,7 @@ export async function createSellable(
     return {
         outcome: "blocked",
         code: "SELLABLE_NOT_WRITABLE",
-        message: "公司商品池是销售可见 SKU 投影，请在「商品与 SKU」中维护。",
+        message: "公司商品池只展示可销售的 SKU，请在「商品与 SKU」中维护。",
         detail: "W14：sellable-items 不是独立 resource 写入口。",
     }
 }
@@ -29,7 +29,7 @@ export async function updateSellableRevision(
     return {
         outcome: "blocked",
         code: "SELLABLE_NOT_WRITABLE",
-        message: "公司商品池是销售可见 SKU 投影，请在「商品与 SKU」中维护。",
+        message: "公司商品池只展示可销售的 SKU，请在「商品与 SKU」中维护。",
     }
 }
 
@@ -39,6 +39,6 @@ export async function disableSellable(
     return {
         outcome: "blocked",
         code: "SELLABLE_NOT_WRITABLE",
-        message: "公司商品池是销售可见 SKU 投影，请在「商品与 SKU」中维护。",
+        message: "公司商品池只展示可销售的 SKU，请在「商品与 SKU」中维护。",
     }
 }

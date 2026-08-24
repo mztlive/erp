@@ -51,6 +51,14 @@ export function TextField({
     const field = useFieldContext<string>()
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
     const errors = toFieldErrors(field.state.meta.errors)
+    const descriptionId = `${field.name}-description`
+    const errorId = `${field.name}-error`
+    const describedBy = [
+        description ? descriptionId : undefined,
+        isInvalid ? errorId : undefined,
+    ]
+        .filter(Boolean)
+        .join(" ")
 
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>
@@ -74,14 +82,17 @@ export function TextField({
                 step={step}
                 data-testid={testId}
                 aria-invalid={isInvalid || undefined}
+                aria-describedby={describedBy || undefined}
                 className={inputClassName}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
             />
             {description ? (
-                <FieldDescription>{description}</FieldDescription>
+                <FieldDescription id={descriptionId}>
+                    {description}
+                </FieldDescription>
             ) : null}
-            {isInvalid ? <FieldError errors={errors} /> : null}
+            {isInvalid ? <FieldError id={errorId} errors={errors} /> : null}
         </Field>
     )
 }

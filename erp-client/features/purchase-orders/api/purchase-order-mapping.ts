@@ -173,7 +173,8 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             // 缺口：对象中心无 prepayment_gate 投影
             prepaymentGate: {
                 state: "NOT_APPLICABLE",
-                message: "先款门禁数据未由后端返回",
+                message:
+                    "暂无法确认预付款要求，请刷新后重试；如仍失败，请联系财务或支持人员。",
                 required: "0",
                 allocated: "0",
                 gap: "0",

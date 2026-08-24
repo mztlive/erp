@@ -204,7 +204,7 @@ describe("handleCompleteTask", () => {
             expect.objectContaining({
                 status: "rejected",
                 title: "任务完成未提交",
-                description: "boom",
+                description: "提交失败，请刷新后重试",
             }),
         )
     })

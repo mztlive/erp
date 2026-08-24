@@ -339,12 +339,14 @@ describe("uploadSchema", () => {
 })
 
 describe("uploadErrorMessage", () => {
-    it("maps CONTRACT_NO_EXISTS to a business message", () => {
+    it("uses the backend contract-conflict message unchanged", () => {
         expect(
             uploadErrorMessage({
                 kind: "Http",
                 status: 409,
-                message: "CONTRACT_NO_EXISTS",
+                code: "CONTRACT_NO_EXISTS",
+                message:
+                    "该合同编号已存在，请打开已有合同核对；重复编号不能新建合同。",
             }),
         ).toBe("该合同编号已存在，请打开已有合同核对；重复编号不能新建合同。")
     })
@@ -354,7 +356,8 @@ describe("uploadErrorMessage", () => {
             uploadErrorMessage({
                 kind: "Validation",
                 status: 400,
-                message: "CONTRACT_VALIDITY_INVALID",
+                code: "CONTRACT_VALIDITY_INVALID",
+                message: "有效期止不能早于有效期起。",
             }),
         ).toBe("有效期止不能早于有效期起。")
     })

@@ -24,7 +24,7 @@ export async function submitHistoryBackfillCommand(
                 status: "BLOCKED",
                 title: "缺少创建参数",
                 description:
-                    "创建回填任务需要 cutoverId、rangeStart、rangeEnd；创建上下文接口未交付时无法自动填参。",
+                    "请填写切换编号、范围起点和范围终点后再创建回填任务。",
                 operationId,
                 idempotencyKey,
                 blockers: ["CREATE_CONTEXT_MISSING"],
@@ -80,8 +80,8 @@ export async function submitHistoryBackfillCommand(
         }
         return {
             status: "BLOCKED",
-            title: "来源校验接口未交付",
-            description: "后端未提供独立 VALIDATE_SOURCE 命令；可直接 START。",
+            title: "暂不支持单独校验来源",
+            description: "当前可直接开始回填，系统会在开始时核对来源资料。",
             jobId: input.jobId,
             operationId,
             idempotencyKey,
@@ -124,8 +124,8 @@ export async function submitHistoryBackfillCommand(
     if (action === "REATTRIBUTE") {
         return {
             status: "BLOCKED",
-            title: "重新归集未交付",
-            description: "后端尚未提供回填明细重新归集命令。",
+            title: "暂不支持重新归集",
+            description: "当前无法重新归集回填明细，请联系管理员处理。",
             jobId: input.jobId,
             operationId,
             idempotencyKey,
@@ -136,9 +136,8 @@ export async function submitHistoryBackfillCommand(
     if (action === "CONFIRM_REPORT") {
         return {
             status: "BLOCKED",
-            title: "报告确认未交付",
-            description:
-                "后端 BackfillJobView 仅有 report_file_id，无报告确认状态机接口。",
+            title: "暂不支持在本页确认报告",
+            description: "请先下载报告核对；需要确认时请联系管理员处理。",
             jobId: input.jobId,
             operationId,
             idempotencyKey,
@@ -148,8 +147,8 @@ export async function submitHistoryBackfillCommand(
 
     return {
         status: "FAILED",
-        title: "未知动作",
-        description: `不支持的 action: ${action}`,
+        title: "操作未完成",
+        description: "当前操作暂不受支持，请刷新页面后重试。",
         operationId,
         idempotencyKey,
     }

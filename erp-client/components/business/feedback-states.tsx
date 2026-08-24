@@ -98,7 +98,8 @@ function GuardedBusinessAction({
                             <span
                                 className="inline-flex cursor-not-allowed"
                                 tabIndex={0}
-                                role="group"
+                                role="button"
+                                aria-disabled="true"
                                 aria-label={`操作不可用：${explanation}`}
                             />
                         }
@@ -289,7 +290,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
         label: "接口失败",
     },
     projection: {
-        title: "查询模型更新失败",
+        title: "数据更新失败",
         description: freshnessText.lastSuccessKept,
         icon: RotateCcwIcon,
         variant: "warning",
@@ -336,7 +337,7 @@ function BusinessFailureState({
 
     const resolvedAction =
         action ??
-        (onRetry ? (
+        (onRetry && (presentation?.retryable ?? true) ? (
             <Button type="button" variant="outline" size="sm" onClick={onRetry}>
                 {retryLabel}
             </Button>

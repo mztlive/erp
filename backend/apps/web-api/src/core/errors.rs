@@ -4,6 +4,43 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use std::collections::BTreeMap;
+
+const TECHNICAL_MESSAGE_TERMS: &[&str] = &[
+    "work_item",
+    "idempotency",
+    "lockVersion",
+    "幂等",
+    "投影",
+    "水位",
+    "快照",
+    "内容指纹",
+    "锁版本",
+    "服务端",
+    "客户端",
+    "前端",
+    "数据库",
+    "Mongo",
+    "SQL",
+    "状态机接口",
+    "接口未交付",
+    "接口",
+    "事务",
+    "指纹",
+    "后端",
+    "validation error",
+    "payload",
+    "canonical",
+    "handler",
+    "blocker",
+    "view",
+    "status",
+    "dto",
+    "enum",
+    "rbac",
+];
+
+const USER_ACTION_MARKERS: &[&str] = &["请", "可以", "可在", "重新", "刷新", "稍后", "联系", "返回"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -78,6 +115,7 @@ fn duplicate_key_conflict_message(error: &database::Error) -> String {
         Some("uk_party_bank_accounts_party_hmac") => "该主体下银行账号已存在".to_string(),
         Some("uk_supplier_accounts_party") => "该主体已绑定供应商角色".to_string(),
         Some("uk_supplier_accounts_supplier_no") => "供应商编号已存在".to_string(),
+        Some("uk_contracts_contract_no") => "合同编号已存在".to_string(),
         Some("uk_customer_accounts_party") => "该主体已绑定客户角色".to_string(),
         Some("uk_customer_accounts_customer_no") => "客户编号已存在".to_string(),
         Some("uk_procurement_confirmation_lines_confirmation_line")
@@ -161,33 +199,18 @@ impl IntoResponse for Error {
             Error::RateLimited(error) => error.retry_after_secs(),
             _ => None,
         };
-        let (http_status, message) = match &self {
-            Error::Internal(_) | Error::Repository(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "系统内部错误".to_string())
-            }
-            Error::OutcomeUnknown(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "操作结果暂无法确认，请查询当前状态后再决定是否重试".to_string(),
-            ),
-            Error::BadRequest(_) | Error::Validation(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            Error::NotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
-            Error::Conflict(_) => (StatusCode::CONFLICT, self.to_string()),
-            Error::Unprocessable(_) | Error::Logic(_) => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
-            Error::Forbidden(_) => (StatusCode::FORBIDDEN, self.to_string()),
-            Error::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
-            Error::RateLimited(error) => match error.retry_after_secs() {
-                Some(_) => (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    "请求过于频繁，请稍后重试".to_string(),
-                ),
-                None => (StatusCode::INTERNAL_SERVER_ERROR, "系统内部错误".to_string()),
-            },
-        };
+        let http_status = self.http_status();
+        let message = self.user_message();
+        let code = self.error_code().to_string();
+        let field_errors = self.field_errors();
+        let retryable = self.retryable();
 
         let body = ApiResponse::<()> {
             status: http_status.as_u16(),
             message,
-            code: Some(self.error_code().to_string()),
+            code: Some(code),
+            field_errors,
+            retryable: Some(retryable),
             data: None,
             success: false,
         };
@@ -205,8 +228,28 @@ impl IntoResponse for Error {
 }
 
 impl Error {
+    /// 返回稳定的 HTTP 状态码。
+    ///
+    /// # 返回
+    /// 返回与错误分类对应的协议状态码。
+    pub(crate) fn http_status(&self) -> StatusCode {
+        match self {
+            Error::Internal(_) | Error::Repository(_) | Error::OutcomeUnknown(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            Error::BadRequest(_) | Error::Validation(_) => StatusCode::BAD_REQUEST,
+            Error::NotFound(_) => StatusCode::NOT_FOUND,
+            Error::Conflict(_) => StatusCode::CONFLICT,
+            Error::Unprocessable(_) | Error::Logic(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Error::Forbidden(_) => StatusCode::FORBIDDEN,
+            Error::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            Error::RateLimited(error) if error.retry_after_secs().is_some() => StatusCode::TOO_MANY_REQUESTS,
+            Error::RateLimited(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
     /// 返回稳定的外部错误码；不得依赖可变的用户提示文案判断错误类型。
-    fn error_code(&self) -> &'static str {
+    pub(crate) fn error_code(&self) -> &'static str {
         match self {
             Error::Internal(_) | Error::Repository(_) => "INTERNAL_ERROR",
             Error::BadRequest(_) | Error::Validation(_) => "INVALID_REQUEST",
@@ -219,6 +262,138 @@ impl Error {
             Error::RateLimited(_) => "RATE_LIMITED",
         }
     }
+
+    /// 返回可直接展示给业务用户的错误说明。
+    ///
+    /// 内部错误和包含实现术语的消息必须在 HTTP 边界替换为安全说明；
+    /// 已经是业务语言的消息保留原原因，并在缺少恢复指引时补充下一步。
+    ///
+    /// # 返回
+    /// 返回不包含底层实现细节的中文错误说明。
+    pub(crate) fn user_message(&self) -> String {
+        match self {
+            Error::Internal(_) | Error::Repository(_) => {
+                "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string()
+            }
+            Error::OutcomeUnknown(_) => {
+                "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试".to_string()
+            }
+            Error::BadRequest(message) => {
+                user_message_or(message, "提交内容不符合要求，请检查后重试", "请修改后重试")
+            }
+            Error::Validation(_) => "提交内容不符合要求，请根据字段提示修改后重试".to_string(),
+            Error::NotFound(message) => {
+                user_message_or(message, "没有找到所需资料，请刷新后重新选择", "请刷新后重新选择")
+            }
+            Error::Conflict(message) => user_message_or(
+                message,
+                "当前资料状态不允许继续操作，请刷新后核对",
+                "请核对当前资料后再操作",
+            ),
+            Error::Unprocessable(message) => user_message_or(
+                message,
+                "当前业务条件不允许继续操作，请核对相关资料后重试",
+                "请核对相关业务条件后再操作",
+            ),
+            Error::Logic(error) => user_message_or(
+                &error.to_string(),
+                "当前业务条件不允许继续操作，请核对相关资料后重试",
+                "请核对相关业务条件后再操作",
+            ),
+            Error::Forbidden(message) => user_message_or(
+                message,
+                "当前账号没有执行此操作的权限，请联系管理员或有权限的同事",
+                "请联系管理员或有权限的同事",
+            ),
+            Error::Unauthorized(_) => "登录状态已失效，请重新登录".to_string(),
+            Error::RateLimited(error) if error.retry_after_secs().is_some() => {
+                "请求过于频繁，请稍后重试".to_string()
+            }
+            Error::RateLimited(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
+        }
+    }
+
+    /// 返回字段级校验说明。
+    ///
+    /// # 返回
+    /// 仅直接持有 `validator::ValidationErrors` 时返回字段与用户提示；
+    /// 其它错误返回 `None`。
+    pub(crate) fn field_errors(&self) -> Option<BTreeMap<String, String>> {
+        let Error::Validation(errors) = self else {
+            return None;
+        };
+        let fields = errors
+            .field_errors()
+            .iter()
+            .map(|(field, errors)| {
+                let message = errors
+                    .iter()
+                    .filter_map(|error| error.message.as_deref())
+                    .find(|message| user_message_is_safe(message))
+                    .unwrap_or("该字段填写不符合要求")
+                    .to_string();
+                ((*field).to_string(), message)
+            })
+            .collect::<BTreeMap<_, _>>();
+        (!fields.is_empty()).then_some(fields)
+    }
+
+    /// 返回前端能否安全提供原操作重试入口。
+    ///
+    /// # 返回
+    /// 仅网络外的临时系统失败和限流允许直接重试；业务冲突与结果未知
+    /// 必须先核对当前状态。
+    pub(crate) fn retryable(&self) -> bool {
+        matches!(
+            self,
+            Error::Internal(_) | Error::Repository(_) | Error::RateLimited(_)
+        )
+    }
+}
+
+/// 将业务原因规范为安全且包含下一步的用户说明。
+fn user_message_or(message: &str, fallback: &str, next_step: &str) -> String {
+    if !user_message_is_safe(message) {
+        return fallback.to_string();
+    }
+    let message = message.trim().trim_end_matches(['。', '；', '，']);
+    if USER_ACTION_MARKERS.iter().any(|marker| message.contains(marker)) {
+        return message.to_string();
+    }
+    format!("{message}，{next_step}")
+}
+
+/// 判断内部错误原因是否符合用户展示合同。
+fn user_message_is_safe(message: &str) -> bool {
+    let message = message.trim();
+    if message.is_empty()
+        || !message
+            .chars()
+            .any(|character| ('\u{3400}'..='\u{9fff}').contains(&character))
+    {
+        return false;
+    }
+    let normalized = message.to_ascii_lowercase();
+    if TECHNICAL_MESSAGE_TERMS
+        .iter()
+        .any(|term| normalized.contains(&term.to_ascii_lowercase()))
+    {
+        return false;
+    }
+    !message
+        .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+        .any(is_internal_code_token)
+}
+
+/// 判断一个 ASCII 词是否为不应展示的内部稳定码或枚举值。
+fn is_internal_code_token(token: &str) -> bool {
+    if matches!(token, "SKU" | "ERP" | "PDF" | "CSV") || token.len() < 2 {
+        return false;
+    }
+    token.chars().any(|character| character.is_ascii_uppercase())
+        && token
+            .chars()
+            .all(|character| character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_')
 }
 
 pub type Result<T> = std::result::Result<ApiResponse<T>, Error>;
@@ -336,7 +511,11 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
 
         assert_eq!(body["status"], 500);
-        assert_eq!(body["errorMessage"], "系统内部错误");
+        assert_eq!(
+            body["errorMessage"],
+            "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员"
+        );
+        assert_eq!(body["retryable"], true);
         assert_eq!(body["success"], false);
         assert!(!body.to_string().contains("database password leaked"));
     }
@@ -355,9 +534,61 @@ mod tests {
         assert_eq!(body["status"], 500);
         assert_eq!(
             body["errorMessage"],
-            "操作结果暂无法确认，请查询当前状态后再决定是否重试"
+            "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试"
         );
+        assert_eq!(body["retryable"], false);
         assert!(!body.to_string().contains("driver details"));
+    }
+
+    #[tokio::test]
+    async fn business_error_keeps_reason_and_adds_next_step() {
+        let response = Error::Conflict("主体编号已存在".into()).into_response();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
+
+        assert_eq!(body["errorMessage"], "主体编号已存在，请核对当前资料后再操作");
+        assert_eq!(body["retryable"], false);
+    }
+
+    #[tokio::test]
+    async fn technical_business_error_uses_safe_fallback() {
+        let response = Error::Logic(entities::Error::from("同步水位不得回退")).into_response();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
+
+        assert_eq!(
+            body["errorMessage"],
+            "当前业务条件不允许继续操作，请核对相关资料后重试"
+        );
+        assert!(!body.to_string().contains("水位"));
+    }
+
+    #[tokio::test]
+    async fn serialized_validation_details_use_safe_fallback() {
+        let response = Error::BadRequest("customer_id: Validation error: required [客户不能为空]".into())
+            .into_response();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
+
+        assert_eq!(body["errorMessage"], "提交内容不符合要求，请检查后重试");
+        assert!(!body.to_string().contains("customer_id"));
+    }
+
+    #[tokio::test]
+    async fn business_abbreviations_remain_readable() {
+        let response = Error::Unprocessable("SKU 已停用".into()).into_response();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
+
+        assert_eq!(body["errorMessage"], "SKU 已停用，请核对相关业务条件后再操作");
     }
 
     #[test]

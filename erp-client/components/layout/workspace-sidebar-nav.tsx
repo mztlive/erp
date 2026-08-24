@@ -98,7 +98,7 @@ export function WorkspaceSidebarAccount() {
                             <span className="truncate font-medium">
                                 {displayName}
                             </span>
-                            <span className="truncate text-xs text-muted-foreground">
+                            <span className="truncate text-xs text-sidebar-foreground/70">
                                 {accountLabel}
                             </span>
                         </span>
@@ -172,7 +172,7 @@ export function WorkspaceSidebarNav() {
             <SidebarGroup className="px-1">
                 <SidebarGroupLabel className="sr-only">导航</SidebarGroupLabel>
                 <SidebarGroupContent>
-                    <p className="px-2 py-3 text-xs text-muted-foreground">
+                    <p className="px-2 py-3 text-xs text-sidebar-foreground/70">
                         加载菜单…
                     </p>
                 </SidebarGroupContent>
@@ -185,7 +185,7 @@ export function WorkspaceSidebarNav() {
             <SidebarGroup className="px-1">
                 <SidebarGroupLabel className="sr-only">导航</SidebarGroupLabel>
                 <SidebarGroupContent>
-                    <p className="px-2 py-3 text-xs text-muted-foreground">
+                    <p className="px-2 py-3 text-xs text-sidebar-foreground/70">
                         {getErrorMessage(
                             profileQuery.error,
                             "无法加载权限，菜单暂不可用。",
@@ -201,7 +201,7 @@ export function WorkspaceSidebarNav() {
             <SidebarGroup className="px-1">
                 <SidebarGroupLabel className="sr-only">导航</SidebarGroupLabel>
                 <SidebarGroupContent>
-                    <p className="px-2 py-3 text-xs text-muted-foreground">
+                    <p className="px-2 py-3 text-xs text-sidebar-foreground/70">
                         当前账号暂无可用菜单
                     </p>
                 </SidebarGroupContent>

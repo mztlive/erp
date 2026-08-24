@@ -53,6 +53,7 @@ import {
     multiplyFixed,
     parseDecimal,
 } from "@/lib/fixed-decimal"
+import { getErrorMessage } from "@/lib/api/errors"
 
 type PurchaseBasisLineInput = {
     salesOrderLineId: string
@@ -312,6 +313,7 @@ export type PurchaseOrdersCreateDialogProps = {
     openBases: readonly PurchaseCreationBasis[]
     basesPending: boolean
     basesFailed: boolean
+    basesError?: unknown
     onRetryBases: () => void
     basisFromUrl: string | null
     salesOrderFromUrl: string | null
@@ -335,6 +337,7 @@ export function PurchaseOrdersCreateDialog({
     openBases,
     basesPending,
     basesFailed,
+    basesError,
     onRetryBases,
     basisFromUrl,
     salesOrderFromUrl,
@@ -424,7 +427,10 @@ export function PurchaseOrdersCreateDialog({
                         ) : basesFailed ? (
                             <Alert variant="destructive">
                                 <AlertDescription>
-                                    创建依据加载失败，请重试。
+                                    {getErrorMessage(
+                                        basesError,
+                                        "创建依据加载失败，请重试。",
+                                    )}
                                 </AlertDescription>
                                 <AlertAction>
                                     <Button

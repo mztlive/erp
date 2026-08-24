@@ -368,8 +368,9 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         }
         setLastResult({
             status: "blocked",
-            title: "导出功能待接入",
-            description: "导出尚未接入后端；正式环境将按权限策略生成导出文件。",
+            title: "暂不能导出",
+            description:
+                "当前导出功能暂不可用，请稍后重试或联系管理员。",
         })
     }
 

@@ -4,7 +4,7 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import type { ApiError } from "@/lib/api/errors"
+import { getErrorMessage, type ApiError } from "@/lib/api/errors"
 import type {
     PostAcceptanceInput,
     PostAcceptanceResult,
@@ -148,15 +148,16 @@ export async function postCustomerAcceptanceWorkspace(
         if (apiErr?.kind === "Network" || apiErr?.status === 500) {
             return {
                 status: "unknown",
-                message:
-                    apiErr.message ||
+                message: getErrorMessage(
+                    err,
                     "操作结果暂无法确认，请查询当前状态后再决定是否重试",
+                ),
                 idempotencyKey: input.idempotencyKey,
             }
         }
         return {
             status: "failed",
-            message: apiErr?.message ?? "验收过账失败",
+            message: getErrorMessage(err, "验收过账失败，请稍后重试。"),
         }
     }
 }
@@ -182,10 +183,9 @@ export async function reverseCustomerAcceptanceWorkspace(
             originalAcceptanceNo: input.acceptanceId,
         }
     } catch (err) {
-        const apiErr = err as ApiError
         return {
             status: "failed",
-            message: apiErr?.message ?? "冲正失败",
+            message: getErrorMessage(err, "冲正失败，请稍后重试。"),
         }
     }
 }

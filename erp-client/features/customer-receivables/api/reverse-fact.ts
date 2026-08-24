@@ -1,6 +1,7 @@
 /** Reverse facts (receipt reversal / refund / red invoice) — append-only. */
 
 import { apiGet, apiPost } from "@/lib/api"
+import { getErrorMessage } from "@/lib/api/errors"
 
 import type {
     ReverseFactInput,
@@ -409,10 +410,7 @@ export async function reverseFact(
         reverseIdempotency.set(input.idempotencyKey, result)
         return result
     } catch (err) {
-        const message =
-            err && typeof err === "object" && "message" in err
-                ? String((err as { message: unknown }).message)
-                : "纠错提交失败"
+        const message = getErrorMessage(err, "纠错提交失败，请稍后重试。")
         const failed: ReverseFactResult = {
             status: "failed",
             code: "HTTP_ERROR",

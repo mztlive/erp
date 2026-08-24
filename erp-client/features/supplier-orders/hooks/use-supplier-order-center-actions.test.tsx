@@ -435,7 +435,7 @@ describe("handleAfterSales", () => {
             expect.objectContaining({
                 status: "rejected",
                 title: "售后动作未提交",
-                description: "boom",
+                description: "提交失败，请稍后重试",
             }),
         )
     })

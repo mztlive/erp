@@ -1,9 +1,8 @@
-import { apiGet, apiPost, type ApiError, type Page } from "@/lib/api"
+import { apiGet, apiPost, createApiError } from "@/lib/api"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { contractPdfError } from "@/features/contracts/lib/pdf"
 
 import {
-    isApiError,
     loadCustomerBrief,
     paymentTermCodeFromLabel,
     tsToIso,
@@ -26,32 +25,32 @@ export async function uploadContractPdf(
 ): Promise<UploadContractPdfResult> {
     const fileError = contractPdfError(input.pdfFile)
     if (fileError) {
-        const err: ApiError = {
+        throw createApiError({
             kind: "Validation",
             message: fileError,
             status: 400,
-        }
-        throw err
+            retryable: false,
+        })
     }
 
     // 后端文件资产上限 5 MiB（handler），前端文案仍为 20 MB 校验；超 5 MiB 由后端拒绝
     if (!input.customerId?.trim()) {
-        const err: ApiError = {
+        throw createApiError({
             kind: "Validation",
             message: "请选择客户",
             status: 400,
-        }
-        throw err
+            retryable: false,
+        })
     }
 
     const customer = await loadCustomerBrief(input.customerId.trim())
     if (!customer) {
-        const err: ApiError = {
+        throw createApiError({
             kind: "Http",
             status: 404,
             message: "客户不存在或无权访问",
-        }
-        throw err
+            retryable: false,
+        })
     }
 
     // 结算主体：以表单选定为准；未提供时退回客户自有主体。
@@ -67,37 +66,23 @@ export async function uploadContractPdf(
 
     const asset = await uploadFileAsset(input.pdfFile)
 
-    let created: BackendContractView
-    try {
-        created = await apiPost<BackendContractView>("/admin/contracts", {
-            contract_no: input.contractNo.trim(),
-            customer_id: input.customerId.trim(),
-            settlement_party_id: settlementPartyId,
-            contract_pdf_file_id: asset.id,
-            archive_source: "CONTRACT_CENTER",
-            customer_name: input.customerName.trim(),
-            settlement_party_name: input.settlementPartyName.trim(),
-            payment_term_code: termCode,
-            payment_term_name: termName,
-            // UI 未采集开票快照：用受控默认值满足后端校验（见证据 gap）
-            invoice_type: "增值税专用发票",
-            tax_point: "13",
-            valid_from: input.validFrom,
-            valid_to: input.validTo || undefined,
-            signed_at: input.signedAt,
-        })
-    } catch (error) {
-        if (isApiError(error) && error.status === 409) {
-            const err: ApiError = {
-                kind: "Http",
-                status: 409,
-                message: "CONTRACT_NO_EXISTS",
-                responseData: error.responseData,
-            }
-            throw err
-        }
-        throw error
-    }
+    const created = await apiPost<BackendContractView>("/admin/contracts", {
+        contract_no: input.contractNo.trim(),
+        customer_id: input.customerId.trim(),
+        settlement_party_id: settlementPartyId,
+        contract_pdf_file_id: asset.id,
+        archive_source: "CONTRACT_CENTER",
+        customer_name: input.customerName.trim(),
+        settlement_party_name: input.settlementPartyName.trim(),
+        payment_term_code: termCode,
+        payment_term_name: termName,
+        // UI 未采集开票快照：用受控默认值满足后端校验（见证据 gap）
+        invoice_type: "增值税专用发票",
+        tax_point: "13",
+        valid_from: input.validFrom,
+        valid_to: input.validTo || undefined,
+        signed_at: input.signedAt,
+    })
 
     let revisionId = created.current_revision_id ?? created.id
     let revisionNo = 1

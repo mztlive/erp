@@ -108,6 +108,8 @@ impl IntoResponse for WorkItemActionError {
                     status: 409,
                     message: kind.message().to_string(),
                     code: Some(kind.code().to_string()),
+                    field_errors: None,
+                    retryable: Some(true),
                     data: Some(*conflict),
                     success: false,
                 }

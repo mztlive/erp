@@ -73,6 +73,7 @@ fn duplicate_key_conflict_message(error: &database::Error) -> String {
         Some("uk_supplier_accounts_party") => "该主体已绑定供应商角色".to_string(),
         Some("uk_supplier_accounts_supplier_no") => "供应商编号已存在".to_string(),
         Some("uk_supplier_offerings_supplier_sku") => "该供应商 SKU 已登记供给".to_string(),
+        Some("uk_contracts_contract_no") => "合同编号已存在".to_string(),
         Some("uk_purchase_orders_creation_basis") => "该采购创建依据已生成采购单".to_string(),
         Some("uk_customer_accounts_party") => "该主体已绑定客户角色".to_string(),
         Some("uk_customer_accounts_customer_no") => "客户编号已存在".to_string(),
@@ -256,6 +257,26 @@ mod tests {
         let error = Error::from(database::Error::DuplicateKey(mongo_error));
 
         assert_eq!(error.to_string(), "数据冲突: 主体编号已存在");
+    }
+
+    #[test]
+    fn contract_number_duplicate_index_maps_to_contract_message() {
+        use mongodb::{
+            bson::{doc, from_document},
+            error::{ErrorKind, WriteError, WriteFailure},
+        };
+
+        let write_error: WriteError = from_document(doc! {
+            "code": 11000,
+            "codeName": "DuplicateKey",
+            "errmsg": "E11000 duplicate key error collection: erp.contracts index: uk_contracts_contract_no dup key: { contract_no: \"HT-1\" }",
+            "errInfo": null,
+        })
+        .expect("write error fixture should deserialize");
+        let mongo_error: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
+        let error = Error::from(database::Error::DuplicateKey(mongo_error));
+
+        assert_eq!(error.to_string(), "数据冲突: 合同编号已存在");
     }
 
     #[test]

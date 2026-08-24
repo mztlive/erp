@@ -20,13 +20,13 @@ describe("loginErrorMessage", () => {
 
     it("falls back to a generic hint when a Validation error has no message", () => {
         expect(loginErrorMessage({ kind: "Validation" })).toBe(
-            "登录信息未通过校验",
+            "登录信息未通过检查，请修改后重试。",
         )
     })
 
     it("maps Network errors to the connectivity hint", () => {
         expect(loginErrorMessage({ kind: "Network", message: "x" })).toBe(
-            "无法连接服务器，请确认后端已启动",
+            "网络连接失败，请检查网络后重试。",
         )
     })
 
@@ -36,13 +36,15 @@ describe("loginErrorMessage", () => {
         ).toBe("系统繁忙")
     })
 
-    it("passes through Error instances", () => {
-        expect(loginErrorMessage(new Error("boom"))).toBe("boom")
+    it("replaces technical Error messages with the login fallback", () => {
+        expect(loginErrorMessage(new Error("boom"))).toBe(
+            "登录失败，请稍后重试。",
+        )
     })
 
     it("falls back for non-object errors", () => {
-        expect(loginErrorMessage("oops")).toBe("登录失败，请稍后重试")
-        expect(loginErrorMessage(undefined)).toBe("登录失败，请稍后重试")
-        expect(loginErrorMessage(null)).toBe("登录失败，请稍后重试")
+        expect(loginErrorMessage("oops")).toBe("登录失败，请稍后重试。")
+        expect(loginErrorMessage(undefined)).toBe("登录失败，请稍后重试。")
+        expect(loginErrorMessage(null)).toBe("登录失败，请稍后重试。")
     })
 })

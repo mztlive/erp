@@ -48,12 +48,20 @@ export function SalesOrderCancelApprovalButton({
 
     if (!salesOrderAllowsWithdrawApproval(order)) return null
 
+    const permissionFailure = permissions.accountQuery.isError
+        ? getErrorPresentation(
+              permissions.accountQuery.error,
+              "暂时无法核对权限，请刷新后重试。",
+          )
+        : null
     const gate = permissions.accountQuery.isPending
         ? ({ enabled: false, reason: "正在核对权限，请稍候。" } as const)
         : permissions.accountQuery.isError
           ? ({
                 enabled: false,
-                reason: "暂时无法核对权限，请刷新后重试。",
+                reason:
+                    permissionFailure?.description ??
+                    "暂时无法核对权限，请刷新后重试。",
             } as const)
           : gateCancelSalesOrderApproval({
                 order,

@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useApplyCustomerAssignmentMutation } from "@/features/customers/hooks/queries"
 import type { CustomerAssignmentView } from "@/features/customers/types"
 import { useOwnerOptionsQuery } from "@/hooks/use-options"
-import type { ApiError } from "@/lib/api"
+import { getErrorMessage } from "@/lib/api/errors"
 
 /** 返回本地业务日期。 */
 function todayBusinessDate(): string {
@@ -37,13 +37,8 @@ function nextBusinessDate(value: string): string {
 }
 
 /** 从统一 API 错误中提取服务端业务消息。 */
-function mutationMessage(error: unknown): string {
-    const apiError = error as ApiError
-    const response = apiError.responseData as
-        | { errorMessage?: string }
-        | undefined
-    return response?.errorMessage || apiError.message || "归属调整失败，请重试"
-}
+const mutationMessage = (error: unknown): string =>
+    getErrorMessage(error, "归属调整失败，请重试。")
 
 /** 建立/换任责任归属，或结束一条当前协作归属。 */
 export function CustomerAssignmentDialog({

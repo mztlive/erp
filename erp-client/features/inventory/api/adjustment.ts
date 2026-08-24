@@ -3,7 +3,7 @@
  */
 
 import { apiGet, apiPost, apiPut } from "@/lib/api"
-import type { ApiError } from "@/lib/api/errors"
+import { getErrorMessage, type ApiError } from "@/lib/api/errors"
 import type {
     AdjustmentDetailView,
     AdjustmentDraftView,
@@ -145,7 +145,9 @@ export async function submitAdjustment(input: {
                     // （历史缺陷：note/occurredAt 从未落库，流水原因与发生时间丢失）
                     note: input.note || null,
                     occurred_at: input.occurredAt
-                        ? Math.floor(new Date(input.occurredAt).getTime() / 1000)
+                        ? Math.floor(
+                              new Date(input.occurredAt).getTime() / 1000,
+                          )
                         : null,
                     // 创建草稿时明细为占位数量/方向，提交前必须把表单数量与方向写回明细行，
                     // 否则过账按占位数量扣减、盘盈方向不一致被拒（历史缺陷）
@@ -153,7 +155,9 @@ export async function submitAdjustment(input: {
                         line_id: line.id,
                         quantity: input.quantity,
                         direction:
-                            input.direction === "increase" ? "INCREASE" : "DECREASE",
+                            input.direction === "increase"
+                                ? "INCREASE"
+                                : "DECREASE",
                     })),
                 },
             )
@@ -196,22 +200,20 @@ export async function submitAdjustment(input: {
                     latestLockVersion: input.expectedBalanceLockVersion,
                 }
             }
-            // OutcomeUnknown from backend maps to HTTP 500 with specific message
-            if (
-                error.status === 500 &&
-                typeof error.message === "string" &&
-                error.message.includes("暂无法确认")
-            ) {
+            if (error.code === "OUTCOME_UNKNOWN") {
                 return {
                     status: "unknown",
-                    message: error.message,
+                    message: getErrorMessage(
+                        error,
+                        "操作结果暂无法确认，请先查询当前状态。",
+                    ),
                     idempotencyKey: input.idempotencyKey,
                 }
             }
             return {
                 status: "failed",
-                code: String(error.status ?? "ERROR"),
-                message: error.message,
+                code: String(error.code ?? error.status ?? "ERROR"),
+                message: getErrorMessage(error),
             }
         }
         throw error

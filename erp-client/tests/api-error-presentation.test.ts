@@ -7,14 +7,16 @@ describe("error presentation safety", () => {
         const error = fromHttpResponse(500, {
             errorMessage: "MongoServerError: E11000 duplicate key",
             requestId: "req-technical",
+            success: false,
         })
 
         expect(getErrorPresentation(error)).toEqual({
             kind: "system",
             title: "系统暂时无法完成操作",
             description:
-                "系统暂时无法完成请求，请稍后重试；如仍失败，请联系支持人员。",
+                "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员。",
             code: undefined,
+            fieldErrors: undefined,
             requestId: "req-technical",
             retryable: true,
         })

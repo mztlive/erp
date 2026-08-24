@@ -12,14 +12,14 @@ import {
 function WorkspaceSidebarHeader() {
     return (
         <div className="flex items-center gap-2.5 px-2 py-3">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
                 <Building2Icon className="size-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
-                <div className="truncate text-base font-bold tracking-tight text-foreground">
+                <div className="truncate text-base font-bold tracking-tight text-sidebar-accent-foreground">
                     福尚云 ERP
                 </div>
-                <div className="truncate text-xs text-muted-foreground">
+                <div className="truncate text-xs text-sidebar-foreground/70">
                     内部工作台
                 </div>
             </div>

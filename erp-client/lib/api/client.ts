@@ -2,7 +2,7 @@
  * fetch 封装基座：base URL、JWT 头、超时、ApiResponse 信封统一解包。
  *
  * 后端信封（backend/apps/web-api/src/core/response.rs）真实字段：
- * { status: number, errorMessage: string, data: T | null, success: boolean }
+ * { status, errorMessage, code?, fieldErrors?, retryable?, data, success }
  * 成功判定：HTTP 2xx 且信封 success === true，业务数据取信封 data。
  *
  * 失败统一抛 ApiError（errors.ts）：
@@ -42,6 +42,8 @@ interface ApiResponseEnvelope<T> {
     status: number
     errorMessage: string
     code?: string
+    fieldErrors?: Record<string, string>
+    retryable?: boolean
     requestId?: string
     data: T | null
     success: boolean
@@ -118,22 +120,23 @@ const apiFetch = async <T>(
     }
 
     const envelope = parsed as Partial<ApiResponseEnvelope<T>> | undefined
+    const requestId = res.headers.get("X-Trace-Id") ?? undefined
 
     // 401：HTTP 状态或业务信封中的 status 均归类为 Auth，并通知 session 清理
     if (res.status === 401 || envelope?.status === 401) {
         notifyUnauthorized()
-        throw fromAuth(401, parsed)
+        throw fromAuth(401, parsed, requestId)
     }
 
     // HTTP 非 2xx（403 / 404 / 500 ...）
     if (!res.ok) {
-        throw fromHttpResponse(res.status, parsed)
+        throw fromHttpResponse(res.status, parsed, requestId)
     }
 
     // 业务失败（信封 success=false，携带后端 errorMessage）
     if (envelope && envelope.success === false) {
         if (typeof envelope.status === "number" && envelope.status >= 400) {
-            throw fromHttpResponse(envelope.status, parsed)
+            throw fromHttpResponse(envelope.status, parsed, requestId)
         }
         throw createApiError({
             kind: "Validation",
@@ -142,7 +145,9 @@ const apiFetch = async <T>(
                 "请求未通过业务校验，请检查填写内容后重试。",
             status: envelope.status,
             code: envelope.code,
-            requestId: envelope.requestId,
+            fieldErrors: envelope.fieldErrors,
+            retryable: envelope.retryable ?? false,
+            requestId: envelope.requestId ?? requestId,
             responseData: envelope,
         })
     }

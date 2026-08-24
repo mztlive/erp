@@ -4,6 +4,7 @@
  */
 
 import { apiPost } from "@/lib/api"
+import { getErrorMessage } from "@/lib/api/errors"
 import type {
     CompleteCardFundsReviewCommand,
     FormalActionResponse,
@@ -150,10 +151,7 @@ export async function completeCardFundsReview(
             },
         }
     } catch (err) {
-        const message =
-            err && typeof err === "object" && "message" in err
-                ? String((err as { message: unknown }).message)
-                : "完成复核失败"
+        const message = getErrorMessage(err, "完成复核失败，请稍后重试。")
         const status =
             err && typeof err === "object" && "status" in err
                 ? (err as { status?: number }).status

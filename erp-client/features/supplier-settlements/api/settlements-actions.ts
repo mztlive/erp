@@ -67,14 +67,11 @@ export async function createSettlementDraft(
             ],
         }
     } catch (err) {
-        const message =
-            err && typeof err === "object" && "message" in err
-                ? String((err as { message: string }).message)
-                : "创建草稿失败"
-        if (
-            message.includes("SOURCE_EVIDENCE_MISSING") ||
-            message.includes("来源证据")
-        ) {
+        const code =
+            err && typeof err === "object" && "code" in err
+                ? (err as { code?: string }).code
+                : undefined
+        if (code === "SOURCE_EVIDENCE_MISSING") {
             return {
                 status: "blocked",
                 code: "SOURCE_EVIDENCE_MISSING",

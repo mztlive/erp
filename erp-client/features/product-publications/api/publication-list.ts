@@ -57,8 +57,8 @@ function rowFromPublication(
         latestRevisionNo: rev?.revision_no,
         hasPendingConfirmation: Boolean(
             rev &&
-                pub.current_revision_id &&
-                rev.id !== pub.current_revision_id,
+            pub.current_revision_id &&
+            rev.id !== pub.current_revision_id,
         ),
         salesPriceGross: rev?.sales_price_gross,
         fixedOffering: emptyFixedOffering(),
@@ -230,12 +230,12 @@ export async function fetchPublicationList(
 
     const hasFilters = Boolean(
         query.q?.trim() ||
-            query.mallId ||
-            query.skuId ||
-            query.supplierOfferingRevisionId ||
-            (query.publicationStatus && query.publicationStatus !== "all") ||
-            (query.deliveryStatus && query.deliveryStatus !== "all") ||
-            (query.metric && query.metric !== "all"),
+        query.mallId ||
+        query.skuId ||
+        query.supplierOfferingRevisionId ||
+        (query.publicationStatus && query.publicationStatus !== "all") ||
+        (query.deliveryStatus && query.deliveryStatus !== "all") ||
+        (query.metric && query.metric !== "all"),
     )
 
     return {
@@ -251,8 +251,7 @@ export async function fetchPublicationList(
         ),
         creationBlocker: {
             code: "PUBLICATION_IDENTITY_POLICY_UNCONFIRMED",
-            message:
-                "新建发布身份策略尚未在后端确认；列表/详情/修订/投递已接入真实接口。",
+            message: "当前暂不能新建商品发布，请联系管理员确认发布范围。",
         },
         filterSummary: `${filtered.length} 条`,
         emptyReason:

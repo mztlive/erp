@@ -5,6 +5,7 @@ import type {
     AllocationMode,
     ReverseFactInput,
 } from "@/features/customer-receivables/types"
+import { getErrorMessage } from "@/lib/api/errors"
 import { hasAnyPermission, hasPermission } from "@/lib/permissions"
 
 export function useCustomerReceivablesPermissions() {
@@ -34,7 +35,10 @@ export function useCustomerReceivablesPermissions() {
     const reason = profileQuery.isPending
         ? "正在核对操作权限，请稍候。"
         : profileQuery.isError
-          ? "暂时无法核对操作权限，请刷新后重试。"
+          ? getErrorMessage(
+                profileQuery.error,
+                "暂时无法核对操作权限，请刷新后重试。",
+            )
           : "当前账号没有执行此操作的权限。"
 
     return {

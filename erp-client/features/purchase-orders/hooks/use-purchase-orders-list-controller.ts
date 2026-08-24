@@ -148,16 +148,11 @@ export function usePurchaseOrdersListController() {
     }, [exportQuery])
 
     const openBases = React.useMemo(() => {
-        if (basesQuery.isError || basesQuery.isRefetchError) return []
+        if (basesQuery.error) return []
         const open = basesQuery.data?.filter((b) => !b.consumed) ?? []
         if (!salesOrderFromUrl) return open
         return open.filter((b) => b.salesOrderId === salesOrderFromUrl)
-    }, [
-        basesQuery.data,
-        basesQuery.isError,
-        basesQuery.isRefetchError,
-        salesOrderFromUrl,
-    ])
+    }, [basesQuery.data, basesQuery.error, salesOrderFromUrl])
 
     React.useEffect(() => {
         if (!basisFromUrl && !createFromSales) return

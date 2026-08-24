@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use axum::{
     extract::DefaultBodyLimit,
-    http::StatusCode,
+    http::{header::HeaderName, StatusCode},
     middleware,
     routing::{get, post},
     Router,
@@ -103,7 +103,8 @@ pub fn create(app_state: AppState) -> Router {
                 CorsLayer::new()
                     .allow_origin(Any)
                     .allow_methods(Any)
-                    .allow_headers(Any),
+                    .allow_headers(Any)
+                    .expose_headers([HeaderName::from_static("x-trace-id")]),
             ),
     )
 }

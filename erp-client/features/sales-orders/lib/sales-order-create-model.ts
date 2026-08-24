@@ -166,15 +166,5 @@ export function calculateTotals(
     }
 }
 
-export function errorMessage(error: unknown): string {
-    const message = getErrorMessage(error, "创建失败，请重试。")
-    const messages: Record<string, string> = {
-        CONTRACT_NOT_SELECTABLE: "所选合同已不可用于新建销售单，请刷新后重选。",
-        CONTRACT_REVISION_NOT_FOUND: "所选合同修订不存在，请刷新合同后重试。",
-        CONTRACT_REVISION_NOT_CURRENT: "新销售单只能引用合同当前有效修订。",
-        LINE_ITEM_REQUIRED: "至少需要一条销售明细。",
-        LINE_ITEM_INVALID: "销售明细不完整，请检查项目、数量、单位和价格。",
-        VOUCHER_REQUIRES_EXACTLY_ONE_LINE: "卡券销售单必须恰好一条明细。",
-    }
-    return messages[message] ?? message
-}
+export const errorMessage = (error: unknown): string =>
+    getErrorMessage(error, "创建失败，请重试。")

@@ -137,11 +137,16 @@ describe("errorMessage", () => {
         expect(
             errorMessage({
                 kind: "Validation",
-                message: "CONTRACT_NOT_SELECTABLE",
+                code: "CONTRACT_NOT_SELECTABLE",
+                message: "所选合同已不可用于新建销售单，请刷新后重选。",
             }),
         ).toBe("所选合同已不可用于新建销售单，请刷新后重选。")
         expect(
-            errorMessage({ kind: "Validation", message: "LINE_ITEM_REQUIRED" }),
+            errorMessage({
+                kind: "Validation",
+                code: "LINE_ITEM_REQUIRED",
+                message: "至少需要一条销售明细。",
+            }),
         ).toBe("至少需要一条销售明细。")
     })
 

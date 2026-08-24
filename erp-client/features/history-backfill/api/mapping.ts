@@ -300,6 +300,6 @@ export function emptyCreateContext(): CreateBackfillContext {
         estimatedFactCount: 0,
         hasOverlappingFormalJob: false,
         canCreateDraft: false,
-        blockReasons: ["创建上下文接口未交付（backend_gap）"],
+        blockReasons: ["当前暂不能创建任务，请联系管理员确认功能是否已启用"],
     }
 }

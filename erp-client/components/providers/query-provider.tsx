@@ -3,7 +3,22 @@
 import { useState } from "react"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
+import { toast } from "@/components/ui/toast"
+import { getErrorPresentation } from "@/lib/api/errors"
 import { makeQueryClient } from "@/lib/query-client"
+
+/** 将 Mutation 接口失败统一展示为短时提示。 */
+const notifyMutationError = (error: unknown) => {
+    const failure = getErrorPresentation(error)
+    toast.add({
+        title: failure.title,
+        description: failure.requestId
+            ? `${failure.description} 请求编号：${failure.requestId}`
+            : failure.description,
+        type: "error",
+        timeout: 6000,
+    })
+}
 
 /**
  * 全局 TanStack Query Provider。
@@ -12,7 +27,7 @@ import { makeQueryClient } from "@/lib/query-client"
  */
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     // 客户端单例：避免每次 render 新建 QueryClient 导致缓存丢失
-    const [queryClient] = useState(() => makeQueryClient())
+    const [queryClient] = useState(() => makeQueryClient(notifyMutationError))
 
     return (
         <QueryClientProvider client={queryClient}>

@@ -678,7 +678,7 @@ describe("useActualProfitLossPage", () => {
         await act(async () => {
             await result.current.handleExport()
         })
-        expect(result.current.exportFailed).toBe("boom")
+        expect(result.current.exportFailed).toBe("未能生成导出文件，请稍后重试。")
         expect(result.current.exportJob).toBeNull()
     })
 

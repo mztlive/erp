@@ -172,15 +172,8 @@ function RuleDialog({
                 })
                 onOpenChange(false)
             } catch (error) {
-                toast.add({
-                    title: "保存失败",
-                    description: getErrorMessage(
-                        error,
-                        "暂时无法保存采购责任规则，请稍后重试。",
-                    ),
-                    type: "error",
-                    timeout: 5000,
-                })
+                // MutationCache 已统一提示；此处吞回异常，避免表单重复报告。
+                void error
             }
         },
     })
@@ -460,7 +453,7 @@ export function ProcurementResponsibilityRulesPage() {
         value: account.id,
         label: `${account.name} · ${account.account}`,
     }))
-    const rows = rulesQuery.data ?? []
+    const rows = [...(rulesQuery.data ?? [])]
 
     return (
         <PageScaffold density="compact">
