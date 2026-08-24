@@ -45,9 +45,14 @@ type CustomerAccountDetailPreviewProps = Readonly<{
         existingFactId?: string,
         target?: AllocationTarget,
     ) => void | Promise<void>
+    canStartSession?: (mode: AllocationMode) => boolean
     onRequestReverse: (request: ReverseRequest) => void
+    canRequestReverse?: (kind: ReverseRequest["kind"]) => boolean
     onRequestRefundSubmit?: () => void
     onRequestReversalSubmit?: () => void
+    canSubmitRefund?: boolean
+    canSubmitReversal?: boolean
+    permissionReason?: string
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -67,9 +72,14 @@ export function CustomerAccountDetailPreview({
     onRetry,
     onClose,
     onStartSession,
+    canStartSession = () => true,
     onRequestReverse,
+    canRequestReverse = () => true,
     onRequestRefundSubmit,
     onRequestReversalSubmit,
+    canSubmitRefund = true,
+    canSubmitReversal = true,
+    permissionReason,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -157,6 +167,12 @@ export function CustomerAccountDetailPreview({
                         {data.receivable ? (
                             <Button
                                 type="button"
+                                disabled={!canStartSession("receipt")}
+                                title={
+                                    canStartSession("receipt")
+                                        ? undefined
+                                        : permissionReason
+                                }
                                 onClick={() =>
                                     void onStartSession(
                                         "receipt",
@@ -179,6 +195,12 @@ export function CustomerAccountDetailPreview({
                         ) ? (
                             <Button
                                 type="button"
+                                disabled={!canStartSession("receipt")}
+                                title={
+                                    canStartSession("receipt")
+                                        ? undefined
+                                        : permissionReason
+                                }
                                 onClick={() =>
                                     void onStartSession(
                                         "receipt",
@@ -196,6 +218,12 @@ export function CustomerAccountDetailPreview({
                             <Button
                                 type="button"
                                 variant="outline"
+                                disabled={!canRequestReverse("receipt_reverse")}
+                                title={
+                                    canRequestReverse("receipt_reverse")
+                                        ? undefined
+                                        : permissionReason
+                                }
                                 onClick={() =>
                                     onRequestReverse({
                                         kind: "receipt_reverse",
@@ -212,6 +240,12 @@ export function CustomerAccountDetailPreview({
                             <Button
                                 type="button"
                                 variant="outline"
+                                disabled={!canRequestReverse("refund")}
+                                title={
+                                    canRequestReverse("refund")
+                                        ? undefined
+                                        : permissionReason
+                                }
                                 onClick={() =>
                                     onRequestReverse({
                                         kind: "refund",
@@ -229,6 +263,12 @@ export function CustomerAccountDetailPreview({
                         ) ? (
                             <Button
                                 type="button"
+                                disabled={!canStartSession("invoice")}
+                                title={
+                                    canStartSession("invoice")
+                                        ? undefined
+                                        : permissionReason
+                                }
                                 onClick={() =>
                                     void onStartSession(
                                         "invoice",
@@ -248,6 +288,12 @@ export function CustomerAccountDetailPreview({
                         onRequestRefundSubmit ? (
                             <Button
                                 type="button"
+                                disabled={!canSubmitRefund}
+                                title={
+                                    canSubmitRefund
+                                        ? undefined
+                                        : permissionReason
+                                }
                                 onClick={onRequestRefundSubmit}
                             >
                                 提交审批
@@ -263,6 +309,12 @@ export function CustomerAccountDetailPreview({
                         onRequestReversalSubmit ? (
                             <Button
                                 type="button"
+                                disabled={!canSubmitReversal}
+                                title={
+                                    canSubmitReversal
+                                        ? undefined
+                                        : permissionReason
+                                }
                                 onClick={onRequestReversalSubmit}
                             >
                                 提交审批
@@ -274,6 +326,12 @@ export function CustomerAccountDetailPreview({
                             <Button
                                 type="button"
                                 variant="outline"
+                                disabled={!canRequestReverse("red_invoice")}
+                                title={
+                                    canRequestReverse("red_invoice")
+                                        ? undefined
+                                        : permissionReason
+                                }
                                 onClick={() =>
                                     onRequestReverse({
                                         kind: "red_invoice",

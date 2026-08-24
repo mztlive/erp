@@ -4,9 +4,7 @@ import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import type { ResultState as SharedResultState } from "@/components/business/feedback"
-import type {
-    FulfillmentQueueFilters,
-} from "@/features/fulfillment-operations/api"
+import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
 import { FIRST_INPUT_ID } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import {
     useFulfillmentQueueQuery,
@@ -14,15 +12,18 @@ import {
     useResolveUnknownFulfillmentMutation,
     useSaveFulfillmentMutation,
 } from "@/features/fulfillment-operations/hooks/queries"
+import { FULFILLMENT_ROLES } from "@/features/fulfillment-operations/lib/fulfillment-roles"
 import {
-    FULFILLMENT_ROLES,
-} from "@/features/fulfillment-operations/lib/fulfillment-roles"
+    canExecuteFulfillmentOperation,
+    canListFulfillmentOperation,
+} from "@/features/fulfillment-operations/lib/fulfillment-permissions"
 import type { FulfillmentLane } from "@/features/fulfillment-operations/lib/lanes"
 import {
     cloneDraft,
     clientValidation,
 } from "@/features/fulfillment-operations/lib/validation"
 import {
+    SLUG_TO_TYPE,
     TYPE_SLUG,
     type FulfillmentDraft,
     type FulfillmentFormalOutcome,
@@ -33,12 +34,17 @@ import { useFulfillmentActions } from "./use-fulfillment-actions"
 type ResultState = SharedResultState<FulfillmentFormalOutcome>
 
 export type FulfillmentOperationsControllerContext = {
-    roleValue: "warehouse" | "procurement"
+    roleValue: FulfillmentQueueFilters["role"]
     filters: FulfillmentQueueFilters
     /** 解析后的岗位通道；无岗位深链为 null */
     lane: FulfillmentLane | null
     /** URL 里的 autoNext：1 / 0 / 未设置 */
     autoNextExplicit: string | null | undefined
+    /** 销售单详情使用本地状态，切换单据和自动连续处理时不改页面地址。 */
+    stateMode?: "url" | "local"
+    grantedPermissions?: readonly string[]
+    permissionsReady?: boolean
+    onPosted?: (salesOrderId: string) => void
 }
 
 /**
@@ -49,30 +55,84 @@ export function useFulfillmentOperationsController({
     filters,
     lane,
     autoNextExplicit,
+    stateMode = "url",
+    grantedPermissions,
+    permissionsReady = true,
+    onPosted,
 }: FulfillmentOperationsControllerContext) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
+    const localState = stateMode === "local"
+    const [localFilters, setLocalFilters] =
+        React.useState<FulfillmentQueueFilters>(filters)
+    const [localAutoNextExplicit, setLocalAutoNextExplicit] =
+        React.useState(autoNextExplicit)
 
-    const queueQuery = useFulfillmentQueueQuery(filters)
+    React.useEffect(() => {
+        if (!localState) return
+        setLocalFilters(filters)
+        setLocalAutoNextExplicit(autoNextExplicit)
+    }, [autoNextExplicit, filters, localState])
+
+    const effectiveFilters = localState ? localFilters : filters
+    const effectiveAutoNextExplicit = localState
+        ? localAutoNextExplicit
+        : autoNextExplicit
+
+    const queueQuery = useFulfillmentQueueQuery(effectiveFilters)
     const saveMutation = useSaveFulfillmentMutation()
     const postMutation = usePostFulfillmentMutation()
     const resolveUnknownMutation = useResolveUnknownFulfillmentMutation()
 
     const view = queueQuery.data
-    const operations = React.useMemo(
-        () => view?.operations ?? [],
-        [view?.operations],
-    )
     const context = view?.context
-    const canExecute = context?.canExecute ?? true
-    const visibleTypes =
+    const roleVisibleTypes =
         context?.visibleTypes ?? FULFILLMENT_ROLES[roleValue].types
-    const currentOperationId = filters.currentOperationId
+    const permissionChecksEnabled = grantedPermissions !== undefined
+    const visibleTypes = React.useMemo(
+        () =>
+            permissionChecksEnabled && permissionsReady
+                ? roleVisibleTypes.filter((type) =>
+                      canListFulfillmentOperation(grantedPermissions, type),
+                  )
+                : roleVisibleTypes,
+        [
+            grantedPermissions,
+            permissionChecksEnabled,
+            permissionsReady,
+            roleVisibleTypes,
+        ],
+    )
+    const operations = React.useMemo(
+        () =>
+            (view?.operations ?? []).filter((candidate) =>
+                visibleTypes.includes(candidate.operationType),
+            ),
+        [view?.operations, visibleTypes],
+    )
+    const currentOperationId = effectiveFilters.currentOperationId
     const operation =
         operations.find((t) => t.operationId === currentOperationId) ??
-        view?.current ??
+        operations.find(
+            (candidate) => candidate.operationId === view?.current?.operationId,
+        ) ??
         operations[0]
+    const canExecute =
+        Boolean(context?.canExecute ?? true) &&
+        Boolean(operation) &&
+        (!permissionChecksEnabled ||
+            (permissionsReady &&
+                canExecuteFulfillmentOperation(
+                    grantedPermissions,
+                    operation!.operationType,
+                )))
+    const executeBlockedReason =
+        permissionChecksEnabled && !permissionsReady
+            ? "正在核对履约操作权限，请稍候。"
+            : permissionChecksEnabled && operation && !canExecute
+              ? "当前账号可以查看这类单据，但没有保存或确认权限。"
+              : undefined
     const currentIndex = operation
         ? Math.max(
               0,
@@ -81,15 +141,22 @@ export function useFulfillmentOperationsController({
               ),
           )
         : 0
-    const completed = Boolean(view) && operations.length === 0
+    const permissionDenied =
+        permissionChecksEnabled && permissionsReady && visibleTypes.length === 0
+    const emptyReason = permissionDenied ? "NO_PERMISSION" : view?.emptyReason
+    const completed =
+        Boolean(view) &&
+        operations.length === 0 &&
+        emptyReason !== "NO_PERMISSION" &&
+        emptyReason !== "FILTER_NO_RESULT"
 
     const [sessionAutoNext, setSessionAutoNext] = React.useState(
         () => roleValue !== "warehouse",
     )
     const autoNext =
-        autoNextExplicit === "0"
+        effectiveAutoNextExplicit === "0"
             ? false
-            : autoNextExplicit === "1"
+            : effectiveAutoNextExplicit === "1"
               ? true
               : sessionAutoNext
 
@@ -116,7 +183,7 @@ export function useFulfillmentOperationsController({
     }, [operation])
 
     React.useEffect(() => {
-        if (queueQuery.isPending || !view) return
+        if (localState || queueQuery.isPending || !view) return
         const hasLane = searchParams.has("lane")
         const hasItem = searchParams.has("currentOperationId")
         // 没有确定岗位（只读角色 / 未声明岗位的深链）就不写 lane，
@@ -133,6 +200,7 @@ export function useFulfillmentOperationsController({
         const qs = params.toString()
         router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
     }, [
+        localState,
         queueQuery.isPending,
         view,
         searchParams,
@@ -166,6 +234,54 @@ export function useFulfillmentOperationsController({
 
     const replaceUrl = React.useCallback(
         (patch: Record<string, string | null | undefined>) => {
+            if (localState) {
+                setLocalFilters((current) => {
+                    const next = { ...current }
+                    if (Object.hasOwn(patch, "currentOperationId")) {
+                        next.currentOperationId =
+                            patch.currentOperationId || undefined
+                    }
+                    if (Object.hasOwn(patch, "type")) {
+                        const type = patch.type
+                            ? SLUG_TO_TYPE[patch.type]
+                            : undefined
+                        next.operationTypes = type ? [type] : undefined
+                    }
+                    if (Object.hasOwn(patch, "purchaseOrderId")) {
+                        next.purchaseOrderId =
+                            patch.purchaseOrderId || undefined
+                    }
+                    if (Object.hasOwn(patch, "warehouseId")) {
+                        next.warehouseId = patch.warehouseId || undefined
+                    }
+                    if (Object.hasOwn(patch, "q")) {
+                        next.q = patch.q || undefined
+                    }
+                    if (Object.hasOwn(patch, "due")) {
+                        next.due =
+                            patch.due === "today" || patch.due === "overdue"
+                                ? patch.due
+                                : undefined
+                    }
+                    if (Object.hasOwn(patch, "gate")) {
+                        next.gate =
+                            patch.gate === "blocked" ||
+                            patch.gate === "satisfied"
+                                ? patch.gate
+                                : undefined
+                    }
+                    return {
+                        ...next,
+                        role: filters.role,
+                        salesOrderId: filters.salesOrderId,
+                    }
+                })
+                if (Object.hasOwn(patch, "autoNext")) {
+                    setLocalAutoNextExplicit(patch.autoNext ?? undefined)
+                }
+                return
+            }
+
             const params = new URLSearchParams(searchParams.toString())
             for (const [key, value] of Object.entries(patch)) {
                 if (value == null || value === "") params.delete(key)
@@ -176,7 +292,14 @@ export function useFulfillmentOperationsController({
                 scroll: false,
             })
         },
-        [pathname, router, searchParams],
+        [
+            filters.role,
+            filters.salesOrderId,
+            localState,
+            pathname,
+            router,
+            searchParams,
+        ],
     )
 
     const goToOperation = React.useCallback(
@@ -208,13 +331,18 @@ export function useFulfillmentOperationsController({
             const nextId =
                 preferredNext ??
                 neighborId(1) ??
-                operations.find(
-                    (t) => t.operationId !== operation?.operationId,
-                )?.operationId
+                operations.find((t) => t.operationId !== operation?.operationId)
+                    ?.operationId
             if (nextId) goToOperation(nextId, keepResult)
             else replaceUrl({ currentOperationId: null })
         },
-        [goToOperation, neighborId, replaceUrl, operation?.operationId, operations],
+        [
+            goToOperation,
+            neighborId,
+            replaceUrl,
+            operation?.operationId,
+            operations,
+        ],
     )
 
     const actions = useFulfillmentActions({
@@ -222,6 +350,7 @@ export function useFulfillmentOperationsController({
         draft,
         dirty,
         autoNext,
+        canExecute,
         pendingIdempotencyKey: lastResult?.pendingIdempotencyKey,
         saveMutation,
         postMutation,
@@ -234,6 +363,7 @@ export function useFulfillmentOperationsController({
         setSaveMessage,
         setConfirmOpen,
         setLastResult,
+        onPosted,
     })
 
     const validationIssues =
@@ -357,7 +487,9 @@ export function useFulfillmentOperationsController({
         operation,
         currentIndex,
         completed,
+        emptyReason,
         canExecute,
+        executeBlockedReason,
         visibleTypes,
         draft,
         dirty,
@@ -392,3 +524,7 @@ export function useFulfillmentOperationsController({
         goToWarehouseShip,
     }
 }
+
+export type FulfillmentOperationsController = ReturnType<
+    typeof useFulfillmentOperationsController
+>

@@ -3,7 +3,6 @@
  */
 
 import { apiGet } from "@/lib/api"
-import type { Page } from "@/lib/api"
 
 import type {
     AllocationDraftLine,
@@ -17,27 +16,39 @@ import type {
     BackendReceivableAccount,
 } from "./dto"
 import { instantToIso } from "./mappers"
+import { loadAllPages } from "./loaders"
 import { mapCustomerReceiptApproval } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 
 export const sessions = new Map<string, AllocationSessionView>()
 let sessionSeq = 100
 
+type AllocationPoolScope = {
+    salesOrderId?: string
+    receivableAccountId?: string
+}
+
 async function buildPool(
     mode: "receipt" | "invoice",
     counterpartyPartyId: string,
+    scope: AllocationPoolScope = {},
 ): Promise<AllocationSessionView["pool"]> {
-    const page = await apiGet<Page<BackendReceivableAccount>>(
+    const page = await loadAllPages<BackendReceivableAccount>(
         "/admin/receivable-accounts",
         {
             counterparty_party_id: counterpartyPartyId,
-            page: 1,
-            page_size: 100,
+            sales_order_id: scope.salesOrderId,
             sort_by: "created_at",
             sort_dir: "desc",
         },
     )
-    const rows = page.items ?? []
+    const rows = (page.items ?? []).filter(
+        (row) =>
+            (!scope.salesOrderId ||
+                row.sales_order_id === scope.salesOrderId) &&
+            (!scope.receivableAccountId ||
+                row.id === scope.receivableAccountId),
+    )
     if (mode === "receipt") {
         return rows.flatMap((r) =>
             (r.entries ?? [])
@@ -46,6 +57,7 @@ async function buildPool(
                     targetId: e.id,
                     targetKind: "receivable_entry" as const,
                     label: `${r.sales_order_no || r.sales_order_id} · ${e.entry_type}`,
+                    salesOrderId: r.sales_order_id,
                     salesOrderNo: r.sales_order_no || r.sales_order_id,
                     // open amount is server field on account; entry-level open is not exposed — use amount as display open
                     openAmount: e.amount,
@@ -66,6 +78,7 @@ async function buildPool(
             targetId: r.id,
             targetKind: "receivable_account" as const,
             label: `应收子账 #${r.account_seq} · ${r.sales_order_no || r.sales_order_id}`,
+            salesOrderId: r.sales_order_id,
             salesOrderNo: r.sales_order_no || r.sales_order_id,
             openAmount: r.open_invoiceable_total,
             dueDate: r.entries?.[0]?.due_date,
@@ -95,14 +108,17 @@ function recomputeProposed(
 export async function createAllocationSession(
     input: CreateSessionInput,
 ): Promise<AllocationSessionView> {
-    const pool = await buildPool(input.mode, input.counterpartyPartyId)
+    const pool = await buildPool(input.mode, input.counterpartyPartyId, {
+        salesOrderId: input.salesOrderId,
+        receivableAccountId: input.receivableAccountId,
+    })
     let existingFactNo: string | undefined
     let existingFactVersion: number | undefined
     let approval: AllocationSessionView["approval"]
     let fact: AllocationSessionView["fact"] = {}
     let prefillAllocations: AllocationDraftLine[] = []
-    let customerId = ""
-    let customerName = ""
+    let customerId = input.customerId ?? ""
+    let customerName = input.customerName ?? ""
 
     if (input.mode === "receipt" && input.existingFactId) {
         const r = await apiGet<BackendCustomerReceipt>(
@@ -154,21 +170,14 @@ export async function createAllocationSession(
     }
 
     if (input.receivableAccountId || input.salesOrderId) {
-        const match = pool.find((p) => {
+        const match = pool.find((target) => {
             if (input.receivableAccountId) {
-                if (p.targetKind === "receivable_account") {
-                    return p.targetId === input.receivableAccountId
-                }
-                return p.label.includes(input.receivableAccountId)
-            }
-            if (input.salesOrderId) {
                 return (
-                    p.salesOrderNo === input.salesOrderId ||
-                    p.label.includes(input.salesOrderId) ||
-                    p.targetId === input.salesOrderId
+                    target.targetKind === "receivable_entry" ||
+                    target.targetId === input.receivableAccountId
                 )
             }
-            return false
+            return target.salesOrderId === input.salesOrderId
         })
         if (match) {
             prefillAllocations = [
@@ -186,28 +195,27 @@ export async function createAllocationSession(
         }
     }
 
-    // Resolve customer from first pool account if available
+    // Resolve the customer from the same immutable account scope.
     if (!customerId && pool.length > 0) {
         try {
-            const detail = await apiGet<BackendReceivableAccount>(
-                `/admin/receivable-accounts/${encodeURIComponent(
-                    pool[0]!.targetKind === "receivable_account"
-                        ? pool[0]!.targetId
-                        : ((
-                              await apiGet<Page<BackendReceivableAccount>>(
-                                  "/admin/receivable-accounts",
-                                  {
-                                      counterparty_party_id:
-                                          input.counterpartyPartyId,
-                                      page: 1,
-                                      page_size: 1,
-                                  },
-                              )
-                          ).items[0]?.id ?? ""),
-                )}`,
+            const page = await loadAllPages<BackendReceivableAccount>(
+                "/admin/receivable-accounts",
+                {
+                    counterparty_party_id: input.counterpartyPartyId,
+                    sales_order_id: input.salesOrderId,
+                    sort_by: "created_at",
+                    sort_dir: "desc",
+                },
             )
-            customerId = detail.customer_id
-            customerName = detail.customer_id
+            const account = page.items.find(
+                (row) =>
+                    (!input.salesOrderId ||
+                        row.sales_order_id === input.salesOrderId) &&
+                    (!input.receivableAccountId ||
+                        row.id === input.receivableAccountId),
+            )
+            customerId = account?.customer_id ?? ""
+            customerName = account?.customer_name || customerId
         } catch {
             // leave empty — display gap
         }
@@ -224,9 +232,10 @@ export async function createAllocationSession(
         draftSessionId,
         mode: input.mode,
         counterpartyPartyId: input.counterpartyPartyId,
-        counterpartyPartyName: input.counterpartyPartyId,
+        counterpartyPartyName:
+            input.counterpartyPartyName ?? input.counterpartyPartyId,
         customerId,
-        customerName,
+        customerName: customerName || customerId,
         status: "draft",
         existingFactId: input.existingFactId,
         existingFactNo,
@@ -246,6 +255,7 @@ export async function createAllocationSession(
             returnTo: input.returnTo,
             from: input.from,
             salesOrderId: input.salesOrderId,
+            receivableAccountId: input.receivableAccountId,
         },
         leaseValid: true,
         editVersion: 1,
@@ -260,7 +270,10 @@ export async function fetchAllocationSession(
 ): Promise<AllocationSessionView | null> {
     const s = sessions.get(draftSessionId)
     if (!s) return null
-    const pool = await buildPool(s.mode, s.counterpartyPartyId)
+    const pool = await buildPool(s.mode, s.counterpartyPartyId, {
+        salesOrderId: s.returnContext?.salesOrderId,
+        receivableAccountId: s.returnContext?.receivableAccountId,
+    })
     const factAmount =
         s.mode === "receipt"
             ? (s.fact.amount ?? "0")
@@ -291,10 +304,39 @@ export async function saveAllocationDraft(
             status: 409,
         })
     }
+
+    const pool = await buildPool(s.mode, s.counterpartyPartyId, {
+        salesOrderId: s.returnContext?.salesOrderId,
+        receivableAccountId: s.returnContext?.receivableAccountId,
+    })
+    const targets = new Map(
+        pool.map((target) => [
+            `${target.targetKind}:${target.targetId}`,
+            target,
+        ]),
+    )
+    const allocations = input.allocations.map((line) => {
+        const target = targets.get(`${line.targetKind}:${line.targetId}`)
+        if (!target) {
+            throw {
+                kind: "Validation",
+                message: "分配目标不属于本次核销范围，请刷新后重新选择。",
+            }
+        }
+        return {
+            ...line,
+            label: target.label,
+            salesOrderNo: target.salesOrderNo,
+            openAmount: target.openAmount,
+            baselineVersion: target.baselineVersion,
+        }
+    })
+
     const next: AllocationSessionView = {
         ...s,
         fact: { ...input.fact },
-        allocations: input.allocations.map((a) => ({ ...a })),
+        pool,
+        allocations,
         editVersion: s.editVersion + 1,
         savedAt: new Date().toISOString(),
     }

@@ -12,6 +12,8 @@ export type ColumnAllocationTarget = Readonly<{
 
 export type ColumnActions = Readonly<{
     onPreview: (target: CustomerAccountPreviewTarget) => void
+    canStartSession?: (mode: AllocationMode) => boolean
+    permissionReason?: string
     onStartSession: (
         mode: AllocationMode,
         partyId: string,

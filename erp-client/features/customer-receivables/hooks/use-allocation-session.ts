@@ -42,10 +42,14 @@ export function useAllocationSession({
     session,
     onClose,
     onPosted,
+    canOperate = true,
+    permissionReason,
 }: {
     session: AllocationSessionView
     onClose: () => void
     onPosted: () => void
+    canOperate?: boolean
+    permissionReason?: string
 }) {
     const saveMutation = useSaveAllocationDraftMutation()
     const postMutation = usePostAllocationMutation()
@@ -130,9 +134,7 @@ export function useAllocationSession({
     }
 
     // 发票 gross 变化时按 13% 预填不含税/税额（可手动覆盖）
-    const invoiceGross = isReceipt
-        ? ""
-        : String(formValues.grossAmount ?? "")
+    const invoiceGross = isReceipt ? "" : String(formValues.grossAmount ?? "")
     React.useEffect(() => {
         if (isReceipt || !invoiceGross) return
         const net = String(form.state.values.netAmount ?? "").trim()
@@ -158,6 +160,13 @@ export function useAllocationSession({
     )
 
     const issues: ValidationIssue[] = []
+    if (!canOperate) {
+        issues.push({
+            id: "permission",
+            label: "操作权限",
+            message: permissionReason ?? "当前账号没有执行此操作的权限。",
+        })
+    }
     if (!session.leaseValid) {
         issues.push({
             id: "lease",
@@ -200,6 +209,7 @@ export function useAllocationSession({
     }
 
     const canSubmit =
+        canOperate &&
         session.leaseValid &&
         issues.length === 0 &&
         parseAmt(factAmountStr) > 0 &&
@@ -215,7 +225,10 @@ export function useAllocationSession({
             (sum, line) => sum + parseAmt(line.amount),
             0,
         )
-        const remaining = Math.max(0, parseAmt(factAmountStr) - alreadyAllocated)
+        const remaining = Math.max(
+            0,
+            parseAmt(factAmountStr) - alreadyAllocated,
+        )
         const fill =
             remaining > 0
                 ? money(Math.min(parseAmt(target.openAmount), remaining))
@@ -261,6 +274,10 @@ export function useAllocationSession({
     }
 
     async function doSaveDraft() {
+        if (!canOperate) {
+            setActionError(permissionReason ?? "当前账号没有执行此操作的权限。")
+            return
+        }
         setActionError(null)
         try {
             const fact = factFromValues(form.state.values, isReceipt)
@@ -285,6 +302,10 @@ export function useAllocationSession({
      * @returns 创建或刷新成功为 true。
      */
     async function prepareReceiptDraft(): Promise<boolean> {
+        if (!canOperate) {
+            setActionError(permissionReason ?? "当前账号没有执行此操作的权限。")
+            return false
+        }
         setActionError(null)
         if (!idempotencyRef.current) {
             idempotencyRef.current = `w11-submit-${session.draftSessionId}-${Date.now()}`
@@ -317,6 +338,11 @@ export function useAllocationSession({
     }
 
     async function doPost() {
+        if (!canOperate) {
+            setActionError(permissionReason ?? "当前账号没有执行此操作的权限。")
+            setConfirmOpen(false)
+            return
+        }
         setActionError(null)
         if (!idempotencyRef.current) {
             idempotencyRef.current = `w11-submit-${session.draftSessionId}-${Date.now()}`

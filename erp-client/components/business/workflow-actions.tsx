@@ -401,6 +401,8 @@ export type SequentialProcessBarProps = Omit<
      * 必须传与行为一致的文案（按钮说动作，不说机制）。
      */
     backLabel?: string
+    /** 已嵌入对象详情时可隐藏返回按钮；默认保留。 */
+    showBack?: boolean
     /** 主动作会离开当前页面（如跳转专用处理器）时置 false，避免两个同义按钮。 */
     showProcessNext?: boolean
     /**
@@ -431,6 +433,7 @@ function SequentialProcessBar({
     processDisabled = false,
     processNextDisabled,
     backLabel = "返回队列",
+    showBack = true,
     showProcessNext = true,
     showProcess = true,
     statusExtras,
@@ -482,18 +485,20 @@ function SequentialProcessBar({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-                <Button
-                    type="button"
-                    variant="outline"
-                    disabled={pending}
-                    onClick={onBack}
-                >
-                    <ArrowLeftIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
-                    {backLabel}
-                </Button>
+                {showBack ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={pending}
+                        onClick={onBack}
+                    >
+                        <ArrowLeftIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        {backLabel}
+                    </Button>
+                ) : null}
 
                 {showProcess ? (
                     <Button

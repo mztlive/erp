@@ -29,6 +29,8 @@ export type FulfillmentPageStatesProps = {
     onClearAllFilters?: () => void
     /** 已由页面脚手架承载时跳过 PageScaffold / PageHeader，只渲染状态体 */
     standalone?: boolean
+    /** 销售单详情内仅提供刷新，不跳去其它页面或解除销售单范围。 */
+    embedded?: boolean
 }
 
 /**
@@ -48,6 +50,7 @@ export function FulfillmentPageStates({
     filterSummary,
     onClearAllFilters,
     standalone = false,
+    embedded = false,
 }: FulfillmentPageStatesProps) {
     if (status === "pending") {
         const body = (
@@ -100,25 +103,42 @@ export function FulfillmentPageStates({
                 kind="no-tasks"
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 title={
-                    operationTypes?.length === 1
-                        ? OPERATION_CLEARED_LABEL[operationTypes[0]]
-                        : "这批活都干完了"
+                    embedded
+                        ? "本单当前没有待处理的履约单据"
+                        : operationTypes?.length === 1
+                          ? OPERATION_CLEARED_LABEL[operationTypes[0]]
+                          : "这批活都干完了"
                 }
-                description="可以换个类型看看，或者清掉筛选、回工作台。"
+                description={
+                    embedded
+                        ? "可刷新查看本单最新履约进度；已完成记录仍会保留在销售单摘要中。"
+                        : "可以换个类型看看，或者清掉筛选、回工作台。"
+                }
                 action={
-                    <div className="flex flex-wrap gap-2">
+                    embedded ? (
                         <Button
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
-                            onClick={onClearAllFilters}
+                            onClick={onRetry}
                         >
-                            清除全部筛选
+                            刷新
                         </Button>
-                        <Button render={<Link href="/workspace" />}>
-                            回今日工作台
-                        </Button>
-                    </div>
+                    ) : (
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                className="rounded-lg shadow-none"
+                                onClick={onClearAllFilters}
+                            >
+                                清除全部筛选
+                            </Button>
+                            <Button render={<Link href="/workspace" />}>
+                                回今日工作台
+                            </Button>
+                        </div>
+                    )
                 }
             />
         )
@@ -138,9 +158,9 @@ export function FulfillmentPageStates({
                         type="button"
                         variant="secondary"
                         className="rounded-lg shadow-none"
-                        onClick={onClearAllFilters}
+                        onClick={embedded ? onRetry : onClearAllFilters}
                     >
-                        回到我能处理的
+                        {embedded ? "重新加载" : "回到我能处理的"}
                     </Button>
                 }
             />
@@ -151,16 +171,22 @@ export function FulfillmentPageStates({
         <BusinessEmptyState
             kind="filter"
             className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-            title="没有符合条件的单据"
-            description={filterSummary ?? "换个类型或单号试试"}
+            title={
+                embedded ? "本单当前没有待处理的履约单据" : "没有符合条件的单据"
+            }
+            description={
+                embedded
+                    ? "可刷新查看本单最新履约进度。"
+                    : (filterSummary ?? "换个类型或单号试试")
+            }
             action={
                 <Button
                     type="button"
                     variant="secondary"
                     className="rounded-lg shadow-none"
-                    onClick={onClearAllFilters}
+                    onClick={embedded ? onRetry : onClearAllFilters}
                 >
-                    清除全部筛选
+                    {embedded ? "刷新" : "清除全部筛选"}
                 </Button>
             }
         />

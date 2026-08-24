@@ -14,6 +14,7 @@ export type FulfillmentGateStatusProps = {
     operation: FulfillmentOperation
     currentUrl: string
     snapshotUpdatedAt: string
+    showPaymentAction?: boolean
 }
 
 /**
@@ -24,6 +25,7 @@ export function FulfillmentGateStatus({
     operation,
     currentUrl,
     snapshotUpdatedAt,
+    showPaymentAction = true,
 }: FulfillmentGateStatusProps) {
     const isShip = operation.operationType === "WAREHOUSE_SHIP"
     if (operation.gate.state === "NOT_APPLICABLE") {
@@ -32,9 +34,7 @@ export function FulfillmentGateStatus({
                 context="list"
                 id="prepayment-gate"
                 tone="neutral"
-                label={
-                    isShip ? "发货条件：无先款要求" : "无先款要求"
-                }
+                label={isShip ? "发货条件：无先款要求" : "无先款要求"}
                 description={operation.gate.message}
             />
         )
@@ -70,7 +70,7 @@ export function FulfillmentGateStatus({
             }}
             allowed={operation.gate.state === "SATISFIED"}
             paymentAction={
-                blocked ? (
+                blocked && showPaymentAction ? (
                     <Button
                         type="button"
                         size="sm"

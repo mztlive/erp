@@ -84,8 +84,8 @@ export async function fetchCustomerAccountsList(
     ])
 
     let receivables = (recvPage.items ?? []).map(projectReceivable)
-    const receipts = (rcptPage.items ?? []).map(projectReceipt)
-    const invoices = (invPage.items ?? [])
+    let receipts = (rcptPage.items ?? []).map(projectReceipt)
+    let invoices = (invPage.items ?? [])
         .filter((i) => i.invoice_direction === "sales" || !i.invoice_direction)
         .map(projectInvoice)
 
@@ -106,8 +106,26 @@ export async function fetchCustomerAccountsList(
             )
         }
     }
-    // due filter: backend gap — cannot filter overdue without due_state
 
+    if (query.salesOrderId || query.receivableAccountId) {
+        const targetIds = new Set<string>()
+        for (const account of receivables) {
+            targetIds.add(account.accountId)
+            for (const entry of account.entries) targetIds.add(entry.entryId)
+        }
+        const belongsToCurrentOrder = (
+            allocations: readonly { targetId: string }[],
+        ) =>
+            allocations.some((allocation) => targetIds.has(allocation.targetId))
+        receipts = receipts.filter((receipt) =>
+            belongsToCurrentOrder(receipt.allocations),
+        )
+        invoices = invoices.filter((invoice) =>
+            belongsToCurrentOrder(invoice.allocations),
+        )
+    }
+
+    // due filter: backend gap — cannot filter overdue without due_state
     const unallocatedReceipts = receipts.filter(
         (r) =>
             r.status === "posted" &&
@@ -124,13 +142,23 @@ export async function fetchCustomerAccountsList(
             i.unallocatedAmount !== "0.00",
     )
 
+    const orderScoped = Boolean(query.salesOrderId || query.receivableAccountId)
     let total = 0
-    if (query.view === "receivable")
-        total = recvPage.total ?? receivables.length
-    else if (query.view === "receipt") total = rcptPage.total ?? receipts.length
-    else if (query.view === "sales_invoice")
-        total = invPage.total ?? invoices.length
-    else total = unallocatedReceipts.length + unallocatedInvoices.length
+    if (query.view === "receivable") {
+        total = orderScoped
+            ? receivables.length
+            : (recvPage.total ?? receivables.length)
+    } else if (query.view === "receipt") {
+        total = orderScoped
+            ? receipts.length
+            : (rcptPage.total ?? receipts.length)
+    } else if (query.view === "sales_invoice") {
+        total = orderScoped
+            ? invoices.length
+            : (invPage.total ?? invoices.length)
+    } else {
+        total = unallocatedReceipts.length + unallocatedInvoices.length
+    }
 
     const hasFilters = Boolean(
         query.q?.trim() ||

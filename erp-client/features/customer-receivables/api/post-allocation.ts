@@ -170,6 +170,20 @@ export async function postAllocation(
         }
     }
 
+    const poolTargets = new Set(
+        s.pool.map((target) => `${target.targetKind}:${target.targetId}`),
+    )
+    if (
+        s.allocations.some(
+            (line) => !poolTargets.has(`${line.targetKind}:${line.targetId}`),
+        )
+    ) {
+        return failedResult(
+            "TARGET_OUT_OF_SCOPE",
+            "分配目标不属于本次核销范围，请刷新后重新选择。",
+        )
+    }
+
     const positiveLines = s.allocations.filter(
         (a) => a.amount && Number(a.amount) > 0,
     )

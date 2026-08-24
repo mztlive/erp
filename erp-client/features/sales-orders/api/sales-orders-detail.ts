@@ -279,6 +279,8 @@ export async function fetchSalesOrderDetail(
     const queriedAt = formatIsoNow()
     return {
         ...order,
+        customerId: detail.customer_id,
+        settlementPartyId: detail.settlement_party_id,
         acceptance,
         permissionVersion: PERMISSION_VERSION,
         sourceAsOf: queriedAt,

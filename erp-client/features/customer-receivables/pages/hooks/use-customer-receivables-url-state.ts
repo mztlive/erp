@@ -51,7 +51,9 @@ export interface CustomerReceivablesUrlState {
     setSearchDraft: React.Dispatch<React.SetStateAction<string>>
     searchInputRef: React.RefObject<HTMLInputElement | null>
     counterpartyPartyIdDraft: string | null
-    setCounterpartyPartyIdDraft: React.Dispatch<React.SetStateAction<string | null>>
+    setCounterpartyPartyIdDraft: React.Dispatch<
+        React.SetStateAction<string | null>
+    >
     dueDraft: DueFilter
     setDueDraft: React.Dispatch<React.SetStateAction<DueFilter>>
     statusDraft: ReceivableStatusFilter
@@ -72,16 +74,12 @@ export interface CustomerReceivablesUrlState {
     handlePaginationChange: (next: PaginationState) => void
 }
 
-function parseReceivableStatus(
-    raw: string | null,
-): ReceivableStatusFilter {
+function parseReceivableStatus(raw: string | null): ReceivableStatusFilter {
     if (raw === "open" || raw === "partial" || raw === "settled") return raw
     return "all"
 }
 
-function parseReviewStatus(
-    raw: string | null,
-): ReceivableReviewStatusFilter {
+function parseReviewStatus(raw: string | null): ReceivableReviewStatusFilter {
     if (
         raw === "pending_opening" ||
         raw === "reviewed" ||
@@ -92,10 +90,20 @@ function parseReviewStatus(
     return "all"
 }
 
-export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
+export function useCustomerReceivablesUrlState(
+    options: {
+        fixedSalesOrderId?: string
+        stateMode?: "url" | "local"
+    } = {},
+): CustomerReceivablesUrlState {
     const router = useRouter()
     const pathname = usePathname()
-    const searchParams = useSearchParams()
+    const routeSearchParams = useSearchParams()
+    const [localSearchParams, setLocalSearchParams] = React.useState(
+        () => new URLSearchParams(),
+    )
+    const localState = options.stateMode === "local"
+    const searchParams = localState ? localSearchParams : routeSearchParams
 
     const view = parseView(searchParams.get("view"))
     const qParam = searchParams.get("q") ?? ""
@@ -112,7 +120,10 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
             ? undefined
             : reviewStatusDraftFromUrl
     const focusId = searchParams.get("focusId") ?? undefined
-    const salesOrderId = searchParams.get("salesOrderId") ?? undefined
+    const salesOrderId =
+        options.fixedSalesOrderId ??
+        searchParams.get("salesOrderId") ??
+        undefined
     const registerParam = searchParams.get("register")
     const registerMode =
         registerParam === "invoice" || registerParam === "receipt"
@@ -150,10 +161,7 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
         React.useState<ReceivableReviewStatusFilter>(reviewStatusDraftFromUrl)
 
     const hasStructuredFilters = Boolean(
-        counterpartyPartyId ||
-            (due && due !== "all") ||
-            status ||
-            reviewStatus,
+        counterpartyPartyId || (due && due !== "all") || status || reviewStatus,
     )
     // 有结构化条件的初始深链展开面板；后续 URL 回填不得抢夺展开态。
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
@@ -203,27 +211,38 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
 
     function patchUrl(
         patch: Record<string, string | null | undefined>,
-        options?: { replace?: boolean },
+        patchOptions?: { replace?: boolean },
     ) {
+        if (localState) {
+            setLocalSearchParams((current) => {
+                const next = new URLSearchParams(current.toString())
+                for (const [key, value] of Object.entries(patch)) {
+                    if (value == null || value === "") next.delete(key)
+                    else next.set(key, value)
+                }
+                return next
+            })
+            return
+        }
         // 筛选写入使用 replace + scroll:false，不膨胀历史、不跳动滚动位置。
         patchSearchParams(
-            { router, pathname, searchParams, view },
+            { router, pathname, searchParams: routeSearchParams, view },
             patch,
-            options?.replace
+            patchOptions?.replace
                 ? { replace: true, scroll: false }
-                : options,
+                : patchOptions,
         )
     }
 
     const hasActiveFilters = Boolean(
         qParam.trim() ||
-            counterpartyPartyId ||
-            customerId ||
-            (due && due !== "all") ||
-            status ||
-            reviewStatus ||
-            salesOrderId ||
-            receivableAccountId,
+        counterpartyPartyId ||
+        customerId ||
+        (due && due !== "all") ||
+        status ||
+        reviewStatus ||
+        salesOrderId ||
+        receivableAccountId,
     )
 
     /** 单一提交路径：收起态 Enter 与展开态「应用全部筛选」都走这里。 */
@@ -317,7 +336,9 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
             patchUrl(
                 {
                     page:
-                        next.pageIndex + 1 > 1 ? String(next.pageIndex + 1) : null,
+                        next.pageIndex + 1 > 1
+                            ? String(next.pageIndex + 1)
+                            : null,
                 },
                 { replace: true },
             )
@@ -364,9 +385,7 @@ export function useCustomerReceivablesUrlState(): CustomerReceivablesUrlState {
                 return
             }
             if (
-                document.querySelector(
-                    '[role="dialog"], [data-slot="sheet"]',
-                )
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
             ) {
                 return
             }

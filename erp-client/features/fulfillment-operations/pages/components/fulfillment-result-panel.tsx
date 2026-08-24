@@ -20,6 +20,8 @@ export type FulfillmentResultPanelProps = {
     onNext: () => void
     /** 入库完成后切到同一销售单的待仓发。 */
     onContinueWarehouseShip?: (salesOrderId: string) => void
+    /** 嵌入销售单详情时原地展开客户验收。 */
+    onOpenAcceptance?: () => void
 }
 
 /**
@@ -36,6 +38,7 @@ export function FulfillmentResultPanel({
     onResolveUnknown,
     onNext,
     onContinueWarehouseShip,
+    onOpenAcceptance,
 }: FulfillmentResultPanelProps) {
     if (!lastResult) return null
 
@@ -94,22 +97,34 @@ export function FulfillmentResultPanel({
                     ) : null}
                     {lastResult.outcome?.kind === "POSTED" &&
                     lastResult.outcome.acceptanceRequired ? (
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={
-                                <Link
-                                    href={acceptanceHref(
-                                        lastResult.outcome.salesOrderId,
-                                        currentUrl,
-                                    )}
-                                />
-                            }
-                        >
-                            去登记客户验收
-                            <ArrowRightIcon data-icon="inline-end" />
-                        </Button>
+                        onOpenAcceptance ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={onOpenAcceptance}
+                            >
+                                去登记客户验收
+                                <ArrowRightIcon data-icon="inline-end" />
+                            </Button>
+                        ) : (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                render={
+                                    <Link
+                                        href={acceptanceHref(
+                                            lastResult.outcome.salesOrderId,
+                                            currentUrl,
+                                        )}
+                                    />
+                                }
+                            >
+                                去登记客户验收
+                                <ArrowRightIcon data-icon="inline-end" />
+                            </Button>
+                        )
                     ) : null}
                     {lastResult.stayOnItem === false ||
                     lastResult.status === "blocked" ? null : (

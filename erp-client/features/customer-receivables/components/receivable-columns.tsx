@@ -8,6 +8,8 @@ import type { ColumnActions } from "./column-types"
 export function createReceivableColumns({
     onPreview,
     onStartSession,
+    canStartSession = () => true,
+    permissionReason,
 }: ColumnActions): ColumnDef<ReceivableAccountRow>[] {
     return [
         {
@@ -149,14 +151,16 @@ export function createReceivableColumns({
                         disabled={
                             !row.original.allowedActions.includes(
                                 "REGISTER_RECEIPT",
-                            )
+                            ) || !canStartSession("receipt")
                         }
                         title={
-                            row.original.allowedActions.includes(
-                                "REGISTER_RECEIPT",
-                            )
-                                ? undefined
-                                : "当前无回款登记/核销权限"
+                            !canStartSession("receipt")
+                                ? permissionReason
+                                : row.original.allowedActions.includes(
+                                        "REGISTER_RECEIPT",
+                                    )
+                                  ? undefined
+                                  : "当前不能登记回款并核销"
                         }
                         onClick={() =>
                             void onStartSession(

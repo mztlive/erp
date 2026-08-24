@@ -296,7 +296,12 @@ describe("electronic delivery source paths omit the approval zone", () => {
     })
 
     it("routes electronic delivery submit confirmation through the business dialog, not an approval zone", () => {
-        const source = readFeature("pages/fulfillment-operations-page.tsx")
+        const source = [
+            readFeature(
+                "pages/components/fulfillment-operations-workspace.tsx",
+            ),
+            readFeature("pages/components/fulfillment-result-panel.tsx"),
+        ].join("\n")
         expect(source).toContain("FormalActionConfirmDialog")
         expect(source).toContain("OPERATION_CONFIRM_TITLE")
         expect(sourceMentionsApprovalZone(source)).toBe(false)

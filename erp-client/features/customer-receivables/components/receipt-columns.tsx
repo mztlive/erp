@@ -9,6 +9,8 @@ import type { ColumnActions } from "./column-types"
 export function createReceiptColumns({
     onPreview,
     onStartSession,
+    canStartSession = () => true,
+    permissionReason,
 }: ColumnActions): ColumnDef<ReceiptRow>[] {
     return [
         {
@@ -108,6 +110,12 @@ export function createReceiptColumns({
                             type="button"
                             size="sm"
                             variant="outline"
+                            disabled={!canStartSession("receipt")}
+                            title={
+                                canStartSession("receipt")
+                                    ? undefined
+                                    : permissionReason
+                            }
                             onClick={() =>
                                 void onStartSession(
                                     "receipt",

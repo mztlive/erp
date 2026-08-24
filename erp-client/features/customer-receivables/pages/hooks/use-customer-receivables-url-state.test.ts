@@ -70,6 +70,35 @@ describe('useCustomerReceivablesUrlState', () => {
         })
     })
 
+    it('keeps embedded state local and preserves the fixed sales order scope', () => {
+        mockedPathname.mockReturnValue('/sales/orders/so-1')
+        const router = setupRouter()
+        const { result } = renderHook(() =>
+            useCustomerReceivablesUrlState({
+                fixedSalesOrderId: 'so-1',
+                stateMode: 'local',
+            }),
+        )
+
+        act(() => {
+            result.current.patchUrl({
+                view: 'sales_invoice',
+                sessionId: 'session-1',
+            })
+        })
+
+        expect(result.current.salesOrderId).toBe('so-1')
+        expect(result.current.view).toBe('sales_invoice')
+        expect(result.current.sessionId).toBe('session-1')
+        expect(router.replace).not.toHaveBeenCalled()
+        expect(router.push).not.toHaveBeenCalled()
+
+        act(() => result.current.clearFilters())
+        expect(result.current.salesOrderId).toBe('so-1')
+        expect(result.current.sessionId).toBe('session-1')
+        expect(router.replace).not.toHaveBeenCalled()
+    })
+
     it('parses every param from the URL', () => {
         mockedSearchParams.mockReturnValue(
             new URLSearchParams(

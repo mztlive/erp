@@ -39,6 +39,7 @@ export function useReverseFlow(args: {
     openReversalPreview: (reversalId: string) => void
     setLastResult: React.Dispatch<React.SetStateAction<ResultState>>
     setActionError: React.Dispatch<React.SetStateAction<string | null>>
+    onChanged?: () => void
 }): {
     reverseConfirm: ReverseRequest | null
     setReverseConfirm: React.Dispatch<
@@ -73,6 +74,7 @@ export function useReverseFlow(args: {
         openReversalPreview,
         setLastResult,
         setActionError,
+        onChanged,
     } = args
     const reverseMutation = useReverseFactMutation()
     const ensureRefundMutation = useEnsureCustomerRefundDraftMutation()
@@ -268,6 +270,7 @@ export function useReverseFlow(args: {
         setReverseReason("")
         setReverseAmount("")
         openReversalPreview(res.reversal.reversalId)
+        onChanged?.()
     }
 
     /**
@@ -303,6 +306,7 @@ export function useReverseFlow(args: {
         setReverseReason("")
         setReverseAmount("")
         openRefundPreview(res.refund.refundId)
+        onChanged?.()
     }
 
     async function confirmReverse() {
@@ -341,6 +345,7 @@ export function useReverseFlow(args: {
             setReverseReason("")
             setReverseAmount("")
             closePreview()
+            onChanged?.()
             return
         }
         if (res.status === "unknown") {

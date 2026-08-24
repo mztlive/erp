@@ -33,10 +33,14 @@ export function AllocationSessionPanel({
     session,
     onClose,
     onPosted,
+    canOperate = true,
+    permissionReason,
 }: {
     session: AllocationSessionView
     onClose: () => void
     onPosted: () => void
+    canOperate?: boolean
+    permissionReason?: string
 }) {
     const {
         form,
@@ -72,7 +76,13 @@ export function AllocationSessionPanel({
         postMutation,
         resolveMutation,
         ensureReceiptMutation,
-    } = useAllocationSession({ session, onClose, onPosted })
+    } = useAllocationSession({
+        session,
+        onClose,
+        onPosted,
+        canOperate,
+        permissionReason,
+    })
     const receiptPhase = customerReceiptApprovalPhase(
         receiptApproval,
         postedLocally ? "IN_APPROVAL" : "DRAFT",
@@ -157,7 +167,9 @@ export function AllocationSessionPanel({
                     session={session}
                     allocations={allocations}
                     disabled={
-                        session.status === "posted" || postedLocally
+                        !canOperate ||
+                        session.status === "posted" ||
+                        postedLocally
                     }
                     onAdd={addFromPool}
                 />
@@ -198,7 +210,9 @@ export function AllocationSessionPanel({
                 }}
                 allocations={allocations}
                 getRowId={(a) => a.lineKey}
-                disabled={session.status === "posted" || postedLocally}
+                disabled={
+                    !canOperate || session.status === "posted" || postedLocally
+                }
                 addLabel="从池中选择"
                 addDisabledReason="请从左侧同主体池加入目标"
                 onRemoveAllocation={(a) => setPendingRemove(a.lineKey)}
@@ -276,10 +290,12 @@ export function AllocationSessionPanel({
                             type="button"
                             variant="outline"
                             disabled={
+                                !canOperate ||
                                 saveMutation.isPending ||
                                 session.status === "posted" ||
                                 postedLocally
                             }
+                            title={canOperate ? undefined : permissionReason}
                             onClick={() => void doSaveDraft()}
                         >
                             <SaveIcon
@@ -291,11 +307,13 @@ export function AllocationSessionPanel({
                         <Button
                             type="button"
                             disabled={
+                                !canOperate ||
                                 !canSubmit ||
                                 postMutation.isPending ||
                                 ensureReceiptMutation.isPending ||
                                 postedLocally
                             }
+                            title={canOperate ? undefined : permissionReason}
                             onClick={() => {
                                 void form.handleSubmit()
                             }}

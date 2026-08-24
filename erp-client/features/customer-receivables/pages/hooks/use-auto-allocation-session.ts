@@ -17,6 +17,7 @@ export function useAutoAllocationSession(args: {
     salesOrderId: string | undefined
     registerMode: "receipt" | "invoice" | undefined
     receivableAccountId: string | undefined
+    canRegister?: boolean
     createSession: {
         mutateAsync: (input: {
             mode: "receipt" | "invoice"
@@ -40,6 +41,7 @@ export function useAutoAllocationSession(args: {
         salesOrderId,
         registerMode,
         receivableAccountId,
+        canRegister = true,
         createSession,
         patchUrl,
         setActionError,
@@ -49,7 +51,7 @@ export function useAutoAllocationSession(args: {
     React.useEffect(() => {
         if (autoSessionRef.current || sessionId || !data) return
         if (from !== "W05" || !returnTo) return
-        if (!data.canRegister) return
+        if (!data.canRegister || !canRegister) return
         const party =
             counterpartyPartyId ??
             data.receivables[0]?.counterpartyPartyId ??
@@ -67,7 +69,10 @@ export function useAutoAllocationSession(args: {
                     returnTo,
                     from,
                 })
-                patchUrl({ sessionId: session.draftSessionId }, { replace: true })
+                patchUrl(
+                    { sessionId: session.draftSessionId },
+                    { replace: true },
+                )
             } catch (err) {
                 setActionError(getErrorMessage(err, "无法开始本次核销"))
             }

@@ -59,6 +59,8 @@ export type FulfillmentWorkSurfaceProps = {
     shortcutsOpen: boolean
     headingRef: React.Ref<HTMLHeadingElement>
     resultUnknown: boolean
+    showBack?: boolean
+    showSalesOrderLinks?: boolean
     onDraftChange: (next: FulfillmentDraft) => void
     onSkip: () => void
     onDiscard: () => void
@@ -90,6 +92,8 @@ export function FulfillmentWorkSurface({
     shortcutsOpen,
     headingRef,
     resultUnknown,
+    showBack = true,
+    showSalesOrderLinks = true,
     onDraftChange,
     onSkip,
     onDiscard,
@@ -115,10 +119,12 @@ export function FulfillmentWorkSurface({
                         operation={operation}
                         currentUrl={currentUrl}
                         snapshotUpdatedAt={snapshotUpdatedAt}
+                        showPaymentAction={showSalesOrderLinks}
                     />
                 }
                 onBack={onBack}
                 backLabel="返回"
+                showBack={showBack}
                 onProcess={onConfirm}
                 onProcessNext={onConfirm}
             />
@@ -131,9 +137,7 @@ export function FulfillmentWorkSurface({
             >
                 {shortcutsOpen
                     ? `快捷键：J / K 上下条${
-                          canExecute
-                              ? " · Ctrl+S 保存 · Ctrl+Enter 确认"
-                              : ""
+                          canExecute ? " · Ctrl+S 保存 · Ctrl+Enter 确认" : ""
                       } · 再按 ? 收起`
                     : "按 ? 看快捷键"}
             </button>
@@ -182,8 +186,7 @@ export function FulfillmentWorkSurface({
                                 },
                                 {
                                     label: "采购单",
-                                    value:
-                                        operation.source.purchaseNo ?? "—",
+                                    value: operation.source.purchaseNo ?? "—",
                                 },
                                 {
                                     label: "仓库",
@@ -211,10 +214,7 @@ export function FulfillmentWorkSurface({
                                     value: operation.source.customerLabel,
                                 },
                             ].map((field) => (
-                                <div
-                                    key={field.label}
-                                    className="bg-card p-3"
-                                >
+                                <div key={field.label} className="bg-card p-3">
                                     <dt className="text-xs text-muted-foreground">
                                         {field.label}
                                     </dt>
@@ -224,7 +224,8 @@ export function FulfillmentWorkSurface({
                                             field.numeric && "num",
                                         )}
                                     >
-                                        {field.href &&
+                                        {showSalesOrderLinks &&
+                                        field.href &&
                                         field.value !== "—" ? (
                                             <Link
                                                 href={field.href}
@@ -247,9 +248,7 @@ export function FulfillmentWorkSurface({
                         operation={operation}
                         draft={draft}
                         onChange={onDraftChange}
-                        disabled={
-                            formalPending || !canExecute || resultUnknown
-                        }
+                        disabled={formalPending || !canExecute || resultUnknown}
                     />
 
                     {validationIssues.length > 0 ? (
@@ -320,23 +319,25 @@ export function FulfillmentWorkSurface({
                                 />
                                 {readOnlyNote}
                             </p>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                className="rounded-lg shadow-none"
-                                render={
-                                    <Link
-                                        href={salesOrderHref(
-                                            operation.source.salesOrderId,
-                                            currentUrl,
-                                        )}
-                                    />
-                                }
-                            >
-                                打开销售单
-                                <ArrowRightIcon data-icon="inline-end" />
-                            </Button>
+                            {showSalesOrderLinks ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    className="rounded-lg shadow-none"
+                                    render={
+                                        <Link
+                                            href={salesOrderHref(
+                                                operation.source.salesOrderId,
+                                                currentUrl,
+                                            )}
+                                        />
+                                    }
+                                >
+                                    打开销售单
+                                    <ArrowRightIcon data-icon="inline-end" />
+                                </Button>
+                            ) : null}
                         </div>
                     )}
                 </CardContent>

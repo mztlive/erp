@@ -23,8 +23,23 @@ const session = (): AllocationSessionView => ({
     customerId: "c1",
     customerName: "客户甲",
     status: "draft",
-    fact: { receivedAt: "2026-01-01T10:00", amount: "100", bankReference: "ref" },
-    pool: [],
+    fact: {
+        receivedAt: "2026-01-01T10:00",
+        amount: "100",
+        bankReference: "ref",
+    },
+    pool: [
+        {
+            targetId: "e1",
+            targetKind: "receivable_entry",
+            label: "SO-1",
+            salesOrderId: "so-1",
+            salesOrderNo: "SO-1",
+            openAmount: "60",
+            counterpartyPartyId: "p1",
+            baselineVersion: 1,
+        },
+    ],
     allocations: [
         {
             lineKey: "line_e1",
@@ -170,8 +185,7 @@ describe("postAllocation receipt submit", () => {
 
         expect(
             apiMocks.apiPost.mock.calls.every(
-                ([path]) =>
-                    typeof path === "string" && !path.endsWith("/post"),
+                ([path]) => typeof path === "string" && !path.endsWith("/post"),
             ),
         ).toBe(true)
     })
@@ -193,7 +207,18 @@ const invoiceSession = (): AllocationSessionView => ({
         taxAmount: "13.00",
         invoiceKind: "blue",
     },
-    pool: [],
+    pool: [
+        {
+            targetId: "acc-1",
+            targetKind: "receivable_account",
+            label: "应收子账 #1",
+            salesOrderId: "so-1",
+            salesOrderNo: "SO-1",
+            openAmount: "113.00",
+            counterpartyPartyId: "p1",
+            baselineVersion: 1,
+        },
+    ],
     allocations: [
         {
             lineKey: "line_a1",

@@ -4,8 +4,8 @@ import * as React from "react"
 
 import { surfaceInsetClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { FulfillmentOperationsPage } from "@/features/fulfillment-operations/pages/fulfillment-operations-page"
 import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
-import { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { cn } from "@/lib/utils"
@@ -79,28 +79,32 @@ function AcceptanceSummary({
 
 export function FulfillmentPanel({
     order,
-    selfReturn,
     acceptanceExpanded,
     canAccept,
     onExpandAcceptance,
     onCollapseAcceptance,
+    onDataChanged,
 }: {
     order: SalesOrderDetailView
-    selfReturn: string
     acceptanceExpanded: boolean
     canAccept: boolean
     onExpandAcceptance: () => void
     onCollapseAcceptance: () => void
+    onDataChanged: () => void
 }) {
     const isCard = order.nature === "card_voucher"
 
     return (
-        <div className="space-y-4">
-            <RelatedLanes
-                order={order}
-                selfReturn={selfReturn}
-                lanes={isCard ? ["fulfillment"] : ["purchase", "fulfillment"]}
-            />
+        <div className="flex flex-col gap-4">
+            {!isCard ? (
+                <div className={cn(surfaceInsetClassName, "px-3 py-3")}>
+                    <h3 className="text-sm font-medium">关联采购</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        采购单 {order.related.purchaseOrders} 笔 · 履约状态：
+                        {order.fulfillment.label}
+                    </p>
+                </div>
+            ) : null}
 
             {isCard ? (
                 <div className={cn(surfaceInsetClassName, "px-3 py-3")}>
@@ -113,13 +117,20 @@ export function FulfillmentPanel({
                     </p>
                 </div>
             ) : (
-                <AcceptanceSummary
-                    order={order}
-                    canAccept={canAccept}
-                    expanded={acceptanceExpanded}
-                    onExpand={onExpandAcceptance}
-                    onCollapse={onCollapseAcceptance}
-                />
+                <div className="flex flex-col gap-4">
+                    <FulfillmentOperationsPage
+                        embeddedSalesOrderId={order.id}
+                        onSalesOrderChanged={onDataChanged}
+                        onOpenAcceptance={onExpandAcceptance}
+                    />
+                    <AcceptanceSummary
+                        order={order}
+                        canAccept={canAccept}
+                        expanded={acceptanceExpanded}
+                        onExpand={onExpandAcceptance}
+                        onCollapse={onCollapseAcceptance}
+                    />
+                </div>
             )}
         </div>
     )

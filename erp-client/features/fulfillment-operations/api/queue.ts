@@ -1,6 +1,6 @@
 /**
  * W09 履约单据处理 · 队列查询：按角色拉取各类 DRAFT 单据，投影为工作单并
- * 在客户端完成筛选/排序/明细补全。权限不匹配时不报错，回退为空队列。
+ * 在客户端完成筛选/排序/明细补全。权限不匹配时返回明确的无权限空态。
  */
 
 import { apiGet, type Page } from "@/lib/api"
@@ -14,7 +14,10 @@ import {
     resolveRole,
     type FulfillmentRole,
 } from "@/features/fulfillment-operations/lib/fulfillment-roles"
-import { isApiError, nowIso } from "@/features/fulfillment-operations/lib/projection"
+import {
+    isApiError,
+    nowIso,
+} from "@/features/fulfillment-operations/lib/projection"
 import {
     deliveryToOperation,
     electronicToOperation,
@@ -27,6 +30,32 @@ import {
     type BackendWarehouse,
 } from "./documents"
 import { hydrateOperationDetail } from "./hydrate"
+
+const QUEUE_PAGE_SIZE = 100
+const MAX_QUEUE_PAGES = 50
+
+async function loadAllPages<T>(
+    path: string,
+    query: Record<string, unknown> = {},
+): Promise<T[]> {
+    const items: T[] = []
+    let page = 1
+    let total = Number.POSITIVE_INFINITY
+
+    while (items.length < total && page <= MAX_QUEUE_PAGES) {
+        const result = await apiGet<Page<T>>(path, {
+            ...query,
+            page,
+            page_size: QUEUE_PAGE_SIZE,
+        })
+        items.push(...(result.items ?? []))
+        total = result.total ?? items.length
+        if (!result.items?.length) break
+        page += 1
+    }
+
+    return items
+}
 
 export type FulfillmentQueueFilters = {
     role: FulfillmentRole
@@ -43,6 +72,8 @@ export type FulfillmentQueueFilters = {
      * 仓发草稿不挂采购单，要用这个身份才能和入库出现在同一队列。
      */
     linkedSalesOrderId?: string
+    /** 销售单详情聚合履约时，用来源采购单补齐未直接携带销售单 ID 的单据。 */
+    linkedPurchaseOrderIds?: readonly string[]
 }
 
 function filterSummary(
@@ -94,11 +125,16 @@ function matchOperation(
             return false
         }
     }
-    if (
-        filters.salesOrderId &&
-        operation.source.salesOrderId !== filters.salesOrderId
-    ) {
-        return false
+    if (filters.salesOrderId) {
+        const sameSalesOrder =
+            operation.source.salesOrderId === filters.salesOrderId
+        const linkedByPurchaseOrder = Boolean(
+            operation.source.purchaseOrderId &&
+            filters.linkedPurchaseOrderIds?.includes(
+                operation.source.purchaseOrderId,
+            ),
+        )
+        if (!sameSalesOrder && !linkedByPurchaseOrder) return false
     }
     if (filters.purchaseOrderId) {
         const samePurchaseOrder =
@@ -158,6 +194,23 @@ async function resolveLinkedSalesOrderId(
     }
 }
 
+async function resolveLinkedPurchaseOrderIds(
+    salesOrderId: string | undefined,
+): Promise<readonly string[]> {
+    if (!salesOrderId) return []
+    try {
+        const orders = await loadAllPages<{ id: string }>(
+            "/admin/purchase-orders",
+            {
+                sales_order_id: salesOrderId,
+            },
+        )
+        return orders.map((order) => order.id)
+    } catch {
+        return []
+    }
+}
+
 export async function fetchFulfillmentQueue(
     filters: FulfillmentQueueFilters,
 ): Promise<FulfillmentQueueView> {
@@ -195,103 +248,118 @@ export async function fetchFulfillmentQueue(
     // Load draft documents for types visible to role
     const want = new Set(role.types)
     const operations: FulfillmentOperation[] = []
+    const deniedTypes = new Set<FulfillmentOperationType>()
     const linkedSalesOrderId = await resolveLinkedSalesOrderId(filters)
+    const linkedPurchaseOrderIds =
+        await resolveLinkedPurchaseOrderIds(linkedSalesOrderId)
     const queueFilters: FulfillmentQueueFilters = {
         ...filters,
         linkedSalesOrderId,
+        linkedPurchaseOrderIds,
     }
 
     const loaders: Promise<void>[] = []
 
     if (want.has("RECEIPT")) {
         loaders.push(
-            apiGet<Page<BackendPurchaseReceipt>>(
-                "/admin/purchase-receipts",
-                {
-                    page: 1,
-                    page_size: 100,
-                    status: "DRAFT",
-                    purchase_order_id: filters.purchaseOrderId,
-                    sort_by: "created_at",
-                    sort_dir: "desc",
-                },
-            )
-                .then((page) => {
-                    for (const r of page.items)
-                        operations.push(receiptToOperation(r))
+            loadAllPages<BackendPurchaseReceipt>("/admin/purchase-receipts", {
+                status: "DRAFT",
+                purchase_order_id: filters.purchaseOrderId,
+                sort_by: "created_at",
+                sort_dir: "desc",
+            })
+                .then((items) => {
+                    for (const receipt of items) {
+                        operations.push(receiptToOperation(receipt))
+                    }
                 })
                 .catch((error) => {
-                    if (!(isApiError(error) && error.status === 403))
-                        throw error
+                    if (isApiError(error) && error.status === 403) {
+                        deniedTypes.add("RECEIPT")
+                        return
+                    }
+                    throw error
                 }),
         )
     }
 
     if (want.has("WAREHOUSE_SHIP") || want.has("SUPPLIER_DIRECT")) {
         loaders.push(
-            apiGet<Page<BackendDelivery>>("/admin/deliveries", {
-                page: 1,
-                page_size: 100,
+            loadAllPages<BackendDelivery>("/admin/deliveries", {
                 status: "DRAFT",
                 sales_order_id: linkedSalesOrderId ?? filters.salesOrderId,
                 sort_by: "created_at",
                 sort_dir: "desc",
             })
-                .then((page) => {
-                    for (const d of page.items) {
-                        const t = deliveryToOperation(d)
-                        if (want.has(t.operationType)) operations.push(t)
+                .then((items) => {
+                    for (const delivery of items) {
+                        const operation = deliveryToOperation(delivery)
+                        if (want.has(operation.operationType)) {
+                            operations.push(operation)
+                        }
                     }
                 })
                 .catch((error) => {
-                    if (!(isApiError(error) && error.status === 403))
-                        throw error
+                    if (isApiError(error) && error.status === 403) {
+                        if (want.has("WAREHOUSE_SHIP")) {
+                            deniedTypes.add("WAREHOUSE_SHIP")
+                        }
+                        if (want.has("SUPPLIER_DIRECT")) {
+                            deniedTypes.add("SUPPLIER_DIRECT")
+                        }
+                        return
+                    }
+                    throw error
                 }),
         )
     }
 
     if (want.has("ELECTRONIC")) {
         loaders.push(
-            apiGet<Page<BackendElectronicDelivery>>(
+            loadAllPages<BackendElectronicDelivery>(
                 "/admin/electronic-deliveries",
                 {
-                    page: 1,
-                    page_size: 100,
                     status: "DRAFT",
                     sort_by: "created_at",
                     sort_dir: "desc",
                 },
             )
-                .then((page) => {
-                    for (const e of page.items)
-                        operations.push(electronicToOperation(e))
+                .then((items) => {
+                    for (const delivery of items) {
+                        operations.push(electronicToOperation(delivery))
+                    }
                 })
                 .catch((error) => {
-                    if (!(isApiError(error) && error.status === 403))
-                        throw error
+                    if (isApiError(error) && error.status === 403) {
+                        deniedTypes.add("ELECTRONIC")
+                        return
+                    }
+                    throw error
                 }),
         )
     }
 
     if (want.has("SERVICE")) {
         loaders.push(
-            apiGet<Page<BackendServiceFulfillment>>(
+            loadAllPages<BackendServiceFulfillment>(
                 "/admin/service-fulfillments",
                 {
-                    page: 1,
-                    page_size: 100,
                     status: "DRAFT",
                     sort_by: "created_at",
                     sort_dir: "desc",
                 },
             )
-                .then((page) => {
-                    for (const s of page.items)
-                        operations.push(serviceToOperation(s))
+                .then((items) => {
+                    for (const service of items) {
+                        operations.push(serviceToOperation(service))
+                    }
                 })
                 .catch((error) => {
-                    if (!(isApiError(error) && error.status === 403))
-                        throw error
+                    if (isApiError(error) && error.status === 403) {
+                        deniedTypes.add("SERVICE")
+                        return
+                    }
+                    throw error
                 }),
         )
     }
@@ -301,9 +369,16 @@ export async function fetchFulfillmentQueue(
     if (linkedSalesOrderId) {
         for (let index = 0; index < operations.length; index += 1) {
             const operation = operations[index]
+            const purchaseOrderId = operation.source.purchaseOrderId
+            const belongsToLinkedSalesOrder = Boolean(
+                purchaseOrderId &&
+                (purchaseOrderId === filters.purchaseOrderId ||
+                    linkedPurchaseOrderIds.includes(purchaseOrderId)),
+            )
             if (
                 operation.operationType === "RECEIPT" &&
-                !operation.source.salesOrderId
+                !operation.source.salesOrderId &&
+                belongsToLinkedSalesOrder
             ) {
                 operations[index] = {
                     ...operation,
@@ -322,14 +397,9 @@ export async function fetchFulfillmentQueue(
     let warehouseOptions: FulfillmentQueueView["context"]["warehouseOptions"] =
         []
     try {
-        const wh = await apiGet<Page<BackendWarehouse>>(
-            "/admin/warehouses",
-            {
-                page: 1,
-                page_size: 100,
-            },
-        )
-        warehouseOptions = wh.items.map((w) => ({
+        const warehouses =
+            await loadAllPages<BackendWarehouse>("/admin/warehouses")
+        warehouseOptions = warehouses.map((w) => ({
             value: w.id,
             label: w.warehouse_code,
         }))
@@ -343,18 +413,21 @@ export async function fetchFulfillmentQueue(
         warehouseOptions = [...seen].map(([value, label]) => ({ value, label }))
     }
 
-    const inScope = operations.filter((t) =>
-        role.types.includes(t.operationType),
+    const accessibleTypes = role.types.filter(
+        (operationType) => !deniedTypes.has(operationType),
     )
-    const metrics = role.types.map((operationType) => ({
+    const inScope = operations.filter((operation) =>
+        accessibleTypes.includes(operation.operationType),
+    )
+    const metrics = accessibleTypes.map((operationType) => ({
         operationType,
         label: `待${OPERATION_TYPE_SHORT[operationType]}`,
         count: inScope.filter((t) => t.operationType === operationType).length,
         visible: true,
     }))
 
-    let filtered = inScope.filter((t) =>
-        matchOperation(t, queueFilters, role.types),
+    let filtered = inScope.filter((operation) =>
+        matchOperation(operation, queueFilters, accessibleTypes),
     )
     filtered = [...filtered].sort((a, b) => {
         if (a.overdue !== b.overdue) return a.overdue ? -1 : 1
@@ -381,12 +454,20 @@ export async function fetchFulfillmentQueue(
         )
     }
 
-    const emptyReason =
-        inScope.length === 0
-            ? "NO_OPERATIONS"
-            : filtered.length === 0
-              ? "FILTER_NO_RESULT"
-              : undefined
+    const requestedTypes =
+        filters.operationTypes && filters.operationTypes.length > 0
+            ? filters.operationTypes
+            : role.types
+    const noPermission = requestedTypes.every((operationType) =>
+        deniedTypes.has(operationType),
+    )
+    const emptyReason = noPermission
+        ? "NO_PERMISSION"
+        : inScope.length === 0
+          ? "NO_OPERATIONS"
+          : filtered.length === 0
+            ? "FILTER_NO_RESULT"
+            : undefined
 
     return {
         preferences: { autoNextDefault: filters.role !== "warehouse" },
@@ -398,7 +479,7 @@ export async function fetchFulfillmentQueue(
             nextOperationId: filtered[position + 1]?.operationId,
             filterSummary: filterSummary(filters, warehouseOptions),
             warehouseOptions,
-            visibleTypes: role.types,
+            visibleTypes: accessibleTypes,
             roleLabel: role.label,
             viewerLabel: role.userLabel,
             canExecute: role.canExecute,

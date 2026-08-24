@@ -5,7 +5,6 @@ import * as React from "react"
 import { DocumentHeader, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
-import { LifecycleRail } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
 import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
 import { sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -79,10 +78,7 @@ export function SalesOrderIdentityHeader({
             primaryAction={primaryAction}
             secondaryActions={secondaryActions}
         >
-            <div className="space-y-3">
-                <LifecycleRail order={order} />
-                <SalesOrderAmountSummary order={order} />
-            </div>
+            <SalesOrderAmountSummary order={order} />
         </DocumentHeader>
     )
 }

@@ -30,6 +30,7 @@ export type FulfillmentActionsOptions = {
     draft: FulfillmentDraft | null
     dirty: boolean
     autoNext: boolean
+    canExecute?: boolean
     /** 上一次结果未确认时保留的请求标识，用于补查 */
     pendingIdempotencyKey: string | undefined
     saveMutation: SaveMutation
@@ -51,6 +52,7 @@ export type FulfillmentActionsOptions = {
     setSaveMessage: React.Dispatch<React.SetStateAction<string | null>>
     setConfirmOpen: React.Dispatch<React.SetStateAction<boolean>>
     setLastResult: React.Dispatch<React.SetStateAction<ResultState>>
+    onPosted?: (salesOrderId: string) => void
 }
 
 /**
@@ -62,6 +64,7 @@ export function useFulfillmentActions({
     draft,
     dirty,
     autoNext,
+    canExecute = true,
     pendingIdempotencyKey,
     saveMutation,
     postMutation,
@@ -74,6 +77,7 @@ export function useFulfillmentActions({
     setSaveMessage,
     setConfirmOpen,
     setLastResult,
+    onPosted,
 }: FulfillmentActionsOptions) {
     const supportsSave =
         draft?.type === "RECEIPT" ||
@@ -82,6 +86,10 @@ export function useFulfillmentActions({
 
     const handleSave = React.useCallback(async (): Promise<boolean> => {
         if (!operation || !draft) return false
+        if (!canExecute) {
+            setActionError("当前账号没有保存这类履约单据的权限")
+            return false
+        }
         if (!supportsSave) {
             setActionError("这类履约单据没有草稿保存命令，请直接确认")
             return false
@@ -107,6 +115,7 @@ export function useFulfillmentActions({
             return false
         }
     }, [
+        canExecute,
         draft,
         saveMutation,
         supportsSave,
@@ -118,6 +127,11 @@ export function useFulfillmentActions({
 
     const handlePost = React.useCallback(async () => {
         if (!operation || !draft) return
+        if (!canExecute) {
+            setActionError("当前账号没有确认这类履约单据的权限")
+            setConfirmOpen(false)
+            return
+        }
         setActionError(null)
         try {
             const nextId = neighborId(1)
@@ -169,6 +183,7 @@ export function useFulfillmentActions({
                 outcome,
                 stayOnItem: !autoNext,
             })
+            onPosted?.(outcome.salesOrderId)
             if (autoNext) {
                 advanceIfNeeded(true, nextId, true)
             }
@@ -178,8 +193,10 @@ export function useFulfillmentActions({
     }, [
         advanceIfNeeded,
         autoNext,
+        canExecute,
         draft,
         neighborId,
+        onPosted,
         postMutation,
         operation,
         setActionError,
@@ -235,6 +252,7 @@ export function useFulfillmentActions({
                 outcome: response.outcome,
                 stayOnItem: !autoNext,
             })
+            onPosted?.(response.outcome.salesOrderId)
             if (autoNext) advanceIfNeeded(true)
         }
     }, [
@@ -244,6 +262,7 @@ export function useFulfillmentActions({
         pendingIdempotencyKey,
         resolveUnknownMutation,
         operation,
+        onPosted,
         setActionError,
         setLastResult,
     ])

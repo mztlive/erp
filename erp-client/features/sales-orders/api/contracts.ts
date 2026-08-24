@@ -9,6 +9,9 @@ import type {
 // ─── 导出视图类型（保持 queries 契约） ───────────────────────────────────────
 
 export type SalesOrderDetailView = SalesOrderListItem & {
+    /** 详情内原地登记票款时使用的经营客户与结算主体稳定身份。 */
+    customerId?: string
+    settlementPartyId?: string
     acceptance?: {
         acceptedQuantity: string
         note: string

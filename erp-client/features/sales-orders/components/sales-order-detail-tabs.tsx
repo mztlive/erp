@@ -28,12 +28,12 @@ export function SalesOrderDetailTabs({
     visibleNav,
     canAccept,
     acceptanceExpanded,
-    selfReturn,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
     onSelectSection,
     onApprovalResult,
+    onDataChanged,
 }: {
     order: SalesOrderDetailView
     section?: string
@@ -46,12 +46,12 @@ export function SalesOrderDetailTabs({
     }>
     canAccept: boolean
     acceptanceExpanded: boolean
-    selfReturn: string
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
     onSelectSection: (next: NavSectionId | WorkSectionId | "versions") => void
     onApprovalResult: (result: SalesOrderDetailActionResult) => void
+    onDataChanged: () => void
 }) {
     const items = visibleNav.map((item) => {
         const todoOnFulfillment =
@@ -107,19 +107,19 @@ export function SalesOrderDetailTabs({
                 />
             </ObjectSectionTabsPanel>
 
-            <ObjectSectionTabsPanel value="fulfillment">
+            <ObjectSectionTabsPanel value="fulfillment" keepMounted>
                 <FulfillmentPanel
                     order={order}
-                    selfReturn={selfReturn}
                     acceptanceExpanded={acceptanceExpanded}
                     canAccept={Boolean(canAccept)}
                     onExpandAcceptance={() => onSelectSection("acceptance")}
                     onCollapseAcceptance={() => onSelectSection("fulfillment")}
+                    onDataChanged={onDataChanged}
                 />
             </ObjectSectionTabsPanel>
 
-            <ObjectSectionTabsPanel value="receivable">
-                <ReceivablePanel order={order} selfReturn={selfReturn} />
+            <ObjectSectionTabsPanel value="receivable" keepMounted>
+                <ReceivablePanel order={order} onDataChanged={onDataChanged} />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="collaboration">

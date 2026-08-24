@@ -15,6 +15,8 @@ import type { ColumnActions } from "./column-types"
 export function createInvoiceColumns({
     onPreview,
     onStartSession,
+    canStartSession = () => true,
+    permissionReason,
 }: ColumnActions): ColumnDef<SalesInvoiceRow>[] {
     return [
         {
@@ -122,6 +124,12 @@ export function createInvoiceColumns({
                             type="button"
                             size="sm"
                             variant="outline"
+                            disabled={!canStartSession("invoice")}
+                            title={
+                                canStartSession("invoice")
+                                    ? undefined
+                                    : permissionReason
+                            }
                             onClick={() =>
                                 void onStartSession(
                                     "invoice",

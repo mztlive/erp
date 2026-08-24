@@ -104,6 +104,63 @@ describe("useFulfillmentOperationsController", () => {
         expect(result.current.completed).toBe(false)
     })
 
+    it("keeps embedded selection local and preserves the sales order scope", async () => {
+        const operations = [
+            makeOperation({ operationId: "op_1" }),
+            makeOperation({ operationId: "op_2" }),
+        ]
+        mockedFetchQueue.mockResolvedValue(makeQueueView(operations))
+        mockedSearchParams.mockReturnValue(
+            new URLSearchParams("section=fulfillment") as unknown as ReadonlyURLSearchParams,
+        )
+        mockedPathname.mockReturnValue("/sales/orders/so_1")
+        const router = setupRouter()
+        const client = createFreshQueryClient()
+        const filters = {
+            role: "sales_order",
+            salesOrderId: "so_1",
+        } as import("@/features/fulfillment-operations/api").FulfillmentQueueFilters
+        const { result } = renderHookWithProviders(
+            () =>
+                useFulfillmentOperationsController({
+                    roleValue: "sales_order",
+                    filters,
+                    lane: null,
+                    autoNextExplicit: "0",
+                    stateMode: "local",
+                }),
+            { queryClient: client },
+        )
+
+        await waitFor(() =>
+            expect(result.current.queueQuery.isPending).toBe(false),
+        )
+        act(() => result.current.goToOperation("op_2"))
+        await waitFor(() =>
+            expect(result.current.operation?.operationId).toBe("op_2"),
+        )
+
+        expect(router.replace).not.toHaveBeenCalled()
+        expect(mockedFetchQueue).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                role: "sales_order",
+                salesOrderId: "so_1",
+                currentOperationId: "op_2",
+            }),
+        )
+
+        act(() => result.current.clearAllFilters())
+        await waitFor(() =>
+            expect(mockedFetchQueue).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    role: "sales_order",
+                    salesOrderId: "so_1",
+                }),
+            ),
+        )
+        expect(router.replace).not.toHaveBeenCalled()
+    })
+
     it("marks the queue completed when there are no operations", async () => {
         mockedFetchQueue.mockResolvedValue(makeQueueView([]))
 

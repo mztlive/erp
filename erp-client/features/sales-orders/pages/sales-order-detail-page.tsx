@@ -23,6 +23,7 @@ import {
 import { SalesOrderEditableCenter } from "@/features/sales-orders/components/sales-order-detail-editable-center"
 import {
     FocusTaskBanner,
+    LifecycleRail,
     SalesOrderIdentityHeader,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
 import { SalesOrderDetailTabs } from "@/features/sales-orders/components/sales-order-detail-tabs"
@@ -88,18 +89,21 @@ export function SalesOrderDetailPage({
         React.useState<SalesOrderDetailActionResult | null>(null)
 
     // 审批决定/命令成功后单据状态会变（如审批中→已生效、改单中→新版本），
-    // 统一在结果落定时刷新详情查询，避免页面停留在旧状态。
+    // 统一刷新详情、列表与客户验收缓存，避免关联区继续显示旧状态。
     const queryClient = useQueryClient()
+    const refreshOrderDetail = React.useCallback(() => {
+        void queryClient.invalidateQueries({
+            queryKey: salesOrderKeys.all,
+        })
+    }, [queryClient])
     const handleActionResult = React.useCallback(
         (next: SalesOrderDetailActionResult) => {
             if (next.status === "succeeded" || next.status === "unknown") {
-                void queryClient.invalidateQueries({
-                    queryKey: salesOrderKeys.detail(salesOrderId),
-                })
+                refreshOrderDetail()
             }
             setResult(next)
         },
-        [queryClient, salesOrderId],
+        [refreshOrderDetail],
     )
 
     const commandLedgerRef = React.useRef<{
@@ -355,6 +359,10 @@ export function SalesOrderDetailPage({
             <div
                 className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
             >
+                <div className="border-b border-grid px-3 py-2 md:px-4">
+                    <LifecycleRail order={order} />
+                </div>
+
                 <SalesOrderDetailTabs
                     order={order}
                     section={section}
@@ -362,7 +370,6 @@ export function SalesOrderDetailPage({
                     visibleNav={derived.visibleNav}
                     canAccept={derived.canAccept}
                     acceptanceExpanded={derived.acceptanceExpanded}
-                    selfReturn={derived.selfReturn}
                     workItemId={
                         section === "change-review"
                             ? undefined
@@ -380,6 +387,7 @@ export function SalesOrderDetailPage({
                     }
                     onSelectSection={selectSection}
                     onApprovalResult={handleActionResult}
+                    onDataChanged={refreshOrderDetail}
                 />
             </div>
 

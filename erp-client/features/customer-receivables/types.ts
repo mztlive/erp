@@ -11,11 +11,7 @@ export type CustomerAccountsView =
 export type DueFilter = "not_due" | "due_today" | "overdue" | "all"
 
 /** 应收台账状态筛选；"all" 只存在于草稿，写 URL 时转为参数缺省。 */
-export type ReceivableStatusFilter =
-    | "all"
-    | "open"
-    | "partial"
-    | "settled"
+export type ReceivableStatusFilter = "all" | "open" | "partial" | "settled"
 
 /** 卡券票款复核状态筛选；"all" 只存在于草稿，写 URL 时转为参数缺省。 */
 export type ReceivableReviewStatusFilter =
@@ -290,6 +286,7 @@ export type AllocationTarget = Readonly<{
     targetId: string
     targetKind: "receivable_entry" | "receivable_account"
     label: string
+    salesOrderId: string
     salesOrderNo: string
     openAmount: string
     dueDate?: string
@@ -352,6 +349,7 @@ export type AllocationSessionView = Readonly<{
         returnTo?: string
         from?: string
         salesOrderId?: string
+        receivableAccountId?: string
     }
     leaseValid: boolean
     editVersion: number
@@ -437,6 +435,9 @@ export type ReverseFactResult =
 export type CreateSessionInput = {
     mode: AllocationMode
     counterpartyPartyId: string
+    counterpartyPartyName?: string
+    customerId?: string
+    customerName?: string
     existingFactId?: string
     salesOrderId?: string
     receivableAccountId?: string
