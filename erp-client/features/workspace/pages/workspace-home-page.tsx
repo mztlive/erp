@@ -9,6 +9,7 @@ import {
     PageActions,
     PageHeader,
     PageScaffold,
+    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -29,6 +30,7 @@ import { WorkspaceTaskList } from "@/features/workspace/components/workspace-tas
 import { useWorkspaceHome } from "@/features/workspace/hooks/use-workspace-home"
 import { deriveWorkItemsFreshness } from "@/features/workspace/lib/freshness"
 import { filterSummaryFor } from "@/features/workspace/lib/url-state"
+import { cn } from "@/lib/utils"
 
 /**
  * 工作台：口径数字贴画布；有任务时队列与作业面左右分栏，审批在右侧连续提交。
@@ -207,13 +209,19 @@ export function WorkspaceHomePage() {
             />
 
             <WorkspaceOverviewBar
+                className="border-b-0 pb-0"
                 metrics={metrics}
                 activeMetric={activeMetric}
                 onMetricClick={onMetricClick}
             />
 
             {items.length === 0 ? (
-                <div className="flex min-h-0 flex-1 flex-col gap-4">
+                <div
+                    className={cn(
+                        surfacePanelClassName,
+                        "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4",
+                    )}
+                >
                     <div className="flex max-w-xl flex-col gap-3">
                         <WorkspaceFamilyNav
                             urlState={urlState}
@@ -232,9 +240,14 @@ export function WorkspaceHomePage() {
                     </div>
                 </div>
             ) : (
-                <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+                <div
+                    className={cn(
+                        surfacePanelClassName,
+                        "flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row",
+                    )}
+                >
                     <section
-                        className="flex min-h-0 w-full flex-col lg:w-80 lg:shrink-0 xl:w-96"
+                        className="flex min-h-0 w-full flex-col p-3 lg:w-80 lg:shrink-0 xl:w-96"
                         aria-label={filterLabel}
                     >
                         <header className="flex flex-col gap-2 pb-3">
@@ -257,7 +270,7 @@ export function WorkspaceHomePage() {
                         orientation="vertical"
                         className="hidden lg:block"
                     />
-                    <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col lg:pl-8">
+                    <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col lg:p-5">
                         {detail}
                     </div>
                 </div>

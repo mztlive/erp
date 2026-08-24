@@ -382,4 +382,54 @@
         td[data-column-pinned] {
         background-color: var(--row-striped);
     }
+
+    /* 表头吸顶。sticky 相对最近的滚动容器 = table-container；
+       页面级滚动时该容器无高度约束，规则等价于无效果，观感不变。
+       只有列表撑满模式给 table-container 限高后才真正吸住。
+       z 值：普通表头 20 > 冻结单元格 10；冻结表头两轴都吸，再高一档 30。 */
+    [data-slot="table-container"] thead th {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background-color: var(--table-header);
+    }
+    [data-slot="table-container"] thead th[data-column-pinned] {
+        z-index: 30;
+    }
+
+    /* 列表工作面撑满剩余高度：卡片吃掉画布空白，表格在卡内滚动，分页吸在卡底。
+       仅当列表框架是脚手架的**直接最后一块**时生效 —— 嵌在对象中心里的
+       section / panel 不是 page-scaffold 的直接子级，一律不受影响。 */
+    [data-slot="page-scaffold"]:has(
+        > [data-business-component="table-frame"]:last-child
+    ) {
+        min-height: 0;
+    }
+    [data-slot="page-scaffold"]
+        > [data-business-component="table-frame"]:last-child {
+        flex: 1 1 auto;
+        /* 下限：筛选面板展开或窗口过矮时，宁可让壳层恢复整页滚动，
+           也不要把表格挤成几十像素的缝。 */
+        min-height: 16rem;
+    }
+    [data-slot="page-scaffold"]
+        > [data-business-component="table-frame"]:last-child
+        :is(
+            [data-slot="business-table-frame-result"],
+            [data-slot="business-table-frame-table"],
+            [data-slot="data-table"],
+            [data-slot="data-table-surface"]
+        ) {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+    [data-slot="page-scaffold"]
+        > [data-business-component="table-frame"]:last-child
+        [data-slot="table-container"] {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
 }
